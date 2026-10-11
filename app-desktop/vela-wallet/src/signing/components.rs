@@ -994,7 +994,8 @@ fn kv_row(
         )
 }
 
-/// The fee row, or the expanded fee-token selector (CS33 / DCS8).
+/// The fee card: the fee row (or the expanded fee-token selector, CS33 /
+/// DCS8), the speed control, and what the card comes to SAY under them.
 ///
 /// `on_row` is the row's own tap — retry a failed quote, or open / close the
 /// coin list — and `on_pick` one listener per coin in drawn order, `None` for
@@ -1002,14 +1003,34 @@ fn kv_row(
 /// `on_refresh` is the refresh control beside the row (spec 079: the send
 /// form's own, outside the row's click so measuring again never opens the
 /// coin list). The mocks pass none of them.
+///
+/// `speed` is the speed control (spec 069), and it is drawn directly under
+/// the row — BEFORE the lines that come and go (PR 4 item 2). Everything the
+/// card has from its first frame — the row, its refresh, the speed control —
+/// then keeps its place for good, and what the card comes to say ("from a
+/// while ago", "no coin can pay this fee", why a fee could not be worked
+/// out) is added at its END. Those lines stood between the row and the
+/// speed control, so each one that landed pushed the control down a line or
+/// two (24 pt for the shortfall, 42 for a failure's reason) under whatever
+/// was pointing at it.
 pub fn fee(
     theme: &Theme,
     icons: &mut IconCache,
     fee: &FeeModel,
+    speed: Option<Div>,
     on_row: Option<crate::flows::panels::Click>,
     on_pick: Vec<Option<crate::flows::panels::Click>>,
     on_refresh: Option<crate::flows::panels::Click>,
 ) -> Option<Div> {
+    // The card's controls, 4 apart; then its lines, 6 apart.
+    let controls = |top: Div, speed: Option<Div>| {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(top)
+            .children(speed)
+    };
     match fee {
         FeeModel::Hidden => None,
         FeeModel::OffChain(note) => Some(
@@ -1146,7 +1167,7 @@ pub fn fee(
                         .flex()
                         .flex_col()
                         .gap(px(6.))
-                        .child(line)
+                        .child(controls(line, speed))
                         .children(stale)
                         .children(warning),
                 );
@@ -1253,7 +1274,7 @@ pub fn fee(
                     .flex()
                     .flex_col()
                     .gap(px(6.))
-                    .child(col)
+                    .child(controls(col, speed))
                     .children(warning),
             )
         }

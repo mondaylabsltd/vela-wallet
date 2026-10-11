@@ -2765,6 +2765,85 @@ mod tests {
         }
     }
 
+    /// PR 4 item 2: what `VELA_SIGN_FEE` pins is what its name says, by the
+    /// real fee core and the live builder — so the measurement taken under
+    /// each (`scripts/check-signing-sheet.sh`) is of the sheet a session
+    /// draws: "Estimating…" with nothing under it; a figure; a figure and
+    /// the speed's note; a figure no coin can pay, said under the card with
+    /// the confirm shut; a fee that could not be worked out, its reason
+    /// under the card and the gate's own line under a shut confirm.
+    #[test]
+    fn a_pinned_fee_says_what_its_name_says() {
+        let en = Loc::for_language("en");
+        let s = SigningStrings::resolve(&en);
+        let flows = crate::flows::FlowStrings::resolve(&en);
+        let money = crate::wallet::live::Money::usd();
+        let row = |pin: FeePin| match fee_pin_row(pin, &s, money) {
+            FeeModel::OnChain {
+                value,
+                warning,
+                stale_note,
+                ..
+            } => (
+                value.to_string(),
+                warning.map(|line| line.to_string()),
+                stale_note,
+            ),
+            _ => unreachable!("cs1's transfer has a fee row"),
+        };
+        let gate = |pin: FeePin| {
+            pin_confirm(SimPin::Send, &pin.view())
+                .unwrap_or_else(|| unreachable!("a gate over a landed verdict"))
+        };
+        for (pin, name) in FeePin::ALL {
+            assert_eq!(FeePin::named(name), Some(pin));
+            let speed = fee_pin_speed(pin, &flows);
+            assert!(!speed.open, "{name}: folded, as every sheet opens");
+            assert_eq!(
+                speed.free_note.is_some(),
+                pin == FeePin::PricedNote,
+                "{name}"
+            );
+        }
+        assert_eq!(FeePin::named("free"), None);
+
+        let (figure, said, stale) = row(FeePin::Estimating);
+        assert_eq!(figure, s.fee_estimating.as_ref());
+        assert_eq!((said, stale), (None, None), "nothing under it yet");
+        assert!(!gate(FeePin::Estimating).enabled, "no fee, no confirm");
+
+        for priced in [FeePin::Priced, FeePin::PricedNote] {
+            let (figure, said, stale) = row(priced);
+            assert!(figure.contains("ETH"), "{figure}");
+            assert_eq!(
+                (said, stale),
+                (None, None),
+                "it can be paid: nothing to say"
+            );
+            assert!(gate(priced).enabled);
+        }
+
+        let short = FeePin::CantPay.view();
+        assert!(
+            short.fee.is_some() && short.no_coin_pays,
+            "priced, and unpayable"
+        );
+        let (figure, said, _) = row(FeePin::CantPay);
+        assert!(figure.contains("ETH"), "{figure}");
+        assert_eq!(said.as_deref(), Some(s.fee_no_coin_pays.as_ref()));
+        assert_eq!(said.as_deref(), Some("No token can pay this fee"));
+        assert!(!gate(FeePin::CantPay).enabled);
+
+        let failed = FeePin::Failed.view();
+        assert!(failed.fee.is_none() && failed.failure.is_some());
+        let (figure, said, _) = row(FeePin::Failed);
+        assert_eq!(figure, "—");
+        assert!(said.is_some_and(|line| line.contains("Ethereum")));
+        let held = gate(FeePin::Failed);
+        assert!(!held.enabled);
+        assert!(held.key.is_some(), "and the confirm says why");
+    }
+
     /// The correctness batch's states draw what they are named for: the
     /// fee row says why it failed (the chain by name, or Vela's own fault),
     /// the confirm is held with the core's line, and a switched coin's

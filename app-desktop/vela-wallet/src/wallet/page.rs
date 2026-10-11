@@ -1266,6 +1266,14 @@ enum FootPlace {
 /// body and half starts the foot, the hairline on the seam.
 const FOOT_GAP: f32 = 16.;
 
+/// Between the signing account's row and the confirm under it, in the
+/// signing column's foot (PR 4 item 2). Half the foot's own 16: the row
+/// belongs to the button, and the 8 saved is body — at the design size the
+/// standard send's sheet has 15 pt to spare, and a fee that lands with a
+/// line to say ("no coin can pay this fee" is 24 pt) must still be read
+/// whole.
+const SIGNER_OVER_CONFIRM: f32 = 8.;
+
 impl Identity {
     /// `0x14fB1f…D1eA5c` — the same middle-truncation every other client uses.
     fn display(&self) -> SharedString {
@@ -17909,8 +17917,8 @@ impl WalletPage {
     }
 
     /// The signing column: its scrolling body and, for a request, its foot —
-    /// the confirm (or the top-up's "check again") and the one line the core
-    /// says under a shut confirm.
+    /// who signs, the confirm (or the top-up's "check again") and the one
+    /// line the core says under a shut confirm.
     ///
     /// The foot is NOT part of the body (PR 3 device round): the scaffold
     /// pins it at the bottom of the column ([`FootPlace::Bottom`]), so the
@@ -18810,20 +18818,33 @@ impl WalletPage {
                         .children(crate::dev_probe::mark("signing-fee"))
                 }),
         );
-        column = column.child(
-            signing_components::signer_row(
-                theme,
-                &mut self.identicons,
-                model.signer_label.clone(),
-                model.signer_name.clone(),
-                &model.signer_seed,
-            )
-            .relative()
-            .children(crate::dev_probe::mark("signing-signer")),
-        );
-        // The column's one action and the line under it are its FOOT, not
-        // its last blocks: pinned at the bottom, where nothing above can
-        // move them.
+        // Who signs. Where the column has an action it stands WITH the
+        // action, in the foot — "Signing with …" directly over the confirm,
+        // as it is on a phone's sheet — and not after the fee card (PR 4
+        // item 2): the fee card is then the last thing in the body, so
+        // whatever it comes to say is added where nothing follows it. The
+        // row stood under the card and slid down with every line the card
+        // gained — 24 pt when a fee landed that no coin could pay, 42 when
+        // it could not be worked out. A column with no action (a refused
+        // request) has no foot, and keeps the row where it was.
+        let signer = signing_components::signer_row(
+            theme,
+            &mut self.identicons,
+            model.signer_label.clone(),
+            model.signer_name.clone(),
+            &model.signer_seed,
+        )
+        .relative()
+        .children(crate::dev_probe::mark("signing-signer"));
+        let (signer_in_body, signer_in_foot) = if model.confirm_label.is_empty() {
+            (Some(signer), None)
+        } else {
+            (None, Some(signer))
+        };
+        column = column.children(signer_in_body);
+        // The column's one action, who signs over it and the line under it
+        // are its FOOT, not its last blocks: pinned at the bottom, where
+        // nothing above can move them.
         let action = (!model.confirm_label.is_empty()).then(|| {
             if funding {
                 // The top-up's "check again": a plain button, not a
@@ -18879,12 +18900,20 @@ impl WalletPage {
                 .flex()
                 .flex_col()
                 .gap(px(16.))
-                .children(action.map(|action| {
+                .child(
+                    // Who signs, close over what they confirm with.
                     div()
-                        .relative()
-                        .child(action)
-                        .children(crate::dev_probe::mark("signing-confirm"))
-                }))
+                        .flex()
+                        .flex_col()
+                        .gap(px(SIGNER_OVER_CONFIRM))
+                        .children(signer_in_foot)
+                        .children(action.map(|action| {
+                            div()
+                                .relative()
+                                .child(action)
+                                .children(crate::dev_probe::mark("signing-confirm"))
+                        })),
+                )
                 .children(note)
         });
         // A refused request's one way out (the web's `dismissOnly`): Close,
@@ -18923,8 +18952,9 @@ impl WalletPage {
         crate::dev_env::var!("VELA_PANEL_SCROLL").is_some()
     }
 
-    /// The sheet's fee row and, under it, the speed control (spec 069) —
-    /// the same control, the same clicks, as the send form's. `None` where
+    /// The sheet's fee card: the fee row, the speed control right under it
+    /// (spec 069 — the same control, the same clicks, as the send form's),
+    /// and after them what the card comes to say. `None` where
     /// the request has no fee row (`FeeModel::Hidden`). Drawn in Vela and in
     /// the hand-off alike: the fee and its speed are chosen here before the
     /// page opens (D-18), and the page signs the operation they priced.
@@ -18936,17 +18966,9 @@ impl WalletPage {
         speed_tiers: &[vela_core::app::fee_policy::FeeTier],
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
-        let fee = signing_components::fee(
-            theme,
-            &mut self.icons,
-            fee,
-            on_fee,
-            on_fee_pick,
-            on_fee_refresh,
-        )?;
-        let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
-        if let Some(speed) = speed {
+        // The speed control first: the card draws it right under the fee
+        // row, before the lines that come and go (`signing_components::fee`).
+        let speed = speed.map(|speed| {
             #[cfg(not(target_os = "linux"))]
             let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
                 |page, _: &gpui::ClickEvent, _, cx| {
@@ -18972,15 +18994,21 @@ impl WalletPage {
                 let _ = speed_tiers;
                 (None, Vec::new())
             };
-            fee_block = fee_block.child(panels::speed_control(
-                theme,
-                &mut self.icons,
-                speed,
-                toggle,
-                picks,
-            ));
-        }
-        Some(fee_block)
+            panels::speed_control(theme, &mut self.icons, speed, toggle, picks)
+                .relative()
+                // For a measurement pass: the speed control's box.
+                .children(crate::dev_probe::mark("signing-speed"))
+        });
+        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
+        signing_components::fee(
+            theme,
+            &mut self.icons,
+            fee,
+            speed,
+            on_fee,
+            on_fee_pick,
+            on_fee_refresh,
+        )
     }
 
     /// The fee row's tap, and one listener per fee coin in the relay's order

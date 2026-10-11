@@ -22,11 +22,22 @@
 #      nothing to say, so the confirm stands where it stood. A request
 #      nothing simulates has no such line at all.
 #
+#   6. the fee card moves nothing either (PR 4 item 2). Whatever it comes
+#      to say — "Estimating…", a figure, the speed's note, "no token can pay
+#      this fee", why the fee could not be worked out — the column's top,
+#      its header and its ✕, the fee row, the speed control under it, the
+#      signing account and the confirm stand where they stood in the first
+#      frame: the card's lines are added at its END, after its controls, and
+#      the signing account stands with the confirm in the foot. The body
+#      never scrolls by itself for it. In a window the sheet fits, every line
+#      of the card is on screen.
+#
 # None of that is arithmetic a unit test can do: it is where gpui puts the
 # boxes. So this opens the drawn send (gallery, cs1) under every simulation
 # answer (VELA_SIM) — at the design size, in a taller window and, for a sheet
-# too tall for its window, at the largest text size — and reads the layout's
-# own account of it (VELA_LAYOUT_PROBE, src/dev_probe.rs).
+# too tall for its window, at the largest text size — and under everything
+# its fee card can say (VELA_SIGN_FEE, through the real fee core) — and reads
+# the layout's own account of it (VELA_LAYOUT_PROBE, src/dev_probe.rs).
 #
 # Like sweep-gallery.sh it opens real windows, so it is a local gate: a CI
 # runner has no display. The windows never take the keyboard
@@ -143,6 +154,24 @@ open short-lands largest "$LANDS" "VELA_SIM=out>tall"
 open held-lands standard "$LANDS" "VELA_SIM=out>send"
 open held-waits standard "$LANDS" "VELA_SIM=out>waited"
 open late-answer standard "$LANDS" "VELA_SIM=waited>send"
+wait
+# 6. Everything the fee card can say, over a verdict that is in — at the
+# design size and in the taller window — and each of them LANDING on a card
+# that opened estimating (`estimating>failed` is the estimate that gives up,
+# offline).
+FEES="estimating priced priced-note cant-pay failed"
+for fee in $FEES; do
+  open "fee-$fee" standard "$DWELL" VELA_SIM=send "VELA_SIGN_FEE=$fee"
+done
+wait
+for fee in $FEES; do
+  open "fee-tall-$fee" standard "$DWELL" VELA_WINDOW=1280x1000 VELA_SIM=send "VELA_SIGN_FEE=$fee"
+done
+wait
+for fee in $FEES; do
+  [ "$fee" = estimating ] && continue
+  open "fee-lands-$fee" standard "$LANDS" VELA_SIM=send "VELA_SIGN_FEE=estimating>$fee"
+done
 wait
 
 for died in "$WORK"/*.died; do
@@ -339,10 +368,114 @@ changed late-answer signing-note-held verdict-row-0
 same "$(value "$WORK/design-none.txt" signing-confirm 3)" "$(value "$WORK/largest-text-none.txt" signing-confirm 3)" ||
   fail "the confirm's position depends on the text size"
 
+# 6. The fee card: what it says is added at its end, and nothing that was
+# there moves — not the column's top, its header or its ✕, not the fee row
+# or the speed control under it, not the signing account, not the confirm.
+# One box per name, the same in every state.
+fixed() { # <probe> <reference probe> <what it is, for the message>
+  local probe="$1" reference="$2" what="$3" mark field got want
+  for mark in panel panel-header panel-close signing-fee signing-speed signing-signer signing-confirm; do
+    for field in 2 3; do
+      got=$(value "$probe" "$mark" "$field")
+      want=$(value "$reference" "$mark" "$field")
+      if [ "$got" = none ] || [ "$want" = none ]; then
+        fail "$what: $mark was not measured"
+        continue 2
+      fi
+      same "$got" "$want" || fail "$what: $mark stands at $got (field $field), not at $want"
+    done
+  done
+  # The header and the ✕ keep their size too; the card may only grow.
+  same "$(value "$probe" panel-header 5)" "$(value "$reference" panel-header 5)" ||
+    fail "$what: the header changed height"
+  same "$(value "$probe" panel 5)" "$(value "$reference" panel 5)" ||
+    fail "$what: the column changed height"
+  # Nothing glided: the body is where it opened.
+  same "$(value "$probe" panel-body 2)" 0 ||
+    fail "$what: the body scrolled by $(value "$probe" panel-body 2)"
+}
+
+printf '\n%-12s %-11s %6s %8s %8s %9s %8s %7s %9s %10s %8s\n' \
+  window fee "x y" "header y" "column y" "fee row y" "speed y" "card h" "signer y" "confirm y" "can scroll"
+for way in design tall-window; do
+  prefix="fee"
+  if [ "$way" = tall-window ]; then prefix="fee-tall"; fi
+  reference="$WORK/$prefix-priced.txt"
+  if [ ! -s "$reference" ]; then
+    fail "$way: the priced fee card was not measured"
+    continue
+  fi
+  for fee in $FEES; do
+    probe="$WORK/$prefix-$fee.txt"
+    if [ ! -s "$probe" ]; then
+      fail "$way/fee $fee: the layout said nothing"
+      continue
+    fi
+    printf '%-12s %-11s %6s %8s %8s %9s %8s %7s %9s %10s %8s\n' "$way" "$fee" \
+      "$(value "$probe" panel-close 3)" "$(value "$probe" panel-header 3)" \
+      "$(value "$probe" panel 3)" "$(value "$probe" signing-fee 3)" \
+      "$(value "$probe" signing-speed 3)" "$(value "$probe" signing-fee 5)" \
+      "$(value "$probe" signing-signer 3)" "$(value "$probe" signing-confirm 3)" \
+      "$(value "$probe" panel-body 3)"
+    fixed "$probe" "$reference" "$way/fee $fee"
+    # The confirm's one position for this window, as under every verdict.
+    same "$(value "$probe" signing-confirm 3)" "$(value "$WORK/$way-out.txt" signing-confirm 3)" ||
+      fail "$way/fee $fee: the confirm stands at $(value "$probe" signing-confirm 3), not where the sheet's stands"
+    # The signing account stands with the confirm: in the foot, over it.
+    signer=$(value "$probe" signing-signer 3)
+    more "$signer" "$(awk -v y="$(value "$probe" panel-foot 3)" 'BEGIN { print y - 0.52 }')" ||
+      fail "$way/fee $fee: the signing account ($signer) is not in the foot"
+    more "$(value "$probe" signing-confirm 3)" "$signer" ||
+      fail "$way/fee $fee: the signing account is not over the confirm"
+    # The speed control is right under the fee row: before any line.
+    same "$(value "$probe" signing-speed 3)" "$(value "$reference" signing-speed 3)" ||
+      fail "$way/fee $fee: the speed control moved"
+  done
+  # What the card says more of makes it taller — at its end. (Else these
+  # cases measure nothing.)
+  least=$(value "$reference" signing-fee 5)
+  same "$(value "$WORK/$prefix-estimating.txt" signing-fee 5)" "$least" ||
+    fail "$way: the estimating card is not the priced card's height"
+  for fee in priced-note cant-pay failed; do
+    more "$(value "$WORK/$prefix-$fee.txt" signing-fee 5)" "$least" ||
+      fail "$way/fee $fee: the card says nothing more than a priced one (this case measures nothing)"
+  done
+done
+# In the taller window the sheet fits whatever the card says: every line of
+# it is on screen.
+for fee in $FEES; do
+  can=$(value "$WORK/fee-tall-$fee.txt" panel-body 3)
+  same "$can" 0 || fail "tall-window/fee $fee: $can of the sheet is under the fold in a window it fits"
+done
+
+# …and each of them landing on a card that opened estimating: the first
+# frame against the settled one.
+for fee in $FEES; do
+  [ "$fee" = estimating ] && continue
+  early="$WORK/fee-lands-$fee.early"
+  late="$WORK/fee-lands-$fee.txt"
+  if [ ! -s "$early" ] || [ ! -s "$late" ]; then
+    fail "fee lands $fee: the layout said nothing"
+    continue
+  fi
+  same "$(value "$early" signing-fee 5)" "$(value "$WORK/fee-estimating.txt" signing-fee 5)" ||
+    fail "fee lands $fee: the first frame was not the estimating card (this case measures nothing)"
+  same "$(value "$late" signing-fee 5)" "$(value "$WORK/fee-$fee.txt" signing-fee 5)" ||
+    fail "fee lands $fee: the card never came to say it"
+  fixed "$late" "$early" "fee lands $fee"
+  printf '%-12s %-11s x %s -> %s, header %s -> %s, signer %s -> %s, confirm %s -> %s (card %s -> %s)\n' \
+    design "est>$fee" \
+    "$(value "$early" panel-close 3)" "$(value "$late" panel-close 3)" \
+    "$(value "$early" panel-header 3)" "$(value "$late" panel-header 3)" \
+    "$(value "$early" signing-signer 3)" "$(value "$late" signing-signer 3)" \
+    "$(value "$early" signing-confirm 3)" "$(value "$late" signing-confirm 3)" \
+    "$(value "$early" signing-fee 5)" "$(value "$late" signing-fee 5)"
+done
+
 if [ "$failed" -gt 0 ]; then
   echo
   echo "$failed check(s) failed"
   exit 1
 fi
 echo
-echo "ok: the confirm has one position per window — held, released and waited out — every verdict is whole, and a landed verdict is in view"
+echo "ok: the confirm has one position per window — held, released and waited out — every verdict is whole, a landed verdict is in view, and nothing moves for what the fee card says"
