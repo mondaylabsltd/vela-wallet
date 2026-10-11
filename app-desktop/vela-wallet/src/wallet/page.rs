@@ -14777,12 +14777,13 @@ impl WalletPage {
         let (host, lock) = if live_browser {
             (
                 SharedString::from(address_bar.host.clone()),
-                address_bar.lock,
+                crate::wallet::browser_host::bar_mark(&address_bar),
             )
         } else {
+            // The drawing: `app.uniswap.org`, over https.
             (
                 explore_fixtures::uniswap().host,
-                vela_core::app::browser_load::BarLock::Closed,
+                Some(vela_core::app::dapp_permissions::OriginLock::Secure),
             )
         };
         // Spec 079 US4 / 082 RF1: the page's chain cannot be reached — said in
@@ -17483,7 +17484,7 @@ impl WalletPage {
             .as_ref()
             .filter(|_| self.browsing)
             .and_then(|_| self.shown_tab_view(cx));
-        let (site_host, site_letter, site_tint, connected, secure, chain_id, origin) = match &live {
+        let (site_host, site_letter, site_tint, connected, lock, chain_id, origin) = match &live {
             Some(tab) => {
                 let (host, _, letter) =
                     signing_live::dapp_identity(tab.origin.as_deref().unwrap_or_default());
@@ -17492,26 +17493,31 @@ impl WalletPage {
                     letter,
                     theme.accent,
                     tab.connected_address.is_some(),
-                    tab.secure,
+                    // The core's mark for this site (PR 4 item 11) — never
+                    // `secure`, which says the wallet may be used from the
+                    // page and is true of plain http on this computer.
+                    tab.lock,
                     tab.chain_id,
                     tab.origin.clone(),
                 )
             }
-            // The drawing's chain: Gnosis, as the mock always showed it.
+            // The drawing's site, over https, and its chain: Gnosis, as the
+            // mock always showed it.
             None => (
                 mock.host.clone(),
                 mock.letter.clone(),
                 mock.tint,
                 true,
-                true,
+                vela_core::app::dapp_permissions::OriginLock::Secure,
                 100,
                 None,
             ),
         };
         // Spec 079 (owner: "你标记的安全站点 只是https 而已，并不代表这个站点真的
-        // 安全"): the scheme is a lock and only a lock — no "secure site" in
-        // words, and no green; "Connected" is a fact about the grant, and is
-        // said only when the core has one.
+        // 安全"): the connection is a mark and only a mark (`lock_glyph`: the
+        // padlock for https alone) — no "secure site" in words, and no green;
+        // "Connected" is a fact about the grant, and is said only when the
+        // core has one.
         //
         // Spec 097 E: and a site the core holds no grant for says so — "No
         // active connection" — with nothing that implies access: no account
@@ -17519,7 +17525,7 @@ impl WalletPage {
         // appear here". It said all of those after a disconnect, with only
         // the status word gone. The network row stays: the page reads its
         // chain whether or not it is connected.
-        let (lock, lock_tint) = explore_components::lock_glyph(theme, secure);
+        let (lock, lock_tint) = explore_components::lock_glyph(theme, lock);
         let status = Some(if connected {
             self.explore.connected_tag.clone()
         } else {

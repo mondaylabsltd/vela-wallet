@@ -33,6 +33,7 @@ use std::collections::VecDeque;
 use gpui::Context;
 
 use vela_core::app::dapp_browser::{DappBrowser, DbrOperation, DbrShellResult, DbrView, Event};
+use vela_core::app::dapp_permissions::{OriginLock, origin_lock, origin_of};
 
 use crate::core_host::{CoreHost, Pending};
 use crate::executor::dapp_browser::{self as executor, Performed, SigningOrder};
@@ -790,6 +791,31 @@ pub fn bar_of(shown: Option<&str>, watch: &LoadWatch) -> browser_load::AddressBa
     let pending = watch.url.as_deref().filter(|_| watch.loading);
     let failed = watch.url.as_deref().filter(|_| watch.failure.is_some());
     browser_load::address_bar(shown, pending, failed)
+}
+
+/// The mark beside the bar's host (PR 4 item 11): the core's [`OriginLock`]
+/// of the document the bar names — the padlock for https alone, a neutral
+/// mark for http on this computer or the person's own network, the warning
+/// for public http — and none when the bar names nothing on screen (a
+/// failure panel, a load that has not committed, an empty tab).
+///
+/// Of the bar's OWN address, which is the committed document's, and not of
+/// the browser machine's tab view: that view's origin moves when a load
+/// STARTS, and the bar's host and its mark must always be one URL's (spec 082
+/// RE1, G28) — else a page could put another site's padlock beside its own
+/// host by starting a load that never commits. Where the two name the same
+/// site they are the same mark: both are `origin_lock` of that origin.
+#[must_use]
+pub fn bar_mark(bar: &browser_load::AddressBar) -> Option<OriginLock> {
+    match bar.lock {
+        browser_load::BarLock::None => None,
+        browser_load::BarLock::Closed | browser_load::BarLock::Open => Some(
+            origin_of(&bar.url)
+                .as_deref()
+                .map(origin_lock)
+                .unwrap_or_default(),
+        ),
+    }
 }
 
 /// Back, forward and reload (RD6, RJ5): what the engine says it can do while
@@ -1872,6 +1898,101 @@ mod tests {
             (page.host.as_str(), page.lock),
             ("app.uniswap.org", BarLock::Closed)
         );
+    }
+
+    /// PR 4 item 11: no padlock for http. A page at `http://127.0.0.1:8137`
+    /// wore one — the bar drew "closed" for anything the wallet may be used
+    /// from. The bar's mark is the core's lock of the page it names: the
+    /// padlock for https alone, a mark of its own for http on this computer
+    /// or the person's network, the warning for public http, and nothing
+    /// while no document of that host is on screen.
+    #[test]
+    fn the_bars_mark_is_the_core_lock_of_the_page_it_names() {
+        let mark = |url: &str| bar_mark(&bar_of(Some(url), &LoadWatch::default()));
+        assert_eq!(
+            mark("https://app.uniswap.org/#/swap"),
+            Some(OriginLock::Secure)
+        );
+        for local in [
+            "http://127.0.0.1:8137/",
+            "http://localhost:5173/app",
+            "http://192.168.1.5:3000/",
+        ] {
+            assert_eq!(mark(local), Some(OriginLock::Local), "{local}");
+        }
+        assert_eq!(mark("http://example.com/"), Some(OriginLock::Insecure));
+
+        // A load that has not committed, and a failure panel: no mark.
+        let mut load = LoadDriver::default();
+        load.requested("https://app.uniswap.org/", 0.0);
+        assert_eq!(bar_mark(&bar_of(None, &load.watch)), None);
+        // And a load pending under a page lends it nothing: the bar still
+        // names the page on screen, with that page's mark (spec 082 RE1).
+        let shown = bar_of(Some("http://example.com/"), &load.watch);
+        assert_eq!(shown.host, "example.com");
+        assert_eq!(bar_mark(&shown), Some(OriginLock::Insecure));
+        load.watchdog(load.watch.generation);
+        load.probed(
+            load.watch.generation,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::REFUSED),
+                proxy: None,
+            },
+            3_500.0,
+        );
+        assert!(load.watch.failure.is_some());
+        assert_eq!(bar_mark(&bar_of(None, &load.watch)), None);
+    }
+
+    /// The connection panel and the consent read the same lock from the
+    /// browser machine's views. A local http page is one the wallet may be
+    /// used from (`secure`) and still wears no padlock; where the bar and
+    /// the machine name the same site, they draw the same mark.
+    #[test]
+    fn a_local_http_page_may_use_the_wallet_and_wears_no_padlock() {
+        use crate::explore::components::lock_glyph;
+        use crate::icons::Icon;
+        const LOCAL: &str = "http://127.0.0.1:8137";
+        storage::tests::with_temp_state("dbr-host-lock", || {
+            let theme = crate::theme::Theme::light();
+            let mut driver = booted();
+            page(&mut driver, LOCAL, json!({"t":"hello","doc":"d1"}));
+            let Some(tab) = driver.view().tabs.into_iter().find(|tab| tab.tab == TAB) else {
+                unreachable!("the machine has heard of the tab");
+            };
+            assert!(tab.secure, "the wallet may be used from this page");
+            assert_eq!(tab.lock, OriginLock::Local);
+            let (glyph, tint) = lock_glyph(&theme, tab.lock);
+            assert_ne!(glyph, Icon::Lock, "and it is not locked");
+            assert_ne!(tint, theme.warning_base, "nor warned about");
+            let bar = bar_of(Some("http://127.0.0.1:8137/app"), &LoadWatch::default());
+            assert_eq!(bar_mark(&bar), Some(tab.lock), "one mark, bar and panel");
+
+            // The site asking to connect carries the same mark.
+            ask(
+                &mut driver,
+                LOCAL,
+                "d1",
+                "1",
+                "eth_requestAccounts",
+                json!([]),
+            );
+            assert_eq!(
+                driver.view().consent.map(|consent| consent.lock),
+                Some(OriginLock::Local)
+            );
+            driver.dispatch(Event::ConsentRejected { now_ms: 0.0 });
+
+            // An https page in the same tab: the padlock, bar and panel.
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d2"}));
+            let Some(tab) = driver.view().tabs.into_iter().find(|tab| tab.tab == TAB) else {
+                unreachable!("the machine has heard of the tab");
+            };
+            assert_eq!(tab.lock, OriginLock::Secure);
+            assert_eq!(lock_glyph(&theme, tab.lock).0, Icon::Lock);
+            let bar = bar_of(Some("https://dapp.example/app"), &LoadWatch::default());
+            assert_eq!(bar_mark(&bar), Some(tab.lock));
+        });
     }
 
     // -- spec 082 T059: WebKit's own load state first ------------------------
