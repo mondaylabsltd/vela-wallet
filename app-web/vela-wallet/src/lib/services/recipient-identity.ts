@@ -9,6 +9,8 @@
  *      (chain → founding key → index units; `public-key-index.ts`)
  *   2. Name services via on-chain RPC (no third-party API dependencies):
  *      .bnb (BSC) · .arb (Arbitrum) · .g (Gravity) · Basenames (Base) · ENS
+ *      — each asked only while its chain is one of the wallet's networks
+ *      (`servicesOnWalletNetworks`)
  *
  * Adding a name service = one entry in NAME_SERVICES. Anything following the
  * ENS registry pattern (registry.resolver(node) → resolver.name(node)) works
@@ -32,6 +34,7 @@
 import * as core from '$lib/core/client';
 import { runWalk } from './core-walk';
 import { namehash } from './ens';
+import { ensureCustomNetworks, networkForChainId } from './networks';
 import { queryWalletName } from './public-key-index';
 import { poolRpcCall } from './rpc-pool';
 import { getItem, setItem } from './storage';
@@ -75,6 +78,33 @@ const NAME_SERVICES: NameServiceConfig[] = [
 	// ENS on Ethereum mainnet
 	{ label: 'ENS', chainId: 1, registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' }
 ];
+
+/**
+ * The name services this wallet asks: those whose chain is one of the
+ * wallet's networks — built in, or added by the person (the list Settings →
+ * Networks shows).
+ *
+ * `.g` lives on chain 1625, which is not one of them. The web asked it all the
+ * same: for a chain it has no network for, the pool collects endpoints from
+ * the public chain index, so every lookup of every counterparty sent a
+ * request to a stranger's node on a network the person never added — at each
+ * launch — and when those nodes did not answer the feedback sheet listed
+ * "Chain 1625" among the networks the wallet could not reach (device walk of
+ * 2026-10-11, item 9). The other three shells make no request there: they
+ * have no endpoint for the chain, and the core fails such a call at once.
+ *
+ * A service that is skipped makes no pool call at all, and the waterfall goes
+ * on to the next one exactly as when a service has no name for the address.
+ * If the person adds the network, its service is asked from the next lookup:
+ * nothing here remembers a "no".
+ */
+async function servicesOnWalletNetworks(): Promise<NameServiceConfig[]> {
+	// The person's own networks are read once per document; a lookup that
+	// runs first waits for that read rather than taking "not read yet" for
+	// "not added". An unreadable store leaves the built-in networks.
+	await ensureCustomNetworks().catch(() => undefined);
+	return NAME_SERVICES.filter((config) => networkForChainId(config.chainId) !== null);
+}
 
 // ---------------------------------------------------------------------------
 // Cache (KV, positive results only)
@@ -352,13 +382,14 @@ async function runWaterfall(address: string): Promise<RecipientIdentity | null> 
 		return identity;
 	}
 
+	const services = await servicesOnWalletNetworks();
 	const results = await Promise.allSettled(
-		NAME_SERVICES.map((config) => reverseResolveRegistry(address, config))
+		services.map((config) => reverseResolveRegistry(address, config))
 	);
 	for (let i = 0; i < results.length; i++) {
 		const r = results[i];
 		if (r.status === 'fulfilled' && r.value) {
-			const identity: RecipientIdentity = { name: r.value, source: NAME_SERVICES[i].label };
+			const identity: RecipientIdentity = { name: r.value, source: services[i].label };
 			await setCache(address, identity);
 			return identity;
 		}
