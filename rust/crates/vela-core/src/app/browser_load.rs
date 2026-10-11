@@ -36,7 +36,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::dapp_permissions::{is_insecure_public_origin, origin_of};
+use super::dapp_permissions::{origin_lock, origin_of, OriginLock};
 
 /// Where an error code comes from: each platform numbers its errors itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1005,13 +1005,18 @@ fn comparable_address(url: &str) -> String {
 // What the address bar names, and a site named once (spec 082, RE1, RE7)
 // ---------------------------------------------------------------------------
 
-/// The padlock beside the bar's host.
+/// The mark beside the bar's host ([`OriginLock`], for a committed document).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BarLock {
-    /// A document from an origin the wallet signs for: https, or http on
-    /// loopback / a private network (the dev and on-device test dApps).
+    /// A document over https: the padlock, and the only one. A padlock says
+    /// "encrypted" to a person, so nothing else wears it.
     Closed,
+    /// A document over http on loopback or a private network (the dev and
+    /// on-device test dApps): the wallet signs for it, and nobody sits on
+    /// the path — but it is not encrypted. A neutral mark of its own; the
+    /// bar drew a padlock beside `127.0.0.1:8137` (the 2026-10-11 walk).
+    Local,
     /// A document over public http, where anyone on the path can change it.
     Open,
     /// Nothing from that host is on screen: a failure panel, a load that has
@@ -1033,8 +1038,8 @@ pub struct AddressBar {
 ///
 /// 1. a failure panel is up (`failed_url`) → the failed host, no lock —
 ///    nothing from that host is on screen;
-/// 2. a document committed (`shown_url`) → its host, [`BarLock::Closed`] or
-///    [`BarLock::Open`] from `!is_insecure_public_origin`;
+/// 2. a document committed (`shown_url`) → its host, and [`BarLock::Closed`],
+///    [`BarLock::Local`] or [`BarLock::Open`] from [`origin_lock`];
 /// 3. a load pending in an EMPTY tab (`pending_url`) → the pending host, no
 ///    lock;
 /// 4. otherwise nothing.
@@ -1060,10 +1065,10 @@ pub fn address_bar(
         };
     }
     if let Some((url, origin)) = given(shown_url).and_then(|url| Some((url, origin_of(url)?))) {
-        let lock = if is_insecure_public_origin(&origin) {
-            BarLock::Open
-        } else {
-            BarLock::Closed
+        let lock = match origin_lock(&origin) {
+            OriginLock::Secure => BarLock::Closed,
+            OriginLock::Local => BarLock::Local,
+            OriginLock::Insecure => BarLock::Open,
         };
         return AddressBar {
             url: url.to_owned(),

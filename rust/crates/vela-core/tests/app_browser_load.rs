@@ -996,8 +996,9 @@ fn a_failure_names_the_failed_host_without_a_lock() {
     );
 }
 
-/// The lock is the signing rule's: https, and http on loopback or a private
-/// network, are closed; public http is open.
+/// The lock says how the page is connected: https is closed — the only
+/// padlock; http on loopback or a private network is local, a mark of its
+/// own; public http is open.
 #[test]
 fn the_lock_follows_the_origin_rule() {
     for (url, host, lock) in [
@@ -1006,14 +1007,14 @@ fn the_lock_follows_the_origin_rule() {
             "app.uniswap.org",
             BarLock::Closed,
         ),
-        ("http://127.0.0.1:8137/", "127.0.0.1:8137", BarLock::Closed),
-        ("http://localhost:5173/", "localhost:5173", BarLock::Closed),
+        ("http://127.0.0.1:8137/", "127.0.0.1:8137", BarLock::Local),
+        ("http://localhost:5173/", "localhost:5173", BarLock::Local),
         (
             "http://192.168.50.9:8137/x",
             "192.168.50.9:8137",
-            BarLock::Closed,
+            BarLock::Local,
         ),
-        ("http://10.0.0.8/", "10.0.0.8", BarLock::Closed),
+        ("http://10.0.0.8/", "10.0.0.8", BarLock::Local),
         ("http://example.com/", "example.com", BarLock::Open),
         (
             "http://10.0.0.1.evil.com/",
