@@ -1164,13 +1164,7 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(
-                    div()
-                        .text_size(theme::text_row_title())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.fg_base)
-                        .child(row.title.clone()),
-                )
+                .child(row_title(theme, row))
                 .child(
                     div()
                         .text_size(theme::text_row_sub())
@@ -1306,6 +1300,71 @@ pub fn asset_sub(theme: &Theme, sub: &super::fixtures::AssetSub) -> Div {
         SubWorth::Absent => line.child(after("")),
     }
 }
+
+/// An activity row's title. One run of text — or, for a title that has
+/// parts ([`TitleParts`]: a dApp row's action and its place), those parts
+/// side by side in a row that wraps: each part is one unbroken line, so the
+/// title breaks BETWEEN them and nowhere else (PR 4 item 1). A part longer
+/// than the row by itself is cut where it can best be spared — the place in
+/// its middle, keeping both ends of the host; the action at its end.
+///
+/// The title was one text, wrapped wherever its line ran out: 「在
+/// arcorbs.game3.app 合 / 约交互」 on the phone, and here, under a long
+/// host, 「…finance 合约 / 交互」 on the home and the host itself broken
+/// mid-name in History.
+pub fn row_title(theme: &Theme, row: &ActivityRowModel) -> Div {
+    title_in_parts(theme, &row.title, row.title_parts.as_ref())
+}
+
+/// [`row_title`] for any surface that says such a title in the row title's
+/// face — the row, and the head of the detail the row opens.
+pub fn title_in_parts(
+    theme: &Theme,
+    whole: &SharedString,
+    parts: Option<&super::fixtures::TitleParts>,
+) -> Div {
+    let title = div()
+        .text_size(theme::text_row_title())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_base);
+    let Some(parts) = parts else {
+        return title.child(whole.clone());
+    };
+    // A word space of the title's face, between two parts on one line —
+    // and none before a part that starts a line, which a gap never draws.
+    let space = if parts.spaced {
+        theme::text_row_title() * TITLE_SPACE_EM
+    } else {
+        px(0.)
+    };
+    let mut line = title.flex().flex_wrap().min_w(px(0.)).gap_x(space);
+    for part in &parts.parts {
+        let cell = title_part_cell().child(part.text.clone());
+        line = line.child(if part.place {
+            cell.text_ellipsis_middle()
+        } else {
+            cell.text_ellipsis()
+        });
+    }
+    line
+}
+
+/// One part of a title: a line of its own that never breaks, no wider than
+/// the row — past that it is cut ([`row_title`]), not wrapped.
+fn title_part_cell() -> Div {
+    div()
+        .min_w(px(0.))
+        .max_w_full()
+        .whitespace_nowrap()
+        .overflow_hidden()
+}
+
+/// A word space of the row title's face between two of its parts, in ems —
+/// measured, not looked up: with this gap a title in two cells is as wide,
+/// to the device pixel, as the same words drawn as one run (1280×800, the
+/// row title's size, Latin and Chinese). The face's own space is wider than
+/// this; the two cells' own edges make up the rest.
+const TITLE_SPACE_EM: f32 = 0.13;
 
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
 pub fn asset_row(
@@ -1816,6 +1875,74 @@ mod tests {
         let at_rest = crate::wallet::fixtures::balance_refresh(&en, false);
         assert!(!refresh_turns(&at_rest, false), "still at rest");
         assert!(!refresh_turns(&at_rest, true));
+    }
+
+    /// PR 4 item 1: a title in parts is drawn so that it can break only
+    /// BETWEEN them. The parts stand in a row that wraps; each is a line that
+    /// never breaks and is never wider than the row — past that it is cut,
+    /// the place in its middle and the action at its end, not wrapped. A
+    /// title with no parts is one run of text, as it always was.
+    #[test]
+    fn a_title_in_parts_breaks_between_them_and_nowhere_else() {
+        use crate::wallet::fixtures::{
+            ActivityKind, ActivityRowModel, TitlePart, TitleParts, activity_default,
+        };
+        let theme = Theme::light();
+        let en = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::for_tag("en"));
+        let mut row: ActivityRowModel = activity_default(&en)
+            .into_iter()
+            .find(|row| row.kind == ActivityKind::Dapp)
+            .unwrap_or_else(|| unreachable!("the board has a dApp row"));
+        assert!(row.title_parts.is_none());
+        let mut plain = row_title(&theme, &row);
+        assert_ne!(
+            plain.style().flex_wrap,
+            Some(gpui::FlexWrap::Wrap),
+            "one run of text"
+        );
+
+        row.title_parts = Some(TitleParts {
+            parts: vec![
+                TitlePart {
+                    text: "Contract interaction".into(),
+                    place: false,
+                },
+                TitlePart {
+                    text: "on arcorbs.game3.app".into(),
+                    place: true,
+                },
+            ],
+            spaced: true,
+        });
+        let mut title = row_title(&theme, &row);
+        let style = title.style();
+        assert_eq!(style.display, Some(gpui::Display::Flex));
+        assert_eq!(style.flex_wrap, Some(gpui::FlexWrap::Wrap), "between parts");
+        assert_eq!(style.min_size.width, Some(px(0.).into()));
+        assert_eq!(
+            style.gap.width,
+            Some((theme::text_row_title() * TITLE_SPACE_EM).into()),
+            "a word space between two parts on one line"
+        );
+        // Japanese writes none.
+        if let Some(parts) = row.title_parts.as_mut() {
+            parts.spaced = false;
+        }
+        assert_eq!(
+            row_title(&theme, &row).style().gap.width,
+            Some(px(0.).into())
+        );
+
+        let mut cell = title_part_cell();
+        let cell = cell.style();
+        assert_eq!(
+            cell.text.white_space,
+            Some(gpui::WhiteSpace::Nowrap),
+            "a part never breaks inside"
+        );
+        assert_eq!(cell.overflow.x, Some(gpui::Overflow::Hidden), "it is cut");
+        assert_eq!(cell.max_size.width, Some(gpui::relative(1.).into()));
+        assert_eq!(cell.min_size.width, Some(px(0.).into()));
     }
 
     /// PR 4 item 4: under the figure the hero has ONE line — what the wallet

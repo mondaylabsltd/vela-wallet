@@ -904,14 +904,19 @@ fn tx_detail(
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(
-                div()
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_base)
-                    .child(model.title.clone()),
-            )
-            .children(model.status.as_ref().map(|chip| status_chip(theme, chip))),
+            // In its parts where it has them: a dApp record's title wraps
+            // between what was done and where, as its row's does.
+            .child(crate::wallet::components::title_in_parts(
+                theme,
+                &model.title,
+                model.title_parts.as_ref(),
+            ))
+            .children(
+                model
+                    .status
+                    .as_ref()
+                    .map(|chip| status_chip(theme, chip).flex_none()),
+            ),
     );
     // A signature's note stands where a transaction's chip would (spec 093):
     // nothing was sent, so there is nothing to settle.
@@ -4328,6 +4333,7 @@ mod tests {
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
         TxDetail {
             title: "dApp 交易".into(),
+            title_parts: None,
             status: Some(StatusChip {
                 text: "处理中".into(),
                 tone,

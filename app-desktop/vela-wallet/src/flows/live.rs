@@ -409,6 +409,7 @@ pub fn tx_detail(
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
+        title_parts: None,
         title: match item.kind {
             vela_core::app::activity_feed::FeedTxKind::DappTx => s.tx_label_dapp.clone(),
             _ => SharedString::from(crate::wallet::fill(
@@ -490,6 +491,7 @@ fn dapp_detail(
     };
     crate::flows::fixtures::TxDetail {
         title: crate::wallet::live::dapp_title(dapp, wallet),
+        title_parts: crate::wallet::live::dapp_title_parts(dapp, wallet),
         status: (!dapp.off_chain).then(|| status_chip(item.status, s)),
         // A signature says it was off-chain; a failed operation says why
         // (spec 097 N4), under its chip.

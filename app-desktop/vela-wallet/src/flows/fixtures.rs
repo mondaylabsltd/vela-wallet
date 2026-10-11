@@ -320,6 +320,9 @@ pub struct HistoryPanel {
 #[derive(Clone)]
 pub struct TxDetail {
     pub title: SharedString,
+    /// The same title in its parts, for a dApp record that names a place:
+    /// where it may wrap (`wallet::fixtures::TitleParts`, PR 4 item 1).
+    pub title_parts: Option<crate::wallet::fixtures::TitleParts>,
     /// Where a transaction stands. `None` for a dApp's signature (spec 093):
     /// nothing was sent, so nothing settles — `note` says so instead.
     pub status: Option<StatusChip>,
@@ -1123,6 +1126,7 @@ fn history(s: &FlowStrings) -> Vec<HistoryGroup> {
                badge: Hsla| ActivityRowModel {
         kind,
         title: title.clone(),
+        title_parts: None,
         subtitle: subtitle.into(),
         amount: amount.into(),
         unit: unit.into(),
@@ -1280,6 +1284,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
     TxDetail {
         breakdown_title: None,
         breakdown: Vec::new(),
+        title_parts: None,
         title: if received {
             fill(&s.tx_label_received, "symbol", "USDT").into()
         } else {

@@ -4478,6 +4478,8 @@ impl WalletPage {
         match crate::dev_env::var!("VELA_ACTIVITY_FIXTURE").as_deref() {
             Some("hidden") => Some(fixtures::transfer_feed(true)),
             Some("shown") => Some(fixtures::transfer_feed(false)),
+            // dApp rows, for their titles (PR 4 item 1).
+            Some("dapp") => Some(fixtures::dapp_feed()),
             _ => None,
         }
     }

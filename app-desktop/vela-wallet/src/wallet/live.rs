@@ -1843,6 +1843,132 @@ mod tests {
         assert!(rows[1].positive);
     }
 
+    /// PR 4 item 1. On the phone a row read 「在 arcorbs.game3.app 合 /
+    /// 约交互」 — the action cut in two; on the desktop a long host did the
+    /// same to the action on the home and broke the host mid-name in
+    /// History. A dApp row's title is carried in its parts, in every
+    /// language the app ships: what was done, whole, in a part of its own,
+    /// and the place with the word that ties it to the action in another —
+    /// in the language's order, saying together exactly what the one-run
+    /// title says. Through the real feed core's rows, too.
+    #[test]
+    fn a_dapp_rows_title_is_carried_in_what_was_done_and_where() {
+        use crate::wallet::fixtures::{LONG_SITE, TitlePart, WALK_SITE};
+        let part = |text: &str, place: bool| TitlePart {
+            text: SharedString::from(text.to_owned()),
+            place,
+        };
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let s = WalletStrings::resolve(&loc);
+            let verb = s.intent_contract_call.to_string();
+            for site in [WALK_SITE, LONG_SITE, "Uniswap"] {
+                let Some(parts) = title_parts_of(&s.dapp_row_title, site, &verb) else {
+                    unreachable!("{tag}: the title has two parts");
+                };
+                let whole = crate::wallet::fill(
+                    &crate::wallet::fill(&s.dapp_row_title, "place", site),
+                    "intent",
+                    &verb,
+                );
+                assert_eq!(parts.joined(), whole, "{tag}: the parts say the title");
+                assert_eq!(parts.parts.len(), 2, "{tag}: {parts:?}");
+                let action: Vec<&TitlePart> =
+                    parts.parts.iter().filter(|part| !part.place).collect();
+                assert_eq!(action.len(), 1, "{tag}");
+                assert_eq!(action[0].text.as_ref(), verb, "{tag}: the action, whole");
+                let place: Vec<&TitlePart> = parts.parts.iter().filter(|part| part.place).collect();
+                assert_eq!(place.len(), 1, "{tag}");
+                assert!(place[0].text.contains(site), "{tag}: {:?}", place[0].text);
+                assert!(
+                    parts
+                        .parts
+                        .iter()
+                        .all(|part| part.text.trim() == part.text.as_ref()),
+                    "{tag}: no part carries a space at its edge"
+                );
+            }
+        }
+        let of = |tag: &str, site: &str| {
+            let s = WalletStrings::resolve(&crate::loc::Loc::for_language(tag));
+            let parts = title_parts_of(&s.dapp_row_title, site, &s.intent_contract_call)
+                .unwrap_or_else(|| unreachable!("{tag}: two parts"));
+            (parts.parts, parts.spaced)
+        };
+        assert_eq!(
+            of("zh", WALK_SITE),
+            (
+                vec![part("在 arcorbs.game3.app", true), part("合约交互", false)],
+                true
+            )
+        );
+        assert_eq!(
+            of("en", WALK_SITE),
+            (
+                vec![
+                    part("Contract interaction", false),
+                    part("on arcorbs.game3.app", true)
+                ],
+                true
+            )
+        );
+        // Japanese writes no space between them.
+        let (ja, spaced) = of("ja", WALK_SITE);
+        assert!(!spaced && ja[0].place && ja[0].text.starts_with(WALK_SITE));
+
+        // A template shaped another way still never cuts the action: words
+        // after it that do not name the place stay on it; no place, or no
+        // action, is one part — nothing to wrap between.
+        let odd = title_parts_of("{{place}} で {{intent}} する", "a.example", "交換")
+            .unwrap_or_else(|| unreachable!("two parts"));
+        assert_eq!(
+            odd.parts,
+            vec![part("a.example で", true), part("交換 する", false)]
+        );
+        assert_eq!(title_parts_of("{{intent}}", "a.example", "Swap"), None);
+        assert_eq!(title_parts_of("On {{place}}", "a.example", "Swap"), None);
+
+        // The rows the home and History draw, from the real feed core.
+        let feed = crate::wallet::fixtures::dapp_feed();
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let flows = crate::flows::FlowStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let rows = activity_rows(&feed, &zh, &flows, false);
+        assert!(!rows.is_empty());
+        let history: Vec<ActivityRowModel> = crate::flows::live::history(&feed, &flows, &zh, false)
+            .into_iter()
+            .flat_map(|group| group.rows)
+            .collect();
+        assert_eq!(history.len(), 4, "History draws every row");
+        for row in rows.iter().chain(&history) {
+            let parts = row
+                .title_parts
+                .as_ref()
+                .unwrap_or_else(|| unreachable!("{}: in parts", row.title));
+            assert_eq!(parts.joined(), row.title.as_ref());
+            assert_eq!(parts.parts[1], part("合约交互", false), "{}", row.title);
+            assert!(parts.parts[0].place);
+        }
+        assert!(history.iter().any(|row| row.title.contains(LONG_SITE)));
+        // A transfer's title is one word: nothing to carry in parts.
+        let transfers = crate::wallet::fixtures::transfer_feed(false);
+        assert!(
+            activity_rows(&transfers, &zh, &flows, false)
+                .iter()
+                .all(|row| row.title_parts.is_none())
+        );
+        // And the detail a dApp row opens says its title the same way.
+        let id = history_item_ids(&feed)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| unreachable!("a row"));
+        let detail =
+            crate::flows::live::tx_detail(&feed, &id, &flows, &zh, false, "zh", Money::usd())
+                .unwrap_or_else(|| unreachable!("the row opens"));
+        assert_eq!(
+            detail.title_parts.map(|parts| parts.joined()),
+            Some(detail.title.to_string())
+        );
+    }
+
     /// A dApp's row (083 H2, spec 093): titled by the core's headline verb in
     /// the sheet's words — the descriptor's text when the wallet has no word
     /// for it — "on" the place the core named, or the verb alone when it
@@ -4203,6 +4329,11 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
             (ActivityKind::Received, None) => s.label_received.clone(),
             (ActivityKind::Dapp, None) => s.label_dapp.clone(),
         },
+        // Where that title may wrap: between what was done and where.
+        title_parts: item
+            .dapp
+            .as_ref()
+            .and_then(|dapp| dapp_title_parts(dapp, s)),
         subtitle: subtitle_text(&item.subtitle, s),
         // The chain this happened on, drawn as its logo where the endpoint has
         // one (§8.3; issue 201): the badge used to be a colour, and a colour
@@ -4358,11 +4489,7 @@ pub(crate) fn dapp_title(
     dapp: &vela_core::app::activity_feed::FeedDapp,
     s: &WalletStrings,
 ) -> SharedString {
-    let verb = dapp
-        .intent_term
-        .and_then(|term| s.terms.get(&term).cloned())
-        .or_else(|| dapp.intent.clone().map(SharedString::from))
-        .unwrap_or_else(|| s.intent_contract_call.clone());
+    let verb = dapp_verb(dapp, s);
     match dapp.place.as_deref() {
         // The place first: a host or a built-in protocol name carries no
         // braces, while a descriptor's verb is text somebody else wrote.
@@ -4373,6 +4500,65 @@ pub(crate) fn dapp_title(
         )),
         None => verb,
     }
+}
+
+/// The headline verb of a dApp interaction, in the reader's words.
+fn dapp_verb(dapp: &vela_core::app::activity_feed::FeedDapp, s: &WalletStrings) -> SharedString {
+    dapp.intent_term
+        .and_then(|term| s.terms.get(&term).cloned())
+        .or_else(|| dapp.intent.clone().map(SharedString::from))
+        .unwrap_or_else(|| s.intent_contract_call.clone())
+}
+
+/// [`dapp_title`] in the parts a row may wrap between (PR 4 item 1): what
+/// was done, and where — the place with the word that ties it to the action
+/// ("on arcorbs.game3.app", 「在 arcorbs.game3.app」, 「arcorbs.game3.appで」).
+/// In the order the language writes them, which is the title template's own
+/// (`history.dappRowTitle`). `None` when the title is one part: no place.
+pub(crate) fn dapp_title_parts(
+    dapp: &vela_core::app::activity_feed::FeedDapp,
+    s: &WalletStrings,
+) -> Option<crate::wallet::fixtures::TitleParts> {
+    let place = dapp.place.as_deref()?;
+    title_parts_of(&s.dapp_row_title, place, &dapp_verb(dapp, s))
+}
+
+/// The title template cut at its action. What stands before `{{intent}}`
+/// and what stands after it are the place's side(s): filled, trimmed, each a
+/// part of its own — except words after the action that do not name the
+/// place (a verb ending), which stay on the action. `None` for a template
+/// that does not make two parts of them.
+pub(crate) fn title_parts_of(
+    template: &str,
+    place: &str,
+    verb: &str,
+) -> Option<crate::wallet::fixtures::TitleParts> {
+    use crate::wallet::fixtures::{TitlePart, TitleParts};
+    const PLACE: &str = "{{place}}";
+    let (before, after) = template.split_once("{{intent}}")?;
+    let filled = |side: &str| crate::wallet::fill(side, "place", place);
+    let part = |text: String, place: bool| TitlePart {
+        text: SharedString::from(text),
+        place,
+    };
+    let mut parts = Vec::new();
+    let mut spaced = false;
+    if !before.trim().is_empty() {
+        parts.push(part(
+            filled(before).trim().to_owned(),
+            before.contains(PLACE),
+        ));
+        spaced |= before.ends_with(char::is_whitespace);
+    }
+    if after.contains(PLACE) {
+        parts.push(part(verb.to_owned(), false));
+        parts.push(part(filled(after).trim().to_owned(), true));
+        spaced |= after.starts_with(char::is_whitespace);
+    } else {
+        // Words after the action that are not the place belong to it.
+        parts.push(part(format!("{verb}{}", after.trim_end()), false));
+    }
+    (parts.len() > 1 && parts.iter().any(|part| part.place)).then_some(TitleParts { parts, spaced })
 }
 
 /// `+120` / `−2`. The minus is U+2212, not a hyphen — the mocks use it and it
