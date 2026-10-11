@@ -99,7 +99,11 @@
 			{#if banner}
 				<div class="banner">{@render banner()}</div>
 			{/if}
+			<!-- `wide`: the hero's line under the figure is two-ended too — what
+			     the wallet says, and the refresh control — so it keeps the rows'
+			     measure, while the figure above it keeps the column. -->
 			<BalanceDisplay
+				wide
 				balance={model.balance}
 				ontoggle={onbalancetoggle}
 				{onstatus}

@@ -14,11 +14,35 @@
 		 * gallery, where the control is a picture.
 		 */
 		onrefresh?: () => void;
+		/**
+		 * The wide layout's hero: its line is as wide as the rows under it
+		 * (`--layout-rowMeasure`), so the control at its trailing edge stands
+		 * over their trailing actions — and it has room for the control's
+		 * words beside whatever is said. On a phone the line is the screen's
+		 * width, and the words step aside for what the wallet has to say.
+		 */
+		wide?: boolean;
 	}
 
-	let { balance, onstatus, ontoggle, onrefresh }: Props = $props();
+	let { balance, onstatus, ontoggle, onrefresh, wide = false }: Props = $props();
 
 	const spinning = $derived(balance.refresh?.spinning === true);
+
+	/** Something is said on the line's leading side. */
+	const saying = $derived(
+		balance.checkingText !== undefined ||
+			balance.status !== undefined ||
+			(balance.state === 'zero-live' && balance.liveText !== undefined)
+	);
+	/**
+	 * Whether the control wears its words ("Updated 2m" / "Updating…") or is
+	 * the glyph alone. On a phone the line says one thing at a time: what the
+	 * wallet has to say, or — when it has nothing to say — when the figure was
+	 * read. "Can't reach BNB Chain right now" and "Updated 2m" do not both fit
+	 * 358 px, and the first is the one a person needs whole. The words are
+	 * still the control's name either way.
+	 */
+	const worded = $derived(wide || !saying);
 
 	function refresh(): void {
 		if (spinning) return;
@@ -74,6 +98,9 @@
 	 * set a little smaller — never under 85 % — and what still does not fit
 	 * ends in "…". Nothing is lost: the whole sentence is the line's
 	 * accessible name, and the sheet the line opens says it in full at its top.
+	 *
+	 * Its room is the line's LEADING side — what the refresh control at the
+	 * trailing edge leaves (item 4 of the 2026-10-11 walk).
 	 */
 	const SAID_FLOOR = 0.85;
 	let saidRoom = $state<HTMLElement | null>(null);
@@ -84,8 +111,10 @@
 		const room = saidRoom;
 		const door = saidDoor;
 		const words = saidWords;
-		// Another sentence on the same line is measured again.
+		// Another sentence on the same line is measured again — and so is the
+		// same one when the control beside it gains or loses its words.
 		void balance.status?.text;
+		void worded;
 		if (!room || !door || !words) {
 			shrink = 1;
 			return;
@@ -175,89 +204,102 @@
 		</div>
 	{/if}
 
-	{#if balance.refresh !== undefined}
-		<!-- Issue 462: "↻ Updated 2m", the same control on all four apps. One
-		     box for both states, so a press moves nothing: the glyph turns in
-		     its own square, and the two labels share one grid cell — the box is
-		     as wide as the longer of them, the one not shown is laid out under
-		     the other, invisible. Inert while it turns, never dimmed. Its name
-		     is what it says — "Updating…" while it turns, "Updated 2m" at rest —
-		     and "Refresh balance" while no read has settled and the glyph stands
-		     alone: a glyph is aria-hidden and the laid-out-but-invisible label
-		     names nothing, so without it a screen reader heard a bare "button"
-		     exactly when a person most needs the control. -->
-		<button
-			type="button"
-			class="refresh"
-			class:spinning
-			data-testid="balance-refresh"
-			aria-label={spinning
-				? balance.refresh.updating
-				: (balance.refresh.updated ?? balance.refresh.a11yIdle)}
-			aria-busy={spinning}
-			aria-disabled={spinning || onrefresh === undefined ? 'true' : undefined}
-			onclick={refresh}
-		>
-			<span class="glyph"><Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" /></span>
-			<span class="words">
-				<span class:shown={!spinning}>{balance.refresh.updated ?? ''}</span>
-				<span class:shown={spinning}>{balance.refresh.updating}</span>
-			</span>
-		</button>
-	{/if}
-
 	<!--
-		The line a status is said on, kept from the first frame (PR 3 note 26b).
+		The hero's ONE line under the figure: what the wallet has to say on its
+		leading side, and at its trailing edge the control that reads the
+		figure again (device walk of 2026-10-11, item 4).
 
-		"Can't reach Gnosis right now", "Some tokens couldn't be priced", the
-		new wallet's "Live · listening for payments": each arrived as a line of
-		its own under the figure, and each arrival pushed the refresh control
-		and the whole page under the hero down a line — and its going pulled
-		them back up. The line is the hero's now, whether or not anything is
-		said on it, and it stands under the refresh control: what a person
-		presses never moves, and a status lands in room that was already there.
+		They were two lines. The control had the first to itself — before the
+		first read that is a lone ↻ over "Checking…" — and the line under it
+		stood empty whenever the wallet had nothing to say, which is nearly
+		always: a line with one glyph on it, or a blank one, in every state.
+
+		One height whatever either half says, there from the first frame (PR 3
+		note 26b): "Can't reach Gnosis right now", "Some tokens couldn't be
+		priced", the new wallet's "Live · listening for payments" each land in
+		room that was already there, and nothing that arrives, changes or goes
+		moves the page under the hero. The control's GLYPH is the last thing
+		on the line in every state, so nothing said beside it — and no change
+		of its own words — moves it under a finger that is pressing it (issue
+		462).
 	-->
-	<div class="said" bind:this={saidRoom}>
-		{#if balance.checkingText !== undefined}
-			<!-- The first read is still out (F19): said quietly, where "Live" or
+	<div class="said" class:wide>
+		<div class="saying" bind:this={saidRoom}>
+			{#if balance.checkingText !== undefined}
+				<!-- The first read is still out (F19): said quietly, where "Live" or
 			     "Can't reach…" will stand once a round has ended. The dot is the
 			     live line's own, not yet green — the words start where they will. -->
-			<p class="live checking">
-				<span class="live-dot" aria-hidden="true"></span>
-				{balance.checkingText}
-			</p>
-		{:else if balance.status !== undefined}
-			<!-- One line (F16): the whole sentence is its name — to a screen
+				<p class="live checking">
+					<span class="live-dot" aria-hidden="true"></span>
+					<span class="live-words">{balance.checkingText}</span>
+				</p>
+			{:else if balance.status !== undefined}
+				<!-- One line (F16): the whole sentence is its name — to a screen
 			     reader, and under a pointer — whatever part of it the line has
 			     room to draw. -->
+				<button
+					type="button"
+					class="status {balance.status.kind}"
+					aria-label={balance.status.text}
+					title={balance.status.text}
+					onclick={onstatus}
+					bind:this={saidDoor}
+				>
+					<Icon
+						icon={balance.status.kind === 'warning'
+							? UTILITY_ICONS['triangle-alert']
+							: UTILITY_ICONS['refresh-cw']}
+						size="sm"
+					/>
+					<span
+						class="sentence"
+						class:shrunk={shrink < 1}
+						style:--shrink={shrink < 1 ? shrink : undefined}
+						data-shrink={shrink}
+						bind:this={saidWords}>{balance.status.text}</span
+					>
+					<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+				</button>
+			{:else if balance.state === 'zero-live' && balance.liveText !== undefined}
+				<p class="live">
+					<span class="live-dot" aria-hidden="true"></span>
+					<span class="live-words">{balance.liveText}</span>
+				</p>
+			{/if}
+		</div>
+
+		{#if balance.refresh !== undefined}
+			<!-- Issue 462: "Updated 2m ↻", the same control on all four apps. One
+			     box for both of its states, so a press moves nothing: the glyph
+			     turns in its own square, and the two labels share one grid cell —
+			     the box is as wide as the longer of them, the one not shown is
+			     laid out under the other, invisible. Inert while it turns, never
+			     dimmed. Its name is what it says — "Updating…" while it turns,
+			     "Updated 2m" at rest — whether or not the words are drawn, and
+			     "Refresh balance" while no read has settled: a glyph is
+			     aria-hidden and a label that is not drawn names nothing, so
+			     without it a screen reader heard a bare "button" exactly when a
+			     person most needs the control. -->
 			<button
 				type="button"
-				class="status {balance.status.kind}"
-				aria-label={balance.status.text}
-				title={balance.status.text}
-				onclick={onstatus}
-				bind:this={saidDoor}
+				class="refresh"
+				class:spinning
+				data-testid="balance-refresh"
+				aria-label={spinning
+					? balance.refresh.updating
+					: (balance.refresh.updated ?? balance.refresh.a11yIdle)}
+				aria-busy={spinning}
+				aria-disabled={spinning || onrefresh === undefined ? 'true' : undefined}
+				onclick={refresh}
 			>
-				<Icon
-					icon={balance.status.kind === 'warning'
-						? UTILITY_ICONS['triangle-alert']
-						: UTILITY_ICONS['refresh-cw']}
-					size="sm"
-				/>
-				<span
-					class="sentence"
-					class:shrunk={shrink < 1}
-					style:--shrink={shrink < 1 ? shrink : undefined}
-					data-shrink={shrink}
-					bind:this={saidWords}>{balance.status.text}</span
-				>
-				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+				{#if worded}
+					<span class="words">
+						<span class:shown={!spinning}>{balance.refresh.updated ?? ''}</span>
+						<span class:shown={spinning}>{balance.refresh.updating}</span>
+					</span>
+				{/if}
+				<span class="glyph"><Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" /></span>
 			</button>
-		{:else if balance.state === 'zero-live' && balance.liveText !== undefined}
-			<p class="live">
-				<span class="live-dot" aria-hidden="true"></span>
-				{balance.liveText}
-			</p>
 		{/if}
 	</div>
 </div>
@@ -340,17 +382,35 @@
 		overflow-x: clip;
 	}
 
-	/* The status line's room: one line of the status, its own padding
-	   included, there before anything is said in it. */
+	/* The hero's one line: one line of the status, its own padding included,
+	   there before anything is said in it — and the same height whatever
+	   stands on it. */
 	.said {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
+		gap: var(--space-lg);
 		width: 100%;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		/* Said out loud rather than left to the face's own metrics, so the
 		   room kept is exactly the room a status takes. */
 		line-height: var(--leading-normal);
-		min-height: calc(1lh + 2 * var(--space-sm));
+		height: calc(1lh + 2 * var(--space-sm));
+	}
+
+	/* The wide layout: as wide as the rows under the hero and no wider, so
+	   the control stands over their trailing actions ("All ›") instead of at
+	   the far edge of an 800-wide column. */
+	.said.wide {
+		max-width: var(--layout-rowMeasure);
+	}
+
+	/* The leading side: everything the control leaves. It may shrink below
+	   its words — a sentence longer than its room is cut, never wrapped. */
+	.saying {
+		display: flex;
+		align-items: center;
+		flex: 1 1 0;
+		min-width: 0;
 	}
 
 	.hidden-row {
@@ -379,6 +439,7 @@
 	.live {
 		display: flex;
 		align-items: center;
+		min-width: 0;
 		gap: var(--space-md);
 		/* The status line's own block padding: the two stand on one line. */
 		padding-block: var(--space-sm);
@@ -387,7 +448,16 @@
 		color: var(--color-fg-muted);
 	}
 
+	/* One line, like the status sentence: what does not fit ends in "…". */
+	.live-words {
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
 	.live-dot {
+		flex: none;
 		width: var(--space-md);
 		height: var(--space-md);
 		border-radius: var(--radius-full);
@@ -468,12 +538,18 @@
 		color: var(--color-fg-muted);
 	}
 
-	/* Quiet, like the status line above it: subtle ink, fuller on hover. */
+	/* Quiet, like the words beside it: subtle ink, fuller on hover. At the
+	   trailing edge, and never squeezed: what is said gives, not this. */
 	.refresh {
 		display: inline-flex;
+		flex: none;
+		/* The line's whole height, with its words or without: one box in
+		   every state, and all of the line's height to press. */
+		align-self: stretch;
 		align-items: center;
 		gap: var(--space-sm);
-		padding: var(--space-sm) 0;
+		margin-inline-start: auto;
+		padding: 0;
 		border: none;
 		background: none;
 		font-family: var(--font-ui);
@@ -513,9 +589,12 @@
 		}
 	}
 
+	/* Set against the glyph: the shorter of the two labels ends where the
+	   longer does, so the glyph — the last thing on the line — is all that a
+	   change of words leaves where it was. */
 	.words {
 		display: inline-grid;
-		text-align: start;
+		text-align: end;
 		white-space: nowrap;
 	}
 
