@@ -700,6 +700,14 @@ export interface FeeSpeedModel {
 	 */
 	freeNote?: string;
 	/**
+	 * The words `freeNote` WOULD say, held as room under the summary while it
+	 * does not say them (device walk of 2026-10-11, item 2): on a sheet
+	 * anchored at the bottom, a fee that lands with that note moved everything
+	 * above it up a line. The signing sheet's builder names it; the send form,
+	 * a page of its own height, does not.
+	 */
+	freeRoom?: string;
+	/**
 	 * This network has one speed (issue 686): every tier settled at the same
 	 * fee with no gas-price range to tell them apart, so the options are
 	 * replaced by this one statement. Absent whenever anything differs, or

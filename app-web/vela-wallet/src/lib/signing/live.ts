@@ -730,6 +730,26 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// withheld, and the row keeps the line it will land on from now — under
 	// "Estimating…" too, so the fee landing moves nothing either (F12).
 	const withheld = inputs.currency.committed ? {} : { valueFiatWithheld: true };
+	// Device walk of 2026-10-11, item 2: the sheet has its final geometry for
+	// everything the fee card can say from its first settled frame. It is
+	// anchored at the bottom, so a line that ARRIVES in the card moved the
+	// sheet's top, its header and its ✕ (measured here on a 390 × 844 screen:
+	// 16 px for the speed's note, 47 with "No token can pay this fee", 27 for
+	// a failure's reason). Said in every state of the fee — estimating, landed,
+	// failed — so the room is the same before and after:
+	// - the money keeps a line of its own under the coin, whatever it will
+	//   read (side by side, a landed figure wrapped at 360 and grew the row);
+	// - what a landed fee says when it cannot be paid has its line held under
+	//   the card: no coin can pay, or the coin that pays is short. A failure's
+	//   reason is said in that same place and brings no room of its own: the
+	//   standing line under it is blank whenever a fee has failed.
+	const paying =
+		fee.options.find((option) => option.selected)?.symbol ??
+		(sign.request ? nativeSymbol(sign.request.chain_id) : '');
+	const still = {
+		moneyLine: true,
+		rooms: [m.feeNoCoinPays, fill(m.feeShort, { sym: paying })]
+	};
 	// PR 2 note 1: the fee's failure, said ONCE by the core for this row and
 	// the line under the confirm (`FeeView.failure`) — present while the run
 	// failed AND through the re-ask that follows it, so nothing here holds a
@@ -756,6 +776,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 			kind: 'onchain',
 			label: m.feeLabel,
 			value: failure.figure_key === null ? '—' : (feeFigures(m)[failure.figure_key] ?? '—'),
+			...still,
 			speed,
 			selector: tap === 'choose_coin' ? feeSelector(inputs) : undefined,
 			tappable: failedFeeTappable(failure),
@@ -777,6 +798,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				label: m.feeLabel,
 				value: m.feeEstimating,
 				...withheld,
+				...still,
 				speed,
 				tappable,
 				// A first figure the core already knows no coin can pay
@@ -825,6 +847,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		value: line.coin,
 		...(line.fiat === null ? {} : { valueFiat: line.fiat }),
 		...withheld,
+		...still,
 		selector,
 		speed,
 		warning,
@@ -891,11 +914,16 @@ function feeSelector(
 function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	const speed = inputs.speed;
 	if (speed === undefined) return undefined;
-	return speedControlModel(speed.view, inputs.m.speed, (quote, tier) => {
+	const model = speedControlModel(speed.view, inputs.m.speed, (quote, tier) => {
 		const options = speed.feeOptions(tier);
 		const parts = feeParts(quote, options);
 		return feeLineParts(parts, feeOptionPriceUsd(parts.contract, options), inputs.currency);
 	});
+	// The speed's note ("Fast costs no more on this network…") is only known
+	// once every speed is priced; its line is held under the summary until
+	// then and after, so a fee that lands WITH it moves nothing (item 2 of the
+	// 2026-10-11 walk — see `feeModel`).
+	return { ...model, freeRoom: inputs.m.speed.free };
 }
 
 /**

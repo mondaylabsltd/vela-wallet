@@ -74,6 +74,10 @@
 		     right under the word it explains, without anybody having to open
 		     anything to find out. -->
 		<p class="free">{speed.freeNote}</p>
+	{:else if speed.freeRoom !== undefined}
+		<!-- Not said — and its room kept (`FeeSpeedModel.freeRoom`): a fee
+		     that lands with the note says it where there was room for it. -->
+		<p class="free room" aria-hidden="true">{speed.freeRoom}</p>
 	{/if}
 
 	{#if speed.open && speed.singleNote !== undefined}
@@ -195,6 +199,10 @@
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.free.room {
+		visibility: hidden;
 	}
 
 	/* Sits where the options were, on the same raised card, so opening the

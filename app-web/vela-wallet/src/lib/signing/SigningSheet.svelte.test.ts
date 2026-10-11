@@ -580,6 +580,234 @@ describe('a fee being measured moves nothing above it', () => {
 });
 
 /*
+ * Device walk of 2026-10-11, item 2. On Android the sheet climbed twice as its
+ * fee landed — 77 px a step, the ✕ moving under a finger. The web's sheet did
+ * the same by smaller steps (`signing-still.e2e.ts` measured it on the real
+ * machines: 16 px for the speed's note, 47 with "No token can pay this fee",
+ * 27 for a failure's reason at 390 × 844; at 360 the fee row itself grew 20 px
+ * when its money wrapped under the coin).
+ *
+ * The suite above starts its comparison at the first LANDING — "the first
+ * measurement had no shortfall to hold yet". This one starts at the first
+ * FRAME: the fee is being worked out and nothing has been said. The models
+ * are what the live builder hands the sheet (`moneyLine`, `rooms`, the speed's
+ * `freeRoom` — `live.test.ts` holds that it names them in every state), and
+ * the same walk without them moves, by the measured steps.
+ */
+describe('the fee says its last word in room that was there from the first frame (item 2)', () => {
+	const NO_COIN = 'No token can pay this fee';
+	const SHORT = 'Not enough ETH for the network fee';
+	const FREE = 'Fast costs no more on this network, so this send uses Fast.';
+	const REASON = "Couldn't get a price from the relay. Retrying automatically.";
+	const LONG_REASON = "The relay couldn't test-run this transaction yet. Retrying automatically.";
+	const speed = (said: boolean, room: boolean) => ({
+		label: 'Speed',
+		value: 'Fast',
+		open: false,
+		onceNote: '',
+		gasPriceLabel: 'Gas Bid',
+		gasPriceLine: false,
+		options: [],
+		...(said ? { freeNote: FREE } : {}),
+		...(room ? { freeRoom: FREE } : {})
+	});
+	/** The fee in each state, as the live builder draws it — or (`held: false`) as it used to. */
+	const fees = (held: boolean) => {
+		const room = held ? { moneyLine: true, rooms: [NO_COIN, SHORT] } : {};
+		const base = { kind: 'onchain' as const, label: 'Network fee', refreshLabel: 'Refresh fee' };
+		const priced = {
+			...base,
+			...room,
+			value: '0.000825 ETH',
+			valueFiat: '≈ $2.48',
+			tappable: false,
+			chevron: false,
+			refreshing: false
+		};
+		const failed = (warning: string) => ({
+			...base,
+			...room,
+			value: '—',
+			tappable: true,
+			chevron: false,
+			refreshing: false,
+			warning,
+			speed: speed(false, held)
+		});
+		return {
+			estimating: {
+				...base,
+				...room,
+				value: 'Estimating...',
+				tappable: false,
+				chevron: false,
+				refreshing: true,
+				speed: speed(false, held)
+			},
+			priced: { ...priced, speed: speed(false, held) },
+			'priced, with the speed’s note': { ...priced, speed: speed(true, held) },
+			'no token can pay': { ...priced, warning: NO_COIN, speed: speed(true, held) },
+			refused: failed(REASON),
+			'a long reason': failed(LONG_REASON)
+		} satisfies Record<string, FeeModel>;
+	};
+	const shut = { action: 'Confirm', enabled: false, note: 'Working out the network fee…' };
+	const open = { action: 'Confirm', enabled: true };
+	const top = (sheet: HTMLElement, selector: string) =>
+		Math.round((sheet.querySelector(selector)?.getBoundingClientRect().top ?? NaN) * 100) / 100;
+	const places = (sheet: HTMLElement) => ({
+		sheet: Math.round(sheet.getBoundingClientRect().top * 100) / 100,
+		header: top(sheet, '[data-signing-top]'),
+		close: top(sheet, 'header.header .close'),
+		blocks: top(sheet, '.blocks'),
+		fee: top(sheet, '.footer > .line'),
+		speed: top(sheet, '.footer > .speed'),
+		signer: top(sheet, '.footer > .signer'),
+		confirm: top(sheet, '[data-testid="signing-confirm"]')
+	});
+
+	afterAll(() => page.viewport(414, 896));
+
+	/** The sheet with its fee being worked out; then each ending, each from that first frame. */
+	async function walk(width: number, height: number, held: boolean) {
+		await page.viewport(width, height);
+		const states = fees(held);
+		const moved: Record<string, Record<string, number>> = {};
+		for (const [ending, fee] of Object.entries(states).slice(1)) {
+			const view = await drawn({
+				model: model({ fee: states.estimating, confirm: shut }),
+				onfeerefresh: () => {}
+			});
+			const first = places(view.sheet);
+			await view.screen.rerender({
+				model: model({ fee, confirm: 'warning' in fee ? shut : open })
+			});
+			await tick();
+			await pause(80);
+			const last = places(view.sheet);
+			moved[ending] = Object.fromEntries(
+				Object.entries(first).map(([part, at]) => [
+					part,
+					Math.round(Math.abs(last[part as keyof typeof last] - at) * 100) / 100
+				])
+			);
+			await view.screen.unmount();
+		}
+		return moved;
+	}
+
+	const STILL = {
+		sheet: 0,
+		header: 0,
+		close: 0,
+		blocks: 0,
+		fee: 0,
+		speed: 0,
+		signer: 0,
+		confirm: 0
+	};
+
+	it.each([
+		['the phone sheet', 390, 844],
+		['a short phone', 360, 640],
+		['the side panel’s width', 320, 600],
+		['the centred card', 1440, 900]
+	] as const)('%s: nothing moves, whatever the fee comes to say', async (_name, width, height) => {
+		const moved = await walk(width, height, true);
+		for (const [ending, parts] of Object.entries(moved)) {
+			expect(parts, `${ending} @ ${width} × ${height}`).toEqual(STILL);
+		}
+	});
+
+	it('without the rooms the same walk moves the sheet’s top and its ✕ — what the phones showed', async () => {
+		const moved = await walk(390, 844, false);
+		// The speed's note alone: a line.
+		expect(moved['priced, with the speed’s note'].close).toBeGreaterThan(10);
+		// The shortfall and the note: two.
+		expect(moved['no token can pay'].close).toBeGreaterThan(
+			moved['priced, with the speed’s note'].close
+		);
+		expect(moved['no token can pay'].sheet).toBe(moved['no token can pay'].close);
+		// A failure's reason: a line, less the 4 px a <button> row was shorter by.
+		expect(moved.refused.close).toBeGreaterThan(10);
+		// The confirm never did: it is pinned in the foot.
+		for (const parts of Object.values(moved)) expect(parts.confirm).toBe(0);
+	});
+
+	it('a room is unseen and unsaid; what is said stands in its place, and is the only alert', async () => {
+		await page.viewport(390, 844);
+		const states = fees(true);
+		const view = await drawn({ model: model({ fee: states.estimating, confirm: shut }) });
+		const rooms = () => [...view.sheet.querySelectorAll<HTMLElement>('.said .room')];
+		expect(rooms().map((room) => room.textContent)).toEqual([NO_COIN, SHORT]);
+		for (const room of rooms()) {
+			expect(getComputedStyle(room).visibility).toBe('hidden');
+			expect(room.getAttribute('aria-hidden')).toBe('true');
+			expect(room.getAttribute('role')).toBeNull();
+		}
+		expect(view.sheet.querySelector('[role="alert"]')).toBeNull();
+		const noteRoom = view.sheet.querySelector<HTMLElement>('.speed .free.room')!;
+		expect(noteRoom.textContent).toBe(FREE);
+		expect(getComputedStyle(noteRoom).visibility).toBe('hidden');
+		expect(noteRoom.getAttribute('aria-hidden')).toBe('true');
+		const place = view.sheet.querySelector('.said')!.getBoundingClientRect();
+
+		await view.screen.rerender({
+			model: model({ fee: states['no token can pay'], confirm: shut })
+		});
+		await tick();
+		const alerts = [...view.sheet.querySelectorAll<HTMLElement>('[role="alert"]')];
+		expect(alerts.map((alert) => alert.textContent)).toEqual([NO_COIN]);
+		// In the room that was kept: the same box, and the line inside it.
+		const said = alerts[0].getBoundingClientRect();
+		const now = view.sheet.querySelector('.said')!.getBoundingClientRect();
+		expect([now.top, now.height]).toEqual([place.top, place.height]);
+		expect(said.top).toBeGreaterThanOrEqual(now.top);
+		expect(said.bottom).toBeLessThanOrEqual(now.bottom + 0.5);
+		// The speed's note is said where its room was.
+		const note = view.sheet.querySelector<HTMLElement>('.speed .free:not(.room)')!;
+		expect(note.textContent).toBe(FREE);
+		expect(view.sheet.querySelector('.speed .free.room')).toBeNull();
+		await view.screen.unmount();
+	});
+
+	it('a failure’s long reason runs on into the blank line under it, whole, and touches nothing', async () => {
+		await page.viewport(390, 844);
+		const states = fees(true);
+		const view = await drawn({ model: model({ fee: states['a long reason'], confirm: shut }) });
+		const reason = view.sheet.querySelector<HTMLElement>('[role="alert"]')!;
+		expect(reason.textContent).toBe(LONG_REASON);
+		const box = reason.getBoundingClientRect();
+		const place = view.sheet.querySelector('.said')!.getBoundingClientRect();
+		// Longer than the room kept for a shortfall…
+		expect(box.height).toBeGreaterThan(place.height + 4);
+		// …so it runs on under it, over the standing line — which says nothing…
+		const standing = view.sheet.querySelector<HTMLElement>('.footer .stale')!;
+		expect(getComputedStyle(standing).visibility).toBe('hidden');
+		// …and ends before the speed control.
+		const speedTop = view.sheet.querySelector('.footer > .speed')!.getBoundingClientRect().top;
+		expect(box.bottom).toBeLessThanOrEqual(speedTop + 0.5);
+		// Nothing of it is cut.
+		expect(reason.scrollHeight).toBeLessThanOrEqual(Math.ceil(box.height) + 1);
+		await view.screen.unmount();
+	});
+
+	it('the row is one height whether it is a fact or a control: a failed fee is a <button>', async () => {
+		await page.viewport(390, 844);
+		const states = fees(true);
+		const view = await drawn({ model: model({ fee: states.priced, confirm: open }) });
+		const row = () => view.sheet.querySelector<HTMLElement>('.footer > .line .row')!;
+		expect(row().tagName).toBe('DIV');
+		const stated = row().getBoundingClientRect().height;
+		await view.screen.rerender({ model: model({ fee: states.refused, confirm: shut }) });
+		await tick();
+		expect(row().tagName).toBe('BUTTON');
+		expect(row().getBoundingClientRect().height).toBe(stated);
+		await view.screen.unmount();
+	});
+});
+
+/*
  * PR 3 final note F2, then the device round (item 1, security).
  *
  * The simulation's verdict is the one part of a signing sheet a site cannot
