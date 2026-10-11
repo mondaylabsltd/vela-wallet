@@ -14,6 +14,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import { speedDefaults, type Speed } from './core-facts';
 import { en, seedSignedIn } from './live-helpers';
 import {
 	abiWord,
@@ -174,12 +175,22 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	await enterWallet(page);
 	await fillForm(page);
 
+	// The speed a send starts at when nobody chose one is the CORE's to say
+	// (`fee_tier_pref::FACTORY_DEFAULT`) — asked of the core, not restated
+	// here: this test said "fast" for days after the core said "standard".
+	const { factory } = await speedDefaults();
+	// The pick that is a MOVE: a speed that is neither the default nor Slow
+	// (which the second pick below goes to).
+	const other: Speed = factory === 'fast' ? 'standard' : 'fast';
+	const option = (tier: Speed, pressed: boolean) =>
+		page.getByRole('button', { pressed }).filter({ hasText: en(`send.gasTier.${tier}`) });
+
 	// 1. Folded, and folded on THEIR default — which on a fresh device is the
-	//    factory `fast`, i.e. exactly what every shell did before spec 068.
+	//    factory default.
 	const speed = page.getByRole('button', { expanded: false }).filter({
 		hasText: en('send.feeSpeedLabel')
 	});
-	await expect(speed).toContainText(en('send.gasTier.fast'));
+	await expect(speed).toContainText(en(`send.gasTier.${factory}`));
 	await expect(page.getByText(en('send.feeSpeedOnce'))).toBeHidden();
 
 	// 2. Opened: three options, named by what they buy, each with its OWN fee.
@@ -187,49 +198,48 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	//    has to be visibly cheaper here or the figures are not really per-tier.
 	await speed.click();
 	await expect(page.getByText(en('send.feeSpeedOnce'))).toBeVisible();
-	const economy = page.getByRole('button', { pressed: false }).filter({
-		hasText: en('send.gasTier.slow')
-	});
+	// The default is the one in force, and no other is.
+	await expect(option(factory, true)).toHaveCount(1);
+	await expect(page.getByRole('button', { pressed: true })).toHaveCount(1);
+	const economy = option('slow', factory === 'slow');
 	await expect(economy).toContainText('ETH', { timeout: 30_000 });
-	const fastFee = await page
-		.getByRole('button', { pressed: true })
-		.filter({ hasText: en('send.gasTier.fast') })
-		.textContent();
+	await expect(option('fast', factory === 'fast')).toContainText('ETH', { timeout: 30_000 });
+	const fastFee = await option('fast', factory === 'fast').textContent();
 	const slowFee = await economy.textContent();
-	expect(fastFee, 'the option in force shows a figure').toMatch(/[\d.]+\s*ETH/);
+	const defaultFee = await option(factory, true).textContent();
+	expect(defaultFee, 'the option in force shows a figure').toMatch(/[\d.]+\s*ETH/);
+	expect(fastFee).toMatch(/[\d.]+\s*ETH/);
 	expect(slowFee).toMatch(/[\d.]+\s*ETH/);
 	const coin = (text: string | null) => Number(/([\d.]+)\s*ETH/.exec(text ?? '')?.[1] ?? 'NaN');
 	expect(coin(slowFee), 'Slow really is cheaper than Fast').toBeLessThan(coin(fastFee));
 
-	const standardFee = await page
-		.getByRole('button', { pressed: false })
-		.filter({ hasText: en('send.gasTier.standard') })
-		.textContent();
+	const otherFee = await option(other, false).textContent();
+	expect(coin(otherFee), 'the pick below really is another price').not.toBeCloseTo(
+		coin(defaultFee),
+		12
+	);
 
 	// The row as it stands BEFORE any pick, so what follows is a move and not
 	// a coincidence.
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
 	expect(coin(await feeRow.textContent()), 'the row starts at the default tier').toBeCloseTo(
-		coin(fastFee),
+		coin(defaultFee),
 		12
 	);
 
-	// 3. Pick Standard. The control folds, the summary says what this send is
-	//    now running at — AND THE MONEY MOVES WITH THE NAME. That last part is
+	// 3. Pick another speed. The control folds, the summary says what this send
+	//    is now running at — AND THE MONEY MOVES WITH THE NAME. That last part is
 	//    the assertion the rest of this file cannot make: the caption above and
 	//    the wire below are both satisfied by Continue's pre-check, which
 	//    re-quotes unconditionally on its way to the confirm, so a picker that
 	//    renamed the row without re-pricing it would pass everything else here
-	//    while the person read Fast's money under another tier's name for two
-	//    whole screens.
-	await page
-		.getByRole('button', { pressed: false })
-		.filter({ hasText: en('send.gasTier.standard') })
-		.click();
-	await expect(speed).toContainText(en('send.gasTier.standard'));
+	//    while the person read the default's money under another tier's name
+	//    for two whole screens.
+	await option(other, false).click();
+	await expect(speed).toContainText(en(`send.gasTier.${other}`));
 	await expect
 		.poll(async () => coin(await feeRow.textContent()), { timeout: 30_000 })
-		.toBeCloseTo(coin(standardFee), 12);
+		.toBeCloseTo(coin(otherFee), 12);
 
 	// 3b. And again, from a form whose estimate has now DEFINITELY settled —
 	//     which is the case the first pick cannot cover. `form_estimate_key` in
@@ -351,17 +361,22 @@ test('every speed says the gas price it buys, from the relay row to the screen',
 		hasText: en('send.feeSpeedLabel')
 	});
 	await speed.click();
-	const option = (tier: 'fast' | 'standard' | 'slow', selected: boolean) =>
-		page.getByRole('button', { pressed: selected }).filter({ hasText: en(`send.gasTier.${tier}`) });
+	// Which option is the one in force is the core's default, and is not what
+	// this test is about: each speed is found by its name, whichever is pressed.
+	const { factory } = await speedDefaults();
+	const option = (tier: Speed) =>
+		page
+			.getByRole('button', { pressed: tier === factory })
+			.filter({ hasText: en(`send.gasTier.${tier}`) });
 
-	await expect(option('slow', false)).toContainText('ETH', { timeout: 30_000 });
+	await expect(option('slow')).toContainText('ETH', { timeout: 30_000 });
 	// `base + this tier's signed tip`, never the cap the relay submits at: the
 	// chain charges the first and never the second.
-	await expect(option('fast', true)).toContainText('3.5 gwei');
-	await expect(option('standard', false)).toContainText('2.5 gwei');
-	await expect(option('slow', false)).toContainText('1.5 gwei');
+	await expect(option('fast')).toContainText('3.5 gwei', { timeout: 30_000 });
+	await expect(option('standard')).toContainText('2.5 gwei');
+	await expect(option('slow')).toContainText('1.5 gwei');
 	// The figure is named for anyone listening, and the name is the corpus's.
-	await expect(option('fast', true)).toContainText(en('send.gasPriceLabel'));
+	await expect(option('fast')).toContainText(en('send.gasPriceLabel'));
 });
 
 /**
@@ -411,15 +426,19 @@ test('every speed says its gas price as bid ~ cap, from the relay row to the scr
 		.getByRole('button', { expanded: false })
 		.filter({ hasText: en('send.feeSpeedLabel') })
 		.click();
-	const option = (tier: 'fast' | 'standard' | 'slow', selected: boolean) =>
-		page.getByRole('button', { pressed: selected }).filter({ hasText: en(`send.gasTier.${tier}`) });
+	// Each speed by its name, whichever the core's default has pressed.
+	const { factory } = await speedDefaults();
+	const option = (tier: Speed) =>
+		page
+			.getByRole('button', { pressed: tier === factory })
+			.filter({ hasText: en(`send.gasTier.${tier}`) });
 
-	await expect(option('slow', false)).toContainText('ETH', { timeout: 30_000 });
+	await expect(option('slow')).toContainText('ETH', { timeout: 30_000 });
 	// Low end `base + signed tip`, high end the cap — never `base + cap + tip`,
 	// which would be 3.7 / 3.25 / 2.7 gwei, above anything the chain can charge.
-	await expect(option('fast', true)).toContainText('1.2 ~ 3.2 gwei');
-	await expect(option('standard', false)).toContainText('1.13 ~ 2.13 gwei');
-	await expect(option('slow', false)).toContainText('1.1 ~ 1.6 gwei');
+	await expect(option('fast')).toContainText('1.2 ~ 3.2 gwei', { timeout: 30_000 });
+	await expect(option('standard')).toContainText('1.13 ~ 2.13 gwei');
+	await expect(option('slow')).toContainText('1.1 ~ 1.6 gwei');
 });
 
 /**
@@ -461,11 +480,12 @@ test('a send nobody touched the speed of names the default out loud', async ({ p
 	await enterWallet(page);
 	await fillForm(page);
 
-	// Issue 686 rule 1, on the route itself: the factory default IS the
-	// fastest, so a free upgrade has nothing to ask about and nothing is priced
-	// beside the fee in force. One refresh, one quote. (Since spec 078 a tier
-	// priced alongside shares that one simulation too — see the A test below.)
-	expect(await quotesPerRefresh(page, () => estimates), 'no quote beside the fee in force').toBe(1);
+	// One refresh, one simulation — whatever the default is. Where the default
+	// is the fastest speed nothing is priced beside the fee in force (issue 686
+	// rule 1: a free upgrade has nothing to ask about); where it is not, the
+	// one speed priced beside it shares the same relay estimate (spec 078 —
+	// the operation is identical whatever the speed; see the A test below).
+	expect(await quotesPerRefresh(page, () => estimates), 'one simulation per refresh').toBe(1);
 
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
@@ -478,10 +498,13 @@ test('a send nobody touched the speed of names the default out loud', async ({ p
 	await expect(page.getByText(en('send.txSubmittedTitle'))).toBeVisible({ timeout: 30_000 });
 
 	expect(sent).toHaveLength(1);
-	// Named, not omitted. An absent tier leaves the relay at its own pace,
-	// which is NOT the same thing as `fast` — being explicit is what makes the
-	// screen and the chain agree.
-	expect(sent[0][2]).toBe('fast');
+	// Named, not omitted — and the name is the core's default, asked of the
+	// core. An absent tier leaves the relay at its own pace, which is NOT the
+	// same thing as the speed the form showed — being explicit is what makes
+	// the screen and the chain agree.
+	const { factory } = await speedDefaults();
+	expect(sent[0]).toHaveLength(3);
+	expect(sent[0][2]).toBe(factory);
 });
 
 test('the refresh really measures again, and says it is doing so', async ({ page }) => {
@@ -524,9 +547,11 @@ test.describe('the stored default', () => {
 		await page.getByText(en('settings.sections.advanced'), { exact: true }).click();
 		const row = page.getByText(en('settings.advanced.feeSpeedTitle'), { exact: true });
 		await expect(row).toBeVisible();
-		// Fresh device: the factory default, so nothing about a send changes
-		// until somebody deliberately changes it.
-		await expect(page.getByText(en('send.gasTier.fast'), { exact: true })).toBeVisible();
+		// Fresh device: the factory default — the core's, asked of the core — so
+		// nothing about a send changes until somebody deliberately changes it.
+		const { factory } = await speedDefaults();
+		expect(factory, 'this test picks Slow as the CHANGE').not.toBe('slow');
+		await expect(page.getByText(en(`send.gasTier.${factory}`), { exact: true })).toBeVisible();
 
 		await row.click();
 		await expect(page.getByText(en('settings.feeSpeed.subtitle'))).toBeVisible();
