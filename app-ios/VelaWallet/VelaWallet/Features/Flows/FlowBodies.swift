@@ -369,23 +369,8 @@ struct TxDetailBody: View {
                     .padding(.top, Tokens.Space.s16)
             }
             if let label = model.deleteLabel, let onDelete {
-                if model.deleteQuiet {
-                    // A pending record's trace stays the loudest thing here
-                    // (RJ18): forgetting it is a quiet choice, never a red one.
-                    Button(action: onDelete) {
-                        Text(verbatim: label)
-                            .typeRole(Typography.body.scaled(textScale))
-                            .foregroundStyle(theme.fgMuted)
-                            .frame(maxWidth: .infinity)
-                            .padding(Tokens.Space.s12)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                TxDeleteAction(label: label, quiet: model.deleteQuiet, action: onDelete)
                     .padding(.top, Tokens.Space.s8)
-                } else {
-                    VelaButton(title: label, kind: .danger, action: onDelete)
-                        .padding(.top, Tokens.Space.s8)
-                }
             }
         }
     }
@@ -451,6 +436,44 @@ struct TxDetailBody: View {
             }
         }
         .padding(.vertical, Tokens.Space.s12)
+    }
+}
+
+/// 删除记录 on a transaction's detail — a transfer's and a dApp row's alike:
+/// a quiet text action under the useful ones.
+///
+/// It was the heaviest thing on the page (device walk 2026-10-11): a
+/// full-width button filled with the error colour, under an outlined "View
+/// on explorer". Deleting a record is the one thing on that page nobody came
+/// to do. Now: no fill, no border, the small type, its words' own width —
+/// destructive by its colour, not by its weight — and the row's full height
+/// for a finger. On a record still pending it keeps the muted tone it already
+/// had there (spec 082 RJ18: that record is the "don't send it again" trace,
+/// and forgetting it is never a red choice).
+struct TxDeleteAction: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let label: String
+    /// The record is still pending: muted, not the error colour.
+    var quiet = false
+    let action: () -> Void
+
+    static let testId = "txDetail.delete"
+
+    var body: some View {
+        Button(action: action) {
+            Text(verbatim: label)
+                .typeRole(Typography.label.scaled(textScale))
+                .foregroundStyle(quiet ? theme.fgMuted : theme.errorBase)
+                .padding(.horizontal, Tokens.Space.s12)
+                .frame(minHeight: Tokens.Layout.hitTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainTextButtonStyle())
+        .accessibilityIdentifier(Self.testId)
+        // Its own width, centred under the row above it.
+        .frame(maxWidth: .infinity)
     }
 }
 
