@@ -699,7 +699,12 @@ struct SendHoldingsAndFeesTests {
     /// for the re-read — so the first look finds the re-read still out, and
     /// must neither answer nor ask again. It was 300 ms of this test's sleep,
     /// which with every test started at once outlasted the 30 s the executor
-    /// gives the re-read (`answer["tokens"] → <null>`, 54a56bbd7).
+    /// gives the re-read (`answer["tokens"] → <null>`, 54a56bbd7). Stepping
+    /// on the executor's looks was not enough either: the looks are 150 ms
+    /// apart by the executor's own sleep, and on the runner two of them were
+    /// more than 30 s apart (the same `<null>`, PR 489). The 30 s is a clock
+    /// in the code under test, and under these tests' stopped clock it does
+    /// not pass (`SendExecutor.fetchTokens`).
     @Test func aLoadThatReachedNothingIsReadOnceMore() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
         let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)

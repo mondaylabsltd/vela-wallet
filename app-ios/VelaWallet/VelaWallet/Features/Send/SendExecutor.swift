@@ -366,7 +366,15 @@ final class SendExecutor {
         /// `.some(round met)` once the one re-read is out (`nil` inside: it
         /// met no settled round, only an unreachable dashboard).
         var retriedFrom: Int?? = nil
-        while Date().timeIntervalSince(started) * 1000 < Self.firstRoundWaitMs, !Task.isCancelled {
+        // The wait's budget is on the wall clock, counted between this
+        // loop's own turns. Under a test's stopped clock (the fee store's —
+        // one clock for the journey) none of it passes: the asset list is
+        // the test's, it answers in two or three looks, and on a main actor
+        // the run had filled the second look came more than thirty seconds
+        // after the first — "could not load" for a load that was coming
+        // (`Waits.swift`). The wait then ends by its answer or its cancel.
+        let budgeted = fees.timers != .stopped
+        while !budgeted || Date().timeIntervalSince(started) * 1000 < Self.firstRoundWaitMs, !Task.isCancelled {
             let view = balances().flatMap { Self.sameAccount($0, address) ? $0 : nil }
             let round = holdingsRound(address)
             let unreachable = view?.unreachable == true
