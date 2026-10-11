@@ -57,7 +57,9 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
+import androidx.compose.ui.platform.testTag
 import app.getvela.wallet.feature.explore.BrowserModel
+import app.getvela.wallet.feature.explore.SiteLock
 import app.getvela.wallet.feature.explore.DemoPageModel
 import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
@@ -164,16 +166,9 @@ fun AddressBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md, Alignment.CenterHorizontally),
                 ) {
-                    // Spec 079 (owner): a lock, and only a lock. Closed and quiet
-                    // for https — which says the line is encrypted, not that the
-                    // site is honest, so it is decorative to a screen reader too;
-                    // open and in the warning colour for plain http.
-                    if (browser.lockShown) {
-                        if (browser.secure) {
-                            Icon(VelaIcons.Lock, null, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xs))
-                        } else if (browser.host.isNotBlank()) {
-                            Icon(VelaIcons.LockOpen, labels.insecure, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.xs))
-                        }
+                    // Spec 079 (owner): a mark, and only a mark ([SiteLockMark]).
+                    if (browser.lockShown && (browser.lock == SiteLock.Secure || browser.host.isNotBlank())) {
+                        SiteLockMark(browser.lock, local = labels.local, insecure = labels.insecure)
                     }
                     Text(
                         text = browser.host,
@@ -268,7 +263,37 @@ data class AddressBarLabels(
     val field: String,
     /** connect.browser.a11yInsecure — the open lock of a plain-http page. */
     val insecure: String,
+    /** connect.browser.a11yLocal — the mark of an http page on this device or the person's own network. */
+    val local: String = "",
 )
+
+/** The mark's test hooks, one per kind: what is drawn has no other way to be told apart. */
+const val SITE_LOCK_SECURE_TAG = "site-lock-secure"
+const val SITE_LOCK_LOCAL_TAG = "site-lock-local"
+const val SITE_LOCK_INSECURE_TAG = "site-lock-insecure"
+
+/**
+ * The mark beside a site's name, wherever one is drawn — the address bar, the
+ * site menu, the connection panel, the connect sheet ([SiteLock]).
+ *
+ * - `https`: the padlock, closed and quiet. It says the line is encrypted,
+ *   not that the site is honest, so it is decorative to a screen reader too.
+ * - `http` on this device or the person's own network: a screen — "here" —
+ *   in the same quiet ink, said as "Local page — not encrypted". Never the
+ *   padlock: nothing about that connection is locked. Never the warning:
+ *   nobody stands between here and there to rewrite the page.
+ * - public `http`: the open lock in the warning colour, said as "Insecure
+ *   site — not encrypted".
+ */
+@Composable
+fun SiteLockMark(lock: SiteLock, local: String, insecure: String, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    when (lock) {
+        SiteLock.Secure -> Icon(VelaIcons.Lock, null, tint = colors.fgMuted, modifier = modifier.size(VelaIconSize.xs).testTag(SITE_LOCK_SECURE_TAG))
+        SiteLock.Local -> Icon(VelaIcons.Monitor, local, tint = colors.fgMuted, modifier = modifier.size(VelaIconSize.xs).testTag(SITE_LOCK_LOCAL_TAG))
+        SiteLock.Insecure -> Icon(VelaIcons.LockOpen, insecure, tint = colors.warningBase, modifier = modifier.size(VelaIconSize.xs).testTag(SITE_LOCK_INSECURE_TAG))
+    }
+}
 
 /**
  * The count in the bar's box. The core caps the strip at 24 tabs, so two

@@ -301,6 +301,7 @@ fun ExploreScreen(
                         menu = strings.t("explore.siteMenu"),
                         field = strings.t("explore.addressBar"),
                         insecure = strings.t("connect.browser.a11yInsecure"),
+                        local = strings.t("connect.browser.a11yLocal"),
                     ),
                     // ‹ is never greyed: with no history left it is the way
                     // to 探索's home, the tab kept alive — as 探索 again is.

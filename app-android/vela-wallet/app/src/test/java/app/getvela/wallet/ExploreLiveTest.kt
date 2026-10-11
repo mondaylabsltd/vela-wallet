@@ -6,6 +6,8 @@ import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
 import app.getvela.wallet.feature.browser.core.DbrTabView
+import app.getvela.wallet.feature.browser.core.OriginLock
+import app.getvela.wallet.feature.explore.SiteLock
 import app.getvela.wallet.feature.browser.core.EngineState
 import app.getvela.wallet.feature.browser.core.ExploreSite
 import app.getvela.wallet.feature.browser.core.ExploreTab
@@ -44,7 +46,7 @@ class ExploreLiveTest {
         val history = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/dex", "curve.fi", "", "", 3.0)))
         val engine = EngineState(url = "https://app.uniswap.org/swap", origin = "https://app.uniswap.org", host = "app.uniswap.org", title = "Uniswap", canBack = true, shown = "https://app.uniswap.org/swap")
         // The lock is the CORE's word (spec 070), not the engine's guess.
-        val tab = DbrTabView(tab = "t1", origin = "https://app.uniswap.org", secure = true)
+        val tab = DbrTabView(tab = "t1", origin = "https://app.uniswap.org", secure = true, lock = OriginLock.Secure)
         val model = ExploreLive.home(fallback, view, history, engine, strings, tab)
         assertNull(model.empty)
         val tiles = model.favorites!!.tiles
@@ -75,8 +77,8 @@ class ExploreLiveTest {
         assertNull(model.groupManageSheet.rows[1].meta)
         assertTrue(model.groupManageSheet.rows.none { it.hidden })
         assertEquals("app.uniswap.org", model.siteMenuSheet.site.host)
-        assertTrue(model.browser.secure)
-        assertTrue(model.siteMenuSheet.secure)
+        assertEquals(SiteLock.Secure, model.browser.lock)
+        assertEquals(SiteLock.Secure, model.siteMenuSheet.lock)
         assertEquals("a favourite's row unpins it", strings.t("explore.removeFromFavorites"), model.siteMenuSheet.items.first { it.id == "favorite" }.label)
         assertTrue("Disconnect is offered only to a connected site", model.siteMenuSheet.items.none { it.id == "disconnect" })
     }
@@ -87,12 +89,12 @@ class ExploreLiveTest {
         val engine = EngineState(url = "http://evil.example/", origin = "http://evil.example", host = "evil.example", shown = "http://evil.example/")
         val tab = DbrTabView(tab = "t1", origin = "http://evil.example", secure = false, crashed = true)
         val model = ExploreLive.home(fallback, view, BhistView(), engine, strings, tab)
-        assertFalse(model.browser.secure)
+        assertEquals(SiteLock.Insecure, model.browser.lock)
         assertTrue(model.browser.crashed)
-        assertFalse(model.connection.secure)
+        assertEquals(SiteLock.Insecure, model.connection.lock)
         // Spec 079 (owner): the open lock alone says it — no words either way.
         assertEquals("", model.siteMenuSheet.statusLine)
-        assertFalse(model.siteMenuSheet.secure)
+        assertEquals(SiteLock.Insecure, model.siteMenuSheet.lock)
     }
 
     /** Spec 079: a failed page says why in the core's words, and says it is retrying. */
@@ -166,7 +168,7 @@ class ExploreLiveTest {
         assertEquals("", fresh.browser.host)
         assertEquals("", fresh.browser.url)
         assertFalse(fresh.browser.lockShown)
-        assertFalse(fresh.browser.secure)
+        assertEquals("nothing to call encrypted", SiteLock.Insecure, fresh.browser.lock)
 
         val opening = ExploreLive.home(fallback, view, BhistView(), EngineState(loading = true, pending = "https://app.uniswap.org/swap"), strings)
         assertEquals("app.uniswap.org", opening.browser.host)
@@ -177,7 +179,7 @@ class ExploreLiveTest {
         assertEquals("curve.fi", shown.browser.host)
         assertEquals("https://curve.fi/", shown.browser.url)
         assertTrue(shown.browser.lockShown)
-        assertTrue(shown.browser.secure)
+        assertEquals(SiteLock.Secure, shown.browser.lock)
     }
 
     /** Spec 082 RE2: the watchdog's one decision, in the engine's units (progress 0–100). */
@@ -207,7 +209,6 @@ class ExploreLiveTest {
             app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t1", origin = "https://app.uniswap.org"),
             strings,
             ExploreLive.Identity(),
-            secure = true,
         )
         assertEquals(strings.t("connect.browser.title", mapOf("host" to "app.uniswap.org")), consent.title)
         assertEquals(strings.t("connect.browser.body"), consent.explainer)
@@ -237,7 +238,6 @@ class ExploreLiveTest {
             app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t2", origin = "https://pancakeswap.finance", address = active.lowercase(), chain_id = 56),
             strings,
             identity,
-            secure = true,
         )
         assertEquals("Parallel Multi", asked.accountName)
         assertEquals(ExploreLive.shortAddress(active.lowercase()), asked.accountAddress)
@@ -251,7 +251,6 @@ class ExploreLiveTest {
             app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t2", origin = "https://pancakeswap.finance", address = other, chain_id = 56),
             strings,
             identity,
-            secure = true,
         )
         assertEquals(ExploreLive.shortAddress(other), switching.accountAddress)
         assertEquals(other, switching.accountSeed)
