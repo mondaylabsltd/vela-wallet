@@ -22,6 +22,7 @@ import {
 	denyOffOrigin,
 	encodeAggregate3Result,
 	happyRelay,
+	readKv,
 	seedNetworkOverrides,
 	stubChainRegistry,
 	stubJsonRpc,
@@ -609,7 +610,9 @@ test.describe('the stored default', () => {
 		await page.getByText(en('send.gasTier.slow'), { exact: true }).click();
 		await expect(page.getByText(en('send.gasTier.slow'), { exact: true })).toBeVisible();
 
-		// A preference that does not survive was never set.
+		// A preference that does not survive was never set. Asked once it has
+		// been written: the core shows the choice and writes it behind.
+		await expect.poll(() => readKv(page, 'vela.feeTier')).toBe('slow');
 		await page.reload();
 		await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 		await page.getByText(en('settings.sections.advanced'), { exact: true }).click();

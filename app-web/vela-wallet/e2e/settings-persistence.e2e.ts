@@ -6,7 +6,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn } from './live-helpers';
-import { denyOffOrigin } from './stub-chain';
+import { denyOffOrigin, readKv } from './stub-chain';
 
 // The live wiring's phase-3/4 scope is the mobile layout (desktop
 // interactivity is a recorded debt) — so the suites speak to it.
@@ -46,7 +46,9 @@ test('the display currency survives a reload (core-persisted, not staged)', asyn
 	await page.getByText('EUR', { exact: true }).click();
 	// The row now carries the committed code…
 	await expect(page.getByText('EUR', { exact: true })).toBeVisible();
-	// …and still does after the page forgets everything it did not persist.
+	// …and still does after the page forgets everything it did not persist —
+	// asked once the choice has been written (the core writes behind it).
+	await expect.poll(() => readKv(page, 'vela.displayCurrency')).toBe('EUR');
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect(page.getByText('EUR', { exact: true })).toBeVisible();
