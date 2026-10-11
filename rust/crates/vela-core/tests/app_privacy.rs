@@ -34,7 +34,7 @@ use vela_core::app::balance_dashboard::{
     Event,
 };
 use vela_core::app::dapp_activity::{DappAction, DappSummary};
-use vela_core::app::privacy::{figure_maskable, MoneySurface, BALANCE_MASK, MASK};
+use vela_core::app::privacy::{figure_maskable, masked_amount, MoneySurface, BALANCE_MASK, MASK};
 use vela_core::app::token_trust::TrustSimJudgment;
 
 const ADDR_A: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -385,16 +385,39 @@ fn fixture() -> Value {
         .collect();
     json!({
         "suite": "privacy-hidden",
-        "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
+        "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. `holdings_masked` is what each holding reads while hidden, on EVERY surface that draws it — a home or Assets row, the token's own page: its `amount` (the mask and the coin's unit, `privacy::masked_amount`) and its `worth` (the bare mask: a fiat worth has no unit to keep). Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
         "mask": MASK,
         "balance_mask": BALANCE_MASK,
         "masked_surfaces": surfaces(&MoneySurface::MASKED),
         "visible_surfaces": surfaces(&MoneySurface::VISIBLE),
         "forbidden": FORBIDDEN,
         "figure_maskable": figure_maskable,
+        "holdings_masked": holdings_masked(),
         "shown": { "balance": balance(false), "feed": feed(false) },
         "hidden": { "balance": balance(true), "feed": feed_hidden },
     })
+}
+
+/// What each holding reads while hidden: the coin amount keeps its unit, the
+/// fiat worth is the bare mask. Written into the fixture so the four shells
+/// assert one spelling instead of each deriving its own — a holdings row read
+/// "••••" on Android and the token's page read "•••• BNB" on the iPhone (the
+/// 2026-10-11 phone walk).
+fn holdings_masked() -> Value {
+    let rows: Vec<Value> = balance(true)
+        .tokens
+        .iter()
+        .map(|token| {
+            json!({
+                "symbol": token.symbol,
+                "chain_id": token.chain_id,
+                "token_address": token.token_address,
+                "amount": masked_amount(&token.symbol),
+                "worth": MASK,
+            })
+        })
+        .collect();
+    Value::Array(rows)
 }
 
 fn pretty(value: &Value) -> String {

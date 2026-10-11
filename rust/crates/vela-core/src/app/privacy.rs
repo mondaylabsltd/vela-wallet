@@ -22,14 +22,24 @@
 //! money; an unlimited allowance is a risk to see, and a signature with no
 //! figure has nothing to hide (a mask there would claim a figure).
 //!
-//! **A masked amount keeps its unit** ([`masked_amount`]): "•••• xDAI", never
-//! a bare "••••", wherever the shown figure carries one ("0.5 xDAI"). The
-//! unit says what kind of money moved without saying how much — the secret
-//! is the number — and one shell dropping it while another keeps it is the
-//! same transfer reading two ways (the 102 device run: a hidden transfer's
-//! detail read "•••• xDAI" on iOS and "••••" on Android). A figure drawn
-//! with no unit beside it (a holding's amount under its own ticker, a fiat
-//! total) masks to [`MASK`] alone, as before.
+//! **A masked coin amount keeps its unit** ([`masked_amount`]): "•••• xDAI",
+//! never a bare "••••" — on a feed row, a transfer's detail, a HOLDINGS row
+//! (home and Assets) and a token's own page alike. The unit says what kind
+//! of money it is without saying how much — the secret is the number — and
+//! one shell dropping it while another keeps it is the same holding reading
+//! two ways (the 102 device run: a hidden transfer's detail read "•••• xDAI"
+//! on iOS and "••••" on Android; the 2026-10-11 walk: a holdings row and the
+//! token page read "••••" on Android, and the iPhone's holdings rows did
+//! too, where its token page read "•••• BNB"). There is no "the ticker is
+//! already in the row's title" exception: a row that reads "0.0003 BNB"
+//! shown reads "•••• BNB" hidden, so hiding changes digits into dots and
+//! moves nothing else.
+//!
+//! **A masked fiat worth is the bare mask** ([`MASK`]): "••••", with no
+//! currency symbol. A worth's unit is the display currency, which every
+//! figure on the screen shares and the hero's caption already names; "¥••••"
+//! would add nothing, and would lead with a different glyph in each
+//! currency.
 //!
 //! **What stays visible on purpose** ([`MoneySurface::VISIBLE`]): the flows a
 //! person starts, where the number IS the decision — Send (the picker, Max,
@@ -40,6 +50,9 @@
 //! The shared fixture `tests/fixtures/privacy-hidden.json` carries a hidden
 //! balance and feed with distinctive figures; every shell replays it through
 //! every surface builder it has and asserts no output contains those digits.
+//! Its `holdings_masked` says what each holding reads while hidden — the
+//! amount with its unit, the worth as the bare mask — and every shell's
+//! holdings row and token page are checked against those strings.
 
 use serde::{Deserialize, Serialize};
 
@@ -55,11 +68,12 @@ pub const MASK: &str = "••••";
 /// The hero's mask — one glyph wider, so the hidden total keeps its weight.
 pub const BALANCE_MASK: &str = "••••••";
 
-/// A masked amount as every shell draws it: the mask, then the unit the
-/// shown figure carries — "•••• xDAI". The one rule for whether a hidden
-/// amount keeps its unit: it does. `unit` is the token's symbol exactly as
-/// the shown figure prints it; an empty one (a figure with no unit of its
-/// own) gives [`MASK`] alone, never a trailing space.
+/// A masked coin amount as every shell draws it: the mask, then the coin's
+/// unit — "•••• xDAI". The one rule for whether a hidden amount keeps its
+/// unit: it does, on every surface (a feed row, a transfer, a holdings row,
+/// a token's page). `unit` is the token's symbol exactly as the shown figure
+/// prints it; an empty one (a fiat worth, a count) gives [`MASK`] alone,
+/// never a trailing space.
 #[must_use]
 pub fn masked_amount(unit: &str) -> String {
     let unit = unit.trim();
