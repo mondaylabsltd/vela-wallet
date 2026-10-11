@@ -491,17 +491,27 @@ pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedS
     Some(SharedString::from(line))
 }
 
-/// The NAMES of the networks whose RPC is failing — what a problem report's
-/// "RPC failing" line may say. The core's `rpc_fixable` rows only: a network
-/// whose node answers (its token list is what could not be loaded, PR 3
-/// note 4) is not an RPC failure, and a report that said so would send
-/// whoever reads it after an endpoint that is working.
+/// The NAMES of the networks that cannot be reached — what a problem
+/// report's "Unreachable networks" line says. The core's `rpc_fixable` rows
+/// only: a network whose node answers (its token list is what could not be
+/// loaded, PR 3 note 4) is not out of reach, and a report that said so would
+/// send whoever reads it after an endpoint that is working.
+///
+/// Each by its own name; one that has none in the reader's words —
+/// `chain_fallback` is the corpus's `assets.chainFallback` ("Chain
+/// {{chainId}}", 「链 {{chainId}}」). Never a bare id: on the owner's phone
+/// the line read 「无法连接的 RPC 1625」, which is a count of RPCs to anyone
+/// who does not know 1625 is a chain (PR 4 item 9).
 #[must_use]
-pub fn rpc_failing_names(view: &BalanceView) -> Vec<String> {
+pub fn rpc_failing_names(view: &BalanceView, chain_fallback: &str) -> Vec<String> {
     view.unreachable_networks
         .iter()
         .filter(|network| network.rpc_fixable)
-        .map(|network| crate::executor::custom_tokens::network_name(network.chain_id))
+        .map(|network| {
+            crate::executor::custom_tokens::own_network_name(network.chain_id).unwrap_or_else(
+                || crate::wallet::fill(chain_fallback, "chainId", &network.chain_id.to_string()),
+            )
+        })
         .collect()
 }
 
@@ -2627,8 +2637,9 @@ mod tests {
             assert!(status.1, "drawn as the failure it is");
             assert!(detail.pending[0].retry, "it can still be read again");
 
+            let fallback = loc.t("assets.chainFallback");
             assert!(
-                rpc_failing_names(&tempo).is_empty(),
+                rpc_failing_names(&tempo, &fallback).is_empty(),
                 "no RPC is failing: a report must not say one is"
             );
 
@@ -2637,13 +2648,75 @@ mod tests {
             set_unreachable(&mut down, &[137]);
             assert!(unreachable_list(&down, &s, "en", money).rows[0].rpc_fixable);
             assert!(unreachable_chips(&down)[0].rpc_fixable);
-            assert_eq!(rpc_failing_names(&down), vec!["Polygon".to_owned()]);
+            assert_eq!(
+                rpc_failing_names(&down, &fallback),
+                vec!["Polygon".to_owned()]
+            );
             let detail = balance_detail(&down, &s, "en", money);
             let status = detail.pending[0].status.as_ref().map(|(text, _)| text);
             assert_eq!(status, Some(&s.detail_status(STATUS_RPC_UNAVAILABLE)));
             assert_eq!(status.map(AsRef::as_ref), Some("RPC unavailable"));
             // A key this build does not know says nothing false.
             assert_eq!(s.detail_status("home.someLaterStatus").as_ref(), "");
+        });
+    }
+
+    /// PR 4 item 9. The feedback sheet on the owner's phone read 「无法连接的
+    /// RPC 1625」: a chain id under a label about RPCs, which reads as a
+    /// count. The desktop's line names each network that cannot be reached —
+    /// its own name, the person's name for one they added, and for one with
+    /// no name the corpus's words ("Chain 1625", 「链 1625」) — under the
+    /// label "Unreachable networks", and no part of the list is a bare
+    /// number, in any language.
+    #[test]
+    fn a_report_names_every_unreachable_network_and_never_a_bare_id() {
+        use crate::executor::bug_report::{DeviceFacts, environment_lines};
+        crate::executor::storage::tests::with_temp_state("report-unreachable-names", || {
+            let named = serde_json::json!([
+                { "chainId": 4242, "displayName": "My devnet" },
+                { "chainId": 5151, "displayName": "  " },
+            ]);
+            let key = crate::executor::storage::KEY_CUSTOM_NETWORKS;
+            assert!(crate::executor::storage::write_value(key, named).is_ok());
+            let mut down = view(Some(10.0));
+            set_unreachable(&mut down, &[137, 4242, 5151, 1625]);
+
+            let line = |down: &BalanceView, tag: &str| {
+                let loc = crate::loc::Loc::for_language(tag);
+                let names = rpc_failing_names(down, &loc.t("assets.chainFallback"));
+                let labels = crate::settings::SettingsStrings::resolve(&loc).bug_labels;
+                let facts = DeviceFacts {
+                    unreachable: names.clone(),
+                    ..DeviceFacts::default()
+                };
+                (names, environment_lines(&labels, &facts)[3].clone())
+            };
+            let (names, said) = line(&down, "en");
+            assert_eq!(names, ["Polygon", "My devnet", "Chain 5151", "Chain 1625"]);
+            assert_eq!(
+                said,
+                "Unreachable networks: Polygon, My devnet, Chain 5151, Chain 1625"
+            );
+            let (names, said) = line(&down, "zh");
+            assert_eq!(names, ["Polygon", "My devnet", "链 5151", "链 1625"]);
+            assert_eq!(said, "连不上的网络: Polygon, My devnet, 链 5151, 链 1625");
+
+            for (tag, loc) in crate::loc::Loc::every_language() {
+                let template = loc.t("assets.chainFallback");
+                assert!(template.contains("{{chainId}}"), "{tag}: {template}");
+                for name in rpc_failing_names(&down, &template) {
+                    assert!(
+                        !name.trim().chars().all(|c| c.is_ascii_digit()),
+                        "{tag}: `{name}` is a bare id"
+                    );
+                    assert!(!name.contains("{{"), "{tag}: {name}");
+                }
+            }
+            // Nothing out of reach: the line says so, not an empty list.
+            set_unreachable(&mut down, &[]);
+            let (names, said) = line(&down, "en");
+            assert!(names.is_empty());
+            assert_eq!(said, "Unreachable networks: none");
         });
     }
 

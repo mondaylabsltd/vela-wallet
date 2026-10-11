@@ -500,14 +500,16 @@ fn busy_button(theme: &Theme, label: SharedString, primary: bool) -> Div {
 impl WalletPage {
     /// What this device may say about itself in a report, and nothing more
     /// (the web's `deviceFacts`): the build, the platform, the language, the
-    /// NAMES of the networks whose RPC is failing — never one whose node
-    /// answers and whose token list is what could not be loaded (PR 3
-    /// note 4). No failure counters exist on this shell yet, so that line
-    /// honestly says none.
+    /// NAMES of the networks that cannot be reached — one with no name in
+    /// the reader's words ("Chain 1625"), never a bare id, and never a
+    /// network whose node answers and whose token list is what could not be
+    /// loaded (PR 3 note 4). No failure counters exist on this shell yet, so
+    /// that line honestly says none.
     fn feedback_facts(&self, cx: &mut Context<Self>) -> bug_report::DeviceFacts {
         let unreachable = if self.identity.is_some() {
             crate::wallet::live::rpc_failing_names(
                 &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                &self.loc.t("assets.chainFallback"),
             )
         } else {
             Vec::new()

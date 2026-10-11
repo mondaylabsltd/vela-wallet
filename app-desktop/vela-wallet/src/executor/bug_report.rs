@@ -77,7 +77,9 @@ pub struct DeviceFacts {
     /// 15.5", "Windows 11", "Ubuntu 24.04" ([`desktop_os`]).
     pub os: String,
     pub language: String,
-    /// Display NAMES of networks whose RPC is unreachable, never their URLs.
+    /// Display NAMES of the networks that cannot be reached — one with no
+    /// name as the corpus's `assets.chainFallback` ("Chain 1625"); never a
+    /// bare chain id, and never a URL.
     pub unreachable: Vec<String>,
     /// Failure counters' classes, never values.
     pub failures: Vec<String>,
@@ -607,7 +609,7 @@ mod tests {
             version: "Version".into(),
             platform: "Platform".into(),
             language: "Language".into(),
-            rpc: "Unreachable RPC".into(),
+            rpc: "Unreachable networks".into(),
             failures: "Recent failures".into(),
             none: "None".into(),
         }
@@ -652,7 +654,7 @@ mod tests {
                 "Version: v1.2.3 (abc1234)",
                 "Platform: Desktop · Windows x86_64",
                 "Language: en",
-                "Unreachable RPC: World Chain, Zora",
+                "Unreachable networks: World Chain, Zora",
                 "Recent failures: None",
             ]
         );
