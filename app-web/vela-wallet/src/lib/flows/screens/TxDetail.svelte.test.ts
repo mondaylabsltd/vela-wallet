@@ -51,7 +51,7 @@ function weight(el: Element) {
 function drawn(model: TxDetailModel, width: number) {
 	const host = document.createElement('div');
 	host.style.width = `${width}px`;
-	document.body.append(host);
+	document.body.appendChild(host);
 	const screen = render(TxDetail, { target: host, props: { model, ondelete: () => {} } });
 	const remove = [...host.querySelectorAll('button')].find(
 		(el) => el.textContent?.trim() === 'Delete record'
@@ -66,7 +66,7 @@ function drawn(model: TxDetailModel, width: number) {
 const token = (name: string) => {
 	const probe = document.createElement('span');
 	probe.style.color = `var(${name})`;
-	document.body.append(probe);
+	document.body.appendChild(probe);
 	const color = getComputedStyle(probe).color;
 	probe.remove();
 	return color;
@@ -115,7 +115,7 @@ describe('"Delete record" is not the heaviest thing on the page', () => {
 
 		const host = document.createElement('div');
 		host.style.width = `${LAYOUTS.phone}px`;
-		document.body.append(host);
+		document.body.appendChild(host);
 		const screen = render(TxDetail, {
 			target: host,
 			props: { model: detail({ explorerUrl: undefined }), ondelete: () => {} }
@@ -133,7 +133,7 @@ describe('"Delete record" is not the heaviest thing on the page', () => {
 		let deleted = 0;
 		const host = document.createElement('div');
 		host.style.width = `${LAYOUTS.phone}px`;
-		document.body.append(host);
+		document.body.appendChild(host);
 		const screen = render(TxDetail, {
 			target: host,
 			props: { model: detail(), ondelete: () => (deleted += 1) }
@@ -144,7 +144,7 @@ describe('"Delete record" is not the heaviest thing on the page', () => {
 		const control = document.createElement('span');
 		control.style.height = 'var(--size-control-md)';
 		control.style.display = 'block';
-		host.append(control);
+		host.appendChild(control);
 		expect(remove.getBoundingClientRect().height).toBeGreaterThanOrEqual(
 			control.getBoundingClientRect().height
 		);
