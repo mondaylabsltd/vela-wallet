@@ -94,7 +94,7 @@ struct WalletScreen: View {
             .refreshableIf(onRefresh)
             WalletTabBar(tabs: model.tabs, onSelect: onSelectTab)
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .walletTextScale(model.textScale)
         .sheet(isPresented: $sheetShown) {
             if let sheet = model.sheet {

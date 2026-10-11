@@ -486,7 +486,7 @@ struct ExploreScreen: View {
                 content
             }
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .overlay(alignment: .bottom) { toastView }
         .environment(\.walletTextScale, 1)
         .sheet(item: $sheet, onDismiss: {

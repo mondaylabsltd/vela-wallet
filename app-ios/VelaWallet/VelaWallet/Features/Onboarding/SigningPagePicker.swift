@@ -116,7 +116,7 @@ struct SigningPagePicker: View {
             .padding(.vertical, Tokens.Space.s24)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .accessibilityIdentifier("signingPagePicker")
     }
 

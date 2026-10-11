@@ -50,7 +50,7 @@ struct FlowScaffold<Content: View, Footer: View>: View {
             .scrollDismissesKeyboard(.immediately)
             footer()
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
     }
 
     private var topBar: some View {

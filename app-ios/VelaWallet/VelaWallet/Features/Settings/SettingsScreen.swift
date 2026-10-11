@@ -245,7 +245,7 @@ struct SettingsScreen: View {
                     onSelect: onSelectTab
                 )
             }
-            .background(theme.bgBase.ignoresSafeArea())
+            .pageGround(theme.bgBase)
             // The endpoints and providers pages ask the core to read and probe
             // what is stored when they are SHOWN — not whenever Settings
             // opens, and whichever way the page was reached.
@@ -1306,6 +1306,6 @@ private struct IndexDownScreen: View {
             .padding(.horizontal, Tokens.Space.s24)
             .padding(.vertical, Tokens.Space.s48)
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
     }
 }
