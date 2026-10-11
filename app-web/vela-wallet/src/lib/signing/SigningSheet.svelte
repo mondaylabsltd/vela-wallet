@@ -96,13 +96,20 @@
 	 * it was, and the verdict is in sight (PR 3 final note F2, then the device
 	 * round's rule: no part of a verdict hidden, the confirm never moved).
 	 *
-	 * This sheet keeps no room for a verdict (spec 082 RG6). Two can land
-	 * late: the relay's own estimate answering that the operation will revert
-	 * (RJ19), a danger line under the intent, and the sheet's own simulation
-	 * in the balance-changes card under the request — "No asset changes" when
-	 * nothing of the person's moves, or the caution that nothing could be
-	 * checked (PR 3). Each is drawn whole, at its own height: nothing in the
-	 * sheet clips or scrolls a block by itself.
+	 * A site's transaction keeps the simulation verdict's PLACE from its first
+	 * frame (`VerdictPlace`), tall enough for the verdicts a sheet usually
+	 * ends on: one of those landing changes no height, so nothing above it or
+	 * below it moves. What can still change the sheet's height late:
+	 *
+	 * - a verdict taller than the place (a third balance row, the warning
+	 *   under an unverified token) — drawn whole, the place growing with it;
+	 * - the relay's own estimate answering that the operation will revert
+	 *   (spec 082 RJ19), a danger line under the intent;
+	 * - the wallet's own request, which keeps no place: its simulation's
+	 *   notice, or a balance card, after its rows.
+	 *
+	 * Each is drawn whole, at its own height: nothing in the sheet clips or
+	 * scrolls a block by itself.
 	 *
 	 * The confirm stands in the sheet's foot, outside the scroll, so on the
 	 * phone sheet nothing the body gains can move it: the sheet grows upward,
@@ -118,11 +125,14 @@
 	const HEADER = '[data-signing-top]';
 	/** Each verdict on the sheet, as what it says: one that changes has landed again. */
 	const verdicts = $derived(
-		model.blocks
-			.filter(
-				(block) => (block.kind === 'warning' || block.kind === 'balances') && block.verdict === true
-			)
-			.map((block) => JSON.stringify(block))
+		model.blocks.flatMap((block) => {
+			// The verdict's place, once something to read is in it.
+			if (block.kind === 'verdict') return block.landed ? [JSON.stringify(block.inner)] : [];
+			if ((block.kind === 'warning' || block.kind === 'balances') && block.verdict === true) {
+				return [JSON.stringify(block)];
+			}
+			return [];
+		})
 	);
 	const verdictKey = $derived(verdicts.join('\n'));
 	let confirmAt: number | null = null;

@@ -113,6 +113,45 @@ export interface BalanceRow {
 	tone: Tone;
 }
 
+/**
+ * A caution or a danger, said in a banner.
+ */
+export interface WarningBlock {
+	kind: 'warning';
+	tone: 'caution' | 'danger';
+	text: string;
+	/**
+	 * This line LANDS after the sheet has opened: the relay's own estimate
+	 * saying the operation will revert (spec 082 RJ19), or — on the wallet's
+	 * own request, which keeps no place for it — the simulation's notice. The
+	 * sheet keeps its confirm where it was across the landing (PR 3 final
+	 * note F2) and brings the line into sight (the device round).
+	 */
+	verdict?: true;
+}
+
+/**
+ * What the chain said this request would move: the one card on a signing
+ * sheet the site being signed for cannot write.
+ */
+export interface BalancesBlock {
+	kind: 'balances';
+	title: string;
+	rows: BalanceRow[];
+	note?: string;
+	noteTone?: Tone;
+	/**
+	 * This card LANDS after the sheet has opened (the sheet's own
+	 * simulation, on the wallet's own request): drawn whole, at its own
+	 * height, the confirm kept where it was and the card brought into sight
+	 * (PR 3 device round).
+	 */
+	verdict?: true;
+}
+
+/** What can stand in the verdict's place: the balance card, or the core's notice. */
+export type VerdictBlock = BalancesBlock | WarningBlock;
+
 export type Block =
 	/** The eyebrow above the hero — "发送", "授权", "盲签". */
 	| { kind: 'intent'; text: string; tone: Tone }
@@ -145,35 +184,39 @@ export type Block =
 	  }
 	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
 	| { kind: 'rows'; rows: KeyValueRow[] }
-	| {
-			kind: 'warning';
-			tone: 'caution' | 'danger';
-			text: string;
-			/**
-			 * This line LANDS after the sheet has opened: the relay's own
-			 * estimate saying the operation will revert (spec 082 RJ19). The
-			 * sheet keeps its confirm where it was across the landing (PR 3
-			 * final note F2) and brings the line into sight (the device round).
-			 */
-			verdict?: true;
-	  }
+	| WarningBlock
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
 	| { kind: 'code'; lines: string[]; note?: string }
 	/** A batch step or a Safe inner call. */
 	| { kind: 'card'; title?: string; rows: KeyValueRow[]; tone: Tone }
+	| BalancesBlock
+	/**
+	 * The simulation verdict's PLACE on a site's transaction — kept from the
+	 * request's first frame, as the phones and the desktop keep it, so a
+	 * verdict that lands a moment later fills a place that was already there
+	 * and moves nothing: not the header and its ✕ above (the phone sheet is
+	 * anchored at the bottom), not the fee row and the confirm below.
+	 *
+	 * `inner` is what stands in it now: the balance card saying "Checking…"
+	 * while the simulation is out, then the verdict — the rows, "No asset
+	 * changes", or the core's notice (a revert, a node that could not check).
+	 *
+	 * `rooms` are the verdicts a sheet usually ends on, never shown: the
+	 * place is at least as tall as the tallest of them at this width, in this
+	 * language and at this text size. A verdict taller than that — a third
+	 * balance row, the warning under an unverified token — is drawn whole and
+	 * the place grows with it; the sheet's body scrolls, never the place.
+	 */
 	| {
-			kind: 'balances';
-			title: string;
-			rows: BalanceRow[];
-			note?: string;
-			noteTone?: Tone;
+			kind: 'verdict';
+			inner: VerdictBlock[];
+			rooms: VerdictBlock[];
 			/**
-			 * This card LANDS after the sheet has opened (the sheet's own
-			 * simulation): drawn whole, at its own height, the confirm kept
-			 * where it was and the card brought into sight (PR 3 device round).
+			 * Something to read is in the place: an answer, or the sentence that
+			 * none came in time. The sheet brings it into sight when it lands.
 			 */
-			verdict?: true;
+			landed: boolean;
 	  };
 
 export interface TechIdentity {

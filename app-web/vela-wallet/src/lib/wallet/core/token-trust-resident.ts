@@ -32,6 +32,7 @@ import type { TrustEvent } from '$lib/core/generated/TrustEvent';
 import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
 import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import type { TrustView } from '$lib/core/generated/TrustView';
 
 /**
@@ -207,24 +208,42 @@ export function pollIncoming(address: string, chainIds: number[]): Promise<Trust
 }
 
 /**
- * Judge one simulation's deltas (invariant ⑥'s asymmetric trust). UNTRUSTED
- * input: this path can reach no write in the core at all.
+ * Judge one simulation's deltas (invariant ⑥'s asymmetric trust) and answer
+ * with the machine's whole judged view: the judgments, and its own word when
+ * nothing of the person's moves (`no_change_key`). UNTRUSTED input: this path
+ * can reach no write in the core at all.
+ *
+ * `null` when the view the machine committed is not this simulation's — it
+ * never should be (the queue below runs one at a time, and the core's session
+ * is the latest asked), and a caller told `null` says "could not check"
+ * rather than drawing somebody else's judgment.
  *
  * No deadline here on purpose. The judgment costs at most one metadata
  * multicall, the executor answers every requested address, and a give-up would
  * have to invent a verdict — which is exactly the decision this machine exists
  * to own.
  */
-export function judgeSimDeltas(
+export function judgeSimView(
+	address: string,
+	chainId: number,
+	deltas: TrustAssetDelta[]
+): Promise<TrustSimView | null> {
+	return simQueue(async () => {
+		send({ type: 'sim_deltas_computed', address, chain_id: chainId, deltas });
+		const settled = await waitForView((next) => next.sim?.ready === true, null);
+		const sim = settled.sim;
+		if (!sim || sim.chain_id !== chainId || sim.address !== address.toLowerCase()) return null;
+		return sim;
+	});
+}
+
+/** {@link judgeSimView}'s judgments alone — what Send's own preview reads. */
+export async function judgeSimDeltas(
 	address: string,
 	chainId: number,
 	deltas: TrustAssetDelta[]
 ): Promise<TrustSimJudgment[]> {
-	return simQueue(async () => {
-		send({ type: 'sim_deltas_computed', address, chain_id: chainId, deltas });
-		const settled = await waitForView((next) => next.sim?.ready === true, null);
-		return settled.sim?.judgments ?? [];
-	});
+	return (await judgeSimView(address, chainId, deltas))?.judgments ?? [];
 }
 
 function toWireToken(token: CustomToken): TrustCustomToken {
