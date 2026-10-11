@@ -473,7 +473,7 @@ object SendLive {
                     // Adding to people already on the form draws from what the form
                     // has not given out yet (`split_remaining`), not the whole balance.
                     remaining = if (formHasRows && !replaces && view.split_remaining != null) {
-                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(view.split_remaining)} $symbol".trim()))
+                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${splitLeft(view)} $symbol".trim()))
                     } else {
                         s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "${trim(view.selected_token?.balance ?: "0")} $symbol".trim()))
                     },
@@ -823,8 +823,26 @@ object SendLive {
             // same predicate Continue refuses on, shown while typing — and how
             // much is still left to give out when they do not.
             over = view.split_over_balance,
-            remaining = view.split_remaining?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(it)} $symbol".trim())) },
+            remaining = splitLeft(view)?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "$it $symbol".trim())) },
         )
+    }
+
+    /**
+     * What is left of a split to give out, as the line under the rows says it
+     * ("0.0003 BNB left"): the CORE's cut of the exact remainder
+     * (`split_remaining_display` — the token ladder, never rounded up), in the
+     * person's decimal mark, ungrouped like every token figure. `null` when
+     * there is no remainder to say.
+     *
+     * It used to go through this shell's own token rule, which rounds half
+     * up: a remainder is what is THERE, and rounding it up by a digit says
+     * there is more to give out than there is. (The iPhone drew the exact
+     * string, eighteen places of it.) A view with no cut of its own — a hand
+     * built one — is cut by the same core function.
+     */
+    internal fun splitLeft(view: SendView): String? {
+        val cut = view.split_remaining_display ?: view.split_remaining?.let { uniffi.vela_core_uniffi.cutTokenAmount(it) }
+        return cut?.let { Formats.current.plain(it) }
     }
 
     /** The core's live refusal on the form — the amount warning, or the same-asset fee ceiling. */
