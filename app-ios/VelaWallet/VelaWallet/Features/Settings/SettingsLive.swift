@@ -476,14 +476,25 @@ enum SettingsLive {
     /// that did not answer leaves the device's own memory on screen, labelled,
     /// without sync badges; one that answered with nothing is NOT called
     /// unreachable.
+    ///
+    /// `device` is what this device's own record says (`WalletKeys
+    /// .deviceOnly`), known before any chain is asked: while still asking,
+    /// the block draws THOSE rows — every key the wallet has, by name, each
+    /// with the room its badges will take — so the registry's answer fills
+    /// rows in instead of adding them, and nothing under the block moves
+    /// (iPhone walk 2026-10-10: one skeleton row, then three keys, and the
+    /// page dropped ~250 pt). With neither there is one skeleton row, for the
+    /// instant before the record is read.
     static func withWalletKeys(
         _ keys: WalletKeys.Result?,
+        device: WalletKeys.Result? = nil,
         backup: RegistryBackup.Check?,
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
-        let rows = (keys?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
+        let known = keys ?? device
+        let rows = (known?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
             var body = row.publicKeyHex.hasPrefix("0x") ? String(row.publicKeyHex.dropFirst(2)) : row.publicKeyHex
             if body.count == 130, body.hasPrefix("04") { body = String(body.dropFirst(2)) }
             // Where the key LIVES, by its place — never "Trusted Signer"
@@ -526,8 +537,9 @@ enum SettingsLive {
             )
         }
         // A record with no key at all (the DEBUG read-only seed) has nothing to
-        // list and nothing to back up: no block, rather than "Keys 0".
-        if keys != nil, rows.isEmpty { return model }
+        // list and nothing to back up: no block, rather than "Keys 0" — and
+        // none while asking either, when the device already says so.
+        if known != nil, rows.isEmpty { return model }
         var next = model
         next.keys = WalletKeysModel(
             title: loc.t(k.keysTitle),
@@ -539,7 +551,11 @@ enum SettingsLive {
             backup: ethereumBackupRow(backup, loc: loc),
             backupExplain: backupExplain(backup, loc: loc),
             copyLabel: loc.t(k.keysCopy),
-            copiedLabel: loc.t(k.keysCopied)
+            copiedLabel: loc.t(k.keysCopied),
+            badgeRoom: [
+                [loc.t(k.keysUserVerified), loc.t(k.keysSynced)],
+                [loc.t(k.keysUserVerified), loc.t(k.keysNotSynced)],
+            ]
         )
         return next
     }

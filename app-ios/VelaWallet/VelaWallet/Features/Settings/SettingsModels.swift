@@ -562,13 +562,17 @@ struct IndexDownModel {
 /// Everything one settings state needs.
 /// The keys that control this wallet (spec 062) — drawn under the account and
 /// above everything else, with the Ethereum backup as the block's last row.
-/// `rows` is empty while the first answer is in flight; `note` is set only when
-/// the registry did not answer and the rows are what this device remembers.
+/// While the registry's answer is in flight (`loading`), `rows` are what this
+/// device's own record says — every key, each drawn with the room its badges
+/// will take — and empty only for the instant before that record is read;
+/// `note` is set only when the registry did not answer and the rows are what
+/// this device remembers.
 struct WalletKeysModel {
     let title: String
     let subtitle: String
     /// "3"; empty while loading — never a guessed count.
     let count: String
+    /// The registry has not answered yet: the rows' badges are still unknown.
     let loading: Bool
     let note: String?
     let rows: [WalletKeyRowModel]
@@ -585,6 +589,12 @@ struct WalletKeysModel {
     /// Spec 102: "Keys on {{domain}}" for an account on its own domain —
     /// once, above the list; `nil` on `getvela.app`.
     var domainLine: String? = nil
+    /// The badges the registry's answer can put on a row, as alternative
+    /// sets, in the core's words ("Verified" beside "Cloud-synced", or beside
+    /// "Device-bound"). Every row keeps the room of the fullest of them, so
+    /// the answer changes no row's height; the first set is what stands in,
+    /// unread, while the registry is asked. Empty on a drawn board.
+    var badgeRoom: [[String]] = []
 }
 
 enum KeyPillTone {

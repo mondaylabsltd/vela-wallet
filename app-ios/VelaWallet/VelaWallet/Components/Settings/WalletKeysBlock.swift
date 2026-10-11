@@ -67,8 +67,10 @@ struct WalletKeysBlock: View {
                 .accessibilityIdentifier("keys.domain")
             }
 
-            if model.loading {
-                // The shape of one row, so the block does not jump when the answer lands.
+            if model.loading && model.rows.isEmpty {
+                // Nothing is known yet — not even this device's own record,
+                // which is read before anybody can open Settings. The shape of
+                // one row, for that instant.
                 HStack(spacing: Tokens.Space.s12) {
                     Circle().fill(theme.borderBase).frame(width: LucideIconSize.action, height: LucideIconSize.action)
                     Capsule().fill(theme.borderBase).frame(width: 140, height: 8)
@@ -79,8 +81,12 @@ struct WalletKeysBlock: View {
                 .accessibilityHidden(true)
                 SettingsDivider()
             } else {
+                // While the registry is still being asked these are the
+                // device's own rows: every key the wallet has, in its final
+                // place and at its final height. The answer fills the badges
+                // in; it adds no row and moves nothing under the block.
                 ForEach(model.rows) { row in
-                    keyRow(row)
+                    keyRow(row, pending: model.loading)
                     SettingsDivider()
                 }
                 if let note = model.note {
@@ -117,7 +123,9 @@ struct WalletKeysBlock: View {
         .padding(.top, Tokens.Space.s16)
     }
 
-    private func keyRow(_ row: WalletKeyRowModel) -> some View {
+    /// `pending`: the registry has not answered — the badges nobody has
+    /// vouched for yet are a quiet placeholder where they will stand.
+    private func keyRow(_ row: WalletKeyRowModel, pending: Bool = false) -> some View {
         let expandable = !row.details.isEmpty
         let isOpen = open.contains(row.id)
         return VStack(alignment: .leading, spacing: 0) {
@@ -141,12 +149,9 @@ struct WalletKeysBlock: View {
                     // name AND the pills on one line, and the name is what loses.
                     // They wrap rather than squeeze — three pills in Russian do
                     // not fit one line.
-                    if !row.pills.isEmpty {
-                        PillFlow(spacing: Tokens.Space.s4) {
-                            ForEach(row.pills, id: \.text) { pill in pillView(pill) }
-                        }
+                    //
+                    pillLine(row, pending: pending)
                         .padding(.top, Tokens.Space.s2)
-                    }
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if expandable {
@@ -212,6 +217,49 @@ struct WalletKeysBlock: View {
                 .padding(.vertical, Tokens.Space.s2)
                 .overlay(Self.pillShape.strokeBorder(tint, lineWidth: 1))
         }
+    }
+
+    /// A row's badges, in the room they can ever take.
+    ///
+    /// The line is ALWAYS there, and always as tall as the fullest set of
+    /// badges this row can end with (`badgeRoom`, at this width and text
+    /// size — three pills in English wrap to two lines): a row is the same
+    /// height while its badges are being asked for, when they arrive, and
+    /// when nobody could vouch for any. So an answer — or a registry that
+    /// never gives one — moves nothing under the row.
+    private func pillLine(_ row: WalletKeyRowModel, pending: Bool) -> some View {
+        // What the device itself vouches for stays in every outcome.
+        let own = row.pills.filter { $0.tone == .signsHere }
+        return ZStack(alignment: .topLeading) {
+            pillView(KeyPillModel(text: " ", tone: .local)).hidden()
+            ForEach(Array(model.badgeRoom.enumerated()), id: \.offset) { _, texts in
+                PillFlow(spacing: Tokens.Space.s4) {
+                    ForEach(own, id: \.text) { pill in pillView(pill) }
+                    ForEach(texts, id: \.self) { text in pillView(KeyPillModel(text: text, tone: .local)) }
+                }
+                .hidden()
+            }
+            PillFlow(spacing: Tokens.Space.s4) {
+                ForEach(row.pills, id: \.text) { pill in pillView(pill) }
+                if pending {
+                    ForEach(model.badgeRoom.first ?? [" "], id: \.self) { text in pendingPill(text) }
+                }
+            }
+        }
+        .accessibilityHidden(row.pills.isEmpty)
+    }
+
+    /// Where a badge will stand, while the registry is still being asked: the
+    /// badge's own size, nothing to read.
+    private func pendingPill(_ text: String) -> some View {
+        Text(text)
+            .typeRole(Typography.flowCaption)
+            .fixedSize(horizontal: false, vertical: true)
+            .hidden()
+            .padding(.horizontal, Tokens.Space.s8)
+            .padding(.vertical, Tokens.Space.s2)
+            .background(Self.pillShape.fill(theme.borderBase))
+            .accessibilityHidden(true)
     }
 
     /// A capsule on one line; on two (Russian or German at the largest text

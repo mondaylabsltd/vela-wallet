@@ -179,6 +179,11 @@ struct RootView: View {
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// Which passkeys control that wallet, and for which wallet it was asked.
     @State private var walletKeys: (address: String, result: WalletKeys.Result)?
+    /// The same wallet's keys as this device's own record has them — known
+    /// without asking a chain, and read when the account comes to the front,
+    /// so Settings draws every key from its first frame and the registry's
+    /// answer only fills the rows in (`SettingsLive.withWalletKeys`).
+    @State private var deviceKeys: (address: String, result: WalletKeys.Result)?
     /// Spec 102: how the active account signs on this device — its key,
     /// domain and venue (`signingPlan`), for "Where you review and sign" and
     /// the keys block's domain line.
@@ -3565,12 +3570,15 @@ struct RootView: View {
         let keys = walletKeys.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
         }
+        let ownKeys = deviceKeys.flatMap {
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
+        }
         // No wallet, no block. With no address nothing is ever asked, so "still
         // asking" would never end: on a signed-out iPhone the block sat on its
         // loading skeleton and the backup on 正在检查… for good (device-found
         // 2026-09-19).
         if !session.view.address.isEmpty {
-            model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
+            model = SettingsLive.withWalletKeys(keys, device: ownKeys, backup: backedUp, on: model, loc: loc)
         }
         // Spec 102: the account's venue (and its domain over the keys), and
         // Settings → Signing pages — every row's line this phone's check.
@@ -3721,7 +3729,25 @@ struct RootView: View {
             else { return nil }
             return hex
         })
+        // What the device knows, before the first chain is asked.
+        deviceKeys = (address, reader.deviceOnly(device: device, signInCredential: signingKey))
         walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
+    }
+
+    /// The account in front's keys as this device's record has them — no
+    /// chain asked. Read as the account comes to the front, long before a
+    /// person can reach Settings, so the keys block opens on its rows.
+    private func readDeviceKeys(of address: String) async {
+        guard !address.isEmpty else { return }
+        let device = await WalletKeys.deviceKeys(
+            of: address, walletName: session.view.activeName, in: sendAccountPort
+        )
+        let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
+        guard address.caseInsensitiveCompare(session.view.address) == .orderedSame else { return }
+        deviceKeys = (
+            address,
+            WalletKeys(ethCall: { _, _, _ in nil }).deviceOnly(device: device, signInCredential: signingKey)
+        )
     }
 
     /// Reads, from the chains themselves, whether this wallet's founding keys
@@ -3866,6 +3892,7 @@ struct RootView: View {
         wallet.open(address: address)
         activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
         contacts.open(myAddress: address)
+        Task { await readDeviceKeys(of: address) }
     }
 
     /// The home switcher closed. The balance core is told, so it stops
