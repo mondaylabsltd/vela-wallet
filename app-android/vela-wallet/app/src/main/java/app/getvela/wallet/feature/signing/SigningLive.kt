@@ -1487,8 +1487,39 @@ object SigningLive {
             // The fee's worth joins the line when the display currency
             // commits: the row keeps the longer line's room from now.
             worthRoom = !ctx.money.settled,
+            rooms = feeRooms(ctx, selected?.symbol, hasSpeed = speed != null),
         )
     }
+
+    /**
+     * What a fee card comes to say by itself once the sheet is up
+     * ([FeeRooms]), named so the sheet keeps its room from the first frame:
+     * the speed's note a fee lands with where a faster speed is free, and
+     * what a fee's answer says under the card when it cannot be paid — no
+     * coin can pay, or the paying coin is short. Together they are what the
+     * sheet is as tall as when a fee has landed.
+     *
+     * Not named, on purpose:
+     * - why there is NO fee (the core's failure reasons: the network out of
+     *   reach, the relay's own faults). A fee that failed brings no speed's
+     *   note, so its sentence stands in the room the two above keep — one
+     *   line in Chinese, two in English, both fit — and the sheet does not
+     *   move for it. A room of its own would be a second empty line under
+     *   every fee card, and on a 1080x2400 phone pushes the signing account
+     *   under the fold of an ordinary transfer. The one case left over: a fee
+     *   that had landed WITH the note and fails on a later re-quote, in a
+     *   language whose reason needs two lines, grows the sheet by one line.
+     * - what only a tap brings (the coin list, the speeds, "this coin is
+     *   spent by the transaction" after choosing it) — a sheet may answer a
+     *   tap by changing.
+     */
+    internal fun feeRooms(ctx: Context, payingSymbol: String?, hasSpeed: Boolean): FeeRooms = FeeRooms(
+        speedNote = ctx.strings.t(I18nKeys.Flows.FEE_SPEED_FREE).takeIf { hasSpeed },
+        lines = listOf(
+            ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS),
+            ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to (payingSymbol ?: ctx.nativeSymbol))),
+        ),
+    )
 
     private fun feeLine(estimate: FeeEstimateView, fee: FeeView, ctx: Context): String {
         val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)

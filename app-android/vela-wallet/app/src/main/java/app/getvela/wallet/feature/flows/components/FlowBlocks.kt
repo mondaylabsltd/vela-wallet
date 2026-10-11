@@ -1491,7 +1491,15 @@ fun FeeSpeedControl(
 }
 
 @Composable
-private fun SpeedNote(text: String) {
+private fun SpeedNote(text: String) = FeeSpeedNote(text)
+
+/**
+ * A note of the speed control, as the control draws it — also what the
+ * signing sheet measures to keep the room of a note the control has not said
+ * yet (`FeeRooms`): one composable, so the room is the note's own height.
+ */
+@Composable
+internal fun FeeSpeedNote(text: String) {
     Text(
         text = text,
         color = VelaTheme.colors.fgSubtle,

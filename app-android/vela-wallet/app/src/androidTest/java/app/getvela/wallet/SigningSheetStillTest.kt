@@ -18,6 +18,24 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsNode
+import app.getvela.wallet.core.designsystem.components.VELA_SHEET_CONTENT_TAG
+import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.send.core.FeeAssetView
+import app.getvela.wallet.feature.send.core.FeeBoards
+import app.getvela.wallet.feature.send.core.FeeEstimateView
+import app.getvela.wallet.feature.send.core.FeeOptionView
+import app.getvela.wallet.feature.send.core.FeeSpeedView
+import app.getvela.wallet.feature.send.core.FeeTier
+import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.signing.HEADER_TAG
+import app.getvela.wallet.feature.signing.SigningLive
+import app.getvela.wallet.feature.signing.SigningSheet
+import app.getvela.wallet.feature.signing.TechModel
+import app.getvela.wallet.feature.signing.core.ClearSigningView
+import kotlin.math.roundToInt
+import org.junit.Assert.assertNotNull
 import app.getvela.wallet.feature.signing.BODY_TAG
 import app.getvela.wallet.feature.signing.CONFIRM_TAG
 import app.getvela.wallet.feature.signing.FeeModel
@@ -291,7 +309,187 @@ class SigningSheetStillTest {
         }
     }
 
+    // -- the 2026-10-11 walk, item 2: the fee landing moved the ✕ ---------------------------
+    //
+    // On the phone the sheet's top went 243 → 166 → 89 px as the fee landed
+    // (two 77 px steps), and the ✕ from y 337 to 183: first an empty gap under
+    // the fee card — the "no coin can pay" line's room, a second before its
+    // words — then the speed's note inside the card. The confirm stayed; the
+    // header, the amount, the recipient and the verdict all moved, and the ✕
+    // moved under a finger. Offline it did the same by another road:
+    // estimating → "can't reach Gnosis" → priced.
+    //
+    // Here the REAL sheet (`SigningSheet`: the modal, anchored at the bottom)
+    // shows the transfer the walk signed, and its fee card is the LIVE
+    // builder's (`SigningLive.feeModel`) over the fee views the core sends for
+    // each moment. Measured on the SCREEN, in px, at whatever window this runs
+    // in: the ✕'s top, the header's top, the sheet's top edge and the
+    // confirm's top. "Before" is the same walk with the fee's rooms taken out
+    // of the model — the sheet as it was; "after" is the model as built.
+
+    private val gnosis by lazy {
+        SigningLive.Context(strings, "Gnosis", androidx.compose.ui.graphics.Color(0xFF04795B), "xDAI", "Parallel space", ACCOUNT, chainId = 100)
+    }
+
+    private fun estimate() = FeeEstimateView(
+        chain_id = 100, total_wei = "10000000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+        relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+        deployed = true, tier = FeeTier.Fast, quoted = true, fee_asset = FeeAssetView.Native, fee_recipient = RELAY,
+    )
+
+    private fun coin(balance: String, short: Boolean) = FeeOptionView(
+        symbol = "xDAI", decimals = 18, balance = balance, recipient = RELAY, usd_balance = if (short) "0" else "5", usd_price = "1",
+        amount = "10000000000000000", insufficient = short, selected = true,
+    )
+
+    /** The speed in force: the person's "standard" while nothing is priced; "fast", with its note, where it costs nothing more. */
+    private fun speed(free: Boolean) = SendLive.SpeedInputs(
+        FeeSpeedView(tier = if (free) FeeTier.Fast else FeeTier.Standard, preferred = FeeTier.Standard, free = free, free_note = free),
+    ) { null }
+
+    private val measuring = "componentsUi.signing.confirmBlock.feeMeasuring"
+
+    /** One moment of the sheet: the fee as the core states it, and the line the gate says under the confirm. */
+    private inner class Moment(val name: String, val fee: FeeView, val free: Boolean = false, val open: Boolean = false, val under: String? = null)
+
+    private fun estimating() = Moment("estimating", FeeView(busy = true), under = measuring)
+    private fun reserveKnown() = Moment("estimating, nothing to pay from", FeeView(busy = true, nothing_to_pay_from = true), under = measuring)
+    private fun priced(free: Boolean) = Moment(
+        if (free) "priced, with the speed's note" else "priced",
+        FeeView(fee = estimate(), options = listOf(coin("5000000000000000000", short = false)), confirm_fee_ready = true),
+        free = free, open = true,
+    )
+    private fun cannotPay() = Moment(
+        "priced, no coin can pay",
+        FeeView(fee = estimate(), options = listOf(coin("0", short = true)), no_coin_pays = true, nothing_to_pay_from = true),
+        free = true,
+    )
+    private fun failed(case: FeeBoards.Case) = FeeBoards.view(case, chainId = 100, account = ACCOUNT).let { view ->
+        Moment("failed (${case.name})", view, under = view.failure?.footer_key)
+    }
+
+    private data class Place(val close: Int, val header: Int, val sheetTop: Int, val confirm: Int) {
+        override fun toString() = "✕ $close · header $header · sheet top $sheetTop · confirm $confirm"
+    }
+
+    private fun onScreenTop(node: SemanticsNode): Int {
+        val view = (node.root as ViewRootForTest).view
+        val at = IntArray(2).also(view::getLocationOnScreen)
+        return (at[1] + node.positionInRoot.y).roundToInt()
+    }
+
+    private fun stillThroughTheFee(walk: String, moments: List<Moment>) {
+        // The walk's own request — an amount, a recipient, the verdict already
+        // in ("could not check"), the fee card, who signs — with no technical
+        // details folded under it: only the fee is on its way.
+        val base = SigningFixtures.build(SigningScreenState.CS58, strings).let { drawn ->
+            drawn.copy(
+                closeLabel = CLOSE,
+                blocks = drawn.blocks.filter { it is SigningBlock.Amount || it is SigningBlock.Party || it is SigningBlock.Held },
+                tech = TechModel(title = drawn.tech.title, copyLabel = drawn.tech.copyLabel, explorerLabel = drawn.tech.explorerLabel),
+            )
+        }
+        fun model(moment: Moment, rooms: Boolean): SigningScreenModel {
+            val fee = SigningLive.feeModel(ClearSigningView(), moment.fee, gnosis, speed(moment.free)) as FeeModel.OnChain
+            assertNotNull("the live builder names the card's rooms", fee.rooms)
+            return base.copy(
+                requestKey = if (rooms) "after" else "before",
+                fee = if (rooms) fee else fee.copy(rooms = null),
+                confirmEnabled = moment.open,
+                confirmBlockLine = moment.under?.let { strings.t(it) },
+            )
+        }
+        var current by mutableStateOf(model(moments.first(), rooms = false))
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) { SigningSheet(model = current, onDismiss = {}) }
+            }
+        }
+        compose.waitUntil(60_000) { runCatching { compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode() }.isSuccess }
+        compose.waitForIdle()
+        fun place() = Place(
+            close = onScreenTop(compose.onNodeWithContentDescription(CLOSE).fetchSemanticsNode()),
+            header = onScreenTop(compose.onNodeWithTag(HEADER_TAG).fetchSemanticsNode()),
+            // The sheet has no handle: its content's top is its own top edge.
+            sheetTop = onScreenTop(compose.onNodeWithTag(VELA_SHEET_CONTENT_TAG).fetchSemanticsNode()),
+            confirm = onScreenTop(compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode()),
+        )
+        fun through(rooms: Boolean) = moments.map { moment ->
+            current = model(moment, rooms)
+            compose.waitForIdle()
+            moment.name to place()
+        }
+        val before = through(rooms = false)
+        save("$walk-before-end")
+        val after = through(rooms = true)
+        save("$walk-after-end")
+        val window = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSystemService(android.view.WindowManager::class.java).currentWindowMetrics.bounds
+        val table = buildString {
+            append("$walk — window ${window.width()}x${window.height()} px\n")
+            moments.indices.forEach { i ->
+                append("  ${before[i].first}\n    before: ${before[i].second}\n    after:  ${after[i].second}\n")
+            }
+        }
+        android.util.Log.i(TAG, table)
+
+        val first = after.first().second
+        after.forEach { (moment, place) -> assertEquals("with its rooms kept, the sheet moved at \"$moment\"\n$table", first, place) }
+        // The room is real, and this test can see a sheet move: without it the
+        // sheet's top is not where it ends — unless the window is so short
+        // that the sheet stands at its cap from the first frame either way.
+        val body = compose.onNodeWithTag(BODY_TAG, useUnmergedTree = true).fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
+        if (body == 0f) {
+            assertTrue("without the rooms nothing moved either: this walk proves nothing\n$table", before.map { it.second.sheetTop }.toSet().size > 1)
+            assertTrue("…and the ✕ moved with it\n$table", before.map { it.second.close }.toSet().size > 1)
+        }
+        // The confirm is the footer's and stays whatever the body does — before and after.
+        assertEquals("the confirm moved\n$table", 1, (before + after).map { it.second.confirm }.toSet().size)
+    }
+
+    /** Evidence for the review: the screen as measured, in the app's cache. */
+    private fun save(name: String) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val shot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return
+        val file = name.replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
+        java.io.File(context.cacheDir, "signing-still-$file.png").outputStream().use {
+            shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
+    /** The walk on the phone: estimating → the core learns nothing can pay → the fee lands, with the speed's note, and no coin can pay. */
+    @Test
+    fun theFeeLandingAsNoCoinCanPayMovesNeitherTheCloseNorTheSheetsTop() =
+        stillThroughTheFee("fee priced + can't pay", listOf(estimating(), reserveKnown(), cannotPay(), reserveKnown(), cannotPay()))
+
+    /** A funded wallet: the fee lands and the confirm opens — with the speed's note on a network where "fast" is free, and without it. */
+    @Test
+    fun theFeeLandingPricedMovesNeitherTheCloseNorTheSheetsTop() =
+        stillThroughTheFee("fee priced", listOf(estimating(), priced(free = false), estimating(), priced(free = true), estimating(), priced(free = true)))
+
+    /** The chain's nodes do not answer: the reason under the card, the retry the core makes by itself, and the next failure. */
+    @Test
+    fun theFeeFailingMovesNeitherTheCloseNorTheSheetsTop() =
+        stillThroughTheFee("fee failed", listOf(estimating(), failed(FeeBoards.Case.ChainDown), failed(FeeBoards.Case.Retrying), estimating(), failed(FeeBoards.Case.ChainDown)))
+
+    /** The walk's step 16, in airplane mode: estimating → failed → (the network back) priced, and no coin can pay. */
+    @Test
+    fun offlineThenBackMovesNeitherTheCloseNorTheSheetsTop() =
+        stillThroughTheFee("offline: estimating → failed → priced", listOf(estimating(), failed(FeeBoards.Case.ChainDown), failed(FeeBoards.Case.Retrying), cannotPay()))
+
+    /** The same in English: the sentences wrap differently, and the rooms are the sentences' own. */
+    @Test
+    fun theFeeLandingInEnglishMovesNeitherTheCloseNorTheSheetsTop() {
+        strings.setLocale("en")
+        stillThroughTheFee("English: estimating → failed → priced + can't pay", listOf(estimating(), failed(FeeBoards.Case.ChainDown), reserveKnown(), cannotPay(), priced(free = true)))
+    }
+
     private companion object {
         const val SHEET = "signing-sheet"
+        const val TAG = "pr4-still"
+        const val CLOSE = "关闭"
+        const val ACCOUNT = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        const val RELAY = "0x2222222222222222222222222222222222222222"
     }
 }
