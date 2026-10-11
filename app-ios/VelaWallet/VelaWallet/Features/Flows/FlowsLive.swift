@@ -41,8 +41,10 @@ enum FlowsLive {
         loc: Loc,
         networks: WalletNetworks = .builtin
     ) -> AssetsModel {
-        let all = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency),
-                                       networks: networks)
+        let all = WalletLive.assetRows(
+            balance, display: WalletLive.Display.from(currency, language: loc.resolvedLanguage),
+            networks: networks
+        )
         let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
         // Empty exactly when the core says the list is (`emptyKey`: a read
         // ended and found nothing held) — it was this file's own "no rows,

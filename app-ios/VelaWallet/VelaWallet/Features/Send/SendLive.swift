@@ -475,7 +475,7 @@ enum SendLive {
         // unit. When the figure is already fiat the other unit is the token's,
         // which is `token_amount` — the very number the signed batch is built
         // from, so the two can never disagree.
-        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol)
+        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol, language: loc.resolvedLanguage)
         live.amount = model.amount.map { drawn in
             AmountFieldModel(
                 value: view.amount.isEmpty ? "0" : view.amount,
@@ -688,15 +688,16 @@ enum SendLive {
     /// The unit drawn beside a figure being typed (issue 231, the web's
     /// `unitAdornment`). `code` is the figure's OWN currency
     /// (`amount_fiat_code`); `nil` means token units, and the unit is the
-    /// token's symbol. A currency with a symbol leads the figure, one the
-    /// catalog has no symbol for follows it as its code, a token always
-    /// follows. Nothing defaults to "$".
-    static func unitAdornment(code: String?, symbol: String) -> (prefix: String?, suffix: String?) {
+    /// token's symbol. A currency with a sign leads the figure — the core's
+    /// sign for the app's `language` (`FiatSign`), the one every fiat figure
+    /// in the app wears — one whose only sign is its code follows it as that
+    /// code, a token always follows. Nothing defaults to "$".
+    static func unitAdornment(
+        code: String?, symbol: String, language: String
+    ) -> (prefix: String?, suffix: String?) {
         guard let code else { return (nil, symbol.isEmpty ? nil : symbol) }
-        if let glyph = CurrencyCatalog.entry(code)?.glyph, !glyph.isEmpty {
-            return (glyph, nil)
-        }
-        return (nil, code)
+        if FiatSign.isCode(code, language: language) { return (nil, code) }
+        return (FiatSign.symbol(code, language: language), nil)
     }
 
     /// What is wrong with **this** row, in the core's words.

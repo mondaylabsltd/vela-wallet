@@ -608,7 +608,7 @@ enum SettingsFixtures {
         return SelectSheetModel(
             title: loc.t(k.currencySheetTitle),
             rows: currencies.enumerated().map { index, currency in
-                SelectRowModel(id: currency.code, label: currency.code, glyph: currency.glyph,
+                SelectRowModel(id: currency.code, label: currency.code, glyph: FiatSign.symbol(currency.code, language: loc.resolvedLanguage),
                                caption: currency.name, selected: index == 0)
             },
             searchPlaceholder: loc.t(k.currencySearch)

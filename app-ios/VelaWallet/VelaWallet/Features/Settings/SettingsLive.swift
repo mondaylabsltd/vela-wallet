@@ -718,7 +718,7 @@ enum SettingsLive {
             updated.rows = section.rows.map { row in
                 guard row.id == "currency" else { return row }
                 var changed = row
-                changed.value = currencyRowValue(view)
+                changed.value = currencyRowValue(view, language: loc.resolvedLanguage)
                 return changed
             }
             return updated
@@ -727,7 +727,10 @@ enum SettingsLive {
             title: model.currencySheet.title,
             rows: CurrencyCatalog.entries.map { entry in
                 SelectRowModel(
-                    id: entry.code, label: entry.code, glyph: entry.glyph,
+                    // The sign a figure in it is written with — the core's,
+                    // in this language: no two rows of the picker alike.
+                    id: entry.code, label: entry.code,
+                    glyph: FiatSign.symbol(entry.code, language: loc.resolvedLanguage),
                     caption: entry.name, selected: entry.code == view.code
                 )
             },
@@ -752,7 +755,12 @@ enum SettingsLive {
     /// to fall back to "USD · $1,234.56" whenever the rate was missing, which
     /// told somebody who had picked CNY that they had not — the code alone is
     /// the honest row: their choice, and no figure (spec 072).
-    static func currencyRowValue(_ view: CurrencyViewWire) -> String {
+    ///
+    /// The sample wears the sign every figure in that currency wears (the
+    /// core's, `FiatSign`): 「CNY · ¥8,262.68」 for a Chinese reader, "CNY ·
+    /// CN¥8,262.68" for an English one. A currency whose only sign is its
+    /// code says the code once: "CHF 1,113.20".
+    static func currencyRowValue(_ view: CurrencyViewWire, language: String) -> String {
         let sample = 1_234.56
         guard view.committed else {
             // The person's own choice, on its way (PR 3, `pending`): named
@@ -767,10 +775,11 @@ enum SettingsLive {
             // its value lands with the commit.
             return ""
         }
-        guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
+        guard let rate = view.rate, rate > 0, !view.code.isEmpty else {
             return view.code
         }
-        return "\(view.code) · \(entry.glyph)\(format(sample * rate))"
+        let figure = FiatSign.lead(view.code, language: language) + format(sample * rate)
+        return FiatSign.isCode(view.code, language: language) ? figure : "\(view.code) · \(figure)"
     }
 
     /// In the person's own number format, as every other figure is.

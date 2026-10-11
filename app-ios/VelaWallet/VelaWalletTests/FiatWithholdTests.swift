@@ -58,13 +58,20 @@ struct FiatWithholdTests {
     private let waitingView = CurrencyViewWire(code: "USD", rate: 1, committed: false, pending: "CNY")
     private let committedView = CurrencyViewWire(code: "CNY", rate: 7.1, committed: true)
     private var waiting: WalletLive.Display { .from(waitingView) }
-    private var committed: WalletLive.Display { .from(committedView) }
+    /// Read by a Chinese reader, as on the owner's phone: their yuan is "¥"
+    /// (the core's `fiatSymbol`; to an English reader it is "CN¥").
+    private var committed: WalletLive.Display { .from(committedView, language: "zh") }
 
     /// A fiat figure: a currency glyph the catalog knows beside a digit, or
     /// an "≈" in front of one. "≈ +0.03 ETH" (a token amount the wallet
     /// cannot vouch for) is not — its "≈" is followed by a sign.
     private static let glyphs: [String] = {
-        Set(CurrencyCatalog.entries.map(\.glyph).filter { !$0.isEmpty }).sorted()
+        // Every sign the picker's currencies are written with, in either
+        // reading of "¥" — the core's (`FiatSign`), down to their marks.
+        let signs = CurrencyCatalog.entries.flatMap { entry in
+            ["en", "zh"].map { FiatSign.symbol(entry.code, language: $0) }
+        }
+        return Set(signs.flatMap { $0.filter { !$0.isLetter }.map(String.init) }).sorted()
     }()
 
     private static func isFiat(_ text: String) -> Bool {
@@ -238,7 +245,7 @@ struct FiatWithholdTests {
     @Test func theOneFormatterWithholdsUntilTheCurrencyCommits() {
         #expect(waiting.fiat(1_383.28) == nil)
         #expect(waiting.fiatParts(1_383.28) == nil)
-        #expect(WalletLive.Display.live(nil).fiat(1) == nil, "before the machine has answered at all")
+        #expect(WalletLive.Display.live(nil, language: "en").fiat(1) == nil, "before the machine has answered at all")
         #expect(WalletLive.Display.from(.unread).fiat(1) == nil)
         #expect(committed.fiat(1_383.28) == "¥9,821.29")
         #expect(committed.fiatParts(1_383.28)?.integer == "¥9,821")
@@ -372,9 +379,10 @@ struct FiatWithholdTests {
         expectNoFiat(before.summary, "settings_total")
         // Settings' own currency row: no figure, and no "USD" that turns
         // into another code — the stored choice named alone, else nothing.
-        #expect(SettingsLive.currencyRowValue(waitingView) == "CNY")
-        #expect(SettingsLive.currencyRowValue(.unread).isEmpty)
-        #expect(SettingsLive.currencyRowValue(committedView).hasPrefix("CNY · ¥"))
+        #expect(SettingsLive.currencyRowValue(waitingView, language: "en") == "CNY")
+        #expect(SettingsLive.currencyRowValue(.unread, language: "en").isEmpty)
+        #expect(SettingsLive.currencyRowValue(committedView, language: "zh").hasPrefix("CNY · ¥"))
+        #expect(SettingsLive.currencyRowValue(committedView, language: "en").hasPrefix("CNY · CN¥"))
     }
 
     // MARK: - token_detail

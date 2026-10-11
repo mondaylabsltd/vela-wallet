@@ -256,13 +256,22 @@ struct SplitVerdictTests {
     /// **The amount wears its own unit** (issue 231), keyed on the figure's
     /// code — never the display currency.
     @Test func theAmountWearsTheFiguresOwnUnit() throws {
-        #expect(SendLive.unitAdornment(code: nil, symbol: "BNB") == (nil, "BNB"))
-        #expect(SendLive.unitAdornment(code: nil, symbol: "") == (nil, nil))
-        #expect(SendLive.unitAdornment(code: "USD", symbol: "BNB") == ("$", nil))
-        #expect(SendLive.unitAdornment(code: "EUR", symbol: "BNB") == ("€", nil))
-        // A code the catalog has no symbol for follows as itself; nothing
-        // defaults to "$".
-        #expect(SendLive.unitAdornment(code: "XYZ", symbol: "BNB") == (nil, "XYZ"))
+        #expect(SendLive.unitAdornment(code: nil, symbol: "BNB", language: "en") == (nil, "BNB"))
+        #expect(SendLive.unitAdornment(code: nil, symbol: "", language: "en") == (nil, nil))
+        #expect(SendLive.unitAdornment(code: "USD", symbol: "BNB", language: "en") == ("$", nil))
+        #expect(SendLive.unitAdornment(code: "EUR", symbol: "BNB", language: "en") == ("€", nil))
+        // A code with no sign but itself follows as itself; nothing defaults
+        // to "$".
+        #expect(SendLive.unitAdornment(code: "XYZ", symbol: "BNB", language: "en") == (nil, "XYZ"))
+        #expect(SendLive.unitAdornment(code: "CHF", symbol: "BNB", language: "en") == (nil, "CHF"))
+        // The sign is the core's, for the reader's language (PR 4 item 8):
+        // the yuan is "¥" to a Chinese reader and "CN¥" to an English one,
+        // the yen the reverse, and the Hong Kong dollar is never a bare "$".
+        #expect(SendLive.unitAdornment(code: "CNY", symbol: "BNB", language: "zh") == ("¥", nil))
+        #expect(SendLive.unitAdornment(code: "CNY", symbol: "BNB", language: "en") == ("CN¥", nil))
+        #expect(SendLive.unitAdornment(code: "JPY", symbol: "BNB", language: "zh") == ("JP¥", nil))
+        #expect(SendLive.unitAdornment(code: "JPY", symbol: "BNB", language: "en") == ("¥", nil))
+        #expect(SendLive.unitAdornment(code: "HKD", symbol: "BNB", language: "en") == ("HK$", nil))
 
         guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
             Issue.record("sd2 is not a send form")

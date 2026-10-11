@@ -135,11 +135,20 @@ struct WalletLiveTests {
         let model = WalletLive.balance(
             view(total: 1_000),
             display: WalletLive.Display.from(CurrencyViewWire(code: "CNY", rate: 7.1,
-                                                             committed: true)),
+                                                             committed: true), language: "zh"),
             fallback: base
         )
         #expect(model.currency == "CNY")
         #expect(model.integer == "¥7,100", "the hero lost its currency badge")
+        // The sign is the core's, for the reader's language (PR 4 item 8): to
+        // an English reader the bare "¥" is the yen, and the yuan says so.
+        let english = WalletLive.balance(
+            view(total: 1_000),
+            display: WalletLive.Display.from(CurrencyViewWire(code: "CNY", rate: 7.1,
+                                                             committed: true), language: "en"),
+            fallback: base
+        )
+        #expect(english.integer == "CN¥7,100")
     }
 
     /// **The defect this rule exists to prevent.** With no rate, the hero shows
@@ -199,15 +208,15 @@ struct WalletLiveTests {
         )
         #expect(first.state == .loading && first.currency.isEmpty)
         // Before the machine has answered at all, the live app waits as well.
-        #expect(!WalletLive.Display.live(nil).settled)
-        #expect(WalletLive.balance(balance, display: .live(nil), fallback: base).integer == nil)
+        #expect(!WalletLive.Display.live(nil, language: "en").settled)
+        #expect(WalletLive.balance(balance, display: .live(nil, language: "en"), fallback: base).integer == nil)
         // A wallet that holds nothing is not "$0" in the meantime either.
         #expect(WalletLive.balance(view(total: 0), display: pending, fallback: base).state == .loading)
 
         // Committed: the figure, once, in the person's money.
         let committed = WalletLive.balance(
             balance,
-            display: .from(CurrencyViewWire(code: "CNY", rate: 7.1, committed: true)),
+            display: .from(CurrencyViewWire(code: "CNY", rate: 7.1, committed: true), language: "zh"),
             fallback: base
         )
         #expect(committed.state == .normal)

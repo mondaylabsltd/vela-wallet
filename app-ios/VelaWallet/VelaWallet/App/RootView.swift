@@ -1155,7 +1155,7 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.live(settings.currency)
+                                wallet.balance, display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
@@ -2075,7 +2075,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.live(settings.currency)
+            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2305,7 +2305,7 @@ struct RootView: View {
                 on: detail, loc: loc,
                 hidden: feed.hidden,
                 // No fiat before the person's currency is known (PR 3).
-                display: WalletLive.Display.live(settings.currency),
+                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2317,7 +2317,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.live(settings.currency),
+                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2327,7 +2327,7 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            let display = WalletLive.Display.live(settings.currency)
+            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -2829,7 +2829,7 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.live(settings.currency),
+            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             origin: live?.request?.origin,
             // What the chain said THIS request would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it —
@@ -3559,7 +3559,7 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.live(settings.currency),
+            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             on: model,
             loc: loc
         )
