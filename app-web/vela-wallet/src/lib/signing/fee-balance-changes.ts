@@ -1,7 +1,7 @@
 /**
  * The sheet's own simulation of a signing request: one `eth_simulateV1` read,
  * read by the core, for the fee machine and for the sheet (spec 083 fee,
- * issue 411; PR 3 device round, item 3).
+ * issue 411; PR 3 device round, item 3; the verdict, drawn whole).
  *
  * **For the fee.** The fee machine picks the coin nobody chose from what the
  * operation LEAVES of each one. The calls say part of that; a router's swap
@@ -9,16 +9,14 @@
  * them the swap leaves, the machine cannot count on either (spec 096 F2), and
  * with a contract call it falls back to the chain's coin — held or not. On
  * Android a Uniswap swap on Polygon (pUSD → USDC) opened with POL, held at 0,
- * as the fee coin, while pUSD and USDC could each pay. The desktop and the
- * phones simulate the request for their balance block and tell the machine
- * what it moves; this sheet draws no balance rows (spec 082 RG6), so it runs
- * the same read for the fee.
+ * as the fee coin, while pUSD and USDC could each pay. It is told what a
+ * check moves BEFORE the tokens are judged: which coin can pay does not wait
+ * on token names.
  *
- * **For the sheet.** The same read says when nothing of the person's moves,
- * and the sheet says so in the core's line ("No asset changes",
- * `SimVerdict.no_change_key`); and when nothing could be checked, which the
- * sheet says as the core's caution (`SimVerdict.notice_key`, PR 3). Those
- * two lines are all it draws from this simulation.
+ * **For the sheet.** The same read is the sheet's verdict — the one part of
+ * it the site being signed for cannot write: what moves, that nothing does,
+ * that the call fails and why, or that nothing could be checked
+ * (`simulateRequest` → `verdict.ts`, the phones' and the desktop's block).
  *
  * What the reply MEANS is the core's (`simOutcome` → `sim_outcome::verdict`),
  * the same on every client: the moves are native value from the node's trace
@@ -26,14 +24,18 @@
  * — nothing a site's contract can emit on a coin's behalf. Only a check
  * (`kind: 'deltas'`) is a measurement: a run that reverted, or that nobody
  * could check — a status neither 0 nor 1 among them, which this shell's own
- * port read as a success — tells the fee machine nothing.
+ * port read as a success — tells the fee machine nothing. And what a check's
+ * moves may be PRINTED as is the core's too (`token_trust`, through
+ * `judgeCheck`): this file carries records between the two and reads neither.
  */
 import { simOutcome } from '$lib/core/kernels';
 import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
+import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import type { SimCall } from '$lib/services/sim/sim-assets';
+import type { SimEnded } from './verdict';
 
 /**
  * A check's moves as the fee machine reads them: native → `token: null`; an
@@ -137,6 +139,60 @@ export async function checkRequest(
 	const changes = measuredChanges(verdict);
 	if (changes !== null) sink.balanceChanges(request.calls, changes);
 	return verdict;
+}
+
+/**
+ * A check's moves, judged by the trust machine, as a seam: its whole judged
+ * view, or `null` when it gave none for this simulation.
+ */
+export type Judge = (
+	from: string,
+	chainId: number,
+	deltas: TrustAssetDelta[]
+) => Promise<TrustSimView | null>;
+
+/**
+ * The resident `token_trust` session's judgment, loaded when a check is
+ * first judged rather than with the sheet — as the pool's read is.
+ */
+const trustJudge: Judge = async (from, chainId, deltas) =>
+	(await import('$lib/services/sim/sim-trust')).judgeCheck(deltas, chainId, from);
+
+/**
+ * A request's simulation from start to END, for the sheet: the one read
+ * (`checkRequest` — which tells the fee machine what a check moves, before
+ * anything is judged), then, for a check, the trust machine's judgment of its
+ * moves. What comes back is everything the verdict's place draws from.
+ *
+ * The verdict is on the sheet when THIS resolves, not when the node replied:
+ * a check's rows need its tokens judged, and the host tells the core its
+ * wait is over in the step it hands this to the sheet. A notice needs no
+ * judgment and resolves at once.
+ *
+ * - `null` — the request it was run for is gone: nobody is told, nothing is
+ *   said.
+ * - `verdict: null` — there was no reply to read (nothing to ask, or an
+ *   answer that is no record): a simulation that has ended with no check.
+ * - `judged: null` under a check — the trust machine gave no view for it, or
+ *   judging threw: a check this sheet cannot report. Never "nothing moves".
+ */
+export async function simulateRequest(
+	sink: BalanceChangesSink,
+	request: { from: string; calls: FeeCall[]; chainId: number },
+	current: () => boolean,
+	simulate: Simulate = rpcSimulate,
+	judge: Judge = trustJudge
+): Promise<SimEnded | null> {
+	const verdict = await checkRequest(sink, request, current, simulate);
+	if (!current()) return null;
+	if (verdict === null || verdict.kind !== 'deltas') return { verdict, judged: null };
+	let judged: TrustSimView | null;
+	try {
+		judged = await judge(request.from, request.chainId, verdict.deltas);
+	} catch {
+		judged = null;
+	}
+	return current() ? { verdict, judged } : null;
 }
 
 /**

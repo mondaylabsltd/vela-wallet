@@ -22,6 +22,7 @@ import { nativeSymbol } from '../networks';
 import { getCachedHeldTokens } from '../wallet-api';
 import {
 	judgeSimDeltas,
+	judgeSimView,
 	notifyHeldTokens,
 	primeRegistry
 } from '$lib/wallet/core/token-trust-resident';
@@ -29,6 +30,7 @@ import type { AssetDelta } from './sim-assets';
 import type { AssetChange } from './tx-simulation';
 import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 
 /** Native coins use 18 decimals on every Vela-supported chain. */
 const NATIVE_DECIMALS = 18;
@@ -83,6 +85,19 @@ function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange
 }
 
 /**
+ * The two facts a RECEIVED amount is judged by, pushed before the judgment:
+ * the chain registry's stables and wrapped coin, and the tokens this account
+ * is cached as holding. Only when a token arrives: a preview with no ERC-20
+ * inflow never needed the registry, and this keeps the signing path from
+ * gaining a network read it did not have.
+ */
+async function primeTrustedSet(receivesToken: boolean, chainId: number, from: string) {
+	if (!receivesToken) return;
+	await primeRegistry([chainId]);
+	notifyHeldTokens(from, chainId, getCachedHeldTokens(from, chainId));
+}
+
+/**
  * Judge and enrich one simulation's deltas. Order-preserving: the core answers
  * one judgment per delta, in the order they were given — less an unverified
  * token that did not move, which is no row.
@@ -92,18 +107,39 @@ export async function enrichDeltas(
 	chainId: number,
 	from: string
 ): Promise<AssetChange[]> {
-	const hasErc20 = deltas.some((d) => d.kind === 'erc20' && d.token);
-	// The same gate `enrichDeltas` applies to the trusted-set fetch today: a
-	// preview with no ERC-20 inflow never needed the registry, and this keeps
-	// the signing path from gaining a network read it did not have.
-	const hasReceive = deltas.some((d) => d.kind === 'erc20' && d.delta > 0n);
-	if (hasErc20 && hasReceive) {
-		await primeRegistry([chainId]);
-		notifyHeldTokens(from, chainId, getCachedHeldTokens(from, chainId));
-	}
+	await primeTrustedSet(
+		deltas.some((d) => d.kind === 'erc20' && d.token && d.delta > 0n),
+		chainId,
+		from
+	);
 	const judgments = await judgeSimDeltas(from, chainId, deltas.map(toWireDelta));
 	return judgments.flatMap((judgment) => {
 		const change = toAssetChange(judgment, chainId);
 		return change === null ? [] : [change];
 	});
+}
+
+/**
+ * A CHECK's moves, judged — for the signing sheet's verdict. The deltas are
+ * the core's own reading of the node's reply (`SimVerdict.deltas`, signed
+ * decimal strings), and the answer is the trust machine's whole judged view:
+ * its judgments in the order given, and `no_change_key` when nothing of the
+ * person's moves. `null` when the machine's view is not this simulation's.
+ *
+ * Every figure the sheet may print comes out of this: an inflow carries one
+ * only inside the trusted set primed here, and a token nobody vouches for
+ * carries only which way it moves.
+ */
+export async function judgeCheck(
+	deltas: TrustAssetDelta[],
+	chainId: number,
+	from: string
+): Promise<TrustSimView | null> {
+	await primeTrustedSet(
+		// Anything that is not plainly an outflow may be an arrival.
+		deltas.some((d) => d.kind === 'erc20' && d.token && !d.delta.trim().startsWith('-')),
+		chainId,
+		from
+	);
+	return judgeSimView(from, chainId, deltas);
 }

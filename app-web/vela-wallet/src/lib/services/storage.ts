@@ -81,7 +81,48 @@ export async function getItem(key: string): Promise<string | null> {
 	return typeof value === 'string' ? value : null;
 }
 
+/**
+ * An erase is under way: the store takes no more writes (spec 028 T434).
+ *
+ * The erase lists what is here, removes it, and checks that nothing is left
+ * (`erase-device.ts`). The wallet goes on running while it does: a rates
+ * refresh answers, and its cache is written behind the sweep's back. The
+ * check then finds a key — `vela.fxRates.v1`, the time the e2e suite named
+ * it — and the person is told "the erase did not finish" about an erase that
+ * removed everything it found.
+ *
+ * Sealed, that cannot happen. A write issued BEFORE the seal is ahead of the
+ * erase's listing in the store's own queue (IndexedDB runs a transaction
+ * only after every earlier read-write transaction on its store), so the
+ * listing sees it and the sweep takes it. A write issued after is refused
+ * here. Nothing can land between the listing and the check — or between the
+ * check and the page being replaced.
+ *
+ * Refused means REJECTED, like any other storage fault (the failure contract
+ * above): the caller is not told that a write happened which did not.
+ */
+let sealed = false;
+
+/** What a write is refused with while the store is sealed. */
+export class StorageSealedError extends Error {
+	constructor(key: string) {
+		super(`storage is sealed for an erase: ${key} was not written`);
+		this.name = 'StorageSealedError';
+	}
+}
+
+/** From here on every {@link setItem} is refused, until {@link unsealStorage}. */
+export function sealStorage(): void {
+	sealed = true;
+}
+
+/** The erase did not go through, and the wallet is still in use: writes again. */
+export function unsealStorage(): void {
+	sealed = false;
+}
+
 export async function setItem(key: string, value: string): Promise<void> {
+	if (sealed) throw new StorageSealedError(key);
 	await inStore('readwrite', (store) => store.put(value, key));
 }
 
@@ -104,4 +145,5 @@ export async function getAllKeys(): Promise<string[]> {
 /** Test seam: drop the cached connection so a fresh open is observable. */
 export function resetStorageForTests(): void {
 	opening = null;
+	sealed = false;
 }

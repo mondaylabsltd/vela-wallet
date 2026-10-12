@@ -87,8 +87,34 @@ interface Reading {
 	said: string;
 }
 
-/** The block's geometry and words, read in the page. */
-function read(page: Page, wide: boolean): Promise<Reading> {
+/**
+ * The page's own typefaces have arrived: nothing is still loading, and the
+ * text face is in.
+ *
+ * Until they are, the words stand in the fallback's metrics — each key's row
+ * a pixel shorter, the block four higher — and a reading taken then is not
+ * where anything rests. On an idle machine the first reading sometimes was
+ * (3 runs in 80): rows read at 235 / 321 / 407 that stand at 239 / 326 / 413,
+ * each time with `document.fonts.status` still "loading".
+ */
+async function typefacesIn(page: Page): Promise<void> {
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					document.fonts.status === 'loaded' &&
+					[...document.fonts].every((face) => face.status !== 'loading') &&
+					[...document.fonts].some(
+						(face) => face.status === 'loaded' && face.family.includes('Plus Jakarta Sans')
+					)
+			)
+		)
+		.toBe(true);
+}
+
+/** The block's geometry and words, read in the page — once its typefaces are in. */
+async function read(page: Page, wide: boolean): Promise<Reading> {
+	await typefacesIn(page);
 	return page.evaluate((wide) => {
 		const round = (n: number) => Math.round(n * 100) / 100;
 		const block = document.querySelector('section.keys') as HTMLElement;

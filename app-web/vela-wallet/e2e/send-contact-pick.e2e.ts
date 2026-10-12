@@ -14,6 +14,7 @@ import {
 	aggregate3CallCount,
 	denyOffOrigin,
 	encodeAggregate3Result,
+	readKv,
 	seedNetworkOverrides,
 	stubChainRegistry,
 	stubJsonRpc
@@ -93,6 +94,10 @@ async function openSendWithBook(page: Page): Promise<void> {
 	await expect(page.getByRole('heading', { name: en('contacts.title') }).first()).toBeVisible();
 	await addContact(page, 'Alice', ALICE);
 	await addContact(page, 'Bob', BOB);
+	// Written, not only shown: the core writes behind what it shows, and the
+	// navigation below can beat the write — the book then opened with Alice
+	// and no Bob (once in a run of the whole suite, on an idle machine).
+	await expect.poll(async () => (await readKv(page, 'vela.contacts')) ?? '').toContain('Bob');
 
 	await page.goto('/en/wallet');
 	await page

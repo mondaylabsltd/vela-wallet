@@ -39,6 +39,16 @@ export const SIM_SAID_KEYS = ['componentsUi.signing.simResultNoChange'] as const
 export const SIM_COULD_NOT_CHECK_KEY = 'componentsUi.signing.simUnavailableWarning';
 
 /**
+ * The danger the core names for a call the chain says fails
+ * (`sim_outcome::KEY_WILL_FAIL_REASON` with the cleaned `{{reason}}`,
+ * `KEY_WILL_FAIL` without one) — `SimVerdict.notice_key` under
+ * `notice_risk: 'danger'`. Their words are `SigningMessages.warnWillFailReason`
+ * and `warnWillFail`. `verdict.test.ts` holds both to the core's source.
+ */
+export const SIM_WILL_FAIL_REASON_KEY = 'componentsUi.signing.simWillFailReason';
+export const SIM_WILL_FAIL_KEY = 'componentsUi.signing.simWillFail';
+
+/**
  * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
  * the web opens no signing page, so no live page here draws the card, and
  * these strings stay out of `SigningMessages` (which every page with a
@@ -217,6 +227,18 @@ export interface SigningMessages {
 	okSelfTransfer: string;
 	okNoNetworkFee: string;
 	balancesTitle: string;
+	/**
+	 * What the verdict's place says while the simulation is out — the plain
+	 * "Checking…" the phones and the desktop say there
+	 * (`componentsUi.funding.checking`).
+	 */
+	simChecking: string;
+	/**
+	 * A balance row's label for a token nobody vouches for
+	 * (`componentsUi.signing.balanceUnverifiedToken`): the row says this and
+	 * which way it moves, and never a figure.
+	 */
+	balanceUnverifiedToken: string;
 	/**
 	 * The verdict's quiet line by the corpus key the core names for it
 	 * (`SimVerdict.no_change_key` — {@link SIM_SAID_KEYS}): "No asset changes"

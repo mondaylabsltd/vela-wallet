@@ -15,7 +15,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
 import { en, seedSignedIn } from './live-helpers';
-import { denyOffOrigin, seedNetworkOverrides, stubChainRegistry, stubJsonRpc } from './stub-chain';
+import {
+	denyOffOrigin,
+	readKv,
+	seedNetworkOverrides,
+	stubChainRegistry,
+	stubJsonRpc
+} from './stub-chain';
 import {
 	abiString,
 	answerAggregate3,
@@ -150,7 +156,11 @@ test("a token added by address carries the chain's identity, is listed, and surv
 	await expect(page.getByText('COFFEE', { exact: true }).first()).toBeVisible({ timeout: 25_000 });
 	await expect(page.getByText('42', { exact: true }).first()).toBeVisible();
 
-	// Reload: the record, not the screen, is what remembers.
+	// Reload: the record, not the screen, is what remembers — once it has
+	// been written.
+	await expect
+		.poll(async () => (await readKv(page, 'vela.customTokens')) ?? '')
+		.toContain('COFFEE');
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await openAssets(page);

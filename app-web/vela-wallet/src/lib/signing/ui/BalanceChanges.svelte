@@ -8,10 +8,21 @@
 		noteTone?: Tone;
 		/** The card that lands after the sheet has opened: named, so the sheet can keep it in sight. */
 		verdict?: boolean;
+		/**
+		 * Drawn as ROOM, not as a card (`VerdictPlace`): the same card, laid out
+		 * at the same size and never said. Its words are generated content, so
+		 * nothing of a verdict the sheet has not given is in the page's text.
+		 */
+		room?: boolean;
 	}
 
-	let { title, rows, note, noteTone = 'neutral', verdict = false }: Props = $props();
+	let { title, rows, note, noteTone = 'neutral', verdict = false, room = false }: Props = $props();
 </script>
+
+<!-- A room's words: in the layout, not in the text. -->
+{#snippet words(text: string)}
+	{#if room}<span class="unsaid" data-room={text}></span>{:else}{text}{/if}
+{/snippet}
 
 <!-- The simulation's own account of what moves. It is the ONE part of a
      signing sheet a malicious site cannot author, which is why the deeper
@@ -19,15 +30,15 @@
      the note are drawn whole: no height of its own, nothing clipped, nothing
      scrolled inside it (PR 3 device round) — a long figure wraps. -->
 <section class="balances" data-verdict={verdict ? '' : undefined}>
-	<h3>{title}</h3>
+	<h3>{@render words(title)}</h3>
 	{#each rows as row, i (i)}
 		<div class="row">
-			<span class="symbol">{row.symbol}</span>
-			<span class="delta" data-tone={row.tone}>{row.delta}</span>
+			<span class="symbol">{@render words(row.symbol)}</span>
+			<span class="delta" data-tone={row.tone}>{@render words(row.delta)}</span>
 		</div>
 	{/each}
 	{#if note}
-		<p class="note" data-tone={noteTone}>{note}</p>
+		<p class="note" data-tone={noteTone}>{@render words(note)}</p>
 	{/if}
 </section>
 
@@ -78,6 +89,16 @@
 
 	.delta[data-tone='danger'] {
 		color: var(--color-error-base);
+	}
+
+	/* A token nobody vouches for: its direction, in the caution's ink — the
+	   colour of the sentence under the card that says why it has no figure. */
+	.delta[data-tone='caution'] {
+		color: var(--color-warning-base);
+	}
+
+	.unsaid::before {
+		content: attr(data-room);
 	}
 
 	.note {

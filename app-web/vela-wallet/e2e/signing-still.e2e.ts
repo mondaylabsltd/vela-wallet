@@ -305,7 +305,13 @@ for (const [layout, viewport] of LAYOUTS) {
 				// The first settled frame: the request is read, its simulation
 				// has said its piece, and the fee is still being worked out.
 				await expect(dialog.locator('.blocks .sentence')).toHaveCount(0, { timeout: 30_000 });
-				await expect(dialog.locator('section.balances')).toBeVisible({ timeout: 30_000 });
+				await expect(dialog.getByTestId('signing-verdict')).toHaveAttribute(
+					'data-stage',
+					'landed',
+					{
+						timeout: 30_000
+					}
+				);
 				const feeLine = dialog.locator('.footer > .line');
 				await expect(feeLine).toContainText(en('componentsUi.gas.estimating'));
 				const settled = await atRest(page);

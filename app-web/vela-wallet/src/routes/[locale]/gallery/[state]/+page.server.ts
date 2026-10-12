@@ -47,6 +47,12 @@ import {
 } from '$lib/explore/fixtures';
 import { ALL_STATES as SIGNING_STATES, buildSigningState } from '$lib/signing/fixtures';
 import { buildHandoffState, HANDOFF_STATES, type HandoffStateId } from '$lib/signing/handoff';
+import {
+	buildVerdictState,
+	VERDICT_STATES,
+	verdictBoardOver,
+	type VerdictStateId
+} from '$lib/signing/verdict-boards';
 import type { ExploreDesktopStateId, ExploreStateId } from '$lib/explore/model';
 import type { SigningStateId } from '$lib/signing/model';
 import {
@@ -91,6 +97,7 @@ export const entries: EntryGenerator = () =>
 			...EXPLORE_DESKTOP_STATES,
 			...SIGNING_STATES,
 			...HANDOFF_STATES,
+			...VERDICT_STATES,
 			...SETTINGS_MOBILE_STATES,
 			...SETTINGS_DESKTOP_STATES
 		].map((state) => ({ locale, state }))
@@ -222,6 +229,24 @@ export const load: PageServerLoad = ({ params }) => {
 				base,
 				resolveHandoffMessages(locale),
 				locale
+			)
+		};
+	}
+	// The simulation verdict's boards: the sheet with each thing its verdict's
+	// place can say, over a CS board's own request. Read by the real core and
+	// built by the live sheet's own builder (`verdict-boards.ts`).
+	if ((VERDICT_STATES as readonly string[]).includes(params.state)) {
+		const state = params.state as VerdictStateId;
+		const m = resolveSigningMessages(locale);
+		return {
+			kind: 'signing' as const,
+			model: buildExploreMobileState('e4', resolveExploreMessages(locale), identiconSvgFor),
+			copy: resolveExploreMessages(locale),
+			settings: undefined,
+			signing: buildVerdictState(
+				state,
+				buildSigningState(verdictBoardOver(state), m, identiconSvgFor),
+				m
 			)
 		};
 	}

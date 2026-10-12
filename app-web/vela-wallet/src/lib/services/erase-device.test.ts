@@ -33,18 +33,37 @@ function fakeLocalStorage(seed: Record<string, string>) {
 	};
 }
 
-/** The IndexedDB KV, stubbed at the module seam the sweep goes through. */
+/**
+ * The IndexedDB KV, stubbed at the module seam the sweep goes through — with
+ * the seal the real one has (`storage.ts`): a write is refused while sealed.
+ * `whileRemoving` is the rest of the wallet, still running during the sweep.
+ */
 const kv = new Map<string, string>();
+const store = { sealed: false, whileRemoving: (): void => {} };
+const write = (key: string, value: string): Promise<void> => {
+	if (store.sealed) return Promise.reject(new Error(`sealed: ${key}`));
+	kv.set(key, value);
+	return Promise.resolve();
+};
 vi.mock('./storage', () => ({
 	getAllKeys: () => Promise.resolve([...kv.keys()]),
 	removeItem: (key: string) => {
 		kv.delete(key);
+		store.whileRemoving();
 		return Promise.resolve();
+	},
+	sealStorage: () => {
+		store.sealed = true;
+	},
+	unsealStorage: () => {
+		store.sealed = false;
 	}
 }));
 
 beforeEach(() => {
 	kv.clear();
+	store.sealed = false;
+	store.whileRemoving = () => {};
 	vi.unstubAllGlobals();
 });
 
@@ -112,6 +131,45 @@ describe('the sweep', () => {
 		await expect(eraseDeviceData()).rejects.toMatchObject({
 			remaining: ['vela.accounts']
 		});
+	});
+
+	it('a cache the wallet writes behind the sweep is refused — the erase is not "incomplete" for it', async () => {
+		// A rates refresh was on its way when the person tapped Erase; its
+		// answer lands while the sweep is removing keys, and its cache is
+		// written fire-and-forget (`fiat-fx.ts`). Unsealed, that key is there at
+		// the check and the person reads "the erase did not finish" — which is
+		// what the e2e suite caught, with `vela.fxRates.v1` in its hands.
+		vi.stubGlobal('localStorage', fakeLocalStorage({ 'vela.accounts': '[]' }));
+		kv.set('vela.contacts', '[]');
+		kv.set('vela.transactionHistory', '[]');
+		const refused: string[] = [];
+		store.whileRemoving = () => {
+			void write('vela.fxRates.v1', '{"rates":{}}').catch(() => refused.push('vela.fxRates.v1'));
+		};
+
+		await expect(eraseDeviceData()).resolves.toEqual([
+			'vela.accounts',
+			'vela.contacts',
+			'vela.transactionHistory'
+		]);
+		expect([...kv.keys()]).toEqual([]);
+		// Refused, not swallowed: once per key the sweep removed.
+		expect(refused).toEqual(['vela.fxRates.v1', 'vela.fxRates.v1']);
+		// And still sealed: the caller replaces the document next, and nothing
+		// is to land in an erased store before it does.
+		expect(store.sealed).toBe(true);
+		await expect(write('vela.late', 'x')).rejects.toThrow('sealed');
+	});
+
+	it('an erase that did NOT go through gives the store back: the wallet is still in use', async () => {
+		const stubborn = fakeLocalStorage({ 'vela.accounts': '[]' });
+		stubborn.removeItem = () => {};
+		vi.stubGlobal('localStorage', stubborn);
+
+		await expect(eraseDeviceData()).rejects.toBeInstanceOf(EraseIncompleteError);
+		expect(store.sealed).toBe(false);
+		await expect(write('vela.contacts', '[]')).resolves.toBeUndefined();
+		expect(kv.get('vela.contacts')).toBe('[]');
 	});
 
 	it('a store this build does not have contributes nothing', async () => {

@@ -16,6 +16,7 @@ import {
 	aggregate3CallCount,
 	denyOffOrigin,
 	encodeAggregate3Result,
+	readKv,
 	seedNetworkOverrides,
 	stubChainRegistry,
 	stubJsonRpc
@@ -79,6 +80,10 @@ test('a chosen currency converts the total with a reachable rate source (SC-104)
 	await page.goto('/en/settings');
 	await page.getByText(en('settings.localization.currencyTitle'), { exact: true }).click();
 	await page.getByText('VND', { exact: true }).click();
+	// Persisted before the page is left: the core writes behind the choice,
+	// and the navigation below, issued on the heels of the tap, beat the write
+	// two runs running on an idle machine — the home then still read $4,500.
+	await expect.poll(() => readKv(page, 'vela.displayCurrency')).toBe('VND');
 
 	// Back on the home: 4,500 × 25,000, in the chosen currency's glyph.
 	await page.goto('/en/wallet');

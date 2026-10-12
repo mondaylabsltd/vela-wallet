@@ -44,7 +44,7 @@
  * in this build contributes nothing rather than failing.
  */
 import { loadCore, storageIsErasableKey } from '$lib/core/client';
-import { getAllKeys, removeItem } from './storage';
+import { getAllKeys, removeItem, sealStorage, unsealStorage } from './storage';
 
 /** Would {@link eraseDeviceData} delete this key? The core's rule; runs after `loadCore()`. */
 export function isErasableKey(key: string): boolean {
@@ -173,16 +173,29 @@ async function erasableEverywhere(): Promise<{
  * Keys that are not ours are not this module's to judge and are left alone.
  */
 export async function eraseDeviceData(): Promise<readonly string[]> {
-	await loadCore();
-	const doomed = await erasableEverywhere();
+	// Before anything is listed: from here the wallet's own late writes — a
+	// cache filled by an answer that was already on its way — are refused
+	// instead of landing behind the sweep (`sealStorage`).
+	sealStorage();
+	try {
+		await loadCore();
+		const doomed = await erasableEverywhere();
 
-	dropLocal(doomed.local);
-	await dropKv(doomed.kv);
-	await dropExtension(doomed.extension);
+		dropLocal(doomed.local);
+		await dropKv(doomed.kv);
+		await dropExtension(doomed.extension);
 
-	const after = await erasableEverywhere();
-	const remaining = [...after.local, ...after.kv, ...after.extension];
-	if (remaining.length > 0) throw new EraseIncompleteError(remaining);
+		const after = await erasableEverywhere();
+		const remaining = [...after.local, ...after.kv, ...after.extension];
+		if (remaining.length > 0) throw new EraseIncompleteError(remaining);
 
-	return [...doomed.local, ...doomed.kv, ...doomed.extension];
+		// Left sealed: the caller replaces the document next, and nothing is
+		// to be written into an erased store in the meantime.
+		return [...doomed.local, ...doomed.kv, ...doomed.extension];
+	} catch (error) {
+		// Not erased. The person stays signed in, on the sheet, and a wallet
+		// that is still in use has to be able to save.
+		unsealStorage();
+		throw error;
+	}
 }

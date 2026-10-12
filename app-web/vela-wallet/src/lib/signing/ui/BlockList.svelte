@@ -11,6 +11,7 @@
 	import PartyRow from './PartyRow.svelte';
 	import PositiveNote from './PositiveNote.svelte';
 	import SwapPair from './SwapPair.svelte';
+	import VerdictPlace from './VerdictPlace.svelte';
 	import WarningBanner from './WarningBanner.svelte';
 	import type { Block } from '../model';
 
@@ -65,6 +66,8 @@
 		<CodeBlock lines={block.lines} note={block.note} />
 	{:else if block.kind === 'card'}
 		<DetailCard title={block.title} rows={block.rows} tone={block.tone} />
+	{:else if block.kind === 'verdict'}
+		<VerdictPlace inner={block.inner} rooms={block.rooms} landed={block.landed} />
 	{:else}
 		<BalanceChanges
 			title={block.title}

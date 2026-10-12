@@ -31,7 +31,6 @@ import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
@@ -48,7 +47,16 @@ import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
-import { SIM_COULD_NOT_CHECK_KEY, type SigningMessages } from './messages';
+import { resolvedFormatKeys } from '$lib/services/locale-format';
+import type { SigningMessages } from './messages';
+import {
+	checkingCard,
+	couldNotCheck,
+	landedVerdict,
+	verdictRooms,
+	type SimEnded,
+	type VerdictSaid
+} from './verdict';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -85,13 +93,15 @@ export interface SigningLiveInputs {
 	 */
 	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
 	/**
-	 * The sheet's own simulation of THIS request, as the core read it
-	 * (`simOutcome`, PR 3 device round) — the host's one `eth_simulateV1`
-	 * read, which also tells the fee machine what the calls move. Absent
-	 * until the node answers, for a request nobody simulated (a message), and
-	 * for any other request than the one it was measured for.
+	 * The sheet's own simulation of THIS request, once it has ended: the
+	 * core's reading of the node's reply (`simOutcome`) and, for a check, the
+	 * trust machine's judged view of what it moves (`verdict.ts`). It is the
+	 * host's one `eth_simulateV1` read, which also tells the fee machine what
+	 * the calls move. Absent while the simulation is out, for a request
+	 * nobody simulated (a message), and for any other request than the one
+	 * it was run for.
 	 */
-	sim?: SimVerdict | null;
+	sim?: SimEnded | null;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -469,6 +479,14 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	return blocks;
 }
 
+/**
+ * Spec 096 F7: the request is still being read. Its blocks are not there
+ * yet — "Loading…" stands in their place — and the sheet is told so
+ * (`SigningModel.reading`).
+ */
+const stillReading = (clear: ClearSigningView): boolean =>
+	clear.surface === 'loading' || clear.resolving;
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
@@ -490,7 +508,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	// Spec 096 F7: still reading — a neutral "Loading…", and the confirm stays
 	// shut (`buildSigningModel`). This said the cap editor's "Set a finite
 	// amount to continue." over an Aave supply for seconds.
-	if (clear.surface === 'loading' || clear.resolving) {
+	if (stillReading(clear)) {
 		blocks.push({ kind: 'sentence', text: m.loading, tone: 'neutral' });
 		return blocks;
 	}
@@ -927,100 +945,102 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 }
 
 /**
- * PR 3 device round, item 3 — "No asset changes" is the core's line, and the
- * web says it too.
+ * What stands in the simulation verdict's place right now.
  *
- * The sheet's own simulation was a check, and nothing of the person's moves:
- * the core names the line (`SimVerdict.no_change_key`) and this looks its
- * words up. Which case this is, and the sentence, are never decided here —
- * no key, no line. Only for a transaction that may still be signed: a
- * message moves nothing by nature (and nobody simulates one), and a refused
- * request says only its refusal.
+ * - `none` — nothing is simulated and nothing is said: a message (it moves
+ *   nothing, and a balance card on a signature would answer a question
+ *   nobody asked), and a refused request, which says only its refusal.
+ * - `out` — a transaction whose simulation has not ended. Also while the
+ *   core still holds the confirm for it (`SignView.sim_checking`), even in
+ *   the step where the host already has the answer: the verdict and the
+ *   confirm that waited for it turn in one frame, never a verdict standing
+ *   over a confirm that still says "Checking what this transaction does…"
+ *   (Android's `verdictShown`, the same rule).
+ * - `landed` — the verdict (`landedVerdict`: the core's records, drawn), or
+ *   the core's word that its deadline passed with none
+ *   (`SignView.sim_waited_out_key` — the confirm waits four seconds at
+ *   most, then opens beside this caution). While that key stands it is what
+ *   is said: a verdict that lands later is drawn in the step the core takes
+ *   the key back, in the same place.
  *
- * Two things of the simulation's answer are still NOT drawn here (spec 082
- * RG6 stands): the balance rows of a check that moves something, and a
- * revert's line — the relay's own estimate stays the one voice that says
- * "will fail" (`withEstimateVerdict`).
- *
- * Nothing while the core says nothing could be checked (`couldNotCheckLine`):
- * that sentence has the verdict's place then, and never both at once.
+ * Nothing here shuts or opens the confirm: that is the core's gate, which
+ * reads the same view.
  */
-function noChangeLine(inputs: SigningLiveInputs): string | undefined {
+type VerdictShown = { stage: 'none' } | { stage: 'out' } | { stage: 'landed'; said: VerdictSaid };
+
+function verdictShown(inputs: SigningLiveInputs): VerdictShown {
 	const { sign, sim, m } = inputs;
 	const request = sign.request;
-	if (!request || sign.blocked) return undefined;
-	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
-	if (couldNotCheckLine(inputs) !== undefined) return undefined;
-	const key = sim?.no_change_key ?? null;
-	return key === null ? undefined : m.simSaid[key] || undefined;
-}
-
-/**
- * PR 3 — nothing could be checked, and the verdict's place says so, as a
- * caution: "Vela couldn't check what this transaction does…". A person who
- * confirms then does it knowing — never under an empty place that reads as
- * "nothing to report".
- *
- * The core says it two ways, and names the sentence both times:
- *
- * - the simulation's deadline passed with no verdict at all
- *   (`SignView.sim_waited_out_key` — the confirm waits four seconds at most,
- *   then opens beside this line);
- * - this request's own verdict is a not-checked answer
- *   (`SimVerdict.notice_risk === 'caution'`, its `notice_key`): the node does
- *   not offer the simulation, answered what nobody can read, or no node
- *   answered.
- *
- * The first was once the only one drawn, and the line then left the sheet the
- * moment the pool gave up: "could not check" taken back, over an open
- * confirm, when "could not check" was the final verdict. Both are the same
- * card, so the one becoming the other moves nothing and lands nothing anew.
- *
- * No key, no line; a key this build has no words for is never drawn as a
- * dotted path; a revert's notice (`danger`) is not this one. A refused
- * request says only its refusal.
- */
-function couldNotCheckLine({ sign, sim, m }: SigningLiveInputs): string | undefined {
-	const request = sign.request;
-	if (!request || sign.blocked) return undefined;
-	const waitedOut = cautionWords(sign.sim_waited_out_key, m);
-	if (waitedOut !== undefined) return waitedOut;
-	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
-	return sim?.notice_risk === 'caution' ? cautionWords(sim.notice_key, m) : undefined;
-}
-
-/** The words of the caution the core named for the verdict's place, by its key — or none. */
-function cautionWords(key: string | null | undefined, m: SigningMessages): string | undefined {
-	return key === SIM_COULD_NOT_CHECK_KEY ? m.warnSimUnavailable || undefined : undefined;
-}
-
-/**
- * The verdict's place: the balance-changes card with no rows, where the apps
- * put the verdict — after the request's own blocks, before the footer. What
- * it says lands after the sheet has opened (`verdict`), so the sheet keeps
- * its confirm where it was and brings the card into sight.
- *
- * "No asset changes" is a site's request's alone here — the wallet's own
- * folds it into Technical details (`techModel`, issue 314). The caution that
- * nothing could be checked is drawn for both alike: it is the one thing the
- * person must see before a confirm that just opened, so it is never folded
- * away.
- */
-function withSimVerdict(blocks: Block[], inputs: SigningLiveInputs, own: boolean): Block[] {
-	const title = inputs.m.balancesTitle;
-	const caution = couldNotCheckLine(inputs);
-	if (caution !== undefined) {
-		return [
-			...blocks,
-			{ kind: 'balances', title, rows: [], note: caution, noteTone: 'caution', verdict: true }
-		];
+	if (!request || sign.blocked) return { stage: 'none' };
+	// Whatever key the core names, what it means is this sentence — and the
+	// confirm is open beside it, so the place never goes on saying "Checking…".
+	if (sign.sim_waited_out_key) {
+		return { stage: 'landed', said: { kind: 'notice', block: couldNotCheck(m) } };
 	}
-	const note = own ? undefined : noChangeLine(inputs);
-	if (note === undefined) return blocks;
-	return [...blocks, { kind: 'balances', title, rows: [], note, verdict: true }];
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return { stage: 'none' };
+	if (sign.sim_checking || !sim) return { stage: 'out' };
+	return {
+		stage: 'landed',
+		said: landedVerdict(sim, {
+			m,
+			nativeSymbol: nativeSymbol(request.chain_id),
+			preset: resolvedFormatKeys().number
+		})
+	};
 }
 
-function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
+/** The verdict's place is itself saying that the transaction is expected to fail. */
+function verdictSaysItFails(shown: VerdictShown): boolean {
+	return (
+		shown.stage === 'landed' && shown.said.kind === 'notice' && shown.said.block.tone === 'danger'
+	);
+}
+
+/**
+ * The simulation's verdict on the sheet — after the request's own blocks,
+ * before the footer, where the phones and the desktop put it.
+ *
+ * **A site's transaction keeps the verdict's PLACE from its first frame**
+ * (`kind: 'verdict'`): the balance card saying "Checking…" while the
+ * simulation is out, then whatever it says, in a place at least as tall as
+ * the verdicts a sheet usually ends on (`verdictRooms`). The sheet is
+ * anchored at the bottom, so a card that arrived a moment late pushed the
+ * header and its ✕ up by its own height; now it fills a place that was
+ * there. A verdict taller than the place is drawn whole and the place grows.
+ *
+ * **The wallet's own request keeps no place** (the phones' rule): its usual
+ * verdict is that nothing moves, and that only confirms what the wallet
+ * itself wrote — a technical fact, folded into Technical details
+ * (`techModel`, issue 314), not a bordered card weighing as much as the
+ * outcome. Anything else the simulation has to say — a call that fails, a
+ * node that could not check, a balance that would move — is on the sheet,
+ * landing late (`verdict`), so the sheet keeps its confirm where it was and
+ * brings it into sight.
+ */
+function withSimVerdict(
+	blocks: Block[],
+	shown: VerdictShown,
+	inputs: SigningLiveInputs,
+	own: boolean
+): Block[] {
+	if (shown.stage === 'none') return blocks;
+	if (own) {
+		if (shown.stage === 'out' || shown.said.kind === 'no_change') return blocks;
+		return [...blocks, { ...shown.said.block, verdict: true }];
+	}
+	const inner = shown.stage === 'out' ? checkingCard(inputs.m) : shown.said.block;
+	return [
+		...blocks,
+		{
+			kind: 'verdict',
+			inner: [inner],
+			rooms: verdictRooms(inputs.m),
+			landed: shown.stage === 'landed'
+		}
+	];
+}
+
+function techModel(inputs: SigningLiveInputs, own: boolean, shown: VerdictShown): TechModel {
 	const { sign, clear, m } = inputs;
 	// A refused request discloses nothing (spec 081). Android and iOS hide this
 	// card entirely under a refusal; web was still putting the raw
@@ -1028,7 +1048,9 @@ function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	// disclosure — the one shell that stayed lax about it.
 	const request = sign.blocked ? null : sign.request;
 	const result = sign.blocked ? null : clear.result;
-	const simResult = noChangeLine(inputs);
+	// "No asset changes", when the core's judged view says so and in its line.
+	const simResult =
+		shown.stage === 'landed' && shown.said.kind === 'no_change' ? shown.said.line : undefined;
 	return {
 		title: m.advancedToggle,
 		// The contract's name beside the toggle tells a site's request apart;
@@ -1342,16 +1364,25 @@ export function signingCloseEvent(
 
 /**
  * Spec 082 RJ19 (G57): the relay's own estimate of this operation says it
- * will revert. The web runs no simulation (RG6), so this is the one voice
- * that can say it before the confirm — in the danger tone, under the intent.
+ * will revert — in the danger tone, under the intent. It was the one voice
+ * that could say so while the web drew nothing of its simulation; it still
+ * speaks whenever the simulation does not say the same (the estimate is of
+ * the whole operation, its fee leg included, and can fail where the bare
+ * calls do not). When the verdict's place is itself saying "expected to
+ * fail", the sheet says it once, there — where every client says it.
  * The confirm stays live: a warning informs, it never blocks (L-D5); a submit
  * then meets the relay's refusal, answered as one (RJ3).
  */
-function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[] {
+function withEstimateVerdict(
+	blocks: Block[],
+	shown: VerdictShown,
+	inputs: SigningLiveInputs
+): Block[] {
 	const { sign, m, identity } = inputs;
 	const request = sign.request;
 	if (!request || sign.blocked) return blocks;
 	if (request.kind !== 'transaction' && request.kind !== 'batch') return blocks;
+	if (verdictSaysItFails(shown)) return blocks;
 	const reverts = estimateRevertsFor(request.chain_id, request.signer_address ?? identity.address);
 	if (!reverts) return blocks;
 	const text = reverts.reason
@@ -1399,7 +1430,13 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
-	const drawn = withSimVerdict(withEstimateVerdict(blocksFor(inputs), inputs), inputs, own);
+	const shown = verdictShown(inputs);
+	const drawn = withSimVerdict(
+		withEstimateVerdict(blocksFor(inputs), shown, inputs),
+		shown,
+		inputs,
+		own
+	);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(drawn), m);
 	// The wallet's own request names no requester: its intent is the header's
 	// headline, beside the ✕, and is not said a second time below it. While
@@ -1435,7 +1472,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		},
 		...(headline ? { headline } : {}),
 		blocks,
-		tech: techModel(inputs, own),
+		...(!sign.blocked && stillReading(clear) ? { reading: 'out' as const } : {}),
+		tech: techModel(inputs, own, shown),
 		techOpen: false,
 		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
 		signer: {

@@ -142,10 +142,12 @@ vi.mock('$lib/flows/core/fee-session', async () => {
 
 import { FeeQuote, type FeeQuoteRequest } from '$lib/flows/core/fee-quote.svelte';
 import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
+import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import {
 	checkRequest,
 	feeBalanceChanges,
 	measureBalanceChanges,
+	simulateRequest,
 	simulateVerdict,
 	tellBalanceChanges
 } from './fee-balance-changes';
@@ -451,5 +453,159 @@ describe('one read, the core’s verdict — for the fee and for the sheet (devi
 			)
 		).toBeNull();
 		expect(sink.told).toEqual([]);
+	});
+});
+
+/**
+ * The verdict, drawn: the same one read, carried on to the trust machine for
+ * a check's moves (`simulateRequest`). The judge is a seam here — what it
+ * decides is `token_trust`'s own suite and `verdict.test.ts`'s; what is pinned
+ * is the ORDER and the endings: the fee machine is told before anything is
+ * judged, only a check is judged, and every way the read can end comes back
+ * as something the verdict's place can say.
+ */
+describe('a request’s simulation, start to end (the verdict)', () => {
+	const request = { from: SAFE, calls: CALLS, chainId: 137 };
+	const JUDGED: TrustSimView = {
+		address: SAFE.toLowerCase(),
+		chain_id: 137,
+		ready: true,
+		judgments: [{ type: 'native', delta: '-1' }],
+		no_change_key: null
+	};
+
+	it('a check: the fee machine is told what it moves BEFORE its tokens are judged, and the sheet gets both', async () => {
+		const order: string[] = [];
+		const sink = {
+			balanceChanges: (_calls: FeeCall[], changes: FeeBalanceChange[]) =>
+				void order.push(`fee:${changes.length}`)
+		};
+		const judge = vi.fn(async (from: string, chainId: number, deltas: unknown[]) => {
+			order.push(`judge:${from}:${chainId}:${deltas.length}`);
+			return JUDGED;
+		});
+		const ended = await simulateRequest(
+			sink,
+			request,
+			() => true,
+			async () => SWAPPED,
+			judge
+		);
+		// Which coin can pay does not wait on token names.
+		expect(order).toEqual([`fee:${CHANGES.length}`, `judge:${SAFE}:137:${CHANGES.length}`]);
+		expect(ended?.verdict).toMatchObject({ kind: 'deltas', no_change_key: null });
+		// The core's own deltas went to the judge, untouched.
+		expect(judge.mock.calls[0][2]).toEqual(ended!.verdict!.deltas);
+		expect(ended?.judged).toBe(JUDGED);
+	});
+
+	it('a check under which nothing moves is judged too: "nothing moves" is the judged view’s to say', async () => {
+		const judge = vi.fn(async () => ({ ...JUDGED, judgments: [], no_change_key: 'k' }));
+		const ended = await simulateRequest(
+			{ balanceChanges: () => {} },
+			request,
+			() => true,
+			async () => NOTHING_MOVED,
+			judge
+		);
+		expect(judge).toHaveBeenCalledOnce();
+		expect(ended?.judged?.no_change_key).toBe('k');
+	});
+
+	it('a revert, a node that cannot check, no node: a verdict at once — nobody is asked to judge it', async () => {
+		const cases: [string | Error, string][] = [
+			[REVERTED, 'reverts'],
+			[UNREADABLE_STATUS, 'not_offered'],
+			[NOT_OFFERED, 'not_offered'],
+			[UNREACHABLE, 'unreachable'],
+			['{}', 'not_offered'],
+			[new Error('every endpoint failed'), 'unreachable']
+		];
+		for (const [reply, kind] of cases) {
+			const judge = vi.fn(async () => JUDGED);
+			const told: unknown[] = [];
+			const ended = await simulateRequest(
+				{ balanceChanges: (...args: unknown[]) => void told.push(args) },
+				request,
+				() => true,
+				async () => {
+					if (reply instanceof Error) throw reply;
+					return reply;
+				},
+				judge
+			);
+			expect(ended, String(reply)).toMatchObject({ verdict: { kind }, judged: null });
+			expect(judge, String(reply)).not.toHaveBeenCalled();
+			expect(told, String(reply)).toEqual([]);
+		}
+	});
+
+	it('nothing to ask about: the simulation has ended with no reply to read — said, not left waiting', async () => {
+		const simulate = vi.fn(async () => SWAPPED);
+		const ended = await simulateRequest(
+			{ balanceChanges: () => {} },
+			{ ...request, calls: [] },
+			() => true,
+			simulate,
+			async () => JUDGED
+		);
+		expect(ended).toEqual({ verdict: null, judged: null });
+		expect(simulate).not.toHaveBeenCalled();
+	});
+
+	it('a judge that gives no view, or throws: a check this sheet cannot report — never an invented "nothing moves"', async () => {
+		const sink = { balanceChanges: () => {} };
+		const none = await simulateRequest(
+			sink,
+			request,
+			() => true,
+			async () => SWAPPED,
+			async () => null
+		);
+		expect(none).toMatchObject({ verdict: { kind: 'deltas' }, judged: null });
+		const thrown = await simulateRequest(
+			sink,
+			request,
+			() => true,
+			async () => SWAPPED,
+			async () => {
+				throw new Error('the trust machine is gone');
+			}
+		);
+		expect(thrown).toMatchObject({ verdict: { kind: 'deltas' }, judged: null });
+	});
+
+	it('a request that is gone has no verdict — while the node answers, or while its moves are judged', async () => {
+		const told: unknown[] = [];
+		const sink = { balanceChanges: (...args: unknown[]) => void told.push(args) };
+		// Gone by the time the node answered: nobody is told, nobody judges.
+		const judge = vi.fn(async () => JUDGED);
+		expect(
+			await simulateRequest(
+				sink,
+				request,
+				() => false,
+				async () => SWAPPED,
+				judge
+			)
+		).toBeNull();
+		expect(judge).not.toHaveBeenCalled();
+		expect(told).toEqual([]);
+		// Gone while the judge was reading token names.
+		let here = true;
+		const slow = vi.fn(async () => {
+			here = false;
+			return JUDGED;
+		});
+		expect(
+			await simulateRequest(
+				sink,
+				request,
+				() => here,
+				async () => SWAPPED,
+				slow
+			)
+		).toBeNull();
+		expect(slow).toHaveBeenCalledOnce();
 	});
 });

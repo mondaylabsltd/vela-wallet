@@ -3,6 +3,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn } from './live-helpers';
+import { readKv } from './stub-chain';
 
 // The live wiring's phase-3/4 scope is the mobile layout (desktop
 // interactivity is a recorded debt) — so the suites speak to it.
@@ -18,6 +19,18 @@ async function openContacts(page: Page): Promise<void> {
 	await page.goto('/en/contacts');
 	await expect(page.getByRole('heading', { name: en('contacts.title') }).first()).toBeVisible();
 }
+
+/**
+ * What the book's store holds under `key`, as text (`''` while it holds nothing).
+ *
+ * The core shows a change the moment it makes it and writes it behind
+ * (`ContactOperation::Write…`, best-effort: "the in-memory ledger stays
+ * authoritative"). So a row on the screen is not yet a row on the disk, and
+ * a reload issued the instant the row appears can beat the write: on a quiet
+ * machine it did, and the group was gone. "Survives a reload" is asked once
+ * the write has landed.
+ */
+const stored = async (page: Page, key: string): Promise<string> => (await readKv(page, key)) ?? '';
 
 async function addContact(page: Page, name: string, address: string): Promise<void> {
 	// The phone's "+" opens the drawn C5 sheet (new / import / export) since
@@ -52,6 +65,7 @@ test('an added contact survives a reload; a deleted one stays gone', async ({ pa
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 
 	// Durability: the book is the core's stored ledger, not screen state.
+	await expect.poll(() => stored(page, 'vela.contacts')).toContain('Alice');
 	await page.reload();
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 
@@ -62,6 +76,10 @@ test('an added contact survives a reload; a deleted one stays gone', async ({ pa
 	await expect(page.getByText('Alice', { exact: true })).toHaveCount(0);
 
 	// A tombstone is durable too — deletion does not resurrect on reload.
+	await expect.poll(() => stored(page, 'vela.contacts')).not.toContain('Alice');
+	await expect
+		.poll(async () => (await stored(page, 'vela.contacts.dismissed')).toLowerCase())
+		.toContain(ALICE_ADDR.slice(2, 14));
 	await page.reload();
 	await expect(page.getByText(en('contacts.empty'))).toBeVisible();
 });
@@ -90,6 +108,7 @@ test('a group is created, joined to the book, and survives restart', async ({ pa
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await expect(page.getByText('Payroll', { exact: true })).toBeVisible();
 
+	await expect.poll(() => stored(page, 'vela.contactGroups')).toContain('Payroll');
 	await page.reload();
 	await expect(page.getByText('Payroll', { exact: true })).toBeVisible();
 });

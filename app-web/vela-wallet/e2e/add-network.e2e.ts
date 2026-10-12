@@ -12,7 +12,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn, zh } from './live-helpers';
-import { denyOffOrigin, stubChainRegistry, stubJsonRpc } from './stub-chain';
+import { denyOffOrigin, readKv, stubChainRegistry, stubJsonRpc } from './stub-chain';
 import { aggregate3CallCount, encodeAggregate3Result, abiWord } from './stub-chain';
 import { isAggregate3 } from './stub-multicall';
 
@@ -464,6 +464,11 @@ test('search → verdict → add → listed → survives a reload → removed', 
 		page.getByText(en('settingsModals.addNetwork.compatible'), { exact: true })
 	).toBeVisible({ timeout: 30_000 });
 	await page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') }).click();
+	// Written before the page is left: `openNetworks` is a navigation, the
+	// add is written behind the tap, and on an idle machine the navigation
+	// won once — the list then came back without the network.
+	const written = async () => (await readKv(page, 'vela.customNetworks')) ?? '';
+	await expect.poll(written).toContain(String(CHAIN_ID));
 
 	// Listed as a custom network, from the core's registry.
 	await openNetworks(page);
@@ -488,6 +493,8 @@ test('search → verdict → add → listed → survives a reload → removed', 
 		.getByRole('button', { name: en('settingsModals.network.removeConfirm'), exact: true })
 		.click();
 	await expect(page.getByRole('button', { name: new RegExp(NAME) })).toHaveCount(0);
+	// And the removal is written before the reload that asks whether it held.
+	await expect.poll(written).not.toContain(String(CHAIN_ID));
 	await page.reload();
 	await openNetworks(page);
 	await expect(page.getByRole('button', { name: new RegExp(NAME) })).toHaveCount(0);

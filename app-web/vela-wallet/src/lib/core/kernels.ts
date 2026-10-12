@@ -43,6 +43,9 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { MarkView } from '$lib/core/generated/MarkView';
 import type { SimVerdict } from '$lib/core/generated/SimVerdict';
+import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
+import type { TrustSimView } from '$lib/core/generated/TrustSimView';
+import type { TrustTokenMeta } from '$lib/core/generated/TrustTokenMeta';
 
 export {
 	PROXY_CREATION_CODE,
@@ -882,6 +885,76 @@ export function simOutcome(user: string, replyJson: string): SimVerdict | null {
 		return JSON.parse(wasm.simOutcome(user, replyJson)) as SimVerdict;
 	} catch {
 		return null;
+	}
+}
+
+/** The facts a fresh trust machine judges a check's moves by ({@link judgedByFreshMachine}). */
+export interface TrustFacts {
+	/** The chain registry's stablecoins and wrapped coin: an inflow of one carries a figure. */
+	stables?: string[];
+	wrapped?: string | null;
+	/** The tokens the account holds: an inflow of one carries a figure. */
+	held?: string[];
+	/**
+	 * What each token's `symbol()` / `decimals()` answer, by lowercased
+	 * contract — `null` (or absent) for one that does not answer.
+	 */
+	meta?: Record<string, TrustTokenMeta | null>;
+}
+
+/**
+ * A check's moves as the `token_trust` core judges them (`judge_delta`, its
+ * invariant ⑥) — by a FRESH machine told exactly `facts`, answered in this
+ * call. The whole judged view: the judgments in the order given, and the
+ * machine's own word when nothing moves (`no_change_key`).
+ *
+ * For a drawn board and a test, so neither writes a judgment by hand: the
+ * rows they show are rows the core would give. The app's own judgments come
+ * from the resident session (`token-trust-resident`), which holds the
+ * wallet's real trusted set and reads real metadata. `null` when the machine
+ * gave no ready view.
+ */
+export function judgedByFreshMachine(
+	address: string,
+	chainId: number,
+	deltas: TrustAssetDelta[],
+	facts: TrustFacts = {}
+): TrustSimView | null {
+	type Step = {
+		view: { sim: TrustSimView | null };
+		effects: { id: number; operation: { type: string; chain_id?: number; addrs?: string[] } }[];
+	};
+	const core = new wasm.TokenTrustCore();
+	try {
+		const tell = (event: unknown) => JSON.parse(core.dispatch(JSON.stringify(event))) as Step;
+		tell({
+			type: 'registry_tokens_snapshot',
+			chain_id: chainId,
+			stables: facts.stables ?? [],
+			wrapped_native: facts.wrapped ?? null
+		});
+		tell({ type: 'held_tokens_snapshot', address, chain_id: chainId, tokens: facts.held ?? [] });
+		let step = tell({ type: 'sim_deltas_computed', address, chain_id: chainId, deltas });
+		// The machine asks once for the metadata it lacks; every address is answered.
+		for (const effect of step.effects) {
+			if (effect.operation.type !== 'multicall_erc20_meta') continue;
+			const entries = (effect.operation.addrs ?? []).map((addr) => ({
+				addr,
+				meta: facts.meta?.[addr.toLowerCase()] ?? null
+			}));
+			step = JSON.parse(
+				core.resolve_effect(
+					BigInt(effect.id),
+					JSON.stringify({ type: 'erc_meta', chain_id: effect.operation.chain_id, entries })
+				)
+			) as Step;
+		}
+		const sim = step.view.sim;
+		return sim !== null && sim.ready ? sim : null;
+	} catch {
+		return null;
+	} finally {
+		core.free();
 	}
 }
 

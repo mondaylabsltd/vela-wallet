@@ -14,18 +14,20 @@
  *   sends it, and that its verdict is on the sheet in the step that puts it
  *   there — however the read ends;
  * - the sign executor runs the core's `sim_verdict_timer` and nothing else;
- * - the sheet draws the gate's line under the shut confirm, and the core's
- *   caution in the verdict's place whenever nothing could be checked: the
- *   deadline passed with no verdict, or the verdict itself is a not-checked
- *   answer (the node does not offer the simulation, or nobody answered).
- *   Drawn for the deadline alone, the caution left the sheet the moment the
- *   pool gave up — "could not check", said and then taken back over an open
- *   confirm.
+ * - the sheet draws the gate's line under the shut confirm, and in the
+ *   verdict's place — kept from the request's first frame — "Checking…"
+ *   while the core waits, then the verdict; and the core's caution whenever
+ *   nothing could be checked: the deadline passed with no verdict, or the
+ *   verdict itself is a not-checked answer (the node does not offer the
+ *   simulation, or nobody answered). Drawn for the deadline alone, the
+ *   caution left the sheet the moment the pool gave up — "could not check",
+ *   said and then taken back over an open confirm.
  *
  * The `sign_request` core is the REAL one, through the web's own session and
  * executor, and so are the gate (`signConfirmState`), the builder
- * (`buildSigningModel`) and the drawn sheet. The simulation is stubbed (the
- * node's reply is the test's to give) and the executor's clock is stopped
+ * (`buildSigningModel`), the trust machine that judges a check's moves (the
+ * resident `token_trust` session) and the drawn sheet. The simulation is
+ * stubbed (the node's reply is the test's to give) and the executor's clock is stopped
  * (its timer fires when the test fires it). The reading, the guard and the
  * fee are stood in for as READY, so the simulation is all that can hold the
  * confirm. The words are a stand-in too: that each key resolves to its
@@ -239,6 +241,9 @@ const CHECKING = 'Checking what this transaction does…';
 const COULD_NOT_CHECK =
 	'Vela couldn’t check what this transaction does. Review it before you sign.';
 const NO_CHANGE = 'No asset changes';
+/** What the verdict's place says while the simulation is out. */
+const PLACE_CHECKING = 'Checking…';
+const WILL_FAIL = 'This transaction is expected to fail — you’d still pay gas.';
 /**
  * The sheet's words, stood in for: the lines under test are looked up by the
  * core's key exactly as the real map is; every other word reads as its name.
@@ -253,6 +258,8 @@ const WORDS = new Proxy(
 		},
 		simSaid: { 'componentsUi.signing.simResultNoChange': NO_CHANGE },
 		warnSimUnavailable: COULD_NOT_CHECK,
+		warnWillFail: WILL_FAIL,
+		simChecking: PLACE_CHECKING,
 		balancesTitle: 'Balance changes',
 		terms: {},
 		feeReasons: {},
@@ -401,8 +408,32 @@ function heldLine(): string | null {
 	if (!line || getComputedStyle(line).visibility === 'hidden') return null;
 	return line.textContent?.trim() ?? '';
 }
-const card = () => document.body.querySelector<HTMLElement>('[role="dialog"] section.balances');
+/** The verdict's place on a site's transaction. */
+const place = () =>
+	document.body.querySelector<HTMLElement>('[role="dialog"] [data-testid="signing-verdict"]');
+/**
+ * What is SAID about the simulation: in the verdict's place, or — on the
+ * wallet's own request, which keeps none — the block that landed on its
+ * sheet. Never a room: a room is laid out and holds no words.
+ */
+const saidIn = () =>
+	place()?.querySelector<HTMLElement>('.said') ??
+	document.body.querySelector<HTMLElement>('[role="dialog"] .blocks > [data-verdict]');
+/** The balance card standing there, if that is what stands there. */
+const card = () => {
+	const said = saidIn();
+	return said?.matches('section.balances')
+		? said
+		: (said?.querySelector<HTMLElement>('section.balances') ?? null);
+};
 const cardNote = () => card()?.querySelector<HTMLElement>('.note') ?? null;
+/** The core's notice standing there — the caution or the danger — if one does. */
+const notice = () => {
+	const said = saidIn();
+	return said?.matches('.banner') ? said : (said?.querySelector<HTMLElement>('.banner') ?? null);
+};
+/** The one line the simulation says right now: the card's, or the notice's. `null`: nothing. */
+const verdictLine = () => (notice()?.querySelector('p') ?? cardNote())?.textContent?.trim() ?? null;
 const top = (el: Element) => Math.round(el.getBoundingClientRect().top * 10) / 10;
 const confirmTop = () => top(confirmEl()!);
 
@@ -421,7 +452,7 @@ function watchFrames() {
 			frames.push({
 				disabled: button.disabled,
 				line: heldLine(),
-				said: cardNote()?.textContent?.trim() ?? null
+				said: verdictLine()
 			});
 		}
 		requestAnimationFrame(sample);
@@ -488,8 +519,12 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		expect(core.view.sim_checking).toBe(true);
 		expect(core.timers.map((timer) => timer.ms)).toEqual([4_000]);
 		expect(node.asked[0]).toMatchObject({ from: ME, chainId: 100 });
-		// Nothing is in the verdict's place yet.
-		expect(card()).toBeNull();
+		// The verdict's place is there, saying that the check is out — and
+		// nothing has landed in it.
+		expect(place()).not.toBeNull();
+		expect(verdictLine()).toBe(PLACE_CHECKING);
+		expect(place()!.dataset.stage).toBe('out');
+		expect(place()!.querySelector('[data-verdict]')).toBeNull();
 		// A press on the held confirm reaches nobody.
 		confirmEl()!.click();
 		await frames.further();
@@ -508,10 +543,16 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		]);
 		expect(core.view.sim_checking).toBe(false);
 		expect(core.view.sim_waited_out_key).toBeNull();
-		// The confirm opened WITH its verdict: no frame had one without the other.
+		// The confirm opened WITH its verdict: no frame had one without the
+		// other — not a confirm open over "Checking…", not a verdict drawn
+		// over a confirm still waiting for it.
 		expect(frames.frames.filter((frame) => !frame.disabled && frame.said !== NO_CHANGE)).toEqual(
 			[]
 		);
+		expect(
+			frames.frames.filter((frame) => frame.disabled && frame.said !== PLACE_CHECKING)
+		).toEqual([]);
+		expect(place()!.dataset.stage).toBe('landed');
 		// The deadline, passing now, is nobody's: nothing is said, nothing shut.
 		core.timers[0].fire();
 		await frames.further();
@@ -537,24 +578,27 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 
 		// Four seconds pass (the test's hand on the clock). No node has answered.
 		core.timers[0].fire();
-		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 		await open();
 		expect(core.view.sim_waited_out_key).toBe('componentsUi.signing.simUnavailableWarning');
-		// A caution: the card's note in the warning ink, on the sheet's own
-		// card in the verdict's place — not a line folded into the details.
-		const note = cardNote()!;
-		expect(note.dataset.tone).toBe('caution');
+		// A caution: the banner the phones draw for it, in the warning ink, in
+		// the verdict's place on the sheet — not a line folded into the details.
+		const line = notice()!;
+		expect(line.dataset.tone).toBe('caution');
+		expect(card()).toBeNull();
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--color-warning-base)';
 		dialog()!.appendChild(probe);
-		expect(getComputedStyle(note).color).toBe(getComputedStyle(probe).color);
+		expect(getComputedStyle(line).color).toBe(getComputedStyle(probe).color);
 		probe.style.color = 'var(--color-fg-subtle)';
-		expect(getComputedStyle(note).color).not.toBe(getComputedStyle(probe).color);
+		expect(getComputedStyle(line).color).not.toBe(getComputedStyle(probe).color);
 		probe.remove();
-		expect(card()!.hasAttribute('data-verdict')).toBe(true);
+		// Something to read has landed: the sheet brings it into sight.
+		expect(saidIn()!.hasAttribute('data-verdict')).toBe(true);
+		expect(place()!.contains(line)).toBe(true);
 		const details = dialog()!.querySelector('section.tech')!;
 		expect(details.querySelector('.toggle')?.getAttribute('aria-expanded')).toBe('false');
-		expect(details.contains(card()!)).toBe(false);
+		expect(details.contains(line)).toBe(false);
 		expect(details.textContent).not.toContain(COULD_NOT_CHECK);
 		// The host said nothing: no verdict is on the sheet, and it knows it.
 		expect(core.sim).toEqual([{ type: 'sim_started', id: 'tx:1' }]);
@@ -567,6 +611,7 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		node.asked[0].answer(NOTHING_MOVES);
 		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(NO_CHANGE), WAIT);
 		expect(cardNote()!.dataset.tone).not.toBe('caution');
+		expect(notice()).toBeNull();
 		expect(dialog()!.textContent).not.toContain(COULD_NOT_CHECK);
 		await vi.waitFor(() => expect(core.view.sim_waited_out_key).toBeNull(), WAIT);
 		expect(core.sim.at(-1)).toEqual({ type: 'sim_settled', id: 'tx:1' });
@@ -578,18 +623,17 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await screen.unmount();
 	});
 
-	it('the deadline, and then the pool gives up: the caution is still there — the same card, in every frame', async () => {
+	it('the deadline, and then the pool gives up: the caution is still there — the same line, in every frame', async () => {
 		const frames = watchFrames();
 		const screen = mount();
 		core.arrive('tx:1', 'transaction');
 		await asked();
 		await held();
 		core.timers[0].fire();
-		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 		await open();
 		expect(core.view.sim_waited_out_key).toBe('componentsUi.signing.simUnavailableWarning');
-		const cardWas = card();
-		const noteWas = cardNote();
+		const lineWas = notice();
 		const from = frames.frames.length;
 
 		// No node ever answered: the pool gives up, and the read ends "unreachable".
@@ -603,11 +647,10 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		expect(core.view.sim_checking).toBe(false);
 		await frames.further(12);
 		// …and the sheet has not changed: "could not check" is the verdict. The
-		// very card and the very line that were there, not ones drawn again.
-		expect(card()).toBe(cardWas);
-		expect(cardNote()).toBe(noteWas);
-		expect(cardNote()!.textContent).toBe(COULD_NOT_CHECK);
-		expect(cardNote()!.dataset.tone).toBe('caution');
+		// very line that was there, not one drawn again.
+		expect(notice()).toBe(lineWas);
+		expect(verdictLine()).toBe(COULD_NOT_CHECK);
+		expect(notice()!.dataset.tone).toBe('caution');
 		// Not one painted frame, from the deadline on, without it — or with a
 		// confirm shut again, or a line back under it.
 		const since = frames.frames.slice(from);
@@ -621,7 +664,7 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await screen.unmount();
 	});
 
-	it('a revert draws no line of its own: answered first there is no card, answered late it takes the caution away', async () => {
+	it('a call that fails is the danger line in the verdict’s place: answered first, and answered late — where it takes the caution’s place', async () => {
 		// First: the node answers at once that the call reverts.
 		node.auto = REVERTS;
 		const frames = watchFrames();
@@ -632,16 +675,27 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 			WAIT
 		);
 		await open();
+		await vi.waitFor(() => expect(verdictLine()).toBe(WILL_FAIL), WAIT);
 		await frames.further(12);
+		// The danger, said as an alert, in the place — and no balance card: a
+		// call that fails moves nothing, and "nothing moves" is not what it says.
+		expect(notice()!.dataset.tone).toBe('danger');
+		expect(notice()!.getAttribute('role')).toBe('alert');
+		expect(place()!.contains(notice()!)).toBe(true);
 		expect(card()).toBeNull();
 		expect(dialog()!.textContent).not.toContain(COULD_NOT_CHECK);
+		expect(dialog()!.textContent).not.toContain(NO_CHANGE);
+		// A warning informs, it never blocks: the confirm opened beside it, and
+		// never over anything else.
+		expect(frames.frames.filter((frame) => !frame.disabled && frame.said !== WILL_FAIL)).toEqual(
+			[]
+		);
 		frames.stop();
 		await screen.unmount();
 		core.dispose();
 
 		// Late: after the deadline's caution. A check did happen — it reverted —
-		// so "could not check" goes, and nothing of the simulation's is said in
-		// its place (the relay's estimate is the one voice for "will fail").
+		// so "could not check" goes, and the danger stands where it stood.
 		node = new Node();
 		core = new RealSign();
 		core.boot();
@@ -650,9 +704,11 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await asked();
 		await held();
 		core.timers[0].fire();
-		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 		node.asked[0].answer(REVERTS);
-		await vi.waitFor(() => expect(card()).toBeNull(), WAIT);
+		await vi.waitFor(() => expect(verdictLine()).toBe(WILL_FAIL), WAIT);
+		expect(notice()!.dataset.tone).toBe('danger');
+		expect(dialog()!.textContent).not.toContain(COULD_NOT_CHECK);
 		await open();
 		await screen.unmount();
 	});
@@ -663,9 +719,15 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await asked();
 		await held();
 		expect(core.view.request?.first_party).toBe(true);
+		// Its sheet keeps no place for the verdict: nothing is said of the
+		// simulation while it is out.
+		expect(place()).toBeNull();
+		expect(verdictLine()).toBeNull();
 		core.timers[0].fire();
-		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
-		expect(cardNote()!.dataset.tone).toBe('caution');
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
+		expect(notice()!.dataset.tone).toBe('caution');
+		expect(notice()!.hasAttribute('data-verdict')).toBe(true);
+		expect(place()).toBeNull();
 		await open();
 		await screen.unmount();
 	});
@@ -685,8 +747,8 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		// "could not check" — said by the verdict, not by a deadline.
 		expect(core.view.sim_checking).toBe(false);
 		expect(core.view.sim_waited_out_key).toBeNull();
-		expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK);
-		expect(cardNote()!.dataset.tone).toBe('caution');
+		expect(verdictLine()).toBe(COULD_NOT_CHECK);
+		expect(notice()!.dataset.tone).toBe('caution');
 		expect(
 			frames.frames.filter((frame) => !frame.disabled && frame.said !== COULD_NOT_CHECK)
 		).toEqual([]);
@@ -714,12 +776,13 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await tick();
 		flushSync();
 		expect(core.sim.filter((event) => event.type === 'sim_settled')).toEqual([]);
-		expect(card()).toBeNull();
+		expect(verdictLine()).toBe(PLACE_CHECKING);
 		expect(confirmEl()!.disabled).toBe(true);
 		// Its own answer opens it.
 		node.asked[1].answer(NOTHING_MOVES);
 		await open();
 		expect(core.sim.at(-1)).toEqual({ type: 'sim_settled', id: 'tx:2' });
+		expect(verdictLine()).toBe(NO_CHANGE);
 		await screen.unmount();
 	});
 });
@@ -735,7 +798,9 @@ describe('where there is no simulation, nothing is held (PR 3)', () => {
 		expect(core.sim).toEqual([]);
 		expect(core.timers).toEqual([]);
 		expect(core.view.sim_checking).toBe(false);
-		// No frame of it said "checking", and none put a card on the sheet.
+		// No frame of it said "checking", and none kept a verdict's place: a
+		// message moves nothing, and nobody simulates one.
+		expect(place()).toBeNull();
 		expect(frames.frames.length).toBeGreaterThan(0);
 		expect(frames.frames.filter((frame) => frame.line === CHECKING || frame.said !== null)).toEqual(
 			[]
@@ -761,11 +826,11 @@ describe('where there is no simulation, nothing is held (PR 3)', () => {
 		await open();
 		// Nothing was checked, and the sheet says so — by the verdict's own
 		// key: no wait ran out here.
-		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
-		expect(cardNote()!.dataset.tone).toBe('caution');
-		expect(card()!.hasAttribute('data-verdict')).toBe(true);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
+		expect(notice()!.dataset.tone).toBe('caution');
+		expect(saidIn()!.hasAttribute('data-verdict')).toBe(true);
 		expect(core.view.sim_waited_out_key).toBeNull();
-		const cardWas = card();
+		const lineWas = notice();
 		// From here on: every frame is an open confirm, no line under it, and
 		// the caution in the verdict's place.
 		const from = frames.frames.length;
@@ -783,7 +848,7 @@ describe('where there is no simulation, nothing is held (PR 3)', () => {
 				(frame) => frame.disabled || frame.line !== null || frame.said !== COULD_NOT_CHECK
 			)
 		).toEqual([]);
-		expect(card()).toBe(cardWas);
+		expect(notice()).toBe(lineWas);
 		expect(core.view.sim_waited_out_key).toBeNull();
 		// And from the sheet's first frame: never a confirm open over nothing.
 		expect(
@@ -795,21 +860,29 @@ describe('where there is no simulation, nothing is held (PR 3)', () => {
 });
 
 /**
- * The hold line sits where the confirm's note already does, in the sheet's
- * foot outside its scroll, and the confirm does not move when the line
- * appears or goes — nor when the caution lands in the verdict's place, when
- * the pool then gives up under it, or when a late verdict takes its place.
+ * Nothing moves for the simulation. The hold line sits where the confirm's
+ * note already does, in the sheet's foot outside its scroll; the verdict's
+ * place is on the sheet from the request's first frame, tall enough for what
+ * usually lands in it. So neither the confirm NOR the sheet's own top — its
+ * header, who is asking, the ✕ that refuses — moves when the line appears or
+ * goes, when the caution lands in the place, when the pool then gives up
+ * under it, or when a late verdict takes its place. (Before the place was
+ * kept, the caution's card arrived at the deadline and the bottom-anchored
+ * sheet's top went up by its height.)
  */
-describe('the confirm does not move while the line comes and goes (PR 3)', () => {
+describe('nothing moves while the line comes and goes and the verdict lands (PR 3, the kept place)', () => {
 	const SCREENS = [
 		['the phone sheet', 390, 844, 'the pool gives up'],
 		['the phone sheet', 390, 844, 'a late verdict'],
-		['the centred card', 1400, 900, 'the pool gives up'],
-		['the centred card', 1400, 900, 'a late verdict']
+		['a small phone', 320, 700, 'a late verdict'],
+		['the centred card', 1440, 900, 'the pool gives up'],
+		['the centred card', 1440, 900, 'a late verdict']
 	] as const;
+	const closeEl = () =>
+		document.body.querySelector<HTMLElement>('[role="dialog"] header.header .close');
 
 	it.each(SCREENS)(
-		'%s (%i×%i), then %s: the confirm’s top is the same held, cautioned at the deadline, and after',
+		'%s (%i×%i), then %s: the confirm, the ✕ and the place are where they were — held, cautioned at the deadline, and after',
 		async (name, width, height, ending) => {
 			await page.viewport(width, height);
 			const frames = watchFrames();
@@ -817,55 +890,61 @@ describe('the confirm does not move while the line comes and goes (PR 3)', () =>
 			core.arrive('tx:1', 'transaction');
 			await asked();
 			await held();
+			/** Where everything is: the confirm, the sheet's top, its ✕, the place and its height. */
+			const where = () => ({
+				confirm: confirmTop(),
+				sheet: top(dialog()!),
+				close: top(closeEl()!),
+				place: top(place()!),
+				placeHeight: Math.round(place()!.getBoundingClientRect().height * 10) / 10
+			});
 			/**
-			 * Where the confirm rests: whole inside the window, and in the same
-			 * place over a run of PAINTED frames. Two looks a moment apart can
-			 * agree in the middle of the sheet's entrance when the machine is
-			 * busy and no frame was drawn between them.
+			 * Where it all rests: the confirm whole inside the window, and every
+			 * figure the same over a run of PAINTED frames. Two looks a moment
+			 * apart can agree in the middle of the sheet's entrance when the
+			 * machine is busy and no frame was drawn between them.
 			 */
-			const restingTop = async () => {
-				let last = Number.NaN;
+			const resting = async () => {
+				let last = '';
 				let still = 0;
 				await vi.waitFor(async () => {
 					await frames.further(2);
-					const now = confirmTop();
+					const now = JSON.stringify(where());
 					const inside = confirmEl()!.getBoundingClientRect().bottom <= window.innerHeight;
 					still = inside && now === last ? still + 1 : 0;
 					last = now;
 					expect(still).toBeGreaterThanOrEqual(4);
 				}, WAIT);
-				return last;
+				return where();
 			};
-			// Past the sheet's entrance, held with its line.
-			const linePresent = await restingTop();
+			// Past the sheet's entrance, held with its line, the place saying "Checking…".
+			const linePresent = await resting();
 			expect(heldLine()).toBe(CHECKING);
+			expect(verdictLine()).toBe(PLACE_CHECKING);
 
-			// The deadline: the line goes, the caution lands.
+			// The deadline: the line goes, the caution lands — in the place.
 			core.timers[0].fire();
-			await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
+			await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 			await open();
-			const lineAbsent = await restingTop();
+			const lineAbsent = await resting();
 
 			if (ending === 'the pool gives up') {
 				// Nobody answered: the read ends "unreachable", the core's wait is
-				// over, and the caution is the verdict — the card that was there.
-				const cardWas = card();
+				// over, and the caution is the verdict — the line that was there.
+				const lineWas = notice();
 				node.asked[0].answer(UNREACHABLE);
 				await vi.waitFor(() => expect(core.view.sim_waited_out_key).toBeNull(), WAIT);
 				expect(core.sim.at(-1)).toEqual({ type: 'sim_settled', id: 'tx:1' });
-				expect(card()).toBe(cardWas);
-				expect(cardNote()!.textContent).toBe(COULD_NOT_CHECK);
+				expect(notice()).toBe(lineWas);
+				expect(verdictLine()).toBe(COULD_NOT_CHECK);
 			} else {
 				// The late answer: "No asset changes" takes the caution's place.
 				node.asked[0].answer(NOTHING_MOVES);
-				await vi.waitFor(() => expect(cardNote()?.textContent).toBe(NO_CHANGE), WAIT);
+				await vi.waitFor(() => expect(verdictLine()).toBe(NO_CHANGE), WAIT);
 			}
-			const after = await restingTop();
+			const after = await resting();
 
-			// Measured on this build: 739 on the phone sheet with either ending;
-			// on the centred card 551 where the window had just been resized (the
-			// card re-centres) and 565.5 where it had not (the foot is held where
-			// it first rested) — the same figure in all three states each time.
+			// One set of figures in all three states.
 			expect([name, ending, lineAbsent]).toEqual([name, ending, linePresent]);
 			expect([name, ending, after]).toEqual([name, ending, linePresent]);
 			// Whole and on screen throughout.

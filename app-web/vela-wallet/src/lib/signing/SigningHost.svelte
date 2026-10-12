@@ -28,8 +28,8 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
-	import { checkRequest } from '$lib/signing/fee-balance-changes';
-	import type { SimVerdict } from '$lib/core/generated/SimVerdict';
+	import { simulateRequest } from '$lib/signing/fee-balance-changes';
+	import type { SimEnded } from '$lib/signing/verdict';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
@@ -406,14 +406,18 @@
 	// backup to Ethereum, which costs real dollars, said nothing about it.
 	let quotedFor = '';
 	/**
-	 * What the sheet's own simulation said of a request, as the core read it
-	 * (PR 3 device round, item 3): the one `eth_simulateV1` read that tells
-	 * the fee machine what the calls move also tells the sheet when nothing
-	 * of the person's does ("No asset changes"). It belongs to the request it
-	 * was measured for — the sheet is handed it for that request only, and a
-	 * new request starts with none.
+	 * The sheet's own simulation of a request, once it has ended: the core's
+	 * reading of the node's reply and, for a check, the trust machine's
+	 * judgment of what it moves (`simulateRequest`). The one `eth_simulateV1`
+	 * read that tells the fee machine what the calls move is also the sheet's
+	 * verdict — what moves, that nothing does, that the call fails, or that
+	 * nothing could be checked. It belongs to the request it was run for —
+	 * the sheet is handed it for that request only, and a new request starts
+	 * with none (its place says "Checking…").
 	 */
-	let checked = $state<{ requestId: string; verdict: SimVerdict } | null>(null);
+	let checked = $state<{ requestId: string; sim: SimEnded } | null>(null);
+	/** A simulation that ended with no reply to read: "could not check". */
+	const UNREAD: SimEnded = { verdict: null, judged: null };
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
@@ -432,7 +436,18 @@
 		}
 		if (quotedFor === request.id) return;
 		const calls = feeCallsOf(request.kind, request.params_json);
-		if (calls === null) return;
+		if (calls === null) {
+			// Nothing on chain to ask about. A message is simulated by nobody and
+			// has no verdict at all. A transaction whose calls do not read is not
+			// simulated either, and the core is told of no simulation — so its
+			// verdict's place says from the first frame that nothing was checked,
+			// never "Checking…" for a check nobody is making.
+			const onChain = request.kind === 'transaction' || request.kind === 'batch';
+			if (onChain && untrack(() => checked?.requestId) !== request.id) {
+				checked = { requestId: request.id, sim: UNREAD };
+			}
+			return;
+		}
 		// A new request starts at the stored default, never at the last one's pick.
 		speedControl.reset();
 		quotedFor = request.id;
@@ -463,30 +478,42 @@
 		// Told to the fee in force and every speed pricing these calls, for as
 		// long as this request is the one on the sheet; a revert or a node that
 		// could not check tells it nothing.
-		// The same read is the sheet's (item 3): what it means is the core's
-		// (`simOutcome`), kept for this request alone.
+		// The same read is the sheet's verdict: what it means is the core's
+		// (`simOutcome`, then `token_trust`'s judgment of a check's moves), kept
+		// for this request alone.
 		const requestId = request.id;
 		// PR 3: the confirm waits for this read's verdict — the one part of
 		// the sheet the site being signed for cannot write. The core is told
 		// the simulation is out in the step that sends it, and that its
-		// verdict is on the sheet in the step that puts it there; between the
-		// two it holds the confirm (`sim_checking`), for four seconds at most
-		// on a timer of its own. Nothing here holds the confirm or keeps a
-		// clock. A message never reaches this line: it has no calls.
+		// verdict is on the sheet in the step that puts it there — for a check
+		// that is when its moves are judged, not when the node replied;
+		// between the two it holds the confirm (`sim_checking`), for four
+		// seconds at most on a timer of its own. Nothing here holds the
+		// confirm or keeps a clock. A message never reaches this line: it has
+		// no calls.
 		signRequest.dispatch({ type: 'sim_started', id: requestId });
-		// However the read ends — a verdict, nothing to say, or a throw — the
-		// verdict's place is no longer "checking". For a request that has gone
-		// nothing is said: its wait went with it.
-		const settled = (verdict: SimVerdict | null) => {
+		// However the read ends — a verdict, no reply to read, or a throw — the
+		// verdict's place is no longer "Checking…": what ended with nothing to
+		// report is "could not check" (`landedVerdict`), never a place left
+		// waiting. Said and told to the core in ONE step, so no frame draws a
+		// verdict over a confirm that still waits for it. For a request that
+		// has gone nothing is said: its wait went with it.
+		const settled = (sim: SimEnded) => {
 			if (quotedFor !== requestId) return;
-			if (verdict !== null) checked = { requestId, verdict };
+			checked = { requestId, sim };
 			signRequest.dispatch({ type: 'sim_settled', id: requestId });
 		};
-		void checkRequest(
+		void simulateRequest(
 			speedControl,
 			{ from: identity.address, calls, chainId: request.chain_id },
 			() => quotedFor === requestId
-		).then(settled, () => settled(null));
+		).then(
+			(sim) => {
+				// `null`: the request went while the node was answering.
+				if (sim !== null) settled(sim);
+			},
+			() => settled(UNREAD)
+		);
 	});
 
 	/**
@@ -530,7 +557,7 @@
 			fee: feeShown,
 			progress: signRequest.progress,
 			// This request's own simulation, and no other's.
-			sim: checked !== null && checked.requestId === signView.request?.id ? checked.verdict : null,
+			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
 			feeOpen,
 			speed: {
 				view: speedControl.view,

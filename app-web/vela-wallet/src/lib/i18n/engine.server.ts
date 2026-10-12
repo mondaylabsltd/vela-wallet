@@ -34,6 +34,8 @@ import type { ExtensionMessages } from '$lib/extension/messages';
 import {
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
+	SIM_WILL_FAIL_KEY,
+	SIM_WILL_FAIL_REASON_KEY,
 	type HandoffMessages,
 	type SigningMessages
 } from '$lib/signing/messages';
@@ -1172,8 +1174,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnBlindDecode: k('componentsUi.signing.blindDecodeWarning'),
 		warnSelectorNotListed: k('componentsUi.signing.selectorNotListed'),
 		warnExpired: k('componentsUi.signing.expiredWarning'),
-		warnWillFail: k('componentsUi.signing.simWillFail'),
-		warnWillFailReason: k('componentsUi.signing.simWillFailReason'),
+		warnWillFail: k(SIM_WILL_FAIL_KEY),
+		warnWillFailReason: k(SIM_WILL_FAIL_REASON_KEY),
 		warnHexMessage: k('componentsUi.signing.hexMessageWarning'),
 		warnBlindTyped: k('componentsUi.signing.blindTypedWarning'),
 		warnEthSign: k('componentsUi.signing.ethSignWarning'),
@@ -1194,6 +1196,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
 		balancesTitle: k('componentsUi.signing.balanceChangesTitle'),
+		simChecking: k('componentsUi.funding.checking'),
+		balanceUnverifiedToken: k('componentsUi.signing.balanceUnverifiedToken'),
 		// PR 3 device round: the verdict's quiet line, by the key the core names.
 		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
 		balancesMatchHero: k('componentsUi.signing.balanceMatchesHero'),

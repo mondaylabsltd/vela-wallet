@@ -12,8 +12,9 @@
  *
  * Chain and relay are stubbed per call; nothing leaves the machine.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import { speedDefaults, type Speed } from './core-facts';
 import { en, seedSignedIn } from './live-helpers';
 import {
 	abiWord,
@@ -21,6 +22,7 @@ import {
 	denyOffOrigin,
 	encodeAggregate3Result,
 	happyRelay,
+	readKv,
 	seedNetworkOverrides,
 	stubChainRegistry,
 	stubJsonRpc,
@@ -166,20 +168,33 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	page
 }) => {
 	const sent: unknown[][] = [];
+	// How many times the relay has been asked to price the operation.
+	let priced = 0;
 	await stubChain(page);
 	await stubRelay(page, RELAY, (method, params) => {
 		if (method === 'eth_sendUserOperation') sent.push(params);
+		if (method === 'eth_estimateUserOperationGas') priced += 1;
 		return tieredRelay(() => 'pending')(method, params);
 	});
 	await enterWallet(page);
 	await fillForm(page);
 
+	// The speed a send starts at when nobody chose one is the CORE's to say
+	// (`fee_tier_pref::FACTORY_DEFAULT`) — asked of the core, not restated
+	// here: this test said "fast" for days after the core said "standard".
+	const { factory } = await speedDefaults();
+	// The pick that is a MOVE: a speed that is neither the default nor Slow
+	// (which the second pick below goes to).
+	const other: Speed = factory === 'fast' ? 'standard' : 'fast';
+	const option = (tier: Speed, pressed: boolean) =>
+		page.getByRole('button', { pressed }).filter({ hasText: en(`send.gasTier.${tier}`) });
+
 	// 1. Folded, and folded on THEIR default — which on a fresh device is the
-	//    factory `fast`, i.e. exactly what every shell did before spec 068.
+	//    factory default.
 	const speed = page.getByRole('button', { expanded: false }).filter({
 		hasText: en('send.feeSpeedLabel')
 	});
-	await expect(speed).toContainText(en('send.gasTier.fast'));
+	await expect(speed).toContainText(en(`send.gasTier.${factory}`));
 	await expect(page.getByText(en('send.feeSpeedOnce'))).toBeHidden();
 
 	// 2. Opened: three options, named by what they buy, each with its OWN fee.
@@ -187,60 +202,115 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	//    has to be visibly cheaper here or the figures are not really per-tier.
 	await speed.click();
 	await expect(page.getByText(en('send.feeSpeedOnce'))).toBeVisible();
-	const economy = page.getByRole('button', { pressed: false }).filter({
-		hasText: en('send.gasTier.slow')
-	});
-	await expect(economy).toContainText('ETH', { timeout: 30_000 });
-	const fastFee = await page
-		.getByRole('button', { pressed: true })
-		.filter({ hasText: en('send.gasTier.fast') })
-		.textContent();
-	const slowFee = await economy.textContent();
-	expect(fastFee, 'the option in force shows a figure').toMatch(/[\d.]+\s*ETH/);
-	expect(slowFee).toMatch(/[\d.]+\s*ETH/);
+	// The default is the one in force, and no other is.
+	await expect(option(factory, true)).toHaveCount(1);
+	await expect(page.getByRole('button', { pressed: true })).toHaveCount(1);
+	const economy = option('slow', factory === 'slow');
+	/**
+	 * An option's words once it holds a figure. An option says "…" while it is
+	 * measured, and can say it again after it has shown a figure: one look
+	 * read NaN here with all three at "…" under a fee row still at 0.0009 ETH.
+	 * A figure is read when it is there, not at the instant the test looks.
+	 */
+	const figure = async (shown: Locator, what: string): Promise<string> => {
+		let text = '';
+		await expect
+			.poll(async () => (text = (await shown.textContent()) ?? ''), {
+				timeout: 30_000,
+				message: what
+			})
+			.toMatch(/[\d.]+\s*ETH/);
+		return text;
+	};
+	const fastFee = await figure(option('fast', factory === 'fast'), 'Fast shows a figure');
+	const slowFee = await figure(economy, 'Slow shows a figure');
+	const defaultFee = await figure(option(factory, true), 'the option in force shows a figure');
 	const coin = (text: string | null) => Number(/([\d.]+)\s*ETH/.exec(text ?? '')?.[1] ?? 'NaN');
 	expect(coin(slowFee), 'Slow really is cheaper than Fast').toBeLessThan(coin(fastFee));
 
-	const standardFee = await page
-		.getByRole('button', { pressed: false })
-		.filter({ hasText: en('send.gasTier.standard') })
-		.textContent();
+	const otherFee = await figure(option(other, false), 'the other speed shows a figure');
+	expect(coin(otherFee), 'the pick below really is another price').not.toBeCloseTo(
+		coin(defaultFee),
+		12
+	);
 
 	// The row as it stands BEFORE any pick, so what follows is a move and not
 	// a coincidence.
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
-	expect(coin(await feeRow.textContent()), 'the row starts at the default tier').toBeCloseTo(
-		coin(fastFee),
-		12
-	);
+	await expect
+		.poll(async () => coin(await feeRow.textContent()), {
+			timeout: 30_000,
+			message: 'the row starts at the default tier'
+		})
+		.toBeCloseTo(coin(defaultFee), 12);
 
-	// 3. Pick Standard. The control folds, the summary says what this send is
-	//    now running at — AND THE MONEY MOVES WITH THE NAME. That last part is
+	// 3. Pick another speed. The control folds, the summary says what this send
+	//    is now running at — AND THE MONEY MOVES WITH THE NAME. That last part is
 	//    the assertion the rest of this file cannot make: the caption above and
 	//    the wire below are both satisfied by Continue's pre-check, which
 	//    re-quotes unconditionally on its way to the confirm, so a picker that
 	//    renamed the row without re-pricing it would pass everything else here
-	//    while the person read Fast's money under another tier's name for two
-	//    whole screens.
-	await page
-		.getByRole('button', { pressed: false })
-		.filter({ hasText: en('send.gasTier.standard') })
-		.click();
-	await expect(speed).toContainText(en('send.gasTier.standard'));
+	//    while the person read the default's money under another tier's name
+	//    for two whole screens.
+	await option(other, false).click();
+	await expect(speed).toContainText(en(`send.gasTier.${other}`));
 	await expect
 		.poll(async () => coin(await feeRow.textContent()), { timeout: 30_000 })
-		.toBeCloseTo(coin(standardFee), 12);
+		.toBeCloseTo(coin(otherFee), 12);
 
 	// 3b. And again, from a form whose estimate has now DEFINITELY settled —
 	//     which is the case the first pick cannot cover. `form_estimate_key` in
 	//     the send core is token | payee | fee-coin and knows nothing about a
 	//     speed, so anything that re-prices by re-asking the core for the same
 	//     three is a no-op from here on, and only the second pick says so.
+	// A row that shows a figure IS a settled quote, and a tap on it promotes —
+	// measured: tapped 123 ms after the control reopened, the fee row went
+	// straight to the tapped figure and the relay was asked nothing. What this
+	// step tripped over, 5 runs in 120 on an idle machine, is the form's own
+	// quote. The send core asks it twice: once when the form is complete, and
+	// again `FORM_ESTIMATE_DEBOUNCE_MS` (400 ms) after that answer lands — the
+	// first answer names the fee coin, which is part of what the quote is
+	// about (`form_estimate_key`). While that second question is out, nothing
+	// can be promoted: every row says "…", the session in force is measuring,
+	// and a pick made then is rightly priced by asking — the fee row says "…"
+	// in between. The test tapped 53 ms after reopening; the question left 20
+	// ms later.
+	//
+	// So the row is tapped once the form has finished asking: the relay has
+	// priced the operation twice, nothing is still out, the row holds a figure
+	// — and all of that is still so two painted frames on. (Counted from the
+	// start, not from the reopening: on a slow machine the second question
+	// has come and gone before the control is opened again.)
+	const FORM_QUOTES = 2;
+	const asking = new Set<unknown>();
+	page.on('request', (request) => {
+		if (RELAY.test(request.url()) || request.url().startsWith(STUB)) asking.add(request);
+	});
+	page.on('requestfinished', (request) => asking.delete(request));
+	page.on('requestfailed', (request) => asking.delete(request));
 	await speed.click();
 	const economyAgain = page
 		.getByRole('button', { pressed: false })
 		.filter({ hasText: en('send.gasTier.slow') });
-	await expect(economyAgain).toContainText('ETH', { timeout: 30_000 });
+	const quoted = async () =>
+		priced >= FORM_QUOTES &&
+		asking.size === 0 &&
+		/[\d.]+\s*ETH/.test((await economyAgain.textContent()) ?? '');
+	await expect
+		.poll(
+			async () => {
+				if (!(await quoted())) return false;
+				await page.evaluate(
+					() =>
+						new Promise<void>((painted) =>
+							requestAnimationFrame(() => requestAnimationFrame(() => painted()))
+						)
+				);
+				return quoted();
+			},
+			{ timeout: 30_000, message: 'the form has asked its quote twice, and nothing is out' }
+		)
+		.toBe(true);
 
 	// Everything the fee row says from the tap onward (issue 681).
 	//
@@ -286,12 +356,11 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	const fastOption = page
 		.getByRole('button', { pressed: false })
 		.filter({ hasText: en('send.gasTier.fast') });
-	await expect(fastOption).toContainText('ETH', { timeout: 30_000 });
-	const reopenedFast = await fastOption.textContent();
-	const reopenedSlow = await page
-		.getByRole('button', { pressed: true })
-		.filter({ hasText: en('send.gasTier.slow') })
-		.textContent();
+	const reopenedFast = await figure(fastOption, 'Fast shows a figure again');
+	const reopenedSlow = await figure(
+		page.getByRole('button', { pressed: true }).filter({ hasText: en('send.gasTier.slow') }),
+		'the tier in force shows a figure again'
+	);
 	expect(coin(reopenedSlow), 'the tier in force still shows its own fee').toBeCloseTo(
 		coin(slowFee),
 		12
@@ -351,17 +420,22 @@ test('every speed says the gas price it buys, from the relay row to the screen',
 		hasText: en('send.feeSpeedLabel')
 	});
 	await speed.click();
-	const option = (tier: 'fast' | 'standard' | 'slow', selected: boolean) =>
-		page.getByRole('button', { pressed: selected }).filter({ hasText: en(`send.gasTier.${tier}`) });
+	// Which option is the one in force is the core's default, and is not what
+	// this test is about: each speed is found by its name, whichever is pressed.
+	const { factory } = await speedDefaults();
+	const option = (tier: Speed) =>
+		page
+			.getByRole('button', { pressed: tier === factory })
+			.filter({ hasText: en(`send.gasTier.${tier}`) });
 
-	await expect(option('slow', false)).toContainText('ETH', { timeout: 30_000 });
+	await expect(option('slow')).toContainText('ETH', { timeout: 30_000 });
 	// `base + this tier's signed tip`, never the cap the relay submits at: the
 	// chain charges the first and never the second.
-	await expect(option('fast', true)).toContainText('3.5 gwei');
-	await expect(option('standard', false)).toContainText('2.5 gwei');
-	await expect(option('slow', false)).toContainText('1.5 gwei');
+	await expect(option('fast')).toContainText('3.5 gwei', { timeout: 30_000 });
+	await expect(option('standard')).toContainText('2.5 gwei');
+	await expect(option('slow')).toContainText('1.5 gwei');
 	// The figure is named for anyone listening, and the name is the corpus's.
-	await expect(option('fast', true)).toContainText(en('send.gasPriceLabel'));
+	await expect(option('fast')).toContainText(en('send.gasPriceLabel'));
 });
 
 /**
@@ -411,15 +485,19 @@ test('every speed says its gas price as bid ~ cap, from the relay row to the scr
 		.getByRole('button', { expanded: false })
 		.filter({ hasText: en('send.feeSpeedLabel') })
 		.click();
-	const option = (tier: 'fast' | 'standard' | 'slow', selected: boolean) =>
-		page.getByRole('button', { pressed: selected }).filter({ hasText: en(`send.gasTier.${tier}`) });
+	// Each speed by its name, whichever the core's default has pressed.
+	const { factory } = await speedDefaults();
+	const option = (tier: Speed) =>
+		page
+			.getByRole('button', { pressed: tier === factory })
+			.filter({ hasText: en(`send.gasTier.${tier}`) });
 
-	await expect(option('slow', false)).toContainText('ETH', { timeout: 30_000 });
+	await expect(option('slow')).toContainText('ETH', { timeout: 30_000 });
 	// Low end `base + signed tip`, high end the cap — never `base + cap + tip`,
 	// which would be 3.7 / 3.25 / 2.7 gwei, above anything the chain can charge.
-	await expect(option('fast', true)).toContainText('1.2 ~ 3.2 gwei');
-	await expect(option('standard', false)).toContainText('1.13 ~ 2.13 gwei');
-	await expect(option('slow', false)).toContainText('1.1 ~ 1.6 gwei');
+	await expect(option('fast')).toContainText('1.2 ~ 3.2 gwei', { timeout: 30_000 });
+	await expect(option('standard')).toContainText('1.13 ~ 2.13 gwei');
+	await expect(option('slow')).toContainText('1.1 ~ 1.6 gwei');
 });
 
 /**
@@ -461,11 +539,12 @@ test('a send nobody touched the speed of names the default out loud', async ({ p
 	await enterWallet(page);
 	await fillForm(page);
 
-	// Issue 686 rule 1, on the route itself: the factory default IS the
-	// fastest, so a free upgrade has nothing to ask about and nothing is priced
-	// beside the fee in force. One refresh, one quote. (Since spec 078 a tier
-	// priced alongside shares that one simulation too — see the A test below.)
-	expect(await quotesPerRefresh(page, () => estimates), 'no quote beside the fee in force').toBe(1);
+	// One refresh, one simulation — whatever the default is. Where the default
+	// is the fastest speed nothing is priced beside the fee in force (issue 686
+	// rule 1: a free upgrade has nothing to ask about); where it is not, the
+	// one speed priced beside it shares the same relay estimate (spec 078 —
+	// the operation is identical whatever the speed; see the A test below).
+	expect(await quotesPerRefresh(page, () => estimates), 'one simulation per refresh').toBe(1);
 
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
@@ -478,10 +557,13 @@ test('a send nobody touched the speed of names the default out loud', async ({ p
 	await expect(page.getByText(en('send.txSubmittedTitle'))).toBeVisible({ timeout: 30_000 });
 
 	expect(sent).toHaveLength(1);
-	// Named, not omitted. An absent tier leaves the relay at its own pace,
-	// which is NOT the same thing as `fast` — being explicit is what makes the
-	// screen and the chain agree.
-	expect(sent[0][2]).toBe('fast');
+	// Named, not omitted — and the name is the core's default, asked of the
+	// core. An absent tier leaves the relay at its own pace, which is NOT the
+	// same thing as the speed the form showed — being explicit is what makes
+	// the screen and the chain agree.
+	const { factory } = await speedDefaults();
+	expect(sent[0]).toHaveLength(3);
+	expect(sent[0][2]).toBe(factory);
 });
 
 test('the refresh really measures again, and says it is doing so', async ({ page }) => {
@@ -524,16 +606,20 @@ test.describe('the stored default', () => {
 		await page.getByText(en('settings.sections.advanced'), { exact: true }).click();
 		const row = page.getByText(en('settings.advanced.feeSpeedTitle'), { exact: true });
 		await expect(row).toBeVisible();
-		// Fresh device: the factory default, so nothing about a send changes
-		// until somebody deliberately changes it.
-		await expect(page.getByText(en('send.gasTier.fast'), { exact: true })).toBeVisible();
+		// Fresh device: the factory default — the core's, asked of the core — so
+		// nothing about a send changes until somebody deliberately changes it.
+		const { factory } = await speedDefaults();
+		expect(factory, 'this test picks Slow as the CHANGE').not.toBe('slow');
+		await expect(page.getByText(en(`send.gasTier.${factory}`), { exact: true })).toBeVisible();
 
 		await row.click();
 		await expect(page.getByText(en('settings.feeSpeed.subtitle'))).toBeVisible();
 		await page.getByText(en('send.gasTier.slow'), { exact: true }).click();
 		await expect(page.getByText(en('send.gasTier.slow'), { exact: true })).toBeVisible();
 
-		// A preference that does not survive was never set.
+		// A preference that does not survive was never set. Asked once it has
+		// been written: the core shows the choice and writes it behind.
+		await expect.poll(() => readKv(page, 'vela.feeTier')).toBe('slow');
 		await page.reload();
 		await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 		await page.getByText(en('settings.sections.advanced'), { exact: true }).click();
@@ -1075,14 +1161,15 @@ test('a dApp send closed after approving is still answered, and no landing comes
  * the fee, and not at the sheet's own simulation: a person could confirm
  * before the one part of the sheet a site cannot write was on screen. Here,
  * on the real machines, with a node that is asked to simulate and holds its
- * answer: the confirm is shut with the core's line under it; at the core's
- * deadline it opens beside the caution that nothing could be checked, in the
- * verdict's place; and through all of it the confirm, in the sheet's foot,
- * does not move.
+ * answer: the confirm is shut with the core's line under it while the
+ * verdict's place — there from the sheet's first frame — says "Checking…";
+ * at the core's deadline it opens beside the caution that nothing could be
+ * checked, in that place; and through all of it neither the confirm, in the
+ * sheet's foot, nor the sheet's own ✕ moves.
  *
  * What comes after the deadline has two endings, and the caution outlives
  * neither wrongly: the pool gives up — "could not check" IS then the verdict,
- * and the caution stays, the same card (it used to leave the sheet at that
+ * and the caution stays, the same line (it used to leave the sheet at that
  * moment, said and taken back over an open confirm); or the node answers
  * after all, and its verdict takes the caution's place. And a node that says
  * at once that it does not offer the simulation draws the caution with no
@@ -1094,22 +1181,29 @@ test('a dApp send closed after approving is still answered, and no landing comes
 
 /**
  * What stands in the sheet's foot and in its verdict's place right now: can
- * the confirm be pressed, the line shown under it, and what the
- * balance-changes card says.
+ * the confirm be pressed, the line shown under it, what the place SAYS — the
+ * balance card's line ("Checking…", "No asset changes") or the core's notice
+ * — and where the confirm and the sheet's ✕ are.
  */
 async function verdictPlace(page: Page) {
 	return page.evaluate(() => {
 		const sheet = document.querySelector('[role="dialog"]');
 		const confirm = sheet?.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]');
 		const line = sheet?.querySelector<HTMLElement>('.confirm-note');
+		// What is said, never a room: a room is laid out and holds no words.
+		const said = sheet?.querySelector('[data-testid="signing-verdict"] .said');
+		const close = sheet?.querySelector('header.header .close');
 		return {
 			disabled: confirm ? confirm.disabled : true,
 			line:
 				line && getComputedStyle(line).visibility !== 'hidden'
 					? (line.textContent?.trim() ?? '')
 					: null,
-			said: sheet?.querySelector('section.balances .note')?.textContent?.trim() ?? null,
-			top: confirm ? confirm.getBoundingClientRect().top : null
+			said:
+				(said?.querySelector('.banner p') ?? said?.querySelector('.note'))?.textContent?.trim() ??
+				null,
+			top: confirm ? confirm.getBoundingClientRect().top : null,
+			close: close ? close.getBoundingClientRect().top : null
 		};
 	});
 }
@@ -1123,6 +1217,8 @@ async function verdictPlace(page: Page) {
 async function waitsForTheVerdict(page: Page): Promise<'held' | 'cautioned'> {
 	const checking = en('componentsUi.signing.confirmBlock.simChecking');
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
+	// What the place says while the simulation is out.
+	const out = en('componentsUi.funding.checking');
 	expect(checking).toBe('Checking what this transaction does…');
 	let rested: 'held' | 'cautioned' | null = null;
 	const looks: string[] = [];
@@ -1131,14 +1227,14 @@ async function waitsForTheVerdict(page: Page): Promise<'held' | 'cautioned'> {
 			async () => {
 				const now = await verdictPlace(page);
 				looks.push(JSON.stringify(now));
-				if (now.disabled && now.line === checking && now.said === null) rested = 'held';
+				if (now.disabled && now.line === checking && now.said === out) rested = 'held';
 				else if (!now.disabled && now.said === couldNot) rested = 'cautioned';
 				return rested;
 			},
 			{ timeout: 25_000, intervals: [100] }
 		)
 		.not.toBeNull();
-	// Open, and nothing in the verdict's place: never, in any look.
+	// Open over "Checking…", or over nothing at all: never, in any look.
 	const open = looks.filter((look) => {
 		const now = JSON.parse(look) as { disabled: boolean; said: string | null };
 		return !now.disabled && now.said !== couldNot;
@@ -1240,14 +1336,15 @@ async function raiseSimulated(
 	return node;
 }
 
-/** Where the confirm rests: the same place twice running. */
-async function restingTop(page: Page): Promise<number> {
-	let last = -1;
+/** Where the confirm and the sheet's ✕ rest: the same places twice running. */
+async function restingTop(page: Page): Promise<{ top: number; close: number }> {
+	let last = { top: -1, close: -1 };
 	await expect
 		.poll(
 			async () => {
-				const now = (await verdictPlace(page)).top ?? -1;
-				const still = now === last;
+				const look = await verdictPlace(page);
+				const now = { top: look.top ?? -1, close: look.close ?? -1 };
+				const still = now.top === last.top && now.close === last.close;
 				last = now;
 				return still;
 			},
@@ -1260,10 +1357,14 @@ async function restingTop(page: Page): Promise<number> {
 /**
  * Look at the sheet again and again until `over()` — and in every look the
  * confirm can be pressed, no line stands under it, the caution is in the
- * verdict's place, and the confirm is where it was. What must NOT happen has
- * only a watch to stand on; what ends the watch is a condition.
+ * verdict's place, and the confirm and the ✕ are where they were. What must
+ * NOT happen has only a watch to stand on; what ends the watch is a condition.
  */
-async function cautionStands(page: Page, top: number, over: () => boolean): Promise<number> {
+async function cautionStands(
+	page: Page,
+	at: { top: number; close: number },
+	over: () => boolean
+): Promise<number> {
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
 	let looks = 0;
 	await expect
@@ -1275,7 +1376,8 @@ async function cautionStands(page: Page, top: number, over: () => boolean): Prom
 					disabled: false,
 					line: null,
 					said: couldNot,
-					top
+					top: at.top,
+					close: at.close
 				});
 				return over();
 			},
@@ -1287,7 +1389,7 @@ async function cautionStands(page: Page, top: number, over: () => boolean): Prom
 
 const SCREENS = [
 	['the phone sheet', 390, 844],
-	['the centred card', 1400, 900]
+	['the centred card', 1440, 900]
 ] as const;
 
 for (const [name, width, height] of SCREENS) {
@@ -1298,7 +1400,10 @@ for (const [name, width, height] of SCREENS) {
 			const node = await raiseSimulated(page, { width, height }, 'hold');
 			const confirm = page.getByTestId('signing-confirm');
 			const couldNot = en('componentsUi.signing.simUnavailableWarning');
-			const card = page.locator('[role="dialog"] section.balances');
+			const place = page.locator('[role="dialog"] [data-testid="signing-verdict"]');
+			// What is said in the place: the core's notice, or the balance card.
+			const caution = place.locator('.said .banner');
+			const card = place.locator('.said section.balances');
 
 			// Held, with the line under it — unless this machine was slow enough
 			// for the deadline to pass first, which is the next state, checked below.
@@ -1306,18 +1411,21 @@ for (const [name, width, height] of SCREENS) {
 			const linePresent = first === 'held' ? await restingTop(page) : null;
 			if (first === 'held') await page.screenshot({ path: testInfo.outputPath('held.png') });
 
-			// The deadline: the caution lands, the confirm opens, the line is gone.
-			await expect(card).toContainText(couldNot, { timeout: 20_000 });
-			await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
-			await expect(card).toHaveAttribute('data-verdict', '');
+			// The deadline: the caution lands — the banner the phones draw, in
+			// the place — the confirm opens, the line is gone.
+			await expect(caution).toContainText(couldNot, { timeout: 20_000 });
+			await expect(caution).toHaveAttribute('data-tone', 'caution');
+			await expect(place).toHaveAttribute('data-stage', 'landed');
+			await expect(place.locator('.said')).toHaveAttribute('data-verdict', '');
+			await expect(card).toHaveCount(0);
 			await expect(confirm).toBeEnabled();
 			expect((await verdictPlace(page)).line).toBeNull();
 			const lineAbsent = await restingTop(page);
 			await expect(confirm).toBeInViewport({ ratio: 1 });
-			await expect(card).toBeInViewport({ ratio: 1 });
+			await expect(caution).toBeInViewport({ ratio: 1 });
 			await page.screenshot({ path: testInfo.outputPath('cautioned.png') });
 
-			let after: number;
+			let after: { top: number; close: number };
 			if (ending === 'the pool gives up') {
 				// Every request to the node fails from here on. The pool tries it
 				// again, and then stops asking: it has given up, and the read
@@ -1332,9 +1440,9 @@ for (const [name, width, height] of SCREENS) {
 				);
 				expect(looks).toBeGreaterThan(10);
 				expect(node.asked).toBeGreaterThanOrEqual(askedBefore);
-				await expect(card).toHaveCount(1);
-				await expect(card).toContainText(couldNot);
-				await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
+				await expect(caution).toHaveCount(1);
+				await expect(caution).toContainText(couldNot);
+				await expect(caution).toHaveAttribute('data-tone', 'caution');
 				after = await restingTop(page);
 				await page.screenshot({ path: testInfo.outputPath('gave-up.png') });
 			} else {
@@ -1352,10 +1460,12 @@ for (const [name, width, height] of SCREENS) {
 
 			testInfo.annotations.push({
 				type: 'confirm-top',
-				description: `${width}x${height}, ${ending}: line present ${linePresent}, at the deadline ${lineAbsent}, after ${after}`
+				description: `${width}x${height}, ${ending}: line present ${JSON.stringify(linePresent)}, at the deadline ${JSON.stringify(lineAbsent)}, after ${JSON.stringify(after)}`
 			});
-			if (linePresent !== null) expect(lineAbsent).toBe(linePresent);
-			expect(after).toBe(lineAbsent);
+			// The confirm AND the sheet's ✕: the place was there from the first
+			// frame, so neither the caution nor the verdict moved the sheet's top.
+			if (linePresent !== null) expect(lineAbsent).toEqual(linePresent);
+			expect(after).toEqual(lineAbsent);
 		});
 	}
 }
@@ -1367,11 +1477,13 @@ test('a node that does not offer the simulation: the caution is on the sheet, an
 	const firstAsked = node.lastAskedAt;
 	const confirm = page.getByTestId('signing-confirm');
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
-	const card = page.locator('[role="dialog"] section.balances');
+	const place = page.locator('[role="dialog"] [data-testid="signing-verdict"]');
+	const caution = place.locator('.said .banner');
 
-	await expect(card).toContainText(couldNot, { timeout: 20_000 });
-	await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
-	await expect(card.locator('.row')).toHaveCount(0);
+	await expect(caution).toContainText(couldNot, { timeout: 20_000 });
+	await expect(caution).toHaveAttribute('data-tone', 'caution');
+	// The notice, and no balance card: nothing was checked, so nothing is listed.
+	await expect(place.locator('.said section.balances')).toHaveCount(0);
 	// The fee has its say, then the confirm opens: nothing else holds it.
 	await expect(confirm).toBeEnabled({ timeout: 30_000 });
 	const top = await restingTop(page);
@@ -1381,10 +1493,10 @@ test('a node that does not offer the simulation: the caution is on the sheet, an
 	// long. Watched well past it: the caution neither goes nor is drawn anew.
 	const looks = await cautionStands(page, top, () => Date.now() - firstAsked > 7_000);
 	expect(looks).toBeGreaterThan(5);
-	await expect(card).toHaveCount(1);
+	await expect(caution).toHaveCount(1);
 	await expect(confirm).toBeInViewport({ ratio: 1 });
 	testInfo.annotations.push({
 		type: 'confirm-top',
-		description: `390x844, not offered: ${top} throughout (${looks} looks)`
+		description: `390x844, not offered: ${JSON.stringify(top)} throughout (${looks} looks)`
 	});
 });
