@@ -10024,7 +10024,7 @@ dependencies = [
 
 [[package]]
 name = "vela-wallet"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "block2 0.5.1",
  "btleplug",

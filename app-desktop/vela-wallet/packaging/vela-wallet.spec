@@ -87,6 +87,24 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Mon Oct 12 2026 Monday Labs <hello@getvela.app> - 0.9.8-1
+- Pre-release: Fees on Ethereum are several times lower: the wallet pays the
+  relay's price for the gas it actually bills, and Standard is the default
+  speed. Each account chooses where its transactions are reviewed and signed: in
+  Vela, or on a trusted signing page that is checked against Vela's published
+  builds before it opens. The signing sheet confirms with a tap, no longer jumps
+  as the fee arrives, and on the web lists what a transaction moves before you
+  sign. Tapping Explore lands on its home, where your open tabs resume without a
+  reload, and on a phone the wallet stays one tap away while you browse. The
+  balance has a manual refresh on every platform. Hide balance now hides every
+  money figure, the account switcher's included. A second send waits for the
+  first to land instead of being dropped, and an old receipt is no longer shown
+  under Today. Home shows the three newest activities, every recipient row can
+  scan a code, and a contact's page offers Send. On iPhone, switching account
+  switches the whole home, and signing for a dApp no longer sticks on "Can't
+  reach" after a change in Settings. Custom Explore groups are gone; Favorites
+  and Recent stay, and nothing you pinned is lost.
+
 * Thu Oct 08 2026 Monday Labs <hello@getvela.app> - 0.9.7-1
 - Pre-release: dApp browser tabs keep their page when you switch between them
   (on desktop, no reload), and close the way a browser's do: others, to the
