@@ -44,7 +44,7 @@
 
 import { dayStartMs, syncReceivedTransfers } from '$lib/services/activity';
 import { hapticSuccess } from '$lib/services/platform';
-import { deleteTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
+import { forgetTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import type { LocalTransaction } from '$lib/services/transactions-model';
@@ -416,7 +416,7 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 				// `incoming-transfers.web.ts`) and already answers 0 on any failure.
 				return { type: 'sync_completed', new_count: asCount(await scanOnce(operation.address)) };
 			case 'delete_tx_record':
-				await deleteTransaction(operation.id);
+				await forgetTransaction(operation.id);
 				return { type: 'delete_committed', id: operation.id };
 			case 'resolve_recipient_identity': {
 				// The user's OWN accounts first — a local name, no network at all

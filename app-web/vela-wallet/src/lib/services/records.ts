@@ -98,12 +98,42 @@ export async function mergeTransactions(incoming: LocalTransaction[]): Promise<n
 	return withTxLock(async () => {
 		const existing = await loadTransactions();
 		const ids = new Set(existing.map((t) => t.id));
-		const fresh = incoming.filter((t) => !ids.has(t.id));
+		// …and what the person deleted: a scan finding the transfer again does
+		// not bring it back (incoming ids are `${chainId}-${txHash}-${logIndex}`).
+		const deleted = new Set(await loadArray<string>(DELETED_KEY));
+		const fresh = incoming.filter((t) => !ids.has(t.id) && !deleted.has(t.id));
 		if (fresh.length === 0) return 0;
 		const merged = [...fresh, ...existing].sort((a, b) => b.timestamp - a.timestamp);
 		if (merged.length > TX_CAP) merged.length = TX_CAP;
 		await setItem(TX_KEY, JSON.stringify(merged));
 		return fresh.length;
+	});
+}
+
+/**
+ * The records the person deleted, by id, newest first — so a scan does not
+ * merge them back. Part of the `transactions` storage item (clearing the
+ * history clears it; `storage_catalog.rs`).
+ */
+const DELETED_KEY = 'vela.deletedTransactions';
+const DELETED_CAP = 1000;
+
+/**
+ * The person's "Delete record" (the feed's `DeleteTxRecord`). `id` names a
+ * feed row: a record, or — for a folded batch row — its operation's hash, so
+ * every record of that operation goes. What goes is remembered as deleted.
+ */
+export async function forgetTransaction(id: string): Promise<void> {
+	return withTxLock(async () => {
+		const txs = await loadTransactions();
+		const hash = id.toLowerCase();
+		const gone = txs.filter((t) => t.id === id || t.userOpHash?.toLowerCase() === hash);
+		if (gone.length === 0) return;
+		const goneIds = new Set(gone.map((t) => t.id));
+		await setItem(TX_KEY, JSON.stringify(txs.filter((t) => !goneIds.has(t.id))));
+		const before = await loadArray<string>(DELETED_KEY);
+		const remembered = [...new Set([...goneIds, ...before])].slice(0, DELETED_CAP);
+		await setItem(DELETED_KEY, JSON.stringify(remembered));
 	});
 }
 
