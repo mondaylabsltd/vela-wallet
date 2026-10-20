@@ -45,5 +45,10 @@ export type SettingsPrefEvent =
 	 * only — no core: the phone and desktop apps carry no analytics).
 	 */
 	| { kind: 'analytics'; on: boolean }
+	/** Spec 103: the AI agent — on/off, the bridge's address, the wallet's token. */
+	| { kind: 'agent'; on: boolean }
+	| { kind: 'agent-url'; value: string }
+	| { kind: 'agent-token'; value: string }
+	| { kind: 'agent-grant'; on: boolean }
 	/** The destructive one, confirmed. */
 	| { kind: 'erase' };

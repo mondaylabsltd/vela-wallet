@@ -156,6 +156,12 @@ export type SettingsPageId =
 	| 'signing-venue'
 	/** Spec 102 — the signing pages this device trusts (Settings → Signing pages). */
 	| 'signing-pages'
+	/**
+	 * Spec 103 — the AI agent: whether this wallet answers a remote agent
+	 * through a ClientMCP bridge, and which bridge. Web only, so the route adds
+	 * its row and nav entry; the fixtures draw neither.
+	 */
+	| 'agent'
 	| 'about';
 
 /**
@@ -380,6 +386,8 @@ export interface UrlFieldModel {
 	badge?: StatusPillModel;
 	/** SR2's field is outlined in the tone of its state. */
 	tone?: 'default' | 'error' | 'success';
+	/** A credential: drawn masked. */
+	secret?: boolean;
 }
 
 export interface NetworkDetailModel {
@@ -530,6 +538,23 @@ export interface SwitchRowModel {
 	title: string;
 	subtitle: string;
 	on: boolean;
+}
+
+/** Spec 103: Settings → AI agent, built by the route from what is stored and the live connection. */
+export interface AgentPanelModel {
+	title: string;
+	description: string;
+	enable: SwitchRowModel;
+	bridge: UrlFieldModel;
+	token: UrlFieldModel;
+	/** The connection, as the bridge last said. */
+	status: StatusPillModel;
+	/** Where the agent connects, derived from the bridge address — absent until it parses. */
+	endpoint?: { label: string; value: string; hint: string };
+	/** The control the agent pressed last. */
+	lastAction?: { label: string; value: string };
+	/** Whether the agent may confirm transfers (the passkey still signs) — while it is on. */
+	grant?: SwitchRowModel;
 }
 
 export interface AboutModel {

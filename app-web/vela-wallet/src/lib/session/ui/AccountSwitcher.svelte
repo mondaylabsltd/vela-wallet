@@ -22,6 +22,7 @@
 	import { liveAccountsSheet, switcherBalances } from '$lib/settings/live';
 	import type { SettingsMessages } from '$lib/settings/messages';
 	import { session } from '$lib/session/core/session.svelte';
+	import { intents } from '$lib/intents/index.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
@@ -72,7 +73,8 @@
 
 	function select(position: number): void {
 		const row = view.accounts[position];
-		if (row !== undefined) session.switchAccount(row.index);
+		if (row !== undefined)
+			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 		onclose();
 	}
 
@@ -83,7 +85,8 @@
 	 */
 	function remove(position: number): void {
 		const row = view.accounts[position];
-		if (row !== undefined) session.removeAccount(row.index);
+		if (row !== undefined)
+			void intents.invoke('person', { type: 'remove_wallet', address: row.account.address });
 		onclose();
 	}
 </script>

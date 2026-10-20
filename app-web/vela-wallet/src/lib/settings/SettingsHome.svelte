@@ -20,6 +20,7 @@
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
+		AgentPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsHomeModel,
@@ -31,6 +32,7 @@
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import TabBar from '$lib/wallet/ui/TabBar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
+	import AgentPanel from './ui/AgentPanel.svelte';
 	import AccountRow from './ui/AccountRow.svelte';
 	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
@@ -89,6 +91,11 @@
 		 */
 		analytics?: SwitchRowModel;
 		/**
+		 * Spec 103: Settings → AI agent, with its live state — web only, so the
+		 * route adds the row that opens it. Absent in the gallery.
+		 */
+		agent?: AgentPanelModel;
+		/**
 		 * The account switcher (spec 028 Phase 8). A row is picked by its
 		 * POSITION in the sheet — the session's own order — and the two buttons
 		 * leave for the create and sign-in journeys. Absent in the gallery.
@@ -137,6 +144,7 @@
 		onstorageclear,
 		onprefevent,
 		analytics,
+		agent,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
@@ -175,7 +183,8 @@
 		about: 'about',
 		// Spec 102: the account's venue, and the pages this device trusts.
 		'signing-venue': 'signing-venue',
-		'signing-pages': 'signing-pages'
+		'signing-pages': 'signing-pages',
+		agent: 'agent'
 	};
 
 	const OVERLAY_OF: Partial<Record<string, SettingsOverlayId>> = {
@@ -203,6 +212,23 @@
 		}
 		const sheet = OVERLAY_OF[id];
 		if (sheet !== undefined) overlay = sheet;
+	}
+
+	/** The phone draws these as sections of its own list, not pages. */
+	const SECTIONS_OF_HOME = new Set(['account', 'appearance', 'localization', 'community']);
+
+	/**
+	 * Open a settings page by name (spec 103's `show`): the row the person taps
+	 * for it. A page the phone draws as a section of this list opens the list.
+	 * `false` when the phone has no such page.
+	 */
+	export function open(id: string): boolean {
+		if (PAGE_OF[id] === undefined && OVERLAY_OF[id] === undefined && !SECTIONS_OF_HOME.has(id))
+			return false;
+		close();
+		page = 'home';
+		if (!SECTIONS_OF_HOME.has(id)) selectRow(id);
+		return true;
 	}
 
 	function close() {
@@ -248,6 +274,8 @@
 				return { title: model.storage.title, subtitle: model.storage.subtitle };
 			case 'about':
 				return { title: model.about.title, subtitle: undefined };
+			case 'agent':
+				return agent && { title: agent.title, subtitle: undefined };
 			case 'signing-venue':
 				return model.venue && { title: model.venue.title, subtitle: model.venue.subtitle };
 			case 'signing-pages':
@@ -521,6 +549,14 @@
 						panel={model.about}
 						{analytics}
 						onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+					/>
+				{:else if page === 'agent' && agent !== undefined}
+					<AgentPanel
+						panel={agent}
+						onenable={(on) => onprefevent?.({ kind: 'agent', on })}
+						onbridge={(value) => onprefevent?.({ kind: 'agent-url', value })}
+						ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
+						ongrant={(on) => onprefevent?.({ kind: 'agent-grant', on })}
 					/>
 				{/if}
 			{/if}

@@ -55,6 +55,8 @@
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
+	import { agentSettings, bridgeUrlProblem, mcpEndpoint } from '$lib/agent/settings.svelte';
+	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
 	import {
 		switcherBalances,
 		withLiveAccounts,
@@ -70,14 +72,10 @@
 	} from '$lib/settings/live';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
 	import {
-		clearAllCaches,
-		clearStorageItem,
 		measureDeviceStorage,
 		STORAGE_ITEM_IDS,
-		type DeviceStorageReport,
-		type StorageItemId
+		type DeviceStorageReport
 	} from '$lib/services/device-storage';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import {
 		feedbackLabels,
 		themeFromSegment,
@@ -89,10 +87,13 @@
 		withLivePreferences,
 		withLivePreferencesDesktop
 	} from '$lib/settings/live';
-	import { preferences } from '$lib/services/preferences.svelte';
+	import { preferences, TEXT_SCALE_LEVELS } from '$lib/services/preferences.svelte';
+	import { intents } from '$lib/intents/index.svelte';
+	import { screenDesk } from '$lib/flows/screen-desk.svelte';
+	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
+	import type { IntentPreference } from '$lib/core/generated/IntentPreference';
 	import { loadCurrencyCodes } from '$lib/settings/core/currency-catalog';
-	import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
-	import { eraseDeviceData } from '$lib/services/erase-device';
+	import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 	import {
 		AREA_OTHER,
 		buildBugReport,
@@ -109,7 +110,6 @@
 	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
 	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { packagedHref } from '$lib/extension/page-url';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -179,6 +179,9 @@
 		void balance.boot();
 		preferences.boot();
 		analyticsConsent.boot();
+		agentSettings.boot();
+		// The root layout dialled already when it was on; this only learns of the connection.
+		if (agentSettings.enabled) syncAgent();
 		void refreshGrants();
 		void refreshStorage();
 		void loadCurrencyCodes().then((codes) => (currencyCodes = codes));
@@ -313,6 +316,22 @@
 	 */
 	const feeQuote = new FeeQuote();
 	onMount(() => () => feeQuote.dispose());
+
+	let desktopSettings = $state<SettingsDesktop | undefined>();
+	let phoneSettings = $state<SettingsHome | undefined>();
+
+	/** A settings page by name, for the intents (spec 103): the layout's own nav. */
+	async function present(screen: IntentScreen): Promise<string | null> {
+		if (screen.type !== 'settings' || screen.page === null) return null;
+		const layout = () => (wide.current ? desktopSettings : phoneSettings);
+		const deadline = Date.now() + 5_000;
+		while (layout() === undefined && Date.now() < deadline)
+			await new Promise((done) => setTimeout(done, 50));
+		const shown = layout();
+		if (shown === undefined) return 'settings did not open';
+		return shown.open(screen.page) ? null : 'this layout has no such settings page';
+	}
+	onMount(() => screenDesk.attach(['settings'], present));
 	let backupOpening = false;
 	function startBackup(): void {
 		// What a tap does is the core's (`BackupRow.action`). `retry` — only
@@ -365,36 +384,35 @@
 			case 'theme': {
 				const choice = themeFromSegment(event.id);
 				if (choice !== undefined) {
-					preferences.setTheme(choice);
+					prefer({ kind: 'theme', value: choice });
 					track('setting_theme_changed', { theme: choice });
 				}
 				return;
 			}
 			case 'language': {
 				// `system` unpins and follows the browser again; anything else is a
-				// locale, and on the web a locale is a route.
+				// locale, and on the web a locale is a route (the intent goes there).
 				const chosen = event.id === 'system' ? 'auto' : event.id;
-				preferences.setLanguage(chosen);
 				const target = chosen === 'auto' ? data.locale : chosen;
 				// Before the navigation: the page is about to become another locale's.
 				const locale = SUPPORTED_LOCALES.find((code) => code === target);
 				if (locale !== undefined) track('setting_language_changed', { locale });
-				if (target !== data.locale && SUPPORTED_LOCALES.includes(target as Locale)) {
-					void goto(resolve('/[locale]/settings', { locale: target as Locale }));
-				}
+				prefer({ kind: 'language', value: chosen });
 				return;
 			}
-			case 'text-scale':
-				preferences.setTextScaleIndex(event.index);
+			case 'text-scale': {
+				const level = TEXT_SCALE_LEVELS[event.index]?.key;
+				if (level !== undefined) prefer({ kind: 'text_scale', value: level });
 				return;
+			}
 			case 'number-format':
-				preferences.setNumberFormat(event.id as 'auto');
+				prefer({ kind: 'number_format', value: event.id });
 				return;
 			case 'date-format':
-				preferences.setDateFormat(event.id as 'auto');
+				prefer({ kind: 'date_format', value: event.id });
 				return;
 			case 'time-format':
-				preferences.setTimeFormat(event.id as 'auto');
+				prefer({ kind: 'time_format', value: event.id });
 				return;
 			case 'currency':
 				// One of the two preferences with a core behind it: the committed
@@ -406,7 +424,7 @@
 				// build does not offer is refused there rather than reaching
 				// storage and, later, the relay (which answers -32602).
 				if (event.id === 'fast' || event.id === 'standard' || event.id === 'slow') {
-					feeTierPreference.choose(event.id);
+					prefer({ kind: 'fee_speed', value: event.id });
 					track('setting_fee_speed_changed', { speed: event.id });
 				}
 				return;
@@ -416,7 +434,19 @@
 				if (view.address !== '') session.chooseVenue(view.address, event.venue);
 				return;
 			case 'analytics':
-				analyticsConsent.set(event.on);
+				prefer({ kind: 'analytics', value: event.on });
+				return;
+			case 'agent':
+				configureAgent({ enabled: event.on, bridge_url: null, client_token: null });
+				return;
+			case 'agent-url':
+				configureAgent({ enabled: null, bridge_url: event.value, client_token: null });
+				return;
+			case 'agent-token':
+				configureAgent({ enabled: null, bridge_url: null, client_token: event.value });
+				return;
+			case 'agent-grant':
+				void intents.invoke('person', { type: 'set_agent_grant', submit_transactions: event.on });
 				return;
 			case 'erase':
 				void erase();
@@ -424,9 +454,23 @@
 		}
 	}
 
+	/** A preference, through the intents (spec 103) — the road an agent's takes too. */
+	function prefer(preference: IntentPreference): void {
+		void intents.invoke('person', { type: 'set_preference', preference });
+	}
+
+	/** The agent's own connection: the person's alone (spec 103). */
+	function configureAgent(change: {
+		enabled: boolean | null;
+		bridge_url: string | null;
+		client_token: string | null;
+	}): void {
+		void intents.invoke('person', { type: 'configure_agent', ...change }).then(syncAgent);
+	}
+
 	/** Both layouts' currency pick (the phone's sheet reports it on its own callback). */
 	function chooseCurrency(code: string): void {
-		currency.choose(code);
+		prefer({ kind: 'currency', value: code });
 		track('setting_currency_changed', { currency: code });
 	}
 
@@ -441,18 +485,13 @@
 	 */
 	async function erase(): Promise<void> {
 		eraseFailed = false;
-		try {
-			await eraseDeviceData();
-		} catch (error) {
-			console.error('[erase] incomplete:', error);
+		// On success the intent leaves for the first run (`perform.ts`); a
+		// refusal means data is still here, said in the sheet's own callout.
+		const outcome = await intents.invoke('person', { type: 'erase_device' });
+		if (outcome.status === 'rejected') {
+			console.error('[erase] incomplete:', outcome.reason.detail);
 			eraseFailed = true;
-			return;
 		}
-		// Nothing of this wallet is left to read, so the session machine's own
-		// view is stale by construction: a full reload is the first run — at
-		// the DOCUMENT the welcome is stored as. In the packaged extension a
-		// route path is no file, and `/en` landed on `chrome-error://` (094 S4).
-		location.assign(packagedHref(welcome));
 	}
 
 	/**
@@ -482,19 +521,19 @@
 	 */
 	async function clearRow(id: string): Promise<void> {
 		const isItem = (STORAGE_ITEM_IDS as readonly string[]).includes(id);
-		if (!isItem || id === 'dapps') {
+		if (!isItem) {
 			await disconnect(id);
 			return;
 		}
-		await clearStorageItem(id as Exclude<StorageItemId, 'dapps'>);
-		// The app's address book is resident: it must read the cleared stores
-		// again, or it would show — and re-save — what was just removed.
-		if (id === 'contacts') contactsBook.reload();
+		// The intent clears it — the dApp grants too — and has the resident
+		// address book read the cleared stores again.
+		await intents.invoke('person', { type: 'clear_storage_item', item: id });
+		if (id === 'dapps') await refreshGrants();
 		await refreshStorage();
 	}
 
 	async function clearCaches(): Promise<void> {
-		await clearAllCaches();
+		await intents.invoke('person', { type: 'clear_caches' });
 		await refreshStorage();
 	}
 
@@ -520,7 +559,8 @@
 
 	function selectAccount(position: number): void {
 		const row = view.accounts[position];
-		if (row !== undefined) session.switchAccount(row.index);
+		if (row !== undefined)
+			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 	}
 
 	/** The switcher is on screen: the balance core refreshes every row's total. */
@@ -542,6 +582,104 @@
 		subtitle: m.analytics.subtitle,
 		on: analyticsConsent.enabled
 	});
+
+	// --- The AI agent (spec 103) ----------------------------------------------
+	//
+	// Web only: its row and nav entry are added here, not drawn by the shared
+	// fixtures. The connection lives in `$lib/agent/bridge.svelte`, loaded on
+	// first use so a wallet that never turns the agent on never carries it.
+
+	let agentBridge = $state<(typeof import('$lib/agent/bridge.svelte'))['agentBridge'] | null>(null);
+
+	/** Dial, redial or hang up to match what Settings now says. */
+	function syncAgent(): void {
+		void import('$lib/agent/bridge.svelte').then((bridge) => {
+			agentBridge = bridge.agentBridge;
+			bridge.agentBridge.sync();
+		});
+	}
+
+	const agentStatus = $derived.by((): StatusPillModel => {
+		const a = m.agent;
+		if (!agentSettings.ready) return { tone: 'neutral', label: a.statusOff, dot: true };
+		switch (agentBridge?.status ?? 'connecting') {
+			case 'online':
+				return { tone: 'ok', label: a.statusOnline, dot: true };
+			case 'offline':
+				return { tone: 'warn', label: a.statusOffline, dot: true };
+			case 'closed':
+				return { tone: 'error', label: a.statusRefused, dot: true };
+			default:
+				return { tone: 'accent', label: a.statusConnecting, dot: true };
+		}
+	});
+
+	const agentPanel = $derived.by((): AgentPanelModel => {
+		const a = m.agent;
+		const url = agentSettings.url;
+		const invalid = url.trim() !== '' && bridgeUrlProblem(url) !== null;
+		const endpoint = mcpEndpoint(url);
+		// The agent's latest call, by its action's name and how it ended.
+		const latest = intents.activity[0];
+		const last =
+			latest === undefined
+				? null
+				: `${latest.action} · ${latest.outcome?.status === 'rejected' ? latest.outcome.reason.code : (latest.outcome?.status ?? latest.stage ?? '')}`;
+		return {
+			title: a.title,
+			description: a.description,
+			enable: {
+				id: 'settings-agent',
+				title: a.enable,
+				subtitle: a.subtitle,
+				on: agentSettings.enabled
+			},
+			bridge: {
+				id: 'agent-bridge',
+				label: a.bridge,
+				value: url,
+				placeholder: 'wss://bridge.example.com/connect',
+				hint: invalid ? a.bridgeInvalid : a.bridgeHint,
+				tone: invalid ? 'error' : 'default'
+			},
+			token: {
+				id: 'agent-token',
+				label: a.token,
+				value: agentSettings.token,
+				hint: a.tokenHint,
+				secret: true
+			},
+			status: agentStatus,
+			endpoint:
+				endpoint === null
+					? undefined
+					: { label: a.endpoint, value: endpoint, hint: a.endpointHint },
+			lastAction: last === null ? undefined : { label: a.lastAction, value: last },
+			grant: agentSettings.enabled
+				? {
+						id: 'settings-agent-grant',
+						title: a.grant,
+						subtitle: a.grantHint,
+						on: agentSettings.submitTransactions
+					}
+				: undefined
+		};
+	});
+
+	/** Its row, in 高级 after the service endpoints — the other "which server" row. */
+	const agentRow = $derived<SettingsRowModel>({
+		id: 'agent',
+		icon: 'link-2',
+		title: m.agent.title,
+		subtitle: m.agent.subtitle,
+		value: agentSettings.enabled ? agentStatus.label : m.agent.statusOff,
+		trailing: 'chevron'
+	});
+
+	function withAgentRow(rows: SettingsRowModel[]): SettingsRowModel[] {
+		const at = rows.findIndex((row) => row.id === 'endpoints');
+		return at < 0 ? rows : [...rows.slice(0, at + 1), agentRow, ...rows.slice(at + 1)];
+	}
 
 	/**
 	 * Spec 102: where the active account reviews and signs, from the SESSION's
@@ -605,7 +743,9 @@
 			sections: model.sections
 				.map((section) => ({
 					...section,
-					rows: section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'signing-pages')
+					rows: withAgentRow(
+						section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'signing-pages')
+					)
 				}))
 				.filter((section) => section.rows.length > 0 || section.appearanceControls === true)
 		};
@@ -635,7 +775,11 @@
 			},
 			// Spec 102: the web opens no signing page — see the phone model above.
 			signingPages: undefined,
-			nav: model.nav.filter((item) => item.id !== 'signing-pages')
+			nav: model.nav.flatMap((item) => {
+				if (item.id === 'signing-pages') return [];
+				if (item.id !== 'endpoints') return [item];
+				return [item, { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title }];
+			})
 		};
 		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card
@@ -695,8 +839,11 @@
 			}
 			case 'delete-network': {
 				const chain = chainOf(event.id);
-				networkAdmin.dispatch({ type: 'delete_confirmed', id: event.id });
-				if (chain !== undefined) track('network_removed', { chain });
+				// Through the intents (spec 103), by the chain the row is.
+				if (chain !== undefined) {
+					void intents.invoke('person', { type: 'remove_network', chain_id: chain });
+					track('network_removed', { chain });
+				} else networkAdmin.dispatch({ type: 'delete_confirmed', id: event.id });
 				return;
 			}
 			case 'detail-field': {
@@ -747,7 +894,14 @@
 					return;
 				}
 				addingChain = net.wizard.chain_info?.chain_id ?? null;
-				networkAdmin.dispatch({ type: 'add_confirmed', now_iso: new Date().toISOString() });
+				// Through the intents (spec 103): the wizard checked this chain
+				// already, so only the add is sent, as the button always did.
+				if (addingChain !== null)
+					void intents.invoke('person', {
+						type: 'add_network',
+						chain_id: addingChain,
+						rpc_url: null
+					});
 				return;
 			case 'recheck':
 				recheckCandidate();
@@ -762,7 +916,7 @@
 				networkAdmin.dispatch({ type: 'endpoint_blurred', field: event.field });
 				return;
 			case 'endpoints-reset':
-				networkAdmin.dispatch({ type: 'reset_endpoints_to_defaults' });
+				void intents.invoke('person', { type: 'reset_service_endpoints' });
 				return;
 			case 'providers-open':
 				networkAdmin.dispatch({ type: 'providers_opened' });
@@ -800,7 +954,7 @@
 	}
 
 	function signOut() {
-		session.signOut();
+		void intents.invoke('person', { type: 'sign_out' });
 	}
 </script>
 
@@ -813,6 +967,7 @@
 	{#if wide.current}
 		<div class="desktop-shell">
 			<SettingsDesktop
+				bind:this={desktopSettings}
 				model={liveDesktop}
 				{sidebar}
 				onnav={selectTab}
@@ -820,6 +975,7 @@
 				onnetevent={onNetEvent}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				agent={agentPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
@@ -838,6 +994,7 @@
 	{:else}
 		<main class="page">
 			<SettingsHome
+				bind:this={phoneSettings}
 				model={liveHome}
 				destinations={WEB_DESTINATIONS}
 				onselecttab={selectTab}
@@ -847,6 +1004,7 @@
 				onstorageclear={clearRow}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				agent={agentPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}

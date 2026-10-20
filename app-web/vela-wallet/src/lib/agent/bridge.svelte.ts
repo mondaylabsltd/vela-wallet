@@ -1,0 +1,206 @@
+/**
+ * The wallet's end of a ClientMCP bridge: one outbound WebSocket, over which a
+ * remote AI agent asks this wallet for what the person can do (spec 103).
+ *
+ * The tools are the intents' catalog — one per thing the person can do, with
+ * the shared input schema and risk — plus `vela_state`, the wallet as the
+ * agent reads it. Every call goes through `intents.invoke('agent', …)`, the
+ * same way in as the person's own taps, and answers as ClientMCP SPEC §9.2
+ * says: `completed` once the change is seen, or `rejected` with a code.
+ *
+ * Loaded only when the person has turned the agent on (the root layout and
+ * Settings import it dynamically), so the Welcome page never carries it.
+ */
+import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
+import { balance } from '$lib/wallet/core/balance.svelte';
+import { feed } from '$lib/wallet/core/feed.svelte';
+import { intentCatalog, loadCore } from '$lib/core/client';
+import type { IntentAction } from '$lib/core/generated/IntentAction';
+import type { IntentCatalogEntry } from '$lib/core/generated/IntentCatalogEntry';
+import { intents, world, type IntentOutcome } from '$lib/intents/index.svelte';
+import { agentState } from '$lib/intents/state';
+import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
+import { transfers } from '$lib/intents/transfers.svelte';
+import { accepted, ClientMCP, completed, rejected, type Risk, type Status } from './clientmcp';
+import { agentSettings } from './settings.svelte';
+
+const INSTRUCTIONS = `This is the person's Vela Wallet, open in their browser right now. They see every change you make.
+
+- vela_state is the wallet now: accounts, balances, recent transactions, contacts and groups, preferences, networks and services, transfers, and your requests still waiting for the person. Read it before acting and after.
+- vela_show opens a screen for the person: home, contacts, one contact or group, settings (or one settings page), one asset, one activity record's details, or the receive code for a network.
+- Every other tool is one thing the person can do in the wallet. It answers "completed" once the change shows in the wallet, "accepted" with operation (the id of what goes on — a transfer, whose state is in transfer), or "rejected" with reason.code: invalid_input, not_found, not_ready, person_only, agent_off, denied, approval_timed_out, stopped, refused, not_observed, not_granted or busy.
+- Transfers: vela_prepare_transfer (one recipient) or vela_prepare_batch_transfer (one token to several, each with its own amount) drafts it into the wallet's own review screen, where the person sees it; nothing is sent. Then either the person confirms it there, or — only if they allowed it in Settings — vela_submit_transfer confirms it; either way their passkey signs it. Follow it with vela_wait (awaiting_confirmation → awaiting_passkey → submitting → submitted → confirmed / failed / cancelled). Once a transfer is out, drafting the next one closes its receipt (the receipt's own Done), so batches can follow one another; a review still waiting is "busy" until it is submitted or cancelled. On one network a transfer can only be confirmed once the previous one there is final (same nonce): submit answers not_ready until then — vela_wait for the earlier one first.
+- Manage-level tools (deleting, erasing, removing a wallet, clearing data, networks and service endpoints, sharing usage statistics) wait for the person to approve the request in the wallet; the call returns when they answer. Signing out is confirmed on the wallet's own sheet.
+- Ask the person before anything they would not expect.`;
+
+/** The page the person is on, by its route (`wallet`, `contacts`, `settings`; `welcome` for the start). */
+function page(): string {
+	return location.pathname.split('/')[2]?.replace(/\.html$/, '') || 'welcome';
+}
+
+function answer(outcome: IntentOutcome) {
+	switch (outcome.status) {
+		case 'completed':
+			return completed();
+		case 'accepted':
+			// `operation` is the outcome's own (its id, SPEC §9.2): the transfer
+			// itself is `transfer`, as in vela_wait and vela_state.
+			return accepted(outcome.operation.id, {
+				transfer: outcome.operation,
+				...(outcome.closed && { closed_receipt: outcome.closed })
+			});
+		case 'rejected':
+			return rejected(outcome.reason.code, outcome.reason.detail);
+	}
+}
+
+const STATES: IntentOperationState[] = [
+	'awaiting_confirmation',
+	'awaiting_passkey',
+	'submitting',
+	'submitted',
+	'confirmed',
+	'failed',
+	'cancelled'
+];
+const FINAL: IntentOperationState[] = ['confirmed', 'failed', 'cancelled'];
+/**
+ * The longest one `vela_wait` holds a call open: under the bridge's own call
+ * timeout (ClientMCP's default is 120 s), so the agent hears `timed_out`
+ * rather than the bridge giving up.
+ */
+const WAIT_MAX_MS = 100_000;
+
+/**
+ * Wait until the operation reaches one of `until` (or any final state), time
+ * is up, or the agent's call is given up (`signal`).
+ */
+async function waitFor(
+	id: string,
+	until: IntentOperationState[],
+	ms: number,
+	signal?: AbortSignal
+) {
+	const deadline = Date.now() + Math.min(Math.max(ms, 0), WAIT_MAX_MS);
+	for (;;) {
+		if (signal?.aborted) return rejected('stopped', 'the call was cancelled');
+		const operation = transfers.get(id);
+		if (!operation) return rejected('not_found', 'no transfer has that operation id');
+		const reached = until.includes(operation.state) || FINAL.includes(operation.state);
+		if (reached || Date.now() >= deadline) return { transfer: operation, timed_out: !reached };
+		await new Promise((done) => setTimeout(done, 250));
+	}
+}
+
+/** Expose the catalog: one tool per action the agent may ask for. */
+async function exposeTools(client: ClientMCP): Promise<void> {
+	await loadCore();
+	// The networks are read for the agent as for Settings: the ledger reads its stores.
+	void networkAdmin.boot();
+	const catalog = JSON.parse(intentCatalog()) as IntentCatalogEntry[];
+	client.expose('vela_state', {
+		title: 'The wallet now',
+		description:
+			'Accounts, balances, recent transactions, contacts and groups, preferences, networks and services, transfers, and your requests still waiting for the person.',
+		risk: 'observe',
+		handler: () =>
+			agentState({
+				world: world(),
+				balance: balance.view,
+				feed: feed.view,
+				page: page(),
+				approvals: intents.approvals,
+				activity: intents.activity
+			})
+	});
+	client.expose('vela_wait', {
+		title: 'Follow a transfer',
+		description:
+			'Wait until a transfer reaches one of `until` (default: confirmed, failed or cancelled), or `timeout_ms` passes (at most 100000). Answers `transfer` (its state now), and `timed_out` when it had not got there.',
+		risk: 'observe',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				operation: {
+					type: 'string',
+					description: 'From prepare_transfer or prepare_batch_transfer.'
+				},
+				until: { type: 'array', items: { type: 'string', enum: STATES } },
+				timeout_ms: { type: 'integer', minimum: 0, maximum: WAIT_MAX_MS }
+			},
+			required: ['operation'],
+			additionalProperties: false
+		},
+		handler: ({ operation, until, timeout_ms }, { signal }) =>
+			waitFor(
+				String(operation),
+				Array.isArray(until) ? (until as IntentOperationState[]) : FINAL,
+				typeof timeout_ms === 'number' ? timeout_ms : 60_000,
+				signal
+			)
+	});
+	for (const entry of catalog) {
+		// The person's own settings are no tool at all: the check refuses them
+		// anyway, and an agent should not be offered what it may never do.
+		if (entry.person_only) continue;
+		client.expose(`vela_${entry.action}`, {
+			description: entry.description,
+			inputSchema: entry.input_schema as { type: 'object' },
+			risk: entry.risk as Risk,
+			// The bridge giving up on a call (its timeout, a lost connection)
+			// aborts `signal`: nothing waiting for the person is done after it.
+			handler: async (args, { signal }) =>
+				answer(
+					await intents.invoke('agent', { ...args, type: entry.action } as IntentAction, {
+						signal
+					})
+				)
+		});
+	}
+}
+
+class AgentBridge {
+	/** `off` while the agent is switched off or not fully configured. */
+	status = $state<Status | 'off'>('off');
+	/** Why the bridge refused or closed the connection for good. */
+	closed = $state<{ code: number; reason: string } | null>(null);
+	#client: ClientMCP | null = null;
+	#dialled = '';
+
+	/** Connect, reconnect or hang up so the connection matches Settings. */
+	sync(): void {
+		const dial = agentSettings.ready
+			? `${agentSettings.url.trim()}\n${agentSettings.token.trim()}`
+			: '';
+		if (dial === this.#dialled) return;
+		this.#dialled = dial;
+		const previous = this.#client;
+		this.#client = null;
+		previous?.close();
+		this.closed = null;
+		if (dial === '') {
+			this.status = 'off';
+			// Nothing of a disconnected agent's still waits for the person.
+			intents.stop();
+			return;
+		}
+		const [url, token] = dial.split('\n');
+		const client = new ClientMCP({
+			url,
+			token,
+			instructions: INSTRUCTIONS,
+			onStatus: (status, detail) => {
+				if (this.#client !== client) return;
+				this.status = status;
+				if (status === 'closed') this.closed = detail ?? null;
+			}
+		});
+		this.#client = client;
+		void exposeTools(client);
+		void client.connect().catch(() => {
+			/* the status says why */
+		});
+	}
+}
+
+export const agentBridge = new AgentBridge();

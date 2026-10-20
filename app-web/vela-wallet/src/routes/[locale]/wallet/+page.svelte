@@ -20,6 +20,11 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
+	import { intents } from '$lib/intents/index.svelte';
+	import { transfers } from '$lib/intents/transfers.svelte';
+	import { sendDesk } from '$lib/flows/send-desk.svelte';
+	import { screenDesk } from '$lib/flows/screen-desk.svelte';
+	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -550,9 +555,13 @@
 							const candidate = networkAdmin.view.wizard.chain_info?.chain_id ?? null;
 							if (candidate === null || !networkAdmin.view.wizard.can_add) return;
 							netPendingAdd = candidate;
-							// A timestamp, not a clock: the record carries when it was added.
-							const nowIso = new Date().toISOString();
-							networkAdmin.dispatch({ type: 'add_confirmed', now_iso: nowIso });
+							// Through the intents (spec 103): the wizard checked this
+							// chain already, so only the add is sent, as before.
+							void intents.invoke('person', {
+								type: 'add_network',
+								chain_id: candidate,
+								rpc_url: null
+							});
 							return;
 						}
 						const first = addTokenView?.found[0];
@@ -713,8 +722,12 @@
 		sendSession.dispatch({ type: 'display_changed', display });
 	});
 
+	/** Which send is open — a new number per open (`sendDesk`'s operations key on it). */
+	let sendGeneration = 0;
+
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
+		sendGeneration = sendDesk.begin();
 		await loadCore();
 		if (!identity) return;
 		// The picker's suggestions come from the send history, which may have
@@ -1060,7 +1073,7 @@
 						const rows = (sendView?.recipients ?? []).filter((_, i) => i !== index);
 						sendSession?.dispatch({ type: 'recipients_changed', recipients: rows });
 					},
-					confirm: () => sendSession?.dispatch({ type: 'slide_confirm' }),
+					confirm: confirmSend,
 					pickFeeToken: (index: number) => {
 						const option = feeQuote.view.options[index];
 						if (option) {
@@ -1651,8 +1664,13 @@
 		// Inert while it turns: a second press would only start a second round.
 		if (balance.view.refreshing || refreshHold.held) return;
 		refreshHold.press();
-		balance.refresh(true, true);
-		feed.focusTick();
+		// Through the intents (spec 103): the same refresh an agent asks for.
+		void intents.invoke('person', { type: 'refresh_balances' });
+	}
+
+	/** The eye: through the intents (spec 103), as an agent's would. */
+	function toggleBalances(): void {
+		void intents.invoke('person', { type: 'set_balance_privacy', hidden: !balance.view.hidden });
 	}
 
 	/** Fixture base → identity overlay → live balance/holdings (research D10). */
@@ -1818,12 +1836,112 @@
 	}
 
 	/**
+	 * The person's confirm, through the intents (spec 103): the very intent an
+	 * agent's goes through, for the transfer this review is. The review is the
+	 * only place the button is drawn, so there is always one.
+	 */
+	function confirmSend(): void {
+		const operation = transfers.current();
+		if (operation === null) {
+			sendSession?.dispatch({ type: 'slide_confirm' });
+			return;
+		}
+		void intents.invoke('person', { type: 'submit_transfer', operation: operation.id });
+	}
+
+	/** The asset a held token is, as its row names it — spam is not drawn, so not named. */
+	function heldAssetId(chainId: number, token: string | null): string | null {
+		const held = balance.view.tokens.find(
+			(t) =>
+				!t.spam &&
+				t.chain_id === chainId &&
+				(t.token_address ?? null)?.toLowerCase() === (token ?? null)?.toLowerCase()
+		);
+		return held === undefined ? null : balanceTokenId(held);
+	}
+
+	/** The feed row a record is drawn in: its own, or its batch's folded one. */
+	function feedRowOf(recordId: string): string | null {
+		if (findFeedItem(feed.view, recordId)) return recordId;
+		const record = feed.view?.transactions.find((tx) => tx.id === recordId);
+		const folded = record?.user_op_hash ?? '';
+		return folded !== '' && findFeedItem(feed.view, folded) ? folded : null;
+	}
+
+	/**
+	 * The screens this page draws, for the intents (spec 103): what each one's
+	 * row runs when tapped — the asset's sheet or column, the record's detail,
+	 * a network's code.
+	 */
+	async function present(screen: IntentScreen): Promise<string | null> {
+		switch (screen.type) {
+			case 'asset': {
+				const id = heldAssetId(screen.chain_id, screen.token);
+				if (id === null) return 'the wallet does not hold that token';
+				if (wide.current) {
+					// The desktop's row: the column is the asset's now.
+					if (sendSession) closeSend();
+					closeAddToken();
+					nav.close();
+					selectedAssetId = id;
+				} else {
+					selectedAssetId = id;
+					enter('token-detail');
+				}
+				return null;
+			}
+			case 'activity': {
+				// History lists the narrowed feed: a record on another network is
+				// shown with the filter lifted, as the person would lift it.
+				if (feedRowOf(screen.id) === null && chainFilter.chainId !== null) chainFilter.select(null);
+				const deadline = Date.now() + 5_000;
+				let row = feedRowOf(screen.id);
+				while (row === null && Date.now() < deadline) {
+					await new Promise((done) => setTimeout(done, 50));
+					row = feedRowOf(screen.id);
+				}
+				if (row === null) return 'no activity record has that id';
+				selectedTxId = row;
+				enter('tx-detail');
+				return null;
+			}
+			case 'receive':
+				if (
+					screen.chain_id !== null &&
+					!receiveNetworks().some((network) => network.chainId === screen.chain_id)
+				)
+					return 'the wallet has no network with that chain id';
+				enter('receive', screen.chain_id === null ? undefined : { chainId: screen.chain_id });
+				return null;
+			default:
+				return 'this page does not draw that screen';
+		}
+	}
+	onMount(() => screenDesk.attach(['asset', 'activity', 'receive'], present));
+
+	// The send, for the intents (spec 103): the page's own functions, nothing new.
+	onMount(() =>
+		sendDesk.attach({
+			view: () => sendView,
+			alert: () => sendAlert,
+			session: () => sendGeneration,
+			open: (prefill) => {
+				if (sendSession) closeSend();
+				nav.enter('send');
+				void openSend(prefill);
+			},
+			dispatch: (event) => sendSession?.dispatch(event),
+			close: closeSend
+		})
+	);
+
+	/**
 	 * Open a flow from the home, the asset column or the token sheet. `detail`
 	 * names the held token a door is about (spec 028 Phase 9, RULING 3): 转账
 	 * from a token opens the form with it chosen, 收款 from a token opens its
 	 * own code — no picker in between, the token already names its chain.
 	 */
-	function enter(entry: FlowEntry, detail?: { assetId?: string }) {
+	function enter(entry: FlowEntry, detail?: { assetId?: string; chainId?: number }) {
 		// A door taken while a send is open leaves that send (Phase 10): a
 		// picker already up used to swallow a token's own 转账 — `openSend`
 		// returned early — and stay beside the token's detail.
@@ -1846,11 +1964,13 @@
 			);
 			return;
 		}
-		if (entry === 'receive' && chainFilter.chainId !== null) {
+		const receiveChain = detail?.chainId ?? chainFilter.chainId;
+		if (entry === 'receive' && receiveChain !== null) {
 			// RULING 1: the sidebar's filter already chose the network — straight
-			// to its code, with the list one step back.
+			// to its code, with the list one step back. A network named (spec
+			// 103's `show`) is the same row tapped in that list.
 			nav.enter(entry);
-			selectedReceiveChainId = chainFilter.chainId;
+			selectedReceiveChainId = receiveChain;
 			nav.push('receive-qr');
 			return;
 		}
@@ -1892,7 +2012,9 @@
 	 */
 	function deleteSelectedTx() {
 		if (selectedTxId === null) return;
-		feed.deleteRecord(selectedTxId);
+		// Through the intents (spec 103). The row's id is its record's, or a
+		// folded batch's operation hash: every record of the batch goes.
+		void intents.invoke('person', { type: 'delete_activity', id: selectedTxId });
 		selectedTxId = null;
 		nav.back();
 	}
@@ -2255,6 +2377,11 @@
 				nav.close();
 				return;
 			}
+			// The empty assets list's Receive: the flow's own door.
+			if (to === 'receive') {
+				enter('receive');
+				return;
+			}
 			nav.push(to);
 			if (to === 'add-token') void openAddToken();
 		}}
@@ -2288,7 +2415,7 @@
 				onnav={select}
 				onaccounts={() => (switching = true)}
 				onflow={enter}
-				onbalancetoggle={() => balance.togglePrivacy()}
+				onbalancetoggle={toggleBalances}
 				onstatus={openRescue}
 				onbalancerefresh={refreshBalances}
 				onchainselect={(row) => chainFilter.select(row.chainId ?? null)}
@@ -2332,7 +2459,7 @@
 					onselect={select}
 					onaccounts={() => (switching = true)}
 					onflow={enter}
-					onbalancetoggle={() => balance.togglePrivacy()}
+					onbalancetoggle={toggleBalances}
 					onstatus={openRescue}
 					onbalancerefresh={refreshBalances}
 					onactivity={(row) => (selectedTxId = row.id ?? null)}
@@ -2409,6 +2536,12 @@
 			}
 			if (to === 'receive-token') {
 				enter('receive-token');
+				return;
+			}
+			// The empty assets screen's Receive: the flow's own door, as the
+			// home's Receive is (`nav.push` has no 'receive' to push).
+			if (to === 'receive') {
+				enter('receive');
 				return;
 			}
 			if (to === 'fee-token') feeSheetOpen = true;

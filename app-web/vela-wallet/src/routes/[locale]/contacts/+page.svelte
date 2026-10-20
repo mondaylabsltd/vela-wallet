@@ -30,6 +30,9 @@
 	import SheetOrDialog from '$lib/contacts/ui/SheetOrDialog.svelte';
 	import type { ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
+	import { intents } from '$lib/intents/index.svelte';
+	import { screenDesk } from '$lib/flows/screen-desk.svelte';
+	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import { addMenu, groupMenuMobile } from '$lib/contacts/fixtures';
 	import {
 		buildContactsDesktopLive,
@@ -172,6 +175,32 @@
 		void feed.contactFilter(openContact);
 	});
 	onMount(() => () => void feed.contactFilter(null));
+
+	/**
+	 * One contact or group, for the intents (spec 103): what its row sends
+	 * when tapped, once the book is read — by the address the book stores.
+	 */
+	async function present(screen: IntentScreen): Promise<string | null> {
+		const deadline = Date.now() + 5_000;
+		while (!contactsBook.view?.loaded && Date.now() < deadline)
+			await new Promise((done) => setTimeout(done, 50));
+		const book = contactsBook.view;
+		if (!book?.loaded) return 'the address book is not loaded yet';
+		if (screen.type === 'contact') {
+			const wanted = screen.address.trim().toLowerCase();
+			const entry = book.contacts.find((c) => c.address.toLowerCase() === wanted);
+			if (!entry) return 'no contact has that address';
+			onUiEvent({ kind: 'open', address: entry.address });
+			return null;
+		}
+		if (screen.type === 'group') {
+			if (!book.groups.some((g) => g.id === screen.id)) return 'no group has that id';
+			onUiEvent({ kind: 'group-open', id: screen.id });
+			return null;
+		}
+		return 'this page does not draw that screen';
+	}
+	onMount(() => screenDesk.attach(['contact', 'group'], present));
 
 	const extras = $derived({
 		feed: feed.view,
@@ -351,7 +380,7 @@
 	}
 
 	function deleteContact(address: string): void {
-		contacts.dispatch({ type: 'delete', address, now_ms: Date.now() });
+		void intents.invoke('person', { type: 'delete_contact', address });
 		sheet = { kind: 'none' };
 		if (ui.selectedAddress === address) {
 			ui = { ...ui, screen: 'list', selectedAddress: undefined };
@@ -359,7 +388,7 @@
 	}
 
 	function deleteGroup(id: string): void {
-		contacts.dispatch({ type: 'group_delete', id });
+		void intents.invoke('person', { type: 'delete_group', id });
 		sheet = { kind: 'none' };
 		if (ui.selectedGroupId === id) {
 			ui = { ...ui, screen: 'list', selectedGroupId: undefined };
@@ -533,18 +562,10 @@
 	function saveContact(draft: { name: string; address: string }): void {
 		// A new entry — the add form, or a recent payee saved for the first time.
 		if (sheet.kind === 'add' || (sheet.kind === 'edit' && sheet.unsaved)) track('contact_added');
-		contacts.dispatch({
-			type: 'save',
-			input: {
-				address: draft.address,
-				name: draft.name,
-				note: null,
-				favorite: null,
-				kind: null,
-				resolved_name: null,
-				resolved_source: null
-			},
-			now_ms: Date.now()
+		void intents.invoke('person', {
+			type: 'save_contact',
+			address: draft.address,
+			name: draft.name
 		});
 		sheet = { kind: 'none' };
 		// On the desktop the column that held the form shows what it made —
@@ -561,33 +582,27 @@
 	}
 
 	function saveGroup(name: string): void {
-		contacts.dispatch({
-			type: 'group_save',
-			input: { id: null, name, color: null, members: null }
-		});
+		void intents.invoke('person', { type: 'save_group', id: null, name });
 		sheet = { kind: 'none' };
 	}
 
 	function renameGroup(name: string): void {
 		if (sheet.kind !== 'group-rename') return;
-		contacts.dispatch({
-			type: 'group_save',
-			input: { id: sheet.id, name, color: null, members: null }
-		});
+		void intents.invoke('person', { type: 'save_group', id: sheet.id, name });
 		sheet = { kind: 'none' };
 	}
 
 	/** 添加成员's answer: the whole membership, ticked. The core normalises. */
 	function saveMembers(addresses: string[]): void {
 		if (sheet.kind !== 'member-pick') return;
-		contacts.dispatch({ type: 'set_group_members', id: sheet.id, members: addresses });
+		void intents.invoke('person', { type: 'set_group_members', id: sheet.id, members: addresses });
 		sheet = { kind: 'none' };
 	}
 
 	/** 移入分组's answer: which groups hold this contact. */
 	function saveGroups(groupIds: string[]): void {
 		if (sheet.kind !== 'group-pick') return;
-		contacts.dispatch({
+		void intents.invoke('person', {
 			type: 'set_contact_groups',
 			address: sheet.address,
 			group_ids: groupIds

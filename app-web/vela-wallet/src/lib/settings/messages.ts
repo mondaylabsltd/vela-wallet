@@ -46,6 +46,29 @@ export interface SettingsMessages {
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
 	analytics: { title: string; subtitle: string };
+	/** "AI agent" — a remote agent using the wallet through a ClientMCP bridge (spec 103). */
+	agent: Record<
+		| 'title'
+		| 'subtitle'
+		| 'description'
+		| 'enable'
+		| 'bridge'
+		| 'bridgeHint'
+		| 'bridgeInvalid'
+		| 'token'
+		| 'tokenHint'
+		| 'endpoint'
+		| 'endpointHint'
+		| 'statusOff'
+		| 'statusConnecting'
+		| 'statusOnline'
+		| 'statusOffline'
+		| 'statusRefused'
+		| 'lastAction'
+		| 'grant'
+		| 'grantHint',
+		string
+	>;
 	appearance: {
 		themeTitle: string;
 		themeLight: string;
@@ -731,6 +754,25 @@ export const SETTINGS_KEYS = [
 	'settings.feedback.subtitle',
 	'settings.analytics.title',
 	'settings.analytics.subtitle',
+	'settings.agent.title',
+	'settings.agent.subtitle',
+	'settings.agent.description',
+	'settings.agent.enable',
+	'settings.agent.bridge',
+	'settings.agent.bridgeHint',
+	'settings.agent.bridgeInvalid',
+	'settings.agent.token',
+	'settings.agent.tokenHint',
+	'settings.agent.endpoint',
+	'settings.agent.endpointHint',
+	'settings.agent.statusOff',
+	'settings.agent.statusConnecting',
+	'settings.agent.statusOnline',
+	'settings.agent.statusOffline',
+	'settings.agent.statusRefused',
+	'settings.agent.lastAction',
+	'settings.agent.grant',
+	'settings.agent.grantHint',
 	'settings.appearance.themeTitle',
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',

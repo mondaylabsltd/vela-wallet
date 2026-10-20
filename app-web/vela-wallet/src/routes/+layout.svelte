@@ -30,6 +30,8 @@
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
+	import { agentSettings } from '$lib/agent/settings.svelte';
+	import type { AgentMessages } from '$lib/agent/messages';
 	import { localeOfPath } from '$lib/i18n/locales';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
@@ -146,6 +148,28 @@
 	 * channel's code, so they are loaded only inside the extension: Welcome
 	 * never carries them (`budgets.e2e.ts`).
 	 */
+	// --- The AI agent (spec 103) ----------------------------------------------
+	//
+	// Behind its switch and a dynamic import, like the console below: a wallet
+	// that never turned it on never loads it. Turned on — here or in Settings
+	// — the bridge dials and its layer (the bar, the requests to approve)
+	// comes up over every page.
+	let agent = $state<{
+		bridge: (typeof import('$lib/agent/bridge.svelte'))['agentBridge'];
+		Layer: (typeof import('$lib/agent/AgentLayer.svelte'))['default'];
+	} | null>(null);
+	$effect(() => {
+		if (!agentSettings.enabled || agent !== null) return;
+		void Promise.all([
+			import('$lib/agent/bridge.svelte'),
+			import('$lib/agent/AgentLayer.svelte')
+		]).then(([bridge, layer]) => {
+			bridge.agentBridge.sync();
+			agent = { bridge: bridge.agentBridge, Layer: layer.default };
+		});
+	});
+	const agentMessages = $derived((page.data as { agent?: AgentMessages } | undefined)?.agent);
+
 	onMount(() => {
 		if (!inExtension()) return;
 		let stop: (() => void) | undefined;
@@ -239,6 +263,8 @@
 			reload: () => location.reload()
 		});
 
+		// The AI agent bridge (spec 103): read its switch; the effect below loads it.
+		agentSettings.boot();
 		// The dev/e2e console (spec 025) is a DYNAMIC import behind its gate:
 		// a static one would drag the core's JS glue into the first-paint
 		// chunk of every page, Welcome included.
@@ -304,6 +330,10 @@
 	<!-- A bug report whose sheet was closed mid-send says how it ended here,
 	     on whatever page the person went on to (078). -->
 	<ReportToastHost />
+
+	{#if agent !== null && agentMessages !== undefined}
+		<agent.Layer messages={agentMessages} status={agent.bridge.status} />
+	{/if}
 
 	{#if launching}
 		<LaunchAnimation
