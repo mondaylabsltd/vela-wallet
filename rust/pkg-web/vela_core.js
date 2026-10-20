@@ -4265,6 +4265,51 @@ export function inFlightOps(track_view_json) {
 }
 
 /**
+ * Every action, with how much it matters and who may ask for it.
+ * @returns {string}
+ */
+export function intentCatalog() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.intentCatalog();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * Whether `actor` (`"person"` or `"agent"`) may ask for the action, and
+ * whether its input is well formed. An actor or grants this build cannot
+ * read is treated as an agent with nothing granted — the narrowest reading.
+ * @param {string} actor
+ * @param {string} action_json
+ * @param {string} grants_json
+ * @returns {string}
+ */
+export function intentCheck(actor, action_json, grants_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(actor, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(action_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(grants_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.intentCheck(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */

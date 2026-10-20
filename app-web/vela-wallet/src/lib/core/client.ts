@@ -63,6 +63,8 @@ import init, {
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	intentCatalog,
+	intentCheck,
 	prefsMigrations,
 	prefsRead,
 	publicRpcUrls,
@@ -169,6 +171,9 @@ export { registryResolveKeyStep, registryResolveUnitStep };
 // read, and what each stored key IS — its storage row, whether "clear all
 // caches" takes it, whether an erase does. JSON in and out, like the machines.
 export { prefsMigrations, prefsRead };
+// The wallet's intents (spec 103): the catalog, and the check every request
+// passes — who may ask, and whether the input is well formed. JSON in and out.
+export { intentCatalog, intentCheck };
 export {
 	storageIsCacheKey,
 	storageIsErasableKey,

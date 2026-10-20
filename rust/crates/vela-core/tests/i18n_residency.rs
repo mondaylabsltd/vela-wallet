@@ -63,7 +63,13 @@ const CORPUS_BYTES: usize = 990_499;
 /// 51 strings in every locale, which fit at 144,350 only after `en` and `ja`
 /// were cut to the bone and one line dropped, with 50 bytes left. Same rule:
 /// ~1 KB above the measurement. Approved by the owner: 「Text budget 提高预算」.
-const SC005_BUDGET: usize = 145_400;
+///
+/// 2026-10-20 (103): Settings → AI agent — 17 strings, `en` and `ja` already
+/// tightened — put the runtime route at 145,819, 419 bytes over, and more of
+/// the agent's words are coming (the in-wallet approval, the agent's status).
+/// The owner raised the line by half rather than by ~1 KB per step, knowing it
+/// warns later for it: 「预算可以加50%」 (145,400 × 1.5).
+const SC005_BUDGET: usize = 218_100;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
 ///
@@ -71,7 +77,11 @@ const SC005_BUDGET: usize = 145_400;
 /// measurement at 85.94%. Moved with the budget, the same way and approved with
 /// it: ~1.4 KB of room above the measurement. The sentence SC-005 requires — one language plus
 /// `en` — is asserted separately and does not move.
-const SC005_REDUCTION_PERCENT: f64 = 85.8;
+///
+/// 2026-10-20 (103): moved with the budget again, to the reduction the new
+/// budget itself allows (100 − 218,100 / 990,499 ≈ 77.98%), so the two checks
+/// guard one line rather than the percentage firing first.
+const SC005_REDUCTION_PERCENT: f64 = 77.9;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

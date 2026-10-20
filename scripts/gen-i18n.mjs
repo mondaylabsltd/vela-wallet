@@ -804,9 +804,27 @@ for (let i = 1; i < PATHS.length; i++) {
 //   device or the person's own network, which is neither the padlock nor the
 //   warning. (`componentsUi.bugReport.previewRpc` is reworded, not added.)
 //   1778 + 2 = 1780 leaves, 101 branches.
-if (PATHS.length !== 1881) fail(`expected 1881 paths (1780 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
+// 1899 (AI agent bridge, spec 103, 2026-10-20): + the `settings.agent` branch
+//   — the Settings page where a person lets an AI agent use the wallet through
+//   a ClientMCP bridge: the switch, the bridge address and token fields, the
+//   endpoint to give the agent, the connection status and the last action.
+//   1780 + 17 = 1797 leaves, 101 + 1 = 102 branches.
+// 1919 (AI agent intents, spec 103, 2026-10-20): + the agent's request the
+//   person approves in the wallet (its title, hint, Allow and Deny), the Stop
+//   on the agent's bar, and `settings.agent.action` — what each of the
+//   fourteen actions an agent may ask for is called.
+//   1797 + 5 + 14 = 1816 leaves, 102 + 1 = 103 branches.
+// 1924 (transfers through the intents, spec 103, 2026-10-20): + the switch
+//   that lets an agent confirm transfers (its title and the line saying the
+//   passkey still signs), and the names of the three transfer actions.
+//   1816 + 5 = 1821 leaves, 103 branches.
+// 1936 (the rest of the person's capabilities, spec 103, 2026-10-20): + the
+//   agent bar's name for each new action (batch transfer, token, activity,
+//   balance privacy and refresh, favorite, six network and service actions).
+//   1821 + 12 = 1833 leaves, 103 branches.
+if (PATHS.length !== 1936) fail(`expected 1936 paths (1833 leaf + 103 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1833) fail(`expected 1833 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 103) fail(`expected 103 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -1002,6 +1002,18 @@ export function identiconSvgCircular(seed: string): string;
  */
 export function inFlightOps(track_view_json: string): string;
 
+/**
+ * Every action, with how much it matters and who may ask for it.
+ */
+export function intentCatalog(): string;
+
+/**
+ * Whether `actor` (`"person"` or `"agent"`) may ask for the action, and
+ * whether its input is well formed. An actor or grants this build cannot
+ * read is treated as an agent with nothing granted — the narrowest reading.
+ */
+export function intentCheck(actor: string, action_json: string, grants_json: string): string;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1797,6 +1809,8 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly intentCatalog: () => [number, number];
+    readonly intentCheck: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];

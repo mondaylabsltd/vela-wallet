@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1881 paths = 1780 leaf + 101 branch. Repeated per locale these key bytes
-//! would cost 755880 bytes; interned once they cost 52292.
+//! 1936 paths = 1833 leaf + 103 branch. Repeated per locale these key bytes
+//! would cost 779955 bytes; interned once they cost 53932.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1881] = [
+pub(crate) static PATHS: [&str; 1936] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -1631,6 +1631,61 @@ pub(crate) static PATHS: [&str; 1881] = [
     "settings.advanced.networksTitle",
     "settings.advanced.rpcProvidersSubtitle",
     "settings.advanced.rpcProvidersTitle",
+    "settings.agent",
+    "settings.agent.action",
+    "settings.agent.action.addNetwork",
+    "settings.agent.action.addToken",
+    "settings.agent.action.cancelTransfer",
+    "settings.agent.action.clearCaches",
+    "settings.agent.action.clearStorageItem",
+    "settings.agent.action.deleteActivity",
+    "settings.agent.action.deleteContact",
+    "settings.agent.action.deleteGroup",
+    "settings.agent.action.eraseDevice",
+    "settings.agent.action.prepareBatchTransfer",
+    "settings.agent.action.prepareTransfer",
+    "settings.agent.action.refreshBalances",
+    "settings.agent.action.removeNetwork",
+    "settings.agent.action.removeWallet",
+    "settings.agent.action.resetServiceEndpoints",
+    "settings.agent.action.saveContact",
+    "settings.agent.action.saveGroup",
+    "settings.agent.action.setBalancePrivacy",
+    "settings.agent.action.setContactFavorite",
+    "settings.agent.action.setContactGroups",
+    "settings.agent.action.setGroupMembers",
+    "settings.agent.action.setNetworkEndpoint",
+    "settings.agent.action.setPreference",
+    "settings.agent.action.setProviderKey",
+    "settings.agent.action.setServiceEndpoint",
+    "settings.agent.action.show",
+    "settings.agent.action.signOut",
+    "settings.agent.action.submitTransfer",
+    "settings.agent.action.switchAccount",
+    "settings.agent.allow",
+    "settings.agent.approveHint",
+    "settings.agent.approveTitle",
+    "settings.agent.bridge",
+    "settings.agent.bridgeHint",
+    "settings.agent.bridgeInvalid",
+    "settings.agent.deny",
+    "settings.agent.description",
+    "settings.agent.enable",
+    "settings.agent.endpoint",
+    "settings.agent.endpointHint",
+    "settings.agent.grant",
+    "settings.agent.grantHint",
+    "settings.agent.lastAction",
+    "settings.agent.statusConnecting",
+    "settings.agent.statusOff",
+    "settings.agent.statusOffline",
+    "settings.agent.statusOnline",
+    "settings.agent.statusRefused",
+    "settings.agent.stop",
+    "settings.agent.subtitle",
+    "settings.agent.title",
+    "settings.agent.token",
+    "settings.agent.tokenHint",
     "settings.analytics",
     "settings.analytics.subtitle",
     "settings.analytics.title",
@@ -1896,7 +1951,7 @@ pub(crate) static PATHS: [&str; 1881] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 236] = [
+pub(crate) static IS_BRANCH: [u8; 242] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00,
     0x00, 0x00, 0x01, 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0x60, 0x00, 0x00, 0x11, 0x42, 0x00, 0x00,
     0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x80, 0x42, 0x22, 0x04, 0x00, 0x00, 0x20, 0x10, 0x02, 0x0a,
@@ -1909,13 +1964,14 @@ pub(crate) static IS_BRANCH: [u8; 236] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x08,
     0x00, 0x21, 0x00, 0x00, 0x4e, 0x92, 0x24, 0x04, 0x00, 0x02, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00,
     0x20, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c, 0x08, 0x40, 0x02, 0x84, 0x00, 0x49, 0x88,
-    0x00, 0x81, 0x40, 0x80, 0x00, 0x40, 0x00, 0x00, 0x00, 0x08, 0x60, 0x08, 0x00, 0x00, 0x00, 0x81,
-    0x00, 0x00, 0x11, 0x00, 0x01, 0x10, 0x00, 0x81, 0x00, 0x82, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c, 0x08, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x20, 0x01, 0x42, 0x80, 0x24, 0x44, 0x80, 0x40, 0x20, 0x40, 0x00, 0x20, 0x00, 0x00, 0x00,
+    0x04, 0x30, 0x04, 0x00, 0x00, 0x80, 0x40, 0x00, 0x80, 0x08, 0x80, 0x00, 0x08, 0x80, 0x40, 0x00,
+    0x41, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1881;
+pub(crate) const N_PATHS: usize = 1936;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

@@ -49,7 +49,8 @@ pub const ITEMS: [StorageItem; 8] = [
     StorageItem {
         id: "transactions",
         group: StorageGroup::User,
-        keys: &["vela.transactionHistory"],
+        // The deleted list goes with the history it was kept for.
+        keys: &["vela.transactionHistory", "vela.deletedTransactions"],
         prefixes: &[],
     },
     StorageItem {
@@ -209,6 +210,7 @@ mod tests {
     #[test]
     fn every_shells_keys_land_in_the_same_row() {
         assert_eq!(row("vela.transactionHistory"), Some("transactions"));
+        assert_eq!(row("vela.deletedTransactions"), Some("transactions"));
         assert_eq!(row("vela.contacts.dismissed"), Some("contacts"));
         assert_eq!(row("vela.networkConfig"), Some("custom"));
         assert_eq!(row("vela.bhist"), Some("browsing"));

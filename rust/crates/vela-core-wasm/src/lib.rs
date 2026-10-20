@@ -19,6 +19,7 @@ use wasm_bindgen::prelude::*;
 /// function exports below — pure kernels the app calls — these are stateful
 /// cores the web shell drives with events and effect results.
 mod bridge;
+mod intents;
 mod onboarding;
 mod settings;
 /// Where an account's signatures go: its sign-in key.
