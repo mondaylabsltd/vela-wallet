@@ -21,6 +21,14 @@ pub fn intent_check(actor: String, action_json: String, grants_json: String) -> 
     intent_json::check(&actor, &action_json, &grants_json)
 }
 
+/// Where the action's change is seen: the screen to open once an agent's
+/// request is done (a screen's JSON, or `null`).
+#[uniffi::export]
+#[must_use]
+pub fn intent_shows(action_json: String) -> String {
+    intent_json::shows(&action_json)
+}
+
 /// Does what the action names exist, and is it already so?
 #[uniffi::export]
 #[must_use]

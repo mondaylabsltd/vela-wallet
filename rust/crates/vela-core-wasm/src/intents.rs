@@ -20,6 +20,14 @@ pub fn intent_check(actor: &str, action_json: &str, grants_json: &str) -> String
     intent_json::check(actor, action_json, grants_json)
 }
 
+/// Where the action's change is seen: the screen to open once an agent's
+/// request is done (a screen's JSON, or `null`).
+#[wasm_bindgen(js_name = intentShows)]
+#[must_use]
+pub fn intent_shows(action_json: &str) -> String {
+    intent_json::shows(action_json)
+}
+
 /// Does what the action names exist, and is it already so?
 #[wasm_bindgen(js_name = intentExamine)]
 #[must_use]

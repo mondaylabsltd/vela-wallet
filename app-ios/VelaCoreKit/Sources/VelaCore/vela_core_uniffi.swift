@@ -16929,6 +16929,18 @@ public func intentReview(inputJson: String) -> String  {
 })
 }
 /**
+ * Where the action's change is seen: the screen to open once an agent's
+ * request is done (a screen's JSON, or `null`).
+ */
+public func intentShows(actionJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_shows(
+        FfiConverterString.lower(actionJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Has the change held? `{ verdict, baseline }`.
  */
 public func intentVerdict(actionJson: String, worldJson: String, baselineJson: String) -> String  {
@@ -18106,6 +18118,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_review() != 10119) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_shows() != 44329) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_verdict() != 64611) {

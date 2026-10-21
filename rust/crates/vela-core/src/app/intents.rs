@@ -1233,6 +1233,64 @@ pub fn check(actor: Actor, action: &Action, grants: &Grants) -> Check {
     }
 }
 
+/// Where the change an action makes is seen: the screen a shell opens once an
+/// agent's request is done, so the person watching sees what it did (owner,
+/// 2026-10-21: an approved change that left the page as it was felt silent).
+///
+/// `None` where the action shows itself — a transfer drafts onto its own
+/// review, signing out has its sheet, an erase ends at the first run — or is
+/// the person's own (the agent's connection).
+#[must_use]
+pub fn shows(action: &Action) -> Option<Screen> {
+    let settings = |page: &str| {
+        Some(Screen::Settings {
+            page: Some(page.to_owned()),
+        })
+    };
+    match action {
+        Action::Show { screen } => Some(screen.clone()),
+        Action::SwitchAccount { .. }
+        | Action::DeleteActivity { .. }
+        | Action::SetBalancePrivacy { .. }
+        | Action::RefreshBalances
+        | Action::AddToken { .. } => Some(Screen::Home),
+        Action::SetPreference { preference } => match preference {
+            Preference::Theme(_) | Preference::Language(_) | Preference::TextScale(_) => {
+                settings("appearance")
+            }
+            Preference::NumberFormat(_)
+            | Preference::DateFormat(_)
+            | Preference::TimeFormat(_)
+            | Preference::Currency(_) => settings("localization"),
+            Preference::FeeSpeed(_) => settings("fee-speed"),
+            Preference::Analytics(_) => Some(Screen::Settings { page: None }),
+        },
+        Action::SaveContact { address, .. }
+        | Action::SetContactFavorite { address, .. }
+        | Action::SetContactGroups { address, .. } => Some(Screen::Contact {
+            address: address.clone(),
+        }),
+        Action::SetGroupMembers { id, .. } => Some(Screen::Group { id: id.clone() }),
+        Action::DeleteContact { .. } | Action::SaveGroup { .. } | Action::DeleteGroup { .. } => {
+            Some(Screen::Contacts)
+        }
+        Action::RemoveWallet { .. } => settings("account"),
+        Action::ClearStorageItem { .. } | Action::ClearCaches => settings("storage"),
+        Action::AddNetwork { .. }
+        | Action::SetNetworkEndpoint { .. }
+        | Action::RemoveNetwork { .. } => settings("networks"),
+        Action::SetProviderKey { .. } => settings("rpc-providers"),
+        Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => settings("endpoints"),
+        Action::SignOut
+        | Action::EraseDevice
+        | Action::ConfigureAgent { .. }
+        | Action::PrepareTransfer { .. }
+        | Action::PrepareBatchTransfer { .. }
+        | Action::SubmitTransfer { .. }
+        | Action::CancelTransfer { .. } => None,
+    }
+}
+
 /// [`check`] for an action that arrives as JSON (an agent wrote it): one that
 /// does not parse is refused, saying why.
 #[must_use]

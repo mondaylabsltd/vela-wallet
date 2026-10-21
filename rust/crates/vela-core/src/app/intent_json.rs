@@ -38,10 +38,16 @@ pub fn catalog() -> String {
 /// whether its input is well formed.
 #[must_use]
 pub fn check(actor: &str, action_json: &str, grants_json: &str) -> String {
-    let actor = serde_json::from_value::<Actor>(Value::String(actor.to_owned()))
-        .unwrap_or(Actor::Agent);
+    let actor =
+        serde_json::from_value::<Actor>(Value::String(actor.to_owned())).unwrap_or(Actor::Agent);
     let grants = serde_json::from_str::<Grants>(grants_json).unwrap_or_default();
     to_json(&intents::check_json(actor, action_json, &grants))
+}
+
+/// Where the action's change is seen (a screen), or `null`.
+#[must_use]
+pub fn shows(action_json: &str) -> String {
+    to_json(&action_of(action_json).and_then(|action| intents::shows(&action)))
 }
 
 /// Does what the action names exist, and is it already so?
@@ -111,7 +117,12 @@ pub fn operation_progress(
 
 /// `vela_state`: the wallet as an agent reads it.
 #[must_use]
-pub fn agent_state(world_json: &str, page: &str, approvals_json: &str, activity_json: &str) -> String {
+pub fn agent_state(
+    world_json: &str,
+    page: &str,
+    approvals_json: &str,
+    activity_json: &str,
+) -> String {
     let approvals = serde_json::from_str::<Value>(approvals_json).unwrap_or(Value::Null);
     let activity = serde_json::from_str::<Value>(activity_json).unwrap_or(Value::Null);
     to_json(&intent_rules::agent_state(

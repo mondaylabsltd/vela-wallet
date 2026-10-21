@@ -680,3 +680,36 @@ fn network_changes_are_manage_level_and_need_real_urls() {
         );
     }
 }
+
+/// Every change an agent makes opens where it is seen — or shows itself.
+#[test]
+fn every_action_shows_where_its_change_is_seen() {
+    use vela_core::app::intents::{shows, Screen, SETTINGS_PAGES};
+    for action in one_of_each() {
+        match shows(&action) {
+            Some(Screen::Settings { page: Some(page) }) => {
+                assert!(SETTINGS_PAGES.contains(&page.as_str()), "{page}");
+            }
+            Some(_) => {}
+            None => assert!(
+                is_transfer(&action)
+                    || matches!(
+                        action,
+                        Action::SignOut | Action::EraseDevice | Action::ConfigureAgent { .. }
+                    ),
+                "{} shows nothing",
+                action.kind()
+            ),
+        }
+    }
+    let save: Action = serde_json::from_value(serde_json::json!({
+        "type": "save_contact", "address": "0x1111111111111111111111111111111111111111", "name": "Alice"
+    }))
+    .unwrap();
+    assert_eq!(
+        shows(&save),
+        Some(Screen::Contact {
+            address: "0x1111111111111111111111111111111111111111".into()
+        })
+    );
+}
