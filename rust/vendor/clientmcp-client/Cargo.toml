@@ -1,9 +1,10 @@
 # Vendored copy of ClientMCP's Rust client (`crates/client` in
-# github.com/atshelchin/clientmcp), the desktop's end of the AI agent's bridge
-# (spec 103, spec 104 phase 5). The owner chose a copy over a git dependency
-# (2026-10-21).
+# github.com/atshelchin/clientmcp), every native shell's end of the AI agent's
+# bridge (spec 103, spec 104): the desktop's directly, the phones' through
+# `vela-agent` in vela-core-uniffi. The owner chose a copy over a git
+# dependency (2026-10-21).
 #
-# Source: clientmcp crates/client at baa89b60fdc7e0a8ad8ac1e9472ffd5b042c1cd6
+# Source: clientmcp crates/client at 76e801facf484dc3f0f7e55d53e65a21c5ce76e5
 # (branch rust-client; not yet on GitHub).
 # `src/lib.rs` is the upstream file unchanged; this manifest is upstream's with
 # the workspace inheritance written out and the dev-dependencies (its tests run
@@ -27,8 +28,13 @@ publish = false
 futures-util = "0.3"
 rand = "0.10"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-native-certs = "0.8"
 serde_json = "1"
 tokio = { version = "1.40", features = ["rt", "macros", "net", "time", "sync"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
 tokio-util = "0.7"
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+rustls-native-certs = "0.8"
+
+[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+webpki-roots = "1"

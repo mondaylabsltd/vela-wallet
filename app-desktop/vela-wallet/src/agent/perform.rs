@@ -262,12 +262,8 @@ pub async fn perform(
             super::transfers::prepare_batch(*chain_id, token.as_deref(), recipients, actor, cx)
                 .await
         }
-        Action::SubmitTransfer { operation } => {
-            cx.update(|cx| super::transfers::submit(operation, actor, cx))
-        }
-        Action::CancelTransfer { operation } => {
-            cx.update(|cx| super::transfers::cancel(operation, cx))
-        }
+        Action::SubmitTransfer { operation } => super::transfers::submit(operation, actor, cx),
+        Action::CancelTransfer { operation } => super::transfers::cancel(operation, cx),
         Action::AddToken { chain_id, address } => add_token(*chain_id, address, cx).await,
         Action::DeleteActivity { id } => {
             // History's "Delete record": the feed tombstones it and drops the row.

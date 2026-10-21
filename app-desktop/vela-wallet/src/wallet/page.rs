@@ -1635,7 +1635,7 @@ impl WalletPage {
         crate::agent::register_page(cx.entity().downgrade(), cx);
         cx.observe_global::<crate::agent::Agent>(|_, cx| cx.notify())
             .detach();
-        cx.observe_global::<crate::agent::intents::Book>(|_, cx| cx.notify())
+        cx.observe_global::<crate::agent::Requests>(|_, cx| cx.notify())
             .detach();
         let agent_url_focus = cx.focus_handle();
         let agent_token_focus = cx.focus_handle();

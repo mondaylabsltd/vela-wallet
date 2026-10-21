@@ -1868,6 +1868,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -10057,6 +10058,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
+name = "vela-agent"
+version = "0.1.0"
+dependencies = [
+ "clientmcp-client",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "vela-core",
+]
+
+[[package]]
 name = "vela-core"
 version = "0.1.0"
 dependencies = [
@@ -10134,6 +10147,7 @@ dependencies = [
  "ureq",
  "url",
  "uuid",
+ "vela-agent",
  "vela-core",
  "vela-passkey-win",
  "webview2-com",

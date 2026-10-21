@@ -57,5 +57,10 @@ alloy-dyn-abi = { workspace = true }
 alloy-primitives = { workspace = true }
 thiserror = { workspace = true }
 crux_core = { workspace = true }
+# The AI agent (spec 104 phase 7, `agent_bridge.rs`): the runner, the
+# transfers, the tools and the ClientMCP connection, the one copy the desktop
+# runs too. It brings tokio, rustls (ring) and a WebSocket into the phones'
+# library — the agent's own thread, idle until the person switches it on.
+vela-agent = { path = "../vela-agent" }
 serde = { workspace = true }
 serde_json = { workspace = true }

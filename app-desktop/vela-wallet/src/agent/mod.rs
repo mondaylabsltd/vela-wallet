@@ -4,7 +4,8 @@
 //! - **The person** configures it in Settings → AI agent (`settings.rs`): off
 //!   unless they turn it on, and never changed by the agent.
 //! - **The connection** is ClientMCP's Rust client on a thread of its own
-//!   (`runtime.rs`); every call it receives is handed to gpui and answered
+//!   (`vela_agent::connection`), dialled through the app's proxy route; every
+//!   call it receives is handed to gpui and answered
 //!   there (`tools.rs`), through the same intents the screens use.
 //! - **The intents** (`intents.rs`, `perform.rs`, `transfers.rs`): the core
 //!   judges, the desktop's residents and page do; the agent's manage-level
@@ -15,9 +16,8 @@
 
 #[cfg(test)]
 mod coverage;
-pub mod intents;
+pub use vela_agent::intents;
 mod perform;
-mod runtime;
 pub mod settings;
 pub mod tools;
 pub mod transfers;
@@ -33,12 +33,22 @@ use vela_core::app::intents::{
 };
 
 use intents::{Book, Deps, Outcome, Performed};
-use runtime::Connection;
 use settings::{AgentChange, AgentConfig};
+use vela_agent::connection::{Connection, Dial};
 
 use crate::wallet::page::WalletPage;
 
-impl Global for Book {}
+/// The runner's book as a gpui global: the screens watch it (the capsule,
+/// the approval sheet, Settings' last action).
+#[derive(Default)]
+pub struct Requests(pub Book);
+
+impl Global for Requests {}
+
+/// The book, to read.
+pub fn book(cx: &App) -> Option<&Book> {
+    cx.try_global::<Requests>().map(|requests| &requests.0)
+}
 
 /// The connection as Settings and the bar show it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,7 +84,7 @@ impl Global for PagePort {}
 /// Start the agent: read its settings, and dial if they say so. Once, at launch.
 pub fn boot(cx: &mut App) {
     let (events, mut incoming) = futures::channel::mpsc::unbounded();
-    cx.set_global(Book::default());
+    cx.set_global(Requests::default());
     cx.set_global(Agent {
         config: AgentConfig::load(),
         link: Link::Off,
@@ -155,16 +165,16 @@ pub fn sync(cx: &mut App) {
     if dial.is_empty() {
         cx.update_global::<Agent, _>(|agent, _| agent.link = Link::Off);
         // Nothing of a disconnected agent's still waits for the person.
-        cx.update_global::<Book, _>(|book, _| book.stop());
+        cx.update_global::<Requests, _>(|requests, _| requests.0.stop());
         return;
     }
     let (url, token) = dial.split_once('\n').unwrap_or_default();
-    let tools = tools::definitions();
+    let definitions = vela_agent::tools::definitions();
     let status_events = events.clone();
     let opened = Connection::open(
         url,
         token,
-        tools::INSTRUCTIONS,
+        &vela_agent::tools::instructions("computer"),
         move |status, close| {
             let _ = status_events.unbounded_send(tools::Event::Status {
                 serial,
@@ -172,7 +182,8 @@ pub fn sync(cx: &mut App) {
                 close: close.cloned(),
             });
         },
-        |client| tools::expose(client, &tools, &events),
+        Some(proxy_dial(url.trim_start().starts_with("wss:"))),
+        |client| vela_agent::tools::expose(client, &definitions, &tools::forward(&events)),
     );
     cx.update_global::<Agent, _>(|agent, _| {
         agent.link = if opened.is_some() {
@@ -182,6 +193,18 @@ pub fn sync(cx: &mut App) {
         };
         agent.connection = opened.map(|connection| (serial, connection));
     });
+}
+
+/// The bridge's socket, the way the rest of the app reaches the network:
+/// through the proxy the system names for it (the cable tunnel's dialler).
+fn proxy_dial(secure: bool) -> Dial {
+    std::sync::Arc::new(move |host: String, port: u16| {
+        let scheme = if secure { "https" } else { "http" };
+        crate::ctap::cable::dial(&format!("{scheme}://{host}:{port}/"), &host, port, |line| {
+            crate::diag::vlog!("agent", "{line}");
+        })
+        .map_err(|error| std::io::Error::other(error.to_string()))
+    })
 }
 
 /// The connection's status changed (on gpui, from its thread).
@@ -226,8 +249,8 @@ pub fn invoke_person_then(
 /// The person stopped the agent: nothing of its still waits, and it is
 /// switched off (their own setting, through the same intent Settings uses).
 pub fn stop(cx: &mut App) {
-    if cx.has_global::<Book>() {
-        cx.update_global::<Book, _>(|book, _| book.stop());
+    if cx.has_global::<Requests>() {
+        cx.update_global::<Requests, _>(|requests, _| requests.0.stop());
     }
     invoke_person(
         Action::ConfigureAgent {
@@ -241,8 +264,8 @@ pub fn stop(cx: &mut App) {
 
 /// The person answered an agent's request.
 pub fn answer(id: u64, approved: bool, cx: &mut App) {
-    if cx.has_global::<Book>() {
-        cx.update_global::<Book, _>(|book, _| book.answer(id, approved));
+    if cx.has_global::<Requests>() {
+        cx.update_global::<Requests, _>(|requests, _| requests.0.answer(id, approved));
     }
 }
 
@@ -297,10 +320,10 @@ impl Deps for Live<'_> {
 
     fn book<R>(&mut self, change: impl FnOnce(&mut Book) -> R) -> R {
         self.cx.update(|cx| {
-            if !cx.has_global::<Book>() {
-                cx.set_global(Book::default());
+            if !cx.has_global::<Requests>() {
+                cx.set_global(Requests::default());
             }
-            cx.update_global::<Book, _>(|book, _| change(book))
+            cx.update_global::<Requests, _>(|requests, _| change(&mut requests.0))
         })
     }
 }

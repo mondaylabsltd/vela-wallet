@@ -9,7 +9,6 @@ use gpui::{AnyElement, App};
 use vela_core::app::intents::{Action, Preference, Screen};
 
 use super::*;
-use crate::agent::intents::Book;
 use crate::agent::{self, Agent, Link};
 use crate::settings::components::toggle_row;
 use crate::settings::fixtures::Pill;
@@ -458,9 +457,7 @@ impl WalletPage {
         }
 
         // The agent's latest call, by its action's name and how it ended.
-        let latest = cx
-            .try_global::<Book>()
-            .and_then(|book| book.activity.first().cloned());
+        let latest = agent::book(cx).and_then(|book| book.activity.first().cloned());
         if let Some(latest) = latest {
             let how = match &latest.outcome {
                 Some(agent::intents::Outcome::Rejected { reason }) => {
@@ -492,8 +489,7 @@ impl WalletPage {
 
     /// The agent's request waiting for the person, if one is.
     pub(super) fn agent_pending(&self, cx: &App) -> Option<agent::intents::PendingApproval> {
-        cx.try_global::<Book>()
-            .and_then(|book| book.approvals.first().cloned())
+        agent::book(cx).and_then(|book| book.approvals.first().cloned())
     }
 
     /// The agent's capsule, floating at the top of the window as the web's
@@ -510,9 +506,7 @@ impl WalletPage {
         if !ready && !pending {
             return None;
         }
-        let latest = cx
-            .try_global::<Book>()
-            .and_then(|book| book.activity.first().cloned());
+        let latest = agent::book(cx).and_then(|book| book.activity.first().cloned());
         let busy = latest.as_ref().is_some_and(|entry| entry.stage.is_some());
         let (dot, words) = match link {
             Link::Online if busy => (theme.info_base, None),

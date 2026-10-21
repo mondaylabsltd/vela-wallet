@@ -812,6 +812,1333 @@ public func FfiConverterTypeActivityFeedCore_lower(_ value: ActivityFeedCore) ->
 
 
 /**
+ * The phone's AI agent: one for the app's life.
+ */
+public protocol AgentCoreProtocol: AnyObject, Sendable {
+    
+    /**
+     * The agent's recent calls, newest first (JSON).
+     */
+    func activity()  -> String
+    
+    /**
+     * The person answered an agent's request.
+     */
+    func answer(id: UInt64, approved: Bool) 
+    
+    /**
+     * The agent's requests waiting for the person, oldest first (JSON).
+     */
+    func approvals()  -> String
+    
+    /**
+     * The passkey's ceremony moved: `"started"` (its prompt is up) or
+     * `"signed"`.
+     */
+    func ceremony(event: String) 
+    
+    /**
+     * The person's settings, as stored: connect, reconnect or hang up to
+     * match them. Also the app's coming to the foreground (`enabled` as set)
+     * and leaving it (`false`).
+     */
+    func configure(enabled: Bool, bridgeUrl: String, clientToken: String) 
+    
+    /**
+     * The open send's operation on its review (an `Operation`'s JSON),
+     * adopted if it has none yet — so a person who filled the form
+     * themselves confirms through `submit_transfer` too. Calls the shell's
+     * `send_open` on this thread.
+     */
+    func currentReview()  -> String?
+    
+    /**
+     * The person's own tap, through the same intents an agent's request
+     * takes (spec 103 D3). `false` when `action_json` is no action (nothing
+     * is done, `done` is not called).
+     */
+    func invokePerson(actionJson: String, done: AgentDone?)  -> Bool
+    
+    func link()  -> AgentLink
+    
+    /**
+     * The person stopped the agent: nothing of its still waits, and it is
+     * switched off through `configure_agent` (the shell's `perform` saves
+     * it and configures again).
+     */
+    func stop() 
+    
+}
+/**
+ * The phone's AI agent: one for the app's life.
+ */
+open class AgentCore: AgentCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_agentcore(self.handle, $0) }
+    }
+    /**
+     * `device` is where the wallet is open, for the model: `"phone"`.
+     */
+public convenience init(shell: AgentShell, device: String) {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_agentcore_new(
+        FfiConverterTypeAgentShell_lower(shell),
+        FfiConverterString.lower(device),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_agentcore(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The agent's recent calls, newest first (JSON).
+     */
+open func activity() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_activity(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The person answered an agent's request.
+     */
+open func answer(id: UInt64, approved: Bool)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_answer(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(id),
+        FfiConverterBool.lower(approved),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The agent's requests waiting for the person, oldest first (JSON).
+     */
+open func approvals() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_approvals(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The passkey's ceremony moved: `"started"` (its prompt is up) or
+     * `"signed"`.
+     */
+open func ceremony(event: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_ceremony(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(event),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The person's settings, as stored: connect, reconnect or hang up to
+     * match them. Also the app's coming to the foreground (`enabled` as set)
+     * and leaving it (`false`).
+     */
+open func configure(enabled: Bool, bridgeUrl: String, clientToken: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_configure(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(enabled),
+        FfiConverterString.lower(bridgeUrl),
+        FfiConverterString.lower(clientToken),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The open send's operation on its review (an `Operation`'s JSON),
+     * adopted if it has none yet — so a person who filled the form
+     * themselves confirms through `submit_transfer` too. Calls the shell's
+     * `send_open` on this thread.
+     */
+open func currentReview() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_current_review(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The person's own tap, through the same intents an agent's request
+     * takes (spec 103 D3). `false` when `action_json` is no action (nothing
+     * is done, `done` is not called).
+     */
+open func invokePerson(actionJson: String, done: AgentDone?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_invoke_person(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(actionJson),
+        FfiConverterOptionTypeAgentDone.lower(done),uniffiCallStatus
+    )
+})
+}
+    
+open func link() -> AgentLink  {
+    return try!  FfiConverterTypeAgentLink_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_link(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The person stopped the agent: nothing of its still waits, and it is
+     * switched off through `configure_agent` (the shell's `perform` saves
+     * it and configures again).
+     */
+open func stop()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_stop(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = AgentCore
+
+    public static func lift(_ handle: UInt64) throws -> AgentCore {
+        return AgentCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: AgentCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AgentCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentCore_lift(_ handle: UInt64) throws -> AgentCore {
+    return try FfiConverterTypeAgentCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentCore_lower(_ value: AgentCore) -> UInt64 {
+    return FfiConverterTypeAgentCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Hears how a person's own request ended: an outcome's JSON
+ * (`{"status":"completed"}`, `{"status":"rejected","reason":…}`, …).
+ */
+public protocol AgentDone: AnyObject, Sendable {
+    
+    func done(outcome: String) 
+    
+}
+/**
+ * Hears how a person's own request ended: an outcome's JSON
+ * (`{"status":"completed"}`, `{"status":"rejected","reason":…}`, …).
+ */
+open class AgentDoneImpl: AgentDone, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_agentdone(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_agentdone(handle, $0) }
+    }
+
+    
+
+    
+open func done(outcome: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentdone_done(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(outcome),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceAgentDone {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAgentDone = UniffiVTableCallbackInterfaceAgentDone(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeAgentDone.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface AgentDone: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeAgentDone.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface AgentDone: handle missing in uniffiClone")
+            }
+        },
+        done: { (
+            uniffiHandle: UInt64,
+            outcome: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeAgentDone.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.done(
+                     outcome: try FfiConverterString.lift(outcome)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAgentDone> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAgentDone>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitAgentDone() {
+    uniffi_vela_core_uniffi_fn_init_callback_vtable_agentdone(UniffiCallbackInterfaceAgentDone.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentDone: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<AgentDone>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = AgentDone
+
+    public static func lift(_ handle: UInt64) throws -> AgentDone {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return AgentDoneImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: AgentDone) -> UInt64 {
+         if let rustImpl = value as? AgentDoneImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentDone {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AgentDone, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentDone_lift(_ handle: UInt64) throws -> AgentDone {
+    return try FfiConverterTypeAgentDone.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentDone_lower(_ value: AgentDone) -> UInt64 {
+    return FfiConverterTypeAgentDone.lower(value)
+}
+
+
+
+
+
+
+/**
+ * What a shell does for its agent — `vela_agent::shell::Shell`, as Swift
+ * and Kotlin see it.
+ */
+public protocol AgentShell: AnyObject, Sendable {
+    
+    /**
+     * The wallet's views as one JSON object: `session`, `contacts`,
+     * `balance`, `feed`, `networks` (once loaded), `currency`, `fee_tier`,
+     * `preferences` — each the machine's view JSON.
+     */
+    func views()  -> String
+    
+    /**
+     * Do an action (an intent's JSON) — any but a transfer's — through the
+     * shell's own machines, as its screens do; answer once every call was
+     * made: `{"done":true}`, or `{"refused":{"code":…,"detail":…}}`.
+     */
+    func perform(action: String)  -> String
+    
+    /**
+     * Open a screen (an intent's `Screen` JSON) for the person.
+     */
+    func reveal(screen: String) 
+    
+    /**
+     * The page the person is on: `wallet`, `contacts`, `explore`,
+     * `settings`, or `welcome` while nobody is in.
+     */
+    func page()  -> String
+    
+    /**
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     */
+    func signing()  -> String?
+    
+    /**
+     * What the agent's screens show changed: its link, its requests. Read
+     * them again (on the main thread).
+     */
+    func changed() 
+    
+    /**
+     * The send open now, if any.
+     */
+    func sendOpen()  -> AgentSendOpen?
+    
+    /**
+     * The send's alert while one is up, by its name (`SendAlert` JSON's
+     * tag, or the string it is).
+     */
+    func sendAlert()  -> String?
+    
+    /**
+     * Open a send on `params` (`SendOpenParams` JSON), as its own entry
+     * does; its session.
+     */
+    func sendStart(params: String)  -> UInt64?
+    
+    /**
+     * One of the open send's events (`SendEvent` JSON).
+     */
+    func sendDispatch(event: String) 
+    
+    /**
+     * Leave the send, as its own Back off the form does.
+     */
+    func sendClose() 
+    
+    /**
+     * The signed-in account's address, or empty.
+     */
+    func account()  -> String
+    
+    /**
+     * Whether `account`'s balances have been read at least once.
+     */
+    func balancesSettled(account: String)  -> Bool
+    
+    /**
+     * The holdings (`BalanceToken[]` JSON).
+     */
+    func holdings()  -> String
+    
+    /**
+     * The chain tracker's entries (`TrackEntryView[]` JSON).
+     */
+    func tracker()  -> String
+    
+    /**
+     * A network as this shell's send spells it in `SendToken.network`.
+     */
+    func networkId(chainId: UInt32)  -> String
+    
+}
+/**
+ * What a shell does for its agent — `vela_agent::shell::Shell`, as Swift
+ * and Kotlin see it.
+ */
+open class AgentShellImpl: AgentShell, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_agentshell(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_agentshell(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The wallet's views as one JSON object: `session`, `contacts`,
+     * `balance`, `feed`, `networks` (once loaded), `currency`, `fee_tier`,
+     * `preferences` — each the machine's view JSON.
+     */
+open func views() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_views(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Do an action (an intent's JSON) — any but a transfer's — through the
+     * shell's own machines, as its screens do; answer once every call was
+     * made: `{"done":true}`, or `{"refused":{"code":…,"detail":…}}`.
+     */
+open func perform(action: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_perform(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(action),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Open a screen (an intent's `Screen` JSON) for the person.
+     */
+open func reveal(screen: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_reveal(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(screen),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The page the person is on: `wallet`, `contacts`, `explore`,
+     * `settings`, or `welcome` while nobody is in.
+     */
+open func page() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_page(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     */
+open func signing() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_signing(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * What the agent's screens show changed: its link, its requests. Read
+     * them again (on the main thread).
+     */
+open func changed()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_changed(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The send open now, if any.
+     */
+open func sendOpen() -> AgentSendOpen?  {
+    return try!  FfiConverterOptionTypeAgentSendOpen.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_send_open(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The send's alert while one is up, by its name (`SendAlert` JSON's
+     * tag, or the string it is).
+     */
+open func sendAlert() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_send_alert(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Open a send on `params` (`SendOpenParams` JSON), as its own entry
+     * does; its session.
+     */
+open func sendStart(params: String) -> UInt64?  {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_send_start(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(params),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * One of the open send's events (`SendEvent` JSON).
+     */
+open func sendDispatch(event: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_send_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(event),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Leave the send, as its own Back off the form does.
+     */
+open func sendClose()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_send_close(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The signed-in account's address, or empty.
+     */
+open func account() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_account(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Whether `account`'s balances have been read at least once.
+     */
+open func balancesSettled(account: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_balances_settled(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(account),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The holdings (`BalanceToken[]` JSON).
+     */
+open func holdings() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_holdings(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The chain tracker's entries (`TrackEntryView[]` JSON).
+     */
+open func tracker() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_tracker(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * A network as this shell's send spells it in `SendToken.network`.
+     */
+open func networkId(chainId: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentshell_network_id(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceAgentShell {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceAgentShell = UniffiVTableCallbackInterfaceAgentShell(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeAgentShell.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface AgentShell: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeAgentShell.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface AgentShell: handle missing in uniffiClone")
+            }
+        },
+        views: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.views(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        perform: { (
+            uniffiHandle: UInt64,
+            action: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.perform(
+                     action: try FfiConverterString.lift(action)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reveal: { (
+            uniffiHandle: UInt64,
+            screen: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reveal(
+                     screen: try FfiConverterString.lift(screen)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        page: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.page(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        signing: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String? in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.signing(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        changed: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.changed(
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sendOpen: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> AgentSendOpen? in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.sendOpen(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionTypeAgentSendOpen.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sendAlert: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String? in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.sendAlert(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sendStart: { (
+            uniffiHandle: UInt64,
+            params: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> UInt64? in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.sendStart(
+                     params: try FfiConverterString.lift(params)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionUInt64.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sendDispatch: { (
+            uniffiHandle: UInt64,
+            event: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.sendDispatch(
+                     event: try FfiConverterString.lift(event)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        sendClose: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.sendClose(
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        account: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.account(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        balancesSettled: { (
+            uniffiHandle: UInt64,
+            account: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.balancesSettled(
+                     account: try FfiConverterString.lift(account)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        holdings: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.holdings(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        tracker: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.tracker(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        networkId: { (
+            uniffiHandle: UInt64,
+            chainId: UInt32,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeAgentShell.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.networkId(
+                     chainId: try FfiConverterUInt32.lift(chainId)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceAgentShell> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceAgentShell>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitAgentShell() {
+    uniffi_vela_core_uniffi_fn_init_callback_vtable_agentshell(UniffiCallbackInterfaceAgentShell.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentShell: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<AgentShell>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = AgentShell
+
+    public static func lift(_ handle: UInt64) throws -> AgentShell {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return AgentShellImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: AgentShell) -> UInt64 {
+         if let rustImpl = value as? AgentShellImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentShell {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: AgentShell, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentShell_lift(_ handle: UInt64) throws -> AgentShell {
+    return try FfiConverterTypeAgentShell.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentShell_lower(_ value: AgentShell) -> UInt64 {
+    return FfiConverterTypeAgentShell.lower(value)
+}
+
+
+
+
+
+
+/**
  * The approval guard: an unlimited approval never leaves the wallet.
  */
 public protocol ApprovalGuardCoreProtocol: AnyObject, Sendable {
@@ -7432,6 +8759,75 @@ public func FfiConverterTypeAbiValue_lower(_ value: AbiValue) -> RustBuffer {
 
 
 /**
+ * The send open now.
+ */
+public struct AgentSendOpen: Equatable, Hashable {
+    /**
+     * The shell's own id for this send: a new one for each send opened.
+     */
+    public var session: UInt64
+    /**
+     * Its `SendView`, as JSON.
+     */
+    public var view: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The shell's own id for this send: a new one for each send opened.
+         */session: UInt64, 
+        /**
+         * Its `SendView`, as JSON.
+         */view: String) {
+        self.session = session
+        self.view = view
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AgentSendOpen: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentSendOpen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentSendOpen {
+        return
+            try AgentSendOpen(
+                session: FfiConverterUInt64.read(from: &buf), 
+                view: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AgentSendOpen, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.session, into: &buf)
+        FfiConverterString.write(value.view, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentSendOpen_lift(_ buf: RustBuffer) throws -> AgentSendOpen {
+    return try FfiConverterTypeAgentSendOpen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentSendOpen_lower(_ value: AgentSendOpen) -> RustBuffer {
+    return FfiConverterTypeAgentSendOpen.lower(value)
+}
+
+
+/**
  * One balance a chain's read covers (spec 082 RE9).
  */
 public struct BalanceReadSlot: Equatable, Hashable {
@@ -11216,6 +12612,106 @@ public func FfiConverterTypeWebAuthnAssertion_lower(_ value: WebAuthnAssertion) 
 
 
 /**
+ * The connection as the agent's screens show it.
+ */
+
+public enum AgentLink: Equatable, Hashable {
+    
+    /**
+     * Switched off, or not fully set up.
+     */
+    case off
+    case connecting
+    case online
+    case offline
+    /**
+     * The bridge refused or closed it for good, saying why.
+     */
+    case closed(code: UInt16, reason: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AgentLink: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentLink: FfiConverterRustBuffer {
+    typealias SwiftType = AgentLink
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentLink {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .off
+        
+        case 2: return .connecting
+        
+        case 3: return .online
+        
+        case 4: return .offline
+        
+        case 5: return .closed(code: try FfiConverterUInt16.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AgentLink, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .off:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .connecting:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .online:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .offline:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .closed(code,reason):
+            writeInt(&buf, Int32(5))
+            FfiConverterUInt16.write(code, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentLink_lift(_ buf: RustBuffer) throws -> AgentLink {
+    return try FfiConverterTypeAgentLink.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentLink_lower(_ value: AgentLink) -> RustBuffer {
+    return FfiConverterTypeAgentLink.lower(value)
+}
+
+
+
+/**
  * What one [`CcidPort::transmit`] produced.
  */
 
@@ -13360,6 +14856,30 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAgentDone: FfiConverterRustBuffer {
+    typealias SwiftType = AgentDone?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAgentDone.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAgentDone.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSignerPageAdmission: FfiConverterRustBuffer {
     typealias SwiftType = SignerPageAdmission?
 
@@ -13376,6 +14896,30 @@ fileprivate struct FfiConverterOptionTypeSignerPageAdmission: FfiConverterRustBu
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeSignerPageAdmission.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAgentSendOpen: FfiConverterRustBuffer {
+    typealias SwiftType = AgentSendOpen?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAgentSendOpen.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAgentSendOpen.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -16638,6 +18182,29 @@ public func wrappedNativeIsTheNative(chainId: UInt32, address: String) -> Bool  
 })
 }
 /**
+ * Why a bridge URL cannot be used — `"invalid"`, `"insecure"` (`ws:` to
+ * another machine) — or `None`.
+ */
+public func agentBridgeUrlProblem(url: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_agent_bridge_url_problem(
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
+ * The MCP endpoint an agent adds, derived from the bridge URL.
+ */
+public func agentMcpEndpoint(url: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_agent_mcp_endpoint(
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
  * The WebSocket tunnel URL to open, from the decrypted advert plaintext. `None`
  * if the secrets or the advert are malformed, or the advert names an unknown
  * tunnel domain.
@@ -18060,6 +19627,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_wrapped_native_is_the_native() != 56849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_agent_bridge_url_problem() != 43537) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_agent_mcp_endpoint() != 16137) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_cable_connect_url() != 43371) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18286,6 +19859,84 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_t_first() != 10021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_activity() != 11811) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_answer() != 14687) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_approvals() != 62719) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_ceremony() != 59471) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_configure() != 17673) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_current_review() != 60306) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_invoke_person() != 26696) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_link() != 16391) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_stop() != 1122) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentdone_done() != 46120) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_views() != 19381) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_perform() != 32054) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_reveal() != 19595) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_page() != 54259) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_signing() != 15618) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_changed() != 39137) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_open() != 39770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_alert() != 28675) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_start() != 10794) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_dispatch() != 40284) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_close() != 17009) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_account() != 34495) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_balances_settled() != 14770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_holdings() != 1340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_tracker() != 62022) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_network_id() != 24451) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_cableframeport_write_frame() != 33387) {
@@ -18642,6 +20293,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_constructor_i18n_new_with_legacy_plurals() != 58560) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_constructor_agentcore_new() != 2462) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18733,6 +20387,8 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitAgentDone()
+    uniffiCallbackInitAgentShell()
     uniffiCallbackInitCableFramePort()
     uniffiCallbackInitCcidPort()
     uniffiCallbackInitCtapCeremonyHost()

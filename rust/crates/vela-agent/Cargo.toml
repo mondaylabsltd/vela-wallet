@@ -1,0 +1,20 @@
+[package]
+name = "vela-agent"
+version.workspace = true
+# Let-chains, as the shells that use it (the desktop is 2024 too).
+edition = "2024"
+rust-version = "1.88"
+description = "The AI agent's shared core (spec 103, spec 104): the intents' runner, transfers, the ClientMCP tools and connection — one copy for the desktop and the phones."
+
+[dependencies]
+vela-core = { workspace = true, features = ["crux"] }
+clientmcp-client = { path = "../../vendor/clientmcp-client" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1.40", features = ["rt", "time", "sync", "net"] }
+# The bridge's address, to tell `wss:` from `ws:` to this machine.
+url = "2"
+
+[dev-dependencies]
+crux_core = { workspace = true }
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }

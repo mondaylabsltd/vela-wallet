@@ -751,14 +751,24 @@ async fn run(shared: Arc<Shared>, id: u64, stop: CancellationToken) {
 type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// TLS with the platform's roots and *ring*, set up once. A library does not
-/// install a process-wide crypto provider: the application may have its own.
+/// The roots a connection trusts: the platform's own where it hands them out
+/// (macOS, Windows, Linux), Mozilla's bundled where it does not (iOS, Android).
+fn roots() -> rustls::RootCertStore {
+    let mut roots = rustls::RootCertStore::empty();
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    roots
+}
+
+/// TLS with [`roots`] and *ring*, set up once. A library does not install a
+/// process-wide crypto provider: the application may have its own.
 fn tls() -> Result<Arc<rustls::ClientConfig>, String> {
     static CONFIG: OnceLock<Result<Arc<rustls::ClientConfig>, String>> = OnceLock::new();
     CONFIG
         .get_or_init(|| {
-            let mut roots = rustls::RootCertStore::empty();
-            roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+            let roots = roots();
             let config = rustls::ClientConfig::builder_with_provider(Arc::new(
                 rustls::crypto::ring::default_provider(),
             ))

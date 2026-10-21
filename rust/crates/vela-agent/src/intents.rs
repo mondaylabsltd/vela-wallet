@@ -164,6 +164,10 @@ impl Book {
 }
 
 /// What the runner needs of the wallet.
+///
+/// Implemented by the shells for their own concrete types, whose futures are
+/// then known whole (`Send` included where the shell needs it).
+#[allow(async_fn_in_trait)]
 pub trait Deps {
     /// The core's shared check, for this asker, with the grants the wallet holds.
     fn check(&mut self, actor: Actor, action: &Action) -> Check;
@@ -199,15 +203,15 @@ const CANCELLED: &str = "the agent’s call was cancelled (its connection or the
 /// Ask for an action. Never fails: every end is an outcome.
 ///
 /// `gone` is the caller giving up — an agent's call the bridge timed out or
-/// its connection lost. Before anything is done that ends the call: an
+/// its connection lost (`Sync` where the shell's runner must be `Send`). Before anything is done that ends the call: an
 /// approval still waiting is withdrawn and nothing is performed, so an agent
 /// told "timed out" never finds the change made after all. Once the step has
 /// begun it is not undone; the person sees how it ended.
-pub async fn invoke(
+pub async fn invoke<G: Fn() -> bool + ?Sized>(
     deps: &mut impl Deps,
     actor: Actor,
     action: Action,
-    gone: &dyn Fn() -> bool,
+    gone: &G,
 ) -> Outcome {
     let agent = actor == Actor::Agent;
     let (id, epoch) = deps.book(|book| {
@@ -250,13 +254,13 @@ fn stage(deps: &mut impl Deps, id: u64, stage: Stage) {
     deps.book(|book| book.update(id, |entry| entry.stage = Some(stage)));
 }
 
-async fn run(
+async fn run<G: Fn() -> bool + ?Sized>(
     deps: &mut impl Deps,
     id: u64,
     actor: Actor,
     action: &Action,
     epoch: u64,
-    gone: &dyn Fn() -> bool,
+    gone: &G,
 ) -> Outcome {
     let checked = deps.check(actor, action);
     if let Decision::Deny { reason } = checked.decision {
@@ -357,12 +361,12 @@ enum Asked {
 }
 
 /// Put the request in front of the person and wait for their answer.
-async fn ask(
+async fn ask<G: Fn() -> bool + ?Sized>(
     deps: &mut impl Deps,
     id: u64,
     action: &Action,
     risk: Risk,
-    gone: &dyn Fn() -> bool,
+    gone: &G,
 ) -> Asked {
     let since = deps.now_ms();
     deps.book(|book| {
