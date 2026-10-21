@@ -15,6 +15,7 @@ import android.app.Application
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.feature.agent.AgentStore
 import app.getvela.wallet.feature.agent.AgentWallet
+import app.getvela.wallet.feature.agent.KeystoreTokenVault
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -565,6 +566,7 @@ class AppContainer(private val app: Application) {
         AgentStore(
             VelaStore(app),
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            KeystoreTokenVault(VelaStore(app)),
         )
     }
 
@@ -604,6 +606,9 @@ class AppContainer(private val app: Application) {
     suspend fun eraseDevice(): List<String> {
         browser.revokeAll()
         val left = DeviceStorage.eraseDevice(app, VelaStore(app))
+        // The AI agent's token: its sealed bytes went with the sweep; its key
+        // leaves the Keystore.
+        agent.forgetToken()
         // Spec 091: the debug-mode key went with the rest — About hides the
         // switch again, and the browser follows.
         preferences.reloadDebugMode()

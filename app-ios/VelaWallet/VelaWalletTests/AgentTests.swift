@@ -100,10 +100,11 @@ struct AgentTests {
         #expect(CoreFacts(json: refused)["refused"]["code"].string == "not_ready")
     }
 
-    @Test func theSettingsAreStoredAsTheWebAndTheDesktopStoreThem() async {
+    @Test func theSettingsAreStoredWithTheTokenInItsVault() async {
         let defaults = UserDefaults(suiteName: "vela.tests.agent.\(UUID().uuidString)")!
         let shelf = VelaStore(defaults: defaults)
-        let agent = AgentStore(shelf: shelf)
+        let vault = MemoryTokenVault()
+        let agent = AgentStore(shelf: shelf, vault: vault)
         #expect(!agent.config.enabled, "off unless the person turns it on")
         #expect(!agent.showsCapsule)
 
@@ -112,10 +113,19 @@ struct AgentTests {
         let stored = shelf.readObject(VelaStore.Key.agent)
         #expect(stored["enabled"] as? Bool == false)
         #expect(stored["url"] as? String == "wss://bridge.example.com/connect")
-        #expect(stored["token"] as? String == "t0k")
-        #expect(AgentStore(shelf: shelf).config == agent.config, "read back as stored")
+        #expect(stored["token"] == nil, "the token is the vault's, never the record's")
+        #expect(vault.read() == "t0k")
+        #expect(AgentStore(shelf: shelf, vault: vault).config == agent.config, "read back as stored")
         #expect(agent.endpoint?.hasPrefix("https://bridge.example.com/") == true, "\(agent.endpoint ?? "nil")")
         #expect(agent.link == .off)
+
+        // An empty token is forgotten; so is any token on Erase This Device.
+        agent.apply(enabled: nil, url: nil, token: "")
+        #expect(vault.read() == nil)
+        agent.apply(enabled: nil, url: nil, token: "again")
+        agent.forgetToken()
+        #expect(vault.read() == nil)
+        #expect(agent.config.token.isEmpty)
 
         // Encrypted, or this machine.
         #expect(AgentConfig(enabled: true, url: "wss://bridge.example.com/connect", token: "t").ready)
@@ -124,6 +134,32 @@ struct AgentTests {
         #expect(!AgentConfig(enabled: true, url: "wss://bridge.example.com/connect", token: " ").ready)
         agent.apply(enabled: nil, url: "ws://bridge.example.com/connect", token: nil)
         #expect(agent.urlProblem == "insecure")
+    }
+
+    @Test func aTokenAnOlderBuildKeptInTheRecordMovesToTheVault() {
+        let defaults = UserDefaults(suiteName: "vela.tests.agent.\(UUID().uuidString)")!
+        let shelf = VelaStore(defaults: defaults)
+        shelf.writeObject(VelaStore.Key.agent, ["enabled": false, "url": "wss://bridge.example.com/connect", "token": "old"])
+        let vault = MemoryTokenVault()
+        let agent = AgentStore(shelf: shelf, vault: vault)
+        #expect(agent.config.token == "old")
+        #expect(vault.read() == "old")
+        #expect(shelf.readObject(VelaStore.Key.agent)["token"] == nil, "and the record no longer holds it")
+    }
+
+    /// Only where this build may use the Keychain: a signed one. CI's unsigned
+    /// simulator runs cannot (`errSecMissingEntitlement`), and say so here.
+    @Test(.enabled(if: KeychainTokenVault.available, "an unsigned build has no Keychain"))
+    func theKeychainKeepsTheTokenAndForgetsIt() {
+        let vault = KeychainTokenVault(service: "app.getvela.VelaWallet.agent.tests", account: UUID().uuidString)
+        defer { vault.delete() }
+        #expect(vault.read() == nil)
+        #expect(vault.write("secret-1"))
+        #expect(vault.read() == "secret-1")
+        #expect(vault.write("secret-2"), "a second write replaces the first")
+        #expect(vault.read() == "secret-2")
+        vault.delete()
+        #expect(vault.read() == nil)
     }
 
     @Test func everyActionAnAgentMayAskForHasWords() throws {

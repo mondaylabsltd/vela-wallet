@@ -138,13 +138,21 @@
 
 ## Mobile: what is not verified yet
 
-Phase 7 is implemented on both phones; that is not the same as ready to ship. Open, in the owner's order (2026-10-21):
+Phase 7 is implemented on both phones; that is not the same as ready to ship. The owner's order (2026-10-21), and where each stands:
 
-1. **Coverage ledgers** for iOS and Android, as the desktop has (`agent::coverage`): every core event and direct call of each phone's screens placed, so a capability added to a screen and not to the intents fails a test.
-2. **The client token in secure storage** — the iOS Keychain, the Android Keystore. Today it sits with every other `vela.*` value in the app's store (`UserDefaults`, DataStore), readable from a device backup.
-3. **A person-confirmed transfer on chain, on each phone** — the agent drafts, the person confirms on the review, the passkey signs, the chain confirms. The live runs so far stopped at the review (drafted, read, cancelled); the confirmation was verified on the desktop only. On a simulator or emulator the parallel space signs with its fixture keys, not a platform passkey: a real passkey ceremony needs a device.
+1. **Coverage ledgers — implemented.** iOS `AgentCoverageTests`, Android `AgentCoverageTest`, as the desktop's `agent::coverage`: every call a screen makes into a store or controller is placed (intent, step, view, machine, none, later), the 21 commit points are checked to go through the intents, and only catalogued actions are named. Their `later` lists are the gaps an agent cannot reach yet: several tokens to one address (sweep), paying the fee in another token, one transfer's own speed, answering a dApp's signing request (and limiting its approval), browsing in the in-app browser, disconnecting one site, testing a provider key, signing in or creating a wallet, and (Android) the Ethereum key backup.
+2. **The client token in secure storage — implemented, verified on a simulator and an emulator.**
+   - iOS: the Keychain (`AgentTokenVault`, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). On an ad-hoc-signed simulator build the token is kept and read back, the `vela.agent` record holds `{enabled, url}` only, and the agent reconnects after a relaunch from the Keychain alone. An unsigned build — CI's — has no Keychain (`errSecMissingEntitlement`): there the Keychain test is reported disabled, and a token entered is kept for that run only.
+   - Android: the Keystore (`KeystoreTokenVault`: an AES-GCM key inside the Keystore seals the token; only `vela.agentToken`, the sealed bytes, is stored). On the emulator the plain token an earlier build stored was moved and is gone from the app's store, and the agent reconnects after a cold restart.
+   - Both: Erase This Device forgets it (the Keychain item; the sealed bytes and the Keystore key).
+   - Not covered: the desktop and the web still keep the token with their other settings.
+3. **A person-confirmed transfer on chain — verified on both phones, with the parallel space's fixture keys.** The agent drafted 0.00001 BNB to a fixture Safe; the owner confirmed it on the review; it was signed, submitted and confirmed (BNB Chain, EntryPoint v0.7, `UserOperationEvent` success):
+   - iOS simulator: tx `0x61fe46636c27dcad665745740dc4d2a98a0530999bb7541d0ab0df1538a043fe` (block 128933432);
+   - Android emulator: tx `0x5fbe63113bf7a59b881662a5d661f8453023542b9bd23ab03cc3aa3138badde4` (block 128934102), followed through `vela_wait`: `awaiting_confirmation` → `submitting` → `submitted` → `confirmed`.
 
-Still deferred: QR pairing (phase 6).
+   **Not verified: a platform passkey.** On a simulator and an emulator the parallel space signs with its fixture keys, so no system passkey sheet appeared, and `awaiting_passkey` lasted too briefly to be seen. A real passkey ceremony needs a physical device with a wallet of its own.
+
+Still open before production: the platform passkey on a physical iPhone and Android phone; a security review of the agent surface on the phones. Still deferred: QR pairing (phase 6).
 
 ## Phase 7 notes (iOS)
 

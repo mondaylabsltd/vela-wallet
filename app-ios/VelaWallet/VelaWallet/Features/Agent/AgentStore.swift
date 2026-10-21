@@ -24,8 +24,8 @@ import Foundation
 import Observation
 import VelaCore
 
-/// Settings → AI agent: `vela.agent`, `{ enabled, url, token }`, as the web
-/// and the desktop store it.
+/// Settings → AI agent: `vela.agent`, `{ enabled, url }` — and the client
+/// token, which is the Keychain's (`AgentTokenVault`), never the record's.
 struct AgentConfig: Equatable {
     var enabled = false
     /// The bridge's client endpoint, e.g. `wss://bridge.example.com/connect`.
@@ -39,14 +39,16 @@ struct AgentConfig: Equatable {
         self.token = token
     }
 
-    /// What is stored; anything unreadable reads as off.
+    /// What is stored; anything unreadable reads as off. A `token` in the
+    /// record is an older build's, to be moved to the Keychain.
     init(_ object: [String: Any]) {
         enabled = object["enabled"] as? Bool ?? false
         url = object["url"] as? String ?? ""
         token = object["token"] as? String ?? ""
     }
 
-    var object: [String: Any] { ["enabled": enabled, "url": url, "token": token] }
+    /// The record as stored: no token.
+    var record: [String: Any] { ["enabled": enabled, "url": url] }
 
     /// Whether the bridge can be dialled with what is entered.
     var ready: Bool {
@@ -123,6 +125,8 @@ final class AgentStore {
     @ObservationIgnored var page: AgentPage?
 
     @ObservationIgnored private let shelf: VelaStore
+    /// The client token's place: the Keychain.
+    @ObservationIgnored private let vault: AgentTokenVault
     @ObservationIgnored private var core: AgentCore!
     /// Whether the app is in front: the agent answers only then.
     @ObservationIgnored private var active = true
@@ -130,9 +134,18 @@ final class AgentStore {
     /// nothing is not a reconnect.
     @ObservationIgnored private var dialled: AgentConfig?
 
-    init(shelf: VelaStore) {
+    init(shelf: VelaStore, vault: AgentTokenVault = KeychainTokenVault()) {
         self.shelf = shelf
-        self.config = AgentConfig(shelf.readObject(VelaStore.Key.agent))
+        self.vault = vault
+        var config = AgentConfig(shelf.readObject(VelaStore.Key.agent))
+        if config.token.isEmpty {
+            config.token = vault.read() ?? ""
+        } else if vault.write(config.token) {
+            // An older build kept it in the record: moved to the Keychain, and
+            // the record written again without it.
+            shelf.writeObject(VelaStore.Key.agent, config.record)
+        }
+        self.config = config
         let bridge = AgentShellBridge()
         self.core = AgentCore(shell: bridge, device: "phone")
         bridge.store = self
@@ -154,6 +167,13 @@ final class AgentStore {
         connect()
     }
 
+    /// Erase This Device: the token goes too — it is not one of the `vela.*`
+    /// values the sweep finds.
+    func forgetToken() {
+        vault.delete()
+        config.token = ""
+    }
+
     private func connect() {
         let wanted = AgentConfig(enabled: config.enabled && active, url: config.url, token: config.token)
         guard wanted != dialled else { return }
@@ -167,9 +187,13 @@ final class AgentStore {
         var next = config
         if let enabled { next.enabled = enabled }
         if let url { next.url = url.trimmingCharacters(in: .whitespaces) }
-        if let token { next.token = token.trimmingCharacters(in: .whitespaces) }
+        if let token {
+            next.token = token.trimmingCharacters(in: .whitespaces)
+            // The Keychain's; a token it would not keep is kept for this run only.
+            if next.token.isEmpty { vault.delete() } else { vault.write(next.token) }
+        }
         config = next
-        shelf.writeObject(VelaStore.Key.agent, next.object)
+        shelf.writeObject(VelaStore.Key.agent, next.record)
         connect()
     }
 

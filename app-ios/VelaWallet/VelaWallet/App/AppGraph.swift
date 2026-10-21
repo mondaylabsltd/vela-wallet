@@ -416,7 +416,9 @@ final class AppGraph {
             onDeposit: { [weak wallet] in wallet?.refresh(pull: false) }
         )
         self.camera = CameraScanner()
-        let agent = AgentStore(shelf: shelf)
+        // The client token is the Keychain's; a graph over a test's own
+        // storage keeps it in memory, as it keeps everything else apart.
+        let agent = AgentStore(shelf: shelf, vault: defaults == nil ? KeychainTokenVault() : MemoryTokenVault())
         self.agent = agent
         // The passkey's ceremony, for the agent's transfers to follow: a
         // transfer is awaiting its passkey once the prompt is up.

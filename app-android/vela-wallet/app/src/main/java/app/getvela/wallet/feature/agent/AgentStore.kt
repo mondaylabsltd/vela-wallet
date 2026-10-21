@@ -38,6 +38,8 @@ class AgentStore(
     private val store: KeyValueStore,
     /** The main thread's: what the screens collect is set here. */
     private val scope: CoroutineScope,
+    /** The client token's place: the Keystore's, never the record's. */
+    private val vault: AgentTokenVault,
 ) {
     private val _config = MutableStateFlow(AgentConfig())
     val config: StateFlow<AgentConfig> = _config
@@ -98,9 +100,33 @@ class AgentStore(
     fun start(wallet: AgentWallet) {
         this.wallet = wallet
         scope.launch {
-            _config.value = AgentConfig.from(runCatching { store.read(KEY) }.getOrNull())
+            load()
             connect()
         }
+    }
+
+    /**
+     * The settings as stored, the token from its vault. A token an older
+     * build kept in the record moves to the vault, and the record is written
+     * again without it.
+     */
+    internal suspend fun load() {
+        val stored = AgentConfig.from(runCatching { store.read(KEY) }.getOrNull())
+        _config.value = if (stored.token.isEmpty()) {
+            stored.copy(token = vault.read().orEmpty())
+        } else {
+            if (vault.write(stored.token)) store.write(KEY, stored.recordJson())
+            stored
+        }
+    }
+
+    /**
+     * Erase This Device: the token goes too — its sealed bytes are swept with
+     * the `vela.*` values, and its key leaves the Keystore.
+     */
+    suspend fun forgetToken() {
+        vault.delete()
+        _config.value = _config.value.copy(token = "")
     }
 
     /** The app came to the front, or left it. */
@@ -124,9 +150,17 @@ class AgentStore(
         var next = _config.value
         if (enabled != null) next = next.copy(enabled = enabled)
         if (url != null) next = next.copy(url = url.trim())
-        if (token != null) next = next.copy(token = token.trim())
+        if (token != null) {
+            next = next.copy(token = token.trim())
+            // The vault's; a token it would not keep is kept for this run only.
+            if (next.token.isEmpty()) {
+                vault.delete()
+            } else if (!vault.write(next.token)) {
+                VelaLog.event("agent", "token not kept")
+            }
+        }
         _config.value = next
-        if (!store.write(KEY, next.json())) VelaLog.event("agent", "settings not saved")
+        if (!store.write(KEY, next.recordJson())) VelaLog.event("agent", "settings not saved")
         connect()
     }
 
@@ -213,7 +247,7 @@ class AgentStore(
     }
 }
 
-/** Settings → AI agent: `{ enabled, url, token }`. */
+/** Settings → AI agent: `vela.agent`, `{ enabled, url }` — and the client token, which is the vault's. */
 data class AgentConfig(
     val enabled: Boolean = false,
     /** The bridge's client endpoint, e.g. `wss://bridge.example.com/connect`. */
@@ -230,10 +264,11 @@ data class AgentConfig(
     /** The MCP endpoint an agent adds, derived from the bridge URL. */
     val endpoint: String? get() = agentMcpEndpoint(url)
 
-    fun json(): String = JSONObject().put("enabled", enabled).put("url", url).put("token", token).toString()
+    /** The record as stored: no token — that is the vault's. */
+    fun recordJson(): String = JSONObject().put("enabled", enabled).put("url", url).toString()
 
     companion object {
-        /** What is stored; anything unreadable reads as off. */
+        /** What is stored; anything unreadable reads as off. A `token` in it is an older build's. */
         fun from(text: String?): AgentConfig {
             val json = text?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return AgentConfig()
             return AgentConfig(

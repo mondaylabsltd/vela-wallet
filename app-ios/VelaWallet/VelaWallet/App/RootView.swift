@@ -3898,8 +3898,10 @@ struct RootView: View {
         await accounts.clearSignedInWallet()
         session.signOut()
         session.signOutConfirmed()
-        // The agent hangs up with the graph that answered it.
+        // The agent hangs up with the graph that answered it, and its token —
+        // the Keychain's, not one of the swept `vela.*` values — goes too.
         agent.shutdown()
+        agent.forgetToken()
         onErased()
         return nil
     }

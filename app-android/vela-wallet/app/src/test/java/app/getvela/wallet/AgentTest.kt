@@ -6,6 +6,11 @@ import app.getvela.wallet.feature.agent.AgentConfig
 import app.getvela.wallet.feature.agent.AgentOutcome
 import app.getvela.wallet.feature.agent.AgentStore
 import app.getvela.wallet.feature.agent.AgentWords
+import app.getvela.wallet.feature.agent.MemoryTokenVault
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import app.getvela.wallet.feature.settings.SettingsFixtures
 import app.getvela.wallet.feature.settings.SettingsPage
 import app.getvela.wallet.feature.settings.SettingsScreenState
@@ -33,13 +38,53 @@ class AgentTest {
         I18nRuntime { name -> File(root, "assets/i18n/$name.json").readBytes() }.apply { initialize(tag) }
 
     @Test
-    fun theSettingsAreStoredAsTheWebAndTheDesktopStoreThem() {
+    fun theRecordHoldsNoToken() {
         val config = AgentConfig(enabled = true, url = "wss://bridge.example.com/connect", token = "t0k")
-        assertEquals(config, AgentConfig.from(config.json()))
+        assertEquals(config.copy(token = ""), AgentConfig.from(config.recordJson()))
+        assertFalse("the token is the vault's", "t0k" in config.recordJson())
         // Off unless the person turns it on; anything unreadable reads as off.
         assertEquals(AgentConfig(), AgentConfig.from(null))
         assertEquals(AgentConfig(), AgentConfig.from("not json"))
         assertFalse(AgentConfig().ready)
+    }
+
+    private fun agent(store: FakeStore, vault: MemoryTokenVault) =
+        AgentStore(store, CoroutineScope(Dispatchers.Unconfined), vault)
+
+    @Test
+    fun theTokenIsKeptInItsVaultAndForgottenOnErase() = runBlocking {
+        val store = FakeStore()
+        val vault = MemoryTokenVault()
+        val agent = agent(store, vault)
+        // Switched off, so nothing is dialled.
+        agent.apply(enabled = false, url = " wss://bridge.example.com/connect ", token = " t0k ")
+        assertEquals("t0k", vault.read())
+        val record = JSONObject(store.values.getValue(AgentStore.KEY))
+        assertEquals("wss://bridge.example.com/connect", record.getString("url"))
+        assertFalse("the record holds no token", record.has("token"))
+
+        // Read back: the record, and the token from the vault.
+        val again = agent(store, vault).also { it.load() }
+        assertEquals(agent.config.value, again.config.value)
+
+        // An empty token is forgotten; so is any token on Erase This Device.
+        agent.apply(enabled = null, url = null, token = "")
+        assertNull(vault.read())
+        agent.apply(enabled = null, url = null, token = "again")
+        agent.forgetToken()
+        assertNull(vault.read())
+        assertEquals("", agent.config.value.token)
+    }
+
+    @Test
+    fun aTokenAnOlderBuildKeptInTheRecordMovesToTheVault() = runBlocking {
+        val legacy = JSONObject().put("enabled", false).put("url", "wss://bridge.example.com/connect").put("token", "old")
+        val store = FakeStore(mapOf(AgentStore.KEY to legacy.toString()))
+        val vault = MemoryTokenVault()
+        val agent = agent(store, vault).also { it.load() }
+        assertEquals("old", agent.config.value.token)
+        assertEquals("old", vault.read())
+        assertFalse("and the record no longer holds it", JSONObject(store.values.getValue(AgentStore.KEY)).has("token"))
     }
 
     @Test
