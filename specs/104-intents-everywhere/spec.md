@@ -70,8 +70,8 @@
 | # | What | Exit |
 |---|---|---|
 | 1 | Part A into Rust; wasm exports; the web calls them and drops its copies | **done** — `intent_rules` (14 Rust tests); the web's `rules`/`state`/`review`/transfer progress are doors to it; unit 3900, e2e 455, live run |
-| 2 | uniffi exports for the intents | Kotlin/Swift bindings generated; a smoke test on each |
-| 3 | `clientmcp-client` (Rust) | Conformance suite green against the native and Workers bridges |
+| 2 | uniffi exports for the intents | **done** — `intents_bridge` (the same JSON functions); Kotlin and Swift bindings generated; both harnesses replay the shared `intents` vectors |
+| 3 | `clientmcp-client` (Rust) | **done** — conformance 34/34 with it as the application, against the native bridge and the Worker in workerd; 6 lifecycle tests of its own |
 | 4 | Production cancel fix | Conformance green against `bridge.clientmcp.dev`, the first-second hang-up included |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | Desktop coverage ledger; live agent run |
 | 6 | QR pairing | Pair desktop and web in one step |
@@ -83,6 +83,28 @@
 - **`world_needs`** keeps a polled verdict from serializing the whole wallet: deleting a record sends the feed, a contact change sends the address book, and so on.
 - **Cost.** The wasm grew by 143 KB raw: +52 KB gzip, +38 KB brotli, about 3%. Most of it is the deserializers for the facts types (the projections written with `json!` or with typed structs measure the same). Reading the world as a generic JSON value instead would cut it, at the cost of the typed code. That is the owner's call.
 - **Found while porting:** a cancelled transfer kept the agent's "waiting for the person to confirm" as its reason. It now says it was left without sending.
+
+## Phase 3 notes
+
+- **Where.** `crates/client` in the ClientMCP repository (`clientmcp-client`), beside the JS SDK, with the same behaviour:
+  - online on `registered`;
+  - ping every 25 s, the socket dropped after 10 s of silence;
+  - jittered backoff up to 30 s;
+  - stops for good on 1009, 4400, 4409, and on 4401 with a fixed token;
+  - an oversized result becomes a tool error;
+  - `completed` / `accepted` / `rejected` refuse the reserved members.
+- **Cancelling is stricter than the JS SDK's.** When the agent cancels, or the connection ends, the handler's future is dropped. The work stops at its next await, instead of a signal the handler may ignore. The handler also gets a `CancellationToken`, for work it handed elsewhere.
+- **The conformance suite runs it.** `CLIENTMCP_APP=rust tests/run-native.sh` (and `run-worker.sh`). An example app (`conformance_app`) does the protocol. The suite's handlers stay in JavaScript, reached over stdio. A dropped future reports back as a cancel, so the cancel tests check the Rust behaviour itself.
+- **Its own tests**, against the native bridge, cover what the suite does not:
+  - reconnecting after the bridge restarts;
+  - a fresh token for each connection, with a 4401 retried;
+  - a refused fixed token closing for good;
+  - `connect` after `close`;
+  - an agent hanging up in the first second dropping the handler;
+  - `wss://` going through rustls.
+- **Found:** with only the WebSocket crate's TLS feature, rustls had no crypto provider, so the first `wss://` connection would have panicked. The client now builds its own TLS config with *ring* and the platform's roots, and installs nothing process-wide.
+- **The production cancel bug is not in workerd.** The first-second hang-up test passes against the Worker run locally. Phase 4 has to be checked on Cloudflare itself.
+- **Not yet:** the uniffi wrapper for iOS and Android. It comes with phase 7, shaped by what the native shells need.
 
 ## Open
 
