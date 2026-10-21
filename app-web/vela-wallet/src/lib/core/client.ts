@@ -63,8 +63,15 @@ import init, {
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	intentAgentState,
+	intentBaseline,
 	intentCatalog,
 	intentCheck,
+	intentExamine,
+	intentOperationProgress,
+	intentReview,
+	intentVerdict,
+	intentWorldNeeds,
 	prefsMigrations,
 	prefsRead,
 	publicRpcUrls,
@@ -174,6 +181,17 @@ export { prefsMigrations, prefsRead };
 // The wallet's intents (spec 103): the catalog, and the check every request
 // passes — who may ask, and whether the input is well formed. JSON in and out.
 export { intentCatalog, intentCheck };
+// Their judgements over the wallet's state (spec 104): examine, verdict, a
+// transfer's progress, and what an agent reads. JSON in and out.
+export {
+	intentAgentState,
+	intentBaseline,
+	intentExamine,
+	intentOperationProgress,
+	intentReview,
+	intentVerdict,
+	intentWorldNeeds
+};
 export {
 	storageIsCacheKey,
 	storageIsErasableKey,

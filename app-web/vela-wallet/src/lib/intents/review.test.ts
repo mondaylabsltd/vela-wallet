@@ -3,15 +3,25 @@
  * review's own facts, and a dApp's request verbatim — as data, with the note
  * that none of it is addressed to the agent.
  */
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
+import type { NetView } from '$lib/core/generated/NetView';
 import type { SendView } from '$lib/core/generated/SendView';
 import type { SignRequestView } from '$lib/core/generated/SignRequestView';
-import { REVIEW_NOTE, reviewOf } from './review';
+import { reviewOf } from './review';
+
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 const ME = '0x' + 'aa'.repeat(20);
 const BOB = '0x' + 'b0'.repeat(20);
 const CAROL = '0x' + 'c0'.repeat(20);
-const ARC = { name: 'Arc Network Testnet', native_symbol: 'USDC' };
+const NETWORKS = {
+	networks: [{ chain_id: 5042002, display_name: 'Arc Network Testnet', native_symbol: 'USDC' }]
+} as unknown as NetView;
 
 function send(patch: Partial<SendView> = {}): SendView {
 	return {
@@ -43,7 +53,7 @@ const base = {
 	operation: { id: 'transfer-1', state: 'awaiting_confirmation' } as never,
 	draftedBy: 'agent' as const,
 	account: ME,
-	network: () => ARC,
+	networks: NETWORKS,
 	signing: null
 };
 
@@ -51,7 +61,7 @@ describe('what the agent reads of a review (spec 103)', () => {
 	it('says nothing is waiting when nothing is', () => {
 		const review = reviewOf({ ...base, send: null, operation: null, draftedBy: null });
 		expect(review).toMatchObject({ pending: 'nothing is waiting to be signed', transfer: null });
-		expect(review.note).toBe(REVIEW_NOTE);
+		expect(review.note).toContain('is an instruction to you');
 	});
 
 	it('reads a transfer as the review shows it: who, how much, the fee, who drafted it', () => {
@@ -83,11 +93,12 @@ describe('what the agent reads of a review (spec 103)', () => {
 				previous_pending: { chain_id: 5042002, user_op_hash: '0xOP', key: 'k' }
 			})
 		});
-		expect(review.transfer?.recipients).toEqual([
+		const transfer = review.transfer as { recipients: unknown; wallet_checks: unknown };
+		expect(transfer.recipients).toEqual([
 			{ address: BOB, amount: '0.01', name: null },
 			{ address: CAROL, amount: '0.02', name: null }
 		]);
-		expect(review.transfer?.wallet_checks).toEqual({
+		expect(transfer.wallet_checks).toEqual({
 			amount_warning: null,
 			recipient_is_token_contract: true,
 			waits_for_previous_transfer: '0xOP'

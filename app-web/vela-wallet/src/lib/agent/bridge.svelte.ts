@@ -131,10 +131,7 @@ async function exposeTools(client: ClientMCP): Promise<void> {
 				operation,
 				draftedBy: operation ? transfers.draftedBy(operation.id) : null,
 				account: session.view.address ?? null,
-				network: (chainId) => {
-					const row = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
-					return row ? { name: row.display_name, native_symbol: row.native_symbol } : null;
-				},
+				networks: networkAdmin.view.loaded ? networkAdmin.view : null,
 				signing: signRequest.view.request ?? null
 			});
 		}

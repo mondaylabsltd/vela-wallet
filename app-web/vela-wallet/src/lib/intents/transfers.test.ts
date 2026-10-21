@@ -4,7 +4,10 @@
  * read from the send, the passkey's ceremony and the chain tracker — played
  * here by a desk whose "core" answers each event as the real one does.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import type { SendView } from '$lib/core/generated/SendView';
 
@@ -33,6 +36,10 @@ vi.mock('$lib/onboarding/core/passkey', () => ({
 		return () => {};
 	}
 }));
+
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 const { sendDesk } = await import('$lib/flows/send-desk.svelte');
 const { transfers } = await import('./transfers.svelte');
@@ -227,8 +234,12 @@ describe('an operation, read from the machines that own it', () => {
 	it('is cancelled when its review is left unsent', async () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;
+		transfers.submit(id, 'agent');
 		expect(transfers.cancel(id)).toBeNull();
-		expect(transfers.get(id)).toMatchObject({ state: 'cancelled' });
+		expect(transfers.get(id)).toMatchObject({
+			state: 'cancelled',
+			reason: 'left the review without sending'
+		});
 		expect(transfers.submit(id)).toMatchObject({ code: 'not_found' });
 		d.detach();
 	});

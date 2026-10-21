@@ -11,11 +11,12 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import type { IntentActor } from '$lib/core/generated/IntentActor';
+import type { IntentProgress } from '$lib/core/generated/IntentProgress';
+import { intentOperationProgress } from '$lib/core/client';
 import type { IntentOperation } from '$lib/core/generated/IntentOperation';
 import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
 import type { IntentReason } from '$lib/core/generated/IntentReason';
 import type { SendView } from '$lib/core/generated/SendView';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import { sendDesk, type SendDeskPort } from '$lib/flows/send-desk.svelte';
 import { localeOfPath } from '$lib/i18n/locales';
 import { onSignCeremony, type SignCeremonyEvent } from '$lib/onboarding/core/passkey';
@@ -297,91 +298,52 @@ class Transfers {
 		if (!port || !operation || port.session() !== operation.session || port.view() === null)
 			return reason('not_found', 'that transfer is no longer on the review screen');
 		port.close();
-		// A review that failed before anything was sent is left like any other.
+		// A review that failed before anything was sent is left like any other,
+		// and keeps why it failed. One still waiting says it was left: what it
+		// was waiting for is over.
 		if (operation.state === 'failed' && operation.user_op_hash === null)
 			operation.state = 'cancelled';
+		else operation.reason = null;
 		this.sync();
 		return null;
 	}
 
-	/** Bring every operation up to date with what the machines say now. */
+	/**
+	 * Bring every operation up to date with what the machines say now: its
+	 * send while open, else the chain tracker, and the passkey's ceremony —
+	 * read by the core (`intent_rules::operation_progress`), the same for
+	 * every shell. Before the core has loaded nothing has moved to read.
+	 */
 	sync(): void {
 		const port = sendDesk.port;
-		const tracker = txTrackerView().entries;
+		const tracker = JSON.stringify(txTrackerView().entries);
+		const ceremony = JSON.stringify(this.#ceremony);
 		for (const operation of this.operations) {
 			if (FINAL.includes(operation.state)) continue;
 			const open = port !== null && port.session() === operation.session ? port.view() : null;
-			if (open) this.#fromSend(operation, open);
-			else this.#fromChain(operation, tracker);
-		}
-	}
-
-	#fromSend(operation: Tracked, view: SendView): void {
-		if (view.user_op_hash) operation.user_op_hash = view.user_op_hash;
-		if (view.tx_hash) operation.tx_hash = view.tx_hash;
-		if (view.stage === 'receipt' && view.receipt) {
-			const status = view.receipt.status;
-			if (status === 'confirmed') operation.state = 'confirmed';
-			else if (status === 'failed' || status === 'not_sent') {
-				operation.state = 'failed';
-				operation.reason = view.receipt.refusal_key ?? status;
-			} else operation.state = 'submitted';
-			return;
-		}
-		switch (view.tx_status) {
-			// The core's order is preparing → submitting (built, not yet signed)
-			// → signing → submitting (signed, on its way to the relay): its own
-			// `submitting` comes before the passkey too. Only the ceremony's
-			// "signed" says the passkey answered.
-			case 'preparing':
-			case 'submitting':
-			case 'signing': {
-				const ceremony = this.#ceremony;
-				const signed =
-					ceremony?.event === 'signed' &&
-					operation.confirmedAfter !== null &&
-					ceremony.seq > operation.confirmedAfter;
-				operation.state = signed ? 'submitting' : 'awaiting_passkey';
+			let next: IntentProgress;
+			try {
+				next = JSON.parse(
+					intentOperationProgress(
+						JSON.stringify({
+							operation: this.#plain(operation),
+							confirmed_after: operation.confirmedAfter
+						}),
+						JSON.stringify(open),
+						ceremony,
+						tracker
+					)
+				) as IntentProgress;
+			} catch {
 				return;
 			}
-			case 'confirmed':
-				operation.state = 'submitting';
-				return;
-			case 'error':
-				operation.state = 'failed';
-				operation.reason = view.tx_error ?? 'error';
-				return;
-			case 'idle':
-				// Back at the review: from the passkey, that is its prompt dismissed.
-				if (view.stage !== 'confirm') return;
-				// (From signing, too: nothing was sent while it is back here.)
-				if (operation.state !== 'awaiting_confirmation')
-					operation.reason = 'the person dismissed the passkey prompt';
-				operation.state = 'awaiting_confirmation';
-				return;
+			Object.assign(operation, {
+				state: next.operation.state,
+				user_op_hash: next.operation.user_op_hash,
+				tx_hash: next.operation.tx_hash,
+				reason: next.operation.reason
+			});
 		}
-	}
-
-	#fromChain(operation: Tracked, tracker: TrackEntryView[]): void {
-		const hash = operation.user_op_hash;
-		if (hash === null) {
-			// Gone before it was signed: left without sending.
-			operation.state = 'cancelled';
-			operation.reason = operation.reason ?? 'left the review without sending';
-			return;
-		}
-		const entry = tracker.find((candidate) => same(candidate.user_op_hash, hash));
-		if (!entry) return;
-		if (entry.tx_hash) operation.tx_hash = entry.tx_hash;
-		if (entry.status === 'confirmed') operation.state = 'confirmed';
-		else if (
-			entry.status === 'dropped' ||
-			entry.status === 'rejected' ||
-			entry.status === 'not_sent'
-		) {
-			operation.state = 'failed';
-			operation.reason = entry.refusal_key ?? entry.status;
-		} else operation.state = 'submitted';
 	}
 
 	#adopt(port: SendDeskPort, chainId: number | null): Tracked {

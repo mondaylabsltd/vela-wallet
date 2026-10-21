@@ -416,7 +416,9 @@ describe('the rest of what the person can do (spec 103)', () => {
 			activity: []
 		});
 		expect(JSON.stringify(state)).not.toContain('sk-secret');
-		expect(state.networks?.providers).toEqual([{ provider: 'alchemy', has_key: true }]);
+		expect((state.networks as { providers: unknown }).providers).toEqual([
+			{ provider: 'alchemy', has_key: true }
+		]);
 	});
 });
 
