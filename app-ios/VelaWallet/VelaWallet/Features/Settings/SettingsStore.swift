@@ -75,6 +75,18 @@ final class SettingsStore {
     private let executor: NetworkAdminExecutor
     private let currencyExecutor: DisplayCurrencyExecutor
     private var core: CoreStore<NetViewWire>!
+
+    /// The network ledger's view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var networksJson: String? { core.json }
+
+    /// The display currency's view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var currencyJson: String? { currencyCore.json }
+
+    /// The fee speed preference's view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var feeTierJson: String? { feeTierCore.json }
     private var currencyCore: CoreStore<CurrencyViewWire>!
     private var feeTierCore: CoreStore<FeeTierPrefViewWire>!
     private var signingPagesCore: CoreStore<SigningPagesViewWire>!
@@ -108,20 +120,26 @@ final class SettingsStore {
             // A shell fault here is a malformed event or a view this build
             // cannot read — never a person's mistake. Swallowing it silently is
             // how a screen stops responding with nothing in any log to say why.
-            onFault: { print("[vela-wallet] network_admin fault: \($0)") }
+            onFault: { print("[vela-wallet] network_admin fault: \($0)") },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         self.currencyCore = CoreStore(
             bridge: DisplayCurrencyCore(),
             perform: { [currencyExecutor] operation in await currencyExecutor.perform(operation) },
             onView: { [weak self] view in self?.currency = view },
-            onFault: { print("[vela-wallet] display_currency fault: \($0)") }
+            onFault: { print("[vela-wallet] display_currency fault: \($0)") },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         let feeTierExecutor = FeeTierExecutor(store: store)
         self.feeTierCore = CoreStore(
             bridge: FeeTierPrefCore(),
             perform: { operation in feeTierExecutor.perform(operation) },
             onView: { [weak self] view in self?.feeTier = view },
-            onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") }
+            onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         self.signingPages = SigningPagesViewWire.initial
         let signingPagesExecutor = SigningPagesExecutor(store: store)

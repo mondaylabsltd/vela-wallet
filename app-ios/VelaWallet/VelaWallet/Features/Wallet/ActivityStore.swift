@@ -51,6 +51,10 @@ final class ActivityStore {
 
     private let executor: ActivityExecutor
     private var core: CoreStore<FeedViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     private var scopedTo: String?
     private var ticker: Task<Void, Never>?
     private var liveTicker: Task<Void, Never>?
@@ -73,7 +77,9 @@ final class ActivityStore {
                 return answer
             },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] activity_feed fault: \($0)") }
+            onFault: { print("[vela-wallet] activity_feed fault: \($0)") },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
     }
 

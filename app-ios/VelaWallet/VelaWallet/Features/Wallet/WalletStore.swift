@@ -39,6 +39,10 @@ final class WalletStore {
 
     private let executor: BalanceExecutor
     private var core: CoreStore<BalanceViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     /// The address the dashboard is currently reading for, so re-entering the
     /// tab does not re-announce the same account and throw away its holdings.
     private var scopedTo: String?
@@ -64,7 +68,9 @@ final class WalletStore {
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.viewArrived(view) },
-            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.

@@ -57,6 +57,10 @@ final class ContactsStore {
     private let executor: ContactsExecutor
     private var core: CoreStore<ContactsViewWire>!
 
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
+
     /// No effect in flight: every read and write the machine asked for has
     /// been answered — `CoreDriver.isIdle`.
     var isIdle: Bool { core.isIdle }
@@ -69,7 +73,9 @@ final class ContactsStore {
         self.core = CoreStore(
             bridge: ContactsCore(),
             perform: { [executor] operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.view = view }
+            onView: { [weak self] view in self?.view = view },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
     }
 

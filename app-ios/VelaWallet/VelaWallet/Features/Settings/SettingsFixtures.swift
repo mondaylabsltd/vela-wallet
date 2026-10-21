@@ -195,6 +195,10 @@ enum SettingsFixtures {
                     // speed, where the 071 page field was.
                     SettingsRowModel(id: SigningPagesPageModel.rowId, title: loc.t("settings.signing.title"),
                                      icon: .link2, subtitle: loc.t("settings.signing.subtitle")),
+                    // Spec 103: the AI agent — before the storage, as the
+                    // web and the desktop place it.
+                    SettingsRowModel(id: agentRow, title: loc.t("settings.agent.title"),
+                                     icon: .power, subtitle: loc.t("settings.agent.subtitle")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
                                      icon: .hardDrive, subtitle: loc.t(k.storageSubtitle)),
                 ],
@@ -222,6 +226,8 @@ enum SettingsFixtures {
 
     /// The row that opens the report sheet (ST15).
     static let feedbackRow = "feedback"
+    /// The row that opens Settings → AI agent (spec 103).
+    static let agentRow = "agent"
 
     /// One official account: its row, its brand name (never translated), the
     /// handle shown under it, and where it goes.

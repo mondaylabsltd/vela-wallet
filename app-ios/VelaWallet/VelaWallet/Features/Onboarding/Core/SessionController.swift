@@ -23,6 +23,9 @@ import VelaCore
 final class SessionController {
 
     private(set) var view: SessionView = .booting
+    /// The same view as the core wrote it — the AI agent reads the wallet
+    /// whole (`AgentShellBridge.views`, spec 104).
+    @ObservationIgnored private(set) var viewJson: String?
 
     private let store: AccountStore
     private let executor: SessionExecutor
@@ -34,12 +37,17 @@ final class SessionController {
     init(store: AccountStore, registryTransport: @escaping RegistryClient.Transport = RegistryClient.urlSession) {
         self.store = store
         self.executor = SessionExecutor(store: store, registryTransport: registryTransport)
+        let core = SessionCore()
+        // Before its first event the machine's view is its own idle one, as
+        // `CoreStore` keeps it.
+        self.viewJson = try? core.view()
         self.driver = CoreDriver(
-            bridge: SessionCore(),
+            bridge: core,
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] json in
                 guard let decoded = try? CoreJSON.decode(SessionView.self, from: json) else { return }
                 self?.view = decoded
+                self?.viewJson = CoreJSON.string(json)
             },
             onFault: { error in
                 print("[vela-wallet] session fault: \(error)")

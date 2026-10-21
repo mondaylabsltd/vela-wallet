@@ -75,6 +75,9 @@ struct RootView: View {
     /// The settings page a screen elsewhere is sending somebody to. Cleared
     /// the moment settings opens, so it steers exactly one visit.
     @State private var pendingSettingsPage: SettingsPage?
+    /// Bumped to draw Settings afresh — the AI agent opening one of its pages
+    /// while Settings is already up (the screen seeds its page once).
+    @State private var settingsVisit = 0
     /// An erase ran and these keys survived (spec 081 FR-017).
     ///
     /// Never `Some([])`: an empty survivor list is the success, and the app has
@@ -276,6 +279,13 @@ struct RootView: View {
     /// No machine owns it — storage keys with a reader, on the same spellings
     /// every client writes.
     private var preferences: Preferences { graph.preferences }
+    /// The AI agent (spec 103): the person's taps on the commit points go
+    /// through its intents, and its requests come back through this view's
+    /// own functions (`registerAgentPage`).
+    private var agent: AgentStore { graph.agent }
+    /// The agent's request just answered here, so its sheet goes at once
+    /// rather than when the core next says so.
+    @State private var agentAnswered: UInt64?
     /// The camera behind the scanner (spec 055). App-resident so the session
     /// survives the surface's own rebuilds — reconfiguring it drops frames for
     /// a beat, which on a viewfinder reads as the camera stuttering.
@@ -431,6 +441,32 @@ struct RootView: View {
             if parallelSpace { ParallelSpaceBadge() }
             #endif
         }
+        // The AI agent's capsule (spec 103): whether it is connected, what it
+        // did last, and Stop — over every screen, as the web's floats over its
+        // page. Floated low, above the tab bar and a flow's own button: the
+        // pages lay their tops out against the window, so a capsule up there
+        // covered the account's name. It stays put when a keyboard rises, so
+        // it never sits on the field being typed into.
+        .overlay(alignment: .bottom) {
+            AgentCapsule(agent: agent, loc: loc)
+                .padding(.bottom, AgentCapsule.clearance)
+                .ignoresSafeArea(.keyboard)
+        }
+        // The agent's manage-level request, asked here in the wallet.
+        // Dismissing it is a no.
+        .sheet(item: Binding(
+            get: { agent.pending.flatMap { $0.id == agentAnswered ? nil : $0 } },
+            set: { if $0 == nil, let pending = agent.pending { answerAgent(pending.id, approved: false) } }
+        )) { request in
+            AgentApprovalSheet(
+                request: request,
+                detail: AgentWords.detail(request, graph: graph),
+                loc: loc,
+                onAnswer: { approved in answerAgent(request.id, approved: approved) }
+            )
+            .themed(scheme)
+        }
+        .task { registerAgentPage() }
         .themed(scheme)
         // 设置 → 字号, for the whole tree (spec 056 FR-011).
         //
@@ -511,7 +547,12 @@ struct RootView: View {
                 // asking it to is how a blank row appears in a list.
                 guard !name.isEmpty else { return }
                 VelaHaptic.select.play()
-                contacts.saveGroup(id: target?.id, name: name)
+                // `id` absent (null) is a new group.
+                agent.person([
+                    "type": "save_group",
+                    "id": target?.id.map { $0 as Any } ?? NSNull(),
+                    "name": name,
+                ])
             }
         }
         .sheet(item: $identiconViewer) { subject in
@@ -787,6 +828,9 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await refreshSigningPages() } }
+                // The agent answers only while the wallet is in front: in the
+                // background it hangs up, and what waited is withdrawn.
+                if phase != .inactive { agent.sceneActive(phase == .active) }
                 wallet.homePoller.sceneActive(phase == .active)
                 // A failed page retries by itself only while the app is in
                 // front (spec 079).
@@ -1002,7 +1046,12 @@ struct RootView: View {
                             onSelectTab: selectTab,
                             onFlow: { enterFlow($0) },
                             onOpenActivity: { activityItemId = $0 },
-                            onToggleBalance: { wallet.togglePrivacy() },
+                            onToggleBalance: {
+                                agent.person([
+                                    "type": "set_balance_privacy",
+                                    "hidden": !(wallet.balance?.hidden ?? false),
+                                ])
+                            },
                             onStatusTap: { openRescue() },
                             // The name line's chevron has drawn a disclosure since
                             // spec 015 and led nowhere on this screen until now.
@@ -1014,7 +1063,7 @@ struct RootView: View {
                                 // The same refresh as the hero's control, held
                                 // until its spin ends — one spin for both, so a
                                 // pull while the control turns starts nothing new.
-                                if wallet.pullRefresh() { activity.focusTick() }
+                                await agent.person(["type": "refresh_balances"])
                                 await wallet.settled()
                             },
                             // Issue 462: `pull: true` is carried so the core can
@@ -1022,7 +1071,7 @@ struct RootView: View {
                             // answer it differently — `refreshing` holds until
                             // this round settles, and the control turns until then.
                             onRefreshNow: {
-                                if wallet.pullRefresh() { activity.focusTick() }
+                                agent.person(["type": "refresh_balances"])
                             }
                         )
                     }
@@ -1085,7 +1134,7 @@ struct RootView: View {
                             // where the finger already is.
                             onRemoveAccount: { index in
                                 closeHomeSwitcher()
-                                session.removeAccount(index: index)
+                                removeWallet(at: index)
                             }
                         )
                         .themed(scheme)
@@ -1144,6 +1193,7 @@ struct RootView: View {
                         // would send the NEXT visit to the same place for no
                         // reason.
                         .onAppear { pendingSettingsPage = nil }
+                        .id(settingsVisit)
                 case .explore:
                     // Spec 053: 探索 is a browser. Its start page is this
                     // person's own favourites, groups and recents, its tab
@@ -1788,7 +1838,7 @@ struct RootView: View {
                             // 删除联系人 at the foot of the page shipped doing
                             // nothing too — the row swipe was the only way out.
                             onDelete: {
-                                contacts.delete(address: contact.address)
+                                agent.person(["type": "delete_contact", "address": contact.address])
                                 contactsRoute = nil
                             },
                             formName: $contactName,
@@ -1807,9 +1857,11 @@ struct RootView: View {
                             },
                             onSaveGroups: {
                                 if let picked = groupPick {
-                                    contacts.setContactGroups(
-                                        address: contact.address, groupIds: Array(picked).sorted()
-                                    )
+                                    agent.person([
+                                        "type": "set_contact_groups",
+                                        "address": contact.address,
+                                        "group_ids": Array(picked).sorted(),
+                                    ])
                                 }
                                 groupPick = nil
                             },
@@ -1849,7 +1901,7 @@ struct RootView: View {
                                 contactsRoute = .detail(address: member.addressFull)
                             },
                             onDeleteGroup: {
-                                contacts.deleteGroup(id: group.id)
+                                agent.person(["type": "delete_group", "id": group.id])
                                 // Back to the list: the page this was is gone.
                                 contactsRoute = nil
                             },
@@ -1871,9 +1923,11 @@ struct RootView: View {
                                     // what the sheet asked about. `add_group_`
                                     // `members` is a union and could not remove
                                     // anybody the person just unticked.
-                                    contacts.setGroupMembers(
-                                        id: group.id, members: Array(picked).sorted()
-                                    )
+                                    agent.person([
+                                        "type": "set_group_members",
+                                        "id": group.id,
+                                        "members": Array(picked).sorted(),
+                                    ])
                                 }
                                 memberPick = nil
                             },
@@ -1935,7 +1989,7 @@ struct RootView: View {
                                           title: loc.t("contacts.groupNew"))
             },
             onSelectTab: selectTab,
-            onDelete: { contacts.delete(address: $0) },
+            onDelete: { agent.person(["type": "delete_contact", "address": $0]) },
             onAdd: {
                 contactName = ""
                 contactAddress = ""
@@ -1972,14 +2026,14 @@ struct RootView: View {
         guard let draft = contactDraft else { return }
         let address = draft.editing ?? contactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !address.isEmpty else { return }
-        contacts.save(address: address, name: contactName)
-        // The core is synchronous through the bridge: by the time this returns
-        // the view has the contact, or it does not.
-        if contacts.contact(at: address.lowercased()) != nil
-            || contacts.contact(at: address) != nil {
-            contactDraft = nil
-        } else {
-            contactDraft?.error = loc.t("contacts.invalidAddress")
+        // Through the intents: done once the book shows the contact; the
+        // form stays open with the words in it otherwise.
+        agent.person(["type": "save_contact", "address": address, "name": contactName]) { outcome in
+            if outcome.done {
+                contactDraft = nil
+            } else {
+                contactDraft?.error = loc.t("contacts.invalidAddress")
+            }
         }
     }
 
@@ -2120,7 +2174,7 @@ struct RootView: View {
     /// transaction; this is the wallet forgetting it.
     private func deleteOpenTransaction() {
         guard let feed = activity.feed, let item = selectedItem(in: feed) else { return }
-        activity.deleteRequested(id: item.id)
+        agent.person(["type": "delete_activity", "id": item.id])
         flows.back()
     }
 
@@ -2994,7 +3048,7 @@ struct RootView: View {
                         flows.push(.scan)
                     },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
-                    onConfirm: { send.slideConfirm() },
+                    onConfirm: { confirmTransfer() },
                     onReceiptDone: {
                         // One button, two meanings, the core's rule: a prompt
                         // that is up is cancelled at its checkpoint; anything
@@ -3331,7 +3385,7 @@ struct RootView: View {
             onSelectTab: selectTab,
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
-            onSignOut: { session.signOut() },
+            onSignOut: { agent.person(["type": "sign_out"]) },
             networkActions: SettingsNetworkActions(
                 onOpenNetwork: { settings.expandNetwork(chainId: $0) },
                 onEditOverride: { chainId, field, value in
@@ -3339,7 +3393,10 @@ struct RootView: View {
                     settings.editOverride(chainId: chainId, field: field, value: value)
                 },
                 onCommitOverride: { settings.blurOverride(chainId: $0) },
-                onRemoveNetwork: { settings.deleteNetwork(id: $0) },
+                onRemoveNetwork: { id in
+                    guard let chainId = settings.network(id: id)?.chainId else { return }
+                    agent.person(["type": "remove_network", "chain_id": chainId])
+                },
                 onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
                 onSelectChain: { chainId in
@@ -3348,7 +3405,7 @@ struct RootView: View {
                 },
                 onEditCustomRpc: { settings.editCustomRpc($0) },
                 onRecheck: { settings.recheck(customRpc: $0) },
-                onConfirmAdd: { settings.confirmAdd() },
+                onConfirmAdd: { addCheckedNetwork() },
                 isLive: true
             ),
             appearance: SettingsAppearanceActions(
@@ -3356,36 +3413,27 @@ struct RootView: View {
                 // stored and what stops pinning a scheme (spec 072).
                 onTheme: { id in
                     guard let choice = SettingsLive.themeChoice(segment: id) else { return }
-                    preferences.setTheme(choice)
+                    setPreference("theme", choice.rawValue)
                 },
                 onTextScale: { index in
                     guard let level = TextScaleLevel.allCases[safe: index] else { return }
-                    preferences.setTextScale(level)
-                    UiScale.apply(preferences)
+                    setPreference("text_scale", level.rawValue)
                 }
             ),
             onPick: { overlay, id in settingsPicked(overlay, id) },
-            onClearCaches: { clearSettingsCaches() },
+            onClearCaches: { agent.person(["type": "clear_caches"]) },
             onClearStorageItem: { id in
                 // A connected site's own row: disconnect that ONE site, in
-                // the live browser — its open tabs hear it at once.
+                // the live browser — its open tabs hear it at once. It is the
+                // browser's, not one of the store's items.
                 if SettingsLive.isConnectionRow(id) {
                     browser.revoke(origin: id)
                     storageTick += 1
                     return
                 }
-                DeviceStorage.clear(shelf, item: id)
-                // "dApp permissions" clears the keys AND the browser's live
-                // copy of them (spec 070 FR-017): before, the core kept every
-                // grant in memory until the next launch.
-                if id == "dapps" { browser.revokeAll() }
-                storageTick += 1
-                // What was cleared is what the rest of the app was showing:
-                // balances re-read, the feed and the address book re-read
-                // themselves from a store that no longer has those keys.
-                wallet.refresh(pull: true)
+                agent.person(["type": "clear_storage_item", "item": id])
             },
-            onErase: { eraseThisDevice() },
+            onErase: { agent.person(["type": "erase_device"]) },
             onSelectAccount: { address in switchToAccount(address) },
             // The two ways on from the switcher. Both drew and did nothing
             // until 2026-09-16; the sign-in picker rides the ONE onboarding
@@ -3393,7 +3441,7 @@ struct RootView: View {
             // from Welcome.
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
-            onRemoveAccount: { index in session.removeAccount(index: index) },
+            onRemoveAccount: { index in removeWallet(at: index) },
             // The rows' ids ARE the core's field and provider names (the
             // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(
@@ -3401,7 +3449,7 @@ struct RootView: View {
                     NetEndpointFieldWire(rawValue: id).map { settings.editEndpoint(field: $0, value: value) }
                 },
                 onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint(field: $0) } },
-                onResetEndpoints: { settings.resetEndpoints() },
+                onResetEndpoints: { agent.person(["type": "reset_service_endpoints"]) },
                 onEditProvider: { id, value in
                     NetProviderIdWire(rawValue: id).map { settings.editProviderKey(provider: $0, value: value) }
                 },
@@ -3449,7 +3497,8 @@ struct RootView: View {
             // Settings' hidden debug mode (spec 091): the preference and the
             // browser are told in one place, so they cannot disagree.
             onRevealDebugMode: { debugModeChanged { $0.revealDebugMode() } },
-            onDebugMode: { on in debugModeChanged { $0.setDebugMode(on) } }
+            onDebugMode: { on in debugModeChanged { $0.setDebugMode(on) } },
+            agent: agent
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -3834,53 +3883,233 @@ struct RootView: View {
     /// awaited before the session machine is told: `AccountStore` is an actor,
     /// and a sign-out that read a list the sweep had already emptied would
     /// disagree with the store.
-    private func eraseThisDevice() {
+    private func eraseThisDevice() async -> String? {
         browser.revokeAll()
-        Task { @MainActor in
-            let survivors = await DeviceStorage.erase(shelf)
-            guard survivors.isEmpty else {
-                print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
-                eraseFailed = survivors
-                storageTick += 1
-                return
-            }
-            eraseFailed = nil
+        let survivors = await DeviceStorage.erase(shelf)
+        guard survivors.isEmpty else {
+            print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
+            eraseFailed = survivors
             storageTick += 1
-            relayClient.clearCaches()
-            await accounts.clearSignedInWallet()
-            session.signOut()
-            session.signOutConfirmed()
-            onErased()
+            return "\(survivors.count) stored item(s) could not be erased"
         }
+        eraseFailed = nil
+        storageTick += 1
+        relayClient.clearCaches()
+        await accounts.clearSignedInWallet()
+        session.signOut()
+        session.signOutConfirmed()
+        // The agent hangs up with the graph that answered it.
+        agent.shutdown()
+        onErased()
+        return nil
     }
 
     /// An account row in the switcher — from the wallet header, Explore or
     /// Settings, every one a pick that takes effect.
     private func switchToAccount(_ address: String) {
         VelaHaptic.select.play()
-        Task {
-            let records = await accounts.loadAccounts()
-            guard let index = records.firstIndex(where: {
-                ($0["address"] as? String)?.lowercased() == address.lowercased()
-            }) else { return }
-            session.switchAccount(index: index)
-            // The browser is told too, and this is not housekeeping. A
-            // connected site holds a grant PINNED to an address; the core
-            // re-pins it on `AccountSwitched`, writes it, and tells the page —
-            // but only if somebody says the switch happened. Until now only
-            // the browser's own first launch did, so switching accounts with a
-            // site connected left the page believing it was still talking to
-            // the account it was granted, while the wallet signed as another.
-            browser.accountsChanged(
-                addresses: records.compactMap { $0["address"] as? String },
-                active: address
-            )
-            // Everything account-scoped starts again — the book, the
-            // balances, the feed — when the session's address moves
-            // (`followAccountInFront`), not here: a refresh sent from here
-            // re-read the PREVIOUS account, the one the stores were still
-            // pointed at.
+        agent.person(["type": "switch_account", "address": address])
+    }
+
+    /// The switch itself — `switch_account`, performed.
+    private func switchAccountNow(_ address: String) async -> Bool {
+        let records = await accounts.loadAccounts()
+        guard let index = records.firstIndex(where: {
+            ($0["address"] as? String)?.lowercased() == address.lowercased()
+        }) else { return false }
+        session.switchAccount(index: index)
+        // The browser is told too, and this is not housekeeping. A
+        // connected site holds a grant PINNED to an address; the core
+        // re-pins it on `AccountSwitched`, writes it, and tells the page —
+        // but only if somebody says the switch happened. Until now only
+        // the browser's own first launch did, so switching accounts with a
+        // site connected left the page believing it was still talking to
+        // the account it was granted, while the wallet signed as another.
+        browser.accountsChanged(
+            addresses: records.compactMap { $0["address"] as? String },
+            active: address
+        )
+        // Everything account-scoped starts again — the book, the
+        // balances, the feed — when the session's address moves
+        // (`followAccountInFront`), not here: a refresh sent from here
+        // re-read the PREVIOUS account, the one the stores were still
+        // pointed at.
+        return true
+    }
+
+    // MARK: - The AI agent (spec 103, spec 104 phase 7)
+
+    /// What only this view can do for the agent: the same functions its own
+    /// controls call (`AgentPage`).
+    private func registerAgentPage() {
+        let page = AgentPage()
+        page.show = { screen in agentShow(screen) }
+        page.name = { agentPageName() }
+        page.signing = { signing?.signViewJson }
+        page.openSend = { params in
+            enterSend()
+            send.handIn(params)
+            // The flow's own `.task(id:)` opens it too, once drawn; `open` is
+            // idempotent within a journey.
+            Task { await openSend() }
         }
+        page.sendShowing = { flows.top.map { sendStates.contains($0) } ?? false }
+        page.erase = { await eraseThisDevice() }
+        page.clearStorageItem = { item in clearStorageItem(item) }
+        page.clearCaches = { clearSettingsCaches() }
+        page.refreshBalances = { if wallet.pullRefresh() { activity.focusTick() } }
+        page.switchAccount = { address in await switchAccountNow(address) }
+        agent.page = page
+    }
+
+    /// The person answered the agent's request.
+    private func answerAgent(_ id: UInt64, approved: Bool) {
+        agentAnswered = id
+        if approved { VelaHaptic.press.play() }
+        agent.answer(id, approved: approved)
+    }
+
+    /// The page in front, as the agent reads it.
+    private func agentPageName() -> String {
+        guard session.view.allowedRoute == .wallet else { return "welcome" }
+        switch section {
+        case .wallet: return "wallet"
+        case .contacts: return "contacts"
+        case .explore: return "explore"
+        case .settings: return "settings"
+        }
+    }
+
+    /// Open an intent's screen, as its own row or tab does. A refusal, in
+    /// words, when it cannot be shown.
+    private func agentShow(_ screen: [String: Any]) -> String? {
+        guard session.view.allowedRoute == .wallet else { return "nobody is signed in" }
+        let same = { (a: String, b: String) in a.caseInsensitiveCompare(b) == .orderedSame }
+        switch screen["type"] as? String {
+        case "home":
+            flows.close()
+            section = .wallet
+        case "contacts":
+            flows.close()
+            contactsRoute = nil
+            section = .contacts
+        case "contact":
+            let address = screen["address"] as? String ?? ""
+            guard let contact = contacts.view?.contacts.first(where: { same($0.address, address) })
+            else { return "no contact has that address" }
+            flows.close()
+            section = .contacts
+            contactsRoute = .detail(address: contact.address)
+        case "group":
+            let id = screen["id"] as? String ?? ""
+            guard contacts.group(id: id) != nil else { return "no group has that id" }
+            flows.close()
+            section = .contacts
+            contactsRoute = .group(id: id)
+        case "settings":
+            flows.close()
+            pendingSettingsPage = Self.settingsPage(screen["page"] as? String)
+            if section == .settings { settingsVisit += 1 } else { section = .settings }
+        case "asset":
+            let chainId = (screen["chain_id"] as? NSNumber)?.intValue
+            let token = (screen["token"] as? String)?.lowercased()
+            guard let index = wallet.balance?.tokens.firstIndex(where: {
+                !$0.spam && $0.chainId == chainId && $0.tokenAddress?.lowercased() == token
+            }) else { return "the wallet does not hold that token" }
+            section = .wallet
+            assetRow = index
+            flows.enter(.tokenDetail)
+        case "activity":
+            guard let id = screen["id"] as? String else { return "no activity record has that id" }
+            section = .wallet
+            activityItemId = id
+            flows.enter(.txDetail)
+        case "receive":
+            section = .wallet
+            enterReceive()
+            if let chainId = (screen["chain_id"] as? NSNumber)?.intValue {
+                guard let index = walletNetworks.chains.firstIndex(where: { $0.chainId == chainId }),
+                      let chain = walletNetworks.chains[safe: index]
+                else { return "the wallet has no network with that chain id" }
+                receiveNetwork = index
+                paymentRequest.pickAsset(
+                    chainId: chain.chainId,
+                    tokenAddress: nil,
+                    symbol: chain.nativeSymbol,
+                    decimals: 18,
+                    networkName: chain.displayName
+                )
+                flows.push(.receiveQr)
+            }
+        default:
+            return "the wallet has no such screen"
+        }
+        return nil
+    }
+
+    /// The core's settings page names, as this Settings lays them out: the
+    /// ones that are rows or sheets on its home open the home.
+    private static func settingsPage(_ name: String?) -> SettingsPage? {
+        switch name {
+        case "networks": .networks
+        case "rpc-providers": .rpcProviders
+        case "endpoints": .endpoints
+        case "storage": .storage
+        case "about": .about
+        case "agent": .agent
+        case "signing-pages": .signingPages
+        default: nil
+        }
+    }
+
+    /// One of the storage page's items, cleared — `clear_storage_item`,
+    /// performed.
+    private func clearStorageItem(_ id: String) {
+        DeviceStorage.clear(shelf, item: id)
+        // "dApp permissions" clears the keys AND the browser's live
+        // copy of them (spec 070 FR-017): before, the core kept every
+        // grant in memory until the next launch.
+        if id == "dapps" { browser.revokeAll() }
+        storageTick += 1
+        // What was cleared is what the rest of the app was showing:
+        // balances re-read, the feed and the address book re-read
+        // themselves from a store that no longer has those keys.
+        wallet.refresh(pull: true)
+    }
+
+    /// A wallet removed from a switcher, by its row.
+    private func removeWallet(at index: Int) {
+        let accounts = session.view.accounts
+        guard let row = accounts.first(where: { $0.index == index }) ?? accounts[safe: index] else { return }
+        agent.person(["type": "remove_wallet", "address": row.account.address])
+    }
+
+    /// One of the preferences, set as Settings sets it.
+    private func setPreference(_ kind: String, _ value: String) {
+        agent.person(["type": "set_preference", "preference": ["kind": kind, "value": value]])
+    }
+
+    /// The add wizard's Add, on the chain it checked.
+    private func addCheckedNetwork() {
+        let wizard = CoreFacts(json: settings.networksJson)["wizard"]
+        guard let chainId = wizard["chain_info"]["chain_id"].int else {
+            settings.confirmAdd()
+            return
+        }
+        var action: [String: Any] = ["type": "add_network", "chain_id": chainId]
+        let rpc = wizard["custom_rpc"].string.trimmingCharacters(in: .whitespaces)
+        if !rpc.isEmpty { action["rpc_url"] = rpc }
+        agent.person(action)
+    }
+
+    /// The review's confirm: the person's own `submit_transfer`, as an
+    /// agent's request asks for it — the slide, and the passkey after it.
+    private func confirmTransfer() {
+        guard let operation = agent.reviewing() else {
+            send.slideConfirm()
+            return
+        }
+        agent.person(["type": "submit_transfer", "operation": operation])
     }
 
     /// Every account-scoped store, pointed at the account in front: the
@@ -3931,35 +4160,28 @@ struct RootView: View {
     /// choice a person could not see themselves make.
     private func settingsPicked(_ overlay: SettingsOverlay, _ id: String) {
         switch overlay {
+        // Each through the intents (`set_preference`), which do what these
+        // did: the core owns the display currency and the default speed
+        // (validated and persisted there); the language and the three formats
+        // are stored and take effect now (`AgentPerform.setPreference`).
         case .currency:
-            // The core owns the display currency: it re-resolves the rate, and
-            // a shell that wrote the code itself would show a figure converted
-            // at the previous one.
-            settings.chooseCurrency(id)
+            setPreference("currency", id)
         case .feeSpeed:
-            // The core validates and persists; a pick here is the ONE place
-            // the stored default changes (the send screen's is one-shot).
-            if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
+            // The stored default changes only here (the send screen's pick is
+            // one-shot).
+            if ["fast", "standard", "slow"].contains(id) { setPreference("fee_speed", id) }
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
-            let tag = id == "system" ? "auto" : id
-            preferences.setLanguage(tag)
-            // And the app changes language now, not on the next launch —
-            // `Loc.t` observes `resolvedLanguage`, so every translated view
-            // redraws. Android has done this since 047.
-            loc.apply(tag)
+            setPreference("language", id == "system" ? "auto" : id)
         case .numberFormat:
-            guard let key = NumberFormatKey(rawValue: id) else { return }
-            preferences.setNumberFormat(key)
-            Formats.apply(preferences)
+            guard NumberFormatKey(rawValue: id) != nil else { return }
+            setPreference("number_format", id)
         case .dateFormat:
-            guard let key = DateFormatKey(rawValue: id) else { return }
-            preferences.setDateFormat(key)
-            Formats.apply(preferences)
+            guard DateFormatKey(rawValue: id) != nil else { return }
+            setPreference("date_format", id)
         case .timeFormat:
-            guard let key = TimeFormatKey(rawValue: id) else { return }
-            preferences.setTimeFormat(key)
-            Formats.apply(preferences)
+            guard TimeFormatKey(rawValue: id) != nil else { return }
+            setPreference("time_format", id)
         default:
             break
         }

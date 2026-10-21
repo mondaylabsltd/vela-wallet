@@ -35,6 +35,9 @@ enum SettingsPage: Equatable {
     case home, networks, networkDetail, addNetwork, rpcProviders, endpoints, storage, about
     /// Spec 102: the pages this device trusts to show and sign requests.
     case signingPages
+    /// Spec 103: whether an AI agent may use this wallet, and through which
+    /// bridge.
+    case agent
 
     /// Where the page's ‹ goes: a pushed page goes back to the Settings home.
     /// `nil` on the home, which has no way back inside Settings. Android

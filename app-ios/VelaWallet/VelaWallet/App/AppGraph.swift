@@ -91,6 +91,9 @@ final class AppGraph {
     /// The camera behind the scanner (spec 055): its capture session survives
     /// the surface's rebuilds.
     let camera: CameraScanner
+    /// The AI agent (spec 103, spec 104 phase 7): the core's, answering
+    /// through this graph's stores. Off unless the person turns it on.
+    let agent: AgentStore
 
     /// The launch sequence has started (`launch`).
     private(set) var launched = false
@@ -413,6 +416,11 @@ final class AppGraph {
             onDeposit: { [weak wallet] in wallet?.refresh(pull: false) }
         )
         self.camera = CameraScanner()
+        let agent = AgentStore(shelf: shelf)
+        self.agent = agent
+        // The passkey's ceremony, for the agent's transfers to follow: a
+        // transfer is awaiting its passkey once the prompt is up.
+        sendStore.onCeremony = { [weak agent] event in agent?.ceremony(event) }
         self.welcome = WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -426,6 +434,7 @@ final class AppGraph {
                 onboarding.showSignInMethods = true
             }
         }
+        agent.graph = self
         Self.built += 1
     }
 
@@ -454,5 +463,8 @@ final class AppGraph {
         // screen. The pending set is derived from the transaction store, so a
         // force-quit mid-send loses nothing — the next launch picks it up here.
         tracker.boot()
+        // The AI agent connects as set up — after the session, whose view its
+        // first request reads.
+        agent.start()
     }
 }

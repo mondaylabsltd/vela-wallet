@@ -126,6 +126,9 @@ struct VelaStore {
         /// version has been tapped seven times, absent until then. The core's
         /// `prefs::keys::DEBUG_MODE`; what is stored is `prefsDebugModeValue`'s.
         static let debugMode = "vela.debugMode"
+        /// Settings → AI agent (spec 103 D1): `{ enabled, url, token }`, as
+        /// the web and the desktop store it. Erase sweeps it with the rest.
+        static let agent = "vela.agent"
     }
 
     private let defaults: UserDefaults

@@ -29,6 +29,10 @@ final class SendStore {
     private(set) var trustedSignerNotice: TrustedSignerNotice?
 
     private var core: CoreStore<SendViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     private let executor: SendExecutor
 
     /// No effect in flight — but a bound a stopped clock holds
@@ -38,6 +42,14 @@ final class SendStore {
     var isIdle: Bool { core.inFlight == executor.heldTimerCount }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
+    /// Whether a journey is open — `Open` sent, and not closed or left since.
+    var inJourney: Bool { entered }
+    /// What the next `open` is handed in (`SendOpenParams`): the AI agent's
+    /// draft names its token and recipient (spec 104). Taken by that open.
+    private var handedIn: [String: Any]?
+    /// The passkey's ceremony moved — `started` (its prompt is up) or
+    /// `signed` — for the agent's transfers to follow (spec 104).
+    var onCeremony: ((String) -> Void)?
     /// The display currency the open journey's machine was last told —
     /// at `open`, then at every change after it (`displayStands`). `nil`
     /// with no journey open.
@@ -69,7 +81,9 @@ final class SendStore {
             bridge: SendCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { VelaLog.failure(.sign, kind: "send_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.sign, kind: "send_fault", VelaLog.error($0)) },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         // Two ports close over this store, so they are installed after it
         // exists rather than passed into the executor's initialiser.
@@ -81,6 +95,7 @@ final class SendStore {
         executor.ports.signingStarted = { [weak self] in
             self?.trustedSignerNotice = nil
             self?.dispatch(["type": "signing_started"])
+            self?.onCeremony?("started")
         }
         // The op is signed and nothing has left (spec 082 RJ1): the core
         // writes every recipient's record ahead, hands the op to the tracker
@@ -91,6 +106,7 @@ final class SendStore {
                 "submit_block": block.map { $0 as Any } ?? NSNull(),
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
+            self?.onCeremony?("signed")
         }
         executor.ports.alert = { [weak self] kind in self?.alert = kind }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
@@ -141,6 +157,7 @@ final class SendStore {
             "display": Self.display(code: "USD", rate: nil, decimals: 2),
         ]))
         entered = false
+        handedIn = nil
         account = nil
         heardRound = nil
         toldFeeToken = nil
@@ -149,6 +166,11 @@ final class SendStore {
         trustedSignerNotice = nil
         alert = nil
     }
+
+    /// What the next `open` starts on, instead of nothing: the token and the
+    /// recipient an AI agent's draft names (spec 104). Every other entry hands
+    /// its code in after the open, through `scanned`.
+    func handIn(_ params: [String: Any]) { handedIn = params }
 
     /// An open with nothing handed in. A pay link or a scanned code arrives
     /// afterwards, through `scanned`, exactly as a code on the form does.
@@ -189,10 +211,11 @@ final class SendStore {
                 "id": accountId, "address": address,
                 "name": name.map { $0 as Any } ?? NSNull(),
             ] as [String: Any],
-            "params": Self.noParams,
+            "params": handedIn.map { Self.noParams.merging($0) { _, given in given } } ?? Self.noParams,
             "display": Self.display(code: displayCode, rate: displayRate, decimals: fiatDecimals),
         ])
         guard !entered else { return }
+        handedIn = nil
         entered = true
         account = address.lowercased()
         heardRound = nil

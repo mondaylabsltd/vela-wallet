@@ -91,6 +91,9 @@ struct SettingsScreen: View {
     /// unchanged — the wizard stays a picture there, which is what keeps the
     /// screenshot sweep meaningful.
     var networkActions = SettingsNetworkActions()
+    /// Settings → AI agent's page reads and changes it (spec 103). Absent in
+    /// the gallery, where the row is drawn and its page is empty.
+    var agent: AgentStore?
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
@@ -143,7 +146,8 @@ struct SettingsScreen: View {
         signingActions: SigningSettingsActions? = nil,
         onOpenLink: ((String) -> Void)? = nil,
         onRevealDebugMode: (() -> Void)? = nil,
-        onDebugMode: ((Bool) -> Void)? = nil
+        onDebugMode: ((Bool) -> Void)? = nil,
+        agent: AgentStore? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -167,6 +171,7 @@ struct SettingsScreen: View {
         self.onOpenLink = onOpenLink
         self.onRevealDebugMode = onRevealDebugMode
         self.onDebugMode = onDebugMode
+        self.agent = agent
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -388,6 +393,7 @@ struct SettingsScreen: View {
         case .storage: (model.storage.title, model.storage.subtitle)
         case .about: (model.about.title, nil)
         case .signingPages: (model.signingPages?.title ?? "", model.signingPages?.subtitle)
+        case .agent: (loc.t("settings.agent.title"), loc.t("settings.agent.subtitle"))
         case .home: (model.title, nil)
         }
     }
@@ -450,6 +456,8 @@ struct SettingsScreen: View {
             if let panel = model.signingPages {
                 SigningPagesBody(loc: loc, panel: panel, actions: signingActions)
             }
+        case .agent:
+            if let agent { AgentSettingsBody(agent: agent, loc: loc) }
         case .about: AboutBody(
             panel: model.about,
             onOpenLink: onOpenLink,
@@ -643,6 +651,7 @@ struct SettingsScreen: View {
         case "storage": page = .storage
         case "about": page = .about
         case SigningPagesPageModel.rowId: page = .signingPages
+        case SettingsFixtures.agentRow: page = .agent
         case SettingsLive.ethereumBackupRow: onEthereumBackup?()
         default: break
         }
