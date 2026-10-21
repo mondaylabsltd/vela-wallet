@@ -4432,6 +4432,27 @@ export function intentReview(input_json) {
 }
 
 /**
+ * Where the action's change is seen: the screen to open once an agent's
+ * request is done (a screen's JSON, or `null`).
+ * @param {string} action_json
+ * @returns {string}
+ */
+export function intentShows(action_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(action_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.intentShows(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Has the change held? `{ verdict, baseline }`.
  * @param {string} action_json
  * @param {string} world_json

@@ -24,7 +24,8 @@ import type { IntentOperation } from '$lib/core/generated/IntentOperation';
 import type { IntentReason } from '$lib/core/generated/IntentReason';
 import type { IntentReasonCode } from '$lib/core/generated/IntentReasonCode';
 import type { IntentRisk } from '$lib/core/generated/IntentRisk';
-import { baselineOf, examine, verdict, type Verdict } from './rules';
+import type { IntentScreen } from '$lib/core/generated/IntentScreen';
+import { baselineOf, examine, shows, verdict, type Verdict } from './rules';
 import type { World } from './world';
 
 export type IntentOutcome =
@@ -74,6 +75,11 @@ export type IntentsDeps = {
 		actor: IntentActor
 	): Promise<null | string | IntentReason | { operation: IntentOperation; closed?: string | null }>;
 	now(): number;
+	/**
+	 * Open `screen` for the person, as `show` does: where an agent's change is
+	 * seen, once its request is done.
+	 */
+	reveal?(screen: IntentScreen): Promise<void>;
 	/** How long an agent's request may wait for the person. */
 	approvalMs: number;
 	/** How long a performed change may take to show. */
@@ -136,7 +142,15 @@ export class Intents {
 			(error: unknown): IntentOutcome =>
 				rejected('refused', error instanceof Error ? error.message : String(error))
 		);
-		if (agent) this.#update(id, { stage: null, outcome });
+		if (agent) {
+			this.#update(id, { stage: null, outcome });
+			// What an agent did is seen where it is (owner, 2026-10-21: an
+			// approved change that left the page as it was felt silent). A
+			// `show` has opened its screen already.
+			const done = outcome.status === 'completed' || outcome.status === 'accepted';
+			const screen = done && action.type !== 'show' ? shows(action) : null;
+			if (screen) await this.#deps.reveal?.(screen).catch(() => {});
+		}
 		return outcome;
 	}
 

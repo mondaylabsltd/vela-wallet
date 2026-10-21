@@ -10,6 +10,7 @@ import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import type { IntentAction } from '$lib/core/generated/IntentAction';
 import type { IntentCheck } from '$lib/core/generated/IntentCheck';
+import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
@@ -96,6 +97,7 @@ function world(): World {
 function harness(apply: (action: IntentAction, now: World) => string | null | void = () => {}) {
 	let now = world();
 	const performed: IntentAction[] = [];
+	const revealed: IntentScreen[] = [];
 	const intents = new Intents({
 		ready: async () => {},
 		check: (actor, action, seen) =>
@@ -112,6 +114,9 @@ function harness(apply: (action: IntentAction, now: World) => string | null | vo
 			return apply(action, now) ?? null;
 		},
 		now: () => Date.now(),
+		reveal: async (screen) => {
+			revealed.push(screen);
+		},
 		approvalMs: 300,
 		observeMs: 300,
 		pollMs: 5
@@ -119,6 +124,7 @@ function harness(apply: (action: IntentAction, now: World) => string | null | vo
 	return {
 		intents,
 		performed,
+		revealed,
 		get world() {
 			return now;
 		},
@@ -148,6 +154,23 @@ describe('the person and an agent, one way in (spec 103)', () => {
 		expect(settled, 'performed, not yet seen').toBe(false);
 		h.world = { ...h.world, contacts: book({ [ALICE]: 'Alice', [BOB]: 'Bob' }) };
 		expect(code(await pending)).toBe('completed');
+	});
+
+	it('opens where an agent’s change is seen, once it is done', async () => {
+		const h = harness((action, now) => {
+			if (action.type === 'save_contact')
+				h.world = { ...now, contacts: book({ [ALICE]: 'Alice', [action.address]: action.name }) };
+		});
+		expect(code(await h.intents.invoke('person', saveBob))).toBe('completed');
+		expect(h.revealed, 'the person is where they did it').toEqual([]);
+		const carol = `0x${'c'.repeat(40)}`;
+		const saveCarol: IntentAction = { type: 'save_contact', address: carol, name: 'Carol' };
+		expect(code(await h.intents.invoke('agent', saveCarol))).toBe('completed');
+		expect(h.revealed).toEqual([{ type: 'contact', address: carol }]);
+
+		const refused = harness(() => 'storage is full');
+		expect(code(await refused.intents.invoke('agent', saveBob))).toBe('refused');
+		expect(refused.revealed, 'nothing changed: nothing to show').toEqual([]);
 	});
 
 	it('does not claim a change that never shows', async () => {

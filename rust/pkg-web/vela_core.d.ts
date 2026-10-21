@@ -1038,6 +1038,12 @@ export function intentOperationProgress(progress_json: string, send_json: string
 export function intentReview(input_json: string): string;
 
 /**
+ * Where the action's change is seen: the screen to open once an agent's
+ * request is done (a screen's JSON, or `null`).
+ */
+export function intentShows(action_json: string): string;
+
+/**
  * Has the change held? `{ verdict, baseline }`.
  */
 export function intentVerdict(action_json: string, world_json: string, baseline_json: string): string;
@@ -1849,6 +1855,7 @@ export interface InitOutput {
     readonly intentExamine: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentOperationProgress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly intentReview: (a: number, b: number) => [number, number];
+    readonly intentShows: (a: number, b: number) => [number, number];
     readonly intentVerdict: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly intentWorldNeeds: (a: number, b: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];

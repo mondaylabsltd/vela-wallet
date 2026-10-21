@@ -90,7 +90,7 @@ function routeOf(
  * Go to the screen's page, then open the screen there as its own row would —
  * the page's presenter (`screenDesk`) — unless the page itself is the screen.
  */
-async function show(screen: IntentScreen): Promise<string | null> {
+export async function show(screen: IntentScreen): Promise<string | null> {
 	await goto(resolve(routeOf(screen), { locale: currentLocale() }));
 	const whole =
 		screen.type === 'home' ||

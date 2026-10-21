@@ -5,8 +5,15 @@
  * (`vela_core::app::intent_rules`), for every shell; this is the web's door
  * to it.
  */
-import { intentBaseline, intentExamine, intentVerdict, intentWorldNeeds } from '$lib/core/client';
+import {
+	intentBaseline,
+	intentExamine,
+	intentShows,
+	intentVerdict,
+	intentWorldNeeds
+} from '$lib/core/client';
 import type { IntentAction } from '$lib/core/generated/IntentAction';
+import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 import type { IntentBaseline } from '$lib/core/generated/IntentBaseline';
 import type { IntentExamined } from '$lib/core/generated/IntentExamined';
 import type { IntentVerdict } from '$lib/core/generated/IntentVerdict';
@@ -21,6 +28,15 @@ export type Baseline = IntentBaseline;
 function args(action: IntentAction, world: World): [string, string] {
 	const json = JSON.stringify(action);
 	return [json, worldJson(world, JSON.parse(intentWorldNeeds(json)) as string[])];
+}
+
+/**
+ * Where the action's change is seen: the screen to open once an agent's
+ * request is done, or `null` where it shows itself (a transfer's review, the
+ * sign-out sheet, an erase).
+ */
+export function shows(action: IntentAction): IntentScreen | null {
+	return JSON.parse(intentShows(JSON.stringify(action))) as IntentScreen | null;
 }
 
 /** Does what the action names exist, and is it already so? */

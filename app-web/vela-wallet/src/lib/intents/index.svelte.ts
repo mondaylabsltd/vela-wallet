@@ -12,7 +12,7 @@ import { session } from '$lib/session/core/session.svelte';
 import { currency } from '$lib/settings/core/currency.svelte';
 import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 import { Intents } from './intents.svelte';
-import { perform } from './perform';
+import { perform, show } from './perform';
 import { transfers } from './transfers.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { feed } from '$lib/wallet/core/feed.svelte';
@@ -57,6 +57,10 @@ export const intents = new Intents({
 		) as IntentCheck,
 	world,
 	perform,
+	// Where an agent's change is seen opens once its request is done.
+	reveal: async (screen) => {
+		await show(screen);
+	},
 	now: () => Date.now(),
 	// Under the bridge's own call timeout (ClientMCP's default is 120 s), so
 	// the wallet says how the wait ended before the bridge gives up on it.

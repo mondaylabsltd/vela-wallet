@@ -70,6 +70,7 @@ import init, {
 	intentExamine,
 	intentOperationProgress,
 	intentReview,
+	intentShows,
 	intentVerdict,
 	intentWorldNeeds,
 	prefsMigrations,
@@ -189,6 +190,7 @@ export {
 	intentExamine,
 	intentOperationProgress,
 	intentReview,
+	intentShows,
 	intentVerdict,
 	intentWorldNeeds
 };
