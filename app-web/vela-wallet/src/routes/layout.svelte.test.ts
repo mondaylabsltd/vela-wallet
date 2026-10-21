@@ -304,4 +304,17 @@ describe('the page language, for the money formatter', () => {
 		expect(pageLanguage()).toBe('zh-HK');
 		await screen.unmount();
 	});
+
+	it('is the document’s own language too, after a switch without a reload', async () => {
+		const screen = render(Layout, {
+			props: { children: createRawSnippet(() => ({ render: () => '<p>wallet</p>' })) } as any
+		});
+		flushSync();
+		expect(document.documentElement.lang).toBe('zh');
+		pageState.locale = 'ja';
+		flushSync();
+		expect(document.documentElement.lang).toBe('ja');
+		expect(document.documentElement.dir).toBe('ltr');
+		await screen.unmount();
+	});
 });

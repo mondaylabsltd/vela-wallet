@@ -32,7 +32,7 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { agentSettings } from '$lib/agent/settings.svelte';
 	import type { AgentMessages } from '$lib/agent/messages';
-	import { localeOfPath } from '$lib/i18n/locales';
+	import { localeOfPath, textDirectionOf, toLocale } from '$lib/i18n/locales';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
 
@@ -85,6 +85,20 @@
 	 * whenever the locale in the path changes (`layout.svelte.test.ts`).
 	 */
 	$effect.pre(() => setPageLanguage(locale));
+
+	/**
+	 * `<html lang dir>` with it. The server stamps them into the first response
+	 * only (`hooks.server.ts`); a language chosen later moves the page to its
+	 * own [locale] without a reload, and the document went on saying the first
+	 * one — a Chinese page read as English by screen readers and the browser's
+	 * own translate offer.
+	 */
+	$effect(() => {
+		const known = toLocale(locale);
+		if (known === undefined) return;
+		document.documentElement.lang = known;
+		document.documentElement.dir = textDirectionOf(known);
+	});
 
 	const parallelHref = $derived(resolve('/[locale]/parallel', { locale }));
 
