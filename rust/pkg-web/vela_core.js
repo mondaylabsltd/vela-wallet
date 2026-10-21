@@ -4334,9 +4334,7 @@ export function intentCatalog() {
 }
 
 /**
- * Whether `actor` (`"person"` or `"agent"`) may ask for the action, and
- * whether its input is well formed. An actor or grants this build cannot
- * read is treated as an agent with nothing granted — the narrowest reading.
+ * Whether `actor` may ask for the action, and whether its input is well formed.
  * @param {string} actor
  * @param {string} action_json
  * @param {string} grants_json
@@ -4362,8 +4360,7 @@ export function intentCheck(actor, action_json, grants_json) {
 }
 
 /**
- * Does what the action names exist, and is it already so? An action this
- * build cannot read is refused, never waved through.
+ * Does what the action names exist, and is it already so?
  * @param {string} action_json
  * @param {string} world_json
  * @returns {string}
@@ -4386,7 +4383,7 @@ export function intentExamine(action_json, world_json) {
 }
 
 /**
- * Where a transfer stands now. `send_json` / `ceremony_json` may be `null`.
+ * Where a transfer stands now.
  * @param {string} progress_json
  * @param {string} send_json
  * @param {string} ceremony_json
@@ -4435,8 +4432,7 @@ export function intentReview(input_json) {
 }
 
 /**
- * Has the change held? Answers `{ verdict, baseline }`: the baseline as the
- * call has moved it (the sign-out sheet coming up is part of the call).
+ * Has the change held? `{ verdict, baseline }`.
  * @param {string} action_json
  * @param {string} world_json
  * @param {string} baseline_json

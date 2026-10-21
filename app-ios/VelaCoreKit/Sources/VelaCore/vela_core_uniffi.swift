@@ -16842,6 +16842,117 @@ public func shareCardQrMatrix(text: String) -> QrMatrix?  {
 })
 }
 /**
+ * `vela_state`: the wallet as an agent reads it.
+ */
+public func intentAgentState(worldJson: String, page: String, approvalsJson: String, activityJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_agent_state(
+        FfiConverterString.lower(worldJson),
+        FfiConverterString.lower(page),
+        FfiConverterString.lower(approvalsJson),
+        FfiConverterString.lower(activityJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * What was true when the call began.
+ */
+public func intentBaseline(actionJson: String, worldJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_baseline(
+        FfiConverterString.lower(actionJson),
+        FfiConverterString.lower(worldJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Every action, with how much it matters and who may ask for it.
+ */
+public func intentCatalog() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_catalog(uniffiCallStatus
+    )
+})
+}
+/**
+ * Whether `actor` (`"person"` or `"agent"`) may ask for the action, and
+ * whether its input is well formed.
+ */
+public func intentCheck(actor: String, actionJson: String, grantsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_check(
+        FfiConverterString.lower(actor),
+        FfiConverterString.lower(actionJson),
+        FfiConverterString.lower(grantsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Does what the action names exist, and is it already so?
+ */
+public func intentExamine(actionJson: String, worldJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_examine(
+        FfiConverterString.lower(actionJson),
+        FfiConverterString.lower(worldJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where a transfer stands now (`send_json` / `ceremony_json` may be `null`).
+ */
+public func intentOperationProgress(progressJson: String, sendJson: String, ceremonyJson: String, trackerJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_operation_progress(
+        FfiConverterString.lower(progressJson),
+        FfiConverterString.lower(sendJson),
+        FfiConverterString.lower(ceremonyJson),
+        FfiConverterString.lower(trackerJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * `vela_review`: what the person is being asked to sign.
+ */
+public func intentReview(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_review(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Has the change held? `{ verdict, baseline }`.
+ */
+public func intentVerdict(actionJson: String, worldJson: String, baselineJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_verdict(
+        FfiConverterString.lower(actionJson),
+        FfiConverterString.lower(worldJson),
+        FfiConverterString.lower(baselineJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The views a judgement of the action reads.
+ */
+public func intentWorldNeeds(actionJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_world_needs(
+        FfiConverterString.lower(actionJson),uniffiCallStatus
+    )
+})
+}
+/**
  * `balanceOf(address)` calldata — what an `aggregate3` batch is almost always
  * made of.
  */
@@ -17974,6 +18085,33 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_agent_state() != 5204) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_baseline() != 4167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_catalog() != 41765) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_check() != 43094) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_examine() != 29526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_operation_progress() != 49202) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_review() != 10119) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_verdict() != 64611) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_world_needs() != 41165) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_erc20_encode_balance_of() != 6291) {

@@ -147,6 +147,18 @@ func bool(_ input: [String: Any], _ key: String) throws -> Bool {
     return v
 }
 
+/// An input value as the JSON text a shell hands the core (`null` included).
+func jsonText(_ input: [String: Any], _ key: String) throws -> String {
+    guard let value = input[key] else { throw BadInput(detail: "missing input `\(key)`") }
+    let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+    return String(data: data, encoding: .utf8) ?? "null"
+}
+
+/// The core's JSON answer, as a value to compare.
+func parsed(_ text: String) throws -> Any? {
+    try JSONSerialization.jsonObject(with: Data(text.utf8), options: [.fragmentsAllowed])
+}
+
 func runCase(_ fn: String, _ input: [String: Any]) throws -> Any? {
     switch fn {
     // primitives
@@ -324,6 +336,34 @@ func runCase(_ fn: String, _ input: [String: Any]) throws -> Any? {
             "resolved_language": st.resolvedLanguage.map { $0 as Any } ?? NSNull(),
             "languages": st.languages,
         ] as [String: Any]
+
+    // --- intents (app::intent_json): JSON in as the text a shell sends ---
+    case "intent_check":
+        return try parsed(intentCheck(
+            actor: try str(input, "actor"), actionJson: try jsonText(input, "action"),
+            grantsJson: try jsonText(input, "grants")))
+    case "intent_examine":
+        return try parsed(intentExamine(
+            actionJson: try jsonText(input, "action"), worldJson: try jsonText(input, "world")))
+    case "intent_baseline":
+        return try parsed(intentBaseline(
+            actionJson: try jsonText(input, "action"), worldJson: try jsonText(input, "world")))
+    case "intent_verdict":
+        return try parsed(intentVerdict(
+            actionJson: try jsonText(input, "action"), worldJson: try jsonText(input, "world"),
+            baselineJson: try jsonText(input, "baseline")))
+    case "intent_world_needs":
+        return try parsed(intentWorldNeeds(actionJson: try jsonText(input, "action")))
+    case "intent_operation_progress":
+        return try parsed(intentOperationProgress(
+            progressJson: try jsonText(input, "progress"), sendJson: try jsonText(input, "send"),
+            ceremonyJson: try jsonText(input, "ceremony"), trackerJson: try jsonText(input, "tracker")))
+    case "intent_agent_state":
+        return try parsed(intentAgentState(
+            worldJson: try jsonText(input, "world"), page: try str(input, "page"),
+            approvalsJson: try jsonText(input, "approvals"), activityJson: try jsonText(input, "activity")))
+    case "intent_review":
+        return try parsed(intentReview(inputJson: try jsonText(input, "input")))
 
     // --- marks (app::remote_mark) ---
     case "token_mark":
@@ -562,7 +602,7 @@ let REQUIRED_SUITES = [
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "marks", "primitives", "relative-time", "safe", "safe-multi",
+    "identicon", "identicon-bulk", "intents", "marks", "primitives", "relative-time", "safe", "safe-multi",
     "webauthn",
 ]
 

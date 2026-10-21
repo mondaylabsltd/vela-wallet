@@ -199,6 +199,38 @@ const DISPATCH = {
     wasm.tokenMark(i.ethereum_data_url, i.chain_id, i.symbol, i.token_address, i.named),
   chain_mark: (i) => wasm.chainMark(i.ethereum_data_url, i.chain_id, i.native_symbol),
   chain_logo_url: (i) => wasm.chainLogoUrl(i.ethereum_data_url, i.chain_id) ?? null,
+  // --- intents (app::intent_json): JSON in as the text a shell sends, the
+  // answer parsed back; every field of the expectation is compared.
+  intent_check: (i) =>
+    JSON.parse(wasm.intentCheck(i.actor, JSON.stringify(i.action), JSON.stringify(i.grants))),
+  intent_examine: (i) =>
+    JSON.parse(wasm.intentExamine(JSON.stringify(i.action), JSON.stringify(i.world))),
+  intent_baseline: (i) =>
+    JSON.parse(wasm.intentBaseline(JSON.stringify(i.action), JSON.stringify(i.world))),
+  intent_verdict: (i) =>
+    JSON.parse(
+      wasm.intentVerdict(JSON.stringify(i.action), JSON.stringify(i.world), JSON.stringify(i.baseline))
+    ),
+  intent_world_needs: (i) => JSON.parse(wasm.intentWorldNeeds(JSON.stringify(i.action))),
+  intent_operation_progress: (i) =>
+    JSON.parse(
+      wasm.intentOperationProgress(
+        JSON.stringify(i.progress),
+        JSON.stringify(i.send),
+        JSON.stringify(i.ceremony),
+        JSON.stringify(i.tracker)
+      )
+    ),
+  intent_agent_state: (i) =>
+    JSON.parse(
+      wasm.intentAgentState(
+        JSON.stringify(i.world),
+        i.page,
+        JSON.stringify(i.approvals),
+        JSON.stringify(i.activity)
+      )
+    ),
+  intent_review: (i) => JSON.parse(wasm.intentReview(JSON.stringify(i.input))),
   // --- relative time: the web's own route. The words are resolved by the
   // engine the way the prerender resolves them (no `{{n}}` filled), and the
   // client export spells the core's rule with them.
@@ -219,13 +251,29 @@ const DISPATCH = {
 };
 
 /** Compare an actual value against the vector's `expect`, matching conformance.rs. */
+/**
+ * JSON as a value, not as text: keys in a fixed order at every depth. Two
+ * surfaces that agree on the data may still differ on key order (the core's
+ * `serde_json` sorts a map's keys; a struct keeps its fields' order).
+ */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function check(expect, actual) {
   if ('value' in expect) {
     const want = expect.value;
     const got = typeof actual === 'object' && actual !== null && !Array.isArray(actual)
       ? actual
       : actual;
-    if (JSON.stringify(want) !== JSON.stringify(got)) {
+    if (canonical(want) !== canonical(got)) {
       return `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`;
     }
     return null;
@@ -243,7 +291,7 @@ function check(expect, actual) {
     const same =
       want === got ||
       (want !== null && got !== null && typeof want === 'object' && typeof got === 'object'
-        ? JSON.stringify(want) === JSON.stringify(got)
+        ? canonical(want) === canonical(got)
         : false);
     if (!same) {
       return `field \`${key}\`: expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`;
@@ -267,6 +315,7 @@ const REQUIRED_SUITES = [
   'i18n-plural-legacy',
   'identicon',
   'identicon-bulk',
+  'intents',
   'marks',
   'primitives',
   'relative-time',

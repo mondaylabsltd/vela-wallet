@@ -11,6 +11,7 @@ uniffi::setup_scaffolding!();
 // The Crux state machines (spec 019-onboarding-live-wiring), exported with the
 // same JSON surface the web gets from `vela-core-wasm`.
 mod ctap_bridge;
+mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;

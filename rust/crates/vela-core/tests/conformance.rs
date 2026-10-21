@@ -43,7 +43,7 @@ struct Case {
 /// or a partial checkout would make all four surfaces report "green" over a corpus
 /// that had silently shrunk — the precise false confidence this feature exists to
 /// prevent.
-const REQUIRED_SUITES: [&str; 14] = [
+const REQUIRED_SUITES: [&str; 15] = [
     "abi",
     "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
@@ -53,6 +53,10 @@ const REQUIRED_SUITES: [&str; 14] = [
     "i18n-plural-legacy",
     "identicon",
     "identicon-bulk",
+    // What every shell's intents answer (`app::intent_json`): the check, the
+    // judgements over the wallet's state, a transfer's progress, what an
+    // agent reads — hand-written from specs 103/104.
+    "intents",
     // Which logo a token or a network wears (`app::remote_mark`), hand-written
     // from the four shells' rule rather than dumped from a TypeScript oracle.
     "marks",
@@ -651,10 +655,56 @@ fn run_case(case: &Case) -> Result<(), String> {
             )
             .map_or(Value::Null, Value::String)),
         ),
+        #[cfg(feature = "crux")]
+        intent if intent.starts_with("intent_") => {
+            let got = intent_case(intent, input)?;
+            let got: Value = serde_json::from_str(&got).map_err(|e| format!("not JSON: {e}"))?;
+            // A plain value is expected as `{ "value": … }`, as in every suite.
+            let want = expect.get("value").unwrap_or(expect);
+            if &got == want {
+                Ok(())
+            } else {
+                Err(format!("got {got}, want {want}"))
+            }
+        }
         other => Err(format!(
             "no dispatch arm for fn `{other}` — add it to conformance.rs"
         )),
     }
+}
+
+/// One `intents` case, through the JSON every shell calls (`app::intent_json`):
+/// each JSON input is handed over as the text a shell would send.
+#[cfg(feature = "crux")]
+fn intent_case(intent: &str, input: &Value) -> Result<String, String> {
+    use vela_core::app::intent_json as ij;
+    let json = |key: &str| -> Result<String, String> {
+        input
+            .get(key)
+            .map(Value::to_string)
+            .ok_or_else(|| format!("missing input `{key}`"))
+    };
+    Ok(match intent {
+        "intent_check" => ij::check(&in_str(input, "actor")?, &json("action")?, &json("grants")?),
+        "intent_examine" => ij::examine(&json("action")?, &json("world")?),
+        "intent_baseline" => ij::baseline(&json("action")?, &json("world")?),
+        "intent_verdict" => ij::verdict(&json("action")?, &json("world")?, &json("baseline")?),
+        "intent_world_needs" => ij::world_needs(&json("action")?),
+        "intent_operation_progress" => ij::operation_progress(
+            &json("progress")?,
+            &json("send")?,
+            &json("ceremony")?,
+            &json("tracker")?,
+        ),
+        "intent_agent_state" => ij::agent_state(
+            &json("world")?,
+            &in_str(input, "page")?,
+            &json("approvals")?,
+            &json("activity")?,
+        ),
+        "intent_review" => ij::review(&json("input")?),
+        other => return Err(format!("no dispatch arm for fn `{other}`")),
+    })
 }
 
 /// A string input that may be JSON `null` (an absent value the function
