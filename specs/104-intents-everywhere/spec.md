@@ -61,7 +61,7 @@
 
 ## Before going live
 
-- **The production bridge's cancel** (Cloudflare): an agent that hangs up in the first second of a call is never cancelled in the app (`CancelOnDrop`, `crates/worker`). 103's "a cancelled call withdraws its approval" depends on that cancel. Fix it, and make the conformance suite pass against production.
+- ~~**The production bridge's cancel** (Cloudflare): an agent that hangs up in the first second of a call is never cancelled in the app.~~ Fixed in phase 4.
 - **One-step pairing (103 phase 7).** Copying a bridge URL and a minted token is not usable on a phone. Pair by QR code: the app shows it, the agent's side scans or pastes it.
 - **Mobile in the background.** iOS (and Android, less strictly) suspends the socket. The agent reaches the wallet only while it is in the foreground; waking it is out of v1, and the app says so.
 
@@ -72,7 +72,7 @@
 | 1 | Part A into Rust; wasm exports; the web calls them and drops its copies | **done** — `intent_rules` (14 Rust tests); the web's `rules`/`state`/`review`/transfer progress are doors to it; unit 3900, e2e 455, live run |
 | 2 | uniffi exports for the intents | **done** — `intents_bridge` (the same JSON functions); Kotlin and Swift bindings generated; both harnesses replay the shared `intents` vectors |
 | 3 | `clientmcp-client` (Rust) | **done** — conformance 34/34 with it as the application, against the native bridge and the Worker in workerd; 6 lifecycle tests of its own |
-| 4 | Production cancel fix | Conformance green against `bridge.clientmcp.dev`, the first-second hang-up included |
+| 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | Desktop coverage ledger; live agent run |
 | 6 | QR pairing | Pair desktop and web in one step |
 | 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | Each platform's coverage ledger; live agent run |
@@ -105,6 +105,19 @@
 - **Found:** with only the WebSocket crate's TLS feature, rustls had no crypto provider, so the first `wss://` connection would have panicked. The client now builds its own TLS config with *ring* and the platform's roots, and installs nothing process-wide.
 - **The production cancel bug is not in workerd.** The first-second hang-up test passes against the Worker run locally. Phase 4 has to be checked on Cloudflare itself.
 - **Not yet:** the uniffi wrapper for iOS and Android. It comes with phase 7, shaped by what the native shells need.
+
+## Phase 4 notes
+
+- **The cause.** On Cloudflare, an agent hanging up on a call's pending JSON response (its first second) ends the Worker's invocation without dropping anything. The bridge's only signal had been a dropped stream, so the application kept the call, and its approval sheet, until the 120 s call timeout. workerd does not do this, so local runs never showed it.
+- **The fix** (`crates/worker`):
+  - the `enable_request_signal` flag;
+  - the Worker cancels on the agent request's abort signal;
+  - the Durable Object also watches its own request's signal;
+  - the object remembers, for 10 s, a Worker cancel that arrived before its call, and refuses that call.
+- **Measured on production**, hanging up at fixed delays: before, hang-ups at 0.6–0.8 s were never cancelled; after, every hang-up whose call reached the app was cancelled within 0.25 s.
+  - A staging copy on workers.dev, reached through this network's HTTP proxy, could not show the bug: the proxy keeps the connection to Cloudflare open until the next write.
+- **Production now** runs version `c0b5e511`; the one before was `5bee0b6c` (rollback: `wrangler rollback`).
+- **The suite** passes on production with the JS SDK and with the Rust client (TLS included). The only skip is the call-timeout case. The harness's https handshake case now works there too.
 
 ## Open
 
