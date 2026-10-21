@@ -61,19 +61,30 @@ export async function addNetwork(
 	return null;
 }
 
+/** How long the RPC save gate may take to hear the endpoint's chain id. */
+const GATE_MS = 20_000;
+
 /**
  * One network's card: open it, edit the field, leave it (which saves). A
  * field already showing `url` is only left.
+ *
+ * An RPC goes through the network core's save gate: one answering for another
+ * chain is not written. The card would keep the refused draft — and the view
+ * shows a card's draft as its value — so the field is put back to what is in
+ * effect, and the refusal is the answer.
  */
 export async function setNetworkEndpoint(
 	chainId: number,
 	field: NetOverrideField,
 	url: string
-): Promise<void> {
+): Promise<IntentReason | null> {
 	await ready();
-	const row = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
-	const shown = field === 'rpc' ? row?.rpc_url : row?.explorer_url;
-	if (shown !== url.trim()) {
+	const shownOf = () => {
+		const row = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
+		return field === 'rpc' ? row?.rpc_url : row?.explorer_url;
+	};
+	const before = shownOf();
+	if (before !== url.trim()) {
 		networkAdmin.dispatch({ type: 'override_expanded', chain_id: chainId });
 		networkAdmin.dispatch({
 			type: 'override_field_edited',
@@ -83,6 +94,26 @@ export async function setNetworkEndpoint(
 		});
 	}
 	networkAdmin.dispatch({ type: 'override_blurred', chain_id: chainId });
+	if (field !== 'rpc') return null;
+	const deadline = Date.now() + GATE_MS;
+	for (;;) {
+		const row = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
+		if (row?.rpc_chain_mismatch) {
+			if (before !== undefined)
+				networkAdmin.dispatch({
+					type: 'override_field_edited',
+					chain_id: chainId,
+					field,
+					value: before
+				});
+			return {
+				code: 'refused',
+				detail: 'that RPC answers for another chain; the network keeps the RPC it had'
+			};
+		}
+		if (!row?.rpc_save_deferred || Date.now() >= deadline) return null;
+		await new Promise((done) => setTimeout(done, 100));
+	}
 }
 
 /** The network's own row is what its delete names. */

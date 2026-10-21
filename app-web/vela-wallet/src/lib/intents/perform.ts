@@ -269,8 +269,7 @@ export async function perform(
 		case 'add_network':
 			return networks.addNetwork(action.chain_id, action.rpc_url);
 		case 'set_network_endpoint':
-			await networks.setNetworkEndpoint(action.chain_id, action.field, action.url);
-			return null;
+			return networks.setNetworkEndpoint(action.chain_id, action.field, action.url);
 		case 'remove_network':
 			await networks.removeNetwork(action.chain_id);
 			return null;
