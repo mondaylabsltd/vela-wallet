@@ -19,10 +19,9 @@
 		onenable?: (on: boolean) => void;
 		onbridge?: (url: string) => void;
 		ontoken?: (token: string) => void;
-		ongrant?: (on: boolean) => void;
 	}
 
-	let { panel, onenable, onbridge, ontoken, ongrant }: Props = $props();
+	let { panel, onenable, onbridge, ontoken }: Props = $props();
 
 	/** What is typed into a field and not yet applied. */
 	let bridgeDraft: string | null = null;
@@ -32,9 +31,6 @@
 <p class="description">{panel.description}</p>
 
 <div class="switch"><SwitchRow row={panel.enable} onchange={onenable} /></div>
-{#if panel.grant !== undefined}
-	<div class="switch"><SwitchRow row={panel.grant} onchange={ongrant} /></div>
-{/if}
 
 <div class="fields">
 	<UrlField

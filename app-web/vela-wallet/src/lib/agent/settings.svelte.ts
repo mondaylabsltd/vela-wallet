@@ -17,11 +17,9 @@ export type AgentConfig = {
 	url: string;
 	/** A ClientMCP client token for this wallet. */
 	token: string;
-	/** The agent may submit a transaction for the person's passkey (spec 103). Off unless granted. */
-	submitTransactions: boolean;
 };
 
-const OFF: AgentConfig = { enabled: false, url: '', token: '', submitTransactions: false };
+const OFF: AgentConfig = { enabled: false, url: '', token: '' };
 
 function stored(): AgentConfig {
 	if (!browser) return OFF;
@@ -32,8 +30,7 @@ function stored(): AgentConfig {
 		return {
 			enabled: raw?.enabled === true,
 			url: typeof raw?.url === 'string' ? raw.url : '',
-			token: typeof raw?.token === 'string' ? raw.token : '',
-			submitTransactions: raw?.submitTransactions === true
+			token: typeof raw?.token === 'string' ? raw.token : ''
 		};
 	} catch {
 		return OFF;
@@ -78,7 +75,6 @@ class AgentSettings {
 	enabled = $state(false);
 	url = $state('');
 	token = $state('');
-	submitTransactions = $state(false);
 
 	/** Read the stored choice (idempotent). */
 	boot(): void {
@@ -86,7 +82,6 @@ class AgentSettings {
 		this.enabled = config.enabled;
 		this.url = config.url;
 		this.token = config.token;
-		this.submitTransactions = config.submitTransactions;
 	}
 
 	/** Whether the bridge can be dialled with what is entered. */
@@ -98,14 +93,12 @@ class AgentSettings {
 		if (patch.enabled !== undefined) this.enabled = patch.enabled;
 		if (patch.url !== undefined) this.url = patch.url;
 		if (patch.token !== undefined) this.token = patch.token;
-		if (patch.submitTransactions !== undefined) this.submitTransactions = patch.submitTransactions;
 		if (!browser) return;
 		try {
 			const config: AgentConfig = {
 				enabled: this.enabled,
 				url: this.url,
-				token: this.token,
-				submitTransactions: this.submitTransactions
+				token: this.token
 			};
 			localStorage.setItem(AGENT_KEY, JSON.stringify(config));
 		} catch {

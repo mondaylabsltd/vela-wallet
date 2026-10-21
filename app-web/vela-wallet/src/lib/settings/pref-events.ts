@@ -49,6 +49,5 @@ export type SettingsPrefEvent =
 	| { kind: 'agent'; on: boolean }
 	| { kind: 'agent-url'; value: string }
 	| { kind: 'agent-token'; value: string }
-	| { kind: 'agent-grant'; on: boolean }
 	/** The destructive one, confirmed. */
 	| { kind: 'erase' };

@@ -203,6 +203,18 @@ describe('an operation, read from the machines that own it', () => {
 		d.detach();
 	});
 
+	it('is awaiting the passkey while the core is “submitting” before it signs', async () => {
+		const d = desk();
+		const id = ((await transfers.prepare(draft())) as { id: string }).id;
+		transfers.submit(id);
+		// The core builds the operation (`submitting`) before it asks for the passkey.
+		d.set({ tx_status: 'submitting' });
+		expect(transfers.get(id)?.state).toBe('awaiting_passkey');
+		ceremony.listener?.('signed');
+		expect(transfers.get(id)?.state).toBe('submitting');
+		d.detach();
+	});
+
 	it('is back on the review when the passkey prompt is dismissed', async () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;

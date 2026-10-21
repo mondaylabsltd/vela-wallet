@@ -7,15 +7,15 @@ import { expect, type Page, type WebSocketRoute } from '@playwright/test';
 
 export const BRIDGE = 'ws://localhost:18999/connect';
 
-/** Settings → AI agent as the person leaves it: on, this bridge, and the grant if given. */
-export async function enableAgent(page: Page, grant = false): Promise<void> {
+/** Settings → AI agent as the person leaves it: on, and this bridge. */
+export async function enableAgent(page: Page): Promise<void> {
 	await page.evaluate(
-		([url, submitTransactions]) =>
+		(url) =>
 			localStorage.setItem(
 				'vela.agent',
-				JSON.stringify({ enabled: true, url, token: 'e2e-token', submitTransactions })
+				JSON.stringify({ enabled: true, url, token: 'e2e-token' })
 			),
-		[BRIDGE, grant] as const
+		BRIDGE
 	);
 }
 

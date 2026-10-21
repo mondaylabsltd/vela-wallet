@@ -240,17 +240,14 @@ export async function perform(
 			});
 			await syncAgent();
 			return null;
-		case 'set_agent_grant':
-			agentSettings.set({ submitTransactions: action.submit_transactions });
-			return null;
 		case 'prepare_transfer':
-			return started(await transfers.prepare(action));
+			return started(await transfers.prepare(action, actor));
 		case 'submit_transfer':
 			return started(transfers.submit(action.operation, actor));
 		case 'cancel_transfer':
 			return transfers.cancel(action.operation);
 		case 'prepare_batch_transfer':
-			return started(await transfers.prepareBatch(action));
+			return started(await transfers.prepareBatch(action, actor));
 		case 'add_token':
 			return addToken(action.chain_id, action.address);
 		case 'delete_activity':

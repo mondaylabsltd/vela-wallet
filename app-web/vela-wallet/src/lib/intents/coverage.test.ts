@@ -218,7 +218,6 @@ const SETTINGS: Record<string, Place> = {
 	'pref.agent': { intent: 'configure_agent' },
 	'pref.agent-url': { intent: 'configure_agent' },
 	'pref.agent-token': { intent: 'configure_agent' },
-	'pref.agent-grant': { intent: 'set_agent_grant' },
 	'pref.signing-venue': {
 		none: 'where this account signs is the signing boundary itself (spec 102)'
 	}
@@ -244,7 +243,6 @@ const PERSON = [
 	'reset_service_endpoints',
 	'save_contact',
 	'save_group',
-	'set_agent_grant',
 	'set_balance_privacy',
 	'set_contact_groups',
 	'set_group_members',

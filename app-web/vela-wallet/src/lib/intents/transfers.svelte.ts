@@ -52,8 +52,8 @@ type Tracked = IntentOperation & {
 	confirmedAfter: number | null;
 	/** The finished transfer whose receipt this draft closed (its Done). */
 	closed: string | null;
-	/** The person dismissed its passkey prompt: only they confirm it now. */
-	declined: boolean;
+	/** Who put it on the review: an agent's draft, or the person's own form. */
+	draftedBy: IntentActor;
 };
 
 /** How long each step of a draft may take before it is given up. */
@@ -98,8 +98,8 @@ class Transfers {
 	 * Draft a transfer into the review. Resolves with the operation, or with
 	 * why it could not be drafted — in which case nothing is left open.
 	 */
-	prepare(draft: Draft): Promise<IntentOperation | IntentReason> {
-		return this.#draft(draft.chain_id, draft.token, draft.to, (port) => {
+	prepare(draft: Draft, by: IntentActor = 'agent'): Promise<IntentOperation | IntentReason> {
+		return this.#draft(by, draft.chain_id, draft.token, draft.to, (port) => {
 			const amount = decimal(draft.amount);
 			port.dispatch(amount === 'max' ? { type: 'tap_max' } : { type: 'set_amount', amount });
 			return (view) => {
@@ -113,8 +113,11 @@ class Transfers {
 	 * Draft one token to several recipients — the form's several-recipients
 	 * mode, its rows set as a whole as the importer sets them.
 	 */
-	prepareBatch(draft: BatchDraft): Promise<IntentOperation | IntentReason> {
-		return this.#draft(draft.chain_id, draft.token, null, (port) => {
+	prepareBatch(
+		draft: BatchDraft,
+		by: IntentActor = 'agent'
+	): Promise<IntentOperation | IntentReason> {
+		return this.#draft(by, draft.chain_id, draft.token, null, (port) => {
 			port.dispatch({
 				type: 'seed_split_recipients',
 				recipients: draft.recipients.map((row) => ({
@@ -142,6 +145,7 @@ class Transfers {
 	 * the form's own controls go in.
 	 */
 	async #draft(
+		by: IntentActor,
 		chainId: number,
 		contract: string | null,
 		recipient: string | null,
@@ -223,7 +227,13 @@ class Transfers {
 		}
 		const drafted = this.#adopt(port, token.chain_id);
 		drafted.closed = closed;
+		drafted.draftedBy = by;
 		return this.#plain(drafted);
+	}
+
+	/** Who drafted `id` onto its review. */
+	draftedBy(id: string): IntentActor | null {
+		return this.operations.find((entry) => entry.id === id)?.draftedBy ?? null;
 	}
 
 	/** The finished transfer whose receipt drafting `id` closed, if any. */
@@ -243,20 +253,19 @@ class Transfers {
 		return this.#plain(this.#adopt(port, view.selected_token?.chain_id ?? null));
 	}
 
-	/** Press confirm on the operation's review. */
+	/**
+	 * Confirm the operation's review. The person's confirm presses it, and
+	 * their passkey signs. An agent's only asks them (owner, 2026-10-21): the
+	 * passkey prompt shows no transaction, so it is never raised over a review
+	 * the person did not choose to confirm — their own tap on the review is
+	 * the only way to it.
+	 */
 	submit(id: string, by: IntentActor = 'person'): IntentOperation | IntentReason {
 		const port = sendDesk.port;
 		const operation = this.operations.find((entry) => entry.id === id);
 		if (!port || !operation || port.session() !== operation.session || port.view() === null)
 			return reason('not_found', 'that transfer is no longer on the review screen');
 		this.sync();
-		// A dismissed passkey prompt is the person's no to this transfer: the
-		// agent does not raise it at them again.
-		if (by === 'agent' && operation.declined)
-			return reason(
-				'denied',
-				'the person dismissed the passkey prompt for this transfer: only they can confirm it now'
-			);
 		const view = port.view();
 		// One network, one nonce: the core holds the confirm while the account's
 		// previous transfer there is still going through, and opens it itself.
@@ -266,8 +275,15 @@ class Transfers {
 				'not_ready',
 				`the previous transfer on this network (${waiting.user_op_hash}) is still going through: the confirm opens once it is final`
 			);
+		if (by === 'agent') {
+			// The review is the screen in front of the person; the bar says the
+			// agent asks them to confirm it. Nothing is pressed.
+			if (operation.state === 'awaiting_confirmation')
+				operation.reason = 'waiting for the person to confirm it on the review';
+			return this.#plain(operation);
+		}
 		if (!view?.can_confirm) return reason('refused', 'the review cannot be confirmed yet');
-		if (by === 'person') operation.reason = null;
+		operation.reason = null;
 		operation.confirmedAfter = this.#ceremonies;
 		port.dispatch({ type: 'slide_confirm' });
 		this.sync();
@@ -313,7 +329,12 @@ class Transfers {
 			return;
 		}
 		switch (view.tx_status) {
+			// The core's order is preparing → submitting (built, not yet signed)
+			// → signing → submitting (signed, on its way to the relay): its own
+			// `submitting` comes before the passkey too. Only the ceremony's
+			// "signed" says the passkey answered.
 			case 'preparing':
+			case 'submitting':
 			case 'signing': {
 				const ceremony = this.#ceremony;
 				const signed =
@@ -323,7 +344,6 @@ class Transfers {
 				operation.state = signed ? 'submitting' : 'awaiting_passkey';
 				return;
 			}
-			case 'submitting':
 			case 'confirmed':
 				operation.state = 'submitting';
 				return;
@@ -335,10 +355,8 @@ class Transfers {
 				// Back at the review: from the passkey, that is its prompt dismissed.
 				if (view.stage !== 'confirm') return;
 				// (From signing, too: nothing was sent while it is back here.)
-				if (operation.state !== 'awaiting_confirmation') {
-					operation.declined = true;
+				if (operation.state !== 'awaiting_confirmation')
 					operation.reason = 'the person dismissed the passkey prompt';
-				}
 				operation.state = 'awaiting_confirmation';
 				return;
 		}
@@ -378,7 +396,7 @@ class Transfers {
 			tx_hash: null,
 			reason: null,
 			closed: null,
-			declined: false,
+			draftedBy: 'person',
 			session,
 			confirmedAfter: null
 		};

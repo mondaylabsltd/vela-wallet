@@ -501,7 +501,6 @@
 					onenable={(on) => onprefevent?.({ kind: 'agent', on })}
 					onbridge={(value) => onprefevent?.({ kind: 'agent-url', value })}
 					ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
-					ongrant={(on) => onprefevent?.({ kind: 'agent-grant', on })}
 				/>
 			{/if}
 		</div>

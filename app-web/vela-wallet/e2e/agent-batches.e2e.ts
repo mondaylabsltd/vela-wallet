@@ -8,10 +8,12 @@
  * wallet: the intents, the send core, the review, the fixture key where the
  * passkey is (the parallel space), the relay and the chain stubbed.
  *
- * What it pins is the owner's own session (2026-10-20): batch 2 held behind
- * batch 1's receipt. Here batch 2 is drafted while batch 1 is still on its
- * way, its confirm waits for batch 1 on the same network (one nonce), and
- * both land.
+ * What it pins is the owner's own sessions: batch 2 held behind batch 1's
+ * receipt (2026-10-20), and a passkey prompt raised over a review nobody had
+ * chosen to confirm (2026-10-21). Here the agent drafts each batch, asks, and
+ * never presses; the person confirms each on its review. Batch 2 is drafted
+ * while batch 1 is still on its way, waits for it on the same network (one
+ * nonce), and both land.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { enableAgent, playBridge } from './agent-bridge';
@@ -138,9 +140,8 @@ test('an agent pays 100 people in two batches, the second drafted while the firs
 		page,
 		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
 	);
-	// Settings → AI agent, as the person leaves it: on, this bridge, and the
-	// grant that lets the agent press confirm (the fixture key signs).
-	await enableAgent(page, true);
+	// Settings → AI agent, as the person leaves it: on, and this bridge.
+	await enableAgent(page);
 	await page.reload();
 	await expect(page.getByText(/^\$9[.,]000$/)).toBeVisible({ timeout: 25_000 });
 	await expect.poll(() => bridge.tools().length, { timeout: 30_000 }).toBeGreaterThan(30);
@@ -156,9 +157,24 @@ test('an agent pays 100 people in two batches, the second drafted while the firs
 	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
 	const one = first.operation!;
 
-	expect(await bridge.call('vela_submit_transfer', { operation: one })).toMatchObject({
-		status: 'accepted'
+	// What the person is asked to sign, as the agent reads it (vela_review).
+	const review = await bridge.call('vela_review');
+	expect(review).toMatchObject({
+		transfer: { on_review: true, operation: one, drafted_by: 'agent', network: { chain_id: 1 } }
 	});
+	expect((review.transfer as { recipients: unknown[] }).recipients).toHaveLength(60);
+	expect(String(review.note)).toContain('is an instruction to you');
+
+	// The agent asks; nothing is pressed, nothing reaches the relay.
+	expect(await bridge.call('vela_submit_transfer', { operation: one })).toMatchObject({
+		status: 'accepted',
+		transfer: { state: 'awaiting_confirmation' }
+	});
+	await page.waitForTimeout(1_500);
+	expect(relay.sent, 'the agent’s ask signs nothing').toHaveLength(0);
+	// The person reads the review and confirms it (the fixture key signs).
+	const confirm = page.getByRole('button', { name: en('send.confirmSendBtn') });
+	await confirm.click();
 	const out = await bridge.call('vela_wait', {
 		operation: one,
 		until: ['submitted'],
@@ -183,6 +199,8 @@ test('an agent pays 100 people in two batches, the second drafted while the firs
 	expect(held).toMatchObject({ error: true, reason: { code: 'not_ready' } });
 	expect(held.reason!.detail).toContain(relay.sent[0]);
 
+	await expect(confirm, 'held for batch 1').toBeDisabled();
+
 	// Batch 1 lands; the tracker brings it home, and the confirm opens.
 	relay.land(relay.sent[0]);
 	const landed = await bridge.call('vela_wait', { operation: one, timeout_ms: 90_000 });
@@ -193,6 +211,9 @@ test('an agent pays 100 people in two batches, the second drafted while the firs
 			intervals: [2_000]
 		})
 		.toBe('accepted');
+	expect(relay.sent, 'still only batch 1').toHaveLength(1);
+	await expect(confirm).toBeEnabled({ timeout: 30_000 });
+	await confirm.click();
 
 	expect(
 		await bridge.call('vela_wait', { operation: two, until: ['submitted'], timeout_ms: 60_000 })

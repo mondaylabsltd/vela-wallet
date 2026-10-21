@@ -37,7 +37,7 @@ export function world(): World {
 			timeFormat: preferences.timeFormat,
 			analytics: analyticsConsent.enabled
 		},
-		agent: { enabled: agentSettings.enabled, submitTransactions: agentSettings.submitTransactions },
+		agent: { enabled: agentSettings.enabled },
 		operations: transfers.list(),
 		balance: balance.view,
 		feed: feed.view,
@@ -52,10 +52,7 @@ export const intents = new Intents({
 			intentCheck(
 				actor,
 				JSON.stringify(action),
-				JSON.stringify({
-					agent_enabled: seen.agent.enabled,
-					submit_transactions: seen.agent.submitTransactions
-				})
+				JSON.stringify({ agent_enabled: seen.agent.enabled })
 			)
 		) as IntentCheck,
 	world,

@@ -202,10 +202,6 @@ export function examine(action: IntentAction, world: World): Examined {
 		case 'clear_caches':
 		case 'configure_agent':
 			return { kind: 'go' };
-		case 'set_agent_grant':
-			return world.agent.submitTransactions === action.submit_transactions
-				? { kind: 'already' }
-				: { kind: 'go' };
 		case 'prepare_transfer':
 		case 'prepare_batch_transfer':
 		case 'add_token':
@@ -292,8 +288,6 @@ export function verdict(action: IntentAction, world: World, baseline: Baseline):
 		case 'clear_caches':
 		case 'configure_agent':
 			return { kind: 'held' };
-		case 'set_agent_grant':
-			return held(world.agent.submitTransactions === action.submit_transactions);
 		case 'switch_account':
 			return held(world.session !== null && same(world.session.address, action.address));
 		case 'remove_wallet':

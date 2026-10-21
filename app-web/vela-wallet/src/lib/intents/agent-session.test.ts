@@ -134,7 +134,7 @@ function session(): SessionView {
 	} as unknown as SessionView;
 }
 
-function wallet(grant: boolean) {
+function wallet() {
 	return new Intents({
 		ready: async () => {},
 		check: (actor, action, seen) =>
@@ -142,10 +142,7 @@ function wallet(grant: boolean) {
 				intentCheck(
 					actor,
 					JSON.stringify(action),
-					JSON.stringify({
-						agent_enabled: seen.agent.enabled,
-						submit_transactions: seen.agent.submitTransactions
-					})
+					JSON.stringify({ agent_enabled: seen.agent.enabled })
 				)
 			) as IntentCheck,
 		world: () => ({
@@ -154,7 +151,7 @@ function wallet(grant: boolean) {
 			currency: null,
 			feeTier: null,
 			preferences: {} as never,
-			agent: { enabled: true, submitTransactions: grant },
+			agent: { enabled: true },
 			operations: transfers.list(),
 			balance: null,
 			feed: null,
@@ -187,20 +184,40 @@ beforeEach(() => {
 });
 
 describe('an agent sending in batches (spec 103)', () => {
+	const presses = (f: ReturnType<typeof form>) =>
+		f.events.filter((event) => event.type === 'slide_confirm').length;
+
+	it('never raises the passkey: its confirm only asks the person', async () => {
+		const f = form();
+		const intents = wallet();
+		const drafted = await intents.invoke('agent', batch(3));
+		const id = (drafted as { operation: { id: string } }).operation.id;
+		for (let i = 0; i < 3; i++)
+			expect(await intents.invoke('agent', submit(id))).toMatchObject({
+				status: 'accepted',
+				operation: {
+					state: 'awaiting_confirmation',
+					reason: 'waiting for the person to confirm it on the review'
+				}
+			});
+		expect(presses(f), 'nothing pressed, no passkey prompt').toBe(0);
+
+		// The person reads the review and confirms it: then, and only then.
+		expect(await intents.invoke('person', submit(id))).toMatchObject({
+			status: 'accepted',
+			operation: { state: 'awaiting_passkey', reason: null }
+		});
+		expect(presses(f)).toBe(1);
+		f.detach();
+	});
+
 	it('sends batch after batch, the first still on its way when the second is drafted', async () => {
 		const f = form();
-		const intents = wallet(true);
+		const intents = wallet();
 
 		const first = await intents.invoke('agent', batch(60));
-		expect(first).toMatchObject({
-			status: 'accepted',
-			operation: { state: 'awaiting_confirmation' }
-		});
 		const one = (first as { operation: { id: string } }).operation.id;
-		expect(await intents.invoke('agent', submit(one))).toMatchObject({
-			status: 'accepted',
-			operation: { state: 'awaiting_passkey' }
-		});
+		await intents.invoke('person', submit(one));
 		f.signed('0xOP1');
 		expect(transfers.get(one)?.state).toBe('submitted');
 
@@ -214,66 +231,52 @@ describe('an agent sending in batches (spec 103)', () => {
 		tracker.entries = [{ user_op_hash: '0xop1', status: 'confirmed', tx_hash: '0xTX1' }];
 		expect(transfers.get(one)).toMatchObject({ state: 'confirmed', tx_hash: '0xTX1' });
 
-		expect(await intents.invoke('agent', submit(two))).toMatchObject({ status: 'accepted' });
+		await intents.invoke('person', submit(two));
 		f.signed('0xOP2');
 		expect(transfers.get(two)?.state).toBe('submitted');
 		f.detach();
 	});
 
-	it('does not raise the passkey again once the person dismissed it — the person still can', async () => {
+	it('is back on its review when the person dismisses the passkey prompt', async () => {
 		const f = form();
-		const intents = wallet(true);
+		const intents = wallet();
 		const drafted = await intents.invoke('agent', batch(3));
 		const id = (drafted as { operation: { id: string } }).operation.id;
-		await intents.invoke('agent', submit(id));
+		await intents.invoke('person', submit(id));
 		f.dismissed();
 		expect(transfers.get(id)).toMatchObject({
 			state: 'awaiting_confirmation',
 			reason: 'the person dismissed the passkey prompt'
 		});
-
-		expect(await intents.invoke('agent', submit(id))).toMatchObject({
-			status: 'rejected',
-			reason: { code: 'denied' }
-		});
-		expect(f.events.filter((event) => event.type === 'slide_confirm')).toHaveLength(1);
-
-		expect(await intents.invoke('person', submit(id))).toMatchObject({
-			status: 'accepted',
-			operation: { state: 'awaiting_passkey', reason: null }
-		});
-		expect(f.events.filter((event) => event.type === 'slide_confirm')).toHaveLength(2);
+		// Their next confirm is theirs to make.
+		expect(await intents.invoke('person', submit(id))).toMatchObject({ status: 'accepted' });
+		expect(presses(f)).toBe(2);
 		f.detach();
 	});
 
-	it('presses confirm once when asked twice at the same moment', async () => {
+	it('presses confirm once when the person’s confirm comes twice at once', async () => {
 		const f = form();
-		const intents = wallet(true);
+		const intents = wallet();
 		const drafted = await intents.invoke('agent', batch(2));
 		const id = (drafted as { operation: { id: string } }).operation.id;
 		const [a, b] = await Promise.all([
-			intents.invoke('agent', submit(id)),
-			intents.invoke('agent', submit(id))
+			intents.invoke('person', submit(id)),
+			intents.invoke('person', submit(id))
 		]);
 		expect([a.status, b.status].sort()).toEqual(['accepted', 'rejected']);
-		expect(f.events.filter((event) => event.type === 'slide_confirm')).toHaveLength(1);
+		expect(presses(f)).toBe(1);
 		f.detach();
 	});
 
-	it('cannot redraft over a batch on its review, nor confirm without the grant', async () => {
+	it('cannot redraft over a batch on its review', async () => {
 		const f = form();
-		const intents = wallet(false);
-		const drafted = await intents.invoke('agent', batch(2));
-		const id = (drafted as { operation: { id: string } }).operation.id;
+		const intents = wallet();
+		await intents.invoke('agent', batch(2));
 		expect(await intents.invoke('agent', batch(5))).toMatchObject({
 			status: 'rejected',
 			reason: { code: 'busy' }
 		});
-		expect(await intents.invoke('agent', submit(id))).toMatchObject({
-			status: 'rejected',
-			reason: { code: 'not_granted' }
-		});
-		expect(f.events.filter((event) => event.type === 'slide_confirm')).toHaveLength(0);
+		expect(presses(f)).toBe(0);
 		f.detach();
 	});
 });

@@ -553,8 +553,6 @@ export interface AgentPanelModel {
 	endpoint?: { label: string; value: string; hint: string };
 	/** The control the agent pressed last. */
 	lastAction?: { label: string; value: string };
-	/** Whether the agent may confirm transfers (the passkey still signs) — while it is on. */
-	grant?: SwitchRowModel;
 }
 
 export interface AboutModel {

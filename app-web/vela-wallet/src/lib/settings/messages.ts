@@ -64,9 +64,7 @@ export interface SettingsMessages {
 		| 'statusOnline'
 		| 'statusOffline'
 		| 'statusRefused'
-		| 'lastAction'
-		| 'grant'
-		| 'grantHint',
+		| 'lastAction',
 		string
 	>;
 	appearance: {
@@ -771,8 +769,6 @@ export const SETTINGS_KEYS = [
 	'settings.agent.statusOffline',
 	'settings.agent.statusRefused',
 	'settings.agent.lastAction',
-	'settings.agent.grant',
-	'settings.agent.grantHint',
 	'settings.appearance.themeTitle',
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',

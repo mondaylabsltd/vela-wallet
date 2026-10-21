@@ -27,7 +27,7 @@ export type World = {
 		timeFormat: string;
 		analytics: boolean;
 	};
-	agent: { enabled: boolean; submitTransactions: boolean };
+	agent: { enabled: boolean };
 	/** The transfers the wallet is following (`transfers.svelte.ts`), up to date. */
 	operations: IntentOperation[];
 	balance: BalanceView | null;

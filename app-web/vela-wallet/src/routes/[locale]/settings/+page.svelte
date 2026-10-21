@@ -445,9 +445,6 @@
 			case 'agent-token':
 				configureAgent({ enabled: null, bridge_url: null, client_token: event.value });
 				return;
-			case 'agent-grant':
-				void intents.invoke('person', { type: 'set_agent_grant', submit_transactions: event.on });
-				return;
 			case 'erase':
 				void erase();
 				return;
@@ -654,15 +651,7 @@
 				endpoint === null
 					? undefined
 					: { label: a.endpoint, value: endpoint, hint: a.endpointHint },
-			lastAction: last === null ? undefined : { label: a.lastAction, value: last },
-			grant: agentSettings.enabled
-				? {
-						id: 'settings-agent-grant',
-						title: a.grant,
-						subtitle: a.grantHint,
-						on: agentSettings.submitTransactions
-					}
-				: undefined
+			lastAction: last === null ? undefined : { label: a.lastAction, value: last }
 		};
 	});
 

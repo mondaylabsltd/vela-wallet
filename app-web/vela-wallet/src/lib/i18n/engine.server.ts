@@ -455,9 +455,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			statusOnline: k('settings.agent.statusOnline'),
 			statusOffline: k('settings.agent.statusOffline'),
 			statusRefused: k('settings.agent.statusRefused'),
-			lastAction: k('settings.agent.lastAction'),
-			grant: k('settings.agent.grant'),
-			grantHint: k('settings.agent.grantHint')
+			lastAction: k('settings.agent.lastAction')
 		},
 		appearance: {
 			themeTitle: k('settings.appearance.themeTitle'),
