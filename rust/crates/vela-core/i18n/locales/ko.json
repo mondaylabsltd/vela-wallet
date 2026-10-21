@@ -135,8 +135,6 @@
       "allow": "허용",
       "deny": "거부",
       "stop": "중지",
-      "grant": "에이전트의 송금 확인 허용",
-      "grantHint": "모든 송금은 여전히 패스키로 서명합니다.",
       "action": {
         "show": "화면 표시",
         "switchAccount": "지갑 전환",
@@ -153,7 +151,7 @@
         "clearStorageItem": "저장된 데이터 삭제",
         "clearCaches": "캐시 삭제",
         "prepareTransfer": "송금 준비",
-        "submitTransfer": "송금 확인",
+        "submitTransfer": "송금 확인 요청",
         "cancelTransfer": "송금 취소",
         "prepareBatchTransfer": "여러 명에게 송금 준비",
         "addToken": "토큰 추가",

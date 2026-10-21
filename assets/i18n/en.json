@@ -135,8 +135,6 @@
    "allow": "Allow",
    "deny": "Deny",
    "stop": "Stop",
-   "grant": "Let the agent confirm transfers",
-   "grantHint": "Your passkey still signs every one.",
    "action": {
     "show": "Show a screen",
     "switchAccount": "Switch wallets",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Clear stored data",
     "clearCaches": "Clear caches",
     "prepareTransfer": "Prepare a transfer",
-    "submitTransfer": "Confirm a transfer",
+    "submitTransfer": "Ask you to confirm a transfer",
     "cancelTransfer": "Cancel a transfer",
     "prepareBatchTransfer": "Prepare a transfer to several",
     "addToken": "Add a token",

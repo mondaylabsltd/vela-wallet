@@ -135,8 +135,6 @@
       "allow": "Permitir",
       "deny": "Rechazar",
       "stop": "Detener",
-      "grant": "Permitir que el agente confirme envíos",
-      "grantHint": "Tu passkey sigue firmando cada uno.",
       "action": {
         "show": "Mostrar una pantalla",
         "switchAccount": "Cambiar de billetera",
@@ -153,7 +151,7 @@
         "clearStorageItem": "Borrar datos guardados",
         "clearCaches": "Borrar caché",
         "prepareTransfer": "Preparar un envío",
-        "submitTransfer": "Confirmar un envío",
+        "submitTransfer": "Pedirte que confirmes un envío",
         "cancelTransfer": "Cancelar un envío",
         "prepareBatchTransfer": "Preparar un envío a varios",
         "addToken": "Agregar un token",

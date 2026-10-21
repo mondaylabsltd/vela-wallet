@@ -135,8 +135,6 @@
       "allow": "Izinkan",
       "deny": "Tolak",
       "stop": "Hentikan",
-      "grant": "Izinkan agen mengonfirmasi transfer",
-      "grantHint": "Passkey Anda tetap menandatangani setiap transfer.",
       "action": {
         "show": "Tampilkan layar",
         "switchAccount": "Ganti dompet",
@@ -153,7 +151,7 @@
         "clearStorageItem": "Hapus data tersimpan",
         "clearCaches": "Hapus cache",
         "prepareTransfer": "Siapkan transfer",
-        "submitTransfer": "Konfirmasi transfer",
+        "submitTransfer": "Minta Anda mengonfirmasi transfer",
         "cancelTransfer": "Batalkan transfer",
         "prepareBatchTransfer": "Siapkan transfer ke beberapa",
         "addToken": "Tambah token",

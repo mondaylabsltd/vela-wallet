@@ -205,11 +205,6 @@ pub enum Action {
         bridge_url: Option<String>,
         client_token: Option<String>,
     },
-    /// Whether an agent may submit a transaction for the person's passkey.
-    /// The person's alone.
-    SetAgentGrant {
-        submit_transactions: bool,
-    },
     /// A transfer, drafted into the wallet's own review — the screen a person
     /// reaches by filling the form. Nothing moves until it is submitted.
     /// `token`: the contract, absent for the chain's own coin. `amount`: a
@@ -220,8 +215,11 @@ pub enum Action {
         to: String,
         amount: String,
     },
-    /// Press confirm on a prepared transfer's review: the person's passkey
-    /// signs it. An agent may only with the person's grant.
+    /// Confirm a prepared transfer. The person's own confirm presses it on the
+    /// review, and their passkey signs. An agent's only asks the person: the
+    /// review is put in front of them, and nothing is signed until they
+    /// confirm it there — the passkey prompt shows no transaction, so it is
+    /// never raised over a review the person has not chosen to confirm.
     SubmitTransfer {
         operation: String,
     },
@@ -330,7 +328,7 @@ const fn person_only(action: &'static str, description: &'static str) -> Entry {
 /// Every action, in one place: name, risk, and who may ask for it. The risk of
 /// an [`Action`] value is read from here, so a scale and its catalog cannot
 /// disagree.
-const CATALOG: [Entry; 31] = [
+const CATALOG: [Entry; 30] = [
     entry(
         "show",
         Risk::Operate,
@@ -401,10 +399,6 @@ const CATALOG: [Entry; 31] = [
         "configure_agent",
         "The AI agent's connection: on or off, its bridge and its token.",
     ),
-    person_only(
-        "set_agent_grant",
-        "Whether an AI agent may submit transactions for the person's passkey.",
-    ),
     entry(
         "prepare_transfer",
         Risk::Transact,
@@ -413,7 +407,7 @@ const CATALOG: [Entry; 31] = [
     entry(
         "submit_transfer",
         Risk::Transact,
-        "Press confirm on a prepared transfer: the person's passkey signs it. Only when the person has allowed it in Settings; otherwise they confirm it themselves. Once the person dismissed the passkey prompt for a transfer, only they can confirm that one (`denied`). On one network, a transfer is confirmed only once the previous one there is final: until then this answers `not_ready`.",
+        "Ask the person to confirm a prepared transfer: the wallet puts its review in front of them. Nothing is signed by this call — the person reads the review and confirms it there, and their passkey signs. Answers `accepted`; follow the transfer with vela_wait. On one network a transfer can be confirmed only once the previous one there is final: until then this answers `not_ready`.",
     ),
     entry(
         "cancel_transfer",
@@ -624,10 +618,6 @@ fn input_schema(kind: &str) -> serde_json::Value {
             }),
             &[],
         ),
-        "set_agent_grant" => object(
-            json!({ "submit_transactions": { "type": "boolean" } }),
-            &["submit_transactions"],
-        ),
         "prepare_transfer" => object(
             json!({
                 "chain_id": { "type": "integer", "minimum": 1 },
@@ -740,7 +730,6 @@ impl Action {
             Self::ClearStorageItem { .. } => "clear_storage_item",
             Self::ClearCaches => "clear_caches",
             Self::ConfigureAgent { .. } => "configure_agent",
-            Self::SetAgentGrant { .. } => "set_agent_grant",
             Self::PrepareTransfer { .. } => "prepare_transfer",
             Self::SubmitTransfer { .. } => "submit_transfer",
             Self::CancelTransfer { .. } => "cancel_transfer",
@@ -853,8 +842,6 @@ pub enum ReasonCode {
     Refused,
     /// The change was asked for but not seen in time.
     NotObserved,
-    /// The person has not allowed an agent to do this; they do it themselves.
-    NotGranted,
     /// Something of the person's is under way where this would go (an open
     /// send); finish or close it first.
     Busy,
@@ -1082,8 +1069,7 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         Action::SignOut
         | Action::EraseDevice
         | Action::ClearCaches
-        | Action::ConfigureAgent { .. }
-        | Action::SetAgentGrant { .. } => Ok(()),
+        | Action::ConfigureAgent { .. } => Ok(()),
     }
 }
 
@@ -1148,8 +1134,6 @@ fn transfer_amount(amount: &str) -> Result<(), Reason> {
 pub struct Grants {
     /// The AI agent is switched on.
     pub agent_enabled: bool,
-    /// An agent may submit a transaction for the person's passkey.
-    pub submit_transactions: bool,
 }
 
 /// Who approves a request before it is done.
@@ -1200,24 +1184,12 @@ pub fn authorize(actor: Actor, action: &Action, grants: &Grants) -> Decision {
     }
     match action {
         // A draft moves nothing: the review it lands on is where the person
-        // decides, as for one they filled in themselves.
-        Action::PrepareTransfer { .. } | Action::PrepareBatchTransfer { .. } => {
-            return Decision::Allow
-        }
-        // Pressing confirm is the person's, unless they allowed the agent —
-        // and even then their passkey signs, or nothing does.
-        Action::SubmitTransfer { .. } => {
-            return if grants.submit_transactions {
-                Decision::Allow
-            } else {
-                Decision::Deny {
-                    reason: reason(
-                        ReasonCode::NotGranted,
-                        "the person confirms this transfer themselves on the review screen",
-                    ),
-                }
-            };
-        }
+        // decides, as for one they filled in themselves. An agent's confirm
+        // only asks them to (owner, 2026-10-21: a passkey prompt raised over
+        // a review nobody chose to confirm is blind signing).
+        Action::PrepareTransfer { .. }
+        | Action::PrepareBatchTransfer { .. }
+        | Action::SubmitTransfer { .. } => return Decision::Allow,
         _ => {}
     }
     match action.risk() {

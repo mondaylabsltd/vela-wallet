@@ -135,8 +135,6 @@
    "allow": "Cho phép",
    "deny": "Từ chối",
    "stop": "Dừng",
-   "grant": "Cho tác nhân xác nhận chuyển tiền",
-   "grantHint": "Mỗi giao dịch vẫn do passkey của bạn ký.",
    "action": {
     "show": "Hiển thị một màn hình",
     "switchAccount": "Chuyển ví",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Xoá dữ liệu đã lưu",
     "clearCaches": "Xoá bộ nhớ đệm",
     "prepareTransfer": "Chuẩn bị chuyển tiền",
-    "submitTransfer": "Xác nhận chuyển tiền",
+    "submitTransfer": "Nhờ bạn xác nhận một lần chuyển",
     "cancelTransfer": "Huỷ chuyển tiền",
     "prepareBatchTransfer": "Chuẩn bị chuyển cho nhiều người",
     "addToken": "Thêm token",

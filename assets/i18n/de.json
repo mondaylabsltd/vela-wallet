@@ -135,8 +135,6 @@
    "allow": "Erlauben",
    "deny": "Ablehnen",
    "stop": "Stoppen",
-   "grant": "Agent darf Überweisungen bestätigen",
-   "grantHint": "Jede signiert weiterhin Ihr Passkey.",
    "action": {
     "show": "Einen Bildschirm zeigen",
     "switchAccount": "Wallet wechseln",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Gespeicherte Daten löschen",
     "clearCaches": "Caches löschen",
     "prepareTransfer": "Überweisung vorbereiten",
-    "submitTransfer": "Überweisung bestätigen",
+    "submitTransfer": "Dich bitten, eine Überweisung zu bestätigen",
     "cancelTransfer": "Überweisung abbrechen",
     "prepareBatchTransfer": "Überweisung an mehrere vorbereiten",
     "addToken": "Token hinzufügen",

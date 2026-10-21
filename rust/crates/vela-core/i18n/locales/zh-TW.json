@@ -135,8 +135,6 @@
       "allow": "允許",
       "deny": "拒絕",
       "stop": "停止",
-      "grant": "允許代理確認轉帳",
-      "grantHint": "每一筆仍需你的通行密鑰簽署。",
       "action": {
         "show": "顯示頁面",
         "switchAccount": "切換錢包",
@@ -153,7 +151,7 @@
         "clearStorageItem": "清除儲存的資料",
         "clearCaches": "清除快取",
         "prepareTransfer": "準備轉帳",
-        "submitTransfer": "確認轉帳",
+        "submitTransfer": "請你確認一筆轉帳",
         "cancelTransfer": "取消轉帳",
         "prepareBatchTransfer": "準備批次轉帳",
         "addToken": "新增代幣",

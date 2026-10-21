@@ -822,8 +822,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   agent bar's name for each new action (batch transfer, token, activity,
 //   balance privacy and refresh, favorite, six network and service actions).
 //   1821 + 12 = 1833 leaves, 103 branches.
-if (PATHS.length !== 1936) fail(`expected 1936 paths (1833 leaf + 103 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1833) fail(`expected 1833 leaf paths, got ${leafSet.size}`);
+// 1934 (the person always confirms, spec 103, 2026-10-21): − the switch that
+//   let an agent confirm transfers (its title and hint). An agent's confirm
+//   only asks the person now. 1833 − 2 = 1831 leaves, 103 branches.
+if (PATHS.length !== 1934) fail(`expected 1934 paths (1831 leaf + 103 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1831) fail(`expected 1831 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 103) fail(`expected 103 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

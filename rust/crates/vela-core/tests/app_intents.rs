@@ -22,7 +22,6 @@ const MINE: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const ON: Grants = Grants {
     agent_enabled: true,
-    submit_transactions: false,
 };
 
 fn one_of_each() -> Vec<Action> {
@@ -71,9 +70,6 @@ fn one_of_each() -> Vec<Action> {
             enabled: Some(true),
             bridge_url: None,
             client_token: None,
-        },
-        Action::SetAgentGrant {
-            submit_transactions: false,
         },
         Action::PrepareTransfer {
             chain_id: 1,
@@ -167,9 +163,6 @@ fn an_agent_may_not_touch_its_own_connection() {
             enabled: None,
             bridge_url: Some("wss://elsewhere.example/connect".to_owned()),
             client_token: None,
-        },
-        Action::SetAgentGrant {
-            submit_transactions: true,
         },
     ] {
         for grants in [ON, Grants::default()] {
@@ -407,7 +400,7 @@ fn every_action_is_catalogued_under_its_wire_name() {
         .filter(|entry| entry.person_only)
         .map(|entry| entry.action.as_str())
         .collect();
-    assert_eq!(person_only, ["configure_agent", "set_agent_grant"]);
+    assert_eq!(person_only, ["configure_agent"]);
 }
 
 #[test]
@@ -529,32 +522,25 @@ fn an_agent_may_prepare_a_transfer_without_a_grant() {
     assert_eq!(authorize(Actor::Agent, &prepare, &ON), Decision::Allow);
 }
 
-/// Confirm is the person's unless they granted it — and the passkey signs
-/// either way, which no grant can skip.
+/// An agent's confirm only asks the person (owner, 2026-10-21): it signs
+/// nothing, so it needs no grant — and none exists to give.
 #[test]
-fn only_a_granted_agent_may_press_confirm() {
+fn an_agents_confirm_only_asks_the_person() {
     let submit = Action::SubmitTransfer {
         operation: "transfer-1".to_owned(),
     };
-    assert_eq!(
-        denied(&authorize(Actor::Agent, &submit, &ON)),
-        Some(ReasonCode::NotGranted)
-    );
-    let granted = Grants {
-        agent_enabled: true,
-        submit_transactions: true,
-    };
-    assert_eq!(authorize(Actor::Agent, &submit, &granted), Decision::Allow);
+    assert_eq!(authorize(Actor::Agent, &submit, &ON), Decision::Allow);
     assert_eq!(authorize(Actor::Person, &submit, &ON), Decision::Allow);
-    // A grant does not outlive the agent being switched off.
-    let off = Grants {
-        agent_enabled: false,
-        submit_transactions: true,
-    };
     assert_eq!(
-        denied(&authorize(Actor::Agent, &submit, &off)),
+        denied(&authorize(Actor::Agent, &submit, &Grants::default())),
         Some(ReasonCode::AgentOff)
     );
+    let catalog = catalog();
+    let entry = catalog
+        .iter()
+        .find(|entry| entry.action == "submit_transfer")
+        .map(|entry| entry.description.as_str());
+    assert!(entry.is_some_and(|text| text.contains("Nothing is signed by this call")));
 }
 
 #[test]

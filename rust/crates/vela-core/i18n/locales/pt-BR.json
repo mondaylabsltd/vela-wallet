@@ -135,8 +135,6 @@
       "allow": "Permitir",
       "deny": "Recusar",
       "stop": "Parar",
-      "grant": "Deixar o agente confirmar transferências",
-      "grantHint": "Sua passkey continua assinando cada uma.",
       "action": {
         "show": "Mostrar uma tela",
         "switchAccount": "Trocar de carteira",
@@ -153,7 +151,7 @@
         "clearStorageItem": "Limpar dados salvos",
         "clearCaches": "Limpar cache",
         "prepareTransfer": "Preparar uma transferência",
-        "submitTransfer": "Confirmar uma transferência",
+        "submitTransfer": "Pedir que você confirme uma transferência",
         "cancelTransfer": "Cancelar uma transferência",
         "prepareBatchTransfer": "Preparar uma transferência para vários",
         "addToken": "Adicionar um token",

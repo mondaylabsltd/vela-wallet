@@ -135,8 +135,6 @@
       "allow": "允许",
       "deny": "拒绝",
       "stop": "停止",
-      "grant": "允许智能体确认转账",
-      "grantHint": "每一笔仍需你的通行密钥签名。",
       "action": {
         "show": "显示页面",
         "switchAccount": "切换钱包",
@@ -153,7 +151,7 @@
         "clearStorageItem": "清除存储的数据",
         "clearCaches": "清除缓存",
         "prepareTransfer": "准备转账",
-        "submitTransfer": "确认转账",
+        "submitTransfer": "请你确认一笔转账",
         "cancelTransfer": "取消转账",
         "prepareBatchTransfer": "准备批量转账",
         "addToken": "添加代币",

@@ -135,8 +135,6 @@
    "allow": "Autoriser",
    "deny": "Refuser",
    "stop": "Arrêter",
-   "grant": "Laisser l'agent confirmer les transferts",
-   "grantHint": "Votre clé d'accès signe toujours chacun.",
    "action": {
     "show": "Afficher un écran",
     "switchAccount": "Changer de portefeuille",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Effacer des données enregistrées",
     "clearCaches": "Effacer les caches",
     "prepareTransfer": "Préparer un transfert",
-    "submitTransfer": "Confirmer un transfert",
+    "submitTransfer": "Vous demander de confirmer un transfert",
     "cancelTransfer": "Annuler un transfert",
     "prepareBatchTransfer": "Préparer un transfert à plusieurs",
     "addToken": "Ajouter un jeton",

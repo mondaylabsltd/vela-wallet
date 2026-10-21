@@ -135,8 +135,6 @@
    "allow": "Consenti",
    "deny": "Rifiuta",
    "stop": "Ferma",
-   "grant": "Consenti all'agente di confermare i trasferimenti",
-   "grantHint": "La tua passkey firma comunque ognuno.",
    "action": {
     "show": "Mostrare una schermata",
     "switchAccount": "Cambiare wallet",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Cancellare i dati salvati",
     "clearCaches": "Cancella cache",
     "prepareTransfer": "Preparare un trasferimento",
-    "submitTransfer": "Confermare un trasferimento",
+    "submitTransfer": "Chiederti di confermare un trasferimento",
     "cancelTransfer": "Annullare un trasferimento",
     "prepareBatchTransfer": "Preparare un trasferimento a più destinatari",
     "addToken": "Aggiungere un token",

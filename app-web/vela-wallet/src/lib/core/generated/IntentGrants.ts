@@ -7,8 +7,4 @@ export type IntentGrants = {
 /**
  * The AI agent is switched on.
  */
-agent_enabled: boolean, 
-/**
- * An agent may submit a transaction for the person's passkey.
- */
-submit_transactions: boolean, };
+agent_enabled: boolean, };

@@ -135,8 +135,6 @@
    "allow": "İzin ver",
    "deny": "Reddet",
    "stop": "Durdur",
-   "grant": "Ajanın transferleri onaylamasına izin ver",
-   "grantHint": "Her birini yine geçiş anahtarınız imzalar.",
    "action": {
     "show": "Bir ekran göster",
     "switchAccount": "Cüzdan değiştir",
@@ -153,7 +151,7 @@
     "clearStorageItem": "Kayıtlı verileri temizle",
     "clearCaches": "Önbelleği temizle",
     "prepareTransfer": "Transfer hazırla",
-    "submitTransfer": "Transferi onayla",
+    "submitTransfer": "Bir transferi onaylamanızı iste",
     "cancelTransfer": "Transferi iptal et",
     "prepareBatchTransfer": "Birden çok kişiye transfer hazırla",
     "addToken": "Token ekle",
