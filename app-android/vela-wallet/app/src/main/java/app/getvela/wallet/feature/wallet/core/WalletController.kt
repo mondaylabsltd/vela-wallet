@@ -130,6 +130,9 @@ class WalletController(
     /** The last `FetchSettled` the executor answered: whose, and its `now_ms`. */
     private val lastSettle = java.util.concurrent.atomic.AtomicReference<Pair<String, Double>?>(null)
 
+    /** The balances' view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val balanceJson: StateFlow<String?> get() = balanceHost.viewJson
+
     private val balanceHost = CoreHost(
         bridge = BalanceDashboardCore().asBridge(),
         scope = scope,
@@ -225,6 +228,9 @@ class WalletController(
                 .orEmpty()
         },
     )
+
+    /** The activity feed's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val feedJson: StateFlow<String?> get() = feedHost.viewJson
 
     private val feedHost = CoreHost(
         bridge = ActivityFeedCore().asBridge(),
@@ -456,6 +462,9 @@ class WalletController(
             },
         )
     }
+
+    /** The chain tracker's view as the core wrote it (`null` without a tracker) — for the AI agent's transfers (spec 104). */
+    val trackerJson: String? get() = trackerHost?.viewJson?.value
 
     private val trackerHost: CoreHost<TrackView>? = trackerExecutor?.let { tracker ->
         CoreHost(

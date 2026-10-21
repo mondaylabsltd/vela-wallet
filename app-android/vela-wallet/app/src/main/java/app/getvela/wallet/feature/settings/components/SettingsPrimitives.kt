@@ -116,6 +116,7 @@ fun settingsIcon(icon: SettingsIcon): ImageVector = when (icon) {
     SettingsIcon.Plus -> VelaIcons.Plus
     SettingsIcon.Zap -> VelaIcons.Zap
     SettingsIcon.HardDrive -> VelaIcons.HardDrive
+    SettingsIcon.Power -> VelaIcons.Power
     SettingsIcon.Info -> VelaIcons.Info
     SettingsIcon.Sun -> VelaIcons.Sun
     SettingsIcon.Moon -> VelaIcons.Moon

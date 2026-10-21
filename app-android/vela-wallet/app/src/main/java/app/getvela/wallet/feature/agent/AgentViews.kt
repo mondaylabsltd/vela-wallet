@@ -1,0 +1,379 @@
+package app.getvela.wallet.feature.agent
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.getvela.wallet.core.designsystem.theme.VelaTheme
+import app.getvela.wallet.core.designsystem.tokens.VelaBorder
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaRadius
+import app.getvela.wallet.core.designsystem.tokens.VelaSizing
+import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
+import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
+import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.SettingsTone
+import app.getvela.wallet.feature.settings.components.VelaSwitchRow
+import app.getvela.wallet.feature.settings.components.VelaUrlField
+import org.json.JSONObject
+import uniffi.vela_core_uniffi.AgentLink
+
+/** The agent's words, as the person reads them — the core catalog's `settings.agent.*`. */
+object AgentWords {
+    /** What an action is called: `settings.agent.action.<camelCase type>`, or its own name where the catalog has none. */
+    fun action(kind: String, strings: VelaStrings): String {
+        val parts = kind.split('_')
+        val camel = parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+        val key = "settings.agent.action.$camel"
+        return strings.t(key).takeIf { it != key } ?: kind
+    }
+
+    /** How the connection stands. */
+    fun link(link: AgentLink, strings: VelaStrings): String = strings.t(
+        when (link) {
+            AgentLink.Off -> "settings.agent.statusOff"
+            AgentLink.Connecting -> "settings.agent.statusConnecting"
+            AgentLink.Online -> "settings.agent.statusOnline"
+            AgentLink.Offline -> "settings.agent.statusOffline"
+            is AgentLink.Closed -> "settings.agent.statusRefused"
+        },
+    )
+
+    /** What a request names, as the person knows it: a contact's or a wallet's name, the store, the preference. */
+    fun detail(request: AgentRequest, wallet: AgentWallet): String? {
+        val action = request.action
+        return when (request.kind) {
+            "delete_contact" -> {
+                val address = action.optString("address")
+                wallet.contacts.view.value.contacts.firstOrNull { it.address.equals(address, ignoreCase = true) }
+                    ?.name?.takeIf { it.isNotBlank() } ?: address
+            }
+            "delete_group" -> {
+                val id = action.optString("id")
+                wallet.contacts.view.value.groups.firstOrNull { it.id == id }?.name ?: id
+            }
+            "remove_wallet" -> {
+                val address = action.optString("address")
+                wallet.session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }
+                    ?.let { "${it.name} · $address" } ?: address
+            }
+            "clear_storage_item" -> action.optString("item")
+            "set_preference" -> action.optJSONObject("preference")?.let { "${it.optString("kind")}: ${it.opt("value")}" }
+            else -> null
+        }
+    }
+}
+
+/** The agent, for the screens that draw its state deep in their trees (Settings → AI agent). */
+val LocalAgentStore = androidx.compose.runtime.staticCompositionLocalOf<AgentStore?> { null }
+
+/** How high the capsule floats over the bottom: clear of the tab bar. */
+private val CapsuleClearance = 84.dp
+
+/**
+ * The agent's capsule, floating over every screen as the web's floats over
+ * its page (spec 103): whether it is connected — a dot in the link's tone —
+ * what it did last, and Stop, which refuses everything of its still waiting
+ * and switches it off. Shown while the agent is set up, or a request waits on
+ * the person. Low on the screen, above the tab bar: the headers are the
+ * screens' own. On a wallet flow the foot of the page is the flow's — its
+ * button and the note above it (Confirm & Send, "First time sending here") —
+ * so there it is smaller, in the header's empty corner beside the back arrow.
+ */
+@Composable
+fun AgentCapsule(agent: AgentStore, modifier: Modifier = Modifier) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    val config by agent.config.collectAsStateWithLifecycle()
+    val link by agent.link.collectAsStateWithLifecycle()
+    val approvals by agent.approvals.collectAsStateWithLifecycle()
+    val activity by agent.activity.collectAsStateWithLifecycle()
+    val flowOpen by agent.flowOpen.collectAsStateWithLifecycle()
+    if (!config.ready && approvals.isEmpty()) return
+    val latest = activity.firstOrNull()
+    val dot = when (link) {
+        AgentLink.Online -> if (latest?.stage != null) colors.infoBase else colors.successBase
+        is AgentLink.Closed -> colors.errorBase
+        else -> colors.warningBase
+    }
+    // Online, what it did last; otherwise how the link stands.
+    val what = when (link) {
+        AgentLink.Online -> latest?.let { AgentWords.action(it.kind, strings) } ?: strings.t("settings.agent.statusOnline")
+        AgentLink.Off -> strings.t("settings.agent.statusConnecting")
+        else -> AgentWords.link(link, strings)
+    }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(
+                // Level with the back arrow, below the parallel space's badge.
+                top = if (flowOpen) 30.dp else 0.dp,
+                end = if (flowOpen) VelaSpacing.md else VelaSpacing.lg,
+                start = VelaSpacing.lg,
+                bottom = if (flowOpen) 0.dp else CapsuleClearance,
+            ),
+        contentAlignment = if (flowOpen) Alignment.TopEnd else Alignment.BottomCenter,
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .shadow(12.dp, CircleShape)
+                .clip(CircleShape)
+                .background(colors.bgRaised)
+                .border(VelaBorder.hairline, colors.borderBase, CircleShape)
+                .padding(start = VelaSpacing.lg, end = VelaSpacing.xs, top = VelaSpacing.xs, bottom = VelaSpacing.xs)
+                .testTag("agent-capsule"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        ) {
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(dot))
+            Text(
+                text = strings.t("settings.agent.title"),
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            if (!flowOpen) {
+                Text(
+                    text = what,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .height(28.dp)
+                    .clip(CircleShape)
+                    .background(colors.errorSoft)
+                    .clickable { agent.stop() }
+                    .padding(horizontal = VelaSpacing.md)
+                    .testTag("agent-stop"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = strings.t("settings.agent.stop"),
+                    color = colors.errorBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The agent's manage-level request, asked here in the wallet — not in the
+ * agent's chat. Dismissing it is a no.
+ */
+@Composable
+fun AgentApprovalDialog(agent: AgentStore) {
+    val strings = LocalVelaStrings.current
+    val approvals by agent.approvals.collectAsStateWithLifecycle()
+    var answered by remember { mutableStateOf<ULong?>(null) }
+    val request = approvals.firstOrNull()?.takeIf { it.id != answered } ?: return
+    val answer = { approved: Boolean ->
+        answered = request.id
+        agent.answer(request.id, approved)
+    }
+    val name = AgentWords.action(request.kind, strings)
+    val what = AgentWords.detail(request, agent.wallet)
+    val hint = strings.t("settings.agent.approveHint")
+    AlertDialog(
+        onDismissRequest = { answer(false) },
+        title = { Text(strings.t("settings.agent.approveTitle")) },
+        text = { Text(if (what != null) "$name — $what. $hint" else "$name. $hint") },
+        confirmButton = {
+            TextButton(onClick = { answer(true) }, modifier = Modifier.testTag("agent-allow")) {
+                Text(strings.t("settings.agent.allow"), color = VelaTheme.colors.errorBase)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { answer(false) }, modifier = Modifier.testTag("agent-deny")) {
+                Text(strings.t("settings.agent.deny"))
+            }
+        },
+    )
+}
+
+/**
+ * Settings → AI agent: whether this wallet answers a remote AI agent through
+ * a ClientMCP bridge, and which bridge (spec 103 D1). Every change is the
+ * person's own, through the `configure_agent` intent — an agent can never
+ * make it.
+ */
+@Composable
+fun AgentSettingsBody(agent: AgentStore, modifier: Modifier = Modifier) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    val config by agent.config.collectAsStateWithLifecycle()
+    val link by agent.link.collectAsStateWithLifecycle()
+    val activity by agent.activity.collectAsStateWithLifecycle()
+    var url by remember { mutableStateOf<String?>(null) }
+    var token by remember { mutableStateOf<String?>(null) }
+    var urlFocused by remember { mutableStateOf(false) }
+    var tokenFocused by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val configure = { change: JSONObject -> agent.person(change.put("type", "configure_agent")) }
+    Column(
+        modifier = modifier.fillMaxWidth().padding(bottom = CapsuleClearance),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
+    ) {
+        Text(
+            text = strings.t("settings.agent.description"),
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+        )
+        VelaSwitchRow(
+            title = strings.t("settings.agent.enable"),
+            body = AgentWords.link(link, strings),
+            checked = config.enabled,
+            onCheckedChange = { on -> configure(JSONObject().put("enabled", on)) },
+            modifier = Modifier.testTag("agent-enable"),
+        )
+        VelaUrlField(
+            label = strings.t("settings.agent.bridge"),
+            value = url ?: config.url,
+            placeholder = "wss://bridge.clientmcp.dev/connect",
+            hint = strings.t(if (config.urlProblem == null) "settings.agent.bridgeHint" else "settings.agent.bridgeInvalid"),
+            tone = if (config.urlProblem == null) null else SettingsTone.Error,
+            onValueChange = { url = it },
+            modifier = Modifier
+                .testTag("agent-bridge")
+                .onFocusChanged { state ->
+                    if (urlFocused && !state.isFocused) url?.let { configure(JSONObject().put("bridge_url", it)) }
+                    urlFocused = state.isFocused
+                },
+        )
+        // The client token: a credential, so it is not shown once entered.
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            Text(
+                text = strings.t("settings.agent.token"),
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+            )
+            BasicTextField(
+                value = token ?: config.token,
+                onValueChange = { token = it },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base),
+                cursorBrush = SolidColor(colors.accentBase),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = VelaSizing.controlMd)
+                    .clip(RoundedCornerShape(VelaRadius.lg))
+                    .background(colors.bgSunken)
+                    .border(VelaBorder.hairline, colors.borderBase, RoundedCornerShape(VelaRadius.lg))
+                    .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.lg)
+                    .testTag("agent-token")
+                    .onFocusChanged { state ->
+                        if (tokenFocused && !state.isFocused) token?.let { configure(JSONObject().put("client_token", it)) }
+                        tokenFocused = state.isFocused
+                    },
+            )
+            Text(
+                text = strings.t("settings.agent.tokenHint"),
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+            )
+        }
+        config.endpoint?.let { endpoint ->
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+                Text(
+                    text = strings.t("settings.agent.endpoint"),
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                )
+                Text(
+                    text = endpoint,
+                    color = colors.fgBase,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.base,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(VelaRadius.lg))
+                        .background(colors.bgSunken)
+                        .clickable { clipboard.setText(AnnotatedString(endpoint)) }
+                        .padding(VelaSpacing.lg),
+                )
+                Text(
+                    text = strings.t("settings.agent.endpointHint"),
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                )
+            }
+        }
+        activity.firstOrNull()?.let { latest ->
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                Text(
+                    text = strings.t("settings.agent.lastAction"),
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                )
+                Text(
+                    text = "${AgentWords.action(latest.kind, strings)} · ${latest.code ?: latest.status ?: latest.stage.orEmpty()}",
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+            }
+        }
+    }
+}

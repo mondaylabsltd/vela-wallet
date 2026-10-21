@@ -121,6 +121,9 @@ enum class SettingsPage {
 
     /** Spec 102: this account's "Where you review and sign". */
     Venue,
+
+    /** Spec 103: whether an AI agent may use this wallet, and through which bridge. */
+    Agent,
     ;
 
     /**
@@ -202,6 +205,8 @@ enum class SettingsIcon {
     Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload, LogOut,
     /** Spec 102: where you review and sign (the web's lucide `eye`), and the signing pages. */
     Eye, FileText,
+    /** Spec 103: the AI agent's row. */
+    Power,
     /** Settings → Community: the brands' own monochrome marks. */
     BrandX, BrandTelegram, BrandDiscord,
 }
@@ -985,6 +990,9 @@ data class SettingsScreenModel(
     /** Scrim title behind a rescue sheet — "钱包", "转账", "设备存储". */
     val backdropTitle: String,
     val closeLabel: String,
+    /** Spec 103: Settings → AI agent's header. */
+    val agentTitle: String = "",
+    val agentSubtitle: String? = null,
 ) {
     /** The signed-in identity, swapped over the fixture account (spec 019). */
     fun withIdentity(name: String, address: String, display: String): SettingsScreenModel = copy(

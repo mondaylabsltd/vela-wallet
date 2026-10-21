@@ -50,6 +50,9 @@ class ThemePreferenceRepository(
 
     val themePreference: Flow<ThemePreference> = state.filterNotNull()
 
+    /** The choice now — what the AI agent reads among the preferences (spec 104). */
+    val current: ThemePreference get() = state.value ?: ThemePreference.Auto
+
     init {
         scope.launch {
             val stored = load()

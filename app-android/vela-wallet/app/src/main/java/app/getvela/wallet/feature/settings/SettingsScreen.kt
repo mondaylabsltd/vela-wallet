@@ -366,6 +366,7 @@ fun SettingsRoute(
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
                 SettingsFixtures.SIGNING_PAGES_ROW -> page = SettingsPage.SigningPages
+                SettingsFixtures.AGENT_ROW -> page = SettingsPage.Agent
                 SettingsLive.VENUE_ROW -> page = SettingsPage.Venue
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
@@ -775,6 +776,7 @@ private fun pageHeader(model: SettingsScreenModel, page: SettingsPage): Pair<Str
         SettingsPage.About -> model.about.title to null
         SettingsPage.SigningPages -> model.signingPages.title to model.signingPages.subtitle
         SettingsPage.Venue -> (model.venue?.title ?: model.title) to model.venue?.subtitle
+        SettingsPage.Agent -> model.agentTitle to model.agentSubtitle
         SettingsPage.Home -> model.title to null
     }
 
@@ -970,6 +972,10 @@ private fun SettingsPageBody(
     val colors = VelaTheme.colors
     when (page) {
         SettingsPage.Venue -> model.venue?.let { VenuePageBody(it, onPick = onVenuePick, onManage = onVenueManage, onTrust = onSigningPageTrust) }
+        // Spec 103: the agent's own state, read from it (the navigation host provides it).
+        SettingsPage.Agent -> app.getvela.wallet.feature.agent.LocalAgentStore.current?.let {
+            app.getvela.wallet.feature.agent.AgentSettingsBody(it)
+        }
         SettingsPage.SigningPages -> SigningPagesPageBody(
             model = model.signingPages,
             onAdd = onSigningPageAdd,

@@ -122,6 +122,14 @@ import app.getvela.wallet.feature.onboarding.WelcomeViewModel
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionRoute
+import app.getvela.wallet.feature.agent.AgentApprovalDialog
+import app.getvela.wallet.feature.agent.AgentCapsule
+import app.getvela.wallet.feature.agent.AgentPage
+import app.getvela.wallet.feature.agent.AgentStore
+import app.getvela.wallet.feature.agent.LocalAgentStore
+import app.getvela.wallet.feature.onboarding.core.SessionView
+import org.json.JSONArray
+import org.json.JSONObject
 import app.getvela.wallet.feature.onboarding.flow.CableQrSheet
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
 import app.getvela.wallet.feature.onboarding.flow.CreateFlowScreen
@@ -307,6 +315,63 @@ fun VelaNavHost(
         }
     }
 
+    // The AI agent (spec 103, spec 104 phase 7): what only this host can do
+    // for it — say which page is in front, open a screen, open a send. The
+    // screens a route keeps (an asset, a record, a contact) are left for that
+    // route to take (`AgentStore.detail`).
+    val agent = application.container.agent
+    DisposableEffect(navController) {
+        agent.page = AgentPage(
+            name = {
+                val now = application.container.session.view.value
+                if (now.allowedRoute != SessionRoute.Wallet || now.address.isBlank()) {
+                    "welcome"
+                } else {
+                    when (navController.currentDestination?.route) {
+                        VelaDestinations.CONTACTS -> "contacts"
+                        VelaDestinations.SETTINGS -> "settings"
+                        else -> if (section == VelaTab.Explore) "explore" else "wallet"
+                    }
+                }
+            },
+            show = { screen ->
+                if (application.container.session.view.value.allowedRoute != SessionRoute.Wallet) {
+                    "nobody is signed in"
+                } else {
+                    when (screen.optString("type")) {
+                        "home", "asset", "activity", "receive" -> {
+                            section = VelaTab.Wallet
+                            navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                            agent.detail.value = screen
+                            null
+                        }
+                        "contacts", "contact", "group" -> {
+                            navController.swapOverWallet(VelaDestinations.CONTACTS)
+                            agent.detail.value = screen
+                            null
+                        }
+                        "settings" -> {
+                            application.container.pendingSettingsPage.value =
+                                agentSettingsPage(screen.optString("page").takeIf { !screen.isNull("page") })
+                            navController.swapOverWallet(VelaDestinations.SETTINGS)
+                            null
+                        }
+                        else -> "the wallet has no such screen"
+                    }
+                }
+            },
+            openSend = { params ->
+                // As every entry into Send: the wallet in front, the flow
+                // entered, the open taking what was handed in.
+                application.container.pendingSendParams.value = params
+                application.container.pendingFlow.value = WalletFlowEntry.Send
+                section = VelaTab.Wallet
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+            },
+        )
+        onDispose { agent.page = null }
+    }
+
     // Credential Manager raises system UI, which needs an Activity — not the
     // application context the ViewModel was constructed with.
     val strings = LocalVelaStrings.current
@@ -402,7 +467,7 @@ fun VelaNavHost(
     // Spec 102 D4: the send confirm is on screen — a send's hand-off card is
     // drawn there, in its button's place, and not as a sheet over it.
     var sendConfirmUp by remember { mutableStateOf(false) }
-    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
+    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }, LocalAgentStore provides agent) {
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -609,6 +674,37 @@ fun VelaNavHost(
                 flows.enter(entry)
                 application.container.pendingFlow.value = null
             }
+            // A flow's own button sits low on its page: the agent's capsule
+            // floats above it while one is up.
+            LaunchedEffect(flows.top) { agent.flowOpen.value = flows.top != null }
+            DisposableEffect(Unit) { onDispose { agent.flowOpen.value = false } }
+            // The AI agent's screen (spec 103): an asset, an activity record,
+            // a network's code — opened once the wallet is in front.
+            val agentDetail by agent.detail.collectAsStateWithLifecycle()
+            LaunchedEffect(agentDetail) {
+                val screen = agentDetail ?: return@LaunchedEffect
+                when (screen.optString("type")) {
+                    "home" -> flows.close()
+                    "asset" -> flows.enter(
+                        WalletFlowEntry.TokenDetail,
+                        WalletLive.holdingId(screen.optInt("chain_id"), screen.optString("token").takeIf { !screen.isNull("token") && it.isNotEmpty() }),
+                    )
+                    "activity" -> flows.enter(WalletFlowEntry.TxDetail, screen.optString("id"))
+                    "receive" -> {
+                        flows.enter(WalletFlowEntry.Receive)
+                        if (screen.has("chain_id") && !screen.isNull("chain_id")) {
+                            application.container.settings.networks.value.networks
+                                .firstOrNull { it.chain_id.toInt() == screen.optInt("chain_id") }
+                                ?.let { row ->
+                                    pendingReceiveAsset = ReceiveAssetPick(row.chain_id.toInt(), null, row.native_symbol, 18, row.display_name)
+                                    flows.push(FlowStep.ReceiveQr)
+                                }
+                        }
+                    }
+                    else -> return@LaunchedEffect
+                }
+                agent.detail.value = null
+            }
                 val scope = rememberCoroutineScope()
                 // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
                 // "offline" is what the calls did, not what the radio claims): three
@@ -763,7 +859,7 @@ fun VelaNavHost(
                             switcherOpen = false
                             wallet.switcherClosed()
                             haptic(VelaHaptic.Select)
-                            application.container.session.switchAccount(index)
+                            session.addressAt(index)?.let { agent.person(intent("switch_account", "address" to it)) }
                         },
                         onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
                         onSecondary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.WELCOME) },
@@ -774,7 +870,7 @@ fun VelaNavHost(
                         onRemove = { index ->
                             switcherOpen = false
                             wallet.switcherClosed()
-                            application.container.session.removeAccount(index)
+                            session.addressAt(index)?.let { agent.person(intent("remove_wallet", "address" to it)) }
                         },
                     )
                 }
@@ -1246,7 +1342,7 @@ fun VelaNavHost(
                             } else {
                                 {
                                     openWhenHandedOff = true
-                                    send.slideConfirm()
+                                    confirmTransfer(agent, send)
                                 }
                             },
                             onCancel = trustedSigner::cancel,
@@ -1331,7 +1427,7 @@ fun VelaNavHost(
                             // and the core lowers the stop and asks again. The
                             // shell never picks by a view it may hold stale.
                             onContinue = { send.continueTapped() },
-                            onConfirm = { send.slideConfirm() },
+                            onConfirm = { confirmTransfer(agent, send) },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)
                                 feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
@@ -1491,7 +1587,7 @@ fun VelaNavHost(
                         // transaction; this is the wallet forgetting it.
                         onDeleteTx = flows.selected?.let { id ->
                             {
-                                wallet.deleteActivity(id)
+                                agent.person(intent("delete_activity", "id" to id))
                                 flows.back()
                             }
                         },
@@ -1689,7 +1785,10 @@ fun VelaNavHost(
                             accountOptions = app.getvela.wallet.feature.browser.ExploreLive.accountOptions(session.accounts, session.address),
                             // Every connected site follows the wallet's account (the
                             // core re-pins each grant and tells the pages).
-                            onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },
+                            onPickAccount = { id ->
+                                id.toIntOrNull()?.let { index -> session.addressAt(index) }
+                                    ?.let { agent.person(intent("switch_account", "address" to it)) }
+                            },
                             signingOpen = signingController != null,
                             inspector = inspectorModel,
                             // An open or a resume on its way: the home or the switcher stays until its page is in front.
@@ -1845,9 +1944,12 @@ fun VelaNavHost(
                                 wallet.switcherOpened(session.accounts.map { it.address })
                                 switcherOpen = true
                             },
-                            onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
+                            onToggleVisibility = {
+                                agent.person(intent("set_balance_privacy", "hidden" to !wallet.balances.value.hidden))
+                                haptic(VelaHaptic.Select)
+                            },
                             // Issue 462: the hero's "↻ Updated" and the pull gesture.
-                            onRefresh = { wallet.pullRefresh() },
+                            onRefresh = { agent.person(intent("refresh_balances")) },
                             onStatusClick = {
                                 // Spec 048 + 092 (F08): the status line's rescue, over the wallet —
                                 // the list of EVERY network the wallet cannot reach (the core's
@@ -1905,6 +2007,29 @@ fun VelaNavHost(
                 // entries by whose wallet they belong to.
                 LaunchedEffect(session.address) {
                     contacts.open(session.address.takeIf { it.isNotEmpty() })
+                }
+                // The AI agent's screen (spec 103): the book, a contact, a group.
+                val agentDetail by agent.detail.collectAsStateWithLifecycle()
+                LaunchedEffect(agentDetail) {
+                    val screen = agentDetail ?: return@LaunchedEffect
+                    when (screen.optString("type")) {
+                        "contacts" -> {
+                            openContact = null
+                            openGroup = null
+                        }
+                        "contact" -> {
+                            val address = screen.optString("address")
+                            openGroup = null
+                            openContact = contacts.view.value.contacts
+                                .firstOrNull { it.address.equals(address, ignoreCase = true) }?.address ?: address
+                        }
+                        "group" -> {
+                            openContact = null
+                            openGroup = screen.optString("id")
+                        }
+                        else -> return@LaunchedEffect
+                    }
+                    agent.detail.value = null
                 }
 
                 // The labels — titles, empty-state copy, the tab bar — come from
@@ -2040,7 +2165,7 @@ fun VelaNavHost(
                         saveLabel = strings.t(I18nKeys.Flows.DONE),
                         cancelLabel = ContactsFixtures.addMenu(strings).cancel,
                         onSave = { name ->
-                            contacts.saveGroup(ContactGroupInput(id = id, name = name))
+                            agent.person(intent("save_group", "id" to id, "name" to name))
                             haptic(VelaHaptic.Select)
                             groupEdit = null
                         },
@@ -2064,7 +2189,7 @@ fun VelaNavHost(
                         confirmLabel = strings.t(I18nKeys.Contacts.GROUP_DELETE),
                         cancelLabel = ContactsFixtures.addMenu(strings).cancel,
                         onConfirm = {
-                            group?.let { contacts.deleteGroup(it.id) }
+                            group?.let { agent.person(intent("delete_group", "id" to it.id)) }
                             confirmingGroupDelete = false
                             openGroup = null
                         },
@@ -2083,7 +2208,9 @@ fun VelaNavHost(
                         },
                         onQueryChange = { pickQuery = it },
                         onSave = {
-                            contacts.setGroupMembers(group.id, ContactsLive.membersAfterPick(group, book, memberTicks))
+                            agent.person(
+                                intent("set_group_members", "id" to group.id, "members" to ContactsLive.membersAfterPick(group, book, memberTicks)),
+                            )
                             haptic(VelaHaptic.Select)
                             memberPick = null
                         },
@@ -2100,7 +2227,13 @@ fun VelaNavHost(
                         },
                         onQueryChange = { pickQuery = it },
                         onSave = {
-                            contacts.setContactGroups(selected.address, book.groups.map { it.id }.filter { it in groupTicks })
+                            agent.person(
+                                intent(
+                                    "set_contact_groups",
+                                    "address" to selected.address,
+                                    "group_ids" to book.groups.map { it.id }.filter { it in groupTicks },
+                                ),
+                            )
                             haptic(VelaHaptic.Select)
                             groupPick = null
                         },
@@ -2127,8 +2260,9 @@ fun VelaNavHost(
                                     formEdit = true
                                 }
                                 "contacts.form.save" -> {
-                                    contacts.save(ContactSaveInput(address = formAddress.trim(), name = formName.trim()))
-                                    formEdit = null
+                                    agent.person(intent("save_contact", "address" to formAddress.trim(), "name" to formName.trim())) { outcome ->
+                                        if (outcome.done) formEdit = null
+                                    }
                                 }
                                 "contacts.form.cancel" -> formEdit = null
                                 "contacts.favourite" -> selected?.let { haptic(VelaHaptic.Select); contacts.toggleFavourite(it.address) }
@@ -2157,7 +2291,7 @@ fun VelaNavHost(
                                 }
                                 "contacts.deleteContact" -> confirmingDelete = true
                                 "contacts.delete" -> selected?.let { contact ->
-                                    contacts.delete(contact.address)
+                                    agent.person(intent("delete_contact", "address" to contact.address))
                                     confirmingDelete = false
                                     openContact = null
                                 }
@@ -2261,12 +2395,22 @@ fun VelaNavHost(
                 var openNetworkId by rememberSaveable { mutableStateOf<String?>(null) }
                 val settingsHaptic = rememberVelaHaptic()
                 var requestedPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+                // A page asked for while Settings is already up (the AI agent's
+                // `show`) recomposes it, so the model below takes it.
+                val askedPage by application.container.pendingSettingsPage.collectAsStateWithLifecycle()
                 val sessionView = session
                 val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
                 var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                // Erase and the storage clears go through the intents (spec 103
+                // D3): what they cleared reads again, and what an erase left is
+                // named in its sheet.
+                val agentCleared by agent.storageCleared.collectAsStateWithLifecycle()
+                LaunchedEffect(agentCleared) { if (agentCleared > 0) storageTick++ }
+                val eraseLeft by agent.eraseLeft.collectAsStateWithLifecycle()
+                LaunchedEffect(eraseLeft) { eraseFailed = eraseLeft }
                 // Spec 078 round 3: the report in flight, and how the last one ended —
                 // the app's, not this screen's (closing the sheet mid-send still ends
                 // in something the person sees).
@@ -2365,7 +2509,7 @@ fun VelaNavHost(
                     // Spec 048: a page another route asked for (the add-token 原生代币 tab). Kept
                     // in state: the flow is consumed once, and the page must hold across the
                     // recompositions that follow (a key that flips back re-initialised the screen).
-                    application.container.pendingSettingsPage.value?.let { requested ->
+                    askedPage?.let { requested ->
                         application.container.pendingSettingsPage.value = null
                         VelaLog.event("settings", "page requested", "page" to requested.name)
                         requestedPage = requested
@@ -2390,70 +2534,35 @@ fun VelaNavHost(
                     actions = SettingsActions(
                         onSegment = { group, id ->
                             when (group) {
-                                "theme" -> onThemeSelected(when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto })
+                                "theme" -> setPreference(
+                                    agent,
+                                    "theme",
+                                    when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto }.storageValue,
+                                )
                             }
                         },
-                        onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
+                        onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { setPreference(agent, "text_scale", it.wire) } },
                         // Spec 091: stored with the preferences; the browser follows them (the container).
                         onDebugModeRevealed = { application.container.preferences.revealDebugMode() },
                         onDebugMode = { on -> application.container.preferences.setDebugMode(on) },
                         onStorageClear = { itemId ->
-                            scope.launch {
-                                when {
-                                    // One connected site (spec 070): the core revokes it,
-                                    // writes the store and tells any open page.
-                                    "://" in itemId -> application.container.browser.revoke(itemId)
-                                    // Every grant: gone from the store AND from the live
-                                    // core, which used to keep them until a restart.
-                                    itemId == "dapps" -> {
-                                        DeviceStorage.clear(VelaStore(context), itemId)
-                                        application.container.browser.revokeAll()
-                                    }
-                                    else -> DeviceStorage.clear(VelaStore(context), itemId)
+                            if ("://" in itemId) {
+                                // One connected site (spec 070) is the browser's, not
+                                // one of the store's items: disconnected at once.
+                                scope.launch {
+                                    application.container.clearStorageItem(itemId)
+                                    storageTick++
                                 }
-                                storageTick++
+                            } else {
+                                agent.person(intent("clear_storage_item", "item" to itemId))
                             }
                         },
-                        onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
-                        onErase = {
-                            scope.launch {
-                                // What an erase removes is the CORE's rule
-                                // (`is_erasable_key`): every `vela.` key but the
-                                // pending-upload ledger — the accounts too, so
-                                // nothing of this wallet survives on the device
-                                // (spec 072). Live pages hear their sites
-                                // disconnected first.
-                                //
-                                // What it SWEEPS is main's (spec 081 FR-017):
-                                // `eraseDevice`, not `erase`, because this device
-                                // also holds the theme in a second store, the
-                                // crash record, the logs, the caches and — the
-                                // one that mattered — every browsed site's
-                                // cookies and localStorage under `app_webview/`.
-                                //
-                                // NOTE (075 merge): main kept `vela.accounts`
-                                // and `vela.activeAccountIndex` here, on 028's
-                                // reading that the account records belong to
-                                // sign-out. 072 and the core say an erase takes
-                                // them. Taking the core's, because one rule for
-                                // four shells is the point of having it — and
-                                // flagged for the owner, because it is a
-                                // decision about a destructive action and not a
-                                // merge detail.
-                                application.container.browser.revokeAll()
-                                val left = DeviceStorage.eraseDevice(context, VelaStore(context))
-                                // Spec 091: the debug-mode key went with the rest —
-                                // About hides the switch again, and the browser follows.
-                                application.container.preferences.reloadDebugMode()
-                                if (left.isEmpty()) {
-                                    eraseFailed = null
-                                    application.container.session.signOut()
-                                    application.container.session.signOutConfirmed()
-                                } else {
-                                    eraseFailed = left
-                                }
-                            }
-                        },
+                        onClearCaches = { agent.person(intent("clear_caches")) },
+                        // Erase This Device, through the intents (spec 103 D3): the
+                        // container's `eraseDevice`, which the core's rule decides
+                        // and main's sweep carries out; what it left is named in
+                        // the sheet (`agent.eraseLeft`).
+                        onErase = { agent.person(intent("erase_device")) },
                         onFeedbackSend = { what, steps, screenshots ->
                             // Spec 078 round 3: the report is POSTed (getvela.app), the
                             // screenshots with it; any refusal hands back the prefilled
@@ -2488,13 +2597,16 @@ fun VelaNavHost(
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                         },
                         onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
-                        onAccountSelect = { index -> settingsHaptic(VelaHaptic.Select); application.container.session.switchAccount(index) },
+                        onAccountSelect = { index ->
+                            settingsHaptic(VelaHaptic.Select)
+                            session.addressAt(index)?.let { agent.person(intent("switch_account", "address" to it)) }
+                        },
                         onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                         onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
                         onSelectTab = selectFromPushed,
                         // The way out of a signed-in wallet, on the row a person
                         // would look for it.
-                        onSignOut = { application.container.session.signOut() },
+                        onSignOut = { agent.person(intent("sign_out")) },
                         onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
                         // Only while there is something to do — and in one state there
                         // are two things. With a call in hand the person is taken to the
@@ -2522,20 +2634,22 @@ fun VelaNavHost(
                         },
                         onSheetSelect = { sheet, id ->
                             val prefsStore = application.container.preferences
+                            // Each through the intents (`set_preference`, spec 103 D3), which
+                            // do what these did: the core owns the currency and the
+                            // default speed; the language and the formats are stored and
+                            // take effect now.
                             when (sheet) {
-                                SettingsOverlay.Currency -> settings.chooseCurrency(id)
+                                SettingsOverlay.Currency -> setPreference(agent, "currency", id)
                                 SettingsOverlay.FeeSpeed ->
                                     app.getvela.wallet.feature.send.core.FeeTier.entries
                                         .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }
-                                        ?.let(settings::chooseFeeTier)
-                                SettingsOverlay.Language -> {
-                                    prefsStore.setLanguage(id)
-                                    application.container.applyLanguage(id)
-                                }
+                                        ?.let { setPreference(agent, "fee_speed", it.name.lowercase()) }
+                                SettingsOverlay.Language ->
+                                    setPreference(agent, "language", if (id == "system") app.getvela.wallet.core.data.Preferences.AUTO_LANGUAGE else id)
                                 // Spec 049: the row id IS the wire key (the web's `formatSheet`).
-                                SettingsOverlay.NumberFormat -> prefsStore.setNumberFormat(NumberFormatKey.of(id))
-                                SettingsOverlay.DateFormat -> prefsStore.setDateFormat(DateFormatKey.of(id))
-                                SettingsOverlay.TimeFormat -> prefsStore.setTimeFormat(TimeFormatKey.of(id))
+                                SettingsOverlay.NumberFormat -> setPreference(agent, "number_format", NumberFormatKey.of(id).wire)
+                                SettingsOverlay.DateFormat -> setPreference(agent, "date_format", DateFormatKey.of(id).wire)
+                                SettingsOverlay.TimeFormat -> setPreference(agent, "time_format", TimeFormatKey.of(id).wire)
                                 else -> Unit
                             }
                         },
@@ -2551,12 +2665,15 @@ fun VelaNavHost(
                             endpointField(fieldId)?.let { settings.commitEndpoint(it) }
                             providerId(fieldId)?.let { settings.commitProviderKey(it) }
                         },
-                        onRemoveNetwork = { id -> settings.deleteNetwork(id) },
+                        onRemoveNetwork = { id ->
+                            settings.networks.value.networks.firstOrNull { it.id == id }
+                                ?.let { agent.person(intent("remove_network", "chain_id" to it.chain_id)) }
+                        },
                         // The row carries a display id; the machine speaks chain
                         // ids. The network list already holds both, so the lookup
                         // is a read rather than a second identity to keep in sync.
                         onSearchNetwork = { query -> settings.searchNetworks(query) },
-                        onConfirmAddNetwork = { settings.confirmAddNetwork() },
+                        onConfirmAddNetwork = { addCheckedNetwork(agent, settings) },
                         onPickNetwork = { chainId ->
                             settingsHaptic(VelaHaptic.Select)
                             chainId.toLongOrNull()?.let { settings.selectChain(it) }
@@ -2567,7 +2684,7 @@ fun VelaNavHost(
                                 .firstOrNull { it.id == id }
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
-                        onResetEndpoints = { settings.resetEndpoints() },
+                        onResetEndpoints = { agent.person(intent("reset_service_endpoints")) },
                         onEndpointsOpened = { settings.openEndpoints() },
                         // Spec 102: the account's venue — by address, refused by the
                         // core (nothing written) when it cannot reach the keys.
@@ -2822,6 +2939,10 @@ fun VelaNavHost(
             onDismiss = onboarding::dismissEndpointSheet,
         )
     }
+    // The AI agent (spec 103): its capsule over every route, and its request,
+    // asked here in the wallet.
+    AgentCapsule(agent)
+    AgentApprovalDialog(agent)
     // Spec 043: the parallel space's badge, over every route while active;
     // nothing in release, nothing outside the space.
     ParallelSpaceHook.Badge()
@@ -3064,3 +3185,57 @@ private fun liveFlow(
 
 /** Spec 048: the asset a receive code is asked for — a token detail's 收款, or a network row's QR. */
 private data class ReceiveAssetPick(val chainId: Int, val tokenAddress: String?, val symbol: String, val decimals: Int, val networkName: String)
+
+/** An intent, as the AI agent's runner takes it (spec 103 D3): its `type` and its fields. */
+private fun intent(type: String, vararg fields: Pair<String, Any?>): JSONObject =
+    JSONObject().put("type", type).also { json ->
+        fields.forEach { (key, value) ->
+            json.put(key, when (value) {
+                null -> JSONObject.NULL
+                is List<*> -> JSONArray(value)
+                else -> value
+            })
+        }
+    }
+
+/** The account at a switcher's row, by its address. */
+private fun SessionView.addressAt(index: Int): String? =
+    (accounts.firstOrNull { it.index == index } ?: accounts.getOrNull(index))?.address
+
+/** The core's settings page names, as this Settings lays them out: a row or a sheet of its home opens the home. */
+private fun agentSettingsPage(name: String?): SettingsPage = when (name) {
+    "networks" -> SettingsPage.Networks
+    "rpc-providers" -> SettingsPage.RpcProviders
+    "endpoints" -> SettingsPage.Endpoints
+    "storage" -> SettingsPage.Storage
+    "about" -> SettingsPage.About
+    "agent" -> SettingsPage.Agent
+    "signing-pages" -> SettingsPage.SigningPages
+    "signing-venue" -> SettingsPage.Venue
+    else -> SettingsPage.Home
+}
+
+/** One of the preferences, set as Settings sets it — through the intents. */
+private fun setPreference(agent: AgentStore, kind: String, value: String) =
+    agent.person(intent("set_preference", "preference" to JSONObject().put("kind", kind).put("value", value)))
+
+/** The add wizard's Add, on the chain it checked. */
+private fun addCheckedNetwork(agent: AgentStore, settings: app.getvela.wallet.feature.settings.core.SettingsController) {
+    val wizard = settings.networksJson.value?.let { runCatching { JSONObject(it).optJSONObject("wizard") }.getOrNull() }
+    val chainId = wizard?.optJSONObject("chain_info")?.optLong("chain_id")?.takeIf { it > 0 }
+    if (chainId == null) {
+        settings.confirmAddNetwork()
+        return
+    }
+    val rpc = wizard.optString("custom_rpc").trim()
+    agent.person(intent("add_network", "chain_id" to chainId, "rpc_url" to rpc.ifEmpty { null }))
+}
+
+/**
+ * The review's confirm: the person's own `submit_transfer`, as an agent's
+ * request asks for it — the slide, and the passkey after it.
+ */
+private fun confirmTransfer(agent: AgentStore, send: app.getvela.wallet.feature.send.core.SendController) {
+    val operation = agent.reviewing() ?: return send.slideConfirm()
+    agent.person(intent("submit_transfer", "operation" to operation))
+}

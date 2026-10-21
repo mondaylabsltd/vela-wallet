@@ -41,11 +41,22 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     /** The current view. `loading` until storage has been read. */
     val view: StateFlow<SessionView> = _view
 
+    private val bridge = SessionCore().asBridge()
+
+    // Before its first event the machine's view is its own idle one.
+    private val _viewJson = MutableStateFlow(runCatching { bridge.view() }.getOrNull())
+
+    /** The view as the core wrote it — the AI agent reads the wallet whole (`AgentShellBridge.views`, spec 104). */
+    val viewJson: StateFlow<String?> = _viewJson
+
     private val driver = CoreDriver(
-        bridge = SessionCore().asBridge(),
+        bridge = bridge,
         scope = scope,
         perform = { operation -> executor.perform(operation) },
-        onView = { json -> _view.value = SessionView.from(json) },
+        onView = { json ->
+            _viewJson.value = json.toString()
+            _view.value = SessionView.from(json)
+        },
         escapedFailure = SessionExecutor::escapedFailure,
         // Spec 048: a session fault — the store's records refused by the core,
         // a malformed event — is written down. The driver answers the machine

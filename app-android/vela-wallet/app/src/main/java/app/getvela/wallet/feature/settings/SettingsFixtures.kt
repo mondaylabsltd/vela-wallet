@@ -261,6 +261,14 @@ object SettingsFixtures {
                     icon = SettingsIcon.FileText,
                     subtitle = s.t("settings.signing.subtitle"),
                 ),
+                // Spec 103: the AI agent — before the storage, as the web and
+                // the desktop place it.
+                SettingsRowModel(
+                    id = AGENT_ROW,
+                    title = s.t("settings.agent.title"),
+                    icon = SettingsIcon.Power,
+                    subtitle = s.t("settings.agent.subtitle"),
+                ),
                 SettingsRowModel(
                     id = "storage",
                     title = s.t(I18nKeys.SettingsUi.STORAGE_TITLE),
@@ -787,6 +795,9 @@ object SettingsFixtures {
 
     /** The Settings row of Signing pages (spec 102). */
     const val SIGNING_PAGES_ROW = "signing-pages"
+
+    /** The row that opens Settings → AI agent (spec 103). */
+    const val AGENT_ROW = "agent"
 
 
     /**
@@ -1435,6 +1446,8 @@ object SettingsFixtures {
             indexDown = indexDown(s),
             backdropTitle = backdropTitle,
             closeLabel = s.t(I18nKeys.SettingsUi.CLOSE),
+            agentTitle = s.t("settings.agent.title"),
+            agentSubtitle = s.t("settings.agent.subtitle"),
         )
     }
 }

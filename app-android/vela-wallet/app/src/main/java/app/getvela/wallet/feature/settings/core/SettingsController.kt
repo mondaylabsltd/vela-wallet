@@ -98,6 +98,9 @@ class SettingsController(
     /** Spec 045: the same rate waterfall, for a code the batch prices in (`null` = cannot price, never 1). */
     suspend fun fiatRate(code: String): Double? = rates?.resolve(code)
 
+    /** The display currency's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val currencyJson: StateFlow<String?> get() = currencyHost.viewJson
+
     private val currencyHost = CoreHost(
         bridge = DisplayCurrencyCore().asBridge(),
         scope = scope,
@@ -140,6 +143,9 @@ class SettingsController(
      */
     var onDappAddSettled: ((tab: String, id: String, outcome: app.getvela.wallet.feature.browser.core.DappAddOutcome) -> Unit)? = null
 
+    /** The network ledger's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val networksJson: StateFlow<String?> get() = networkHost.viewJson
+
     private val networkHost = CoreHost(
         bridge = NetworkAdminCore().asBridge(),
         scope = scope,
@@ -167,6 +173,9 @@ class SettingsController(
     // -- the default transaction speed (spec 068; Android's since 069) --------
 
     private val feeTierExecutor = FeeTierExecutor(store)
+
+    /** The fee speed preference's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val feeTierJson: StateFlow<String?> get() = feeTierHost.viewJson
 
     private val feeTierHost = CoreHost(
         bridge = FeeTierPrefCore().asBridge(),

@@ -12,6 +12,9 @@ import app.getvela.wallet.core.diagnostics.CrashReport
 import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.signing.SigningAftercare
 import android.app.Application
+import app.getvela.wallet.core.data.ThemePreference
+import app.getvela.wallet.feature.agent.AgentStore
+import app.getvela.wallet.feature.agent.AgentWallet
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -60,6 +63,7 @@ import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
 import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
+import app.getvela.wallet.feature.settings.core.DeviceStorage
 import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
@@ -547,7 +551,89 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
                 wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
             }
+            // The passkey's ceremony, for the AI agent's transfers to follow:
+            // a transfer is awaiting its passkey once the prompt is up.
+            controller.onCeremony = { event -> agent.ceremony(event) }
         }
+    }
+
+    /**
+     * The AI agent (spec 103, spec 104 phase 7): the core's, answering through
+     * this container's controllers. Off unless the person turns it on.
+     */
+    val agent: AgentStore by lazy {
+        AgentStore(
+            VelaStore(app),
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+        )
+    }
+
+    /** What the agent reaches, here — resolved as it is asked for, so nothing is built early. */
+    private val agentWallet = object : AgentWallet {
+        override val session get() = this@AppContainer.session
+        override val contacts get() = this@AppContainer.contacts
+        override val wallet get() = this@AppContainer.wallet
+        override val settings get() = this@AppContainer.settings
+        override val send get() = this@AppContainer.send
+        override val preferences get() = this@AppContainer.preferences
+        override val theme get() = themeRepository.current
+        override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
+        override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
+        override fun signingJson(): String? = signing.value?.signJson?.value
+        override suspend fun erase(): List<String> = eraseDevice()
+        override suspend fun clearStorageItem(item: String) = this@AppContainer.clearStorageItem(item)
+        override suspend fun clearCaches() = this@AppContainer.clearCaches()
+        override suspend fun switchAccount(address: String): Boolean {
+            val current = session.view.value
+            if (current.address.equals(address, ignoreCase = true)) return true
+            val row = current.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) } ?: return false
+            session.switchAccount(row.index)
+            return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                session.view.first { it.address.equals(address, ignoreCase = true) }
+            } != null
+        }
+    }
+
+    /**
+     * Erase This Device: what survived (empty when everything went). What an
+     * erase removes is the CORE's rule (`is_erasable_key`); what it sweeps is
+     * `eraseDevice`'s — the second theme store, the crash record, the logs, the
+     * caches and every browsed site's data (spec 081 FR-017). Live pages hear
+     * their sites disconnected first. On a clean sweep the session ends.
+     */
+    suspend fun eraseDevice(): List<String> {
+        browser.revokeAll()
+        val left = DeviceStorage.eraseDevice(app, VelaStore(app))
+        // Spec 091: the debug-mode key went with the rest — About hides the
+        // switch again, and the browser follows.
+        preferences.reloadDebugMode()
+        if (left.isEmpty()) {
+            session.signOut()
+            session.signOutConfirmed()
+        }
+        return left
+    }
+
+    /** One of the storage page's items, cleared (spec 058). */
+    suspend fun clearStorageItem(itemId: String) {
+        when {
+            // One connected site (spec 070): the core revokes it, writes the
+            // store and tells any open page.
+            "://" in itemId -> browser.revoke(itemId)
+            // Every grant: gone from the store AND from the live core, which
+            // used to keep them until a restart.
+            itemId == "dapps" -> {
+                DeviceStorage.clear(VelaStore(app), itemId)
+                browser.revokeAll()
+            }
+            else -> DeviceStorage.clear(VelaStore(app), itemId)
+        }
+    }
+
+    /** The caches this app can rebuild, cleared; the balances read again. */
+    suspend fun clearCaches() {
+        DeviceStorage.clearCaches(VelaStore(app))
+        wallet.refresh()
     }
 
     /** Set once [browser] exists: a memory warning has no engines to let go of before that. */
@@ -889,11 +975,17 @@ class AppContainer(private val app: Application) {
         override fun onActivityStarted(activity: android.app.Activity) {
             foregroundActivities += 1
             wallet.focused()
+            // The AI agent answers only while the wallet is in front.
+            agent.sceneActive(true)
         }
 
         override fun onActivityStopped(activity: android.app.Activity) {
             foregroundActivities = (foregroundActivities - 1).coerceAtLeast(0)
-            if (foregroundActivities == 0) wallet.backgrounded()
+            if (foregroundActivities == 0) {
+                wallet.backgrounded()
+                // In the background it hangs up, and what waited is withdrawn.
+                agent.sceneActive(false)
+            }
         }
 
         override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) = Unit
@@ -930,11 +1022,20 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
                 DebugSeed.apply(app, VelaStore(app))
                 session.boot()
+                startAgent()
             }
         } else {
             session.boot()
+            startAgent()
         }
     }
+
+    /**
+     * The AI agent connects as set up (spec 103) — off unless the person
+     * turned it on. After the session's boot, whose view its first request
+     * reads (and after a debug seed, which may hold its settings).
+     */
+    private fun startAgent() = agent.start(agentWallet)
 
     /** Re-resolves the system locale (activity recreation on locale change). */
     fun applySystemLocale() {

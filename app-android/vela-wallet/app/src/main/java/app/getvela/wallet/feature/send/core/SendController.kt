@@ -126,6 +126,7 @@ class SendController(
         override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
         override fun signingStarted() {
             dispatch(SendEvent.SigningStarted)
+            onCeremony?.invoke("started")
         }
 
         override fun trackSubmitted(handoff: TrackHandoff) {
@@ -136,6 +137,7 @@ class SendController(
         // the rows ahead and clears the POST once they are on disk.
         override fun opSigned(userOpHash: String, submitBlock: Long?) {
             dispatch(SendEvent.OpSigned(user_op_hash = userOpHash, submit_block = submitBlock, now_ms = System.currentTimeMillis().toDouble()))
+            onCeremony?.invoke("signed")
         }
 
         override fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {
@@ -237,6 +239,27 @@ class SendController(
             }
         },
     )
+
+    /** The send's view as the core wrote it — what the AI agent's transfers read (spec 104). */
+    val sendJson: StateFlow<String?> get() = sendHost.viewJson
+
+    /**
+     * One of the send's events, as the core's JSON — the AI agent's transfers
+     * drive the form with the same events its controls send (spec 104).
+     */
+    fun dispatchJson(eventJson: String) = sendHost.dispatch(eventJson)
+
+    private val _journeyOpen = MutableStateFlow(false)
+
+    /** A send is on screen: [open] began it, and [left] has not ended it. */
+    val journeyOpen: StateFlow<Boolean> = _journeyOpen
+
+    /**
+     * The passkey's ceremony moved — `started` (its prompt is up) or `signed` —
+     * for the AI agent's transfers to follow (spec 104).
+     */
+    @Volatile
+    var onCeremony: ((String) -> Unit)? = null
 
     private val sendHost = CoreHost(
         bridge = SendCore().asBridge(),
@@ -458,6 +481,7 @@ class SendController(
     /** 发送 tapped: one attempt begins. */
     fun open(account: SendAccountRef?, display: SendDisplayContext, params: SendOpenParams = SendOpenParams()) {
         _opens.value += 1
+        _journeyOpen.value = true
         _closed.value = false
         _alert.value = null
         // A new attempt holds no round yet: its own `fetch_tokens` picks one.
@@ -497,6 +521,7 @@ class SendController(
      * gone. The next [open] asks afresh.
      */
     fun left() {
+        _journeyOpen.value = false
         // No journey: a display change has nobody to tell, and the next
         // [open] carries the money of its own moment.
         toldDisplay = null

@@ -76,7 +76,7 @@
 | 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | **done** — `src/agent/` and `wallet/page/agent.rs`; the desktop's coverage ledger (`agent::coverage`); a live run through `bridge.clientmcp.dev`, transfer included |
 | 6 | QR pairing | **deferred** (owner, 2026-10-21): `bridge.clientmcp.dev` serves as the open trial bridge for now. The design proposed: pairing over the client's own connection (the bridge mints an agent token for the client it is), and optional open registration on a bridge that enables it |
-| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **iOS done** — `vela-agent` shared with the desktop; a live run through `bridge.clientmcp.dev` on the simulator. Android next. Each platform's coverage ledger still to write |
+| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **implemented, not production-ready** — `vela-agent` shared with the desktop; live runs through `bridge.clientmcp.dev` on the iOS simulator and an Android emulator. Open before production: see "Mobile: what is not verified yet" |
 
 ## Phase 1 notes
 
@@ -136,6 +136,16 @@
   Deny was not clicked in the live run (the runner's tests cover it). Found and fixed on the way: the agent was asked to approve a statistics switch the desktop does not have.
 - **Not checked here:** the Linux and Windows builds (CI's jobs); the signing sheet's `vela_review` half on the desktop (no dApp request came up).
 
+## Mobile: what is not verified yet
+
+Phase 7 is implemented on both phones; that is not the same as ready to ship. Open, in the owner's order (2026-10-21):
+
+1. **Coverage ledgers** for iOS and Android, as the desktop has (`agent::coverage`): every core event and direct call of each phone's screens placed, so a capability added to a screen and not to the intents fails a test.
+2. **The client token in secure storage** — the iOS Keychain, the Android Keystore. Today it sits with every other `vela.*` value in the app's store (`UserDefaults`, DataStore), readable from a device backup.
+3. **A person-confirmed transfer on chain, on each phone** — the agent drafts, the person confirms on the review, the passkey signs, the chain confirms. The live runs so far stopped at the review (drafted, read, cancelled); the confirmation was verified on the desktop only. On a simulator or emulator the parallel space signs with its fixture keys, not a platform passkey: a real passkey ceremony needs a device.
+
+Still deferred: QR pairing (phase 6).
+
 ## Phase 7 notes (iOS)
 
 - **`vela-agent`** (`rust/crates/vela-agent`, E2): `intents` (the runner), `transfers` (drafting onto the shell's send, over `SendDesk`), `tools` (the 32 tools, the model's instructions, `vela_wait`), `connection` (the client on a thread of its own), `bridge_url`, and `shell` — the agent for a shell that answers from its own threads: a blocking `Shell` trait and an `Agent` that runs everything on the agent's thread. The desktop uses the first five directly; its own runner, tools and URL rules are gone.
@@ -152,6 +162,15 @@
 - **Tests**: `AgentTests` (7) drive the person's taps through the real runner and bridge; `vela-agent` 18 Rust tests (6 for `shell`, over a fake shell). The full unit suite passes (1678, one known issue of its own).
 - **Live run** (2026-10-21, simulator, parallel space, `bridge.clientmcp.dev`): state; show; save a contact (its page opened); a BNB transfer drafted onto the review, read through `vela_review`, the agent's submit only asking, cancelled, followed by `vela_wait`; delete a group — Allow, Deny and an approval that timed out; background → offline, foreground → back. Not run live: the person's confirm on chain (the shared code's, confirmed on the desktop), Stop from the capsule (its runner path is tested).
 - **Not yet**: iOS's coverage ledger; a token in the Keychain rather than `UserDefaults` (where every other `vela.*` value is).
+
+## Phase 7 notes (Android)
+
+- **The same core** through the same uniffi bridge: `feature/agent/` — `AgentStore` (in `AppContainer`: the settings in `vela.agent`, the link, the requests, the person's road in), `AgentShellBridge` (the controllers' intents and views are thread-safe, so most calls are answered on the agent's thread; the navigation host's and `perform` hop to the main thread), `AgentPerform` (each action by the controller calls Android's own UI makes), `AgentPage` (the navigation host's: the page in front, `show`, opening a send).
+- **What the controllers now say** for it: each view as the core wrote it (`viewJson` and friends), the session's included; the send's raw dispatch, whether a send is open (`journeyOpen`, from `open` to `left`), and the passkey's ceremony. Erase and the storage clears moved from the Settings route into the container, so the person's and the agent's take one road.
+- **Screens a route keeps** — an asset, a record, a network's code, a contact, a group — are left for that route to take (`AgentStore.detail`), as `pendingFlow` and `pendingSettingsPage` already worked; a Settings page asked for while Settings is up now recomposes it.
+- **The 21 commit points** go through the intents, as on the other shells. Settings → Advanced → AI agent; the approval dialog; the capsule above the tab bar, and — on a wallet flow, whose foot is its button and the note above it on a phone's small screen — compact in the header's empty corner. Foreground only, from the container's activity count.
+- **Tests**: `AgentTest` (5: the settings record, the bridge-URL rule, the requests and calls as the core writes them, words for every action in two languages, the Settings row); the JVM suite passes (1372).
+- **Live run** (2026-10-21, a fresh Android 14 emulator, parallel space, `bridge.clientmcp.dev`): state; show; save a contact (its page opened); a transfer drafted onto the review, read, asked for, cancelled and followed; delete a group — Allow and Deny tapped; background → offline, foreground → back; Stop from the capsule (switched off, offline) and on again from Settings. Found and fixed on the way: the capsule covered Confirm & Send, then the note above it, on the review.
 
 ## Open
 
