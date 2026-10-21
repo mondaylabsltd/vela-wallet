@@ -1,0 +1,34 @@
+# Vendored copy of ClientMCP's Rust client (`crates/client` in
+# github.com/atshelchin/clientmcp), the desktop's end of the AI agent's bridge
+# (spec 103, spec 104 phase 5). The owner chose a copy over a git dependency
+# (2026-10-21).
+#
+# Source: clientmcp crates/client at baa89b60fdc7e0a8ad8ac1e9472ffd5b042c1cd6
+# (branch rust-client; not yet on GitHub).
+# `src/lib.rs` is the upstream file unchanged; this manifest is upstream's with
+# the workspace inheritance written out and the dev-dependencies (its tests run
+# in the ClientMCP repository, against its bridges) left out.
+#
+# TO REFRESH: copy crates/client/src/lib.rs from the new commit, re-derive the
+# [dependencies] below from its Cargo.toml, update the commit above, and run
+# the ClientMCP conformance suite with the Rust client there
+# (`CLIENTMCP_APP=rust tests/run-native.sh`).
+[package]
+name = "clientmcp-client"
+description = "ClientMCP for Rust applications: expose a running application's functions as MCP tools over one outbound WebSocket."
+version = "1.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/atshelchin/clientmcp"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+futures-util = "0.3"
+rand = "0.10"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
+serde_json = "1"
+tokio = { version = "1.40", features = ["rt", "macros", "net", "time", "sync"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+tokio-util = "0.7"

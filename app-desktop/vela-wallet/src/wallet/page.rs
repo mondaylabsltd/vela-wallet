@@ -43,6 +43,7 @@ use crate::settings::SettingsStrings;
 
 /// The Feedback page — the report, its screenshots and its two outcomes
 /// (078 S-03 and round 3) — kept beside this file rather than in it.
+mod agent;
 mod feedback;
 use feedback::FeedbackDraft;
 
@@ -104,14 +105,14 @@ use vela_core::app::balance_dashboard::BalanceDashboard;
 use vela_core::app::batch_import::{BatchUnit, Event as BatchEvent};
 use vela_core::app::browser_history::BrowserHistory;
 use vela_core::app::contacts::{
-    ContactExportScope, ContactFileFormat, ContactGroupInput, ContactSaveInput, Contacts,
-    Event as ContactEvent,
+    ContactExportScope, ContactFileFormat, Contacts, Event as ContactEvent,
 };
 use vela_core::app::dapp_browser::Event as DbrEvent;
 use vela_core::app::dapp_rpc::DappAddOutcome;
-use vela_core::app::display_currency::{DisplayCurrency, Event as CurrencyEvent};
+use vela_core::app::display_currency::DisplayCurrency;
 use vela_core::app::explore_sites::ExploreSites;
 use vela_core::app::fee_policy::Event as FeeEvent;
+use vela_core::app::intents::{Action, Preference};
 use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokNetwork};
 use vela_core::app::network_admin::{Event as NetEvent, NetOverrideField, NetworkAdmin};
 use vela_core::app::payment_request::PaymentRequest;
@@ -835,6 +836,12 @@ pub struct WalletPage {
     /// open and discarded with it — a second send starts from a fresh
     /// machine, never a resumed one.
     send_host: Option<gpui::Entity<SendHost>>,
+    /// Settings → AI agent's two fields (spec 103): their focus, and what is
+    /// typed in them until the field is left.
+    agent_url_focus: gpui::FocusHandle,
+    agent_token_focus: gpui::FocusHandle,
+    agent_url_draft: Option<String>,
+    agent_token_draft: Option<String>,
     /// Send columns closed while their submit ran (spec 082 RA4, ruling 1):
     /// kept, unseen, until the core has the submit's result — which is what
     /// writes the payment's record and hands it to the tracker.
@@ -1623,6 +1630,24 @@ impl WalletPage {
         // Spec 082 RJ17: a close the RD14 hold refused says why, here.
         cx.observe_global::<CloseHeld>(|page, cx| page.close_was_held(cx))
             .detach();
+        // The AI agent (spec 103): its connection and its requests are drawn
+        // here, and the intents reach this page for what only it can do.
+        crate::agent::register_page(cx.entity().downgrade(), cx);
+        cx.observe_global::<crate::agent::Agent>(|_, cx| cx.notify())
+            .detach();
+        cx.observe_global::<crate::agent::intents::Book>(|_, cx| cx.notify())
+            .detach();
+        let agent_url_focus = cx.focus_handle();
+        let agent_token_focus = cx.focus_handle();
+        // Leaving a field saves it, as Settings' other fields do (spec 072).
+        cx.on_blur(&agent_url_focus, window, |page, _, cx| {
+            page.agent_commit(cx)
+        })
+        .detach();
+        cx.on_blur(&agent_token_focus, window, |page, _, cx| {
+            page.agent_commit(cx)
+        })
+        .detach();
         // The window coming back is the desktop's `visibilitychange`: the web
         // refreshes the hero and ticks the feed on it, and this app did
         // neither. Registered for the life of the page; the guard is the
@@ -1744,6 +1769,10 @@ impl WalletPage {
             hero_clock: None,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
+            agent_url_focus,
+            agent_token_focus,
+            agent_url_draft: None,
+            agent_token_draft: None,
             send_background: Vec::new(),
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
@@ -2335,21 +2364,15 @@ impl WalletPage {
                     let Some((id, name)) = this.group_form.take() else {
                         return;
                     };
-                    resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(
-                            ContactEvent::GroupSave {
-                                input: ContactGroupInput {
-                                    id,
-                                    name: name.trim().to_owned(),
-                                    color: None,
-                                    // `None` leaves membership alone — a
-                                    // rename must not empty the group.
-                                    members: None,
-                                },
-                            },
-                            cx,
-                        );
-                    });
+                    // Through the intents (spec 103); a rename leaves the
+                    // membership alone there too.
+                    crate::agent::invoke_person(
+                        Action::SaveGroup {
+                            id,
+                            name: name.trim().to_owned(),
+                        },
+                        cx,
+                    );
                     cx.notify();
                 }),
             ));
@@ -2641,19 +2664,22 @@ impl WalletPage {
                 let Some(pick) = this.pick.take() else {
                     return;
                 };
-                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    let event = match pick.subject {
-                        PickSubject::Members { group_id } => ContactEvent::SetGroupMembers {
+                match pick.subject {
+                    PickSubject::Members { group_id } => crate::agent::invoke_person(
+                        Action::SetGroupMembers {
                             id: group_id,
                             members: pick.checked,
                         },
-                        PickSubject::Groups { address } => ContactEvent::SetContactGroups {
+                        cx,
+                    ),
+                    PickSubject::Groups { address } => crate::agent::invoke_person(
+                        Action::SetContactGroups {
                             address,
                             group_ids: pick.checked,
                         },
-                    };
-                    resident.dispatch(event, cx);
-                });
+                        cx,
+                    ),
+                }
                 cx.notify();
             }),
         ));
@@ -2845,31 +2871,23 @@ impl WalletPage {
                 let Some(form) = this.contact_form.take() else {
                     return;
                 };
-                let now_ms = crate::executor::now_ms();
                 let address = form.address.clone();
-                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(
-                        ContactEvent::Save {
-                            input: ContactSaveInput {
-                                address: form.address,
-                                // An empty name CLEARS the name — the core
-                                // reads `Some("")` that way, and a person who
-                                // deleted the text meant to.
-                                name: Some(form.name.trim().to_owned()),
-                                note: None,
-                                favorite: None,
-                                kind: None,
-                                resolved_name: None,
-                                resolved_source: None,
-                            },
-                            now_ms,
-                        },
-                        cx,
-                    );
-                });
-                // The column that held the form shows what it made, as the
-                // web's does on the desktop.
-                this.open_contact_by_address(&address, cx);
+                let page = cx.weak_entity();
+                // Through the intents (spec 103). The column that held the
+                // form shows what it made once it is saved, as the web's does
+                // on the desktop.
+                crate::agent::invoke_person_then(
+                    Action::SaveContact {
+                        address: form.address,
+                        name: form.name.trim().to_owned(),
+                    },
+                    cx,
+                    move |_, cx| {
+                        let _ = page.update(cx, |this, cx| {
+                            this.open_contact_by_address(&address, cx);
+                        });
+                    },
+                );
                 cx.notify();
             }),
         );
@@ -3184,11 +3202,17 @@ impl WalletPage {
             theme,
             copy,
             cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(NetEvent::DeleteConfirmed { id: id.clone() }, cx);
-                });
-                // The hero was counting that chain a moment ago.
-                crate::executor::balance_dashboard::refresh(cx);
+                // Through the intents (spec 103), which name a network by its
+                // chain; the balances stop asking it there too.
+                let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+                if let Some(row) = view.networks.iter().find(|row| row.id == id) {
+                    crate::agent::invoke_person(
+                        Action::RemoveNetwork {
+                            chain_id: row.chain_id,
+                        },
+                        cx,
+                    );
+                }
                 this.network_remove = None;
                 this.settings_expanded_network = None;
                 cx.notify();
@@ -3421,37 +3445,40 @@ impl WalletPage {
         };
         match action {
             // The dialog stays until the erase has an answer.
-            Confirm::ClearItem(id) => self.clear_storage_row(id, cx),
-            Confirm::ClearCaches => self.clear_caches(cx),
+            // Through the intents (spec 103): the same clears, by the road an
+            // agent's request takes (`agent_clear_storage`, `agent_clear_caches`).
+            Confirm::ClearItem(id) => crate::agent::invoke_person(
+                Action::ClearStorageItem {
+                    item: id.to_owned(),
+                },
+                cx,
+            ),
+            Confirm::ClearCaches => crate::agent::invoke_person(Action::ClearCaches, cx),
             Confirm::Disconnect { origin, .. } => {
                 let host = self.browser_host(cx);
                 host.update(cx, |host, cx| {
                     host.dispatch(DbrEvent::RevokeRequested { origin }, cx);
                 });
             }
-            Confirm::DisconnectAll => {
-                let host = self.browser_host(cx);
-                host.update(cx, |host, cx| host.dispatch(DbrEvent::RevokeAll, cx));
-            }
+            // Every connected site: the storage's `dapps` item.
+            Confirm::DisconnectAll => crate::agent::invoke_person(
+                Action::ClearStorageItem {
+                    item: "dapps".to_owned(),
+                },
+                cx,
+            ),
             Confirm::ResetEndpoints => {
-                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
-                });
+                crate::agent::invoke_person(Action::ResetServiceEndpoints, cx);
             }
             Confirm::DeleteContact { address, .. } => {
-                let now_ms = crate::executor::now_ms();
-                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(ContactEvent::Delete { address, now_ms }, cx);
-                });
+                crate::agent::invoke_person(Action::DeleteContact { address }, cx);
                 // A detail panel open on it was about a row that is gone.
                 if self.panel == PanelId::ContactDetail {
                     self.panel = PanelId::None;
                 }
             }
             Confirm::DeleteGroup { id, .. } => {
-                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(ContactEvent::GroupDelete { id }, cx);
-                });
+                crate::agent::invoke_person(Action::DeleteGroup { id }, cx);
                 // The group that was open no longer exists; the rail falls
                 // back to the whole book rather than to whichever group slid
                 // into that index.
@@ -3624,7 +3651,9 @@ impl WalletPage {
     /// Escape: the dialog on top goes, and only that one — the same order
     /// `render` stacks them in, read from the top. False when none was open.
     fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.identicon_viewer.is_some() {
+        if let Some(pending) = self.agent_pending(cx) {
+            crate::agent::answer(pending.id, false, cx);
+        } else if self.identicon_viewer.is_some() {
             self.identicon_viewer = None;
         } else if self.account_switcher {
             self.close_account_switcher(cx);
@@ -4086,8 +4115,14 @@ impl WalletPage {
                         // it real: the fixture hero has no privacy to keep.
                         self.identity.is_some().then(|| {
                             Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                crate::executor::balance_dashboard::dispatch(
-                                    vela_core::app::balance_dashboard::Event::PrivacyToggled,
+                                // Through the intents (spec 103), which name the
+                                // state wanted rather than a toggle.
+                                let hidden = resident::resident::<BalanceDashboard>(cx)
+                                    .read(cx)
+                                    .view()
+                                    .hidden;
+                                crate::agent::invoke_person(
+                                    Action::SetBalancePrivacy { hidden: !hidden },
                                     cx,
                                 );
                             })
@@ -4107,8 +4142,10 @@ impl WalletPage {
                         // with no session behind it, the press does nothing.)
                         (self.identity.is_some() || fixtures::HeroBoard::pinned().is_some()).then(
                             || {
-                                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                    this.refresh_by_hand(cx);
+                                Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                                    // Through the intents (spec 103): the same
+                                    // press (`agent_refresh` → `refresh_by_hand`).
+                                    crate::agent::invoke_person(Action::RefreshBalances, cx);
                                 }))
                                     as crate::wallet::components::BalanceToggle
                             },
@@ -4673,7 +4710,8 @@ impl WalletPage {
     /// the next one cannot be missed the same way.
     #[cfg(not(target_os = "linux"))]
     fn dialog_up(&self, cx: &gpui::App) -> bool {
-        self.account_switcher
+        self.agent_pending(cx).is_some()
+            || self.account_switcher
             || self.identicon_viewer.is_some()
             || self.confirm.is_some()
             || self.settings_dialog.is_some()
@@ -6299,27 +6337,40 @@ impl WalletPage {
                 cx.notify();
             })) as panels::Click
         });
-        actions.add_to_wallet = Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-            // Added on the core's word, not the press: `add_confirmed`
-            // refuses silently unless the wizard is Checked and
-            // compatible, and `last_added_chain_id` moving is the only
-            // sign it did not.
-            let now_iso = crate::executor::now_iso();
-            let added = resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                let view = resident.view();
-                let info = view.wizard.chain_info.clone()?;
-                let query = view.wizard.query.clone();
-                let before = view.last_added_chain_id;
-                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
-                (resident.view().last_added_chain_id != before).then_some((info, query))
-            });
-            if let Some(added) = added {
-                this.add_net_added = Some(added);
-                // A chain nobody has counted yet: the same forced read the
-                // settings dialog makes on its add.
-                crate::executor::balance_dashboard::refresh(cx);
-            }
-            cx.notify();
+        actions.add_to_wallet = Some(Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+            // Through the intents (spec 103), and added on the core's word,
+            // not the press: `completed` is said only once the network is in
+            // the ledger. The wizard has checked this chain, so only the add
+            // is sent.
+            let wizard = resident::resident::<NetworkAdmin>(cx)
+                .read(cx)
+                .view()
+                .wizard;
+            let Some(info) = wizard.chain_info.clone() else {
+                return;
+            };
+            let query = wizard.query.clone();
+            let rpc = wizard.custom_rpc.trim().to_owned();
+            let page = cx.weak_entity();
+            crate::agent::invoke_person_then(
+                Action::AddNetwork {
+                    chain_id: info.chain_id,
+                    rpc_url: (!rpc.is_empty()).then_some(rpc),
+                },
+                cx,
+                move |outcome, cx| {
+                    if *outcome != crate::agent::intents::Outcome::Completed {
+                        return;
+                    }
+                    let _ = page.update(cx, |this, cx| {
+                        this.add_net_added = Some((info, query));
+                        cx.notify();
+                    });
+                    // A chain nobody has counted yet: the same forced read the
+                    // settings dialog makes on its add.
+                    crate::executor::balance_dashboard::refresh(cx);
+                },
+            );
         })) as panels::Click);
     }
 
@@ -7555,12 +7606,8 @@ impl WalletPage {
                     let Some(id) = this.tx_detail.take() else {
                         return;
                     };
-                    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::activity_feed::Event::DeleteRequested { id },
-                            cx,
-                        );
-                    });
+                    // Through the intents (spec 103).
+                    crate::agent::invoke_person(Action::DeleteActivity { id }, cx);
                     this.flow_back(cx);
                 },
             )));
@@ -8093,7 +8140,21 @@ impl WalletPage {
                     actions.advance = Some(to_batch(BatchEvent::Apply));
                 }
                 FlowPanel::Dsd3 => {
-                    actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // The person's confirm is `submit_transfer`, through the
+                    // intents (spec 103): their own send is adopted as an
+                    // operation at its review, and confirmed there.
+                    actions.advance = Some(Box::new(
+                        |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            if let Some(operation) = crate::agent::transfers::current(cx) {
+                                crate::agent::invoke_person(
+                                    Action::SubmitTransfer {
+                                        operation: operation.id,
+                                    },
+                                    cx,
+                                );
+                            }
+                        },
+                    ));
                     // The confirm's fee line, when its failure answers a tap
                     // (PR 2 polish): the form row's own tap.
                     actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
@@ -9210,6 +9271,7 @@ impl WalletPage {
             ),
             SettingsPage::RpcProviders => (self.settings.nav_rpc_providers.clone(), None),
             SettingsPage::Endpoints => (self.settings.nav_endpoints.clone(), None),
+            SettingsPage::Agent => (self.settings.nav_agent.clone(), None),
             SettingsPage::FeeSpeed => (
                 self.settings.fee_speed_title.clone(),
                 Some(self.settings.fee_speed_subtitle.clone()),
@@ -9277,6 +9339,15 @@ impl WalletPage {
                 titles
             });
 
+        // The agent's connection, beside its page's title.
+        if self.settings_page == SettingsPage::Agent {
+            head = head.child(
+                div()
+                    .flex_none()
+                    .child(status_pill(theme, &self.agent_status_pill(cx))),
+            );
+        }
+
         // 添加网络 sits in the panel header, next to the list it adds to.
         if self.settings_page == SettingsPage::Networks {
             let add = self.settings.add_network.clone();
@@ -9322,6 +9393,7 @@ impl WalletPage {
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
+            SettingsPage::Agent => self.settings_agent(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
             SettingsPage::Signing => self.settings_signing(theme, window, cx),
             SettingsPage::Storage => self.settings_storage(theme, cx),
@@ -9577,6 +9649,8 @@ impl WalletPage {
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
             let index = row.index;
+            // What the intents name a wallet by (spec 103): its address.
+            let wallet = row.account.address.clone();
             let address = row.account.address.clone();
             let display = crate::wallet::live::shorten_address(&address);
 
@@ -9653,17 +9727,24 @@ impl WalletPage {
             // the settings page only the OTHER rows are a switch: clicking the
             // one you are already on should do nothing, not re-run a switch.
             if in_dialog || !active {
-                pick = pick
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                pick = pick.cursor_pointer().on_click(cx.listener({
+                    let wallet = wallet.clone();
+                    move |this, _, _, cx| {
                         if !active {
-                            session::switch_account(index, cx);
+                            // Through the intents, the road an agent's takes too.
+                            crate::agent::invoke_person(
+                                Action::SwitchAccount {
+                                    address: wallet.clone(),
+                                },
+                                cx,
+                            );
                         }
                         if in_dialog {
                             this.close_account_switcher(cx);
                         }
                         cx.notify();
-                    }));
+                    }
+                }));
             }
 
             // Taking ONE wallet off this device (2026-09-23). Its own click
@@ -9730,7 +9811,12 @@ impl WalletPage {
                                     .on_click(cx.listener(
                                         move |this, _, _, cx| {
                                             this.removing_account = None;
-                                            session::remove_account(index, cx);
+                                            crate::agent::invoke_person(
+                                                Action::RemoveWallet {
+                                                    address: wallet.clone(),
+                                                },
+                                                cx,
+                                            );
                                             // The list under the switcher just
                                             // changed: leaving it open would put
                                             // the next row where the pointer is.
@@ -9899,7 +9985,9 @@ impl WalletPage {
                     .items_center()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .on_click(cx.listener(|_, _, _, cx| session::sign_out(cx)))
+                    .on_click(
+                        cx.listener(|_, _, _, cx| crate::agent::invoke_person(Action::SignOut, cx)),
+                    )
                     .child(icon_img(
                         &mut self.icons,
                         Icon::LogOut,
@@ -11230,7 +11318,9 @@ impl WalletPage {
                     .items_center()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .on_click(cx.listener(|_, _, _, cx| session::sign_out(cx)))
+                    .on_click(
+                        cx.listener(|_, _, _, cx| crate::agent::invoke_person(Action::SignOut, cx)),
+                    )
                     .child(icon_img(
                         &mut self.icons,
                         Icon::LogOut,
@@ -11335,10 +11425,9 @@ impl WalletPage {
                 move |index, _, cx| {
                     page.update(cx, |this, cx| {
                         if let Some(word) = settings_live::picked_language(index) {
-                            crate::executor::preferences::set_language(word);
-                            this.relocalize();
-                            // The menu bar speaks the new language too (spec 095).
-                            crate::app_menu::install(cx);
+                            // Through the intents (spec 103): the page relocalizes
+                            // and the menu bar follows there (`agent_preference`).
+                            Self::prefer(Preference::Language(word.to_owned()), cx);
                         }
                         this.settings_open_dropdown = None;
                         cx.notify();
@@ -11373,12 +11462,11 @@ impl WalletPage {
             cx.reduce_motion(),
             {
                 let page = page.clone();
-                move |index, window, cx| {
+                move |index, _window, cx| {
                     if let Some((level, _)) = vela_core::prefs::TEXT_SCALE_LEVELS.get(index) {
-                        crate::executor::preferences::set_text_scale(level);
+                        // Every text on screen resizes there (`agent_preference`).
+                        Self::prefer(Preference::TextScale((*level).to_owned()), cx);
                     }
-                    // Every text on screen changes size, not only this page's.
-                    window.refresh();
                     page.update(cx, |_, cx| cx.notify());
                 }
             },
@@ -11389,14 +11477,13 @@ impl WalletPage {
             &mut self.icons,
             &themes,
             settings_live::segment_of(&settings_live::THEME_SEGMENTS, prefs.theme),
-            move |index, window, cx| {
-                crate::executor::preferences::set_theme(settings_live::THEME_SEGMENTS[index]);
-                // "Follow System" reads the window's appearance again.
-                let mode = ThemeMode::detect(window);
-                page.update(cx, |this, cx| {
-                    this.mode = mode;
-                    cx.notify();
-                });
+            move |index, _window, cx| {
+                // "Follow System" reads the window's appearance again there.
+                Self::prefer(
+                    Preference::Theme(settings_live::THEME_SEGMENTS[index].to_owned()),
+                    cx,
+                );
+                page.update(cx, |_, cx| cx.notify());
             },
         );
 
@@ -11601,9 +11688,7 @@ impl WalletPage {
                             let Some(code) = codes.get(index).cloned() else {
                                 return;
                             };
-                            resident::resident::<DisplayCurrency>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(CurrencyEvent::UserChose { code }, cx);
-                            });
+                            Self::prefer(Preference::Currency(code), cx);
                             page.update(cx, |this, cx| {
                                 this.settings_open_dropdown = None;
                                 cx.notify();
@@ -11621,7 +11706,7 @@ impl WalletPage {
                         let page = page.clone();
                         dropdown_menu_picks(theme, &mut self.icons, rows, move |index, _, cx| {
                             page.update(cx, |this, cx| {
-                                this.pick_format(id, index);
+                                this.pick_format(id, index, cx);
                                 this.settings_open_dropdown = None;
                                 cx.notify();
                             });
@@ -11659,13 +11744,26 @@ impl WalletPage {
         }
         col
     }
-    fn pick_format(&mut self, id: &'static str, index: usize) {
-        match id {
-            "number" => format_prefs::set_number(settings_live::picked_number(index)),
-            "date" => format_prefs::set_date(settings_live::picked_date(index)),
-            "time" => format_prefs::set_time(settings_live::picked_time(index)),
-            _ => {}
-        }
+    fn pick_format(&mut self, id: &'static str, index: usize, cx: &mut gpui::App) {
+        let preference = match id {
+            "number" => Preference::NumberFormat(
+                format_prefs::number_word(settings_live::picked_number(index)).to_owned(),
+            ),
+            "date" => Preference::DateFormat(
+                format_prefs::date_choice_word(settings_live::picked_date(index)).to_owned(),
+            ),
+            "time" => Preference::TimeFormat(
+                format_prefs::time_choice_word(settings_live::picked_time(index)).to_owned(),
+            ),
+            _ => return,
+        };
+        Self::prefer(preference, cx);
+    }
+
+    /// A preference, through the intents (spec 103) — the road an agent's
+    /// takes too.
+    fn prefer(preference: Preference, cx: &mut gpui::App) {
+        crate::agent::invoke_person(Action::SetPreference { preference }, cx);
     }
 
     /// DST4 — the network list, expanding one row in place.
@@ -12280,7 +12378,7 @@ impl WalletPage {
     /// once (`fee_tier_pref`).
     fn settings_fee_speed(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         use vela_core::app::fee_policy::FeeTier;
-        use vela_core::app::fee_tier_pref::{Event as FeeTierPrefEvent, FeeTierPref};
+        use vela_core::app::fee_tier_pref::FeeTierPref;
         let view = resident::resident::<FeeTierPref>(cx).read(cx).view();
         let s = &self.flow_strings;
         let rows: Vec<DetailRow> = view
@@ -12311,9 +12409,7 @@ impl WalletPage {
         let menu = (self.settings_open_dropdown == Some("fee-speed")).then(|| {
             dropdown_menu_details(theme, &mut self.icons, &rows, 340., move |index, _, cx| {
                 if let Some(tier) = offered.get(index).copied() {
-                    resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
-                        pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
-                    });
+                    Self::prefer(Preference::FeeSpeed(tier), cx);
                 }
                 page.update(cx, |this, cx| {
                     this.settings_open_dropdown = None;
@@ -13505,30 +13601,46 @@ impl WalletPage {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(primary)
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_click(cx.listener(move |_, _, _, cx| {
                         if !adds {
                             // Retry: ask the same chain again.
                             recheck(cx);
                             cx.notify();
                             return;
                         }
-                        let now_iso = crate::executor::now_iso();
-                        // Close on the core's word, not on the click. Every
-                        // gate in `add_confirmed` refuses by returning
-                        // `done()`, so a dialog that closed itself would say
-                        // "added" over a chain that was not.
-                        let added =
-                            resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                                let before = resident.view().last_added_chain_id;
-                                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
-                                resident.view().last_added_chain_id != before
-                            });
-                        if added {
-                            this.close_settings_dialog(cx);
-                            // A chain nobody has counted yet: the same forced
-                            // read the web makes at the same moment.
-                            crate::executor::balance_dashboard::refresh(cx);
-                        }
+                        // Through the intents (spec 103). Close on the core's
+                        // word, not on the click: `completed` is said only once
+                        // the network is in the ledger, so a dialog that closed
+                        // itself can never say "added" over a chain that was not.
+                        let wizard = resident::resident::<NetworkAdmin>(cx)
+                            .read(cx)
+                            .view()
+                            .wizard;
+                        let Some(chain_id) = wizard.chain_info.as_ref().map(|info| info.chain_id)
+                        else {
+                            return;
+                        };
+                        let rpc = wizard.custom_rpc.trim().to_owned();
+                        let page = cx.weak_entity();
+                        crate::agent::invoke_person_then(
+                            Action::AddNetwork {
+                                chain_id,
+                                rpc_url: (!rpc.is_empty()).then_some(rpc),
+                            },
+                            cx,
+                            move |outcome, cx| {
+                                if *outcome != crate::agent::intents::Outcome::Completed {
+                                    return;
+                                }
+                                let _ = page.update(cx, |this, cx| {
+                                    this.close_settings_dialog(cx);
+                                    cx.notify();
+                                });
+                                // A chain nobody has counted yet: the same
+                                // forced read the web makes at the same moment.
+                                crate::executor::balance_dashboard::refresh(cx);
+                            },
+                        );
                         cx.notify();
                     })),
             );
@@ -14099,7 +14211,11 @@ impl WalletPage {
                 .text_size(theme::text_button())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_inverse)
-                .on_click(cx.listener(|this, _, _, cx| this.erase_device(cx)))
+                .on_click(cx.listener(|_, _, _, cx| {
+                    // Through the intents (spec 103): `agent_erase` runs the
+                    // same sweep, and this dialog shows how it ended.
+                    crate::agent::invoke_person(Action::EraseDevice, cx);
+                }))
                 .child(confirm),
         )
         .child(
@@ -21537,6 +21653,8 @@ impl Render for WalletPage {
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let unreachable = self.unreachable_dialog(&theme, window, cx);
+        let agent_bar = self.agent_bar(&theme, cx);
+        let agent_approval = self.agent_approval_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -21552,6 +21670,10 @@ impl Render for WalletPage {
         // land on top of a question somebody is being asked.
         if let Some(toast) = toast {
             root = root.child(toast);
+        }
+        // The agent's capsule: above the columns, below every dialog.
+        if let Some(bar) = agent_bar {
+            root = root.child(bar);
         }
         if let Some(toast) = self.contacts_toast(&theme) {
             root = root.child(toast);
@@ -21626,6 +21748,10 @@ impl Render for WalletPage {
         // The report's screenshot viewer, over the page it was opened from.
         if let Some(feedback_viewer) = feedback_viewer {
             root = root.child(feedback_viewer);
+        }
+        // Over every other question: the agent waits on the person's answer.
+        if let Some(approval) = agent_approval {
+            root = root.child(approval);
         }
         if let Some(prompt) = &self.crash {
             let entity = cx.entity();
@@ -22156,11 +22282,15 @@ mod tests {
     #[test]
     fn every_dialog_the_root_draws_takes_the_page_off_the_screen() {
         let source = include_str!("page.rs");
+        // The agent's own dialog is drawn from its module (spec 103).
+        let agent = include_str!("page/agent.rs");
         let body_of = |name: &str| -> &str {
-            let start = source
-                .find(&["fn ", name, "("].concat())
+            let signature = ["fn ", name, "("].concat();
+            let (file, start) = [source, agent]
+                .into_iter()
+                .find_map(|file| file.find(&signature).map(|start| (file, start)))
                 .unwrap_or_else(|| unreachable!("fn {name}"));
-            let rest = &source[start..];
+            let rest = &file[start..];
             let end = rest.find("\n    }\n").unwrap_or(rest.len());
             &rest[..end]
         };
@@ -22182,6 +22312,7 @@ mod tests {
             ("unreachable_dialog", "self.unreachable_open"),
             ("sign_out_dialog", ".sign_out"),
             ("trusted_signer_prompt", "trusted_signer()"),
+            ("agent_approval_dialog", "self.agent_pending(cx)"),
         ];
         for (dialog, state) in raised_by {
             assert!(
@@ -22203,6 +22334,9 @@ mod tests {
             "menu_overlay",
             "feedback_viewer",
             "feedback_toast",
+            // The agent's capsule (spec 103): 10–50 px from the window's top,
+            // over the browser's own 56 px toolbar, never over its page.
+            "agent_bar",
         ];
         let render = &source[source
             .find("let scan = self.scan_overlay(")
@@ -22642,15 +22776,17 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 11);
+        assert_eq!(SettingsPage::ALL.len(), 12);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
-        assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
+        // The AI agent after the service endpoints (spec 103).
+        assert_eq!(SettingsPage::ALL[6], SettingsPage::Agent);
+        assert_eq!(SettingsPage::ALL[7], SettingsPage::FeeSpeed);
         // Signing pages beside the speed (spec 071, 102).
-        assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
+        assert_eq!(SettingsPage::ALL[8], SettingsPage::Signing);
         // Community, About, then Send feedback — the phones' order
         // (2026-09-27); Community is drawn above About.
-        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
-        assert_eq!(SettingsPage::ALL[10], SettingsPage::Feedback);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[11], SettingsPage::Feedback);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips

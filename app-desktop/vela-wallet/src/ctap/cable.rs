@@ -317,26 +317,7 @@ impl WebSocketCablePort {
             .filter(|host| !host.is_empty())
             .ok_or_else(|| HybridError::Tunnel(format!("not a wss:// URL: {url}")))?;
 
-        let stream = match resolve_proxy(&format!("https://{host}/"))? {
-            Some(proxy) => {
-                log(&format!("dialing {host}:443 through {proxy}"));
-                proxy.connect(host, 443)?
-            }
-            None => {
-                log(&format!(
-                    "dialing {host}:443 directly (no proxy configured)"
-                ));
-                let address = (host, 443u16)
-                    .to_socket_addrs()
-                    .map_err(|error| {
-                        HybridError::Tunnel(format!("cannot resolve {host}: {error}"))
-                    })?
-                    .next()
-                    .ok_or_else(|| HybridError::Tunnel(format!("no address for {host}")))?;
-                TcpStream::connect_timeout(&address, TUNNEL_CONNECT_TIMEOUT)
-                    .map_err(|error| HybridError::Tunnel(format!("cannot reach {host}: {error}")))?
-            }
-        };
+        let stream = dial(&format!("https://{host}/"), host, 443, log)?;
         // A bounded read so a relay that never answers frees the thread instead
         // of blocking it until the process exits — the upgrade is a round trip
         // with nobody to wait for, so it gets the handshake's budget; each
@@ -643,6 +624,37 @@ fn hex(bytes: &[u8]) -> String {
 // ---------------------------------------------------------------------------
 // Proxy — the tunnel is reached through the same proxy the rest of the app uses
 // ---------------------------------------------------------------------------
+
+/// A TCP connection to `host:port` the way the rest of the app reaches the
+/// network: through the proxy the system names for `route_url` (the host
+/// resolved AT the proxy), or directly when it names none, with a bounded
+/// connect either way. `log` hears which. The tunnel's socket, and the AI
+/// agent's bridge socket (`agent::runtime`).
+pub(crate) fn dial(
+    route_url: &str,
+    host: &str,
+    port: u16,
+    log: impl Fn(&str),
+) -> Result<TcpStream, HybridError> {
+    match resolve_proxy(route_url)? {
+        Some(proxy) => {
+            log(&format!("dialing {host}:{port} through {proxy}"));
+            proxy.connect(host, port)
+        }
+        None => {
+            log(&format!(
+                "dialing {host}:{port} directly (no proxy configured)"
+            ));
+            let address = (host, port)
+                .to_socket_addrs()
+                .map_err(|error| HybridError::Tunnel(format!("cannot resolve {host}: {error}")))?
+                .next()
+                .ok_or_else(|| HybridError::Tunnel(format!("no address for {host}")))?;
+            TcpStream::connect_timeout(&address, TUNNEL_CONNECT_TIMEOUT)
+                .map_err(|error| HybridError::Tunnel(format!("cannot reach {host}: {error}")))
+        }
+    }
+}
 
 /// A configured forward proxy to dial the tunnel through.
 struct ProxyEndpoint {

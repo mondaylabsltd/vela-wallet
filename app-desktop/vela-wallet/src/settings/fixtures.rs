@@ -29,6 +29,10 @@ pub enum SettingsPage {
     Networks,
     RpcProviders,
     Endpoints,
+    /// The AI agent (spec 103): whether this wallet answers one through a
+    /// ClientMCP bridge — after the service endpoints, the other "which
+    /// server" page, as the web places it.
+    Agent,
     /// The default transaction speed (spec 069) — between the endpoints and
     /// the storage, as the web's desktop layout places it.
     FeeSpeed,
@@ -46,13 +50,14 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 11] = [
+    pub const ALL: [SettingsPage; 12] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
         SettingsPage::Networks,
         SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
+        SettingsPage::Agent,
         SettingsPage::FeeSpeed,
         SettingsPage::Signing,
         SettingsPage::Storage,
@@ -71,6 +76,7 @@ impl SettingsPage {
             SettingsPage::Networks => "networks",
             SettingsPage::RpcProviders => "rpc",
             SettingsPage::Endpoints => "endpoints",
+            SettingsPage::Agent => "agent",
             SettingsPage::FeeSpeed => "fee-speed",
             SettingsPage::Signing => "signing",
             SettingsPage::Storage => "storage",
@@ -87,6 +93,7 @@ impl SettingsPage {
             SettingsPage::Networks => Icon::Network,
             SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
+            SettingsPage::Agent => Icon::Link2,
             SettingsPage::FeeSpeed => Icon::Clock,
             SettingsPage::Signing => Icon::Eye,
             SettingsPage::Storage => Icon::HardDrive,
@@ -103,6 +110,7 @@ impl SettingsPage {
             SettingsPage::Networks => s.nav_networks.clone(),
             SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
+            SettingsPage::Agent => s.nav_agent.clone(),
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
             SettingsPage::Signing => s.nav_signing.clone(),
             SettingsPage::Storage => s.nav_storage.clone(),

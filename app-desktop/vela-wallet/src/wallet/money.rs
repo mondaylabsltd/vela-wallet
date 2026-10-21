@@ -488,6 +488,14 @@ impl SendHost {
     // -- the two machines ----------------------------------------------------
 
     pub fn dispatch(&mut self, event: SendEvent, cx: &mut Context<Self>) {
+        // The passkey's ceremony, as the intents count it (spec 103): its
+        // prompt went up, or it signed. What tells "waiting for the passkey"
+        // from "signed, on its way" — the core's own `submitting` comes first.
+        match &event {
+            SendEvent::SigningStarted => crate::agent::transfers::ceremony("started", cx),
+            SendEvent::OpSigned { .. } => crate::agent::transfers::ceremony("signed", cx),
+            _ => {}
+        }
         let pending = self.send.dispatch(event);
         self.pump_send(pending, cx);
     }

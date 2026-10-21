@@ -73,7 +73,7 @@
 | 2 | uniffi exports for the intents | **done** — `intents_bridge` (the same JSON functions); Kotlin and Swift bindings generated; both harnesses replay the shared `intents` vectors |
 | 3 | `clientmcp-client` (Rust) | **done** — conformance 34/34 with it as the application, against the native bridge and the Worker in workerd; 6 lifecycle tests of its own |
 | 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
-| 5 | Desktop: the agent (part B in Rust, on gpui) | Desktop coverage ledger; live agent run |
+| 5 | Desktop: the agent (part B in Rust, on gpui) | **done** — `src/agent/` and `wallet/page/agent.rs`; the desktop's coverage ledger (`agent::coverage`); a live run through `bridge.clientmcp.dev`, transfer included |
 | 6 | QR pairing | Pair desktop and web in one step |
 | 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | Each platform's coverage ledger; live agent run |
 
@@ -118,6 +118,22 @@
   - A staging copy on workers.dev, reached through this network's HTTP proxy, could not show the bug: the proxy keeps the connection to Cloudflare open until the next write.
 - **Production now** runs version `c0b5e511`; the one before was `5bee0b6c` (rollback: `wrangler rollback`).
 - **The suite** passes on production with the JS SDK and with the Rust client (TLS included). The only skip is the call-timeout case. The harness's https handshake case now works there too.
+
+## Phase 5 notes
+
+- **The client** is vendored (`app-desktop/vendor/clientmcp-client`, the owner's choice over a git dependency) and runs on a thread of its own: the desktop has no tokio reactor. Its socket is dialled through the app's proxy route — the cable tunnel's own dialler, now shared (`ctap::cable::dial`) — for which the client gained a dial hook.
+- **Part B in Rust** (`src/agent/`): the runner (`intents.rs`, generic over its wallet so its rules — approvals, Stop, a call given up, the observe — are tested without a window), `perform.rs`, `transfers.rs` (drafting on the send column, the passkey's ceremony counted in `SendHost::dispatch`), `world.rs`, and `tools.rs` (the same 32 tools as the web). The judgements are the core's, called directly.
+- **The person's clicks go through the intents** (spec 103 D3): the same 21 actions as the web's `PERSON`, from the account switcher to the review's confirm. A commit that closes its dialog "on the core's word" (adding a network) waits for `completed`.
+- **What the person sees**: Settings → AI agent (switch, bridge, masked token, the MCP endpoint, the last action); a capsule floating at the top of the window, as the web's (owner, 2026-10-21: a full-width strip ran into the window's buttons) — the link's state as a dot, what the agent did last, Stop; the approval sheet, above every other dialog, Esc being No.
+- **What an agent did is seen where it is** (owner, 2026-10-21: "授权后还是停在首页没有变化"): once an agent's request completes, the screen its change lives on opens — `intents::shows(action)`, in the core so every shell opens the same one (`intentShows` for the web, `intent_shows` for the phones). The web has not adopted it yet.
+- **The ledger** places 198 core events and 61 direct calls of the desktop's screens. Its `later` list, the gaps: several tokens to one address (sweep); paying the fee in another token, and one transfer's own speed; testing a provider key; answering a dApp's signing request (and limiting its approval); disconnecting one site, forgetting one site of the history, browsing in the in-app browser; signing in or creating a wallet. Not on the desktop at all: usage statistics (refused before anyone is asked) and a community page.
+- **Live run** (2026-10-21, the parallel space's fixture wallet, through `bridge.clientmcp.dev`):
+  - operate actions, approvals (Allow, Stop, a request withdrawn when the agent gave up), the person's own changes through the intents;
+  - adding Arc Network Testnet;
+  - a 0.1 USDC transfer drafted by the agent, read through `vela_review`, confirmed by the person on the review: `awaiting_passkey` → `submitted` → `confirmed`.
+
+  Deny was not clicked in the live run (the runner's tests cover it). Found and fixed on the way: the agent was asked to approve a statistics switch the desktop does not have.
+- **Not checked here:** the Linux and Windows builds (CI's jobs); the signing sheet's `vela_review` half on the desktop (no dApp request came up).
 
 ## Open
 
