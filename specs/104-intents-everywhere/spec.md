@@ -8,6 +8,7 @@
 | # | Question | Decision |
 |---|---|---|
 | E1 | What of the intents moves into Rust | **Only the pure judgements** (part A below). The orchestration stays in each shell (part B), as decided for 103 (D6): a stateful intents core was judged over-abstraction. |
+| E2 | Part B on the phones (phase 7, revising E1 for the native shells) | **One shared Rust agent core, `vela-agent`**: the runner, the transfers, the tools and the ClientMCP connection, moved out of the desktop and reached by the phones through uniffi. Each native shell keeps only its "do one thing" (its own stores' calls), its views, opening a screen, and its UI. The web keeps its TypeScript part B. |
 
 ## What moves, and what does not
 
@@ -75,7 +76,7 @@
 | 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | **done** — `src/agent/` and `wallet/page/agent.rs`; the desktop's coverage ledger (`agent::coverage`); a live run through `bridge.clientmcp.dev`, transfer included |
 | 6 | QR pairing | **deferred** (owner, 2026-10-21): `bridge.clientmcp.dev` serves as the open trial bridge for now. The design proposed: pairing over the client's own connection (the bridge mints an agent token for the client it is), and optional open registration on a bridge that enables it |
-| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | Each platform's coverage ledger; live agent run |
+| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **iOS done** — `vela-agent` shared with the desktop; a live run through `bridge.clientmcp.dev` on the simulator. Android next. Each platform's coverage ledger still to write |
 
 ## Phase 1 notes
 
@@ -121,7 +122,7 @@
 
 ## Phase 5 notes
 
-- **The client** is vendored (`app-desktop/vendor/clientmcp-client`, the owner's choice over a git dependency) and runs on a thread of its own: the desktop has no tokio reactor. Its socket is dialled through the app's proxy route — the cable tunnel's own dialler, now shared (`ctap::cable::dial`) — for which the client gained a dial hook.
+- **The client** is vendored (now `rust/vendor/clientmcp-client`, shared with the phones; the owner's choice over a git dependency) and runs on a thread of its own: the desktop has no tokio reactor. Its socket is dialled through the app's proxy route — the cable tunnel's own dialler, now shared (`ctap::cable::dial`) — for which the client gained a dial hook.
 - **Part B in Rust** (`src/agent/`): the runner (`intents.rs`, generic over its wallet so its rules — approvals, Stop, a call given up, the observe — are tested without a window), `perform.rs`, `transfers.rs` (drafting on the send column, the passkey's ceremony counted in `SendHost::dispatch`), `world.rs`, and `tools.rs` (the same 32 tools as the web). The judgements are the core's, called directly.
 - **The person's clicks go through the intents** (spec 103 D3): the same 21 actions as the web's `PERSON`, from the account switcher to the review's confirm. A commit that closes its dialog "on the core's word" (adding a network) waits for `completed`.
 - **What the person sees**: Settings → AI agent (switch, bridge, masked token, the MCP endpoint, the last action); a capsule floating at the top of the window, as the web's (owner, 2026-10-21: a full-width strip ran into the window's buttons) — the link's state as a dot, what the agent did last, Stop; the approval sheet, above every other dialog, Esc being No.
@@ -134,6 +135,23 @@
 
   Deny was not clicked in the live run (the runner's tests cover it). Found and fixed on the way: the agent was asked to approve a statistics switch the desktop does not have.
 - **Not checked here:** the Linux and Windows builds (CI's jobs); the signing sheet's `vela_review` half on the desktop (no dApp request came up).
+
+## Phase 7 notes (iOS)
+
+- **`vela-agent`** (`rust/crates/vela-agent`, E2): `intents` (the runner), `transfers` (drafting onto the shell's send, over `SendDesk`), `tools` (the 32 tools, the model's instructions, `vela_wait`), `connection` (the client on a thread of its own), `bridge_url`, and `shell` — the agent for a shell that answers from its own threads: a blocking `Shell` trait and an `Agent` that runs everything on the agent's thread. The desktop uses the first five directly; its own runner, tools and URL rules are gone.
+- **uniffi** (`vela-core-uniffi/src/agent_bridge.rs`): `AgentShell` (what Swift and Kotlin implement: views as JSON, `perform`, `reveal`, `page`, `signing`, `changed`, the send's open/start/dispatch/close/alert, the account, holdings, tracker, network id) and `AgentCore` (configure, link, approvals, activity, answer, stop, `invoke_person`, ceremony, `current_review`).
+- **The client's trust roots**: iOS and Android hand out no root store, so `rustls-native-certs` found none there and every `wss://` connect would have failed. The client now uses Mozilla's bundled roots on those two (`webpki-roots`) and the platform's elsewhere (ClientMCP `crates/client`, after `baa89b6`; the vendored copy follows it).
+- **iOS** (`Features/Agent/`):
+  - `AgentStore` (in `AppGraph`): the settings (`vela.agent`, as the web and the desktop store them), the link, the requests, the person's road in (`person`);
+  - `AgentShellBridge`: hops to the main actor; the views are the machines' own JSON (`keepsJson` on the stores read);
+  - `AgentPerform`: each action by the store calls iOS's own UI makes — the token sheet's search across networks, a network's bin leaving the balances be;
+  - `AgentPage`: what only `RootView` can do (open a screen, open and close a send with its screens, erase, clear a store), registered by it;
+  - the send opens on the agent's token and recipient (`SendStore.handIn`); the passkey's ceremony is heard from the send's ports.
+- **The person's taps go through the intents**: the same 21 actions as the web's `PERSON`, the review's confirm included (as `submit_transfer` on the review's operation).
+- **What the person sees**: Settings → Advanced → AI agent; the capsule, floating above the tab bar (the pages lay their tops out against the window, so at the top it covered the account's name); the approval sheet, a swipe down being No. The agent answers only in the foreground: in the background it hangs up, and what waited is withdrawn.
+- **Tests**: `AgentTests` (7) drive the person's taps through the real runner and bridge; `vela-agent` 18 Rust tests (6 for `shell`, over a fake shell). The full unit suite passes (1678, one known issue of its own).
+- **Live run** (2026-10-21, simulator, parallel space, `bridge.clientmcp.dev`): state; show; save a contact (its page opened); a BNB transfer drafted onto the review, read through `vela_review`, the agent's submit only asking, cancelled, followed by `vela_wait`; delete a group — Allow, Deny and an approval that timed out; background → offline, foreground → back. Not run live: the person's confirm on chain (the shared code's, confirmed on the desktop), Stop from the capsule (its runner path is tested).
+- **Not yet**: iOS's coverage ledger; a token in the Keychain rather than `UserDefaults` (where every other `vela.*` value is).
 
 ## Open
 
