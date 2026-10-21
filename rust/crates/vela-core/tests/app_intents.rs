@@ -158,13 +158,11 @@ fn denied(decision: &Decision) -> Option<ReasonCode> {
 /// one. Refused whether or not the agent is switched on.
 #[test]
 fn an_agent_may_not_touch_its_own_connection() {
-    for action in [
-        Action::ConfigureAgent {
-            enabled: None,
-            bridge_url: Some("wss://elsewhere.example/connect".to_owned()),
-            client_token: None,
-        },
-    ] {
+    for action in [Action::ConfigureAgent {
+        enabled: None,
+        bridge_url: Some("wss://elsewhere.example/connect".to_owned()),
+        client_token: None,
+    }] {
         for grants in [ON, Grants::default()] {
             let decision = authorize(Actor::Agent, &action, &grants);
             assert_eq!(
@@ -656,7 +654,11 @@ fn network_changes_are_manage_level_and_need_real_urls() {
         field: NetEndpointField::FiatRates,
         url: url.to_owned(),
     };
-    assert_eq!(validate(&service("")), Ok(()), "a cleared field is the default");
+    assert_eq!(
+        validate(&service("")),
+        Ok(()),
+        "a cleared field is the default"
+    );
     assert!(validate(&service("rates.example")).is_err());
     for action in one_of_each().into_iter().filter(|action| {
         matches!(

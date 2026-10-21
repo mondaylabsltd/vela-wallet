@@ -1003,6 +1003,16 @@ export function identiconSvgCircular(seed: string): string;
 export function inFlightOps(track_view_json: string): string;
 
 /**
+ * `vela_state`: the wallet as an agent reads it.
+ */
+export function intentAgentState(world_json: string, page: string, approvals_json: string, activity_json: string): string;
+
+/**
+ * What was true when the call began.
+ */
+export function intentBaseline(action_json: string, world_json: string): string;
+
+/**
  * Every action, with how much it matters and who may ask for it.
  */
 export function intentCatalog(): string;
@@ -1013,6 +1023,33 @@ export function intentCatalog(): string;
  * read is treated as an agent with nothing granted — the narrowest reading.
  */
 export function intentCheck(actor: string, action_json: string, grants_json: string): string;
+
+/**
+ * Does what the action names exist, and is it already so? An action this
+ * build cannot read is refused, never waved through.
+ */
+export function intentExamine(action_json: string, world_json: string): string;
+
+/**
+ * Where a transfer stands now. `send_json` / `ceremony_json` may be `null`.
+ */
+export function intentOperationProgress(progress_json: string, send_json: string, ceremony_json: string, tracker_json: string): string;
+
+/**
+ * `vela_review`: what the person is being asked to sign.
+ */
+export function intentReview(input_json: string): string;
+
+/**
+ * Has the change held? Answers `{ verdict, baseline }`: the baseline as the
+ * call has moved it (the sign-out sheet coming up is part of the call).
+ */
+export function intentVerdict(action_json: string, world_json: string, baseline_json: string): string;
+
+/**
+ * The views a judgement of the action reads.
+ */
+export function intentWorldNeeds(action_json: string): string;
 
 export function keccak256(data: Uint8Array): Uint8Array;
 
@@ -1809,8 +1846,15 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly intentBaseline: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentCatalog: () => [number, number];
     readonly intentCheck: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly intentExamine: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly intentOperationProgress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly intentReview: (a: number, b: number) => [number, number];
+    readonly intentVerdict: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly intentWorldNeeds: (a: number, b: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];

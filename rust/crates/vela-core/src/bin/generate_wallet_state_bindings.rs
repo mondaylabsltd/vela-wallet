@@ -57,6 +57,10 @@ use vela_core::app::fee_speed::{
 use vela_core::app::fee_tier_pref::{
     Event as FeeTierPrefEvent, FeeTierPrefOperation, FeeTierPrefShellResult, FeeTierPrefView,
 };
+use vela_core::app::intent_rules::{
+    Baseline as IntentBaseline, Ceremony as IntentCeremony, Examined as IntentExamined,
+    Preferences as IntentPreferences, Progress as IntentProgress, Verdict as IntentVerdict,
+};
 use vela_core::app::intents::{
     Action as IntentAction, Actor as IntentActor, CatalogEntry as IntentCatalogEntry,
     Check as IntentCheck, Grants as IntentGrants, Operation as IntentOperation,
@@ -132,6 +136,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     IntentCheck::export_all(&config)?;
     IntentGrants::export_all(&config)?;
     IntentOperation::export_all(&config)?;
+    IntentExamined::export_all(&config)?;
+    IntentBaseline::export_all(&config)?;
+    IntentVerdict::export_all(&config)?;
+    IntentPreferences::export_all(&config)?;
+    IntentCeremony::export_all(&config)?;
+    IntentProgress::export_all(&config)?;
     SigningPagesEvent::export_all(&config)?;
     SigningPagesOperation::export_all(&config)?;
     SigningPagesShellResult::export_all(&config)?;
