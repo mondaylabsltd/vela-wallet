@@ -460,7 +460,7 @@ struct RootView: View {
         )) { request in
             AgentApprovalSheet(
                 request: request,
-                detail: AgentWords.detail(request, graph: graph),
+                detail: AgentWords.detail(request, graph: graph, loc: loc),
                 loc: loc,
                 onAnswer: { approved in answerAgent(request.id, approved: approved) }
             )
@@ -826,6 +826,9 @@ struct RootView: View {
                     try? await Task.sleep(nanoseconds: poll * 1_000_000)
                 }
             }
+            // In front already when this root appears: the scene's first
+            // phase is not a change.
+            .onAppear { if scenePhase == .active { agent.sceneActive(true) } }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await refreshSigningPages() } }
                 // The agent answers only while the wallet is in front: in the

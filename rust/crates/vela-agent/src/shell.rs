@@ -262,7 +262,14 @@ impl Agent {
     /// switched off — their own setting, through the same intent Settings
     /// uses (the shell saves it, and configures this again).
     pub fn stop(&self) {
-        self.inner.state().book.stop();
+        {
+            let mut state = self.inner.state();
+            // At once: what the agent asks from here on is refused as off,
+            // and a draft under way is given up, before the shell has saved
+            // the setting and hung up.
+            state.enabled = false;
+            state.book.stop();
+        }
         self.inner.shell.changed();
         self.invoke_person(
             Action::ConfigureAgent {
@@ -478,6 +485,12 @@ impl SendDesk for Desk {
 
     fn ledger<R>(&mut self, change: impl FnOnce(&mut Transfers) -> R) -> R {
         change(&mut self.inner.state().transfers)
+    }
+
+    fn halted(&mut self) -> bool {
+        // Stopped, switched off, or the app in the background (the shell
+        // configures it off there).
+        !self.inner.state().enabled
     }
 }
 
@@ -805,9 +818,10 @@ mod tests {
         let (rx, _task) = call(&agent, "vela_delete_group", json!({ "id": "g1" }));
         until("asked", || approvals(&agent).len() == 1);
         agent.stop();
+        assert!(!agent.enabled(), "off at once, before the shell has saved it");
         let ended = outcome(rx.recv_timeout(WAIT).unwrap());
         assert_eq!(ended["reason"]["code"], "stopped");
-        until("switched off", || !agent.enabled());
+        until("saved", || !fake.performed().is_empty());
         let performed = fake.performed();
         assert_eq!(performed.len(), 1, "the group is kept: {performed:?}");
         assert_eq!(performed[0]["type"], "configure_agent");

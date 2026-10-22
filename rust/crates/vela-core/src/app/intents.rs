@@ -757,6 +757,11 @@ impl Action {
         {
             return Risk::Manage;
         }
+        // Showing hidden balances undoes the person's own privacy, there for
+        // whoever watches the screen — or reads it for an agent.
+        if let Self::SetBalancePrivacy { hidden: false } = self {
+            return Risk::Manage;
+        }
         catalog_entry(self.kind()).map_or(Risk::Manage, |entry| entry.risk)
     }
 

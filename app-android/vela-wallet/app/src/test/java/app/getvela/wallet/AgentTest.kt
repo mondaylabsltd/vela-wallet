@@ -74,6 +74,7 @@ class AgentTest {
         agent.forgetToken()
         assertNull(vault.read())
         assertEquals("", agent.config.value.token)
+        assertEquals("and switched off, as the sweep left it", AgentConfig(), agent.config.value)
     }
 
     @Test

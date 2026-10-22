@@ -1008,6 +1008,12 @@ export function inFlightOps(track_view_json: string): string;
 export function intentAgentState(world_json: string, page: string, approvals_json: string, activity_json: string): string;
 
 /**
+ * What an agent's request changes, for its approval: the network, URL or
+ * record the action's name does not say (a JSON string, or `null`).
+ */
+export function intentApprovalDetail(action_json: string): string;
+
+/**
  * What was true when the call began.
  */
 export function intentBaseline(action_json: string, world_json: string): string;
@@ -1849,6 +1855,7 @@ export interface InitOutput {
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
     readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly intentApprovalDetail: (a: number, b: number) => [number, number];
     readonly intentBaseline: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentCatalog: () => [number, number];
     readonly intentCheck: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];

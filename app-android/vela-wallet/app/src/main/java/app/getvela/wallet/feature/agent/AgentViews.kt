@@ -24,7 +24,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,8 +59,11 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.SettingsTone
 import app.getvela.wallet.feature.settings.components.VelaSwitchRow
 import app.getvela.wallet.feature.settings.components.VelaUrlField
+import kotlinx.coroutines.delay
 import org.json.JSONObject
+import org.json.JSONTokener
 import uniffi.vela_core_uniffi.AgentLink
+import uniffi.vela_core_uniffi.intentApprovalDetail
 
 /** The agent's words, as the person reads them — the core catalog's `settings.agent.*`. */
 object AgentWords {
@@ -81,8 +86,12 @@ object AgentWords {
         },
     )
 
-    /** What a request names, as the person knows it: a contact's or a wallet's name, the store, the preference. */
-    fun detail(request: AgentRequest, wallet: AgentWallet): String? {
+    /**
+     * What a request names, as the person knows it: a contact's or a wallet's
+     * name, the store, the preference — and, the core's, the network, URL or
+     * record it changes (`intentApprovalDetail`).
+     */
+    fun detail(request: AgentRequest, wallet: AgentWallet, strings: VelaStrings): String? {
         val action = request.action
         return when (request.kind) {
             "delete_contact" -> {
@@ -101,7 +110,8 @@ object AgentWords {
             }
             "clear_storage_item" -> action.optString("item")
             "set_preference" -> action.optJSONObject("preference")?.let { "${it.optString("kind")}: ${it.opt("value")}" }
-            else -> null
+            "set_balance_privacy" -> strings.t(if (action.optBoolean("hidden")) "home.a11yHideBalance" else "home.a11yShowBalance")
+            else -> runCatching { JSONTokener(intentApprovalDetail(action.toString())).nextValue() as? String }.getOrNull()
         }
     }
 }
@@ -211,9 +221,16 @@ fun AgentCapsule(agent: AgentStore, modifier: Modifier = Modifier) {
     }
 }
 
+/** How long a request is on screen before Allow takes a tap. */
+private const val ARM_MS = 700L
+
 /**
  * The agent's manage-level request, asked here in the wallet — not in the
  * agent's chat. Dismissing it is a no.
+ *
+ * One dialog per request (`key`): the next request is a new dialog, never the
+ * same one with its words changed under a finger on Allow — and its Allow
+ * takes a tap only once it has been on screen a moment (`ARM_MS`).
  */
 @Composable
 fun AgentApprovalDialog(agent: AgentStore) {
@@ -221,20 +238,40 @@ fun AgentApprovalDialog(agent: AgentStore) {
     val approvals by agent.approvals.collectAsStateWithLifecycle()
     var answered by remember { mutableStateOf<ULong?>(null) }
     val request = approvals.firstOrNull()?.takeIf { it.id != answered } ?: return
-    val answer = { approved: Boolean ->
-        answered = request.id
-        agent.answer(request.id, approved)
+    key(request.id) {
+        var armed by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            delay(ARM_MS)
+            armed = true
+        }
+        val answer = { approved: Boolean ->
+            answered = request.id
+            agent.answer(request.id, approved)
+        }
+        val name = AgentWords.action(request.kind, strings)
+        val what = AgentWords.detail(request, agent.wallet, strings)
+        val hint = strings.t("settings.agent.approveHint")
+        AgentApprovalAlert(
+            strings = strings,
+            text = if (what != null) "$name — $what. $hint" else "$name. $hint",
+            armed = armed,
+            answer = answer,
+        )
     }
-    val name = AgentWords.action(request.kind, strings)
-    val what = AgentWords.detail(request, agent.wallet)
-    val hint = strings.t("settings.agent.approveHint")
+}
+
+@Composable
+private fun AgentApprovalAlert(strings: VelaStrings, text: String, armed: Boolean, answer: (Boolean) -> Unit) {
     AlertDialog(
         onDismissRequest = { answer(false) },
         title = { Text(strings.t("settings.agent.approveTitle")) },
-        text = { Text(if (what != null) "$name — $what. $hint" else "$name. $hint") },
+        text = { Text(text) },
         confirmButton = {
-            TextButton(onClick = { answer(true) }, modifier = Modifier.testTag("agent-allow")) {
-                Text(strings.t("settings.agent.allow"), color = VelaTheme.colors.errorBase)
+            TextButton(onClick = { answer(true) }, enabled = armed, modifier = Modifier.testTag("agent-allow")) {
+                Text(
+                    strings.t("settings.agent.allow"),
+                    color = if (armed) VelaTheme.colors.errorBase else VelaTheme.colors.fgMuted,
+                )
             }
         },
         dismissButton = {

@@ -217,6 +217,31 @@ fn read_all() -> Result<Map<String, Value>> {
     }
 }
 
+/// Write a file only this user may read. The document holds credentials —
+/// the AI agent's client token, the RPC providers' keys — and a Linux
+/// `~/.config` is often readable by every account on the machine; macOS and
+/// Windows keep the folder itself private, and this costs them nothing.
+fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write as _;
+        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        // A temporary left by an older build keeps its mode through `open`.
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        file.write_all(body)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, body)
+    }
+}
+
 fn write_all(map: Map<String, Value>) -> Result<()> {
     let path = path()?;
     if let Some(parent) = path.parent() {
@@ -230,7 +255,7 @@ fn write_all(map: Map<String, Value>) -> Result<()> {
     // direct write leaves a truncated account list, and an account list that
     // parses as EMPTY is indistinguishable from being signed out.
     let temporary = path.with_extension("json.tmp");
-    let written = fs::write(&temporary, body)
+    let written = write_private(&temporary, body.as_bytes())
         .map_err(|error| StorageError(format!("{}: {error}", temporary.display())))
         .and_then(|()| {
             fs::rename(&temporary, &path)
@@ -975,6 +1000,24 @@ pub(crate) mod tests {
         let out = body();
         let _ = fs::remove_dir_all(&dir);
         out
+    }
+
+    /// The document holds the agent's token and the providers' keys: only
+    /// this user may read it, an older build's readable copy included.
+    #[cfg(unix)]
+    #[test]
+    fn the_document_is_readable_only_by_this_user() {
+        use std::os::unix::fs::PermissionsExt as _;
+        with_temp_state("private", || {
+            let Ok(path) = path() else {
+                unreachable!("path");
+            };
+            let _ = fs::write(&path, "{}");
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o644));
+            assert!(write_value("vela.agent", json!({ "token": "t0k" })).is_ok());
+            let mode = fs::metadata(&path).map(|m| m.permissions().mode() & 0o777);
+            assert_eq!(mode.ok(), Some(0o600));
+        });
     }
 
     /// Put one un-confirmed public key in the outbox. Written as JSON rather

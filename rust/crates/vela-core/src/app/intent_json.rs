@@ -50,6 +50,12 @@ pub fn shows(action_json: &str) -> String {
     to_json(&action_of(action_json).and_then(|action| intents::shows(&action)))
 }
 
+/// What an agent's request changes, for its approval (a string), or `null`.
+#[must_use]
+pub fn approval_detail(action_json: &str) -> String {
+    to_json(&action_of(action_json).and_then(|action| intent_rules::approval_detail(&action)))
+}
+
 /// Does what the action names exist, and is it already so?
 #[must_use]
 pub fn examine(action_json: &str, world_json: &str) -> String {

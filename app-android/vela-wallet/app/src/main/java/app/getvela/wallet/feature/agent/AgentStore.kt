@@ -84,9 +84,13 @@ class AgentStore(
     private val bridge = AgentShellBridge(this)
     private val core = AgentCore(bridge, "phone")
 
-    /** Whether the app is in front: the agent answers only then. */
+    /**
+     * Whether the app is in front: the agent answers only then. Not until an
+     * activity has started — a process started for something else (a
+     * broadcast, a job) dials nothing.
+     */
     @Volatile
-    private var active = true
+    private var active = false
 
     /** What the core was last configured with. */
     private var dialled: AgentConfig? = null
@@ -122,11 +126,14 @@ class AgentStore(
 
     /**
      * Erase This Device: the token goes too — its sealed bytes are swept with
-     * the `vela.*` values, and its key leaves the Keystore.
+     * the `vela.*` values, and its key leaves the Keystore. The settings went
+     * with the sweep, so the agent is off from here and hangs up: this app
+     * outlives the erase, and the connection was dialled with that token.
      */
     suspend fun forgetToken() {
         vault.delete()
-        _config.value = _config.value.copy(token = "")
+        _config.value = AgentConfig()
+        connect()
     }
 
     /** The app came to the front, or left it. */

@@ -252,6 +252,11 @@ pub fn stop(cx: &mut App) {
     if cx.has_global::<Requests>() {
         cx.update_global::<Requests, _>(|requests, _| requests.0.stop());
     }
+    // At once: what the agent asks from here on is refused as off, and a
+    // draft under way is given up, before the intent has saved the setting.
+    if cx.has_global::<Agent>() {
+        cx.update_global::<Agent, _>(|agent, _| agent.config.enabled = false);
+    }
     invoke_person(
         Action::ConfigureAgent {
             enabled: Some(false),

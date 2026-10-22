@@ -244,6 +244,23 @@ fn sharing_usage_statistics_is_manage_level() {
     assert_eq!(authorize(Actor::Agent, &theme, &ON), Decision::Allow);
 }
 
+/// Hiding the balances is the person's privacy: an agent may add to it, and
+/// asks before taking it away.
+#[test]
+fn showing_hidden_balances_is_the_persons_to_allow() {
+    let show = Action::SetBalancePrivacy { hidden: false };
+    assert_eq!(show.risk(), Risk::Manage);
+    assert_eq!(
+        authorize(Actor::Agent, &show, &ON),
+        Decision::Approve {
+            by: Approver::Wallet
+        }
+    );
+    let hide = Action::SetBalancePrivacy { hidden: true };
+    assert_eq!(authorize(Actor::Agent, &hide, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Person, &show, &ON), Decision::Allow);
+}
+
 // ---------------------------------------------------------------------------
 // What is well formed
 // ---------------------------------------------------------------------------

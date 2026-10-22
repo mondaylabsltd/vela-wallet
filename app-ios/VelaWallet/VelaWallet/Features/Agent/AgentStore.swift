@@ -128,8 +128,9 @@ final class AgentStore {
     /// The client token's place: the Keychain.
     @ObservationIgnored private let vault: AgentTokenVault
     @ObservationIgnored private var core: AgentCore!
-    /// Whether the app is in front: the agent answers only then.
-    @ObservationIgnored private var active = true
+    /// Whether the app is in front: the agent answers only then. Not until
+    /// the scene says so — a launch into the background dials nothing.
+    @ObservationIgnored private var active = false
     /// What the core was last configured with, so a scene change that changes
     /// nothing is not a reconnect.
     @ObservationIgnored private var dialled: AgentConfig?

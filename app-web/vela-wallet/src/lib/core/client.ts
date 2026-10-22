@@ -64,6 +64,7 @@ import init, {
 	PaymentRequestCore,
 	peggedNativeUsd,
 	intentAgentState,
+	intentApprovalDetail,
 	intentBaseline,
 	intentCatalog,
 	intentCheck,
@@ -186,6 +187,7 @@ export { intentCatalog, intentCheck };
 // transfer's progress, and what an agent reads. JSON in and out.
 export {
 	intentAgentState,
+	intentApprovalDetail,
 	intentBaseline,
 	intentExamine,
 	intentOperationProgress,

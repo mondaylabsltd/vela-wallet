@@ -48,7 +48,13 @@ vi.mock('$lib/onboarding/core/passkey', () => ({
 }));
 
 const { sendDesk } = await import('$lib/flows/send-desk.svelte');
-const { transfers } = await import('./transfers.svelte');
+const { transfers, REVIEW_SETTLE_MS } = await import('./transfers.svelte');
+
+/** The transfers' clock, moved on by hand: the person has looked the review over. */
+const clock = { now: 0 };
+const looked = () => {
+	clock.now += REVIEW_SETTLE_MS;
+};
 const { perform } = await import('./perform');
 const { Intents } = await import('./intents.svelte');
 
@@ -181,6 +187,7 @@ const submit = (operation: string): IntentAction => ({ type: 'submit_transfer', 
 beforeEach(() => {
 	sendDesk.port = null;
 	tracker.entries = [];
+	transfers.clock = { now: () => clock.now, halted: () => false };
 });
 
 describe('an agent sending in batches (spec 103)', () => {
@@ -203,6 +210,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		expect(presses(f), 'nothing pressed, no passkey prompt').toBe(0);
 
 		// The person reads the review and confirms it: then, and only then.
+		looked();
 		expect(await intents.invoke('person', submit(id))).toMatchObject({
 			status: 'accepted',
 			operation: { state: 'awaiting_passkey', reason: null }
@@ -217,6 +225,7 @@ describe('an agent sending in batches (spec 103)', () => {
 
 		const first = await intents.invoke('agent', batch(60));
 		const one = (first as { operation: { id: string } }).operation.id;
+		looked();
 		await intents.invoke('person', submit(one));
 		f.signed('0xOP1');
 		expect(transfers.get(one)?.state).toBe('submitted');
@@ -231,6 +240,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		tracker.entries = [{ user_op_hash: '0xop1', status: 'confirmed', tx_hash: '0xTX1' }];
 		expect(transfers.get(one)).toMatchObject({ state: 'confirmed', tx_hash: '0xTX1' });
 
+		looked();
 		await intents.invoke('person', submit(two));
 		f.signed('0xOP2');
 		expect(transfers.get(two)?.state).toBe('submitted');
@@ -242,6 +252,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		const intents = wallet();
 		const drafted = await intents.invoke('agent', batch(3));
 		const id = (drafted as { operation: { id: string } }).operation.id;
+		looked();
 		await intents.invoke('person', submit(id));
 		f.dismissed();
 		expect(transfers.get(id)).toMatchObject({
@@ -259,6 +270,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		const intents = wallet();
 		const drafted = await intents.invoke('agent', batch(2));
 		const id = (drafted as { operation: { id: string } }).operation.id;
+		looked();
 		const [a, b] = await Promise.all([
 			intents.invoke('person', submit(id)),
 			intents.invoke('person', submit(id))

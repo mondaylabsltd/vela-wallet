@@ -37,7 +37,7 @@ enum AgentWords {
     /// What a request names, as the person knows it: a contact's or a
     /// wallet's name, the store, the preference.
     @MainActor
-    static func detail(_ request: AgentRequest, graph: AppGraph) -> String? {
+    static func detail(_ request: AgentRequest, graph: AppGraph, loc: Loc) -> String? {
         let action = request.action
         let same = { (a: String, b: String) in a.caseInsensitiveCompare(b) == .orderedSame }
         switch request.kind {
@@ -57,8 +57,12 @@ enum AgentWords {
         case "set_preference":
             let preference = action["preference"] as? [String: Any] ?? [:]
             return "\(preference["kind"] ?? ""): \(preference["value"] ?? "")"
+        case "set_balance_privacy":
+            return loc.t(action["hidden"] as? Bool == true ? "home.a11yHideBalance" : "home.a11yShowBalance")
         default:
-            return nil
+            // The core's: the network, URL or record it changes.
+            let detail = intentApprovalDetail(actionJson: request.actionJson)
+            return (try? JSONSerialization.jsonObject(with: Data(detail.utf8), options: .fragmentsAllowed)) as? String
         }
     }
 }
@@ -148,6 +152,11 @@ struct AgentApprovalSheet: View {
     let detail: String?
     let loc: Loc
     let onAnswer: (Bool) -> Void
+    /// Allow takes a tap only once the request has been on screen a moment:
+    /// the next request is a new sheet (`sheet(item:)`, by its id), and a
+    /// finger already on its way to Allow does not land on it.
+    @State private var armed = false
+    static let armMs = 700
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -158,7 +167,7 @@ struct AgentApprovalSheet: View {
                 .foregroundStyle(theme.fgBase)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, Tokens.Space.s24)
-            VelaButton(title: loc.t("settings.agent.allow"), kind: .danger) { onAnswer(true) }
+            VelaButton(title: loc.t("settings.agent.allow"), kind: .danger, enabled: armed) { onAnswer(true) }
                 .padding(.bottom, Tokens.Space.s12)
                 .accessibilityIdentifier("agent-allow")
             VelaButton(title: loc.t("settings.agent.deny"), kind: .secondary) { onAnswer(false) }
@@ -168,6 +177,11 @@ struct AgentApprovalSheet: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium])
         .presentationBackground(theme.bgRaised)
+        .task(id: request.id) {
+            armed = false
+            try? await Task.sleep(for: .milliseconds(Self.armMs))
+            armed = true
+        }
     }
 
     private var words: String {

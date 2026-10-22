@@ -258,6 +258,9 @@ fn action_key(kind: &str) -> String {
 /// The bridge field's placeholder: the shape of a client endpoint.
 const BRIDGE_PLACEHOLDER: &str = "wss://bridge.example.com/connect";
 
+/// How long an agent's request is up before its Allow counts (ms).
+const APPROVAL_ARM_MS: f64 = 700.;
+
 impl WalletPage {
     fn agent_text(&self, key: &str) -> SharedString {
         self.loc.t(key)
@@ -629,7 +632,16 @@ impl WalletPage {
                     )
                 })
             }
-            _ => None,
+            Action::SetBalancePrivacy { hidden } => Some(
+                self.agent_text(if *hidden {
+                    "home.a11yHideBalance"
+                } else {
+                    "home.a11yShowBalance"
+                })
+                .to_string(),
+            ),
+            // The core's: the network, URL or record it changes.
+            _ => vela_core::app::intent_rules::approval_detail(action),
         }
     }
 
@@ -661,10 +673,18 @@ impl WalletPage {
             danger: true,
         };
         let id = pending.id;
+        // Allow counts only once the request has been up a moment: the next
+        // request takes this dialog's place, and a click already on its way
+        // to Allow does not land on it.
+        let since = pending.since;
         let sheet = confirm_sheet(
             theme,
             copy,
-            cx.listener(move |_, _: &gpui::ClickEvent, _, cx| agent::answer(id, true, cx)),
+            cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                if vela_agent::transfers::wall_ms() - since >= APPROVAL_ARM_MS {
+                    agent::answer(id, true, cx);
+                }
+            }),
             cx.listener(move |_, _: &gpui::ClickEvent, _, cx| agent::answer(id, false, cx)),
         );
         Some(

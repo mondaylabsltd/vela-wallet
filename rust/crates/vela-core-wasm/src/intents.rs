@@ -28,6 +28,14 @@ pub fn intent_shows(action_json: &str) -> String {
     intent_json::shows(action_json)
 }
 
+/// What an agent's request changes, for its approval: the network, URL or
+/// record the action's name does not say (a JSON string, or `null`).
+#[wasm_bindgen(js_name = intentApprovalDetail)]
+#[must_use]
+pub fn intent_approval_detail(action_json: &str) -> String {
+    intent_json::approval_detail(action_json)
+}
+
 /// Does what the action names exist, and is it already so?
 #[wasm_bindgen(js_name = intentExamine)]
 #[must_use]

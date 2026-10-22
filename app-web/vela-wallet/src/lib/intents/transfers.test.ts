@@ -42,7 +42,14 @@ beforeAll(() => {
 });
 
 const { sendDesk } = await import('$lib/flows/send-desk.svelte');
-const { transfers } = await import('./transfers.svelte');
+const { transfers, REVIEW_SETTLE_MS } = await import('./transfers.svelte');
+
+/** The transfers' clock, moved on by hand, and the agent's switch. */
+const clock = { now: 0, halted: false };
+/** Long enough on the review for the person's confirm of an agent's draft. */
+const looked = () => {
+	clock.now += REVIEW_SETTLE_MS;
+};
 
 const BOB = '0x1111111111111111111111111111111111111111';
 
@@ -53,6 +60,8 @@ type Behaviour = {
 	alertOnContinue?: { type: string };
 	/** What the split form says of the recipients it was seeded with. */
 	splitIssues?: { ordinal: number; address: string; amount: string }[];
+	/** The agent is stopped as this event is sent. */
+	haltOn?: SendEvent['type'];
 };
 
 /** A send the way the core answers the form's events. */
@@ -85,6 +94,7 @@ function desk(behaviour: Behaviour = {}) {
 		},
 		dispatch: (event: SendEvent) => {
 			events.push(event);
+			if (event.type === behaviour.haltOn) clock.halted = true;
 			if (!view) return;
 			if (event.type === 'set_amount' || event.type === 'tap_max') {
 				const warning = behaviour.amountWarning ?? null;
@@ -128,6 +138,8 @@ const draft = (amount = '1.5') => ({ chain_id: 5042002, token: null, to: BOB, am
 beforeEach(() => {
 	sendDesk.port = null;
 	tracker.entries = [];
+	clock.halted = false;
+	transfers.clock = { now: () => clock.now, halted: () => clock.halted };
 });
 
 describe('a drafted transfer (spec 103)', () => {
@@ -194,6 +206,7 @@ describe('an operation, read from the machines that own it', () => {
 		const prepared = await transfers.prepare(draft());
 		const id = (prepared as { id: string }).id;
 
+		looked();
 		expect(transfers.submit(id)).toMatchObject({ state: 'awaiting_passkey' });
 		expect(d.events.at(-1)).toEqual({ type: 'slide_confirm' });
 
@@ -213,6 +226,7 @@ describe('an operation, read from the machines that own it', () => {
 	it('is awaiting the passkey while the core is “submitting” before it signs', async () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;
+		looked();
 		transfers.submit(id);
 		// The core builds the operation (`submitting`) before it asks for the passkey.
 		d.set({ tx_status: 'submitting' });
@@ -225,6 +239,7 @@ describe('an operation, read from the machines that own it', () => {
 	it('is back on the review when the passkey prompt is dismissed', async () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;
+		looked();
 		transfers.submit(id);
 		d.set({ tx_status: 'idle' });
 		expect(transfers.get(id)?.state).toBe('awaiting_confirmation');
@@ -244,6 +259,35 @@ describe('an operation, read from the machines that own it', () => {
 		d.detach();
 	});
 
+	it('does not take a tap meant for the review it replaced as the confirm of the agent’s new one', async () => {
+		// An agent may cancel a review and draft another without asking.
+		const d = desk();
+		const first = (await transfers.prepare(draft())) as { id: string };
+		looked();
+		expect(transfers.cancel(first.id)).toBeNull();
+		const swapped = (await transfers.prepare(draft('9'))) as { id: string };
+		expect(transfers.submit(swapped.id)).toMatchObject({ code: 'not_ready' });
+		expect(d.events.some((event) => event.type === 'slide_confirm')).toBe(false);
+		looked();
+		expect(transfers.submit(swapped.id)).toMatchObject({ state: 'awaiting_passkey' });
+		d.detach();
+	});
+
+	it('gives up a draft the agent is stopped during, leaving nothing open', async () => {
+		for (const haltOn of ['set_amount', 'continue'] as const) {
+			clock.halted = false;
+			const d = desk({ haltOn });
+			expect(await transfers.prepare(draft()), haltOn).toMatchObject({ code: 'stopped' });
+			expect(d.port.view(), haltOn).toBeNull();
+			d.detach();
+		}
+		const d = desk();
+		clock.halted = true;
+		expect(await transfers.prepare(draft())).toMatchObject({ code: 'stopped' });
+		expect(d.opened).toEqual([]);
+		d.detach();
+	});
+
 	it('takes in a send the person filled in themselves, at its review', () => {
 		const d = desk();
 		d.port.open({});
@@ -252,6 +296,8 @@ describe('an operation, read from the machines that own it', () => {
 		const adopted = transfers.current();
 		expect(adopted).toMatchObject({ state: 'awaiting_confirmation' });
 		expect(transfers.current()?.id, 'once, not again').toBe(adopted?.id);
+		// Theirs: confirmed at once.
+		expect(transfers.submit(adopted!.id)).toMatchObject({ state: 'awaiting_passkey' });
 		d.detach();
 	});
 });
@@ -301,6 +347,7 @@ describe('one transfer after another (spec 103)', () => {
 	it('a sent transfer’s receipt gives way to the next draft, by its own Done', async () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
+		looked();
 		transfers.submit(first.id);
 		ceremony.listener?.('signed');
 		d.set({ stage: 'receipt', user_op_hash: '0xOP1', receipt: { status: 'confirmed' } } as never);
@@ -322,6 +369,7 @@ describe('one transfer after another (spec 103)', () => {
 	it('a receipt still waiting on the chain is followed there once it closes', async () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
+		looked();
 		transfers.submit(first.id);
 		d.set({ stage: 'receipt', user_op_hash: '0xOP2', receipt: { status: 'submitted' } } as never);
 		await transfers.prepare(draft('2'));
@@ -340,12 +388,16 @@ describe('one transfer after another (spec 103)', () => {
 		d.detach();
 	});
 
-	it('a review that failed before sending can be left, and the next one drafted', async () => {
+	it('a review that stopped before sending is not over: it can be retried, or left', async () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
+		looked();
 		transfers.submit(first.id);
 		d.set({ tx_status: 'error', tx_error: 'estimate_failed' } as never);
-		expect(transfers.get(first.id)?.state).toBe('failed');
+		// The review offers to try again: said "failed", an agent would draft
+		// it again while the person's retry goes through.
+		expect(transfers.get(first.id)?.state).toBe('awaiting_confirmation');
+		expect(transfers.get(first.id)?.reason).toContain('estimate_failed');
 		expect(transfers.cancel(first.id)).toBeNull();
 		expect(transfers.get(first.id)?.state).toBe('cancelled');
 		expect(await transfers.prepare(draft('2'))).toMatchObject({

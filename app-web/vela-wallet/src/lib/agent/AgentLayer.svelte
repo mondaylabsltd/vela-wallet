@@ -12,6 +12,7 @@
 	 *   uses); turning it back on is in Settings.
 	 */
 	import type { IntentAction } from '$lib/core/generated/IntentAction';
+	import { intentApprovalDetail } from '$lib/core/client';
 	import { intents } from '$lib/intents/index.svelte';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -29,7 +30,10 @@
 	const name = (type: string) => messages.actions[type] ?? type;
 	const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-	/** What the request names, as the person knows it: a contact's or wallet's name. */
+	/**
+	 * What the request names, as the person knows it: a contact's or wallet's
+	 * name — and, the core's, the network, URL or record it changes.
+	 */
 	function detail(action: IntentAction): string | null {
 		switch (action.type) {
 			case 'delete_contact': {
@@ -46,12 +50,30 @@
 				return action.item;
 			case 'set_preference':
 				return `${action.preference.kind}: ${String(action.preference.value)}`;
+			case 'set_balance_privacy':
+				return action.hidden ? messages.hideBalance : messages.showBalance;
 			default:
-				return null;
+				return JSON.parse(intentApprovalDetail(JSON.stringify(action))) as string | null;
 		}
 	}
 
 	const pending = $derived(intents.approvals[0]);
+
+	/** How long a request is up before its Allow takes a tap. */
+	const ARM_MS = 700;
+	/**
+	 * Each request is a prompt of its own (`#key`), and its Allow is armed only
+	 * once it has been up a moment: a tap already on its way to Allow does not
+	 * land on the next request.
+	 */
+	let armed = $state(false);
+	$effect(() => {
+		const id = pending?.id;
+		armed = false;
+		if (id === undefined) return;
+		const timer = setTimeout(() => (armed = true), ARM_MS);
+		return () => clearTimeout(timer);
+	});
 	const latest = $derived(intents.activity[0]);
 
 	function stop(): void {
@@ -88,6 +110,7 @@
 				confirm: { confirmLabel: messages.allow, cancelLabel: messages.deny }
 			}}
 			dismissLabel={messages.deny}
+			confirmDisabled={!armed}
 			onAnswer={(approved) => intents.answer(pending.id, approved)}
 		/>
 	{/key}

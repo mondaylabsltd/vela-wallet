@@ -11,6 +11,9 @@ export interface AgentMessages {
 	allow: string;
 	deny: string;
 	stop: string;
+	/** `set_balance_privacy`'s two ends, as the home's eye says them. */
+	showBalance: string;
+	hideBalance: string;
 	/** What each action an agent may ask for is called, by its `type`. */
 	actions: Record<string, string>;
 }

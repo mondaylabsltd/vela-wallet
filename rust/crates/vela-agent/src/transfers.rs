@@ -32,7 +32,16 @@ struct Tracked {
     closed: Option<String>,
     /// Who put it on the review.
     drafted_by: Actor,
+    /// When its review came on screen (epoch ms).
+    reviewed_at: f64,
 }
+
+/// How long a review an agent drafted is on screen before the person's
+/// confirm counts. An agent can cancel a review and draft another without
+/// asking (`cancel_transfer` is operate-level); without this, a tap meant for
+/// the review the person was reading could land on its replacement — and
+/// the passkey prompt after it shows no transaction.
+pub const REVIEW_SETTLE_MS: f64 = 1_500.;
 
 /// Every operation drafted or confirmed this run, newest first, and the
 /// passkey's last ceremony.
@@ -66,12 +75,15 @@ impl Transfers {
             .find(|tracked| tracked.operation.id == id)
     }
 
-    /// The operation drafted on `session`, made if there is none.
-    fn adopt(&mut self, session: u64, chain_id: Option<u32>) -> usize {
+    /// The operation on `session`'s review, made if there is none (its review
+    /// on screen since `now`). One that has ended — left without sending, say
+    /// — is not this review's: the person went back, and what they review now
+    /// is another transfer.
+    fn adopt(&mut self, session: u64, chain_id: Option<u32>, now: f64) -> usize {
         if let Some(index) = self
             .operations
             .iter()
-            .position(|tracked| tracked.session == session)
+            .position(|tracked| tracked.session == session && !tracked.operation.state.is_final())
         {
             return index;
         }
@@ -91,6 +103,7 @@ impl Transfers {
                 confirmed_after: None,
                 closed: None,
                 drafted_by: Actor::Person,
+                reviewed_at: now,
             },
         );
         0
@@ -124,12 +137,12 @@ impl Transfers {
     /// The operation of the send open as `session` with `view`, when it is on
     /// its review — adopted if it has none yet: a person who filled the form
     /// themselves confirms through the same intent.
-    pub fn on_review(&mut self, session: u64, view: &SendView) -> Option<Operation> {
+    pub fn on_review(&mut self, session: u64, view: &SendView, now: f64) -> Option<Operation> {
         if view.stage != SendStage::Confirm {
             return None;
         }
         let chain_id = view.selected_token.as_ref().map(|token| token.chain_id);
-        let index = self.adopt(session, chain_id);
+        let index = self.adopt(session, chain_id, now);
         Some(self.operations[index].operation.clone())
     }
 
@@ -177,6 +190,23 @@ pub trait SendDesk {
     async fn sleep(&mut self, ms: u64);
     /// The transfers' own ledger, kept by the shell.
     fn ledger<R>(&mut self, change: impl FnOnce(&mut Transfers) -> R) -> R;
+    /// Now, in epoch ms.
+    fn now_ms(&mut self) -> f64 {
+        wall_ms()
+    }
+    /// Whether the agent was stopped, switched off or sent to the background
+    /// since its draft began: what it was drafting is given up.
+    fn halted(&mut self) -> bool {
+        false
+    }
+}
+
+/// The wall clock, in epoch ms.
+#[must_use]
+pub fn wall_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0., |since| since.as_secs_f64() * 1000.)
 }
 
 /// Bring the ledger up to date with what the machines say now.
@@ -201,7 +231,8 @@ pub fn get(id: &str, desk: &mut impl SendDesk) -> Option<Operation> {
 /// filled the form themselves confirms through the same intent.
 pub fn current(desk: &mut impl SendDesk) -> Option<Operation> {
     let (session, view) = desk.open()?;
-    desk.ledger(|ledger| ledger.on_review(session, &view))
+    let now = desk.now_ms();
+    desk.ledger(|ledger| ledger.on_review(session, &view, now))
 }
 
 fn reason(code: ReasonCode, detail: impl Into<String>) -> Reason {
@@ -264,6 +295,18 @@ async fn until<D: SendDesk, T>(
         desk.sleep(POLL_MS).await;
         waited += POLL_MS;
     }
+}
+
+/// An agent's draft given up because the agent was stopped (`halted`).
+fn stopped(by: Actor, desk: &mut impl SendDesk) -> bool {
+    by == Actor::Agent && desk.halted()
+}
+
+fn halted_refusal() -> Performed {
+    refused(
+        ReasonCode::Stopped,
+        "the agent was stopped or switched off while drafting: nothing was left on the review",
+    )
 }
 
 fn view_of(desk: &mut impl SendDesk, session: u64) -> Option<SendView> {
@@ -360,6 +403,9 @@ async fn draft<D: SendDesk>(
     desk: &mut D,
     fill: impl FnOnce(&mut D) -> Settled,
 ) -> Performed {
+    if stopped(by, desk) {
+        return halted_refusal();
+    }
     // What is open now: a receipt gives way to the next draft (its own Done),
     // anything else is the person's.
     let mut closed = None;
@@ -418,10 +464,16 @@ async fn draft<D: SendDesk>(
         prefilled_recipient: recipient.map(|to| to.trim().to_owned()),
         ..SendOpenParams::default()
     };
+    if stopped(by, desk) {
+        return halted_refusal();
+    }
     let Some(session) = desk.start(params) else {
         return refused(ReasonCode::NotReady, "the send did not open");
     };
     let entered = until(desk, OPEN_MS, |desk| {
+        if stopped(by, desk) {
+            return Some(false);
+        }
         let view = view_of(desk, session)?;
         if view.loading {
             return None;
@@ -431,23 +483,41 @@ async fn draft<D: SendDesk>(
     .await;
     if entered != Some(true) {
         desk.close();
+        if stopped(by, desk) {
+            return halted_refusal();
+        }
         return refused(ReasonCode::NotFound, "the send did not offer that token");
     }
 
     let settled = fill(desk);
-    let ready = until(desk, AMOUNT_MS, |desk| match view_of(desk, session) {
-        Some(view) => settled(&view),
-        None => Some("the send was closed".to_owned()),
+    let ready = until(desk, AMOUNT_MS, |desk| {
+        if stopped(by, desk) {
+            return Some("stopped".to_owned());
+        }
+        match view_of(desk, session) {
+            Some(view) => settled(&view),
+            None => Some("the send was closed".to_owned()),
+        }
     })
     .await;
     if ready.as_deref() != Some("ok") {
         desk.close();
+        if stopped(by, desk) {
+            return halted_refusal();
+        }
         let why = ready.unwrap_or_else(|| "the form could not be checked in time".to_owned());
         return refused(ReasonCode::Refused, why);
     }
 
+    if stopped(by, desk) {
+        desk.close();
+        return halted_refusal();
+    }
     desk.dispatch(SendEvent::Continue);
     let reviewed = until(desk, REVIEW_MS, |desk| {
+        if stopped(by, desk) {
+            return Some("stopped".to_owned());
+        }
         if let Some(alert) = desk.alert() {
             return Some(format!("alert: {alert}"));
         }
@@ -459,11 +529,15 @@ async fn draft<D: SendDesk>(
     .await;
     if reviewed.as_deref() != Some("ok") {
         desk.close();
+        if stopped(by, desk) {
+            return halted_refusal();
+        }
         let why = reviewed.unwrap_or_else(|| "the review did not open in time".to_owned());
         return refused(ReasonCode::Refused, why);
     }
+    let now = desk.now_ms();
     desk.ledger(|ledger| {
-        let index = ledger.adopt(session, Some(token.chain_id));
+        let index = ledger.adopt(session, Some(token.chain_id), now);
         let tracked = &mut ledger.operations[index];
         tracked.closed = closed;
         tracked.drafted_by = by;
@@ -533,6 +607,17 @@ pub fn submit(id: &str, by: Actor, desk: &mut impl SendDesk) -> Performed {
     }
     if !view.can_confirm {
         return refused(ReasonCode::Refused, "the review cannot be confirmed yet");
+    }
+    let now = desk.now_ms();
+    let unsettled = desk.ledger(|ledger| {
+        let tracked = &ledger.operations[index];
+        tracked.drafted_by == Actor::Agent && now - tracked.reviewed_at < REVIEW_SETTLE_MS
+    });
+    if unsettled {
+        return refused(
+            ReasonCode::NotReady,
+            "the agent's review has only just opened: look it over, then confirm again",
+        );
     }
     desk.ledger(|ledger| {
         let ceremonies = ledger.ceremonies;
@@ -618,6 +703,11 @@ mod tests {
         ledger: Transfers,
         /// The form refuses the amount with this warning.
         warning: Option<SendAmountWarning>,
+        /// The clock, moved on by each sleep.
+        clock: f64,
+        /// The agent is stopped as this event is sent.
+        halt_on: Option<&'static str>,
+        halted: bool,
     }
 
     impl Fake {
@@ -646,6 +736,9 @@ mod tests {
         }
         fn dispatch(&mut self, event: SendEvent) {
             self.sent.push(named(&event));
+            if self.halt_on == Some(named(&event).as_str()) {
+                self.halted = true;
+            }
             match event {
                 SendEvent::SetAmount { .. } | SendEvent::TapMax => match self.warning.clone() {
                     Some(warning) => self.view().amount_warning = Some(warning),
@@ -684,9 +777,17 @@ mod tests {
         fn network_id(&mut self, chain_id: u32) -> String {
             format!("chain-{chain_id}")
         }
-        async fn sleep(&mut self, _: u64) {}
+        async fn sleep(&mut self, ms: u64) {
+            self.clock += ms as f64;
+        }
         fn ledger<R>(&mut self, change: impl FnOnce(&mut Transfers) -> R) -> R {
             change(&mut self.ledger)
+        }
+        fn now_ms(&mut self) -> f64 {
+            self.clock
+        }
+        fn halted(&mut self) -> bool {
+            self.halted
         }
     }
 
@@ -760,6 +861,7 @@ mod tests {
             Some("waiting for the person to confirm it on the review")
         );
 
+        desk.clock += REVIEW_SETTLE_MS;
         desk.ledger.ceremony("started");
         submit(&operation.id, Actor::Person, &mut desk);
         assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
@@ -795,6 +897,103 @@ mod tests {
         };
         assert_eq!(reason.code, ReasonCode::NotFound);
         assert!(desk.sent.is_empty() && desk.open.is_none());
+    }
+
+    #[test]
+    fn the_persons_back_from_the_review_ends_it_and_a_second_review_is_another() {
+        let mut desk = Fake::default();
+        let Performed::Started { operation, .. } = prepared(&mut desk, Actor::Agent) else {
+            panic!("drafted");
+        };
+        // The person goes back to the form: the same send, no longer on review.
+        desk.view().stage = SendStage::EnterDetails;
+        let left = get(&operation.id, &mut desk).unwrap();
+        assert_eq!(left.state, OperationState::Cancelled);
+        assert_eq!(
+            left.reason.as_deref(),
+            Some("left the review without sending")
+        );
+        // …edits, and continues to a review again: not the agent's transfer.
+        desk.view().stage = SendStage::Confirm;
+        let again = current(&mut desk).unwrap();
+        assert_ne!(again.id, operation.id);
+        assert_eq!(again.state, OperationState::AwaitingConfirmation);
+        assert_eq!(desk.ledger.drafted_by(&again.id), Some(Actor::Person));
+        assert_eq!(
+            get(&operation.id, &mut desk).unwrap().state,
+            OperationState::Cancelled
+        );
+    }
+
+    /// An agent may cancel a review and draft another without asking: a tap
+    /// meant for the one the person was reading does not confirm its
+    /// replacement.
+    #[test]
+    fn a_review_the_agent_has_just_put_up_is_not_confirmed_at_once() {
+        let mut desk = Fake::default();
+        let Performed::Started {
+            operation: first, ..
+        } = prepared(&mut desk, Actor::Agent)
+        else {
+            panic!("drafted");
+        };
+        desk.clock += REVIEW_SETTLE_MS;
+        assert!(matches!(cancel(&first.id, &mut desk), Performed::Done));
+        let Performed::Started {
+            operation: swapped, ..
+        } = prepared(&mut desk, Actor::Agent)
+        else {
+            panic!("drafted again");
+        };
+        desk.view().can_confirm = true;
+        let Performed::Refused(reason) = submit(&swapped.id, Actor::Person, &mut desk) else {
+            panic!("too soon");
+        };
+        assert_eq!(reason.code, ReasonCode::NotReady);
+        assert!(!desk.sent.contains(&"slide_confirm".to_owned()));
+        desk.clock += REVIEW_SETTLE_MS;
+        submit(&swapped.id, Actor::Person, &mut desk);
+        assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
+    }
+
+    #[test]
+    fn a_review_the_person_filled_in_is_theirs_to_confirm_at_once() {
+        let mut desk = Fake::default();
+        desk.start(SendOpenParams {
+            preselected_symbol: Some("USDC".into()),
+            preselected_network: Some("chain-5042002".into()),
+            ..SendOpenParams::default()
+        });
+        desk.view().stage = SendStage::Confirm;
+        desk.view().can_confirm = true;
+        let mine = current(&mut desk).unwrap();
+        submit(&mine.id, Actor::Person, &mut desk);
+        assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
+    }
+
+    #[test]
+    fn a_draft_the_agent_is_stopped_during_is_given_up() {
+        for event in ["set_amount", "continue"] {
+            let mut desk = Fake {
+                halt_on: Some(event),
+                ..Fake::default()
+            };
+            let Performed::Refused(reason) = prepared(&mut desk, Actor::Agent) else {
+                panic!("given up at {event}");
+            };
+            assert_eq!(reason.code, ReasonCode::Stopped, "{event}");
+            assert!(desk.open.is_none(), "{event}: nothing is left open");
+            assert!(desk.ledger.list().is_empty(), "{event}");
+        }
+        let mut desk = Fake {
+            halted: true,
+            ..Fake::default()
+        };
+        let Performed::Refused(reason) = prepared(&mut desk, Actor::Agent) else {
+            panic!("not begun");
+        };
+        assert_eq!(reason.code, ReasonCode::Stopped);
+        assert!(desk.sent.is_empty() && desk.sessions == 0);
     }
 
     #[test]

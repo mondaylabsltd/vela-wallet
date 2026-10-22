@@ -5,8 +5,9 @@
 
 use serde_json::{json, Value};
 use vela_core::app::intent_rules::{
-    agent_state, baseline, examine, operation_progress, review, verdict, world_needs, Ceremony,
-    Examined, Progress, ReviewInput, SendFacts, TrackFacts, Verdict, World, REVIEW_NOTE,
+    agent_state, approval_detail, baseline, examine, operation_progress, redact_url, review,
+    verdict, world_needs, Ceremony, Examined, Progress, ReviewInput, SendFacts, TrackFacts,
+    Verdict, World, REVIEW_NOTE,
 };
 use vela_core::app::intents::{Action, OperationState, ReasonCode};
 
@@ -183,6 +184,26 @@ fn world_needs_names_only_what_a_judgement_reads() {
         world_needs(&action(json!({ "type": "clear_caches" }))),
         [] as [&str; 0]
     );
+    assert_eq!(
+        world_needs(&action(
+            json!({ "type": "prepare_transfer", "chain_id": 56, "to": ALICE, "amount": "max" })
+        )),
+        ["session", "balance"]
+    );
+}
+
+#[test]
+fn max_is_refused_while_the_balances_are_hidden() {
+    let max =
+        action(json!({ "type": "prepare_transfer", "chain_id": 56, "to": ALICE, "amount": "max" }));
+    let some =
+        action(json!({ "type": "prepare_transfer", "chain_id": 56, "to": ALICE, "amount": "0.1" }));
+    let session = json!({ "loaded": true, "has_wallet": true, "address": ALICE, "accounts": [] });
+    let hidden = world(json!({ "session": session, "balance": { "hidden": true } }));
+    let shown = world(json!({ "session": session, "balance": { "hidden": false } }));
+    assert_eq!(code(&examine(&max, &hidden)), Some(ReasonCode::Refused));
+    assert_eq!(examine(&some, &hidden), Examined::Go);
+    assert_eq!(examine(&max, &shown), Examined::Go);
 }
 
 // --- Where a transfer stands ------------------------------------------------
@@ -245,6 +266,48 @@ fn a_dismissed_passkey_is_back_on_the_review_with_why() {
 }
 
 #[test]
+fn leaving_the_review_without_sending_cancels_it() {
+    // The person's back from the review: the form, the same send still open.
+    let form = send(json!({ "stage": "enter_details", "tx_status": "idle" }));
+    let p = operation_progress(
+        progress("awaiting_confirmation", None, None),
+        Some(&form),
+        None,
+        &[],
+    );
+    assert_eq!(p.operation.state, OperationState::Cancelled);
+    assert_eq!(
+        p.operation.reason.as_deref(),
+        Some("left the review without sending")
+    );
+}
+
+#[test]
+fn a_send_that_stopped_on_its_review_is_not_over() {
+    // A relay out of reach: the review offers to try again.
+    let stopped = send(json!({ "stage": "confirm", "tx_status": "error", "tx_error": "generic" }));
+    let p = operation_progress(
+        progress("awaiting_passkey", None, Some(1)),
+        Some(&stopped),
+        None,
+        &[],
+    );
+    assert_eq!(p.operation.state, OperationState::AwaitingConfirmation);
+    assert!(!p.operation.state.is_final());
+    assert!(p
+        .operation
+        .reason
+        .as_deref()
+        .is_some_and(|why| why.contains("generic")));
+    // …and the retry that goes through is followed as any other.
+    let again = send(
+        json!({ "stage": "receipt", "user_op_hash": "0xOP", "receipt": { "status": "confirmed" } }),
+    );
+    let done = operation_progress(p, Some(&again), None, &[]);
+    assert_eq!(done.operation.state, OperationState::Confirmed);
+}
+
+#[test]
 fn a_receipt_and_then_the_chain_say_how_it_ended() {
     let receipt = send(
         json!({ "stage": "receipt", "user_op_hash": "0xOP", "receipt": { "status": "submitted" } }),
@@ -304,6 +367,89 @@ fn the_agents_state_keeps_hidden_amounts_hidden_and_never_shows_a_key() {
     assert_eq!(
         state["networks"]["providers"][0],
         json!({ "provider": "alchemy", "has_key": true })
+    );
+}
+
+#[test]
+fn an_approval_says_which_network_url_or_record_and_hides_a_key() {
+    let detail = |value: Value| approval_detail(&action(value));
+    assert_eq!(
+        detail(json!({ "type": "set_network_endpoint", "chain_id": 56, "field": "rpc", "url": "https://rpc.example/v2/k" })).as_deref(),
+        Some("chain 56 · rpc → https://rpc.example/v2/k"),
+        "the person sees the URL whole: it is theirs"
+    );
+    assert_eq!(
+        detail(json!({ "type": "set_network_endpoint", "chain_id": 56, "field": "explorer", "url": "" })).as_deref(),
+        Some("chain 56 · explorer")
+    );
+    assert_eq!(
+        detail(json!({ "type": "set_service_endpoint", "field": "bundler_service", "url": "https://relay.example" })).as_deref(),
+        Some("bundler_service → https://relay.example")
+    );
+    assert_eq!(
+        detail(json!({ "type": "add_network", "chain_id": 10 })).as_deref(),
+        Some("chain 10")
+    );
+    assert_eq!(
+        detail(
+            json!({ "type": "set_provider_key", "provider": "alchemy", "key": "sk-secret-9f3a" })
+        )
+        .as_deref(),
+        Some("alchemy · ••••9f3a")
+    );
+    assert_eq!(
+        detail(json!({ "type": "set_provider_key", "provider": "ankr", "key": "abc" })).as_deref(),
+        Some("ankr · ••••")
+    );
+    assert_eq!(detail(json!({ "type": "clear_caches" })), None);
+}
+
+#[test]
+fn a_url_is_read_as_where_it_goes_not_what_it_carries() {
+    for (url, read) in [
+        (
+            "https://bnb-mainnet.g.alchemy.com/v2/sk-secret",
+            "https://bnb-mainnet.g.alchemy.com/…",
+        ),
+        (
+            "https://rpc.example/?apikey=sk-secret",
+            "https://rpc.example/…",
+        ),
+        (
+            "https://user:sk-secret@rpc.example:8545",
+            "https://rpc.example:8545",
+        ),
+        ("https://bscscan.com/", "https://bscscan.com"),
+        ("wss://rpc.example#sk-secret", "wss://rpc.example/…"),
+        ("sk-secret", "…"),
+        ("", ""),
+    ] {
+        assert_eq!(redact_url(url), read, "{url}");
+    }
+    let w = world(json!({ "networks": {
+        "networks": [{ "chain_id": 56, "rpc_url": "https://rpc.example/v2/sk-secret", "explorer_url": "https://bscscan.com" }],
+        "endpoints": [
+            { "field": "ethereum_data", "value": "https://data.example/?key=sk-secret", "default_value": "https://data.getvela.app" },
+            { "field": "fiat_rates", "value": "", "default_value": "https://rates.getvela.app/v1" }
+        ]
+    } }));
+    let state = agent_state(&w, "wallet", &json!([]), &json!([]));
+    assert!(!state.to_string().contains("sk-secret"), "{state}");
+    assert_eq!(
+        state["networks"]["chains"][0]["rpc_url"],
+        "https://rpc.example/…"
+    );
+    assert_eq!(
+        state["networks"]["chains"][0]["explorer_url"],
+        "https://bscscan.com"
+    );
+    assert_eq!(
+        state["networks"]["services"][0]["url"],
+        "https://data.example/…"
+    );
+    assert_eq!(
+        state["networks"]["services"][1]["url"], "https://rates.getvela.app/v1",
+        "the wallet's own default is read whole"
     );
 }
 

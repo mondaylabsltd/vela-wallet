@@ -973,6 +973,8 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 		allow: k('settings.agent.allow'),
 		deny: k('settings.agent.deny'),
 		stop: k('settings.agent.stop'),
+		showBalance: k('home.a11yShowBalance'),
+		hideBalance: k('home.a11yHideBalance'),
 		actions: {
 			show: action('show'),
 			switch_account: action('switchAccount'),

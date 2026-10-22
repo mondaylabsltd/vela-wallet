@@ -365,8 +365,14 @@ describe('the rest of what the person can do (spec 103)', () => {
 		const hide: IntentAction = { type: 'set_balance_privacy', hidden: true };
 		expect(code(await h.intents.invoke('agent', hide))).toBe('completed');
 		expect(h.performed).toEqual([]);
+		// Showing them undoes the person's privacy: theirs to allow.
 		const show: IntentAction = { type: 'set_balance_privacy', hidden: false };
-		expect(code(await h.intents.invoke('agent', show))).toBe('completed');
+		const asked = h.intents.invoke('agent', show);
+		await tick();
+		expect(h.intents.approvals[0]?.risk).toBe('manage');
+		expect(h.performed).toEqual([]);
+		h.intents.answer(h.intents.approvals[0].id, true);
+		expect(code(await asked)).toBe('completed');
 		expect(h.performed).toEqual([show]);
 	});
 

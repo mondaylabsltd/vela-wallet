@@ -570,6 +570,16 @@ pub fn examine(action: &Action, world: &World) -> Examined {
         | Action::ClearStorageItem { .. }
         | Action::ClearCaches
         | Action::ConfigureAgent { .. } => Examined::Go,
+        // "Max" on the review is the balance itself, which the person hid.
+        Action::PrepareTransfer { amount, .. }
+            if amount.trim().eq_ignore_ascii_case("max")
+                && world.balance.as_ref().is_some_and(|b| b.hidden) =>
+        {
+            refused(
+                ReasonCode::Refused,
+                "the person has hidden the balances, and \"max\" would show one on the review: name an amount",
+            )
+        }
         Action::PrepareTransfer { .. }
         | Action::PrepareBatchTransfer { .. }
         | Action::AddToken { .. }
@@ -821,10 +831,10 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         | Action::SetGroupMembers { .. }
         | Action::SetContactGroups { .. }
         | Action::SetContactFavorite { .. } => &["contacts"],
-        Action::PrepareTransfer { .. }
-        | Action::PrepareBatchTransfer { .. }
-        | Action::AddToken { .. }
-        | Action::RefreshBalances => &["session"],
+        Action::PrepareTransfer { .. } => &["session", "balance"],
+        Action::PrepareBatchTransfer { .. } | Action::AddToken { .. } | Action::RefreshBalances => {
+            &["session"]
+        }
         Action::SubmitTransfer { .. } | Action::CancelTransfer { .. } => &["operations"],
         Action::DeleteActivity { .. } => &["feed"],
         Action::SetBalancePrivacy { .. } => &["balance"],
@@ -935,12 +945,18 @@ fn from_send(progress: &mut Progress, view: &SendFacts, ceremony: Option<&Ceremo
             };
         }
         "confirmed" => op.state = OperationState::Submitting,
+        // Stopped on its review — a relay out of reach, a quote that failed:
+        // the review offers to try again (`RetryAfterError`), so nothing is
+        // over. Said "failed", an agent would draft it again while the
+        // person's retry goes through: two transfers.
         "error" => {
-            op.state = OperationState::Failed;
+            op.state = OperationState::AwaitingConfirmation;
             op.reason = Some(match &view.tx_error {
-                Some(Value::String(key)) => key.clone(),
-                Some(other) => other.to_string(),
-                None => "error".to_owned(),
+                Some(Value::String(key)) => {
+                    format!("the send stopped ({key}); the person may try again")
+                }
+                Some(other) => format!("the send stopped ({other}); the person may try again"),
+                None => "the send stopped; the person may try again".to_owned(),
             });
         }
         "idle" if view.stage == "confirm" => {
@@ -949,6 +965,12 @@ fn from_send(progress: &mut Progress, view: &SendFacts, ceremony: Option<&Ceremo
                 op.reason = Some("the person dismissed the passkey prompt".to_owned());
             }
             op.state = OperationState::AwaitingConfirmation;
+        }
+        // Off its review without sending — back to the form or the picker.
+        // This transfer was not sent; a review reached again is another one.
+        "idle" => {
+            op.state = OperationState::Cancelled;
+            op.reason = Some("left the review without sending".to_owned());
         }
         _ => {}
     }
@@ -1077,8 +1099,8 @@ struct ChainOut<'a> {
     name: &'a str,
     native_symbol: &'a str,
     added_by_person: bool,
-    rpc_url: &'a str,
-    explorer_url: &'a str,
+    rpc_url: String,
+    explorer_url: String,
 }
 
 #[derive(Serialize)]
@@ -1090,7 +1112,7 @@ struct ProviderOut<'a> {
 #[derive(Serialize)]
 struct ServiceOut<'a> {
     field: &'a NetEndpointField,
-    url: &'a str,
+    url: String,
     is_default: bool,
 }
 
@@ -1117,9 +1139,94 @@ struct AgentState<'a> {
     recent_agent_actions: &'a Value,
 }
 
+/// What an agent's request changes, for its approval — the part the action's
+/// name does not say: which network, which URL, which record. Where the
+/// wallet's data and signing go is what a person approving it must see
+/// whole; a key, only its last four. `None` where the name is enough, or a
+/// shell says it better from its own stores (a contact's name).
+#[must_use]
+pub fn approval_detail(action: &Action) -> Option<String> {
+    fn word(value: &impl Serialize) -> String {
+        match serde_json::to_value(value) {
+            Ok(Value::String(word)) => word,
+            _ => String::new(),
+        }
+    }
+    let to = |url: &str| {
+        let url = url.trim();
+        if url.is_empty() {
+            String::new()
+        } else {
+            format!(" → {url}")
+        }
+    };
+    match action {
+        Action::AddNetwork { chain_id, rpc_url } => Some(format!(
+            "chain {chain_id}{}",
+            rpc_url.as_deref().map(to).unwrap_or_default()
+        )),
+        Action::SetNetworkEndpoint {
+            chain_id,
+            field,
+            url,
+        } => Some(format!("chain {chain_id} · {}{}", word(field), to(url))),
+        Action::RemoveNetwork { chain_id } => Some(format!("chain {chain_id}")),
+        Action::SetProviderKey { provider, key } => {
+            let key = key.trim();
+            let tail: String = key
+                .chars()
+                .rev()
+                .take(4)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            Some(if key.is_empty() {
+                word(provider)
+            } else if key.chars().count() <= 4 {
+                format!("{} · ••••", word(provider))
+            } else {
+                format!("{} · ••••{tail}", word(provider))
+            })
+        }
+        Action::SetServiceEndpoint { field, url } => Some(format!("{}{}", word(field), to(url))),
+        Action::DeleteActivity { id } => Some(id.clone()),
+        _ => None,
+    }
+}
+
+/// A URL as an agent reads it: where it goes, not what it carries. Keys ride
+/// in RPC and service URLs — a provider's in its path, others in the query or
+/// as `user:pass@` — so only the scheme and host are kept, and `/…` says
+/// there was more.
+#[must_use]
+pub fn redact_url(url: &str) -> String {
+    let url = url.trim();
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return if url.is_empty() {
+            String::new()
+        } else {
+            "…".to_owned()
+        };
+    };
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let tail = &rest[end..];
+    let more = if tail.is_empty() || tail == "/" {
+        ""
+    } else {
+        "/…"
+    };
+    format!("{scheme}://{host}{more}")
+}
+
 /// `vela_state`: the wallet as an agent reads it — ids and values, never
 /// display text. Balance privacy holds here as on every money surface, and a
-/// provider's API key is a credential: only whether one is set is read.
+/// provider's API key is a credential: only whether one is set is read — nor
+/// is any URL read whole that could carry one ([`redact_url`]).
 /// `page`, `approvals` and `activity` are the shell's own, passed through.
 #[must_use]
 pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Value) -> Value {
@@ -1209,8 +1316,8 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     name: &row.display_name,
                     native_symbol: &row.native_symbol,
                     added_by_person: row.is_custom,
-                    rpc_url: &row.rpc_url,
-                    explorer_url: &row.explorer_url,
+                    rpc_url: redact_url(&row.rpc_url),
+                    explorer_url: redact_url(&row.explorer_url),
                 })
                 .collect(),
             providers: n
@@ -1224,14 +1331,17 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
             services: n
                 .endpoints
                 .iter()
-                .map(|row| ServiceOut {
-                    field: &row.field,
-                    url: if row.value.is_empty() {
-                        &row.default_value
-                    } else {
-                        &row.value
-                    },
-                    is_default: row.value.is_empty() || row.value == row.default_value,
+                .map(|row| {
+                    let is_default = row.value.is_empty() || row.value == row.default_value;
+                    ServiceOut {
+                        field: &row.field,
+                        url: if is_default {
+                            row.default_value.clone()
+                        } else {
+                            redact_url(&row.value)
+                        },
+                        is_default,
+                    }
                 })
                 .collect(),
         }),

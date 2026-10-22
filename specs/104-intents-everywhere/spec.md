@@ -76,7 +76,7 @@
 | 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | **done** — `src/agent/` and `wallet/page/agent.rs`; the desktop's coverage ledger (`agent::coverage`); a live run through `bridge.clientmcp.dev`, transfer included |
 | 6 | QR pairing | **deferred** (owner, 2026-10-21): `bridge.clientmcp.dev` serves as the open trial bridge for now. The design proposed: pairing over the client's own connection (the bridge mints an agent token for the client it is), and optional open registration on a bridge that enables it |
-| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **implemented, not production-ready** — `vela-agent` shared with the desktop; live runs through `bridge.clientmcp.dev` on the iOS simulator and an Android emulator. Open before production: see "Mobile: what is not verified yet" |
+| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **implemented, not production-ready** — `vela-agent` shared with the desktop; live runs through `bridge.clientmcp.dev` on the iOS simulator and an Android emulator; the passkey on a physical Android phone; the security review's fixes in. Open before production: the passkey on a physical iPhone, F3, the token on the web and the desktop — see "Mobile: what is not verified yet" |
 
 ## Phase 1 notes
 
@@ -144,15 +144,73 @@ Phase 7 is implemented on both phones; that is not the same as ready to ship. Th
 2. **The client token in secure storage — implemented, verified on a simulator and an emulator.**
    - iOS: the Keychain (`AgentTokenVault`, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). On an ad-hoc-signed simulator build the token is kept and read back, the `vela.agent` record holds `{enabled, url}` only, and the agent reconnects after a relaunch from the Keychain alone. An unsigned build — CI's — has no Keychain (`errSecMissingEntitlement`): there the Keychain test is reported disabled, and a token entered is kept for that run only.
    - Android: the Keystore (`KeystoreTokenVault`: an AES-GCM key inside the Keystore seals the token; only `vela.agentToken`, the sealed bytes, is stored). On the emulator the plain token an earlier build stored was moved and is gone from the app's store, and the agent reconnects after a cold restart.
-   - Both: Erase This Device forgets it (the Keychain item; the sealed bytes and the Keystore key).
-   - Not covered: the desktop and the web still keep the token with their other settings.
+   - Both: Erase This Device forgets it (the Keychain item; the sealed bytes and the Keystore key). Android now also switches the agent off and hangs up there: the app outlives the erase, and its connection had been dialled with that token.
+   - The web and the desktop: see "The token on the web and the desktop" below.
 3. **A person-confirmed transfer on chain — verified on both phones, with the parallel space's fixture keys.** The agent drafted 0.00001 BNB to a fixture Safe; the owner confirmed it on the review; it was signed, submitted and confirmed (BNB Chain, EntryPoint v0.7, `UserOperationEvent` success):
    - iOS simulator: tx `0x61fe46636c27dcad665745740dc4d2a98a0530999bb7541d0ab0df1538a043fe` (block 128933432);
    - Android emulator: tx `0x5fbe63113bf7a59b881662a5d661f8453023542b9bd23ab03cc3aa3138badde4` (block 128934102), followed through `vela_wait`: `awaiting_confirmation` → `submitting` → `submitted` → `confirmed`.
+4. **A platform passkey — verified on a physical Android phone; not on a physical iPhone.** See "The passkey on a phone" below.
+5. **A security review of the agent surface — done; its fixes in.** See "Security review (2026-10-21)" below.
 
-   **Not verified: a platform passkey.** On a simulator and an emulator the parallel space signs with its fixture keys, so no system passkey sheet appeared, and `awaiting_passkey` lasted too briefly to be seen. A real passkey ceremony needs a physical device with a wallet of its own.
+Still open before production: the passkey on a physical iPhone; the bridge noticing a phone that went silent (F3, ClientMCP); the token on the web and the desktop. Still deferred: QR pairing (phase 6).
 
-Still open before production: the platform passkey on a physical iPhone and Android phone; a security review of the agent surface on the phones. Still deferred: QR pairing (phase 6).
+### The passkey on a phone
+
+A Redmi K40 (Android, `9d5f42fb`), the owner's phone. The app on it was backed up and upgraded in place (owner's choice); the owner's wallet on it was neither used nor changed. A dedicated wallet, **Agent test** (`0x1100…45aC`), was created on it with the phone's own passkey and funded with a few cents of BNB from the parallel space's fixture wallet. `vela_state` was not called on the phone (it lists every account on the device). Each run: the agent drafted 0.00001 BNB to the fixture Safe through `bridge.clientmcp.dev`; its submit only asked; the owner acted on the phone; a watcher followed the operation through `vela_wait`.
+
+| Run | What the owner did | What the agent read | On chain |
+|---|---|---|---|
+| T1 | Confirmed on the review, passed the passkey | followed to `confirmed` | `0x96636f986c1c3bfce45b23c5b606a1b3c2821364232d4b1a9c5da6cf35b89c9c` |
+| T2 | Cancelled the system passkey sheet | back to `awaiting_confirmation`, "the person dismissed the passkey prompt"; nothing signed | — |
+| (T2b) | Meant to cancel, signed instead | followed to `confirmed` like T1 | `0x4506569184463aa2a7b7023ab12b7c7a7fad2d1fdcabc09758c9fc8283e34ec9` |
+| T3 | Went back from the review and left the send | **wrong: stayed `awaiting_confirmation`** — fixed (below); run again with the fix: `cancelled`, "left the review without sending" | — |
+| T4 | Sent the app to the background on the review, came back, confirmed | the transfer followed to `confirmed` | `0xbf95f05c5662e410889b08b3b282e7e4393c34cc98afe843b921094d3d989a9e` |
+| T5 | Airplane mode on the review: the send failed; network back, retried on the same review | the retry followed to `confirmed` | `0x3e3069cf317d5ee17caaf0d2ab1c3ff3d77d2424c7f414518cf8871d869b2c24` |
+
+Every transaction above has `UserOperationEvent` success. **Found and fixed:**
+
+- **Leaving the review did not end the transfer** (T3). The core's reading of the send (`intent_rules::from_send`) now says a send off its review with nothing sent is `cancelled`, "left the review without sending"; and a second review on the same send is a transfer of its own (`Transfers::adopt` passes over one that has ended), on every shell — `vela-agent` and the web's `transfers`.
+- **A send that stopped on its review read as `failed`**, a final state, though the review offers to try again — so an agent would have drafted it anew while the person's retry went through. It is now `awaiting_confirmation`, with why it stopped.
+- **The bridge does not notice a phone that went silent** (T5, F3): while the phone was in airplane mode the agent's calls hung for minutes. Not fixed — ClientMCP's, below.
+
+T3 was run again with this round's build installed in place: Back from the agent's review read `cancelled` at once. The person's own second review on the same send could not be shown there — the test wallet's balance no longer covers the fee, so the wallet stops at Continue — and is covered by `vela-agent`'s and the web's tests. The same build connected only once the app was in front (S4). **The physical iPhone is not done**: the paired iPhone 11 has Vela 0.9.8 on it, and whether to back it up and upgrade it in place is the owner's to say.
+
+### Security review (2026-10-21)
+
+The question: can any agent action bypass the person's confirmation, trigger a passkey signing, or reach sensitive wallet data without the person's say?
+
+**What holds** (read in the code, and covered by tests):
+
+- **No agent action signs or raises a passkey.** `submit_transfer` from an agent only marks the transfer "waiting for the person to confirm it on the review" (`transfers::submit`); `SlideConfirm` is dispatched for the person alone. There is no tool, action or `perform` route to the passkey, to a dApp's signing request, or to a key.
+- **The approval gate.** `authorize` in the core: the person always; `person_only` (the agent's own connection) never; nothing while the agent is off; manage- and transact-level actions only after the person's Allow; `sign_out` on the session's own sheet. An approval is withdrawn when the agent's call is given up, on Stop, and in the background.
+- **What an agent reads.** Balances and amounts are hidden from it while the person hides them; spam is not read; a provider's key is read only as "set or not"; `vela_review` hands a dApp's words over as data.
+- **The send.** An agent reaches it only through the send's own events, in the form's order; a send the person has open is `busy`.
+
+**What was weak, and is now fixed:**
+
+| # | Finding | Fix |
+|---|---|---|
+| S1 | **A review swapped under the person's finger.** `cancel_transfer` and a new draft need no approval, so an agent could replace the review the person was reading with another just before their tap; the passkey sheet after it shows no transaction. | A review an agent drafted takes the person's confirm only once it has been on screen 1.5 s (`REVIEW_SETTLE_MS`, `vela-agent` and the web); a tap before that is refused, "look it over, then confirm again". The person's own review is theirs at once. |
+| S2 | **Hidden balances could be shown or read.** `set_balance_privacy { hidden: false }` was operate-level, so an agent could unhide them without asking; and `max` on the review is the balance itself. | Showing them is manage-level (the person's Allow, "Show balance"); `max` is refused while they are hidden (`examine`). Left: a draft refused for its amount still tells an agent the balance is below it — each probe opens the send in front of the person. |
+| S3 | **Approvals that did not say what.** Changing an RPC, a service endpoint or a provider key was asked as "Change a service endpoint", with no URL. | `intent_rules::approval_detail` (`intentApprovalDetail` on every shell): the chain, the field, the URL whole — it is the person's own screen — and a key as its last four. |
+| S4 | **Android, and iOS, dialled before the app was in front** (a process started for a broadcast or a background launch). | Not in front until the activity, or the scene, says so. |
+| S5 | **URLs that carry keys went to the agent whole** (a provider's key in an RPC path, a key in a query, `user:pass@`). | `redact_url`: scheme and host, `/…` for the rest; the wallet's own defaults whole. |
+| S6 | **Android's erase left the agent connected** with the token it forgot. | Off, and hung up. |
+| S7 | **Stop did not stop at once.** A draft under way went on to its review; requests in the moment before the setting was saved were answered as "on". | `Agent::stop` (and the desktop's) switches it off at once; a draft checks between its steps (`SendDesk::halted`: stopped, off or in the background) and leaves nothing open. |
+| S8 | **An approval could change under a tap.** Android's dialog was the same dialog with the next request's words. | One dialog or sheet per request, its Allow taking a tap only after 0.7 s (Android, iOS, the web; the desktop ignores an Allow click before then). |
+
+**Left, low:** an agent-drafted review is not marked as the agent's on the review itself (the capsule says what the agent did last; on an Android flow, where it is compact, it shows only the link and Stop). Side-effect actions an agent may take without asking (show, refresh, save or favourite a contact) are visible and reversible.
+
+### The token on the web and the desktop
+
+Reviewed; what a token gives: connecting as this wallet's application to its bridge — so whoever holds it can answer the person's agent as if it were the wallet (wrong balances, wrong addresses), or push the real wallet off. It signs nothing: the passkey is on the device.
+
+- **Web:** `localStorage` (`vela.agent`, `{enabled, url, token}`), in the clear. Readable by any script on the wallet's origin and by anything that reads the browser profile. A non-extractable WebCrypto key in IndexedDB would keep it from the profile's files and from a copy of them, not from a script on the origin. Proposed: short-lived tokens the bridge renews over the connection (with QR pairing), and the same strict CSP the wallet already relies on.
+- **Desktop:** `wallet.json` (with the RPC providers' keys), in the clear; until now created `0644`. macOS and Windows keep its folder private; a Linux `~/.config` is often readable by every account. **Fixed:** the document is written `0600` on Unix, an older copy's mode included (`storage::write_private`). Proposed: the OS keychain (Keychain, Credential Manager, Secret Service) for the token and the providers' keys.
+
+### F3: a phone that went silent (ClientMCP)
+
+The Worker answers the client's pings at the edge (`setWebSocketAutoResponse`), so its Durable Object never learns that a client stopped pinging. A call to a phone that lost its network waits for the whole call timeout (120 s) and then fails. The fix belongs to ClientMCP's Worker: on a call, and while it waits, read `getWebSocketAutoResponseTimestamp` and fail the call — and close the socket — once the last pong is older than the client's ping interval and its grace (25 s + 10 s). worker-rs 0.8.7 does not expose that method; it needs a `wasm_bindgen` binding of its own. Then a production deploy.
 
 ## Phase 7 notes (iOS)
 

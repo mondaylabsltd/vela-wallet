@@ -18423,6 +18423,18 @@ public func intentAgentState(worldJson: String, page: String, approvalsJson: Str
 })
 }
 /**
+ * What an agent's request changes, for its approval: the network, URL or
+ * record the action's name does not say (a JSON string, or `null`).
+ */
+public func intentApprovalDetail(actionJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_approval_detail(
+        FfiConverterString.lower(actionJson),uniffiCallStatus
+    )
+})
+}
+/**
  * What was true when the call began.
  */
 public func intentBaseline(actionJson: String, worldJson: String) -> String  {
@@ -19673,6 +19685,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_agent_state() != 5204) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_approval_detail() != 4323) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_baseline() != 4167) {

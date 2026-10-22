@@ -23,9 +23,11 @@
 		dismissLabel: string;
 		/** true = accepted, false = declined or dismissed. */
 		onAnswer: (accepted: boolean) => void;
+		/** The confirm takes no tap yet (an agent's request just up). */
+		confirmDisabled?: boolean;
 	}
 
-	let { copy, dismissLabel, onAnswer }: Props = $props();
+	let { copy, dismissLabel, onAnswer, confirmDisabled = false }: Props = $props();
 
 	const desktop = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 	let sheet = $state<{ requestClose: () => void }>();
@@ -55,7 +57,7 @@
 		<p class="message">{copy.message}</p>
 		<div class="actions">
 			{#if copy.confirm}
-				<Button variant="primary" shape="rounded" onclick={accept}
+				<Button variant="primary" shape="rounded" disabled={confirmDisabled} onclick={accept}
 					>{copy.confirm.confirmLabel}</Button
 				>
 				<Button variant="secondary" shape="rounded" onclick={decline}

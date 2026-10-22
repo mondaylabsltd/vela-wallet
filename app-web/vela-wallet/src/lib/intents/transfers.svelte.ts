@@ -10,6 +10,7 @@
  */
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
+import { agentSettings } from '$lib/agent/settings.svelte';
 import type { IntentActor } from '$lib/core/generated/IntentActor';
 import type { IntentProgress } from '$lib/core/generated/IntentProgress';
 import { intentOperationProgress } from '$lib/core/client';
@@ -55,7 +56,18 @@ type Tracked = IntentOperation & {
 	closed: string | null;
 	/** Who put it on the review: an agent's draft, or the person's own form. */
 	draftedBy: IntentActor;
+	/** When its review came on screen (epoch ms). */
+	reviewedAt: number;
 };
+
+/**
+ * How long a review an agent drafted is on screen before the person's
+ * confirm counts. An agent can cancel a review and draft another without
+ * asking (`cancel_transfer` is operate-level); without this, a tap meant for
+ * the review the person was reading could land on its replacement — and the
+ * passkey prompt after it shows no transaction.
+ */
+export const REVIEW_SETTLE_MS = 1_500;
 
 /** How long each step of a draft may take before it is given up. */
 const STEP_MS = { page: 8_000, open: 10_000, amount: 15_000, review: 20_000 } as const;
@@ -82,6 +94,11 @@ class Transfers {
 	#ceremony: { event: SignCeremonyEvent; seq: number } | null = null;
 	#ceremonies = 0;
 	#listening = false;
+	/**
+	 * The clock, and whether the agent was stopped or switched off since its
+	 * draft began (what it was drafting is then given up). The tests' own.
+	 */
+	clock = { now: () => Date.now(), halted: () => !agentSettings.enabled };
 
 	/** The operations as an agent reads them, each brought up to date. */
 	list(): IntentOperation[] {
@@ -152,6 +169,12 @@ class Transfers {
 		recipient: string | null,
 		fill: (port: SendDeskPort) => (view: SendView) => string | null
 	): Promise<IntentOperation | IntentReason> {
+		const stopped = () => by === 'agent' && this.clock.halted();
+		const halted = reason(
+			'stopped',
+			'the agent was stopped or switched off while drafting: nothing was left on the review'
+		);
+		if (stopped()) return halted;
 		this.#listen();
 		const port = await this.#desk();
 		if (!port) return reason('not_ready', 'the wallet page did not open');
@@ -188,6 +211,7 @@ class Transfers {
 					: held.token_address !== null && same(held.token_address, contract))
 		);
 		if (!token) return reason('not_found', 'the wallet holds no such token on that chain');
+		if (stopped()) return halted;
 
 		port.open({
 			preselected_symbol: token.symbol,
@@ -195,27 +219,36 @@ class Transfers {
 			...(recipient !== null && { prefilled_recipient: recipient })
 		});
 		const opened = await until(() => {
+			if (stopped()) return 'stopped';
 			const view = port.view();
 			if (!view || view.loading) return null;
 			return view.selected_token && view.stage === 'enter_details' ? view : 'elsewhere';
 		}, STEP_MS.open);
-		if (opened === null || opened === 'elsewhere') {
+		if (opened === null || typeof opened === 'string') {
 			port.close();
+			if (stopped()) return halted;
 			return reason('not_found', 'the send did not offer that token');
 		}
 
 		const settled = fill(port);
 		const ready = await until(() => {
+			if (stopped()) return 'stopped';
 			const view = port.view();
 			return view ? settled(view) : 'closed';
 		}, STEP_MS.amount);
 		if (ready !== 'ok') {
 			port.close();
+			if (stopped()) return halted;
 			return reason('refused', ready ?? 'the form could not be checked in time');
 		}
 
+		if (stopped()) {
+			port.close();
+			return halted;
+		}
 		port.dispatch({ type: 'continue' });
 		const reviewed = await until(() => {
+			if (stopped()) return 'stopped';
 			const alert = port.alert();
 			if (alert) return `alert: ${named(alert)}`;
 			const view = port.view();
@@ -224,6 +257,7 @@ class Transfers {
 		}, STEP_MS.review);
 		if (reviewed !== 'ok') {
 			port.close();
+			if (stopped()) return halted;
 			return reason('refused', reviewed ?? 'the review did not open in time');
 		}
 		const drafted = this.#adopt(port, token.chain_id);
@@ -284,6 +318,14 @@ class Transfers {
 			return this.#plain(operation);
 		}
 		if (!view?.can_confirm) return reason('refused', 'the review cannot be confirmed yet');
+		if (
+			operation.draftedBy === 'agent' &&
+			this.clock.now() - operation.reviewedAt < REVIEW_SETTLE_MS
+		)
+			return reason(
+				'not_ready',
+				"the agent's review has only just opened: look it over, then confirm again"
+			);
 		operation.reason = null;
 		operation.confirmedAfter = this.#ceremonies;
 		port.dispatch({ type: 'slide_confirm' });
@@ -348,7 +390,11 @@ class Transfers {
 
 	#adopt(port: SendDeskPort, chainId: number | null): Tracked {
 		const session = port.session();
-		const existing = this.operations.find((operation) => operation.session === session);
+		// One that has ended — left without sending, say — is not this review's:
+		// the person went back, and what they review now is another transfer.
+		const existing = this.operations.find(
+			(operation) => operation.session === session && !FINAL.includes(operation.state)
+		);
 		if (existing) return existing;
 		const created: Tracked = {
 			id: `transfer-${this.#next++}`,
@@ -359,6 +405,7 @@ class Transfers {
 			reason: null,
 			closed: null,
 			draftedBy: 'person',
+			reviewedAt: this.clock.now(),
 			session,
 			confirmedAfter: null
 		};

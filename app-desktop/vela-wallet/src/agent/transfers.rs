@@ -80,7 +80,7 @@ pub fn drafted_by(id: &str, cx: &mut App) -> Option<Actor> {
 /// person who filled the form themselves confirms through the same intent.
 pub fn current(cx: &mut App) -> Option<Operation> {
     let (session, view) = open(cx)?;
-    ledger(cx).on_review(session, &view)
+    ledger(cx).on_review(session, &view, shared::wall_ms())
 }
 
 /// The send column, from an async call.
@@ -158,6 +158,10 @@ impl SendDesk for Desk<'_> {
 
     fn ledger<R>(&mut self, change: impl FnOnce(&mut Transfers) -> R) -> R {
         self.cx.update(|cx| change(ledger(cx)))
+    }
+
+    fn halted(&mut self) -> bool {
+        !self.cx.update(|cx| super::enabled(cx))
     }
 }
 
