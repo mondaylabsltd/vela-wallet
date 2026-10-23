@@ -76,7 +76,7 @@
 | 4 | Production cancel fix | **done** — deployed to `bridge.clientmcp.dev`; conformance there 33/34 with either application, the one skipped needing a 5 s call timeout; first-second hang-ups cancelled within 0.25 s |
 | 5 | Desktop: the agent (part B in Rust, on gpui) | **done** — `src/agent/` and `wallet/page/agent.rs`; the desktop's coverage ledger (`agent::coverage`); a live run through `bridge.clientmcp.dev`, transfer included |
 | 6 | QR pairing | **deferred** (owner, 2026-10-21): `bridge.clientmcp.dev` serves as the open trial bridge for now. The design proposed: pairing over the client's own connection (the bridge mints an agent token for the client it is), and optional open registration on a bridge that enables it |
-| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **implemented, not production-ready** — `vela-agent` shared with the desktop; live runs through `bridge.clientmcp.dev` on the iOS simulator and an Android emulator; the passkey on a physical Android phone; the security review's fixes in. Open before production: the passkey on a physical iPhone, F3, the token on the web and the desktop — see "Mobile: what is not verified yet" |
+| 7 | iOS and Android: part B, the approval sheet, the bar, foreground-only | **implemented, not production-ready** — `vela-agent` shared with the desktop; live runs through `bridge.clientmcp.dev` on the iOS simulator and an Android emulator; the passkey on a physical Android phone and a physical iPhone; the security review's fixes and the review bound to the signature in. Open before production: F3, the token on the web and the desktop — see "Mobile: what is not verified yet" |
 
 ## Phase 1 notes
 
@@ -149,12 +149,12 @@ Phase 7 is implemented on both phones; that is not the same as ready to ship. Th
 3. **A person-confirmed transfer on chain — verified on both phones, with the parallel space's fixture keys.** The agent drafted 0.00001 BNB to a fixture Safe; the owner confirmed it on the review; it was signed, submitted and confirmed (BNB Chain, EntryPoint v0.7, `UserOperationEvent` success):
    - iOS simulator: tx `0x61fe46636c27dcad665745740dc4d2a98a0530999bb7541d0ab0df1538a043fe` (block 128933432);
    - Android emulator: tx `0x5fbe63113bf7a59b881662a5d661f8453023542b9bd23ab03cc3aa3138badde4` (block 128934102), followed through `vela_wait`: `awaiting_confirmation` → `submitting` → `submitted` → `confirmed`.
-4. **A platform passkey — verified on a physical Android phone; not on a physical iPhone.** See "The passkey on a phone" below.
+4. **A platform passkey — verified on a physical Android phone and a physical iPhone.** See "The passkey on a phone" below.
 5. **A security review of the agent surface — done; its fixes in.** See "Security review (2026-10-21)" below.
 
 6. **The review bound to what the passkey signs — implemented on every shell.** See "The review, bound to the signature" below.
 
-Still open before production: the passkey on a physical iPhone; the binding exercised on a physical device; the bridge noticing a phone that went silent (F3, ClientMCP); the token on the web (`localStorage`) and the desktop (`0600`, not yet the keychain). Still deferred: QR pairing (phase 6).
+Still open before production: the bridge noticing a phone that went silent (F3, ClientMCP); the token on the web (`localStorage`) and the desktop (`0600`, not yet the keychain). Still deferred: QR pairing (phase 6).
 
 ### The passkey on a phone
 
@@ -175,7 +175,19 @@ Every transaction above has `UserOperationEvent` success. **Found and fixed:**
 - **A send that stopped on its review read as `failed`**, a final state, though the review offers to try again — so an agent would have drafted it anew while the person's retry went through. It is now `awaiting_confirmation`, with why it stopped.
 - **The bridge does not notice a phone that went silent** (T5, F3): while the phone was in airplane mode the agent's calls hung for minutes. Not fixed — ClientMCP's, below.
 
-T3 was run again with this round's build installed in place: Back from the agent's review read `cancelled` at once. The person's own second review on the same send could not be shown there — the test wallet's balance no longer covers the fee, so the wallet stops at Continue — and is covered by `vela-agent`'s and the web's tests. The same build connected only once the app was in front (S4). **The physical iPhone is not done**: the paired iPhone 11 has Vela 0.9.8 on it, and whether to back it up and upgrade it in place is the owner's to say.
+**The iPhone** (2026-10-23): an iPhone 11 (iOS 26.5.2) of the owner's, with seven of the owner's wallets on Vela 0.9.8 (build 4677, a developer build). Before anything was installed, its app data was copied off and a rollback build of 4677 made from its own commit, signed for the phone (`~/VelaDeviceBackups/iphone11-F30282CB-20261022/`, with the steps to restore). It was then upgraded in place to a Release build of `e515261be` — Release because Debug links the parallel space's fixed keys — and the seven accounts read back unchanged, before and after the runs. A dedicated wallet, **agent test** (`0x61B6…6022`), was created on it with Face ID, and funded with 0.0001 + 0.00002 BNB from the fixture wallet on the emulator — itself the first transfer through the review binding (`0x41a0bb8f…`, `0x29bc2166…`). The agent ran on a bridge client of its own (`vela-iphone-test`); its token, passed once at launch, went to the Keychain (the record holds `{enabled, url}`).
+
+| Run | What the owner did | What the agent read | On chain |
+|---|---|---|---|
+| I1 | Confirmed, Face ID (the wallet's first operation: it deployed the Safe) | `awaiting_confirmation` → `awaiting_passkey` → `submitted` → `confirmed` | `0x54ffca05e402d3e38cd1b3f910713076f662c2ce95f8ad1c1d6aee3507c6c96f` |
+| I2 | Cancelled the passkey sheet | back to `awaiting_confirmation`, "the person dismissed the passkey prompt"; no hash, the balance unchanged | — |
+| I3 | Went back from that review and left the send | `cancelled`, "left the review without sending" | — |
+| I4 | Sent Vela to the background on the review, came back, confirmed | offline while in the background; then `awaiting_passkey` → `submitted` → `confirmed` | `0xca0bab439d5ede9716463042700a1b3675bdb628143550c57bda115633006db6` |
+| I5 | Airplane mode on the review: the send failed; network back, retried on the same review | `awaiting_passkey` → `submitted` → `confirmed` | `0xc55979e39858e2e9957d8bbb967c8908c6a26907c9ff665dd07aca97f6f73fa1` |
+
+Every one with `UserOperationEvent` success. Each confirm went through the review binding: the tap named its review, and the passkey's hash was computed only for the operation that was it — on a real passkey, end to end. Not exercised by hand: a swap under the tap (the unit tests cover it).
+
+On the Android phone, T3 was run again with this round's build installed in place: Back from the agent's review read `cancelled` at once. The person's own second review on the same send could not be shown there — the test wallet's balance no longer covers the fee, so the wallet stops at Continue — and is covered by `vela-agent`'s and the web's tests. The same build connected only once the app was in front (S4). **The physical iPhone is not done**: the paired iPhone 11 has Vela 0.9.8 on it, and whether to back it up and upgrade it in place is the owner's to say.
 
 ### Security review (2026-10-21)
 
