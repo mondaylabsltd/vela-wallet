@@ -1841,6 +1841,27 @@ pub fn attest_safe_op_hash(op_json: &str, calls_json: &str, chain_id: u64) -> Js
     attest_safe_op_hash_inner(op_json, calls_json, chain_id).map_err(err)
 }
 
+/// The SafeOp hash for a send — only when the operation is exactly the
+/// review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
+/// chain and every call, decoded back out of its calldata. Anything else is
+/// refused and nothing is signed.
+#[wasm_bindgen(js_name = attestReviewedSafeOpHash)]
+pub fn attest_reviewed_safe_op_hash(
+    op_json: &str,
+    review_json: &str,
+    chain_id: u64,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let op: AttestOp = serde_json::from_str(op_json)
+            .map_err(|e| vela_core::CoreError::Internal(format!("attest: operation: {e}")))?;
+        let call_data = attest_bytes(&op.call_data_hex)?;
+        let user_op = attest_operation(op, call_data)?;
+        let review = vela_core::signed_review::from_json(review_json)?;
+        vela_core::signed_review::reviewed_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
+}
+
 /// The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
 /// under the Safe's own domain) — the core's reading, for comparison.
 #[wasm_bindgen(js_name = attestSafeMessageHash)]

@@ -2120,6 +2120,12 @@ mod tests {
             max_fee_per_gas: None,
             gas_fee_token: None,
             quoted_fee: None,
+            review: vela_core::signed_review::SignedReview {
+                chain_id: 100,
+                account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                transfers: Vec::new(),
+                fee: None,
+            },
         };
         assert!(submits.started(&submit));
         assert!(submits.running(), "closed now, it runs on unseen");
@@ -2433,7 +2439,7 @@ mod tests {
                 println!("stopping before the confirm: set VELA_LIVE_SEND=1 to spend dust");
                 return;
             }
-            money.dispatch(SendEvent::SlideConfirm);
+            money.dispatch(SendEvent::SlideConfirm { review: None });
             let view = money.view();
             println!(
                 "after confirm: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",

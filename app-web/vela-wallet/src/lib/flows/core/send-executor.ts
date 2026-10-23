@@ -545,7 +545,10 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 									// tier this send is — and `rapid` never gets this far.
 									tier: wireTier(operation.quoted_fee.tier)
 								}
-							: undefined
+							: undefined,
+						// The review the person confirmed: the operation is signed
+						// only if it is exactly this.
+						operation.review
 					);
 					submitted.set(result.userOpHash, result);
 					// What the tracker learned while the reply was out (RJ1, RJ4).

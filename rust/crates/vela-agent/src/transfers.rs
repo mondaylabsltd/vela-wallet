@@ -553,7 +553,12 @@ async fn draft<D: SendDesk>(
 /// prompt shows no transaction, so it is never raised over a review the
 /// person did not choose to confirm — their own tap on the review is the
 /// only way to it.
-pub fn submit(id: &str, by: Actor, desk: &mut impl SendDesk) -> Performed {
+///
+/// The person's confirm names the review its tap was drawn on (`review`,
+/// the view's `review_digest`): one drawn for another review — changed, or
+/// another send's that took its place before the tap was handled — is
+/// refused, and the send's own confirm checks it again.
+pub fn submit(id: &str, review: Option<&str>, by: Actor, desk: &mut impl SendDesk) -> Performed {
     let Some((session, _)) = desk.open() else {
         return refused(
             ReasonCode::NotFound,
@@ -608,6 +613,18 @@ pub fn submit(id: &str, by: Actor, desk: &mut impl SendDesk) -> Performed {
     if !view.can_confirm {
         return refused(ReasonCode::Refused, "the review cannot be confirmed yet");
     }
+    let Some(review) = review else {
+        return refused(
+            ReasonCode::InvalidInput,
+            "the confirm did not say which review it was drawn on",
+        );
+    };
+    if view.review_digest.as_deref() != Some(review) {
+        return refused(
+            ReasonCode::NotReady,
+            "the review changed before the confirm reached it: look it over, then confirm again",
+        );
+    }
     let now = desk.now_ms();
     let unsettled = desk.ledger(|ledger| {
         let tracked = &ledger.operations[index];
@@ -625,7 +642,9 @@ pub fn submit(id: &str, by: Actor, desk: &mut impl SendDesk) -> Performed {
         tracked.operation.reason = None;
         tracked.confirmed_after = Some(ceremonies);
     });
-    desk.dispatch(SendEvent::SlideConfirm);
+    desk.dispatch(SendEvent::SlideConfirm {
+        review: Some(review.to_owned()),
+    });
     sync(desk);
     desk.ledger(|ledger| {
         let tracked = &ledger.operations[index];
@@ -745,7 +764,7 @@ mod tests {
                     None => self.view().can_continue = true,
                 },
                 SendEvent::Continue => self.view().stage = SendStage::Confirm,
-                SendEvent::SlideConfirm => {
+                SendEvent::SlideConfirm { .. } => {
                     self.view().tx_status = serde_json::from_value(json!("preparing")).unwrap()
                 }
                 SendEvent::Done => self.open = None,
@@ -848,7 +867,7 @@ mod tests {
         desk.view().can_confirm = true;
         let Performed::Started {
             operation: asked, ..
-        } = submit(&operation.id, Actor::Agent, &mut desk)
+        } = submit(&operation.id, None, Actor::Agent, &mut desk)
         else {
             panic!("asked");
         };
@@ -863,7 +882,8 @@ mod tests {
 
         desk.clock += REVIEW_SETTLE_MS;
         desk.ledger.ceremony("started");
-        submit(&operation.id, Actor::Person, &mut desk);
+        desk.view().review_digest = Some("drawn".into());
+        submit(&operation.id, Some("drawn"), Actor::Person, &mut desk);
         assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
         // Its passkey is a ceremony begun after the confirm, not the one before.
         desk.ledger.ceremony("signed");
@@ -946,13 +966,16 @@ mod tests {
             panic!("drafted again");
         };
         desk.view().can_confirm = true;
-        let Performed::Refused(reason) = submit(&swapped.id, Actor::Person, &mut desk) else {
+        desk.view().review_digest = Some("swapped".into());
+        let Performed::Refused(reason) =
+            submit(&swapped.id, Some("swapped"), Actor::Person, &mut desk)
+        else {
             panic!("too soon");
         };
         assert_eq!(reason.code, ReasonCode::NotReady);
         assert!(!desk.sent.contains(&"slide_confirm".to_owned()));
         desk.clock += REVIEW_SETTLE_MS;
-        submit(&swapped.id, Actor::Person, &mut desk);
+        submit(&swapped.id, Some("swapped"), Actor::Person, &mut desk);
         assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
     }
 
@@ -966,8 +989,37 @@ mod tests {
         });
         desk.view().stage = SendStage::Confirm;
         desk.view().can_confirm = true;
+        desk.view().review_digest = Some("mine".into());
         let mine = current(&mut desk).unwrap();
-        submit(&mine.id, Actor::Person, &mut desk);
+        submit(&mine.id, Some("mine"), Actor::Person, &mut desk);
+        assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
+    }
+
+    /// The person's confirm names the review its tap was drawn on: one drawn
+    /// for another — the agent's swap handled after the tap, a review that
+    /// changed — confirms nothing.
+    #[test]
+    fn a_confirm_drawn_for_another_review_confirms_nothing() {
+        let mut desk = Fake::default();
+        let Performed::Started { operation, .. } = prepared(&mut desk, Actor::Agent) else {
+            panic!("drafted");
+        };
+        desk.clock += REVIEW_SETTLE_MS;
+        desk.view().can_confirm = true;
+        desk.view().review_digest = Some("now".into());
+        let Performed::Refused(reason) =
+            submit(&operation.id, Some("before"), Actor::Person, &mut desk)
+        else {
+            panic!("another review");
+        };
+        assert_eq!(reason.code, ReasonCode::NotReady);
+        let Performed::Refused(reason) = submit(&operation.id, None, Actor::Person, &mut desk)
+        else {
+            panic!("no review named");
+        };
+        assert_eq!(reason.code, ReasonCode::InvalidInput);
+        assert!(!desk.sent.contains(&"slide_confirm".to_owned()));
+        submit(&operation.id, Some("now"), Actor::Person, &mut desk);
         assert_eq!(desk.sent.last().map(String::as_str), Some("slide_confirm"));
     }
 

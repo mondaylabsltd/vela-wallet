@@ -1880,6 +1880,24 @@ pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>
     )?)
 }
 
+/// The SafeOp hash for a send — only when the draft is exactly the review
+/// the person confirmed (`SubmitUserOp.review`, as JSON): its sender, chain
+/// and every call, decoded back out of its calldata. Anything else is
+/// refused and nothing is signed.
+#[uniffi::export]
+pub fn user_op_reviewed_safe_op_hash(
+    draft: UserOpDraft,
+    chain_id: u32,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::from_json(&review_json)?;
+    Ok(vela_core::signed_review::reviewed_safe_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+        &review,
+    )?)
+}
+
 /// The EntryPoint v0.7 `getUserOpHash` of the draft on `chain_id`, 0x-lower-case
 /// (spec 082 RA6). The signature is not part of it, so it is known before the
 /// passkey signs: a client computes it before the first submit POST and

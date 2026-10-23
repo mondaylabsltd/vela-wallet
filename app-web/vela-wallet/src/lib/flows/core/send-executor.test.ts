@@ -301,7 +301,8 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			calls: [],
 			max_fee_per_gas: null,
 			gas_fee_token: null,
-			quoted_fee: null
+			quoted_fee: null,
+			review: { chain_id: 100, account: ACCOUNT, transfers: [], fee: null }
 		}
 	};
 
@@ -365,6 +366,9 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		const submitting = executor.execute(submit);
 		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
 		expect(dispatched[0]).toMatchObject({ type: 'op_signed', user_op_hash: OP, submit_block: 9 });
+		// The review the person confirmed goes down to the signing, where the
+		// operation is attested against it.
+		expect(vi.mocked(sendBatchCalls).mock.calls.at(-1)?.[8]).toEqual(submit.operation.review);
 		await executor.execute(persistAhead(OP));
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(posted).not.toHaveBeenCalled();

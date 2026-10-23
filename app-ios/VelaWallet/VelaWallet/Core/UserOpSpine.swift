@@ -301,6 +301,7 @@ final class UserOpSpine {
         calls: [UserOpCall],
         gasFeeToken: String?,
         quotedFee: Quoted?,
+        review: String? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
@@ -428,11 +429,21 @@ final class UserOpSpine {
             throw other("The operation could not be assembled.")
         }
 
+        // A send's hash is computed only for the operation that is exactly
+        // the review the person confirmed (`SubmitUserOp.review`); a dApp's
+        // request was reviewed on the signing sheet.
         let challenge: Data
         do {
-            challenge = try userOpSafeOpHash(draft: draft, chainId: UInt32(chainId))
+            if let review {
+                challenge = try userOpReviewedSafeOpHash(draft: draft, chainId: UInt32(chainId), reviewJson: review)
+            } else {
+                challenge = try userOpSafeOpHash(draft: draft, chainId: UInt32(chainId))
+            }
         } catch {
-            throw other("The operation could not be hashed.")
+            VelaLog.failure(.sign, kind: "not_the_review", "\(error)")
+            throw other(review == nil
+                ? "The operation could not be hashed."
+                : "The operation is not the one you reviewed. Nothing was signed.")
         }
         guard askerLive() else { throw Refused(failure: .askerGone) }
         signingStarted()

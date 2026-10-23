@@ -766,7 +766,8 @@ class SendController(
 
     fun chooseFeeToken(token: String?) = dispatch(SendEvent.ChooseFeeToken(token))
 
-    fun slideConfirm() = dispatch(SendEvent.SlideConfirm)
+    /** The confirm, naming the review it was drawn on (`review_digest`). */
+    fun slideConfirm(review: String? = null) = dispatch(SendEvent.SlideConfirm(review))
 
     /**
      * Spec 102 D4: the confirm's hand-off for [address] — the page its

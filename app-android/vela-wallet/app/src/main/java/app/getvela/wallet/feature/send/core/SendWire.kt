@@ -783,6 +783,8 @@ data class SendView(
     val same_asset_fee_issue: SendFeeIssueView? = null,
     val can_continue: Boolean = false,
     val can_confirm: Boolean = false,
+    /** On the review: which review this is — what the confirm names back. */
+    val review_digest: String? = null,
     val sending: Boolean = false,
     val tx_status: SendTxStatus = SendTxStatus.Idle,
     val tx_error: SendTxErrorKey? = null,
@@ -886,6 +888,8 @@ sealed class SendOperation {
         val max_fee_per_gas: String? = null,
         val gas_fee_token: String? = null,
         val quoted_fee: SendQuotedFee? = null,
+        /** The review the person confirmed; the passkey's hash is computed against it. */
+        val review: JsonElement? = null,
     ) : SendOperation()
 
     @Serializable
@@ -1251,7 +1255,10 @@ sealed class SendEvent {
 
     @Serializable
     @SerialName("slide_confirm")
-    data object SlideConfirm : SendEvent()
+    data class SlideConfirm(
+        /** The `review_digest` of the review the tapped confirm was drawn on. */
+        val review: String? = null,
+    ) : SendEvent()
 
     @Serializable
     @SerialName("signing_started")

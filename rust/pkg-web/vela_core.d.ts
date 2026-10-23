@@ -625,6 +625,14 @@ export function amountTextCaret(raw: string, clean: string, caret: number): numb
 export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
 
 /**
+ * The SafeOp hash for a send — only when the operation is exactly the
+ * review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
+ * chain and every call, decoded back out of its calldata. Anything else is
+ * refused and nothing is signed.
+ */
+export function attestReviewedSafeOpHash(op_json: string, review_json: string, chain_id: bigint): Uint8Array;
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  */
@@ -1721,6 +1729,7 @@ export interface InitOutput {
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
+    readonly attestReviewedSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly balanceChainReadDeadlineMs: () => number;

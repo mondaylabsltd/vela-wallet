@@ -86,6 +86,17 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
 
 /// The seam spec 052 FR-009 counts. It never produces a usable assertion —
 /// every test here stops before one is needed, which is the point.
+/// The review a person confirmed for the submit these tests drive: 1000 wei
+/// of the native coin to `account` itself, its fee 1000 wei to `account` too
+/// — exactly what the operation the spine assembles carries.
+func sendReview(of account: String, amount: String = "1000") -> [String: Any] {
+    [
+        "chain_id": 100, "account": account,
+        "transfers": [["to": account, "token": NSNull(), "amount": amount]],
+        "fee": ["recipient": account, "token": NSNull(), "amount": "1000"],
+    ]
+}
+
 @MainActor
 final class CountingSigner: UserOpSigner {
     private(set) var calls = 0
@@ -729,6 +740,7 @@ struct SendMachineTests {
             "calls": [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
             "gas_fee_token": NSNull(),
             "quoted_fee": ["amount": "1000", "recipient": golden] as [String: Any],
+            "review": sendReview(of: golden),
         ])
         let reply = try CoreJSON.object(answer)
         #expect(reply["type"] as? String == "submit_failed")
@@ -739,6 +751,49 @@ struct SendMachineTests {
         // themselves stopped.
         let failure = reply["failure"] as? [String: Any] ?? [:]
         #expect(failure["type"] as? String == "passkey_cancelled")
+    }
+
+    /// The passkey's hash is computed only for the operation the person
+    /// reviewed: a submit whose review says 999 where the operation pays
+    /// 1000 raises no ceremony, and nothing is signed.
+    @Test func anOperationThatIsNotTheReviewIsNeverSigned() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        port.rpc["eth_getCode"] = .ok("0x6080604052")
+        port.rpc["eth_call"] = .ok("0x" + String(repeating: "0", count: 63) + "1")
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        let signer = CountingSigner()
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool,
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { signer }),
+            accounts: accountPort, fees: fees,
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
+            metadata: TokenMetadata(store: store, pool: pool),
+            accountStore: accounts,
+            balances: { try? balance() }, networks: { try? networks() },
+            ports: SendExecutor.Ports()
+        )
+        for review in [sendReview(of: golden, amount: "999"), nil] {
+            var operation: [String: Any] = [
+                "type": "submit_user_op",
+                "chain_id": 100,
+                "account": golden,
+                "public_key_hex": "04" + String(repeating: "11", count: 64),
+                "calls": [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+                "gas_fee_token": NSNull(),
+                "quoted_fee": ["amount": "1000", "recipient": golden] as [String: Any],
+            ]
+            if let review { operation["review"] = review }
+            let reply = try CoreJSON.object(await executor.perform(operation))
+            #expect(reply["type"] as? String == "submit_failed")
+            #expect((reply["failure"] as? [String: Any])?["type"] as? String == "other")
+        }
+        #expect(signer.calls == 0, "a passkey was asked over an operation nobody reviewed")
     }
 
     /// Spec 102 (core round 7): an account nothing on this device can reach
@@ -778,6 +833,7 @@ struct SendMachineTests {
             "calls": [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
             "gas_fee_token": NSNull(),
             "quoted_fee": ["amount": "1000", "recipient": golden] as [String: Any],
+            "review": sendReview(of: golden),
         ])
         let reply = try CoreJSON.object(answer)
         #expect(reply["type"] as? String == "submit_failed")

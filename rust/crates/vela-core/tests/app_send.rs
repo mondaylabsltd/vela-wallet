@@ -498,7 +498,7 @@ fn continue_to_confirm(sut: &mut Sut, fee: FeeEstimateView) {
 
 /// Slide through the pre-sign treasury recheck into the in-flight submit.
 fn slide_to_submit(sut: &mut Sut) -> Op {
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(
         matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
         "pre-sign treasury recheck expected, got {ops:?}"
@@ -4059,6 +4059,175 @@ fn a_requote_before_the_slide_signs_the_new_number_not_the_old_one() {
     assert_eq!(quoted.amount, "2000000", "① holds across requotes");
 }
 
+// ===========================================================================
+// The review, bound to what the passkey signs
+// ===========================================================================
+
+/// The operation a shell's spine assembles from `SubmitUserOp`: the calls,
+/// then the in-band fee leg, as one MultiSend.
+fn spine_operation(submit: &Op) -> vela_core::user_op::UserOperation {
+    use vela_core::user_op;
+    let Op::SubmitUserOp {
+        account,
+        calls,
+        gas_fee_token,
+        quoted_fee: Some(quoted),
+        ..
+    } = submit
+    else {
+        panic!("in-band submit expected: {submit:?}");
+    };
+    let inner: Vec<_> = calls
+        .iter()
+        .map(|call| user_op::to_multi_send_call(&call.to, &call.value, &call.data).unwrap())
+        .collect();
+    let batch = user_op::in_band_batch(
+        &inner,
+        gas_fee_token.as_deref(),
+        &quoted.recipient,
+        quoted.amount.parse().unwrap(),
+    )
+    .unwrap();
+    user_op::UserOperation {
+        sender: account.clone(),
+        nonce: "0x1".to_owned(),
+        init_code: Vec::new(),
+        call_data: user_op::build_multi_send_execute_call_data(&batch).unwrap(),
+        verification_gas_limit: 1,
+        call_gas_limit: 1,
+        pre_verification_gas: 1,
+        max_fee_per_gas: 0,
+        max_priority_fee_per_gas: 0,
+        paymaster_and_data: Vec::new(),
+        signature: Vec::new(),
+    }
+}
+
+#[test]
+fn the_review_confirmed_is_handed_down_and_only_its_operation_is_signed() {
+    use vela_core::signed_review::reviewed_safe_op_hash;
+    for token in ["eth", "usdc"] {
+        let mut sut = boot(vec![eth("2"), usdc("100")]);
+        match token {
+            "eth" => to_confirm_native(&mut sut, "1", native_fee(1, 42_000_000_000_000)),
+            _ => {
+                select_usdc(&mut sut);
+                set_recipient(&mut sut, RECIPIENT);
+                sut.dispatch(Event::SetAmount {
+                    amount: "10".to_owned(),
+                });
+                continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+            }
+        }
+        let drawn = sut.view().review_digest.expect("the review names itself");
+        let ops = sut.dispatch(Event::SlideConfirm {
+            review: Some(drawn.clone()),
+        });
+        assert!(
+            matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+            "{ops:?}"
+        );
+        let submit = sut.resolve(covered()).into_iter().next().unwrap();
+        let Op::SubmitUserOp { review, .. } = &submit else {
+            panic!("{submit:?}");
+        };
+        assert_eq!(
+            review.digest(),
+            drawn,
+            "{token}: the review drawn is the review signed"
+        );
+        assert_eq!(review.account, ACCOUNT);
+        assert_eq!(review.transfers.len(), 1);
+        assert_eq!(review.transfers[0].to, RECIPIENT);
+
+        let op = spine_operation(&submit);
+        assert!(reviewed_safe_op_hash(&op, 1, review).is_ok(), "{token}");
+        // One wei more, anywhere, and there is nothing to sign.
+        let Op::SubmitUserOp { calls, .. } = &submit else {
+            unreachable!()
+        };
+        let mut more = submit.clone();
+        if let Op::SubmitUserOp { calls: c, .. } = &mut more {
+            *c = calls.clone();
+            if c[0].value != "0" {
+                c[0].value = (c[0].value.parse::<u128>().unwrap() + 1).to_string();
+            } else {
+                c[0].data =
+                    vela_core::app::fee_policy::encode_erc20_transfer(RECIPIENT, 10_000_001)
+                        .unwrap();
+            }
+        }
+        assert!(
+            reviewed_safe_op_hash(&spine_operation(&more), 1, review).is_err(),
+            "{token}"
+        );
+    }
+}
+
+#[test]
+fn a_confirm_drawn_for_another_review_confirms_nothing() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 42_000_000_000_000));
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: Some("0xnot-this-review".to_owned()),
+    });
+    assert!(ops.is_empty(), "nothing is asked: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+}
+
+/// A re-quote that lands between the tap and the signature is not signed:
+/// the review comes back with its new figure, and confirms again.
+#[test]
+fn a_requote_after_the_confirm_puts_the_review_back_unsigned() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+    let drawn = sut.view().review_digest.expect("on the review");
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: Some(drawn.clone()),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_000_000),
+    });
+    let ops = sut.resolve(covered());
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
+        "the old figure is not signed, nor the new one unseen: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    let again = view.review_digest.expect("on the review");
+    assert_ne!(again, drawn);
+    // Confirmed again, the new figure is what is signed.
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: Some(again),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let submit = sut.resolve(covered()).into_iter().next().unwrap();
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, "2000000");
+}
+
 /// What the shell's simulation said, opaque to the core.
 const SIM_JSON: &str = r#"{"changes":[]}"#;
 
@@ -4276,7 +4445,7 @@ fn a_doomed_same_asset_batch_never_reaches_the_passkey() {
     // The slide routes to "edit amount" — no lock, no signing. (Back on the
     // form with its fee coin reset, the form quote re-arms; that is the one
     // op allowed here, and it is not a submit.)
-    let ops = without_form_quote(sut.dispatch(Event::SlideConfirm));
+    let ops = without_form_quote(sut.dispatch(Event::SlideConfirm { review: None }));
     assert!(ops.is_empty(), "⑧: {ops:?}");
     let view = sut.view();
     assert_eq!(view.stage, SendStage::EnterDetails);
@@ -4292,7 +4461,7 @@ fn a_doomed_same_asset_batch_never_reaches_the_passkey() {
 fn the_race_window_after_preflight_is_covered_by_a_pre_sign_recheck() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]), "⑭");
     assert_eq!(sut.view().tx_status, SendTxStatus::Preparing);
     // The float fell below its floor after the preflight.
@@ -4304,7 +4473,7 @@ fn the_race_window_after_preflight_is_covered_by_a_pre_sign_recheck() {
     assert!(!view.sending, "lock released — a retry can start");
     // And the retry does start.
     sut.dispatch(Event::DismissTreasurySheet);
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
 }
 
@@ -4316,7 +4485,7 @@ fn the_race_window_after_preflight_is_covered_by_a_pre_sign_recheck() {
 fn cancel_during_the_pre_sign_window_never_resurrects_the_passkey() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
     // Cancel while the treasury recheck is still in flight (the pre-sign
     // window — TS's ~20s class of awaits).
@@ -4335,7 +4504,7 @@ fn cancel_during_the_pre_sign_window_never_resurrects_the_passkey() {
 fn back_is_refused_while_a_transaction_is_in_progress() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    sut.dispatch(Event::SlideConfirm);
+    sut.dispatch(Event::SlideConfirm { review: None });
     let ops = sut.dispatch(Event::Back);
     assert!(ops.is_empty());
     assert_eq!(sut.view().stage, SendStage::Confirm, "③: back refused");
@@ -4357,7 +4526,7 @@ fn a_cancelled_runs_stale_result_never_touches_the_retrys_lock() {
     sut.dispatch(Event::CancelSigning);
     assert!(!sut.view().sending, "cancel releases the lock immediately");
     // Retry: a NEW send acquires a new generation.
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
     assert!(sut.view().sending);
     // The CANCELLED run's submit settles now (oldest outstanding op) — it
@@ -4430,7 +4599,7 @@ fn a_currency_commit_under_the_confirm_page_disarms_the_slide_and_says_why() {
     // slide that arrives anyway signs nothing. `to_base_units("0", 6)` is a
     // perfectly valid `Some(0)`, so without this the build path would have
     // encoded a zero-value transfer and asked for a passkey over it.
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(
         !ops.iter()
             .any(|op| matches!(op, Op::SubmitUserOp { .. } | Op::ProbeTreasury { .. })),
@@ -4483,9 +4652,9 @@ fn a_healthy_confirm_page_and_the_batch_modes_are_never_accused_of_a_dead_amount
 fn double_slide_in_one_tick_starts_exactly_one_submit() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    let first = sut.dispatch(Event::SlideConfirm);
+    let first = sut.dispatch(Event::SlideConfirm { review: None });
     assert_eq!(first.len(), 1);
-    let second = sut.dispatch(Event::SlideConfirm);
+    let second = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(second.is_empty(), "④: the lock is synchronous");
 }
 
@@ -7052,7 +7221,7 @@ fn a_cancelled_submit_is_never_cleared_to_post() {
     assert_eq!(view.tx_status, SendTxStatus::Idle);
     assert!(!view.sending);
     // And the next slide sends normally.
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(
         matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
         "{ops:?}"
@@ -7083,7 +7252,7 @@ fn a_cancelled_run_s_late_op_signed_never_rides_the_retry() {
     slide_to_submit(&mut sut);
     sut.dispatch(Event::SigningStarted);
     sut.dispatch(Event::CancelSigning);
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(
         matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
         "{ops:?}"
@@ -7573,7 +7742,7 @@ fn the_cant_reach_sheet_retries_through_the_precheck_and_dismisses_cleanly() {
 fn the_pre_sign_recheck_stops_on_a_relay_that_cannot_serve_the_chain() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]));
     let ops = sut.resolve(uncovered());
     assert!(ops.is_empty(), "no SubmitUserOp: {ops:?}");
@@ -7641,7 +7810,7 @@ fn a_relay_still_short_refreshes_the_balance_and_waits_again() {
 fn on_confirm_a_funded_relay_closes_the_sheet_without_signing() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    sut.dispatch(Event::SlideConfirm);
+    sut.dispatch(Event::SlideConfirm { review: None });
     sut.resolve(low_float());
     elapse_the_watch(&mut sut);
     let ops = answer_the_watch(&mut sut, covered());
@@ -7956,7 +8125,7 @@ fn a_funded_polygon_relayer_shows_no_notice_422() {
     let view = sut.view();
     assert!(view.can_confirm, "the slide is open");
     // The pre-sign recheck asks about Polygon, and goes on to submit.
-    let ops = sut.dispatch(Event::SlideConfirm);
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
     assert!(
         matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 137 }]),
         "{ops:?}"
@@ -8482,7 +8651,7 @@ fn the_cant_reach_stop_carries_its_own_report_466() {
 
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    sut.dispatch(Event::SlideConfirm);
+    sut.dispatch(Event::SlideConfirm { review: None });
     sut.resolve(uncovered());
     let report = sut.view().relay_report.expect("the can't-reach stop");
     assert_eq!(
@@ -8525,7 +8694,7 @@ fn on_confirm_a_relay_stop_closes_the_confirm_gate_and_the_slide_refuses() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
     assert!(sut.view().can_confirm);
-    sut.dispatch(Event::SlideConfirm);
+    sut.dispatch(Event::SlideConfirm { review: None });
     assert_only_the_watch(
         &sut.resolve(low_float()),
         "the funding stop opens on confirm",
@@ -8536,7 +8705,8 @@ fn on_confirm_a_relay_stop_closes_the_confirm_gate_and_the_slide_refuses() {
     assert!(!view.sending);
     assert!(!view.can_confirm, "the stop is up: the slide is shut");
     assert!(
-        sut.dispatch(Event::SlideConfirm).is_empty(),
+        sut.dispatch(Event::SlideConfirm { review: None })
+            .is_empty(),
         "a slide from a stale frame asks for nothing"
     );
     let ops = sut.dispatch(Event::RetryAfterBootstrap);
@@ -8550,10 +8720,12 @@ fn on_confirm_a_relay_stop_closes_the_confirm_gate_and_the_slide_refuses() {
 fn on_confirm_the_cant_reach_stop_closes_the_confirm_gate_and_the_slide_refuses() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
-    sut.dispatch(Event::SlideConfirm);
+    sut.dispatch(Event::SlideConfirm { review: None });
     assert!(sut.resolve(uncovered()).is_empty());
     assert!(!sut.view().can_confirm);
-    assert!(sut.dispatch(Event::SlideConfirm).is_empty());
+    assert!(sut
+        .dispatch(Event::SlideConfirm { review: None })
+        .is_empty());
     let ops = sut.dispatch(Event::RetryRelayUnreachable);
     assert!(
         matches!(ops.as_slice(), [Op::ProbeTreasury { chain_id: 1 }]),
@@ -8573,7 +8745,9 @@ fn a_refused_submit_shuts_the_slide_until_its_retry() {
     });
     assert_eq!(sut.view().tx_error, Some(SendTxErrorKey::Generic));
     assert!(!sut.view().can_confirm);
-    assert!(sut.dispatch(Event::SlideConfirm).is_empty());
+    assert!(sut
+        .dispatch(Event::SlideConfirm { review: None })
+        .is_empty());
     sut.dispatch(Event::RetryAfterError);
     assert!(sut.view().can_confirm);
 }
@@ -8612,7 +8786,8 @@ fn the_confirm_waits_for_the_account_s_previous_transaction() {
         "componentsUi.signing.confirmBlock.previousPending"
     );
     assert!(
-        sut.dispatch(Event::SlideConfirm).is_empty(),
+        sut.dispatch(Event::SlideConfirm { review: None })
+            .is_empty(),
         "a slide from a stale frame signs nothing"
     );
 
@@ -8866,7 +9041,7 @@ fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
     sut.dispatch(Event::FeeBusyChanged { busy: false });
     assert!(!sut.view().can_confirm);
     assert!(sut
-        .dispatch(Event::SlideConfirm)
+        .dispatch(Event::SlideConfirm { review: None })
         .iter()
         .all(|op| !matches!(op, Op::SubmitUserOp { .. })));
 

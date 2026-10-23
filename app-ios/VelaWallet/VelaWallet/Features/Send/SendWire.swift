@@ -495,6 +495,9 @@ struct SendViewWire: Decodable, Equatable {
     let canContinue: Bool
     /// Fee settled ∧ nothing re-quoting ∧ no same-asset breach ∧ idle.
     let canConfirm: Bool
+    /// On the review: which review this is (a digest of what the passkey
+    /// would sign). The confirm sends back the one it was drawn on.
+    var reviewDigest: String?
     let sending: Bool
     /// `idle` / `preparing` / `signing` / `submitting` / `confirmed` / `error`.
     let txStatus: String

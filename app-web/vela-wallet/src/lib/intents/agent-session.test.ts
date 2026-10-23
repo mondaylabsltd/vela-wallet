@@ -99,7 +99,8 @@ function form() {
 					...(event.type === 'seed_split_recipients' && { recipients: event.recipients }),
 					can_continue: true
 				} as SendView;
-			if (event.type === 'continue') view = { ...view, stage: 'confirm', can_confirm: true };
+			if (event.type === 'continue')
+				view = { ...view, stage: 'confirm', can_confirm: true, review_digest: DRAWN };
 			// The core's own gate: confirm only from the review, once.
 			if (event.type === 'slide_confirm' && view.stage === 'confirm' && view.can_confirm)
 				view = { ...view, tx_status: 'preparing', can_confirm: false };
@@ -123,7 +124,7 @@ function form() {
 		/** The person dismissed the passkey prompt: back on the review. */
 		dismissed() {
 			ceremony.listener?.('failed');
-			view = { ...(view as SendView), tx_status: 'idle', can_confirm: true };
+			view = { ...(view as SendView), tx_status: 'idle', can_confirm: true, review_digest: DRAWN };
 		}
 	};
 }
@@ -182,7 +183,15 @@ const batch = (count: number): IntentAction => ({
 	token: null,
 	recipients: recipients(count)
 });
+/** The review the fake form draws, and the person's confirm names. */
+const DRAWN = '0xdrawn';
+/** The person's confirm names the review it was drawn on; an agent's names none. */
 const submit = (operation: string): IntentAction => ({ type: 'submit_transfer', operation });
+const confirm = (operation: string): IntentAction => ({
+	type: 'submit_transfer',
+	operation,
+	review: DRAWN
+});
 
 beforeEach(() => {
 	sendDesk.port = null;
@@ -211,7 +220,7 @@ describe('an agent sending in batches (spec 103)', () => {
 
 		// The person reads the review and confirms it: then, and only then.
 		looked();
-		expect(await intents.invoke('person', submit(id))).toMatchObject({
+		expect(await intents.invoke('person', confirm(id))).toMatchObject({
 			status: 'accepted',
 			operation: { state: 'awaiting_passkey', reason: null }
 		});
@@ -226,7 +235,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		const first = await intents.invoke('agent', batch(60));
 		const one = (first as { operation: { id: string } }).operation.id;
 		looked();
-		await intents.invoke('person', submit(one));
+		await intents.invoke('person', confirm(one));
 		f.signed('0xOP1');
 		expect(transfers.get(one)?.state).toBe('submitted');
 
@@ -241,7 +250,7 @@ describe('an agent sending in batches (spec 103)', () => {
 		expect(transfers.get(one)).toMatchObject({ state: 'confirmed', tx_hash: '0xTX1' });
 
 		looked();
-		await intents.invoke('person', submit(two));
+		await intents.invoke('person', confirm(two));
 		f.signed('0xOP2');
 		expect(transfers.get(two)?.state).toBe('submitted');
 		f.detach();
@@ -253,14 +262,14 @@ describe('an agent sending in batches (spec 103)', () => {
 		const drafted = await intents.invoke('agent', batch(3));
 		const id = (drafted as { operation: { id: string } }).operation.id;
 		looked();
-		await intents.invoke('person', submit(id));
+		await intents.invoke('person', confirm(id));
 		f.dismissed();
 		expect(transfers.get(id)).toMatchObject({
 			state: 'awaiting_confirmation',
 			reason: 'the person dismissed the passkey prompt'
 		});
 		// Their next confirm is theirs to make.
-		expect(await intents.invoke('person', submit(id))).toMatchObject({ status: 'accepted' });
+		expect(await intents.invoke('person', confirm(id))).toMatchObject({ status: 'accepted' });
 		expect(presses(f)).toBe(2);
 		f.detach();
 	});
@@ -272,8 +281,8 @@ describe('an agent sending in batches (spec 103)', () => {
 		const id = (drafted as { operation: { id: string } }).operation.id;
 		looked();
 		const [a, b] = await Promise.all([
-			intents.invoke('person', submit(id)),
-			intents.invoke('person', submit(id))
+			intents.invoke('person', confirm(id)),
+			intents.invoke('person', confirm(id))
 		]);
 		expect([a.status, b.status].sort()).toEqual(['accepted', 'rejected']);
 		expect(presses(f)).toBe(1);

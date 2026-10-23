@@ -584,7 +584,7 @@ pub fn examine(action: &Action, world: &World) -> Examined {
         | Action::PrepareBatchTransfer { .. }
         | Action::AddToken { .. }
         | Action::RefreshBalances => signed_in(world),
-        Action::SubmitTransfer { operation: id } | Action::CancelTransfer { operation: id } => {
+        Action::SubmitTransfer { operation: id, .. } | Action::CancelTransfer { operation: id } => {
             examine_transfer(action, world, id)
         }
         Action::DeleteActivity { id } => match &world.feed {

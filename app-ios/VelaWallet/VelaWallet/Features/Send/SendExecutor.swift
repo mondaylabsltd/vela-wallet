@@ -608,6 +608,14 @@ final class SendExecutor {
                 tier: fee["tier"] as? String
             )
         }
+        // The review the person confirmed: the passkey's hash is computed only
+        // for the operation that is exactly it. A submit without one signs
+        // nothing.
+        guard let review = (operation["review"] as? [String: Any]).map(CoreJSON.string) else {
+            return CoreJSON.string([
+                "type": "submit_failed", "failure": ["type": "other", "message": NSNull()],
+            ])
+        }
         let task = Task<UserOpSpine.Submitted, Error> { [spine, ports, gate, clearanceWaitMs] in
             try await spine.submit(
                 chainId: chainId,
@@ -615,6 +623,7 @@ final class SendExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                review: review,
                 signingStarted: { ports.signingStarted() },
                 // The records before the bytes (RJ1).
                 writeAhead: { hash, block in

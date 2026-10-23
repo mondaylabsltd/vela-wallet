@@ -186,8 +186,8 @@ pub async fn prepare_batch(
     shared::prepare_batch(chain_id, token, recipients, by, &mut Desk { cx }).await
 }
 
-pub fn submit(id: &str, by: Actor, cx: &mut AsyncApp) -> Performed {
-    shared::submit(id, by, &mut Desk { cx })
+pub fn submit(id: &str, review: Option<&str>, by: Actor, cx: &mut AsyncApp) -> Performed {
+    shared::submit(id, review, by, &mut Desk { cx })
 }
 
 pub fn cancel(id: &str, cx: &mut AsyncApp) -> Performed {

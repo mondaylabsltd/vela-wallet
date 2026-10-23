@@ -294,8 +294,17 @@ class Transfers {
 	 * passkey prompt shows no transaction, so it is never raised over a review
 	 * the person did not choose to confirm — their own tap on the review is
 	 * the only way to it.
+	 *
+	 * The person's confirm names the review its tap was drawn on (`review`,
+	 * the view's `review_digest`): one drawn for another review — changed, or
+	 * another send's that took its place — is refused, and the send's own
+	 * confirm checks it again.
 	 */
-	submit(id: string, by: IntentActor = 'person'): IntentOperation | IntentReason {
+	submit(
+		id: string,
+		by: IntentActor = 'person',
+		review: string | null = null
+	): IntentOperation | IntentReason {
 		const port = sendDesk.port;
 		const operation = this.operations.find((entry) => entry.id === id);
 		if (!port || !operation || port.session() !== operation.session || port.view() === null)
@@ -318,6 +327,13 @@ class Transfers {
 			return this.#plain(operation);
 		}
 		if (!view?.can_confirm) return reason('refused', 'the review cannot be confirmed yet');
+		if (review === null)
+			return reason('invalid_input', 'the confirm did not say which review it was drawn on');
+		if (view.review_digest !== review)
+			return reason(
+				'not_ready',
+				'the review changed before the confirm reached it: look it over, then confirm again'
+			);
 		if (
 			operation.draftedBy === 'agent' &&
 			this.clock.now() - operation.reviewedAt < REVIEW_SETTLE_MS
@@ -328,7 +344,7 @@ class Transfers {
 			);
 		operation.reason = null;
 		operation.confirmedAfter = this.#ceremonies;
-		port.dispatch({ type: 'slide_confirm' });
+		port.dispatch({ type: 'slide_confirm', review });
 		this.sync();
 		return this.#plain(operation);
 	}

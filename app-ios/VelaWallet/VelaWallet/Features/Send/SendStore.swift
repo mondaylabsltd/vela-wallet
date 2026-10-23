@@ -424,7 +424,13 @@ final class SendStore {
     /// The chain the form is on: the selected token's, else the sweep's (the
     /// core's `form_chain`).
     var formChainId: Int? { view?.selectedToken?.chainId ?? view?.multiChainId }
-    func slideConfirm() { dispatch(["type": "slide_confirm"]) }
+    /// The confirm, naming the review it was drawn on (`review_digest`): one
+    /// drawn for another review confirms nothing.
+    func slideConfirm(review: String? = nil) {
+        var event: [String: Any] = ["type": "slide_confirm"]
+        if let review { event["review"] = review }
+        dispatch(event)
+    }
     func cancelSigning() { dispatch(["type": "cancel_signing"]) }
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
 

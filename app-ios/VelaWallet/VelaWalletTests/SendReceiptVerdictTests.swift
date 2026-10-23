@@ -150,6 +150,12 @@ struct SendReceiptVerdictTests {
             "calls": [["to": fixture.account, "value": "1000", "data": "0x"] as [String: Any]],
             "gas_fee_token": NSNull(),
             "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
+            // The review the person confirmed: exactly these call and fee.
+            "review": [
+                "chain_id": 100, "account": fixture.account,
+                "transfers": [["to": fixture.account, "token": NSNull(), "amount": "1000"]],
+                "fee": ["recipient": fixture.account, "token": NSNull(), "amount": "1000"],
+            ] as [String: Any],
         ]))
         #expect(reply["type"] as? String == "submitted")
         #expect(reply["maybe_sent"] as? Bool == true)
@@ -212,7 +218,13 @@ struct SendReceiptVerdictTests {
                 "public_key_hex": NSNull(),
                 "calls": [["to": fixture.account, "value": "1000", "data": "0x"] as [String: Any]],
                 "gas_fee_token": NSNull(),
-                "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
+            "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
+                // The review the person confirmed: exactly these call and fee.
+                "review": [
+                    "chain_id": 100, "account": fixture.account,
+                    "transfers": [["to": fixture.account, "token": NSNull(), "amount": "1000"]],
+                    "fee": ["recipient": fixture.account, "token": NSNull(), "amount": "1000"],
+                ] as [String: Any],
             ]))
         }
         // On state, not a clock (`Waits.swift`): the suite's time limit

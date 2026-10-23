@@ -669,10 +669,12 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             calls,
             gas_fee_token,
             quoted_fee,
+            review,
             // In-band operations sign zero native-fee fields; the override
             // the core carries for the legacy path has no reader here.
             max_fee_per_gas: _,
         } => {
+            let review = review.clone();
             let chain_id = *chain_id;
             let account = account.clone();
             let calls: Vec<FeeCall> = calls.clone();
@@ -731,6 +733,9 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     &keys,
                     signer,
                     quoted,
+                    // The review the person confirmed: the operation is
+                    // signed only if it is exactly this.
+                    Some(&review),
                     // The send column reads its own flags for the prompt
                     // (`signing_started`, the Trusted Signer's channel).
                     &user_op::quiet,

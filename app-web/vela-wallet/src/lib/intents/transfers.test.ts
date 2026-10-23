@@ -52,6 +52,8 @@ const looked = () => {
 };
 
 const BOB = '0x1111111111111111111111111111111111111111';
+/** The review the fake send draws, and the person's confirm names. */
+const DRAWN = '0xdrawn';
 
 type Behaviour = {
 	/** What `set_amount` / `tap_max` leaves on the form. */
@@ -112,7 +114,13 @@ function desk(behaviour: Behaviour = {}) {
 			}
 			if (event.type === 'continue') {
 				if (behaviour.alertOnContinue) alert = behaviour.alertOnContinue;
-				else view = { ...view, stage: 'confirm', can_confirm: true } as SendView;
+				else
+					view = {
+						...view,
+						stage: 'confirm',
+						can_confirm: true,
+						review_digest: DRAWN
+					} as SendView;
 			}
 			if (event.type === 'slide_confirm') view = { ...view, tx_status: 'preparing' } as SendView;
 		},
@@ -207,8 +215,8 @@ describe('an operation, read from the machines that own it', () => {
 		const id = (prepared as { id: string }).id;
 
 		looked();
-		expect(transfers.submit(id)).toMatchObject({ state: 'awaiting_passkey' });
-		expect(d.events.at(-1)).toEqual({ type: 'slide_confirm' });
+		expect(transfers.submit(id, 'person', DRAWN)).toMatchObject({ state: 'awaiting_passkey' });
+		expect(d.events.at(-1)).toEqual({ type: 'slide_confirm', review: DRAWN });
 
 		ceremony.listener?.('signed');
 		expect(transfers.get(id)?.state).toBe('submitting');
@@ -227,7 +235,7 @@ describe('an operation, read from the machines that own it', () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;
 		looked();
-		transfers.submit(id);
+		transfers.submit(id, 'person', DRAWN);
 		// The core builds the operation (`submitting`) before it asks for the passkey.
 		d.set({ tx_status: 'submitting' });
 		expect(transfers.get(id)?.state).toBe('awaiting_passkey');
@@ -240,7 +248,7 @@ describe('an operation, read from the machines that own it', () => {
 		const d = desk();
 		const id = ((await transfers.prepare(draft())) as { id: string }).id;
 		looked();
-		transfers.submit(id);
+		transfers.submit(id, 'person', DRAWN);
 		d.set({ tx_status: 'idle' });
 		expect(transfers.get(id)?.state).toBe('awaiting_confirmation');
 		d.detach();
@@ -255,7 +263,7 @@ describe('an operation, read from the machines that own it', () => {
 			state: 'cancelled',
 			reason: 'left the review without sending'
 		});
-		expect(transfers.submit(id)).toMatchObject({ code: 'not_found' });
+		expect(transfers.submit(id, 'person', DRAWN)).toMatchObject({ code: 'not_found' });
 		d.detach();
 	});
 
@@ -266,10 +274,24 @@ describe('an operation, read from the machines that own it', () => {
 		looked();
 		expect(transfers.cancel(first.id)).toBeNull();
 		const swapped = (await transfers.prepare(draft('9'))) as { id: string };
-		expect(transfers.submit(swapped.id)).toMatchObject({ code: 'not_ready' });
+		expect(transfers.submit(swapped.id, 'person', DRAWN)).toMatchObject({ code: 'not_ready' });
 		expect(d.events.some((event) => event.type === 'slide_confirm')).toBe(false);
 		looked();
-		expect(transfers.submit(swapped.id)).toMatchObject({ state: 'awaiting_passkey' });
+		expect(transfers.submit(swapped.id, 'person', DRAWN)).toMatchObject({
+			state: 'awaiting_passkey'
+		});
+		d.detach();
+	});
+
+	it('confirms nothing for a tap drawn on another review, or naming none', async () => {
+		const d = desk();
+		const id = ((await transfers.prepare(draft())) as { id: string }).id;
+		looked();
+		expect(transfers.submit(id, 'person', '0xanother')).toMatchObject({ code: 'not_ready' });
+		expect(transfers.submit(id, 'person', null)).toMatchObject({ code: 'invalid_input' });
+		expect(d.events.some((event) => event.type === 'slide_confirm')).toBe(false);
+		expect(transfers.submit(id, 'person', DRAWN)).toMatchObject({ state: 'awaiting_passkey' });
+		expect(d.events.at(-1)).toEqual({ type: 'slide_confirm', review: DRAWN });
 		d.detach();
 	});
 
@@ -292,12 +314,14 @@ describe('an operation, read from the machines that own it', () => {
 		const d = desk();
 		d.port.open({});
 		expect(transfers.current(), 'still on the form').toBeNull();
-		d.set({ stage: 'confirm', can_confirm: true } as never);
+		d.set({ stage: 'confirm', can_confirm: true, review_digest: DRAWN } as never);
 		const adopted = transfers.current();
 		expect(adopted).toMatchObject({ state: 'awaiting_confirmation' });
 		expect(transfers.current()?.id, 'once, not again').toBe(adopted?.id);
 		// Theirs: confirmed at once.
-		expect(transfers.submit(adopted!.id)).toMatchObject({ state: 'awaiting_passkey' });
+		expect(transfers.submit(adopted!.id, 'person', DRAWN)).toMatchObject({
+			state: 'awaiting_passkey'
+		});
 		d.detach();
 	});
 });
@@ -348,7 +372,7 @@ describe('one transfer after another (spec 103)', () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
 		looked();
-		transfers.submit(first.id);
+		transfers.submit(first.id, 'person', DRAWN);
 		ceremony.listener?.('signed');
 		d.set({ stage: 'receipt', user_op_hash: '0xOP1', receipt: { status: 'confirmed' } } as never);
 		expect(transfers.get(first.id)?.state).toBe('confirmed');
@@ -370,7 +394,7 @@ describe('one transfer after another (spec 103)', () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
 		looked();
-		transfers.submit(first.id);
+		transfers.submit(first.id, 'person', DRAWN);
 		d.set({ stage: 'receipt', user_op_hash: '0xOP2', receipt: { status: 'submitted' } } as never);
 		await transfers.prepare(draft('2'));
 		expect(transfers.get(first.id)).toMatchObject({ state: 'submitted', user_op_hash: '0xOP2' });
@@ -392,7 +416,7 @@ describe('one transfer after another (spec 103)', () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };
 		looked();
-		transfers.submit(first.id);
+		transfers.submit(first.id, 'person', DRAWN);
 		d.set({ tx_status: 'error', tx_error: 'estimate_failed' } as never);
 		// The review offers to try again: said "failed", an agent would draft
 		// it again while the person's retry goes through.

@@ -104,6 +104,40 @@ describe('the SafeOp hash', () => {
 		).toThrow(SignAttestError);
 	});
 
+	/**
+	 * The review the person confirmed, against the operation assembled for it:
+	 * the core decodes the operation's calls and the passkey's hash is only
+	 * given for exactly that review — even when the shell's own fee choice (a
+	 * re-quote after the review) agrees with its own calls.
+	 */
+	test('an operation that is not the review the person confirmed is refused', () => {
+		const { inner, fee, callData } = shownBatch();
+		const userOp = op(callData);
+		const calls = { inner, fee, alwaysMultiSend: true };
+		const shell = calculateSafeOpHash(userOp, CHAIN);
+		const reviewed = (amount: string, feeAmount: string) => ({
+			chain_id: CHAIN,
+			account: SAFE,
+			transfers: [{ to: RECIPIENT, token: USDC, amount }],
+			fee: { recipient: RELAY, token: null, amount: feeAmount }
+		});
+		expect(attestedSafeOpHash(userOp, CHAIN, calls, shell, reviewed('1000000', '12345'))).toEqual(
+			shell
+		);
+		expect(() =>
+			attestedSafeOpHash(userOp, CHAIN, calls, shell, reviewed('999999', '12345'))
+		).toThrow(SignAttestError);
+		expect(() =>
+			attestedSafeOpHash(userOp, CHAIN, calls, shell, reviewed('1000000', '12000'))
+		).toThrow(SignAttestError);
+		expect(() =>
+			attestedSafeOpHash(userOp, CHAIN, calls, shell, {
+				...reviewed('1000000', '12345'),
+				fee: null
+			})
+		).toThrow(SignAttestError);
+	});
+
 	test('a shell hash the core does not reproduce is refused', () => {
 		const { callData } = shownBatch();
 		const userOp = op(callData);

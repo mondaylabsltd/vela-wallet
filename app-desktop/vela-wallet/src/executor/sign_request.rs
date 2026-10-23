@@ -545,6 +545,8 @@ fn sign_and_submit(
         &ctx.keys,
         signer,
         quoted,
+        // A site's request: reviewed on its own sheet.
+        None,
         &edges,
         &asked,
         &before_post,

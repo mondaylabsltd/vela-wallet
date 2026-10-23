@@ -79,6 +79,7 @@ fn one_of_each() -> Vec<Action> {
         },
         Action::SubmitTransfer {
             operation: "transfer-1".to_owned(),
+            review: None,
         },
         Action::CancelTransfer {
             operation: "transfer-1".to_owned(),
@@ -543,6 +544,7 @@ fn an_agent_may_prepare_a_transfer_without_a_grant() {
 fn an_agents_confirm_only_asks_the_person() {
     let submit = Action::SubmitTransfer {
         operation: "transfer-1".to_owned(),
+        review: None,
     };
     assert_eq!(authorize(Actor::Agent, &submit, &ON), Decision::Allow);
     assert_eq!(authorize(Actor::Person, &submit, &ON), Decision::Allow);

@@ -2819,6 +2819,30 @@ export function amountTextClean(raw, number, previous, pasted) {
 }
 
 /**
+ * The SafeOp hash for a send — only when the operation is exactly the
+ * review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
+ * chain and every call, decoded back out of its calldata. Anything else is
+ * refused and nothing is signed.
+ * @param {string} op_json
+ * @param {string} review_json
+ * @param {bigint} chain_id
+ * @returns {Uint8Array}
+ */
+export function attestReviewedSafeOpHash(op_json, review_json, chain_id) {
+    const ptr0 = passStringToWasm0(op_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(review_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.attestReviewedSafeOpHash(ptr0, len0, ptr1, len1, chain_id);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  * @param {Uint8Array} original_hash

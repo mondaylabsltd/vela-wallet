@@ -8142,13 +8142,18 @@ impl WalletPage {
                 FlowPanel::Dsd3 => {
                     // The person's confirm is `submit_transfer`, through the
                     // intents (spec 103): their own send is adopted as an
-                    // operation at its review, and confirmed there.
+                    // operation at its review, and confirmed there — naming
+                    // the review this button is drawn on, read now, at the
+                    // draw: a click handled after another review took its
+                    // place confirms nothing.
+                    let drawn = host.read(cx).view.review_digest.clone();
                     actions.advance = Some(Box::new(
-                        |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                             if let Some(operation) = crate::agent::transfers::current(cx) {
                                 crate::agent::invoke_person(
                                     Action::SubmitTransfer {
                                         operation: operation.id,
+                                        review: drawn.clone(),
                                     },
                                     cx,
                                 );

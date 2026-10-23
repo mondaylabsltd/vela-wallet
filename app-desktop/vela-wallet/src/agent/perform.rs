@@ -262,7 +262,9 @@ pub async fn perform(
             super::transfers::prepare_batch(*chain_id, token.as_deref(), recipients, actor, cx)
                 .await
         }
-        Action::SubmitTransfer { operation } => super::transfers::submit(operation, actor, cx),
+        Action::SubmitTransfer { operation, review } => {
+            super::transfers::submit(operation, review.as_deref(), actor, cx)
+        }
         Action::CancelTransfer { operation } => super::transfers::cancel(operation, cx),
         Action::AddToken { chain_id, address } => add_token(*chain_id, address, cx).await,
         Action::DeleteActivity { id } => {

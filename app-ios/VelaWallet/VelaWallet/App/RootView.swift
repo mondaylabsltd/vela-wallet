@@ -3051,7 +3051,10 @@ struct RootView: View {
                         flows.push(.scan)
                     },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
-                    onConfirm: { confirmTransfer() },
+                    // The review this button is drawn on, taken now, at the
+                    // draw: a tap handled after another review took its
+                    // place confirms nothing.
+                    onConfirm: { [drawn = send.view?.reviewDigest] in confirmTransfer(review: drawn) },
                     onReceiptDone: {
                         // One button, two meanings, the core's rule: a prompt
                         // that is up is cancelled at its checkpoint; anything
@@ -4108,13 +4111,16 @@ struct RootView: View {
     }
 
     /// The review's confirm: the person's own `submit_transfer`, as an
-    /// agent's request asks for it — the slide, and the passkey after it.
-    private func confirmTransfer() {
+    /// agent's request asks for it — the slide, and the passkey after it —
+    /// naming the review the tap was drawn on.
+    private func confirmTransfer(review: String?) {
         guard let operation = agent.reviewing() else {
-            send.slideConfirm()
+            send.slideConfirm(review: review)
             return
         }
-        agent.person(["type": "submit_transfer", "operation": operation])
+        var action: [String: Any] = ["type": "submit_transfer", "operation": operation]
+        if let review { action["review"] = review }
+        agent.person(action)
     }
 
     /// Every account-scoped store, pointed at the account in front: the

@@ -17995,6 +17995,22 @@ public func userOpRelayJson(draft: UserOpDraft, feeToken: String?)throws  -> Str
 })
 }
 /**
+ * The SafeOp hash for a send — only when the draft is exactly the review
+ * the person confirmed (`SubmitUserOp.review`, as JSON): its sender, chain
+ * and every call, decoded back out of its calldata. Anything else is
+ * refused and nothing is signed.
+ */
+public func userOpReviewedSafeOpHash(draft: UserOpDraft, chainId: UInt32, reviewJson: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_reviewed_safe_op_hash(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(reviewJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The SafeOp EIP-712 hash — the challenge the passkey signs.
  */
 public func userOpSafeOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> Data  {
@@ -19598,6 +19614,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_relay_json() != 41999) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_reviewed_safe_op_hash() != 6000) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_safe_op_hash() != 40057) {

@@ -1232,6 +1232,10 @@ fun VelaNavHost(
                 val flowState = flows.top
                 if (flowState != null && flowState in SEND_STATES) {
                     val liveState = SendLive.flowState(sendView, feeSheetOpen)
+                    // The review the confirm is drawn on, read here, at the
+                    // composition: a tap handled after another review took
+                    // its place confirms nothing.
+                    val drawnReview = sendView.review_digest
                     // The system back key on a live send page is the header's back —
                     // the drawn stack's `flows.back()` closed the whole flow from
                     // any page, confirm included (device-found, phase 6).
@@ -1342,7 +1346,7 @@ fun VelaNavHost(
                             } else {
                                 {
                                     openWhenHandedOff = true
-                                    confirmTransfer(agent, send)
+                                    confirmTransfer(agent, send, drawnReview)
                                 }
                             },
                             onCancel = trustedSigner::cancel,
@@ -1427,7 +1431,7 @@ fun VelaNavHost(
                             // and the core lowers the stop and asks again. The
                             // shell never picks by a view it may hold stale.
                             onContinue = { send.continueTapped() },
-                            onConfirm = { confirmTransfer(agent, send) },
+                            onConfirm = { confirmTransfer(agent, send, drawnReview) },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)
                                 feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
@@ -3233,9 +3237,10 @@ private fun addCheckedNetwork(agent: AgentStore, settings: app.getvela.wallet.fe
 
 /**
  * The review's confirm: the person's own `submit_transfer`, as an agent's
- * request asks for it — the slide, and the passkey after it.
+ * request asks for it — the slide, and the passkey after it — naming the
+ * review the tap was drawn on ([review]).
  */
-private fun confirmTransfer(agent: AgentStore, send: app.getvela.wallet.feature.send.core.SendController) {
-    val operation = agent.reviewing() ?: return send.slideConfirm()
-    agent.person(intent("submit_transfer", "operation" to operation))
+private fun confirmTransfer(agent: AgentStore, send: app.getvela.wallet.feature.send.core.SendController, review: String?) {
+    val operation = agent.reviewing() ?: return send.slideConfirm(review)
+    agent.person(intent("submit_transfer", "operation" to operation, "review" to review))
 }

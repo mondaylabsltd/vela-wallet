@@ -391,7 +391,9 @@ impl Deps for Live {
                 transfers::prepare_batch(*chain_id, token.as_deref(), recipients, actor, &mut desk)
                     .await
             }
-            Action::SubmitTransfer { operation } => transfers::submit(operation, actor, &mut desk),
+            Action::SubmitTransfer { operation, review } => {
+                transfers::submit(operation, review.as_deref(), actor, &mut desk)
+            }
             Action::CancelTransfer { operation } => transfers::cancel(operation, &mut desk),
             _ => {
                 let shell = Arc::clone(&self.inner.shell);
@@ -818,7 +820,10 @@ mod tests {
         let (rx, _task) = call(&agent, "vela_delete_group", json!({ "id": "g1" }));
         until("asked", || approvals(&agent).len() == 1);
         agent.stop();
-        assert!(!agent.enabled(), "off at once, before the shell has saved it");
+        assert!(
+            !agent.enabled(),
+            "off at once, before the shell has saved it"
+        );
         let ended = outcome(rx.recv_timeout(WAIT).unwrap());
         assert_eq!(ended["reason"]["code"], "stopped");
         until("saved", || !fake.performed().is_empty());

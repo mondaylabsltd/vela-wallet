@@ -243,7 +243,7 @@ export async function perform(
 		case 'prepare_transfer':
 			return started(await transfers.prepare(action, actor));
 		case 'submit_transfer':
-			return started(transfers.submit(action.operation, actor));
+			return started(transfers.submit(action.operation, actor, action.review ?? null));
 		case 'cancel_transfer':
 			return transfers.cancel(action.operation);
 		case 'prepare_batch_transfer':

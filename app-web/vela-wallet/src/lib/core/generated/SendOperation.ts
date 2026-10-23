@@ -5,6 +5,7 @@ import type { SendHapticKind } from "./SendHapticKind";
 import type { SendQuotedFee } from "./SendQuotedFee";
 import type { SendTimerTag } from "./SendTimerTag";
 import type { SendTxRecord } from "./SendTxRecord";
+import type { SignedReview } from "./SignedReview";
 
 /**
  * What this machine asks the platform to do. Sentences — the shell owns
@@ -23,7 +24,13 @@ auto_fee_token: boolean, } | { "type": "probe_treasury", chain_id: number, } | {
 /**
  * Present ⇔ in-band: sign EXACTLY this (invariant ①).
  */
-quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, 
+quoted_fee: SendQuotedFee | null, 
+/**
+ * The review the person confirmed. The passkey's hash is computed
+ * with [`crate::signed_review::reviewed_safe_op_hash`] against it:
+ * an operation that is not exactly this is never signed.
+ */
+review: SignedReview, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, 
 /**
  * EMPTY on the write-ahead's hand-off (spec 082 RJ1, second review):
  * a POST is about to leave and the tracker holds the op off "not

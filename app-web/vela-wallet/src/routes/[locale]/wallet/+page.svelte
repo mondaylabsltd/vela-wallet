@@ -1841,12 +1841,15 @@
 	 * only place the button is drawn, so there is always one.
 	 */
 	function confirmSend(): void {
+		// The review the button is drawn on: the view the page shows now — a
+		// click handled after another review took its place confirms nothing.
+		const review = sendView?.review_digest ?? undefined;
 		const operation = transfers.current();
 		if (operation === null) {
-			sendSession?.dispatch({ type: 'slide_confirm' });
+			sendSession?.dispatch({ type: 'slide_confirm', review });
 			return;
 		}
-		void intents.invoke('person', { type: 'submit_transfer', operation: operation.id });
+		void intents.invoke('person', { type: 'submit_transfer', operation: operation.id, review });
 	}
 
 	/** The asset a held token is, as its row names it — spam is not drawn, so not named. */

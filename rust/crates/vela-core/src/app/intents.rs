@@ -222,6 +222,14 @@ pub enum Action {
     /// never raised over a review the person has not chosen to confirm.
     SubmitTransfer {
         operation: String,
+        /// The person's own confirm: the [`super::send::SendView::review_digest`]
+        /// of the review their tap was drawn on, handed to the send's
+        /// confirm ([`super::send::Event::SlideConfirm`]) — a confirm drawn
+        /// for another review confirms nothing. An agent's submit only asks,
+        /// and names none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        review: Option<String>,
     },
     /// Leave a prepared transfer's review without sending it.
     CancelTransfer {
@@ -1012,7 +1020,7 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
             address(to)?;
             transfer_amount(amount)
         }
-        Action::SubmitTransfer { operation } | Action::CancelTransfer { operation } => {
+        Action::SubmitTransfer { operation, .. } | Action::CancelTransfer { operation } => {
             named(operation, "operation")
         }
         Action::PrepareBatchTransfer {

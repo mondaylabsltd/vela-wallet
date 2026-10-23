@@ -152,7 +152,9 @@ Phase 7 is implemented on both phones; that is not the same as ready to ship. Th
 4. **A platform passkey — verified on a physical Android phone; not on a physical iPhone.** See "The passkey on a phone" below.
 5. **A security review of the agent surface — done; its fixes in.** See "Security review (2026-10-21)" below.
 
-Still open before production: the passkey on a physical iPhone; the bridge noticing a phone that went silent (F3, ClientMCP); the token on the web and the desktop. Still deferred: QR pairing (phase 6).
+6. **The review bound to what the passkey signs — implemented on every shell.** See "The review, bound to the signature" below.
+
+Still open before production: the passkey on a physical iPhone; the binding exercised on a physical device; the bridge noticing a phone that went silent (F3, ClientMCP); the token on the web (`localStorage`) and the desktop (`0600`, not yet the keychain). Still deferred: QR pairing (phase 6).
 
 ### The passkey on a phone
 
@@ -199,7 +201,28 @@ The question: can any agent action bypass the person's confirmation, trigger a p
 | S7 | **Stop did not stop at once.** A draft under way went on to its review; requests in the moment before the setting was saved were answered as "on". | `Agent::stop` (and the desktop's) switches it off at once; a draft checks between its steps (`SendDesk::halted`: stopped, off or in the background) and leaves nothing open. |
 | S8 | **An approval could change under a tap.** Android's dialog was the same dialog with the next request's words. | One dialog or sheet per request, its Allow taking a tap only after 0.7 s (Android, iOS, the web; the desktop ignores an Allow click before then). |
 
+S1's delay is one of three links now; the others bind what the person saw to what is signed (below).
+
 **Left, low:** an agent-drafted review is not marked as the agent's on the review itself (the capsule says what the agent did last; on an Android flow, where it is compact, it shows only the link and Stop). Side-effect actions an agent may take without asking (show, refresh, save or favourite a contact) are visible and reversible.
+
+### The review, bound to the signature (2026-10-22)
+
+The owner's follow-up to S1: that an agent cannot reach the passkey does not mean the confirmation cannot be steered. A delay on the review is a heuristic; what the person confirmed must be bound to what the passkey signs.
+
+**What an audit of the four shells found** (each assembles the operation itself, from the send core's `SubmitUserOp`, and has the passkey sign its SafeOp hash):
+
+- Nothing compared the final operation with the review. The web's attest rebuilt the calldata from the same calls and the shell's own fee choice, so it could not catch that choice.
+- The web and the desktop, finding the confirmed quote missing or unusable, fetched a new one and signed it — a fee nobody reviewed; on Tempo with no quote they signed a computed reimbursement. The phones refuse both.
+- The send core signed whatever fee estimate it held when the confirm's own checks (the credential, the relay's float) finished: a re-quote landing between the tap and the signature was signed.
+- Every confirm found "the review" when it was handled, not when it was drawn: a tap on one review handled after another took its place (an agent's cancel and redraft) confirmed the second.
+
+**Three links, now:**
+
+1. **The tap names the review it was drawn on.** On the review the send's view carries `review_digest`: a SHA-256 over exactly what the passkey would authorize — the account, the chain, every transfer (recipient, token, base units, in order) and the fee (`signed_review::SignedReview::digest`). Each shell's confirm reads it when the button is drawn (iOS a capture list, Android at composition, the desktop at render, the web from the view on screen) and sends it with the confirm (`submit_transfer { review }`, `slide_confirm { review }`). A confirm drawn for another review confirms nothing (`vela-agent` and the web refuse it with a reason; the send core refuses it again). The person's `submit_transfer` without one is refused.
+2. **The confirm freezes what it confirmed.** At the confirm the send core freezes the review (`confirmed_review`), derived from the confirm screen's own figures (its lines, in base units, and the quoted fee) — not from the calls, so a builder that drifted from the screen is caught too. When the submit is built it is derived again; anything that moved — a re-quote that landed meanwhile — puts the review back in front of the person with its new figures, unsigned. `SubmitUserOp` hands the frozen review down.
+3. **The hash the passkey signs exists only for that review.** `signed_review::reviewed_safe_op_hash` decodes the operation's calls out of its calldata — the exact inverse of the wallet's own encoders: one `executeUserOp` CALL, or `executeUserOp(MultiSend, …, DELEGATECALL)` whose packed calls are all CALLs — reads each as a native or ERC-20 transfer (anything else, an `approve` say, is refused), and compares sender, chain, every transfer in order and the fee leg with the review. Every shell's send computes its challenge through it (`userOpReviewedSafeOpHash` on the phones, `attestReviewedSafeOpHash` on the web, directly on the desktop); a dApp's request keeps the signing sheet as its review. A send without a review signs nothing. The fallbacks above now fail closed: a fee the review did not show is not signed.
+
+**Tests:** the core's decoder and check (5: the wallet's own operations read; a drift in amount, recipient, token, fee, chain, sender, a leg more or less; a call not shown; shapes the wallet does not build); the send core (3: the review handed down is the one drawn, and only its operation hashes; a confirm drawn for another review; a re-quote after the confirm); `vela-agent` and the web's ledger (a confirm naming another review, or none); the web's attest; iOS's executor through its real spine (a review saying 999 where the operation pays 1000, and none at all: no ceremony). Not yet: the same on a physical device.
 
 ### The token on the web and the desktop
 

@@ -502,6 +502,11 @@ class SendExecutor(
             calls = op.calls.map { UserOpCall(to = it.to, value = it.value, data = it.data) },
             gasFeeToken = op.gas_fee_token,
             quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
+            // The review the person confirmed: the passkey's hash is computed
+            // only for the operation that is exactly it. Without one, nothing
+            // is signed.
+            review = op.review?.toString()
+                ?: throw UserOpSpine.Refused(UserOpSpine.Failure.Other("The review was not handed down. Nothing was signed.")),
             signingStarted = { ports.signingStarted() },
             // The passkey returned: past here nothing a cancel can stop.
             ceremonyDone = ceremonyDone,
