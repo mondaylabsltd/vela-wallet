@@ -24,8 +24,9 @@ export function parseProposalLink(hash: string): ProposalLink | null {
 	const body = hash.startsWith('#') ? hash.slice(1) : hash;
 	if (!body.startsWith(PREFIX)) return null;
 	const [chain, multisig, safeTxHash] = body.slice(PREFIX.length).split('.');
+	if (!/^[1-9]\d{0,15}$/.test(chain ?? '')) return null;
 	const chainId = Number(chain);
-	if (!Number.isSafeInteger(chainId) || chainId <= 0) return null;
+	if (!Number.isSafeInteger(chainId)) return null;
 	if (!/^0x[0-9a-fA-F]{40}$/.test(multisig ?? '')) return null;
 	if (!/^0x[0-9a-fA-F]{64}$/.test(safeTxHash ?? '')) return null;
 	return { chainId, multisig, safeTxHash };

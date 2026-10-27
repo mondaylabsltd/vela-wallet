@@ -847,12 +847,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   request. 1872 + 11 = 1883 leaves, 104 branches.
 // 1990 (the wallets an agent may use, spec 107 E8, 2026-10-27): + 3
 //   `settings.agent` words. 1883 + 3 = 1886 leaves, 104 branches.
-// 2110 (multisig accounts, docs/multisig-vault-design.md, 2026-10-28): +
+// 2103 (multisig accounts, docs/multisig-vault-design.md, 2026-10-28): +
 //   `home.multisig` — the switcher's section, the home panel, a proposal's
-//   sheet, proposing a transfer, creating and adding one. 1886 + 111 = 1997
+//   sheet, proposing a transfer, creating and adding one. 1886 + 104 = 1990
 //   leaves, 104 + 9 = 113 branches.
-if (PATHS.length !== 2110) fail(`expected 2110 paths (1997 leaf + 113 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1997) fail(`expected 1997 leaf paths, got ${leafSet.size}`);
+if (PATHS.length !== 2103) fail(`expected 2103 paths (1990 leaf + 113 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1990) fail(`expected 1990 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 113) fail(`expected 113 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

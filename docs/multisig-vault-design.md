@@ -1,7 +1,29 @@
 # 多签账户：方案
 
-2026-10-27 · 第二版。方案已定，尚未立项，Vela 仓库里还没有代码改动。配套的链上合约和服务在独立仓库
-`safe-genesis-registry`（本地 `/Volumes/data/production3/safe-genesis-registry`），合约已部署，服务尚未上线（见第 8 节）。
+2026-10-27 · 第二版。2026-10-28 起在 web 端实现（分支 `feat/multisig-account`），见下方"实现状态"。
+配套的链上合约和服务在独立仓库 `safe-genesis-registry`（本地 `/Volumes/data/production3/safe-genesis-registry`），
+合约已部署，服务尚未上线（见第 8 节）。
+
+## 实现状态（web，2026-10-28）
+
+**已完成**，并在 Gnosis 分叉上用测试 passkey 端到端跑通（`scripts/onchain/multisig-fork`，`e2e/onchain`）：
+
+| 部分 | 内容 |
+| --- | --- |
+| vela-core `multisig` | genesis（Safe L2 v1.4.1、CompatibilityFallbackHandler、无 hook、owner 按给定顺序）、safeTxHash、批准哈希 `SafeMessage(safeTxHash)`、passkey assertion → 批准、批准核对、签名拼装（按 owner 排序、嵌套 1271、执行者 `v = 1`）、执行调用（缺代码的多签和批准 owner 一并部署）、交易解读与安全形状。对外只有一个 JSON 入口 `multisigCall` |
+| genesis 服务 | 凭 owner passkey 证明代付未部署 Safe 的记录（独立通道和单 owner 限额）；提案信箱（`/api/proposals`，批准按链上规则核对、并发安全合并）；证明过的 genesis 在记录落链前就能查到（`pending`） |
+| web | 账户切换器里的多签一栏；创建（不部署）、按地址添加、邀请；首页多签面板（规则、成员、待批准）；发起转账（任意入口：发送、扫码、通讯录、代币详情）；提案详情（批准 / 批准并执行 / 执行、邀请链接、拒绝 = 同 nonce 作废）；执行后写活动记录，其他设备执行的从链上 `ExecutionSuccess` 找回；15 种语言 |
+
+**和设计稿的出入**：
+
+- 提案信箱直接放进了第一阶段（5.3.4 原计划如此），推送、链上批量批准、提议人、成员管理界面、dApp 连接都还没做。
+- 首页面板列出待批准交易，"拒绝"即发起同 nonce 的作废交易；反对票、软过期尚未实现。
+- 多签账户暂不连接 dApp：web 本身没有内置浏览器，扩展仍以 session 的 Vela 账户应答。
+- 执行手续费由执行者账户按现有方式在交易内支付，执行前不单独展示金额（按 relay 当时报价签名）。
+- 只支持 Vela 创建的那种 genesis（Safe v1.4.1 factory + SafeL2 singleton）；其他 Safe 地址添加时提示"暂不支持这个版本"。
+
+**上线前还需要**：部署 `genesis-cf`（含信箱，`wrangler deploy`、`safe-genesis.getvela.app` 域名、代付私钥），
+并在主网用真实 passkey 做一次小额全流程。
 
 **与第一版的区别**（owner，2026-10-27）：多签不再是 Vela 里的内置应用，而是**和 Vela 账户平级的账户**。
 "多签账户本质也是账户，只是在 Vela 里创建的多签账户的 owner 是 Vela 账户而已。"

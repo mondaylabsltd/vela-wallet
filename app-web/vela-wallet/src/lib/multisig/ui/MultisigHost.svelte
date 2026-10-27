@@ -88,7 +88,11 @@
 		}
 		multisig.activate(account.address);
 		multisig.useChain(account.address, proposal.chainId);
-		multisigUi.open({ kind: 'proposal', chainId: proposal.chainId, safeTxHash: proposal.safeTxHash });
+		multisigUi.open({
+			kind: 'proposal',
+			chainId: proposal.chainId,
+			safeTxHash: proposal.safeTxHash
+		});
 		const fresh = multisig.find(account.address);
 		if (fresh) void proposals.refresh(fresh, fresh.chainIds);
 	}
@@ -128,6 +132,7 @@
 		account={active}
 		{tokens}
 		assetId={sheet.assetId}
+		recipient={sheet.recipient}
 		{wide}
 		{closeLabel}
 		onclose={() => multisigUi.close()}
@@ -148,5 +153,12 @@
 		}}
 	/>
 {:else if sheet?.kind === 'invite' && active}
-	<InviteSheet {m} account={active} {locale} {wide} {closeLabel} onclose={() => multisigUi.close()} />
+	<InviteSheet
+		{m}
+		account={active}
+		{locale}
+		{wide}
+		{closeLabel}
+		onclose={() => multisigUi.close()}
+	/>
 {/if}

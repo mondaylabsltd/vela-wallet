@@ -42,11 +42,15 @@
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
-	let owners = $state<string[]>(untrack(() => (current ? [current] : accounts.slice(0, 1).map((a) => a.address))));
+	let owners = $state<string[]>(
+		untrack(() => (current ? [current] : accounts.slice(0, 1).map((a) => a.address)))
+	);
 	let typed = $state('');
 	let typedError = $state<string | null>(null);
 	let threshold = $state(1);
-	let chainId = $state(networks.find((n) => n.chainId === 100)?.chainId ?? networks[0]?.chainId ?? 100);
+	let chainId = $state(
+		networks.find((n) => n.chainId === 100)?.chainId ?? networks[0]?.chainId ?? 100
+	);
 	let creatorChoice = $state<string | null>(null);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
@@ -132,7 +136,14 @@
 	}
 </script>
 
-<Sheet title={m.create.title} {closeLabel} {wide} {busy} onclose={step === 'created' && created ? () => oncreated(created ?? '') : onclose}>
+<!-- eslint-disable svelte/no-at-html-tags -- every {@html} here is the core's identicon SVG, drawn from an address -->
+<Sheet
+	title={m.create.title}
+	{closeLabel}
+	{wide}
+	{busy}
+	onclose={step === 'created' && created ? () => oncreated(created ?? '') : onclose}
+>
 	{#if step === 'members'}
 		<p class="intro">{m.create.intro}</p>
 		<h3>{m.create.yourAccounts}</h3>
@@ -144,8 +155,14 @@
 						<input type="checkbox" checked={on} onchange={() => toggle(a.address)} />
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(a.address)}</span>
-						<span class="text"><span class="name">{a.name || shortenAddress(a.address)}</span><span class="address">{shortenAddress(a.address)}</span></span>
-						<span class="box" aria-hidden="true">{#if on}<Icon icon={UTILITY_ICONS.check} size="sm" />{/if}</span>
+						<span class="text"
+							><span class="name">{a.name || shortenAddress(a.address)}</span><span class="address"
+								>{shortenAddress(a.address)}</span
+							></span
+						>
+						<span class="box" aria-hidden="true"
+							>{#if on}<Icon icon={UTILITY_ICONS.check} size="sm" />{/if}</span
+						>
 					</label>
 				</li>
 			{/each}
@@ -173,7 +190,11 @@
 						<span class="ordinal">{i + 1}</span>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(o)}</span>
-						<span class="text"><span class="name">{memberLabel(o)}</span><span class="address">{shortenAddress(o)}</span></span>
+						<span class="text"
+							><span class="name">{memberLabel(o)}</span><span class="address"
+								>{shortenAddress(o)}</span
+							></span
+						>
 						<button type="button" class="remove" aria-label={closeLabel} onclick={() => toggle(o)}>
 							<Icon icon={UTILITY_ICONS['x']} size="sm" />
 						</button>
@@ -186,25 +207,43 @@
 		{#if owners.length >= 2 && local.length === 0}<p class="error">{m.create.needLocal}</p>{/if}
 
 		<div class="nav">
-			<Button variant="primary" shape="rounded" disabled={!membersOk} onclick={toThreshold}>{m.create.next}</Button>
+			<Button variant="primary" shape="rounded" disabled={!membersOk} onclick={toThreshold}
+				>{m.create.next}</Button
+			>
 		</div>
 	{:else if step === 'threshold'}
 		<h3>{m.create.threshold}</h3>
 		<div class="stepper" role="group" aria-label={m.create.threshold}>
-			<button type="button" aria-label="−" disabled={threshold <= 1} onclick={() => (threshold -= 1)}>−</button>
+			<button
+				type="button"
+				aria-label="−"
+				disabled={threshold <= 1}
+				onclick={() => (threshold -= 1)}>−</button
+			>
 			<output>{fillTemplate(m.create.thresholdValue, { m: threshold, n: owners.length })}</output>
-			<button type="button" aria-label="+" disabled={threshold >= owners.length} onclick={() => (threshold += 1)}>+</button>
+			<button
+				type="button"
+				aria-label="+"
+				disabled={threshold >= owners.length}
+				onclick={() => (threshold += 1)}>+</button
+			>
 		</div>
 		<p class="note" class:risky>{thresholdNote}</p>
 		<div class="nav two">
-			<Button variant="secondary" shape="rounded" onclick={() => (step = 'members')}>{m.create.back}</Button>
-			<Button variant="primary" shape="rounded" onclick={() => (step = 'review')}>{m.create.next}</Button>
+			<Button variant="secondary" shape="rounded" onclick={() => (step = 'members')}
+				>{m.create.back}</Button
+			>
+			<Button variant="primary" shape="rounded" onclick={() => (step = 'review')}
+				>{m.create.next}</Button
+			>
 		</div>
 	{:else if step === 'review'}
 		{#if draft}
 			<div class="hero">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-				<span class="hero-avatar" aria-hidden="true">{@html identiconSvgForClient(draft.address)}</span>
+				<span class="hero-avatar" aria-hidden="true"
+					>{@html identiconSvgForClient(draft.address)}</span
+				>
 				<p class="hero-rule">{fillTemplate(m.panel.title, { m: threshold, n: owners.length })}</p>
 				<p class="hero-address">{draft.address}</p>
 				<p class="hint">{m.create.sameEverywhere}</p>
@@ -213,7 +252,13 @@
 		<h3>{m.create.members}</h3>
 		<ol class="owners compact">
 			{#each owners as o, i (o)}
-				<li><span class="ordinal">{i + 1}</span><span class="text"><span class="name">{memberLabel(o)}</span><span class="address">{shortenAddress(o)}</span></span></li>
+				<li>
+					<span class="ordinal">{i + 1}</span><span class="text"
+						><span class="name">{memberLabel(o)}</span><span class="address"
+							>{shortenAddress(o)}</span
+						></span
+					>
+				</li>
 			{/each}
 		</ol>
 		<label class="select">
@@ -230,10 +275,23 @@
 				</select>
 			</label>
 		{/if}
-		{#if failure}<p class="error" role="alert">{fillTemplate(m.proposal.failed, { reason: failure })}</p>{/if}
+		{#if failure}<p class="error" role="alert">
+				{fillTemplate(m.proposal.failed, { reason: failure })}
+			</p>{/if}
 		<div class="nav two">
-			<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => (step = 'threshold')}>{m.create.back}</Button>
-			<Button variant="primary" shape="rounded" loading={busy} disabled={busy || !creator} onclick={create}>{m.create.create}</Button>
+			<Button
+				variant="secondary"
+				shape="rounded"
+				disabled={busy}
+				onclick={() => (step = 'threshold')}>{m.create.back}</Button
+			>
+			<Button
+				variant="primary"
+				shape="rounded"
+				loading={busy}
+				disabled={busy || !creator}
+				onclick={create}>{m.create.create}</Button
+			>
 		</div>
 	{:else if created}
 		<div class="hero">
@@ -246,12 +304,20 @@
 		</div>
 		<div class="nav two">
 			<Button variant="secondary" shape="rounded" onclick={copy}>
-				<span class="label"><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied ? m.proposal.copied : m.proposal.copyLink}</span>
+				<span class="label"
+					><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied
+						? m.proposal.copied
+						: m.proposal.copyLink}</span
+				>
 			</Button>
-			<Button variant="primary" shape="rounded" onclick={() => oncreated(created ?? '')}>{m.create.done}</Button>
+			<Button variant="primary" shape="rounded" onclick={() => oncreated(created ?? '')}
+				>{m.create.done}</Button
+			>
 		</div>
 	{/if}
 </Sheet>
+
+<!-- eslint-enable svelte/no-at-html-tags -->
 
 <style>
 	.intro {

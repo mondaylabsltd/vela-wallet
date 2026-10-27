@@ -162,8 +162,13 @@ export interface ProposalsAnswer {
  * A multisig's proposals on a chain, with who may approve them there.
  * `null`: the service knows nothing of this multisig on that chain.
  */
-export async function fetchProposals(chainId: number, safe: string): Promise<ProposalsAnswer | null> {
-	const { status, body } = await request<ProposalsAnswer>(`/api/proposals/${safe}?chainId=${chainId}`);
+export async function fetchProposals(
+	chainId: number,
+	safe: string
+): Promise<ProposalsAnswer | null> {
+	const { status, body } = await request<ProposalsAnswer>(
+		`/api/proposals/${safe}?chainId=${chainId}`
+	);
 	if (status === 404) return null;
 	if (status !== 200) throw new ServiceUnavailableError(`HTTP ${status}`);
 	return body;

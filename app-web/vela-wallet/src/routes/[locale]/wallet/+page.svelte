@@ -121,11 +121,7 @@
 		type ManageTokensSession
 	} from '$lib/wallet/core/manage-tokens-session';
 	import type { MtokView } from '$lib/core/generated/MtokView';
-	import {
-		spaceNetworksSync,
-		getCustomChainIdsSync,
-		networkId
-	} from '$lib/services/networks';
+	import { spaceNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
 		formChainOf,
 		makeRecipientId,
@@ -747,6 +743,12 @@
 	let sendGeneration = 0;
 
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
+		// Every door into a send (a scan, the address book, a token's own
+		// button) leads a multisig to a proposal instead: it has no send of its own.
+		if (multisig.active) {
+			multisigUi.open({ kind: 'propose', recipient: prefill?.prefilled_recipient ?? undefined });
+			return;
+		}
 		if (sendSession || !identity) return;
 		sendGeneration = sendDesk.begin();
 		await loadCore();

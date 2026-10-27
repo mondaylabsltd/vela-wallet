@@ -9,6 +9,7 @@
 	 * The whole balance can be proposed: the fee is the executor's, paid from
 	 * its own account, never from the multisig (every gas field is zero).
 	 */
+	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import type { BalanceToken } from '$lib/core/generated/BalanceToken';
@@ -26,13 +27,25 @@
 		account: MultisigAccount;
 		tokens: BalanceToken[];
 		assetId?: string;
+		/** A recipient already chosen (a scan, the address book). */
+		recipient?: string;
 		wide: boolean;
 		closeLabel: string;
 		onclose: () => void;
 		onproposed: (chainId: number, safeTxHash: string) => void;
 	}
 
-	let { m, account, tokens, assetId, wide, closeLabel, onclose, onproposed }: Props = $props();
+	let {
+		m,
+		account,
+		tokens,
+		assetId,
+		recipient: chosen,
+		wide,
+		closeLabel,
+		onclose,
+		onproposed
+	}: Props = $props();
 
 	const holdings = $derived(tokens.filter((t) => !t.spam && Number(t.balance) > 0));
 	let picked = $state<string | null>(null);
@@ -40,7 +53,7 @@
 		holdings.find((t) => balanceTokenId(t) === (picked ?? assetId)) ?? holdings[0] ?? null
 	);
 	let amountText = $state('');
-	let recipient = $state('');
+	let recipient = $state(untrack(() => chosen ?? ''));
 	let touched = $state(false);
 	let failure = $state<string | null>(null);
 	let busy = $state(false);
@@ -51,7 +64,9 @@
 
 	const balanceUnits = $derived(token ? parseUnits(token.balance, token.decimals) : null);
 	const amount = $derived(token ? parseUnits(amountText, token.decimals) : null);
-	const amountOk = $derived(amount !== null && amount > 0n && balanceUnits !== null && amount <= balanceUnits);
+	const amountOk = $derived(
+		amount !== null && amount > 0n && balanceUnits !== null && amount <= balanceUnits
+	);
 	const recipientOk = $derived(/^0x[0-9a-fA-F]{40}$/.test(recipient.trim()));
 	const ready = $derived(!!token && amountOk && recipientOk && !!owner && !busy);
 
@@ -106,13 +121,20 @@
 				{#each holdings as t (balanceTokenId(t))}
 					{@const on = token !== null && balanceTokenId(t) === balanceTokenId(token)}
 					<label class:on>
-						<input type="radio" name="asset" checked={on} onchange={() => (picked = balanceTokenId(t))} />
+						<input
+							type="radio"
+							name="asset"
+							checked={on}
+							onchange={() => (picked = balanceTokenId(t))}
+						/>
 						<span class="glyph" aria-hidden="true">{t.symbol.slice(0, 3)}</span>
 						<span class="asset-text">
 							<span class="symbol">{t.symbol}</span>
 							<span class="chain">{chainName(t.chain_id)}</span>
 						</span>
-						<span class="held">{formatUnits(parseUnits(t.balance, t.decimals) ?? 0n, t.decimals)}</span>
+						<span class="held"
+							>{formatUnits(parseUnits(t.balance, t.decimals) ?? 0n, t.decimals)}</span
+						>
 					</label>
 				{/each}
 			</fieldset>
@@ -131,7 +153,11 @@
 					<button type="button" class="max" onclick={useMax}>{m.send.max}</button>
 				</span>
 				{#if token}
-					<span class="hint">{fillTemplate(m.send.balance, { amount: `${formatUnits(balanceUnits ?? 0n, token.decimals)} ${token.symbol}` })}</span>
+					<span class="hint"
+						>{fillTemplate(m.send.balance, {
+							amount: `${formatUnits(balanceUnits ?? 0n, token.decimals)} ${token.symbol}`
+						})}</span
+					>
 				{/if}
 				{#if touched && !amountOk}<span class="error">{m.send.invalidAmount}</span>{/if}
 			</label>
@@ -154,7 +180,12 @@
 					<legend>{m.proposal.as}</legend>
 					{#each local as o (o.address)}
 						<label class:on={owner?.address === o.address}>
-							<input type="radio" name="owner" checked={owner?.address === o.address} onchange={() => (ownerChoice = o.address)} />
+							<input
+								type="radio"
+								name="owner"
+								checked={owner?.address === o.address}
+								onchange={() => (ownerChoice = o.address)}
+							/>
 							{o.name}
 						</label>
 					{/each}
@@ -162,9 +193,17 @@
 			{/if}
 
 			<p class="hint">{fillTemplate(m.send.hint, { threshold: account.threshold })}</p>
-			{#if failure}<p class="error" role="alert">{fillTemplate(m.proposal.failed, { reason: failure })}</p>{/if}
+			{#if failure}<p class="error" role="alert">
+					{fillTemplate(m.proposal.failed, { reason: failure })}
+				</p>{/if}
 
-			<Button variant="primary" shape="rounded" loading={busy} disabled={busy || !owner} onclick={() => void submit()}>
+			<Button
+				variant="primary"
+				shape="rounded"
+				loading={busy}
+				disabled={busy || !owner}
+				onclick={() => void submit()}
+			>
 				{m.send.propose}
 			</Button>
 		</form>

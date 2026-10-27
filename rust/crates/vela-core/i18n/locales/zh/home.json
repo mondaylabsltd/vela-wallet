@@ -87,13 +87,10 @@
         "title": "{{n}} 位成员中需 {{m}} 位批准",
         "members": "成员",
         "thisDevice": "本设备",
-        "external": "成员",
         "readOnly": "本设备上没有它的成员账户，这里只能查看。登录任一成员账户后即可批准。",
         "pending": "待批准",
-        "nothingPending": "没有待批准的交易。",
         "stale": "暂时无法刷新，显示的是上次的状态。",
         "notShared": "尚未同步：记录完成后其他成员才能添加，Vela 会自动重试。",
-        "propose": "发起转账",
         "invite": "邀请成员"
       },
       "status": {
@@ -101,12 +98,11 @@
         "yourTurn": "待你批准",
         "waiting": "等待其他成员",
         "queued": "排队中",
-        "done": "已完成",
         "progress": "已批准 {{approved}}/{{threshold}}"
       },
       "action": {
         "send": "发送 {{amount}} {{symbol}}",
-        "batch": "{{count}} 笔转账",
+        "batch": "{{total}} 笔转账",
         "cancel": "作废第 {{nonce}} 号交易",
         "addOwner": "添加成员",
         "removeOwner": "移除成员",
@@ -159,8 +155,7 @@
         "hint": "你将给出第一个批准，{{threshold}} 位成员批准后即可发出。",
         "noAssets": "这个多签账户还没有资产，请先向它的地址转入。",
         "invalidAddress": "请输入有效的地址。",
-        "invalidAmount": "请输入不超过余额的金额。",
-        "proposed": "已发起并批准"
+        "invalidAmount": "请输入不超过余额的金额。"
       },
       "create": {
         "title": "新建多签账户",
@@ -176,7 +171,6 @@
         "thresholdAll": "需要全部成员批准。只要一位成员丢失 passkey，资金将永远无法转出。",
         "thresholdOne": "任何一位成员都能单独转出资金。",
         "thresholdSpare": "最多 {{spare}} 位成员失去访问，资金仍能转出。",
-        "review": "确认",
         "address": "地址",
         "sameEverywhere": "所有网络上都是同一个地址。第一次转出前不会部署合约，也不花手续费。",
         "network": "首个网络",
@@ -200,8 +194,7 @@
         "unavailable": "暂时无法连接服务，请重试。",
         "unsupported": "暂不支持这个版本的 Safe。",
         "notMultisig": "这个地址不是 Vela 能识别的多签账户。"
-      },
-      "receiveNote": "多签账户：转入的资金需要 {{n}} 位成员中的 {{m}} 位批准才能转出。"
+      }
     }
   }
 }

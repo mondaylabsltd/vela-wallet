@@ -23,14 +23,19 @@
 		explorerTxUrl,
 		formatUnits,
 		localName,
-		memberLabel,
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
 	import { sameAddress } from '../core/kernel';
 	import { proposalLink } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
-	import { approve, execute, proposals, proposeCancel, type ProposalItem } from '../core/proposals.svelte';
+	import {
+		approve,
+		execute,
+		proposals,
+		proposeCancel,
+		type ProposalItem
+	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -47,10 +52,13 @@
 		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
 	}
 
-	let { m, account, chainId, safeTxHash, locale, wide, closeLabel, onclose, onexecuted }: Props = $props();
+	let { m, account, chainId, safeTxHash, locale, wide, closeLabel, onclose, onexecuted }: Props =
+		$props();
 
 	const item = $derived(
-		proposals.chain(chainId)?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null
+		proposals
+			.chain(chainId)
+			?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null
 	);
 	const members = $derived(proposals.chain(chainId)?.members ?? null);
 
@@ -64,7 +72,10 @@
 		if (action?.kind === 'batch') {
 			void Promise.all(
 				action.transfers.map(async (t) => {
-					const info = await tokenInfo(chainId, t.token).catch(() => ({ symbol: '', decimals: 18 }));
+					const info = await tokenInfo(chainId, t.token).catch(() => ({
+						symbol: '',
+						decimals: 18
+					}));
 					return { label: `${formatUnits(t.amount, info.decimals)} ${info.symbol}`, to: t.to };
 				})
 			).then((l) => (lines = l));
@@ -99,7 +110,10 @@
 	);
 
 	function cancelled(error: unknown): boolean {
-		return error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError');
+		return (
+			error instanceof DOMException &&
+			(error.name === 'NotAllowedError' || error.name === 'AbortError')
+		);
 	}
 
 	function reasonOf(error: unknown): string {
@@ -173,13 +187,17 @@
 		if (!item) return 0;
 		const p = phase;
 		if (p.kind !== 'sent') return item.approved;
-		return item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by)) ? item.approved : item.approved + 1;
+		return item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by))
+			? item.approved
+			: item.approved + 1;
 	});
 </script>
 
 <Sheet title={m.proposal.title} {closeLabel} {wide} {busy} {onclose}>
 	{#if !item}
-		<p class="quiet" aria-busy="true">{proposals.loading ? m.proposal.opening : m.proposal.notFound}</p>
+		<p class="quiet" aria-busy="true">
+			{proposals.loading ? m.proposal.opening : m.proposal.notFound}
+		</p>
 	{:else}
 		<header class="what">
 			<p class="title">{title || '…'}</p>
@@ -195,14 +213,25 @@
 			{#if lines.length > 0}
 				<ul class="lines">
 					{#each lines as line, i (i)}
-						<li><span>{line.label}</span><span class="to-address">{shortenAddress(line.to)}</span></li>
+						<li>
+							<span>{line.label}</span><span class="to-address">{shortenAddress(line.to)}</span>
+						</li>
 					{/each}
 				</ul>
 			{/if}
 			<dl class="facts">
-				<div><dt>{m.action.network}</dt><dd>{chainName(chainId)}</dd></div>
-				<div><dt>{m.action.number}</dt><dd>{item.nonce.toString()}</dd></div>
-				<div><dt>safeTxHash</dt><dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd></div>
+				<div>
+					<dt>{m.action.network}</dt>
+					<dd>{chainName(chainId)}</dd>
+				</div>
+				<div>
+					<dt>{m.action.number}</dt>
+					<dd>{item.nonce.toString()}</dd>
+				</div>
+				<div>
+					<dt>safeTxHash</dt>
+					<dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd>
+				</div>
 			</dl>
 		</header>
 
@@ -216,10 +245,18 @@
 		<section class="approvals" aria-label={m.proposal.approvals}>
 			<h3>
 				{m.proposal.approvals}
-				<span class="count">{fillTemplate(m.status.progress, { approved: shownApproved, threshold: item.threshold })}</span>
+				<span class="count"
+					>{fillTemplate(m.status.progress, {
+						approved: shownApproved,
+						threshold: item.threshold
+					})}</span
+				>
 			</h3>
 			<div class="bar" aria-hidden="true">
-				<span class="fill" style:width="{Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"></span>
+				<span
+					class="fill"
+					style:width="{Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"
+				></span>
 			</div>
 			<ul>
 				{#each members?.owners ?? [] as owner (owner)}
@@ -229,7 +266,11 @@
 					<li class:done={!!row || executedBy}>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
-						<span class="who">{names.label(owner)}{#if mine}<span class="here"> · {m.panel.thisDevice}</span>{/if}</span>
+						<span class="who"
+							>{names.label(owner)}{#if mine}<span class="here">
+									· {m.panel.thisDevice}</span
+								>{/if}</span
+						>
 						<span class="state">
 							{#if executedBy}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.executed}
@@ -247,7 +288,11 @@
 		{#if item.status === 'done' && phase.kind !== 'sent'}
 			<p class="quiet">{m.proposal.doneNote}</p>
 		{:else if item.status === 'queued'}
-			<p class="quiet">{fillTemplate(m.proposal.queuedNote, { nonce: (proposals.chain(chainId)?.members.nonce ?? 0n).toString() })}</p>
+			<p class="quiet">
+				{fillTemplate(m.proposal.queuedNote, {
+					nonce: (proposals.chain(chainId)?.members.nonce ?? 0n).toString()
+				})}
+			</p>
 		{/if}
 		{#if item.cancelledBy}
 			<p class="quiet">{m.proposal.cancelPending}</p>
@@ -258,7 +303,10 @@
 				<Icon icon={UTILITY_ICONS.check} size="md" />
 				<span>{phase.txHash ? m.proposal.executed : m.proposal.executing}</span>
 				{#if phase.txHash && explorerTxUrl(chainId, phase.txHash)}
-					<a href={explorerTxUrl(chainId, phase.txHash)} target="_blank" rel="noopener noreferrer">{m.proposal.explorer}</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external block explorer -->
+					<a href={explorerTxUrl(chainId, phase.txHash)} target="_blank" rel="noopener noreferrer"
+						>{m.proposal.explorer}</a
+					>
 				{/if}
 			</div>
 		{:else if item.status !== 'done' && item.review.action !== null}
@@ -267,7 +315,13 @@
 					<legend>{m.proposal.as}</legend>
 					{#each candidates as owner (owner.address)}
 						<label class:on={actor?.address === owner.address}>
-							<input type="radio" name="actor" value={owner.address} checked={actor?.address === owner.address} onchange={() => (chosen = owner.address)} />
+							<input
+								type="radio"
+								name="actor"
+								value={owner.address}
+								checked={actor?.address === owner.address}
+								onchange={() => (chosen = owner.address)}
+							/>
 							{owner.name}
 						</label>
 					{/each}
@@ -280,12 +334,26 @@
 
 			<div class="primary">
 				{#if executors.length > 0 && actor}
-					<Button variant="primary" shape="rounded" loading={busy && phase.kind === 'busy' && phase.what === 'execute'} disabled={busy} onclick={onExecute}>
-						{actorApproved || item.approved >= item.threshold ? m.proposal.execute : m.proposal.approveAndExecute}
+					<Button
+						variant="primary"
+						shape="rounded"
+						loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
+						disabled={busy}
+						onclick={onExecute}
+					>
+						{actorApproved || item.approved >= item.threshold
+							? m.proposal.execute
+							: m.proposal.approveAndExecute}
 					</Button>
 					<p class="fine">{m.proposal.feeNote}</p>
 				{:else if approvers.length > 0 && actor}
-					<Button variant="primary" shape="rounded" loading={busy && phase.kind === 'busy' && phase.what === 'approve'} disabled={busy} onclick={onApprove}>
+					<Button
+						variant="primary"
+						shape="rounded"
+						loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
+						disabled={busy}
+						onclick={onApprove}
+					>
 						{m.proposal.approve}
 					</Button>
 				{:else if localOwners(members?.owners ?? []).length === 0}
@@ -303,10 +371,16 @@
 				</div>
 				<div class="link-actions">
 					<Button variant="secondary" shape="rounded" onclick={copyLink}>
-						<span class="label"><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied ? m.proposal.copied : m.proposal.copyLink}</span>
+						<span class="label"
+							><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied
+								? m.proposal.copied
+								: m.proposal.copyLink}</span
+						>
 					</Button>
 					{#if canShare}
-						<Button variant="secondary" shape="rounded" onclick={shareLink}>{m.proposal.share}</Button>
+						<Button variant="secondary" shape="rounded" onclick={shareLink}
+							>{m.proposal.share}</Button
+						>
 					{/if}
 				</div>
 			</section>
@@ -316,9 +390,17 @@
 			<div class="reject">
 				{#if rejecting}
 					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>
-					<Button variant="danger" shape="rounded" loading={busy && phase.kind === 'busy' && phase.what === 'reject'} disabled={busy} onclick={onReject}>{m.proposal.reject}</Button>
+					<Button
+						variant="danger"
+						shape="rounded"
+						loading={busy && phase.kind === 'busy' && phase.what === 'reject'}
+						disabled={busy}
+						onclick={onReject}>{m.proposal.reject}</Button
+					>
 				{:else}
-					<button type="button" class="text-button" onclick={() => (rejecting = true)}>{m.proposal.reject}</button>
+					<button type="button" class="text-button" onclick={() => (rejecting = true)}
+						>{m.proposal.reject}</button
+					>
 				{/if}
 			</div>
 		{/if}

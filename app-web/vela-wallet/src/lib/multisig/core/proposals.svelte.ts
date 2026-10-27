@@ -80,7 +80,11 @@ function sortKey(a: ProposalItem, b: ProposalItem): number {
 }
 
 /** What one stored proposal is, as this device reads it. */
-export function readProposal(account: MultisigAccount, members: ChainMembers, p: Proposal): ProposalItem | null {
+export function readProposal(
+	account: MultisigAccount,
+	members: ChainMembers,
+	p: Proposal
+): ProposalItem | null {
 	const hash = safeTxHash(p.chainId, account.address, p.safeTx);
 	if (hash.toLowerCase() !== p.safeTxHash.toLowerCase()) return null;
 	const review = reviewTx(p.chainId, account.address, p.safeTx);
@@ -88,7 +92,7 @@ export function readProposal(account: MultisigAccount, members: ChainMembers, p:
 	const approvals: ApprovalRow[] = [];
 	for (const a of p.approvals) {
 		if (approvals.some((r) => sameAddress(r.owner, a.owner))) continue;
-		let valid = false;
+		let valid: boolean;
 		try {
 			valid = verifyApproval(p.chainId, hash, a);
 		} catch {
@@ -103,7 +107,9 @@ export function readProposal(account: MultisigAccount, members: ChainMembers, p:
 	}
 	const approved = approvals.filter((a) => a.counts).length;
 	const local = localOwners(members.owners);
-	const canApprove = local.filter((o) => !approvals.some((a) => a.counts && sameAddress(a.owner, o.address)));
+	const canApprove = local.filter(
+		(o) => !approvals.some((a) => a.counts && sameAddress(a.owner, o.address))
+	);
 	const status: ProposalStatus =
 		nonce < members.nonce
 			? 'done'
@@ -247,10 +253,21 @@ export const proposals = new Proposals();
 // -- actions --------------------------------------------------------------------------
 
 /** Propose `tx` on `chainId`, approved at once by `owner` (one passkey prompt). */
-export async function propose(account: MultisigAccount, chainId: number, tx: SafeTx, owner: LocalOwner) {
+export async function propose(
+	account: MultisigAccount,
+	chainId: number,
+	tx: SafeTx,
+	owner: LocalOwner
+) {
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await signApproval(owner.account, chainId, hash);
-	const answer = await submitApproval({ chainId, safe: account.address, safeTx: tx, approval, genesis: account.genesis });
+	const answer = await submitApproval({
+		chainId,
+		safe: account.address,
+		safeTx: tx,
+		approval,
+		genesis: account.genesis
+	});
 	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
 	multisig.useChain(account.address, chainId);
 	return { safeTxHash: hash, proposal: answer.proposal };
@@ -271,7 +288,12 @@ export async function approve(account: MultisigAccount, item: ProposalItem, owne
 }
 
 /** `executor` executes `item` (one passkey prompt); resolves with the transaction hash. */
-export async function execute(account: MultisigAccount, item: ProposalItem, executor: LocalOwner, members: ChainMembers) {
+export async function execute(
+	account: MultisigAccount,
+	item: ProposalItem,
+	executor: LocalOwner,
+	members: ChainMembers
+) {
 	const result = await submitExecution({
 		chainId: item.chainId,
 		multisig: account.address,
@@ -285,8 +307,17 @@ export async function execute(account: MultisigAccount, item: ProposalItem, exec
 }
 
 /** A voiding transaction at `item`'s nonce, approved at once by `owner`. */
-export async function proposeCancel(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
-	return propose(account, item.chainId, cancelTx(account.address, `0x${item.nonce.toString(16)}`), owner);
+export async function proposeCancel(
+	account: MultisigAccount,
+	item: ProposalItem,
+	owner: LocalOwner
+) {
+	return propose(
+		account,
+		item.chainId,
+		cancelTx(account.address, `0x${item.nonce.toString(16)}`),
+		owner
+	);
 }
 
 /** The mailbox refused a submission (the core's reason, for the log). */

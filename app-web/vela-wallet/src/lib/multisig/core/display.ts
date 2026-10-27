@@ -13,6 +13,9 @@ import { poolRpcCall } from '$lib/services/rpc-pool';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { MultisigMessages } from '../messages';
 import { sameAddress, type Action } from './kernel';
+import { formatUnits } from './units';
+
+export { formatUnits, parseUnits } from './units';
 
 export { shortenAddress };
 
@@ -64,7 +67,10 @@ export function tokenInfo(chainId: number, token: string | null): Promise<TokenI
 				poolRpcCall('eth_call', [{ to: token, data: '0x313ce567' }, 'latest'], chainId)
 			]);
 			return {
-				symbol: typeof symbol.result === 'string' ? decodeString(symbol.result) || shortenAddress(token) : shortenAddress(token),
+				symbol:
+					typeof symbol.result === 'string'
+						? decodeString(symbol.result) || shortenAddress(token)
+						: shortenAddress(token),
 				decimals: typeof decimals.result === 'string' ? Number(BigInt(decimals.result)) : 18
 			};
 		})();
@@ -74,35 +80,27 @@ export function tokenInfo(chainId: number, token: string | null): Promise<TokenI
 	return hit;
 }
 
-/** `1234500000000000000` with 18 decimals → `1.2345`. */
-export function formatUnits(amount: string | bigint, decimals: number): string {
-	const value = typeof amount === 'bigint' ? amount : BigInt(amount);
-	const base = 10n ** BigInt(decimals);
-	const whole = value / base;
-	const fraction = (value % base).toString().padStart(decimals, '0').replace(/0+$/, '');
-	const shown = fraction.length > 6 ? fraction.slice(0, 6) : fraction;
-	return shown ? `${whole.toLocaleString('en-US')}.${shown}` : whole.toLocaleString('en-US');
-}
-
-/** `1.5` with 18 decimals → base units, or `null` when it is not an amount. */
-export function parseUnits(text: string, decimals: number): bigint | null {
-	const clean = text.trim().replace(/,/g, '');
-	if (!/^\d*\.?\d*$/.test(clean) || clean === '' || clean === '.') return null;
-	const [whole, fraction = ''] = clean.split('.');
-	if (fraction.length > decimals) return null;
-	return BigInt(whole || '0') * 10n ** BigInt(decimals) + BigInt((fraction + '0'.repeat(decimals)).slice(0, decimals) || '0');
-}
-
 /** A transaction's one line, e.g. "Send 500 USDC". */
-export async function actionTitle(m: MultisigMessages, chainId: number, action: Action | null, nonce: bigint): Promise<string> {
+export async function actionTitle(
+	m: MultisigMessages,
+	chainId: number,
+	action: Action | null,
+	nonce: bigint
+): Promise<string> {
 	if (action === null) return m.action.unsupported;
 	switch (action.kind) {
 		case 'transfer': {
-			const info = await tokenInfo(chainId, action.token).catch(() => ({ symbol: '', decimals: 18 }));
-			return fillTemplate(m.action.send, { amount: formatUnits(action.amount, info.decimals), symbol: info.symbol });
+			const info = await tokenInfo(chainId, action.token).catch(() => ({
+				symbol: '',
+				decimals: 18
+			}));
+			return fillTemplate(m.action.send, {
+				amount: formatUnits(action.amount, info.decimals),
+				symbol: info.symbol
+			});
 		}
 		case 'batch':
-			return fillTemplate(m.action.batch, { count: action.transfers.length });
+			return fillTemplate(m.action.batch, { total: action.transfers.length });
 		case 'cancel':
 			return fillTemplate(m.action.cancel, { nonce: nonce.toString() });
 		case 'addOwner':

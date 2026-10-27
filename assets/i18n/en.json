@@ -404,13 +404,10 @@
     "title": "{{m}} of {{n}} members approve",
     "members": "Members",
     "thisDevice": "On this device",
-    "external": "Member",
     "readOnly": "None of its members is signed in on this device, so you can only view it here. Sign in with a member's account to approve.",
     "pending": "Waiting for approval",
-    "nothingPending": "Nothing waiting for approval.",
     "stale": "Couldn't refresh — showing the last known state.",
     "notShared": "Not shared yet: other members can add it once it is recorded. Vela keeps trying.",
-    "propose": "Propose a transfer",
     "invite": "Invite members"
    },
    "status": {
@@ -418,12 +415,11 @@
     "yourTurn": "Needs your approval",
     "waiting": "Waiting for others",
     "queued": "Queued",
-    "done": "Done",
     "progress": "{{approved}}/{{threshold}} approved"
    },
    "action": {
     "send": "Send {{amount}} {{symbol}}",
-    "batch": "{{count}} transfers",
+    "batch": "{{total}} transfers",
     "cancel": "Cancel transaction #{{nonce}}",
     "addOwner": "Add a member",
     "removeOwner": "Remove a member",
@@ -476,8 +472,7 @@
     "hint": "You give the first approval. It is sent once {{threshold}} members have approved.",
     "noAssets": "This multisig holds nothing yet. Send some funds to its address first.",
     "invalidAddress": "Enter a valid address.",
-    "invalidAmount": "Enter an amount up to the balance.",
-    "proposed": "Proposed and approved"
+    "invalidAmount": "Enter an amount up to the balance."
    },
    "create": {
     "title": "New multisig",
@@ -493,7 +488,6 @@
     "thresholdAll": "Every member must approve. If one of them loses their passkey, the funds can never move again.",
     "thresholdOne": "Any single member can move the funds alone.",
     "thresholdSpare": "Up to {{spare}} member(s) can lose access and the funds still move.",
-    "review": "Review",
     "address": "Address",
     "sameEverywhere": "The same address on every network. Nothing is deployed until its first transfer out.",
     "network": "First network",
@@ -517,8 +511,7 @@
     "unavailable": "Couldn't reach the service. Try again.",
     "unsupported": "This Safe's version isn't supported yet.",
     "notMultisig": "This address isn't a multisig Vela can read."
-   },
-   "receiveNote": "Multisig: funds sent here move only when {{m}} of its {{n}} members approve."
+   }
   }
  },
  "send": {

@@ -16,7 +16,13 @@
 import { hasCode } from './chain';
 import { genesisAddress, multisigGenesis, sameAddress, type Genesis } from './kernel';
 import { signOwnerProof, type LocalOwner } from './owners';
-import { fetchGenesis, fetchTask, importGenesis, ServiceUnavailableError, type OwnerProof } from './service';
+import {
+	fetchGenesis,
+	fetchTask,
+	importGenesis,
+	ServiceUnavailableError,
+	type OwnerProof
+} from './service';
 import { multisig, type MultisigAccount } from './store.svelte';
 
 /** The service's home chain: where the registry it reads first lives. */
@@ -57,7 +63,10 @@ export interface CreateChoice {
 }
 
 /** The address a choice gives, for the review screen (the salt is fixed per draft). */
-export function draftGenesis(choice: Pick<CreateChoice, 'owners' | 'threshold'>, saltNonce: string) {
+export function draftGenesis(
+	choice: Pick<CreateChoice, 'owners' | 'threshold'>,
+	saltNonce: string
+) {
 	return multisigGenesis(choice.owners, choice.threshold, saltNonce);
 }
 
@@ -66,11 +75,21 @@ export function newSaltNonce(): string {
 }
 
 /** Record `genesis` through the service; `true` once the registry holds it (or will). */
-async function record(address: string, genesis: Genesis, proof: OwnerProof, chainId: number): Promise<boolean> {
+async function record(
+	address: string,
+	genesis: Genesis,
+	proof: OwnerProof,
+	chainId: number
+): Promise<boolean> {
 	let answer = await importGenesis({ chainId, safe: address, genesis, ownerProof: proof });
 	// A chain the service does not serve: its home chain reads the same factory.
 	if (answer.status === 'error' && chainId !== REGISTRY_HOME_CHAIN_ID) {
-		answer = await importGenesis({ chainId: REGISTRY_HOME_CHAIN_ID, safe: address, genesis, ownerProof: proof });
+		answer = await importGenesis({
+			chainId: REGISTRY_HOME_CHAIN_ID,
+			safe: address,
+			genesis,
+			ownerProof: proof
+		});
 	}
 	return answer.status === 'recorded' || answer.status === 'queued';
 }
@@ -80,7 +99,10 @@ async function record(address: string, genesis: Genesis, proof: OwnerProof, chai
  * service records it. The account exists — and is shown — even if the
  * service is unreachable right now; the record is retried.
  */
-export async function createMultisig(choice: CreateChoice, saltNonce: string): Promise<MultisigAccount> {
+export async function createMultisig(
+	choice: CreateChoice,
+	saltNonce: string
+): Promise<MultisigAccount> {
 	const draft = multisigGenesis(choice.owners, choice.threshold, saltNonce);
 	const proof = await signOwnerProof(choice.creator.account, draft.address, choice.chainId);
 	let recorded = false;
@@ -111,7 +133,15 @@ export async function retryUnrecorded(): Promise<void> {
 			}
 			if (known.found) multisig.markShared(account.address);
 			const proof = proofs[account.address.toLowerCase()];
-			if (proof && (await record(account.address, account.genesis, proof, account.chainIds[0] ?? REGISTRY_HOME_CHAIN_ID))) {
+			if (
+				proof &&
+				(await record(
+					account.address,
+					account.genesis,
+					proof,
+					account.chainIds[0] ?? REGISTRY_HOME_CHAIN_ID
+				))
+			) {
 				// Queued: confirmed by a later `fetchGenesis`.
 			}
 		} catch {
@@ -174,7 +204,12 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
-	const account = multisig.add(address, genesis, !answer.pending, used.length > 0 ? used : chainIds.slice(0, 1));
+	const account = multisig.add(
+		address,
+		genesis,
+		!answer.pending,
+		used.length > 0 ? used : chainIds.slice(0, 1)
+	);
 	// It came from the service: the service can hand it out.
 	multisig.markShared(account.address);
 	multisig.activate(account.address);

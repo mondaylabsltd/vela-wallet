@@ -8,15 +8,8 @@ import { loadTransactions, saveTransactions } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { tokenInfo } from './display';
+import { plainUnits } from './units';
 import type { ProposalItem } from './proposals.svelte';
-
-/** Base units as a plain decimal string (the records' `value`). */
-export function plainUnits(amount: string, decimals: number): string {
-	const value = BigInt(amount);
-	const base = 10n ** BigInt(decimals);
-	const fraction = (value % base).toString().padStart(decimals, '0').replace(/0+$/, '');
-	return fraction ? `${value / base}.${fraction}` : `${value / base}`;
-}
 
 export async function recordExecution(
 	multisig: string,
@@ -27,7 +20,8 @@ export async function recordExecution(
 	at?: number
 ): Promise<void> {
 	const action = item.review.action;
-	const transfers = action?.kind === 'transfer' ? [action] : action?.kind === 'batch' ? action.transfers : [];
+	const transfers =
+		action?.kind === 'transfer' ? [action] : action?.kind === 'batch' ? action.transfers : [];
 	const records: LocalTransaction[] = [];
 	for (const [i, t] of transfers.entries()) {
 		const info = await tokenInfo(item.chainId, t.token).catch(() => ({ symbol: '', decimals: 18 }));
@@ -59,9 +53,14 @@ const LOOKBACK = 50_000n;
  * `ExecutionSuccess` on chain and written to the activity, once. Quiet when
  * the chain cannot say.
  */
-export async function recordRemoteExecutions(multisig: string, items: ProposalItem[]): Promise<boolean> {
+export async function recordRemoteExecutions(
+	multisig: string,
+	items: ProposalItem[]
+): Promise<boolean> {
 	const done = items.filter(
-		(i) => i.status === 'done' && (i.review.action?.kind === 'transfer' || i.review.action?.kind === 'batch')
+		(i) =>
+			i.status === 'done' &&
+			(i.review.action?.kind === 'transfer' || i.review.action?.kind === 'batch')
 	);
 	if (done.length === 0) return false;
 	const known = new Set((await loadTransactions()).map((t) => t.id));
@@ -69,19 +68,36 @@ export async function recordRemoteExecutions(multisig: string, items: ProposalIt
 	for (const item of done) {
 		if (known.has(`multisig:${item.safeTxHash}:0`)) continue;
 		try {
-			const head = BigInt((await poolRpcCall('eth_blockNumber', [], item.chainId)).result as string);
+			const head = BigInt(
+				(await poolRpcCall('eth_blockNumber', [], item.chainId)).result as string
+			);
 			const from = head > LOOKBACK ? head - LOOKBACK : 0n;
-			const logs = (await poolRpcCall(
-				'eth_getLogs',
-				[{ address: multisig, topics: [EXECUTION_SUCCESS, item.safeTxHash], fromBlock: `0x${from.toString(16)}`, toBlock: 'latest' }],
-				item.chainId
-			)).result as { transactionHash: string; blockNumber: string }[] | undefined;
+			const logs = (
+				await poolRpcCall(
+					'eth_getLogs',
+					[
+						{
+							address: multisig,
+							topics: [EXECUTION_SUCCESS, item.safeTxHash],
+							fromBlock: `0x${from.toString(16)}`,
+							toBlock: 'latest'
+						}
+					],
+					item.chainId
+				)
+			).result as { transactionHash: string; blockNumber: string }[] | undefined;
 			const log = logs?.[0];
 			if (!log) continue;
-			const block = (await poolRpcCall('eth_getBlockByNumber', [log.blockNumber, false], item.chainId)).result as
-				| { timestamp: string }
-				| undefined;
-			await recordExecution(multisig, item, log.transactionHash, '', block ? Number(BigInt(block.timestamp)) : undefined);
+			const block = (
+				await poolRpcCall('eth_getBlockByNumber', [log.blockNumber, false], item.chainId)
+			).result as { timestamp: string } | undefined;
+			await recordExecution(
+				multisig,
+				item,
+				log.transactionHash,
+				'',
+				block ? Number(BigInt(block.timestamp)) : undefined
+			);
 			wrote = true;
 		} catch {
 			// the chain could not say; the next refresh asks again

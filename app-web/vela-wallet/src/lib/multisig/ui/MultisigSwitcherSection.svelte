@@ -53,7 +53,10 @@
 					>
 						<span class="text">
 							<span class="name" class:active={selected}>
-								{fillTemplate(m.switcher.rowName, { m: account.threshold, n: account.owners.length })}
+								{fillTemplate(m.switcher.rowName, {
+									m: account.threshold,
+									n: account.owners.length
+								})}
 							</span>
 							<span class="address">{shortenAddress(account.address)}</span>
 						</span>
@@ -96,7 +99,9 @@
 	{/if}
 	<div class="actions">
 		<Button variant="secondary" shape="rounded" onclick={oncreate}>
-			<span class="label"><Icon icon={UTILITY_ICONS['users-round']} size="sm" />{m.switcher.create}</span>
+			<span class="label"
+				><Icon icon={UTILITY_ICONS['users-round']} size="sm" />{m.switcher.create}</span
+			>
 		</Button>
 		<Button variant="secondary" shape="rounded" onclick={onadd}>
 			<span class="label"><Icon icon={UTILITY_ICONS.plus} size="sm" />{m.switcher.add}</span>

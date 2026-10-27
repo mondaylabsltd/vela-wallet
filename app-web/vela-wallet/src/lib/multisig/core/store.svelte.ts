@@ -114,7 +114,12 @@ class MultisigStore {
 	 * Add a multisig by its genesis. The genesis must derive the address —
 	 * the core re-derives it — so a wrong one never becomes an account.
 	 */
-	add(address: string, genesis: Genesis, recorded: boolean, chainIds: number[] = []): MultisigAccount {
+	add(
+		address: string,
+		genesis: Genesis,
+		recorded: boolean,
+		chainIds: number[] = []
+	): MultisigAccount {
 		if (!sameAddress(genesisAddress(genesis), address)) {
 			throw new Error('the genesis does not make this address');
 		}
@@ -159,7 +164,9 @@ class MultisigStore {
 	markShared(address: string): void {
 		const row = this.find(address);
 		if (!row || row.shared) return;
-		this.accounts = this.accounts.map((a) => (sameAddress(a.address, address) ? { ...a, shared: true } : a));
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, shared: true } : a
+		);
 		write(this.accounts);
 	}
 

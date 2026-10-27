@@ -1429,8 +1429,13 @@ export function resolveMultisigMessages(locale: Locale): MultisigMessages {
 		Object.fromEntries(
 			Object.entries(node).map(([key, value]) => [
 				key,
-				typeof value === 'string' ? t(locale, `${prefix}.${key}`) : walk(value as Record<string, unknown>, `${prefix}.${key}`)
+				typeof value === 'string'
+					? t(locale, `${prefix}.${key}`)
+					: walk(value as Record<string, unknown>, `${prefix}.${key}`)
 			])
 		);
-	return walk(MULTISIG_SHAPE as unknown as Record<string, unknown>, 'home.multisig') as unknown as MultisigMessages;
+	return walk(
+		MULTISIG_SHAPE as unknown as Record<string, unknown>,
+		'home.multisig'
+	) as unknown as MultisigMessages;
 }

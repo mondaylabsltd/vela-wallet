@@ -26,19 +26,27 @@ function errors(page: Page): string[] {
 	page.on('response', async (r) => {
 		if (!/127\.0\.0\.1:(8787|8790)/.test(r.url())) return;
 		const body = await r.text().catch(() => '');
-		console.log(`[net ${r.status()}] ${r.request().method()} ${r.url().replace(/^http:\/\/127\.0\.0\.1:/, '')} ${(r.request().postData() ?? '').slice(0, 160)} → ${body.slice(0, 300)}`);
+		console.log(
+			`[net ${r.status()}] ${r.request().method()} ${r.url().replace(/^http:\/\/127\.0\.0\.1:/, '')} ${(r.request().postData() ?? '').slice(0, 160)} → ${body.slice(0, 300)}`
+		);
 	});
 	return seen;
 }
 
-test('a 2-of-3 multisig on one device: create, fund, propose, approve and execute', async ({ page, context }) => {
+test('a 2-of-3 multisig on one device: create, fund, propose, approve and execute', async ({
+	page,
+	context
+}) => {
 	const thrown = errors(page);
 	await useHarness(context);
 	await enterParallel(page);
 	await shot(page, '01-wallet');
 
 	await test.step('create', async () => {
-		await page.getByRole('button', { name: /Parallel One/ }).first().click();
+		await page
+			.getByRole('button', { name: /Parallel One/ })
+			.first()
+			.click();
 		await shot(page, '02-switcher');
 		await page.getByRole('button', { name: 'Create multisig' }).click();
 		await expect(page.getByText('New multisig')).toBeVisible();
@@ -78,7 +86,9 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 	await test.step('approve and execute as the second member', async () => {
 		const before = await balanceOf(RECIPIENT);
 		await page.getByRole('button', { name: 'Approve and execute' }).click();
-		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({ timeout: 120_000 });
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
 		await shot(page, '10-executed');
 		const after = await balanceOf(RECIPIENT);
 		expect(after - before).toBe(15n * 10n ** 17n);
@@ -88,7 +98,9 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 	void FIXTURES;
 });
 
-test('two devices: one proposes, the other opens the link, approves and executes', async ({ browser }) => {
+test('two devices: one proposes, the other opens the link, approves and executes', async ({
+	browser
+}) => {
 	const a = await browser.newContext({ viewport: { width: 430, height: 900 } });
 	const b = await browser.newContext({ viewport: { width: 430, height: 900 } });
 	await useHarness(a);
@@ -101,7 +113,10 @@ test('two devices: one proposes, the other opens the link, approves and executes
 	await enterParallel(pageB, [FIXTURES.two]);
 
 	await test.step('device A creates a 2-of-2 with a member added by address', async () => {
-		await pageA.getByRole('button', { name: /Parallel One/ }).first().click();
+		await pageA
+			.getByRole('button', { name: /Parallel One/ })
+			.first()
+			.click();
 		await pageA.getByRole('button', { name: 'Create multisig' }).click();
 		await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
 		await pageA.getByRole('button', { name: 'Add', exact: true }).click();
@@ -142,7 +157,9 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await expect(pageB.getByText('Send 0.25 xDAI').first()).toBeVisible({ timeout: 90_000 });
 		await shot(pageB, 'x4-proposal-b');
 		await pageB.getByRole('button', { name: 'Approve and execute' }).click();
-		await expect(pageB.getByText('Executed', { exact: true }).first()).toBeVisible({ timeout: 120_000 });
+		await expect(pageB.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
 		await shot(pageB, 'x5-executed-b');
 		expect((await balanceOf(RECIPIENT)) - before).toBe(25n * 10n ** 16n);
 	});
@@ -153,7 +170,9 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		// Nothing left waiting: the executed transaction is gone from the panel.
 		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
 		// Executed on device B, found on chain here, and in this device's activity.
-		await expect(pageA.getByRole('main').getByText(/0\.25/).first()).toBeVisible({ timeout: 60_000 });
+		await expect(pageA.getByRole('main').getByText(/0\.25/).first()).toBeVisible({
+			timeout: 60_000
+		});
 		await expect(pageA.getByText(/Not shared yet/)).toHaveCount(0);
 		await shot(pageA, 'x6-home-a-after');
 	});
@@ -162,4 +181,39 @@ test('two devices: one proposes, the other opens the link, approves and executes
 	expect(thrownB).toEqual([]);
 	await a.close();
 	await b.close();
+});
+
+test('the desktop: create, propose and the transaction dialog', async ({ browser }) => {
+	const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	await page
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await shot(page, 'd1-switcher');
+	await page.getByRole('button', { name: 'Create multisig' }).click();
+	await page.getByText('Parallel Two', { exact: true }).click();
+	await shot(page, 'd2-create');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Create', exact: true }).click();
+	await page.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	await setBalance(multisig, 2n * 10n ** 18n);
+	await page.reload();
+	await expect(page.getByText('2 of 2 members approve').first()).toBeVisible();
+	await shot(page, 'd3-home');
+	await page.getByRole('button', { name: /Send/ }).first().click();
+	await expect(page.getByText('xDAI').first()).toBeVisible({ timeout: 60_000 });
+	await page.getByPlaceholder('0', { exact: true }).fill('0.5');
+	await page.getByPlaceholder('0x…').fill(RECIPIENT);
+	await shot(page, 'd4-propose');
+	await page.getByRole('button', { name: 'Propose and approve' }).click();
+	await expect(page.getByText('1/2 approved').first()).toBeVisible();
+	await shot(page, 'd5-proposal');
+	expect(thrown).toEqual([]);
+	await ctx.close();
 });

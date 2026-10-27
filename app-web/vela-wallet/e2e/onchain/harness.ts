@@ -77,8 +77,12 @@ export async function enterParallel(page: Page, keep?: string[]): Promise<void> 
 	await page.waitForURL(/\/en\/wallet/);
 	if (keep) {
 		await page.evaluate((wanted) => {
-			const rows = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]') as { address: string }[];
-			const kept = rows.filter((r) => wanted.some((w) => w.toLowerCase() === r.address.toLowerCase()));
+			const rows = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]') as {
+				address: string;
+			}[];
+			const kept = rows.filter((r) =>
+				wanted.some((w) => w.toLowerCase() === r.address.toLowerCase())
+			);
 			localStorage.setItem('vela.accounts', JSON.stringify(kept));
 			localStorage.setItem('vela.activeAccountIndex', '0');
 		}, keep);

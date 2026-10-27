@@ -24,7 +24,9 @@
 
 	let { m, account, locale, wide, closeLabel, onclose }: Props = $props();
 
-	const link = $derived(typeof location === 'undefined' ? '' : addLink(location.origin, locale, account.address));
+	const link = $derived(
+		typeof location === 'undefined' ? '' : addLink(location.origin, locale, account.address)
+	);
 	let copied = $state<'address' | 'link' | null>(null);
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
@@ -48,13 +50,27 @@
 	</div>
 	<div class="actions">
 		<Button variant="secondary" shape="rounded" onclick={() => copy('address')}>
-			<span class="label"><Icon icon={copied === 'address' ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied === 'address' ? m.proposal.copied : m.create.address}</span>
+			<span class="label"
+				><Icon
+					icon={copied === 'address' ? UTILITY_ICONS.check : UTILITY_ICONS.copy}
+					size="sm"
+				/>{copied === 'address' ? m.proposal.copied : m.create.address}</span
+			>
 		</Button>
 		<Button variant="secondary" shape="rounded" onclick={() => copy('link')}>
-			<span class="label"><Icon icon={copied === 'link' ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied === 'link' ? m.proposal.copied : m.proposal.copyLink}</span>
+			<span class="label"
+				><Icon
+					icon={copied === 'link' ? UTILITY_ICONS.check : UTILITY_ICONS.copy}
+					size="sm"
+				/>{copied === 'link' ? m.proposal.copied : m.proposal.copyLink}</span
+			>
 		</Button>
 		{#if canShare}
-			<Button variant="secondary" shape="rounded" onclick={() => navigator.share({ url: link }).catch(() => {})}>{m.proposal.share}</Button>
+			<Button
+				variant="secondary"
+				shape="rounded"
+				onclick={() => navigator.share({ url: link }).catch(() => {})}>{m.proposal.share}</Button
+			>
 		{/if}
 	</div>
 </Sheet>

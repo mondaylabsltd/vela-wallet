@@ -12,7 +12,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { names } from '../core/names.svelte';
-	import { actionTitle, chainName, memberLabel } from '../core/display';
+	import { actionTitle, chainName } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { proposals, type ProposalItem } from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
@@ -28,7 +28,9 @@
 	/** The members now: the first chain that answered, else the genesis's. */
 	const members = $derived.by(() => {
 		const c = proposals.chains.find((x) => x.members.deployed) ?? proposals.chains[0];
-		return c ? { owners: c.members.owners, threshold: c.members.threshold } : { owners: account.owners, threshold: account.threshold };
+		return c
+			? { owners: c.members.owners, threshold: c.members.threshold }
+			: { owners: account.owners, threshold: account.threshold };
 	});
 	const local = $derived(localOwners(members.owners));
 	const open = $derived(proposals.open);
@@ -52,10 +54,15 @@
 	}
 </script>
 
-<section class="panel" aria-label={fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}>
+<section
+	class="panel"
+	aria-label={fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}
+>
 	<div class="rule">
 		<span class="glyph"><Icon icon={UTILITY_ICONS['users-round']} size="md" /></span>
-		<span class="rule-text">{fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}</span>
+		<span class="rule-text"
+			>{fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}</span
+		>
 		<button type="button" class="link" onclick={() => multisigUi.open({ kind: 'invite' })}>
 			{m.panel.invite}
 		</button>
@@ -88,14 +95,33 @@
 				<li>
 					<button
 						type="button"
-						onclick={() => multisigUi.open({ kind: 'proposal', chainId: item.chainId, safeTxHash: item.safeTxHash })}
+						onclick={() =>
+							multisigUi.open({
+								kind: 'proposal',
+								chainId: item.chainId,
+								safeTxHash: item.safeTxHash
+							})}
 					>
 						<span class="what">
 							<span class="title">{titles[item.safeTxHash] ?? '…'}</span>
 							<span class="meta">{chainName(item.chainId)} · #{item.nonce.toString()}</span>
 						</span>
-						<span class="progress" aria-label={fillTemplate(m.status.progress, { approved: item.approved, threshold: item.threshold })}>
-							<span class="bar"><span class="fill" style:width="{Math.min(100, (item.approved / Math.max(1, item.threshold)) * 100)}%"></span></span>
+						<span
+							class="progress"
+							aria-label={fillTemplate(m.status.progress, {
+								approved: item.approved,
+								threshold: item.threshold
+							})}
+						>
+							<span class="bar"
+								><span
+									class="fill"
+									style:width="{Math.min(
+										100,
+										(item.approved / Math.max(1, item.threshold)) * 100
+									)}%"
+								></span></span
+							>
 							<span class="count">{item.approved}/{item.threshold}</span>
 						</span>
 						<span class="chip {status.tone}">{status.label}</span>

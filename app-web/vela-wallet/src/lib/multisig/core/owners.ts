@@ -57,7 +57,13 @@ function fromHexString(hex: string): Uint8Array {
 	return out;
 }
 
-async function signAs(owner: Account, challengeHex: string, method: string, chainId: number, params: unknown) {
+async function signAs(
+	owner: Account,
+	challengeHex: string,
+	method: string,
+	chainId: number,
+	params: unknown
+) {
 	const keys = foundingKeys(owner);
 	return signChallenge(fromHexString(challengeHex), {
 		account: owner.address,
@@ -68,7 +74,11 @@ async function signAs(owner: Account, challengeHex: string, method: string, chai
 }
 
 /** `owner` approves `safeTxHash` of a multisig on `chainId`: one passkey prompt. */
-export async function signApproval(owner: Account, chainId: number, safeTxHash: string): Promise<PasskeyApproval> {
+export async function signApproval(
+	owner: Account,
+	chainId: number,
+	safeTxHash: string
+): Promise<PasskeyApproval> {
 	const challenge = approvalChallenge(chainId, owner.address, safeTxHash);
 	const assertion = await signAs(owner, challenge, 'vela_multisigApprove', chainId, { safeTxHash });
 	return approvalFromAssertion(foundingKeys(owner), {
@@ -80,7 +90,11 @@ export async function signApproval(owner: Account, chainId: number, safeTxHash: 
 }
 
 /** `owner` asks the genesis service to record `multisig`: one passkey prompt. */
-export async function signOwnerProof(owner: Account, multisig: string, chainId: number): Promise<OwnerProof> {
+export async function signOwnerProof(
+	owner: Account,
+	multisig: string,
+	chainId: number
+): Promise<OwnerProof> {
 	const challenge = sponsorChallenge(multisig);
 	const assertion = await signAs(owner, challenge, 'vela_multisigCreate', chainId, { multisig });
 	const clientDataJSON = new TextDecoder().decode(fromHexString(assertion.clientDataJSONHex));
@@ -91,7 +105,9 @@ export async function signOwnerProof(owner: Account, multisig: string, chainId: 
 			? assertion.authenticatorDataHex
 			: `0x${assertion.authenticatorDataHex}`,
 		clientDataJSON,
-		signature: assertion.signatureHex.startsWith('0x') ? assertion.signatureHex : `0x${assertion.signatureHex}`
+		signature: assertion.signatureHex.startsWith('0x')
+			? assertion.signatureHex
+			: `0x${assertion.signatureHex}`
 	};
 }
 

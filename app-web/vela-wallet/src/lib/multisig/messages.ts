@@ -16,13 +16,10 @@ export interface MultisigMessages {
 		title: string;
 		members: string;
 		thisDevice: string;
-		external: string;
 		readOnly: string;
 		pending: string;
-		nothingPending: string;
 		stale: string;
 		notShared: string;
-		propose: string;
 		invite: string;
 	};
 	status: {
@@ -30,7 +27,6 @@ export interface MultisigMessages {
 		yourTurn: string;
 		waiting: string;
 		queued: string;
-		done: string;
 		progress: string;
 	};
 	action: {
@@ -89,7 +85,6 @@ export interface MultisigMessages {
 		noAssets: string;
 		invalidAddress: string;
 		invalidAmount: string;
-		proposed: string;
 	};
 	create: {
 		title: string;
@@ -105,7 +100,6 @@ export interface MultisigMessages {
 		thresholdAll: string;
 		thresholdOne: string;
 		thresholdSpare: string;
-		review: string;
 		address: string;
 		sameEverywhere: string;
 		network: string;
@@ -130,7 +124,6 @@ export interface MultisigMessages {
 		unsupported: string;
 		notMultisig: string;
 	};
-	receiveNote: string;
 }
 
 /** Every key of {@link MultisigMessages}, for the resolver to walk. */
@@ -141,28 +134,24 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		add: '',
 		rowName: '',
 		readOnly: '',
-		removeBody: '',
+		removeBody: ''
 	},
 	panel: {
 		title: '',
 		members: '',
 		thisDevice: '',
-		external: '',
 		readOnly: '',
 		pending: '',
-		nothingPending: '',
 		stale: '',
 		notShared: '',
-		propose: '',
-		invite: '',
+		invite: ''
 	},
 	status: {
 		ready: '',
 		yourTurn: '',
 		waiting: '',
 		queued: '',
-		done: '',
-		progress: '',
+		progress: ''
 	},
 	action: {
 		send: '',
@@ -175,7 +164,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		to: '',
 		network: '',
-		number: '',
+		number: ''
 	},
 	proposal: {
 		title: '',
@@ -205,7 +194,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		failed: '',
 		noExpiry: '',
 		notFound: '',
-		opening: '',
+		opening: ''
 	},
 	send: {
 		title: '',
@@ -219,8 +208,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		hint: '',
 		noAssets: '',
 		invalidAddress: '',
-		invalidAmount: '',
-		proposed: '',
+		invalidAmount: ''
 	},
 	create: {
 		title: '',
@@ -236,7 +224,6 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		thresholdAll: '',
 		thresholdOne: '',
 		thresholdSpare: '',
-		review: '',
 		address: '',
 		sameEverywhere: '',
 		network: '',
@@ -249,7 +236,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		duplicate: '',
 		created: '',
 		createdBody: '',
-		done: '',
+		done: ''
 	},
 	add: {
 		title: '',
@@ -259,7 +246,6 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notFound: '',
 		unavailable: '',
 		unsupported: '',
-		notMultisig: '',
-	},
-	receiveNote: '',
+		notMultisig: ''
+	}
 };

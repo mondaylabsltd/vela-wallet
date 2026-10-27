@@ -66,7 +66,13 @@
 			aria-invalid={failure !== null}
 		/>
 		{#if failure}<p class="error" role="alert">{failure}</p>{/if}
-		<Button variant="primary" shape="rounded" loading={busy} disabled={busy} onclick={() => void add()}>{m.add.add}</Button>
+		<Button
+			variant="primary"
+			shape="rounded"
+			loading={busy}
+			disabled={busy}
+			onclick={() => void add()}>{m.add.add}</Button
+		>
 	</form>
 </Sheet>
 

@@ -10,10 +10,21 @@
  */
 import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
 import { findAccountByAddress } from '$lib/services/accounts';
-import { keySetOf, sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
+import {
+	keySetOf,
+	sendBatchCalls,
+	type SignFn,
+	type SubmitResult
+} from '$lib/services/safe-transaction';
 import { signChallenge } from '$lib/signing/sign-challenge';
 import { hasCode, type ChainMembers } from './chain';
-import { executionCalls, sameAddress, type Genesis, type PasskeyApproval, type SafeTx } from './kernel';
+import {
+	executionCalls,
+	sameAddress,
+	type Genesis,
+	type PasskeyApproval,
+	type SafeTx
+} from './kernel';
 import type { LocalOwner } from './owners';
 
 export interface ExecutionInput {
@@ -70,7 +81,8 @@ function executorSigner(owner: LocalOwner, chainId: number, tx: SafeTx): SignFn 
 export async function submitExecution(input: ExecutionInput): Promise<SubmitResult> {
 	const stored = findAccountByAddress(input.executor.address);
 	if (!stored) throw new Error('the executor is not an account on this device');
-	const walletSigner = stored.keys && stored.keys.length > 1 ? keySetOf(stored) : stored.publicKeyHex;
+	const walletSigner =
+		stored.keys && stored.keys.length > 1 ? keySetOf(stored) : stored.publicKeyHex;
 	const calls = await planCalls(input);
 	return sendBatchCalls(
 		input.executor.address,

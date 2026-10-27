@@ -59,7 +59,11 @@ export interface ChainMembers {
 }
 
 /** The multisig's owners, threshold and nonce on `chainId`, from the chain (or, undeployed, its genesis). */
-export async function readMembers(chainId: number, safe: string, genesis: Genesis): Promise<ChainMembers> {
+export async function readMembers(
+	chainId: number,
+	safe: string,
+	genesis: Genesis
+): Promise<ChainMembers> {
 	if (!(await hasCode(chainId, safe))) {
 		const { owners, threshold } = genesisMembers(genesis);
 		return { deployed: false, owners, threshold, nonce: 0n };
