@@ -158,6 +158,7 @@
     "deleteActivity": "기록 하나 삭제",
     "setBalancePrivacy": "잔액 숨기기/표시",
     "refreshBalances": "잔액 새로고침",
+    "setNetworkSpace": "네트워크 공간 전환",
     "setContactFavorite": "즐겨찾기 변경",
     "addNetwork": "네트워크 추가",
     "setNetworkEndpoint": "네트워크 RPC 또는 탐색기 변경",
@@ -258,6 +259,24 @@
   "activity": "활동",
   "delete": "삭제",
   "connected": "연결됨"
+ },
+ "networkSpace": {
+  "mainnet": "메인넷",
+  "testnet": "테스트넷",
+  "bar": "테스트넷 공간 · 여기의 자산은 실제 가치가 없습니다",
+  "title": "네트워크 공간",
+  "mainnetHint": "자산이 실제 가치를 갖는 네트워크입니다.",
+  "testnetHint": "테스트넷과 개발용 네트워크입니다. 여기의 자산은 실제 가치가 없습니다.",
+  "toTestnet": "테스트넷 공간으로 전환",
+  "toMainnet": "메인넷 공간으로 전환",
+  "noValue": "테스트 자산 · 실제 가치 없음",
+  "moveToMainnet": "메인넷 공간으로 이동",
+  "moveToTestnet": "테스트넷 공간으로 이동",
+  "wizardQuestion": "이 네트워크는 어느 공간에 속하나요?",
+  "wizardTestnet": "테스트넷 — 실제 가치 없음",
+  "wizardMainnet": "메인넷 — 실제 가치 있음",
+  "headingMainnet": "메인넷 공간",
+  "headingTestnet": "테스트넷 공간"
  },
  "home": {
   "totalBalance": "총 잔액",

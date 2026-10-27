@@ -31,6 +31,7 @@ import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { AgentMessages } from '$lib/agent/messages';
+import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import {
 	SIM_SAID_KEYS,
@@ -959,6 +960,31 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 	};
 }
 
+/** The spaces' words (spec 105), on every `[locale]` page. */
+export function resolveNetworkSpaceMessages(locale: Locale): NetworkSpaceMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, `networkSpace.${key}`);
+	return {
+		mainnet: k('mainnet'),
+		testnet: k('testnet'),
+		bar: k('bar'),
+		title: k('title'),
+		mainnetHint: k('mainnetHint'),
+		testnetHint: k('testnetHint'),
+		toTestnet: k('toTestnet'),
+		toMainnet: k('toMainnet'),
+		noValue: k('noValue'),
+		moveToMainnet: k('moveToMainnet'),
+		moveToTestnet: k('moveToTestnet'),
+		wizardQuestion: k('wizardQuestion'),
+		wizardTestnet: k('wizardTestnet'),
+		wizardMainnet: k('wizardMainnet'),
+		headingMainnet: k('headingMainnet'),
+		headingTestnet: k('headingTestnet'),
+		cancel: t(locale, 'common.cancel')
+	};
+}
+
 /** The packaged extension's notices (spec 094), on every `[locale]` page. */
 /** The agent's layer over every page (spec 103). Keys by action `type`. */
 export function resolveAgentMessages(locale: Locale): AgentMessages {
@@ -997,6 +1023,7 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			add_token: action('addToken'),
 			delete_activity: action('deleteActivity'),
 			set_balance_privacy: action('setBalancePrivacy'),
+			set_network_space: action('setNetworkSpace'),
 			refresh_balances: action('refreshBalances'),
 			set_contact_favorite: action('setContactFavorite'),
 			add_network: action('addNetwork'),

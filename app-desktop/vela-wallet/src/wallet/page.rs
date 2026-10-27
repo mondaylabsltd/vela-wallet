@@ -115,6 +115,7 @@ use vela_core::app::fee_policy::Event as FeeEvent;
 use vela_core::app::intents::{Action, Preference};
 use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokNetwork};
 use vela_core::app::network_admin::{Event as NetEvent, NetOverrideField, NetworkAdmin};
+use vela_core::app::network_space::NetworkSpace;
 use vela_core::app::payment_request::PaymentRequest;
 use vela_core::app::receive_watch::ReceiveWatch;
 use vela_core::app::send::{
@@ -1085,6 +1086,9 @@ pub struct WalletPage {
     /// The custom network the remove confirmation is about: its id and the
     /// name to say back to the person.
     network_remove: Option<(String, SharedString)>,
+    /// The switch of network space is asked (spec 105): the header label,
+    /// the testnet bar, or Settings → Networks opened it.
+    space_prompt: bool,
     /// The destructive action on screen, asked about and not yet done.
     confirm: Option<Confirm>,
     /// Edited settings fields not yet committed, by focus slot: the event
@@ -1867,6 +1871,7 @@ impl WalletPage {
             settings_probed_panel: None,
             settings_fix_chain: None,
             network_remove: None,
+            space_prompt: false,
             confirm: None,
             field_commits: std::collections::HashMap::new(),
             field_blurs: Vec::new(),
@@ -3238,6 +3243,127 @@ impl WalletPage {
         )
     }
 
+    /// The testnet space's bar (spec 105), across the window above the page:
+    /// nothing here has real value. In the flow, so it pushes the page down
+    /// rather than covering its header; clear of the traffic lights and the
+    /// caption's buttons at either end. Pressed, it offers the switch back.
+    fn testnet_bar(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        if self.identity.is_none() || !crate::network_space::testnet() {
+            return None;
+        }
+        Some(
+            div()
+                .flex_none()
+                .h(px(28.))
+                .px(px(88.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.warning_soft)
+                .border_b_1()
+                .border_color(theme.warning_border)
+                .child(
+                    div()
+                        .id("testnet-bar")
+                        .cursor_pointer()
+                        .text_size(theme::text_label())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .text_ellipsis()
+                        .child(self.loc.t("networkSpace.bar"))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.space_prompt = true;
+                            cx.notify();
+                        })),
+                ),
+        )
+    }
+
+    /// The switch of network space (spec 105): what the other space is, and
+    /// the switch to it. The answer goes through the same intent an agent's
+    /// request takes (`set_network_space`).
+    fn network_space_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.space_prompt {
+            return None;
+        }
+        let to = if crate::network_space::testnet() {
+            NetworkSpace::Mainnet
+        } else {
+            NetworkSpace::Testnet
+        };
+        let (hint, confirm) = match to {
+            NetworkSpace::Testnet => ("networkSpace.testnetHint", "networkSpace.toTestnet"),
+            NetworkSpace::Mainnet => ("networkSpace.mainnetHint", "networkSpace.toMainnet"),
+        };
+        let copy = ConfirmCopy {
+            title: SharedString::default(),
+            body: self.loc.t(hint),
+            callout: None,
+            note: None,
+            confirm: self.loc.t(confirm),
+            cancel: Some(self.loc.t("common.cancel")),
+            danger: false,
+        };
+        let sheet = confirm_sheet(
+            theme,
+            copy,
+            cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                this.space_prompt = false;
+                crate::agent::invoke_person(Action::SetNetworkSpace { space: to }, cx);
+                cx.notify();
+            }),
+            cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.space_prompt = false;
+                cx.notify();
+            }),
+        );
+        Some(
+            crate::ui::dialog::dialog(
+                "network-space",
+                theme,
+                window,
+                self.loc.t("networkSpace.title"),
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("network-space"),
+                Self::closer(cx, |this, _| this.space_prompt = false),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// The space was switched (spec 105) — the person's answer or the
+    /// agent's allowed request: the prompt is answered, and the page's own
+    /// lists follow the space's networks.
+    pub(crate) fn network_space_switched(&mut self, cx: &mut Context<Self>) {
+        self.space_prompt = false;
+        self.follow_space_networks(cx);
+    }
+
+    /// The space's networks changed under the page — a switch, or a network
+    /// moved to the other space: the browser's chains are the space's, a
+    /// filter on a chain that left it is lifted, and an expanded row that
+    /// left the list is closed.
+    fn follow_space_networks(&mut self, cx: &mut Context<Self>) {
+        if let Some(host) = self.browser_host.clone() {
+            host.update(cx, |host, cx| host.follow_networks(cx));
+        }
+        if self
+            .chain_filter
+            .is_some_and(|chain_id| !crate::network_space::in_space(chain_id))
+        {
+            self.select_chain(None, cx);
+        }
+        self.settings_expanded_network = None;
+        cx.notify();
+    }
+
     /// Where the person is: the section, and which settings panel.
     pub fn place(&self) -> (Section, SettingsPage) {
         (self.section, self.settings_page)
@@ -3827,6 +3953,23 @@ impl WalletPage {
                 let identity = self.identity();
                 // Both halves answer only for a real account: the gallery's
                 // header is a picture, as the web's is.
+                // The space in front, beside the account it shows (spec 105):
+                // pressed, it offers the other space. Live only, as the
+                // web's — the gallery's header is a picture.
+                let space = live.then(|| {
+                    let testnet = crate::network_space::testnet();
+                    let label = self.loc.t(if testnet {
+                        "networkSpace.testnet"
+                    } else {
+                        "networkSpace.mainnet"
+                    });
+                    let open: crate::wallet::components::HeaderClick =
+                        Box::new(cx.listener(|this, _, _, cx| {
+                            this.space_prompt = true;
+                            cx.notify();
+                        }));
+                    (label, testnet, open)
+                });
                 let (on_identicon, on_account): (
                     Option<crate::wallet::components::HeaderClick>,
                     Option<crate::wallet::components::HeaderClick>,
@@ -3854,6 +3997,7 @@ impl WalletPage {
                     identity.display(),
                     on_identicon,
                     on_account,
+                    space,
                 )
                 .mb(px(4.))
             })
@@ -4066,7 +4210,7 @@ impl WalletPage {
         // strip, which reads as a list that failed to load (the web's
         // `assetsSection.mode === 'empty'`).
         let strip_view = if self.identity.is_some() {
-            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+            Some(crate::network_space::balance_view(cx))
         } else {
             // The first-read board draws the same rule over its own view.
             Self::pinned_first_read().map(fixtures::first_read_view)
@@ -4602,7 +4746,7 @@ impl WalletPage {
         if self.identity.is_none() {
             return Vec::new();
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         wallet_live::visible_token_indices(&view, self.chain_filter)
     }
 
@@ -4716,6 +4860,7 @@ impl WalletPage {
             || self.confirm.is_some()
             || self.settings_dialog.is_some()
             || self.network_remove.is_some()
+            || self.space_prompt
             || self.import_result.is_some()
             || self.group_form.is_some()
             || self.pick.is_some()
@@ -4875,15 +5020,21 @@ impl WalletPage {
             }
             return fixtures::assets_default(&self.strings);
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         let money = self.money(cx);
-        wallet_live::asset_rows(
+        let rows = wallet_live::asset_rows(
             &view,
             &self.strings,
             &self.locale,
             self.chain_filter,
             &money,
-        )
+        );
+        // The testnet space (spec 105): a holding there has no worth to show.
+        if crate::network_space::testnet() {
+            wallet_live::without_worth(rows)
+        } else {
+            rows
+        }
     }
 
     /// The home's network list: the chains this person actually holds on.
@@ -4891,7 +5042,7 @@ impl WalletPage {
         if self.identity.is_none() {
             return fixtures::chains(&self.strings);
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         wallet_live::chain_rows(&view, &self.strings, self.chain_filter)
     }
 
@@ -4955,7 +5106,7 @@ impl WalletPage {
         if self.identity.is_none() {
             return fixtures::asset_detail_default(&self.strings);
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
         let money = self.money(cx);
         wallet_live::asset_detail(&view, &feed, index, &self.strings, &self.locale, &money)
@@ -5067,7 +5218,7 @@ impl WalletPage {
             }
             return fixtures::balance_default(&self.strings);
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         let money = self.money(cx);
         let mut model = wallet_live::balance(&view, &self.strings, &self.locale, &money);
         // Issue #443: when the figure was last read — "Updated 2m" — beside
@@ -5087,6 +5238,11 @@ impl WalletPage {
             self.refresh_hold,
             std::time::Instant::now(),
         );
+        // The testnet space (spec 105): no figure at all — a "$12" of test
+        // coins would read as money. Said in the figure's place.
+        if crate::network_space::testnet() {
+            model = wallet_live::no_value(model, self.loc.t("networkSpace.noValue"));
+        }
         model
     }
 
@@ -7159,7 +7315,7 @@ impl WalletPage {
         };
         match panel {
             FlowPanel::Dt1 | FlowPanel::Dt4 => {
-                let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+                let view = crate::network_space::balance_view(cx);
                 flow_fixtures::FlowBody::Assets(flows_live::assets(
                     &view,
                     &self.flow_strings,
@@ -7172,7 +7328,7 @@ impl WalletPage {
             FlowPanel::Da1 => {
                 // Privacy is the feed's own flag, told from the balance's
                 // first (`feed_view`).
-                let balance = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+                let balance = crate::network_space::balance_view(cx);
                 let feed = self.feed_view(cx);
                 flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
@@ -9419,7 +9575,7 @@ impl WalletPage {
         // The gallery's DSR8 draws the token-list fixture through the same
         // builders: the one banner whose chip offers nothing (PR 3 note 4).
         let banner_view = if self.identity.is_some() {
-            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+            Some(crate::network_space::balance_view(cx))
         } else {
             (self.tab == GalleryTab::Dsr8).then(fixtures::token_list_view)
         };
@@ -11788,14 +11944,100 @@ impl WalletPage {
             // networks while it waits (spec 030 FR-008).
             return Vec::new();
         }
-        settings_live::network_rows(&view)
+        // Only the space in front's networks (spec 105), under its heading.
+        let space = crate::network_space::current();
+        settings_live::network_rows(&vela_core::app::network_admin::NetView {
+            networks: vela_core::app::network_space::space_rows(space, &view.networks),
+            ..view
+        })
+    }
+
+    /// The network list's heading (spec 105): which space the rows are, what
+    /// it holds, and the switch to the other one. Live only — the design
+    /// surfaces' list is a picture of no space.
+    fn settings_space_heading(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        self.identity.as_ref()?;
+        let testnet = crate::network_space::testnet();
+        let (heading, hint, switch) = if testnet {
+            (
+                "networkSpace.headingTestnet",
+                "networkSpace.testnetHint",
+                "networkSpace.toMainnet",
+            )
+        } else {
+            (
+                "networkSpace.headingMainnet",
+                "networkSpace.mainnetHint",
+                "networkSpace.toTestnet",
+            )
+        };
+        let (bg, border) = if testnet {
+            (theme.warning_soft, theme.warning_border)
+        } else {
+            (theme.bg_sunken, theme.divider)
+        };
+        Some(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(16.))
+                .p(px(16.))
+                .mb(px(16.))
+                .rounded(px(10.))
+                .bg(bg)
+                .border_1()
+                .border_color(border)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(4.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(self.loc.t(heading)),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_subtle)
+                                .child(crate::ui::prose(self.loc.t(hint))),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("settings-network-space-switch")
+                        .flex_none()
+                        .cursor_pointer()
+                        .text_size(theme::text_row_sub())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.info_base)
+                        .child(self.loc.t(switch))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.space_prompt = true;
+                            cx.notify();
+                        })),
+                ),
+        )
     }
 
     fn settings_networks(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let page = cx.entity();
         let expanded = self.settings_expanded_network.clone();
         let rows = self.network_rows(cx);
-        let mut col = div().flex().flex_col();
+        let mut col = div()
+            .flex()
+            .flex_col()
+            .children(self.settings_space_heading(theme, cx));
+        let move_label = self.loc.t(if crate::network_space::testnet() {
+            "networkSpace.moveToMainnet"
+        } else {
+            "networkSpace.moveToTestnet"
+        });
         for (i, n) in rows.into_iter().enumerate() {
             let meta = settings_fixtures::chain_meta(&self.settings, n.chain_id);
             let badge = n.latency_ms.map(|ms| latency(ms, None));
@@ -11830,6 +12072,31 @@ impl WalletPage {
                             });
                         },
                     ) as crate::contacts::components::MenuAction
+                }),
+                // A network the person added moves to the other space (spec
+                // 105): which space has real value is their word.
+                (n.custom && self.identity.is_some()).then(|| {
+                    let page = page.clone();
+                    let id = n.id.to_string();
+                    let testnet = !n.testnet;
+                    (
+                        move_label.clone(),
+                        Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                resident::resident::<NetworkAdmin>(cx).update(cx, |ledger, cx| {
+                                    ledger.dispatch(
+                                        NetEvent::CustomSpaceChanged {
+                                            id: id.clone(),
+                                            testnet,
+                                        },
+                                        cx,
+                                    );
+                                });
+                                crate::network_space::networks_changed(cx);
+                                page.update(cx, |this, cx| this.follow_space_networks(cx));
+                            },
+                        ) as crate::contacts::components::MenuAction,
+                    )
                 }),
             );
             let id = n.id.clone();
@@ -13589,6 +13856,45 @@ impl WalletPage {
                 });
             }
         };
+        // Spec 105: which space the network goes to — the person's word, the
+        // core's preselection (testnet unless the chain registry calls it a
+        // mainnet) — asked only where the network may be added.
+        if wizard.phase == NetWizardPhase::Checked && wizard.can_add {
+            let items = [
+                (None, self.loc.t("networkSpace.wizardTestnet")),
+                (None, self.loc.t("networkSpace.wizardMainnet")),
+            ];
+            col = col.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_base)
+                            .child(self.loc.t("networkSpace.wizardQuestion")),
+                    )
+                    .child(segmented_picks(
+                        "add-network-space",
+                        theme,
+                        &mut self.icons,
+                        &items,
+                        usize::from(!wizard.testnet),
+                        |index, _, cx| {
+                            resident::resident::<NetworkAdmin>(cx).update(cx, |ledger, cx| {
+                                ledger.dispatch(
+                                    NetEvent::WizardTestnetChosen {
+                                        testnet: index == 0,
+                                    },
+                                    cx,
+                                );
+                            });
+                        },
+                    )),
+            );
+        }
         if let Some(primary) = verdict.primary.clone() {
             let adds = wizard.phase == NetWizardPhase::Checked && wizard.can_add;
             col = col.child(
@@ -13642,8 +13948,9 @@ impl WalletPage {
                                     cx.notify();
                                 });
                                 // A chain nobody has counted yet: the same
-                                // forced read the web makes at the same moment.
-                                crate::executor::balance_dashboard::refresh(cx);
+                                // forced read the web makes at the same moment,
+                                // and the feed's chains, if it is the space's.
+                                crate::network_space::networks_changed(cx);
                             },
                         );
                         cx.notify();
@@ -16785,7 +17092,7 @@ impl WalletPage {
         });
         if added {
             // A chain nobody has counted yet: the read Settings' Add makes.
-            crate::executor::balance_dashboard::refresh(cx);
+            crate::network_space::networks_changed(cx);
         }
         cx.notify();
     }
@@ -19658,7 +19965,7 @@ impl WalletPage {
     /// networks the wallet cannot reach open their list (spec 092 — every one,
     /// each with its RPC editor); anything else opens the breakdown.
     fn open_balance_status(&mut self, cx: &mut Context<Self>) {
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         if view.unreachable_networks.is_empty() {
             self.balance_detail_open = true;
         } else {
@@ -19701,7 +20008,7 @@ impl WalletPage {
         // The gallery's DSR6 draws the fixture view through the same builders
         // — and DSR8 the one network whose token list could not be loaded.
         let view = if self.identity.is_some() {
-            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+            crate::network_space::balance_view(cx)
         } else if self.tab == GalleryTab::Dsr8 {
             fixtures::token_list_view()
         } else {
@@ -19809,7 +20116,7 @@ impl WalletPage {
         // The gallery's DSR3 draws the breakdown fixture through the same
         // builders; any other design surface has no sheet to open.
         let view = if self.identity.is_some() {
-            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+            crate::network_space::balance_view(cx)
         } else if self.tab == GalleryTab::Dsr3 {
             Self::breakdown_fixture()
         } else {
@@ -21421,7 +21728,7 @@ impl WalletPage {
             // figures, as they stand now.
             let money = self.money(cx);
             let balances = wallet_live::network_balances(
-                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                &crate::network_space::balance_view(cx),
                 &self.locale,
                 &money,
             );
@@ -21627,6 +21934,7 @@ impl Render for WalletPage {
                 .size_full()
                 .flex()
                 .flex_col()
+                .children(self.testnet_bar(&theme, cx))
                 .child(self.wallet_columns(&theme, caption, window, cx))
         };
 
@@ -21644,6 +21952,7 @@ impl Render for WalletPage {
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, window, cx);
         let network_remove = self.network_remove_dialog(&theme, window, cx);
+        let network_space = self.network_space_dialog(&theme, window, cx);
         let account_switcher = self.account_switcher_dialog(&theme, window, cx);
         let identicon_viewer = self.identicon_viewer_dialog(&theme, cx);
         let feedback_viewer = self.feedback_viewer(&theme, window, cx);
@@ -21737,6 +22046,9 @@ impl Render for WalletPage {
         }
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
+        }
+        if let Some(network_space) = network_space {
+            root = root.child(network_space);
         }
         if let Some(confirm) = confirm {
             root = root.child(confirm);
@@ -22307,6 +22619,7 @@ mod tests {
             ("identicon_viewer_dialog", "self.identicon_viewer"),
             ("settings_dialog_overlay", "self.settings_dialog"),
             ("network_remove_dialog", "self.network_remove"),
+            ("network_space_dialog", "self.space_prompt"),
             ("import_result_dialog", "self.import_result"),
             ("group_form_dialog", "self.group_form"),
             ("pick_dialog", "self.pick"),

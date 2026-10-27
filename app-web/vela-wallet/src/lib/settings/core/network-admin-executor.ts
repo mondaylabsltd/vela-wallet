@@ -102,7 +102,9 @@ function decodeCustomNetwork(raw: unknown): NetCustomNetwork | null {
 		explorer_url: asString(r.explorerURL),
 		bundler_url: asString(r.bundlerURL),
 		native_symbol: asString(r.nativeSymbol),
-		added_at_iso: asString(r.addedAt)
+		added_at_iso: asString(r.addedAt),
+		// The person's word on its space (spec 105); absent on an older record.
+		...(typeof r.isTestnet === 'boolean' && { is_testnet: r.isTestnet })
 	};
 }
 
@@ -120,7 +122,8 @@ function encodeCustomNetwork(n: NetCustomNetwork): Record<string, unknown> {
 		explorerURL: n.explorer_url,
 		bundlerURL: n.bundler_url,
 		nativeSymbol: n.native_symbol,
-		addedAt: n.added_at_iso
+		addedAt: n.added_at_iso,
+		...(typeof n.is_testnet === 'boolean' && { isTestnet: n.is_testnet })
 	};
 }
 

@@ -158,6 +158,7 @@
     "deleteActivity": "Hapus catatan aktivitas",
     "setBalancePrivacy": "Sembunyikan atau tampilkan saldo",
     "refreshBalances": "Muat ulang saldo",
+    "setNetworkSpace": "Ganti ruang jaringan",
     "setContactFavorite": "Ubah favorit",
     "addNetwork": "Tambah jaringan",
     "setNetworkEndpoint": "Ubah RPC atau explorer jaringan",
@@ -258,6 +259,24 @@
   "activity": "Aktivitas",
   "delete": "Hapus",
   "connected": "Terhubung"
+ },
+ "networkSpace": {
+  "mainnet": "Mainnet",
+  "testnet": "Testnet",
+  "bar": "Ruang testnet · tidak ada yang bernilai nyata di sini",
+  "title": "Ruang jaringan",
+  "mainnetHint": "Jaringan yang asetnya bernilai nyata.",
+  "testnetHint": "Testnet dan jaringan pengembang. Tidak ada yang bernilai nyata di sini.",
+  "toTestnet": "Beralih ke ruang testnet",
+  "toMainnet": "Beralih ke ruang mainnet",
+  "noValue": "Aset uji · tanpa nilai nyata",
+  "moveToMainnet": "Pindahkan ke ruang mainnet",
+  "moveToTestnet": "Pindahkan ke ruang testnet",
+  "wizardQuestion": "Jaringan ini termasuk ruang yang mana?",
+  "wizardTestnet": "Testnet — tanpa nilai nyata",
+  "wizardMainnet": "Mainnet — bernilai nyata",
+  "headingMainnet": "Ruang mainnet",
+  "headingTestnet": "Ruang testnet"
  },
  "home": {
   "totalBalance": "Total saldo",

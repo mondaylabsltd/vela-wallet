@@ -158,6 +158,7 @@
     "deleteActivity": "Xoá một bản ghi hoạt động",
     "setBalancePrivacy": "Ẩn hoặc hiện số dư",
     "refreshBalances": "Làm mới số dư",
+    "setNetworkSpace": "Chuyển không gian mạng",
     "setContactFavorite": "Đổi mục yêu thích",
     "addNetwork": "Thêm mạng",
     "setNetworkEndpoint": "Đổi RPC hoặc trình khám phá của mạng",
@@ -258,6 +259,24 @@
   "activity": "Hoạt động",
   "delete": "Xóa",
   "connected": "Đã kết nối"
+ },
+ "networkSpace": {
+  "mainnet": "Mainnet",
+  "testnet": "Testnet",
+  "bar": "Không gian testnet · không có gì ở đây có giá trị thật",
+  "title": "Không gian mạng",
+  "mainnetHint": "Các mạng có tài sản mang giá trị thật.",
+  "testnetHint": "Testnet và mạng dành cho nhà phát triển. Không có gì ở đây có giá trị thật.",
+  "toTestnet": "Chuyển sang không gian testnet",
+  "toMainnet": "Chuyển sang không gian mainnet",
+  "noValue": "Tài sản thử nghiệm · không có giá trị thật",
+  "moveToMainnet": "Chuyển sang không gian mainnet",
+  "moveToTestnet": "Chuyển sang không gian testnet",
+  "wizardQuestion": "Mạng này thuộc không gian nào?",
+  "wizardTestnet": "Testnet — không có giá trị thật",
+  "wizardMainnet": "Mainnet — có giá trị thật",
+  "headingMainnet": "Không gian mainnet",
+  "headingTestnet": "Không gian testnet"
  },
  "home": {
   "totalBalance": "Tổng số dư",

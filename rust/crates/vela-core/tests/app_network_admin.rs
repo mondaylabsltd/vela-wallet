@@ -81,6 +81,7 @@ fn custom_network(chain_id: u32) -> NetCustomNetwork {
         bundler_url: format!("https://custom-bundler.example/{chain_id}"),
         native_symbol: "TST".to_owned(),
         added_at_iso: "2026-08-01T00:00:00.000Z".to_owned(),
+        is_testnet: None,
     }
 }
 
@@ -203,8 +204,12 @@ fn started_loads_the_store_and_lists_builtins_plus_customs() {
     let sut = started_with(vec![custom_network(999)], vec![]);
     let view = sut.view();
     assert!(view.loaded);
-    assert_eq!(view.networks.len(), 25, "24 builtins + 1 custom");
-    let custom = &view.networks[24];
+    assert_eq!(
+        view.networks.len(),
+        BUILTIN_CHAINS.len() + 1,
+        "the built-ins + 1 custom"
+    );
+    let custom = &view.networks[BUILTIN_CHAINS.len()];
     assert!(custom.is_custom);
     assert_eq!(custom.chain_id, 999);
     assert!(!view.networks[0].is_custom);
@@ -591,7 +596,7 @@ fn a_chain_missing_any_required_contract_never_saves() {
             now_iso: NOW_ISO.to_owned()
         })
         .is_empty());
-    assert_eq!(sut.view().networks.len(), 24);
+    assert_eq!(sut.view().networks.len(), BUILTIN_CHAINS.len());
 }
 
 #[test]
@@ -828,14 +833,80 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
                 bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/{NEW_CHAIN}"),
                 native_symbol: "TST".to_owned(),
                 added_at_iso: NOW_ISO.to_owned(),
+                is_testnet: Some(true),
             }]
         }]
     );
     let view = sut.view();
     assert_eq!(view.last_added_chain_id, Some(NEW_CHAIN));
     assert_eq!(view.wizard.phase, NetWizardPhase::Idle, "reset + close");
-    assert_eq!(view.networks.len(), 25);
-    assert!(view.networks[24].is_custom);
+    assert_eq!(view.networks.len(), BUILTIN_CHAINS.len() + 1);
+    assert!(view.networks[BUILTIN_CHAINS.len()].is_custom);
+}
+
+/// Spec 105: the wizard says which space a network goes to — a testnet
+/// unless the person says mainnet — and keeps it with the record; the person
+/// can move it later, and each network's row says its space.
+#[test]
+fn an_added_network_keeps_the_space_the_person_chose() {
+    let mut sut = checked_compatible();
+    assert!(
+        sut.view().wizard.testnet,
+        "a testnet unless the person says otherwise"
+    );
+    sut.dispatch(Event::WizardTestnetChosen { testnet: false });
+    assert!(!sut.view().wizard.testnet);
+    let ops = sut.dispatch(Event::AddConfirmed {
+        now_iso: NOW_ISO.to_owned(),
+    });
+    let Some(Op::WriteCustomNetworks { networks }) = ops.first() else {
+        panic!("saved: {ops:?}");
+    };
+    assert_eq!(networks[0].is_testnet, Some(false));
+    let row = |sut: &Sut| {
+        sut.view()
+            .networks
+            .into_iter()
+            .find(|row| row.chain_id == NEW_CHAIN)
+            .expect("listed")
+    };
+    assert!(!row(&sut).is_testnet);
+
+    let ops = sut.dispatch(Event::CustomSpaceChanged {
+        id: "custom-7777".to_owned(),
+        testnet: true,
+    });
+    let Some(Op::WriteCustomNetworks { networks }) = ops.first() else {
+        panic!("moved: {ops:?}");
+    };
+    assert_eq!(networks[0].is_testnet, Some(true));
+    assert!(row(&sut).is_testnet);
+    // The built-ins carry the table's word.
+    let view = sut.view();
+    let space = |chain: u32| {
+        view.networks
+            .iter()
+            .find(|r| r.chain_id == chain)
+            .map(|r| r.is_testnet)
+    };
+    assert_eq!(space(1), Some(false));
+    assert_eq!(space(11_155_111), Some(true));
+}
+
+/// A network the person added before it shipped built in (Arc Testnet) is
+/// listed once: the built-in.
+#[test]
+fn a_custom_network_now_built_in_is_listed_once() {
+    let sut = started_with(vec![custom_network(5_042_002)], vec![]);
+    let view = sut.view();
+    let arc: Vec<_> = view
+        .networks
+        .iter()
+        .filter(|r| r.chain_id == 5_042_002)
+        .collect();
+    assert_eq!(arc.len(), 1);
+    assert!(!arc[0].is_custom);
+    assert!(arc[0].is_testnet);
 }
 
 /// The wizard's bundler/logo URLs follow the CONFIGURED service endpoints
@@ -1040,7 +1111,11 @@ fn the_scan_path_keeps_rpc_failure_apart_from_not_compatible() {
             chain_id: NEW_CHAIN
         })
     );
-    assert_eq!(sut.view().networks.len(), 24, "nothing saved");
+    assert_eq!(
+        sut.view().networks.len(),
+        BUILTIN_CHAINS.len(),
+        "nothing saved"
+    );
 }
 
 // ===========================================================================
@@ -1489,7 +1564,7 @@ fn deleting_a_custom_network_drops_it_and_flushes_every_pool() {
             Op::InvalidatePools { chain_id: None },
         ]
     );
-    assert_eq!(sut.view().networks.len(), 24);
+    assert_eq!(sut.view().networks.len(), BUILTIN_CHAINS.len());
 }
 
 // ===========================================================================
@@ -2206,7 +2281,8 @@ fn provider_urls_follow_the_slug_maps() {
 /// floor), and the RPC and explorer are what a person actually reaches.
 #[test]
 fn arc_is_a_builtin_network_with_the_fields_the_rest_of_the_wallet_reads() {
-    assert_eq!(BUILTIN_CHAINS.len(), 24);
+    // 24 mainnets and the testnet space's 9 (spec 105).
+    assert_eq!(BUILTIN_CHAINS.len(), 33);
     let arc = BUILTIN_CHAINS
         .iter()
         .find(|c| c.chain_id == 5_042)
@@ -2221,11 +2297,21 @@ fn arc_is_a_builtin_network_with_the_fields_the_rest_of_the_wallet_reads() {
     assert_eq!(arc.typical_inclusion_s, 2);
 }
 
-/// Arc testnet is reachable through the add-a-network flow, deliberately NOT
-/// as a built-in (spec 060 scope decision).
+/// Arc testnet was reachable only by adding it (spec 060); since spec 105 it
+/// ships with the testnet space, beside the other common public testnets —
+/// and like every built-in, its relayer is the operator's to keep funded.
 #[test]
-fn arc_testnet_is_not_a_builtin_network() {
-    assert!(BUILTIN_CHAINS.iter().all(|c| c.chain_id != 5_042_002));
+fn arc_testnet_is_a_builtin_testnet() {
+    let arc = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.chain_id == 5_042_002)
+        .expect("Arc Testnet ships");
+    assert!(arc.testnet);
+    assert_eq!(arc.native_symbol, "USDC");
+    assert!(BUILTIN_CHAINS
+        .iter()
+        .filter(|c| !c.testnet)
+        .all(|c| c.chain_id != 5_042_002));
 }
 
 /// Provider slugs were verified against the live providers, not guessed: a
@@ -2276,8 +2362,9 @@ fn a_builtin_network_is_one_whose_relayer_the_operator_owns() {
             "chain {chain_id} ships with Vela"
         );
     }
-    // Arc TESTNET is added by hand, like any local or internal chain.
-    assert!(!is_builtin_chain(5_042_002));
+    // The testnet space's built-ins too (spec 105): Arc Testnet, Sepolia, …
+    assert!(is_builtin_chain(5_042_002));
+    assert!(is_builtin_chain(11_155_111));
     assert!(
         !is_builtin_chain(31_337),
         "a local devnet is nobody else's to fund"
@@ -2389,7 +2476,11 @@ fn the_scan_path_keeps_its_check_so_a_refusal_says_why() {
     assert_eq!(compat.setup_url, None, "nothing to deploy");
     assert_eq!(wizard.error_key.as_deref(), Some(NO_P256_HINT));
     assert!(!wizard.can_add);
-    assert_eq!(sut.view().networks.len(), 24, "nothing saved");
+    assert_eq!(
+        sut.view().networks.len(),
+        BUILTIN_CHAINS.len(),
+        "nothing saved"
+    );
 
     // Missing contracts: the verifier answers, the contracts are not there.
     let mut sut = scan();

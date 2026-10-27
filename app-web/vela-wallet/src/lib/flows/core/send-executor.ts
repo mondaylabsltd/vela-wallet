@@ -45,7 +45,7 @@ import {
 	userOpWriteAheadWaitMs,
 	verifySafeWebAuthn
 } from '$lib/core/kernels';
-import { getAllNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
+import { spaceNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
 import { PasskeyError } from '$lib/onboarding/core/passkey';
 import { cancelChallenge, signChallenge, VenueBlockedError } from '$lib/signing/sign-challenge';
 import { addCustomNetworkByChainId } from '$lib/services/add-network.svelte';
@@ -157,7 +157,7 @@ export function setSendTrackerSink(sink: ((handoff: SendTrackerHandoff) => void)
 
 /** The chain registry snapshot the core validates locked requests against. */
 function chainInfos(): SendChainInfo[] {
-	return getAllNetworksSync().map((network) => ({
+	return spaceNetworksSync().map((network) => ({
 		chain_id: network.chainId,
 		network: networkId(network.chainId),
 		native_symbol: nativeSymbol(network.chainId)

@@ -57,6 +57,9 @@ import init, {
 	ManageTokensCore,
 	maskedAmount,
 	NetworkAdminCore,
+	networkChainIsTestnet,
+	networkSpaceChainIds,
+	networkSpaceRead,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
 	passkeyFallbackIconDataUri,
@@ -141,6 +144,9 @@ export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which
 // Arc discards a transaction without saying so.
 export { minGasPriceWei, peggedNativeUsd };
+// The mainnet and testnet spaces (spec 105): which space a stored value names,
+// which chains a space holds, whether a chain is a testnet.
+export { networkChainIsTestnet, networkSpaceChainIds, networkSpaceRead };
 // A hidden amount as balance privacy draws it — the mask, and the unit kept:
 // "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
 // kept a mirror of it (`maskedFigure`) until the core exported its own.

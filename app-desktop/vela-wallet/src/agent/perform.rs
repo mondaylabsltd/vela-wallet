@@ -289,6 +289,14 @@ pub async fn perform(
             });
             Performed::Done
         }
+        Action::SetNetworkSpace { space } => {
+            // The device's space (spec 105): stored, the machines that list
+            // networks told, and the page's own lists after them.
+            let space = *space;
+            cx.update(|cx| crate::network_space::switch(space, cx));
+            let _ = super::on_page(cx, |page, _, cx| page.network_space_switched(cx));
+            Performed::Done
+        }
         Action::RefreshBalances => match super::on_page(cx, |page, _, cx| page.agent_refresh(cx)) {
             None => page_gone(),
             Some(()) => Performed::Done,
@@ -310,8 +318,9 @@ pub async fn perform(
                     .find(|row| row.chain_id == *chain_id && row.is_custom)
                     .map_or_else(|| format!("custom-{chain_id}"), |row| row.id.clone());
                 net(cx, NetEvent::DeleteConfirmed { id });
-                // As Settings' own delete does: the balances stop asking that chain.
-                crate::executor::balance_dashboard::refresh(cx);
+                // As Settings' own delete does: the balances stop asking that
+                // chain, and the feed's chains are the space's again.
+                crate::network_space::networks_changed(cx);
             });
             Performed::Done
         }

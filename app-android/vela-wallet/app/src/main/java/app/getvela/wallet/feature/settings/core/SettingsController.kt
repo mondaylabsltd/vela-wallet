@@ -354,6 +354,12 @@ class SettingsController(
 
     fun resetWizard() = net(NetEvent.WizardReset)
 
+    /** Spec 105: the wizard's space choice — a testnet (no real value), or a mainnet. */
+    fun chooseWizardSpace(testnet: Boolean) = net(NetEvent.WizardTestnetChosen(testnet))
+
+    /** Spec 105: "Move to the other space" on a network the person added. */
+    fun moveNetwork(id: String, testnet: Boolean) = net(NetEvent.CustomSpaceChanged(id, testnet))
+
     // -- spec 100: a page asks to add a network ------------------------------
     //
     // The browser machine forwards the request here; the sheet's answers come

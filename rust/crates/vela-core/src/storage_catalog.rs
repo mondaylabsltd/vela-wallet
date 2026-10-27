@@ -234,6 +234,7 @@ mod tests {
             "vela.rpcProviders",
             "vela.serviceEndpoints",
             "vela.feeTier",
+            "vela.networkSpace",
             "vela.signMethod",
         ] {
             assert_eq!(row(key), None, "{key}");

@@ -33,6 +33,8 @@ struct RpcEndpointsTests {
             1, 56, 137, 42_161, 10, 8_453, 43_114, 100, 130, 4_217, 143, 480,
             5_042, 196, 988, 1_868, 4_326, 4_663, 5_000, 8_217, 42_220, 57_073,
             98_866, 1_440_000,
+            // The testnet space (spec 105).
+            11_155_111, 84_532, 421_614, 11_155_420, 80_002, 97, 43_113, 5_042_002, 42_431,
         ]
         #expect(ChainCatalog.chains.count == coreBuiltins.count)
         for chainId in coreBuiltins {

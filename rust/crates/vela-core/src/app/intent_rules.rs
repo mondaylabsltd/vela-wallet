@@ -153,6 +153,8 @@ pub struct NetworkFacts {
     pub explorer_url: String,
     pub rpc_chain_mismatch: Option<Value>,
     pub rpc_save_deferred: bool,
+    /// Its space (spec 105).
+    pub is_testnet: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -217,6 +219,9 @@ pub struct World {
     pub operations: Vec<Operation>,
     pub preferences: Preferences,
     pub agent_enabled: bool,
+    /// The space in front (spec 105): what every list shows.
+    #[serde(default)]
+    pub network_space: super::network_space::NetworkSpace,
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +343,18 @@ fn records_named(feed: &FeedFacts, id: &str) -> usize {
         .iter()
         .filter(|tx| tx.id == id || same(&tx.user_op_hash, id))
         .count()
+}
+
+/// Whether `chain_id` is a network of the space not in front (spec 105) —
+/// known only once the network list is read; a chain it does not list is
+/// left to the send to refuse.
+fn other_space(world: &World, chain_id: u32) -> bool {
+    let testnets = world.network_space == super::network_space::NetworkSpace::Testnet;
+    world
+        .networks
+        .as_ref()
+        .and_then(|n| n.networks.iter().find(|row| row.chain_id == chain_id))
+        .is_some_and(|row| row.is_testnet != testnets)
 }
 
 fn signed_in(world: &World) -> Examined {
@@ -580,6 +597,18 @@ pub fn examine(action: &Action, world: &World) -> Examined {
                 "the person has hidden the balances, and \"max\" would show one on the review: name an amount",
             )
         }
+        Action::PrepareTransfer { chain_id, .. } | Action::PrepareBatchTransfer { chain_id, .. }
+            if other_space(world, *chain_id) =>
+        {
+            refused(
+                ReasonCode::Refused,
+                format!(
+                    "chain {chain_id} belongs to the {} space, and the wallet is in the {} space: ask the person to switch (set_network_space)",
+                    if world.network_space == super::network_space::NetworkSpace::Testnet { "mainnet" } else { "testnet" },
+                    world.network_space.as_str(),
+                ),
+            )
+        }
         Action::PrepareTransfer { .. }
         | Action::PrepareBatchTransfer { .. }
         | Action::AddToken { .. }
@@ -596,6 +625,7 @@ pub fn examine(action: &Action, world: &World) -> Examined {
             None => not_ready("the balances"),
             Some(balance) => go_unless(balance.hidden == *hidden),
         },
+        Action::SetNetworkSpace { space } => go_unless(world.network_space == *space),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
         | Action::RemoveNetwork { .. } => match &world.networks {
@@ -800,6 +830,7 @@ pub fn verdict(action: &Action, world: &World, baseline: &mut Baseline) -> Verdi
                 .as_ref()
                 .is_some_and(|balance| balance.hidden == *hidden),
         ),
+        Action::SetNetworkSpace { space } => held(world.network_space == *space),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
         | Action::RemoveNetwork { .. }
@@ -831,13 +862,13 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         | Action::SetGroupMembers { .. }
         | Action::SetContactGroups { .. }
         | Action::SetContactFavorite { .. } => &["contacts"],
-        Action::PrepareTransfer { .. } => &["session", "balance"],
-        Action::PrepareBatchTransfer { .. } | Action::AddToken { .. } | Action::RefreshBalances => {
-            &["session"]
-        }
+        Action::PrepareTransfer { .. } => &["session", "balance", "networks", "network_space"],
+        Action::PrepareBatchTransfer { .. } => &["session", "networks", "network_space"],
+        Action::AddToken { .. } | Action::RefreshBalances => &["session"],
         Action::SubmitTransfer { .. } | Action::CancelTransfer { .. } => &["operations"],
         Action::DeleteActivity { .. } => &["feed"],
         Action::SetBalancePrivacy { .. } => &["balance"],
+        Action::SetNetworkSpace { .. } => &["network_space"],
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
         | Action::RemoveNetwork { .. }
@@ -1127,6 +1158,9 @@ struct NetworksOut<'a> {
 struct AgentState<'a> {
     signed_in: bool,
     page: &'a str,
+    /// The space in front (spec 105): the networks and balances below are
+    /// its own.
+    network_space: super::network_space::NetworkSpace,
     accounts: Vec<AccountOut<'a>>,
     balances: Option<BalancesOut<'a>>,
     recent_transactions: Option<Vec<RecordOut<'a>>>,
@@ -1191,6 +1225,7 @@ pub fn approval_detail(action: &Action) -> Option<String> {
         }
         Action::SetServiceEndpoint { field, url } => Some(format!("{}{}", word(field), to(url))),
         Action::DeleteActivity { id } => Some(id.clone()),
+        Action::SetNetworkSpace { space } => Some(space.as_str().to_owned()),
         _ => None,
     }
 }
@@ -1233,9 +1268,11 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
     let session = world.session.as_ref();
     let hidden = world.balance.as_ref().is_some_and(|b| b.hidden);
     let book = read_book(world);
+    let testnets = world.network_space == super::network_space::NetworkSpace::Testnet;
     let state = AgentState {
         signed_in: session.is_some_and(|s| s.has_wallet),
         page,
+        network_space: world.network_space,
         accounts: session.map_or_else(Vec::new, |s| {
             s.accounts
                 .iter()
@@ -1248,7 +1285,12 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
         }),
         balances: world.balance.as_ref().map(|b| BalancesOut {
             hidden,
-            total_usd: if hidden { None } else { b.display_total_usd },
+            // A testnet's coins have no value (spec 105): no total to read.
+            total_usd: if hidden || testnets {
+                None
+            } else {
+                b.display_total_usd
+            },
             partial: b.balance_partial,
             tokens: b
                 .tokens
@@ -1311,6 +1353,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
             chains: n
                 .networks
                 .iter()
+                .filter(|row| row.is_testnet == testnets)
                 .map(|row| ChainOut {
                     chain_id: row.chain_id,
                     name: &row.display_name,

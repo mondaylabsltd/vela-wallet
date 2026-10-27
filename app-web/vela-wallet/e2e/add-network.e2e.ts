@@ -463,12 +463,20 @@ test('search → verdict → add → listed → survives a reload → removed', 
 	await expect(
 		page.getByText(en('settingsModals.addNetwork.compatible'), { exact: true })
 	).toBeVisible({ timeout: 30_000 });
+	// Spec 105: the space it goes to — a testnet unless the person says. This
+	// one is said to be a mainnet, so the mainnet space's list shows it.
+	const space = page.getByTestId('add-network-space');
+	await expect(space.getByRole('radio', { name: en('networkSpace.wizardTestnet') })).toBeChecked();
+	await space.getByRole('radio', { name: en('networkSpace.wizardMainnet') }).click();
+	await expect(space.getByRole('radio', { name: en('networkSpace.wizardMainnet') })).toBeChecked();
 	await page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') }).click();
 	// Written before the page is left: `openNetworks` is a navigation, the
 	// add is written behind the tap, and on an idle machine the navigation
 	// won once — the list then came back without the network.
 	const written = async () => (await readKv(page, 'vela.customNetworks')) ?? '';
 	await expect.poll(written).toContain(String(CHAIN_ID));
+	// …with the person's word on its space, in the record every client reads.
+	await expect.poll(written).toContain('"isTestnet":false');
 
 	// Listed as a custom network, from the core's registry.
 	await openNetworks(page);

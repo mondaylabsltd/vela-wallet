@@ -640,6 +640,14 @@ impl WalletPage {
                 })
                 .to_string(),
             ),
+            // The space it switches to, in the header label's words.
+            Action::SetNetworkSpace { space } => Some(
+                self.agent_text(match space {
+                    vela_core::app::network_space::NetworkSpace::Mainnet => "networkSpace.mainnet",
+                    vela_core::app::network_space::NetworkSpace::Testnet => "networkSpace.testnet",
+                })
+                .to_string(),
+            ),
             // The core's: the network, URL or record it changes.
             _ => vela_core::app::intent_rules::approval_detail(action),
         }

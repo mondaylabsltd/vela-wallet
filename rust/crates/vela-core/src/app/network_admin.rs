@@ -405,6 +405,9 @@ pub struct NetBuiltinChain {
     /// Ns", and "longer than usual" past twice it. Never a promise, never a
     /// failure: a slow chain is still a submitted payment (invariant ⑤).
     pub typical_inclusion_s: u16,
+    /// A testnet: its coins have no real value, and it belongs to the testnet
+    /// space (spec 105).
+    pub testnet: bool,
 }
 
 /// How the wallet writes a built-in chain's own coin — the registry's
@@ -445,7 +448,7 @@ pub fn display_native_symbol(chain_id: u32, token_address: Option<&str>, symbol:
     }
 }
 
-pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
+pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
     NetBuiltinChain {
         id: "ethereum",
         display_name: "Ethereum",
@@ -454,6 +457,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://ethereum-rpc.publicnode.com",
         explorer_url: "https://etherscan.io",
         typical_inclusion_s: 24,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "bnb",
@@ -463,6 +467,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://bsc-dataseed.binance.org",
         explorer_url: "https://bscscan.com",
         typical_inclusion_s: 9,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "polygon",
@@ -472,6 +477,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://polygon-bor-rpc.publicnode.com",
         explorer_url: "https://polygonscan.com",
         typical_inclusion_s: 6,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "arbitrum",
@@ -481,6 +487,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://arb1.arbitrum.io/rpc",
         explorer_url: "https://arbiscan.io",
         typical_inclusion_s: 4,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "optimism",
@@ -490,6 +497,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://mainnet.optimism.io",
         explorer_url: "https://optimistic.etherscan.io",
         typical_inclusion_s: 4,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "base",
@@ -499,6 +507,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://mainnet.base.org",
         explorer_url: "https://basescan.org",
         typical_inclusion_s: 4,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "avalanche",
@@ -508,6 +517,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://api.avax.network/ext/bc/C/rpc",
         explorer_url: "https://snowtrace.io",
         typical_inclusion_s: 4,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "gnosis",
@@ -517,6 +527,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.gnosischain.com",
         explorer_url: "https://gnosisscan.io",
         typical_inclusion_s: 15,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "unichain",
@@ -526,6 +537,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://mainnet.unichain.org",
         explorer_url: "https://uniscan.xyz",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "tempo",
@@ -535,6 +547,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.mainnet.tempo.xyz",
         explorer_url: "https://explore.tempo.xyz",
         typical_inclusion_s: 5,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "monad",
@@ -544,6 +557,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.monad.xyz",
         explorer_url: "https://monadscan.com",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     NetBuiltinChain {
         id: "worldchain",
@@ -553,6 +567,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://worldchain.drpc.org",
         explorer_url: "https://worldscan.org",
         typical_inclusion_s: 4,
+        testnet: false,
     },
     // Circle's USDC-native L1 (spec 060). The native coin IS USDC — 18 decimals
     // on-chain, with a 6-decimal ERC-20 view of the SAME balance at
@@ -566,6 +581,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.mainnet.arc.io",
         explorer_url: "https://explorer.arc.io",
         typical_inclusion_s: 2,
+        testnet: false,
     }, // The eleven admitted together (spec 061): every one probed live for all
     // eleven required contracts and the RIP-7212 precompile before it was listed.
     // Polygon CDK zk-rollup; OKB is the gas coin.
@@ -577,6 +593,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.xlayer.tech",
         explorer_url: "https://www.oklink.com/xlayer",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
     NetBuiltinChain {
@@ -587,6 +604,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.stable.xyz",
         explorer_url: "https://stablescan.xyz",
         typical_inclusion_s: 2,
+        testnet: false,
     },
     // OP-stack L2 (Sony).
     NetBuiltinChain {
@@ -597,6 +615,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.soneium.org",
         explorer_url: "https://soneium.blockscout.com",
         typical_inclusion_s: 6,
+        testnet: false,
     },
     // Real-time L2; ~1 s blocks at the RPC boundary.
     NetBuiltinChain {
@@ -607,6 +626,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://megaeth.drpc.org",
         explorer_url: "https://megaeth.blockscout.com",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     // Arbitrum Orbit L2; ~0.1 s blocks.
     NetBuiltinChain {
@@ -617,6 +637,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.mainnet.chain.robinhood.com",
         explorer_url: "https://robinhoodchain.blockscout.com",
         typical_inclusion_s: 2,
+        testnet: false,
     },
     // OP-derived L2 with its own token-ratio gas metering; MNT is the gas coin.
     NetBuiltinChain {
@@ -627,6 +648,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.mantle.xyz",
         explorer_url: "https://mantlescan.xyz",
         typical_inclusion_s: 6,
+        testnet: false,
     },
     // Kaia (ex-Klaytn) L1, 1 s blocks.
     NetBuiltinChain {
@@ -637,6 +659,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://public-en.node.kaia.io",
         explorer_url: "https://kaiascope.com",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     // OP-stack L2 since 2025; CELO is the gas coin.
     NetBuiltinChain {
@@ -647,6 +670,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://forno.celo.org",
         explorer_url: "https://celoscan.io",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     // OP-stack L2 (Kraken).
     NetBuiltinChain {
@@ -657,6 +681,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc-gel.inkonchain.com",
         explorer_url: "https://explorer.inkonchain.com",
         typical_inclusion_s: 3,
+        testnet: false,
     },
     // Arbitrum Orbit L2; PLUME is the gas coin.
     NetBuiltinChain {
@@ -667,6 +692,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.plume.org",
         explorer_url: "https://explorer.plume.org",
         typical_inclusion_s: 2,
+        testnet: false,
     },
     // Cosmos-EVM sidechain, ~6 s blocks; XRP is the gas coin. No provider serves it.
     NetBuiltinChain {
@@ -677,6 +703,100 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.xrplevm.org",
         explorer_url: "https://explorer.xrplevm.org",
         typical_inclusion_s: 18,
+        testnet: false,
+    },
+    // The testnet space (spec 105): common public testnets where this wallet
+    // works — the Safe, 4337 and passkey-signer contracts deployed and the
+    // relay serving them (probed 2026-10-27).
+    NetBuiltinChain {
+        id: "sepolia",
+        display_name: "Sepolia",
+        chain_id: 11155111,
+        native_symbol: "ETH",
+        rpc_url: "https://ethereum-sepolia-rpc.publicnode.com",
+        explorer_url: "https://sepolia.etherscan.io",
+        typical_inclusion_s: 24,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "base-sepolia",
+        display_name: "Base Sepolia",
+        chain_id: 84532,
+        native_symbol: "ETH",
+        rpc_url: "https://sepolia.base.org",
+        explorer_url: "https://sepolia.basescan.org",
+        typical_inclusion_s: 4,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "arbitrum-sepolia",
+        display_name: "Arbitrum Sepolia",
+        chain_id: 421614,
+        native_symbol: "ETH",
+        rpc_url: "https://sepolia-rollup.arbitrum.io/rpc",
+        explorer_url: "https://sepolia.arbiscan.io",
+        typical_inclusion_s: 4,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "optimism-sepolia",
+        display_name: "OP Sepolia",
+        chain_id: 11155420,
+        native_symbol: "ETH",
+        rpc_url: "https://sepolia.optimism.io",
+        explorer_url: "https://sepolia-optimism.etherscan.io",
+        typical_inclusion_s: 4,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "polygon-amoy",
+        display_name: "Polygon Amoy",
+        chain_id: 80002,
+        native_symbol: "POL",
+        rpc_url: "https://polygon-amoy-bor-rpc.publicnode.com",
+        explorer_url: "https://amoy.polygonscan.com",
+        typical_inclusion_s: 6,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "bnb-testnet",
+        display_name: "BNB Chain Testnet",
+        chain_id: 97,
+        native_symbol: "tBNB",
+        rpc_url: "https://bsc-testnet-rpc.publicnode.com",
+        explorer_url: "https://testnet.bscscan.com",
+        typical_inclusion_s: 9,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "avalanche-fuji",
+        display_name: "Avalanche Fuji",
+        chain_id: 43113,
+        native_symbol: "AVAX",
+        rpc_url: "https://api.avax-test.network/ext/bc/C/rpc",
+        explorer_url: "https://testnet.snowscan.xyz",
+        typical_inclusion_s: 4,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "arc-testnet",
+        display_name: "Arc Testnet",
+        chain_id: 5042002,
+        native_symbol: "USDC",
+        rpc_url: "https://rpc.testnet.arc.network",
+        explorer_url: "https://testnet.arcscan.app",
+        typical_inclusion_s: 4,
+        testnet: true,
+    },
+    NetBuiltinChain {
+        id: "tempo-moderato",
+        display_name: "Tempo Moderato",
+        chain_id: 42431,
+        native_symbol: "USD",
+        rpc_url: "https://rpc.moderato.tempo.xyz",
+        explorer_url: "https://explore.testnet.tempo.xyz",
+        typical_inclusion_s: 4,
+        testnet: true,
     },
 ];
 
@@ -845,6 +965,20 @@ pub struct NetCustomNetwork {
     pub native_symbol: String,
     /// ISO 8601 — stamped by the shell (`now_iso` on the triggering event).
     pub added_at_iso: String,
+    /// The person's word on it (spec 105): a testnet, whose coins have no
+    /// real value. `None` on a record written before it was asked, which
+    /// [`custom_is_testnet`] reads as a testnet until the person moves it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub is_testnet: Option<bool>,
+}
+
+/// Whether a network the person added belongs to the testnet space: their
+/// word when they gave it, else a testnet (owner, 2026-10-27: a network the
+/// registry does not vouch for never counts as real value).
+#[must_use]
+pub fn custom_is_testnet(network: &NetCustomNetwork) -> bool {
+    network.is_testnet.unwrap_or(true)
 }
 
 /// A per-network endpoint override — 1:1 `NetworkConfig` under
@@ -1358,6 +1492,16 @@ pub enum Event {
     },
     /// Modal closed — `reset()`.
     WizardReset,
+    /// The wizard's space choice (spec 105): a testnet (no real value), or a
+    /// mainnet.
+    WizardTestnetChosen {
+        testnet: bool,
+    },
+    /// "Move to the other space" on a network the person added (spec 105).
+    CustomSpaceChanged {
+        id: String,
+        testnet: bool,
+    },
     /// The EIP-681 scan recovery path (`addCustomNetworkByChainId`): resolve
     /// → check → save without user confirmation. Shares the wizard pipeline
     /// AND the invariant-① dedup gate the TS scan path was missing.
@@ -1564,6 +1708,9 @@ struct Wizard {
     auto: bool,
     /// The scan path's `added_at_iso` stamp, carried on its request event.
     auto_now_iso: String,
+    /// The person's choice of space for the network (spec 105); `None` until
+    /// they make one, read as a testnet.
+    testnet: Option<bool>,
 }
 
 /// A page's add-network request (spec 100) — beside the wizard, never in it:
@@ -1790,6 +1937,10 @@ pub struct NetWizardView {
     pub rpc_field_label_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
+    /// The space the network goes to (spec 105): a testnet, unless the
+    /// person chose mainnet ([`Event::WizardTestnetChosen`]).
+    #[serde(default)]
+    pub testnet: bool,
 }
 
 /// One row of the network editor (defaults first, then customs — the
@@ -1803,6 +1954,9 @@ pub struct NetNetworkRow {
     pub native_symbol: String,
     /// Custom networks get the delete affordance.
     pub is_custom: bool,
+    /// Its space (spec 105): a testnet's coins have no real value.
+    #[serde(default)]
+    pub is_testnet: bool,
     /// Draft if the card is open, else override value, else the default —
     /// `savedConfig?.rpcURL ?? network.rpcURL` semantics (an override's empty
     /// string passes through, verbatim).
@@ -1962,6 +2116,11 @@ impl App for NetworkAdmin {
                 select_chain(model, chain_id, false, true, now_iso)
             }
             Event::DeleteConfirmed { id } => delete_custom(model, &id),
+            Event::WizardTestnetChosen { testnet } => {
+                model.wizard.testnet = Some(testnet);
+                render()
+            }
+            Event::CustomSpaceChanged { id, testnet } => custom_space_changed(model, &id, testnet),
 
             // -- a page's add-network request ----------------------------------
             Event::DappAddRequested {
@@ -2697,7 +2856,13 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
             return render();
         };
         let now_iso = model.wizard.auto_now_iso.clone();
-        let record = build_custom_network(model, &info, compat.best_rpc_url.as_deref(), now_iso);
+        let record = build_custom_network(
+            model,
+            &info,
+            compat.best_rpc_url.as_deref(),
+            now_iso,
+            wizard_testnet(model),
+        );
         model.wizard = Wizard::default();
         return save_custom_network(model, record);
     }
@@ -2742,7 +2907,13 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
     if !compat.compatible {
         return Command::done();
     }
-    let record = build_custom_network(model, &info, compat.best_rpc_url.as_deref(), now_iso);
+    let record = build_custom_network(
+        model,
+        &info,
+        compat.best_rpc_url.as_deref(),
+        now_iso,
+        wizard_testnet(model),
+    );
     // `onAdded(); reset(); onClose();`
     model.wizard = Wizard::default();
     save_custom_network(model, record)
@@ -2751,11 +2922,19 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
 /// The `CustomNetwork` record both entry points build (SettingsScreen.tsx:
 /// 653-667 and `chainInfoToCustomNetwork` — identical given the parser's
 /// defaults).
+/// The space the wizard's network goes to: the person's choice, else a
+/// testnet — the registry does not say (its `testnet` is unset on every
+/// chain document), and a network nobody vouched for never counts as value.
+fn wizard_testnet(model: &Model) -> bool {
+    model.wizard.testnet.unwrap_or(true)
+}
+
 fn build_custom_network(
     model: &Model,
     info: &NetChainInfo,
     best_rpc_url: Option<&str>,
     now_iso: String,
+    testnet: bool,
 ) -> NetCustomNetwork {
     NetCustomNetwork {
         id: format!("custom-{}", info.chain_id),
@@ -2772,6 +2951,7 @@ fn build_custom_network(
         bundler_url: format!("{}/{}", effective_bundler_service_url(model), info.chain_id),
         native_symbol: info.native_symbol.clone(),
         added_at_iso: now_iso,
+        is_testnet: Some(testnet),
     }
 }
 
@@ -2781,6 +2961,23 @@ fn save_custom_network(model: &mut Model, record: NetCustomNetwork) -> Command<N
     model.custom_networks.retain(|n| n.id != record.id);
     model.custom_networks.push(record);
     let gen = model.wizard_gen;
+    requests_with(
+        gen,
+        vec![NetOperation::WriteCustomNetworks {
+            networks: model.custom_networks.clone(),
+        }],
+    )
+}
+
+fn custom_space_changed(model: &mut Model, id: &str, testnet: bool) -> Command<NetEffect, Event> {
+    if !model.loaded {
+        return Command::done();
+    }
+    let Some(network) = model.custom_networks.iter_mut().find(|n| n.id == id) else {
+        return Command::done();
+    };
+    network.is_testnet = Some(testnet);
+    let gen = model.load_gen;
     requests_with(
         gen,
         vec![NetOperation::WriteCustomNetworks {
@@ -3042,7 +3239,14 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
     let saved = if has_network(model, chain_id) {
         Command::done()
     } else {
-        let record = build_custom_network(model, &info, compat.best_rpc_url.as_deref(), now_iso);
+        let record = build_custom_network(
+            model,
+            &info,
+            compat.best_rpc_url.as_deref(),
+            now_iso,
+            // A page asked; nobody chose a space: the testnet one (spec 105).
+            true,
+        );
         save_custom_network(model, record)
     };
     // The page hears "added" only once the store has it: a shell that answers
@@ -3918,7 +4122,7 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
 fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
     let mut rows: Vec<NetNetworkRow> = Vec::new();
     for b in &BUILTIN_CHAINS {
-        rows.push(network_row(
+        let mut row = network_row(
             model,
             b.id.to_owned(),
             b.chain_id,
@@ -3928,10 +4132,18 @@ fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
             b.rpc_url.to_owned(),
             b.explorer_url.to_owned(),
             format!("{}/{}", effective_bundler_service_url(model), b.chain_id),
-        ));
+        );
+        row.is_testnet = b.testnet;
+        rows.push(row);
     }
-    for n in &model.custom_networks {
-        rows.push(network_row(
+    // A network the person added that is now built in (Arc Testnet, say) is
+    // the built-in one: listed, and read, once.
+    for n in model
+        .custom_networks
+        .iter()
+        .filter(|n| builtin(n.chain_id).is_none())
+    {
+        let mut row = network_row(
             model,
             n.id.clone(),
             n.chain_id,
@@ -3941,7 +4153,9 @@ fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
             n.rpc_url.clone(),
             n.explorer_url.clone(),
             n.bundler_url.clone(),
-        ));
+        );
+        row.is_testnet = custom_is_testnet(n);
+        rows.push(row);
     }
     rows
 }
@@ -3985,6 +4199,7 @@ fn network_row(
         display_name,
         native_symbol,
         is_custom,
+        is_testnet: false,
         rpc_url,
         explorer_url,
         bundler_url,
@@ -4031,6 +4246,7 @@ fn wizard_view(model: &Model) -> NetWizardView {
         rpc_field,
         rpc_field_label_key,
         can_add,
+        testnet: wizard_testnet(model),
     }
 }
 

@@ -32,7 +32,8 @@
 
 import { setItem } from '$lib/services/storage';
 
-import { chainName, getAllNetworksSync, networkId } from '$lib/services/networks';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { chainName, spaceNetworksSync, networkId } from '$lib/services/networks';
 import { tokenChainId, type APIToken } from '$lib/services/tokens-model';
 import {
 	getAccountBalance,
@@ -134,7 +135,7 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					// Spec 092: every chain the round asks — the same list
 					// `fetchAllChainTokens` walks — so one that answered holding
 					// nothing is "nothing when last read", not "not read yet".
-					read_chain_ids: getAllNetworksSync().map((net) => net.chainId),
+					read_chain_ids: spaceNetworksSync().map((net) => net.chainId),
 					// PR 2 note 11 (issue 483): the failed chains whose read never
 					// left the app — a request pool that faulted or never booted, a
 					// read this code threw on — which home says as Vela's own fault
@@ -162,13 +163,17 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 			case 'read_balance_cache':
 				// `getAccountBalance` applies the 24h TTL and answers `null` for a
 				// missing OR expired entry — the core reads both as "nothing cached".
+				// The saved total is the mainnet space's (spec 105): a testnet's
+				// coins have no value to remember, and never stand in for it.
 				return {
 					type: 'cached_total_loaded',
 					address: operation.address,
-					usd: await getAccountBalance(operation.address)
+					usd: networkSpace.testnet ? null : await getAccountBalance(operation.address)
 				};
 			case 'read_balance_cache_many': {
-				const balances = await getAccountBalances(operation.addresses);
+				const balances = networkSpace.testnet
+					? new Map<string, number>()
+					: await getAccountBalances(operation.addresses);
 				return {
 					type: 'cached_balances_loaded',
 					// Keyed by the address strings the core asked for, so the core's
@@ -177,7 +182,7 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				};
 			}
 			case 'write_balance_cache':
-				await setAccountBalance(operation.address, operation.usd);
+				if (!networkSpace.testnet) await setAccountBalance(operation.address, operation.usd);
 				return { type: 'balance_cache_written' };
 			case 'start_retry_timer':
 				await delay(operation.ms, signal);

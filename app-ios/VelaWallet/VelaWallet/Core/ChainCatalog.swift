@@ -42,6 +42,9 @@ struct ChainMeta {
     /// where gas is paid in a USD stablecoin — the distinction that made a
     /// desktop cut show 4e57 dollars of balance when it was ignored.
     let gasModel: GasModel
+    /// A testnet (spec 105): its coins have no real value, and it belongs to
+    /// the testnet space. The core's `BUILTIN_CHAINS` says the same.
+    var testnet: Bool = false
 
     enum GasModel { case native, tempo }
 }
@@ -151,6 +154,45 @@ enum ChainCatalog {
                   apiNetworkId: "xrpl-evm-mainnet", nativeSymbol: "XRP", isL2: false,
                   rpcURL: "https://rpc.xrplevm.org",
                   explorerURL: "https://explorer.xrplevm.org", gasModel: .native),
+        // The testnet space (spec 105): common public testnets where this
+        // wallet works, in the core's order. The balance API names none of
+        // them, so each wears the synthetic `chain-<id>` the core keys on.
+        ChainMeta(id: "sepolia", displayName: "Sepolia", chainId: 11_155_111,
+                  apiNetworkId: "chain-11155111", nativeSymbol: "ETH", isL2: false,
+                  rpcURL: "https://ethereum-sepolia-rpc.publicnode.com",
+                  explorerURL: "https://sepolia.etherscan.io", gasModel: .native, testnet: true),
+        ChainMeta(id: "base-sepolia", displayName: "Base Sepolia", chainId: 84_532,
+                  apiNetworkId: "chain-84532", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://sepolia.base.org",
+                  explorerURL: "https://sepolia.basescan.org", gasModel: .native, testnet: true),
+        ChainMeta(id: "arbitrum-sepolia", displayName: "Arbitrum Sepolia", chainId: 421_614,
+                  apiNetworkId: "chain-421614", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://sepolia-rollup.arbitrum.io/rpc",
+                  explorerURL: "https://sepolia.arbiscan.io", gasModel: .native, testnet: true),
+        ChainMeta(id: "optimism-sepolia", displayName: "OP Sepolia", chainId: 11_155_420,
+                  apiNetworkId: "chain-11155420", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://sepolia.optimism.io",
+                  explorerURL: "https://sepolia-optimism.etherscan.io", gasModel: .native, testnet: true),
+        ChainMeta(id: "polygon-amoy", displayName: "Polygon Amoy", chainId: 80_002,
+                  apiNetworkId: "chain-80002", nativeSymbol: "POL", isL2: false,
+                  rpcURL: "https://polygon-amoy-bor-rpc.publicnode.com",
+                  explorerURL: "https://amoy.polygonscan.com", gasModel: .native, testnet: true),
+        ChainMeta(id: "bnb-testnet", displayName: "BNB Chain Testnet", chainId: 97,
+                  apiNetworkId: "chain-97", nativeSymbol: "tBNB", isL2: false,
+                  rpcURL: "https://bsc-testnet-rpc.publicnode.com",
+                  explorerURL: "https://testnet.bscscan.com", gasModel: .native, testnet: true),
+        ChainMeta(id: "avalanche-fuji", displayName: "Avalanche Fuji", chainId: 43_113,
+                  apiNetworkId: "chain-43113", nativeSymbol: "AVAX", isL2: false,
+                  rpcURL: "https://api.avax-test.network/ext/bc/C/rpc",
+                  explorerURL: "https://testnet.snowscan.xyz", gasModel: .native, testnet: true),
+        ChainMeta(id: "arc-testnet", displayName: "Arc Testnet", chainId: 5_042_002,
+                  apiNetworkId: "chain-5042002", nativeSymbol: "USDC", isL2: false,
+                  rpcURL: "https://rpc.testnet.arc.network",
+                  explorerURL: "https://testnet.arcscan.app", gasModel: .native, testnet: true),
+        ChainMeta(id: "tempo-moderato", displayName: "Tempo Moderato", chainId: 42_431,
+                  apiNetworkId: "chain-42431", nativeSymbol: "USD", isL2: false,
+                  rpcURL: "https://rpc.moderato.tempo.xyz",
+                  explorerURL: "https://explore.testnet.tempo.xyz", gasModel: .tempo, testnet: true),
     ]
 
     static func meta(_ chainId: Int) -> ChainMeta? {

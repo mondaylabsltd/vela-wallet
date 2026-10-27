@@ -85,6 +85,8 @@ final class AppGraph {
     let documents: UIKitDocumentPorts
     let paymentRequest: PaymentRequestStore
     let preferences: Preferences
+    /// The space in front (spec 105): which networks every list shows.
+    let space: NetworkSpace
     let batch: BatchStore
     let deposits: ReceiveWatchStore
     let welcome: WelcomeModel
@@ -405,6 +407,7 @@ final class AppGraph {
         // hidden — off — again.
         browserController.setDebugMode(prefs.debugMode.isOn)
         self.preferences = prefs
+        self.space = NetworkSpace(store: shelf)
         self.batch = BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
             documents: { documentPorts }

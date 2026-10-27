@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { WalletHeaderModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
@@ -32,6 +33,19 @@
 		</span>
 		<span class="address">{header.addressDisplay}</span>
 	</button>
+	<!-- The space in front (spec 105), beside the account it shows: tapping it
+	     offers the other space. Live headers only — the gallery's is a picture. -->
+	{#if onclick && networkSpace.words}
+		<button
+			type="button"
+			class="space"
+			class:testnet={networkSpace.testnet}
+			data-testid="network-space"
+			onclick={() => networkSpace.openSwitcher()}
+		>
+			{networkSpace.testnet ? networkSpace.words.testnet : networkSpace.words.mainnet}
+		</button>
+	{/if}
 </div>
 
 <style>
@@ -40,6 +54,26 @@
 		align-items: center;
 		gap: var(--space-lg);
 		min-width: 0;
+	}
+
+	.space {
+		flex-shrink: 0;
+		margin-inline-start: auto;
+		padding: var(--space-xs) var(--space-md);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-raised);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		font-weight: 600;
+		color: var(--color-fg-muted);
+		cursor: pointer;
+	}
+
+	.space.testnet {
+		border-color: var(--color-warning-border);
+		background: var(--color-warning-soft);
+		color: var(--color-fg-base);
 	}
 
 	.text {

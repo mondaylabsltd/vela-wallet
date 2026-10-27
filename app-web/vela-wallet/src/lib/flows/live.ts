@@ -24,7 +24,7 @@ import type { WalletFlowMessages } from './messages';
 import {
 	chainName,
 	explorerAddressURL,
-	getAllNetworksSync,
+	spaceNetworksSync,
 	nativeSymbol
 } from '$lib/services/networks';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
@@ -145,8 +145,8 @@ export interface FlowsLiveInputs {
 }
 
 /** The networks the receive list walks, in the order the page indexes them. */
-export function receiveNetworks(): ReturnType<typeof getAllNetworksSync> {
-	return getAllNetworksSync();
+export function receiveNetworks(): ReturnType<typeof spaceNetworksSync> {
+	return spaceNetworksSync();
 }
 
 export { balanceTokenMark, chainMark } from './marks';

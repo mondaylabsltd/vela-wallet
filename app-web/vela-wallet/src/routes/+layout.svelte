@@ -32,6 +32,9 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { agentSettings } from '$lib/agent/settings.svelte';
 	import type { AgentMessages } from '$lib/agent/messages';
+	import NetworkSpaceLayer from '$lib/network-space/NetworkSpaceLayer.svelte';
+	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { localeOfPath, textDirectionOf, toLocale } from '$lib/i18n/locales';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
@@ -184,6 +187,15 @@
 	});
 	const agentMessages = $derived((page.data as { agent?: AgentMessages } | undefined)?.agent);
 
+	// The mainnet and testnet spaces (spec 105): the stored one, read through
+	// the core; its bar and its switch over every `[locale]` page.
+	const spaceMessages = $derived(
+		(page.data as { space?: NetworkSpaceMessages } | undefined)?.space
+	);
+	onMount(() => {
+		void networkSpace.boot();
+	});
+
 	onMount(() => {
 		if (!inExtension()) return;
 		let stop: (() => void) | undefined;
@@ -329,6 +341,9 @@
 -->
 <div class="surface">
 	<div class="page" data-launch-page style:opacity={pageOpacity}>
+		{#if spaceMessages !== undefined}
+			<NetworkSpaceLayer messages={spaceMessages} />
+		{/if}
 		{#if offline}
 			<p class="offline" role="status">{offlineLabel}</p>
 		{/if}

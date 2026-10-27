@@ -53,7 +53,7 @@ import { enforceNoUnlimited } from './approval-guard';
 import { toShellCall } from './amount-codec';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
-import { getAllNetworksSync } from './networks';
+import { spaceNetworksSync } from './networks';
 import { resolveChainId } from './chain-id';
 
 /**
@@ -229,7 +229,7 @@ export { resolveChainId };
  * Throws with EIP-3085 error code 4902 if unsupported.
  */
 export function assertChainSupported(chainId: number): void {
-	const supported = getAllNetworksSync().some((n) => n.chainId === chainId);
+	const supported = spaceNetworksSync().some((n) => n.chainId === chainId);
 	if (!supported) {
 		throw Object.assign(
 			new Error(`Unsupported chain: ${chainId}. Add this network in wallet settings.`),

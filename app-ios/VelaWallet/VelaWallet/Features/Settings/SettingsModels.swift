@@ -248,6 +248,27 @@ struct SettingsNetworkRowModel: Identifiable {
     /// ST9: custom networks carry a 自定义 tag and a bin.
     var tag: String?
     var removable: Bool = false
+    /// Spec 105: a network the person added moves to the other space — the
+    /// control's words; `nil` draws none.
+    var move: String?
+    /// The space it is in, so the move knows where to.
+    var testnet = false
+}
+
+/// Spec 105: the space the network list shows, and the switch to the other.
+struct NetworkSpaceHeadingModel {
+    let heading: String
+    let hint: String
+    let switchLabel: String
+    let testnet: Bool
+}
+
+/// Spec 105: the wizard's question — which space the network goes to.
+struct AddNetworkSpaceModel {
+    let question: String
+    let testnetLabel: String
+    let mainnetLabel: String
+    let testnet: Bool
 }
 
 struct UrlFieldModel: Identifiable {
@@ -305,6 +326,8 @@ struct AddNetworkModel {
     var secondaryUrl: String?
     /// "Re-check with this RPC" — with `customRpc`, always and only.
     var recheck: String?
+    /// Spec 105: where the network goes, asked when it may be added.
+    var space: AddNetworkSpaceModel?
     /// "Retry" — a primary that checks again rather than adds, for a chain
     /// the probes could not reach (never worded "incompatible").
     var retry: String?
@@ -728,6 +751,8 @@ struct SettingsScreenContent {
     let networksTitle: String
     let networksSubtitle: String
     var networks: [SettingsNetworkRowModel]
+    /// Spec 105: live only — the space the rows are.
+    var networkSpace: NetworkSpaceHeadingModel?
     let addNetworkLabel: String
     var networkDetail: NetworkDetailModel
     /// One detail per network, keyed by row id (spec 050).

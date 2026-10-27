@@ -66,6 +66,8 @@ struct RootView: View {
     private var activity: ActivityStore { graph.activity }
     private var tokens: ManageTokensStore { graph.tokens }
     private var deposits: ReceiveWatchStore { graph.deposits }
+    /// The space in front (spec 105).
+    private var space: NetworkSpace { graph.space }
     /// Which network row opened the receive code.
     @State private var receiveNetwork = 0
     /// The identicon viewer, hosted once for the whole app.
@@ -436,11 +438,12 @@ struct RootView: View {
         // overlay clipped the account name, which is the opposite of what a
         // marker is for. It answers to neither gate (not the theme, not the
         // launch animation) and is absent from Release by construction.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            #if DEBUG
-            if parallelSpace { ParallelSpaceBadge() }
-            #endif
-        }
+        // Spec 105: the testnet space's bar over every screen, under the
+        // parallel space's marker, and the switch — through the intents, as
+        // the agent's would go.
+        .modifier(NetworkSpaceLayer(space: space, loc: loc, parallelSpace: parallelSpace) { to in
+            agent.person(["type": "set_network_space", "space": to.rawValue])
+        })
         // The AI agent's capsule (spec 103): whether it is connected, what it
         // did last, and Stop — over every screen, as the web's floats over its
         // page. Floated low, above the tab bar and a flow's own button: the
@@ -1062,6 +1065,9 @@ struct RootView: View {
                                 openAccountSwitcher()
                                 homeSwitcherOpen = true
                             },
+                            space: (label: loc.t(space.testnet ? "networkSpace.testnet" : "networkSpace.mainnet"),
+                                    testnet: space.testnet),
+                            onSpace: { space.switcherOpen = true },
                             onRefresh: RefreshAction {
                                 // The same refresh as the hero's control, held
                                 // until its spin ends — one spin for both, so a
@@ -1149,6 +1155,12 @@ struct RootView: View {
                     // from disagreeing by one tap.
                     .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
                         activity.privacyChanged(hidden: hidden)
+                    }
+                    // Spec 105: the feed draws the space in front's records,
+                    // and the balances are its alone.
+                    .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
+                        activity.spaceChains(chains)
+                        wallet.spaceChanged(chains)
                     }
                     .task {
                         activity.open(address: session.view.address,
@@ -1309,7 +1321,9 @@ struct RootView: View {
                     // connections stay drawn. Only closing a tab, navigating
                     // or a renderer dying settles a page — the core's rule.
                     .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
-                    .onChange(of: settings.networkAdmin?.networks.map(\.chainId) ?? []) { _, chains in
+                    // The space in front's chains (spec 105): a switch of space
+                    // is a change of what a site may use.
+                    .onChange(of: walletNetworks.chains.map(\.chainId)) { _, chains in
                         if !chains.isEmpty { browser.networksChanged(chains) }
                     }
                     .task {
@@ -1348,8 +1362,7 @@ struct RootView: View {
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
                         // handler above replaces it the moment it does.
-                        let chains = settings.networkAdmin?.networks.map(\.chainId) ?? []
-                        browser.networksChanged(chains.isEmpty ? ChainCatalog.chains.map(\.chainId) : chains)
+                        browser.networksChanged(walletNetworks.chains.map(\.chainId))
                         tellBrowserAboutAccounts()
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
@@ -2287,7 +2300,8 @@ struct RootView: View {
         return WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
                                 feedRead: activity.hasRead, on: base, loc: loc,
                                 now: Date(), spinning: wallet.spin.spinning,
-                                networks: walletNetworks)
+                                networks: walletNetworks,
+                                noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
     }
 
     /// The networks this wallet has, as the core lists them — the built-ins
@@ -2295,7 +2309,7 @@ struct RootView: View {
     /// read its stores). Every list and name a screen draws from comes from
     /// here, and every receive row's index is an index into its `chains`.
     private var walletNetworks: WalletNetworks {
-        WalletNetworks(settings.networkAdmin?.networks)
+        WalletNetworks(settings.networkAdmin?.networks, space: space.current)
     }
 
     /// The receive list's row `receiveNetwork`, from the same list it was
@@ -3412,6 +3426,9 @@ struct RootView: View {
                 onEditCustomRpc: { settings.editCustomRpc($0) },
                 onRecheck: { settings.recheck(customRpc: $0) },
                 onConfirmAdd: { addCheckedNetwork() },
+                onMoveNetwork: { id, testnet in settings.moveNetwork(id: id, testnet: testnet) },
+                onSwitchSpace: { space.switcherOpen = true },
+                onAddSpace: { settings.chooseWizardSpace(testnet: $0) },
                 isLive: true
             ),
             appearance: SettingsAppearanceActions(
@@ -3600,7 +3617,7 @@ struct RootView: View {
         // ready while the other is not.
         var model = base
         if let view = settings.networkAdmin, view.loaded {
-            model = SettingsLive.withNetworks(view, on: model, loc: loc)
+            model = SettingsLive.withNetworks(view, on: model, loc: loc, space: space.current)
             // The last two pages drawn over live machinery (spec 081 FR-001):
             // 端点 offered a dead host as the person's passkey index with an
             // invented latency beside it, and 供应商 prefilled a mock API key.

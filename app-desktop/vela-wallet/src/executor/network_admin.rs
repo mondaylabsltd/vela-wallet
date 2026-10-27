@@ -75,6 +75,10 @@ struct StoredNetwork {
     native_symbol: String,
     /// Stored as `addedAt`; the core calls it what it is.
     added_at: String,
+    /// The person's word on its space (spec 105); absent on an older record,
+    /// and left absent rather than written as a guess.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_testnet: Option<bool>,
 }
 
 impl From<&NetCustomNetwork> for StoredNetwork {
@@ -93,6 +97,7 @@ impl From<&NetCustomNetwork> for StoredNetwork {
             bundler_url: n.bundler_url.clone(),
             native_symbol: n.native_symbol.clone(),
             added_at: n.added_at_iso.clone(),
+            is_testnet: n.is_testnet,
         }
     }
 }
@@ -113,6 +118,7 @@ impl From<StoredNetwork> for NetCustomNetwork {
             bundler_url: s.bundler_url,
             native_symbol: s.native_symbol,
             added_at_iso: s.added_at,
+            is_testnet: s.is_testnet,
         }
     }
 }
@@ -309,25 +315,30 @@ fn decode_search_index(value: &Value) -> Vec<NetChainIndexEntry> {
         .collect()
 }
 
+/// Every network somebody added, as the core reads them — the space each
+/// belongs to included (spec 105, `crate::network_space`).
+pub fn read_store_custom_networks() -> Vec<NetCustomNetwork> {
+    decode_list::<StoredNetwork, NetCustomNetwork>(storage::KEY_CUSTOM_NETWORKS)
+}
+
 /// The chain ids of every network somebody added.
 ///
 /// Shared with the signing host, which must tell `sign_request` the same list
 /// the settings screen shows — a request for a chain the settings say is
 /// present, refused as absent, is the wallet disagreeing with itself.
 pub fn read_store_custom_chain_ids() -> Vec<u32> {
-    decode_list::<StoredNetwork, NetCustomNetwork>(storage::KEY_CUSTOM_NETWORKS)
+    read_store_custom_networks()
         .into_iter()
         .map(|network| network.chain_id)
         .collect()
 }
 
-/// Every network the wallet has: the built-ins, then whatever the person
-/// added — the list Settings → Networks shows. What "the wallet's networks"
-/// means wherever something must not act on a chain outside them: a dApp's
-/// switch, a signing request's chain, a name service's registry
-/// (`identity::name_service_identity`).
+/// Every network the wallet has, in both spaces: the built-ins, then
+/// whatever the person added. What a name service's registry is asked on
+/// (`identity::name_service_identity`): a contact's name is theirs whichever
+/// space is in front.
 #[must_use]
-pub fn wallet_chain_ids() -> Vec<u32> {
+pub fn all_wallet_chain_ids() -> Vec<u32> {
     let mut ids: Vec<u32> = vela_core::app::network_admin::BUILTIN_CHAINS
         .iter()
         .map(|chain| chain.chain_id)
@@ -338,6 +349,16 @@ pub fn wallet_chain_ids() -> Vec<u32> {
         }
     }
     ids
+}
+
+/// The networks of the space in front (spec 105) — the list Settings →
+/// Networks shows. What "the wallet's networks" means wherever something
+/// must not act on a chain outside them: a dApp's switch, a signing
+/// request's chain. A chain of the other space is answered as one the wallet
+/// does not have.
+#[must_use]
+pub fn wallet_chain_ids() -> Vec<u32> {
+    crate::network_space::retain(all_wallet_chain_ids())
 }
 
 fn read_store() -> NetShellResult {
@@ -811,6 +832,7 @@ mod tests {
             bundler_url: "https://bundler.example".to_owned(),
             native_symbol: "TST".to_owned(),
             added_at_iso: "2026-09-04T00:00:00.000Z".to_owned(),
+            is_testnet: Some(true),
         }
     }
 
@@ -857,6 +879,32 @@ mod tests {
                 "`{absent}` leaked the Rust spelling into the stored record"
             );
         }
+    }
+
+    /// The person's word on a network's space (spec 105) is stored as
+    /// `isTestnet`, both ways; an older record without it stays without it —
+    /// written back absent, never as a guess the core did not make.
+    #[test]
+    fn a_networks_space_is_stored_as_every_client_reads_it() {
+        for word in [Some(true), Some(false)] {
+            let mut mine = network(1234);
+            mine.is_testnet = word;
+            let stored = serde_json::to_value(StoredNetwork::from(&mine))
+                .unwrap_or_else(|_| unreachable!("a network must serialize"));
+            assert_eq!(stored.get("isTestnet").and_then(Value::as_bool), word);
+            assert!(stored.get("is_testnet").is_none());
+            let back: StoredNetwork =
+                serde_json::from_value(stored).unwrap_or_else(|_| unreachable!("and read back"));
+            assert_eq!(NetCustomNetwork::from(back).is_testnet, word);
+        }
+        let mut older = network(1234);
+        older.is_testnet = None;
+        let stored = serde_json::to_value(StoredNetwork::from(&older))
+            .unwrap_or_else(|_| unreachable!("a network must serialize"));
+        assert!(stored.get("isTestnet").is_none(), "absent stays absent");
+        let back: StoredNetwork =
+            serde_json::from_value(stored).unwrap_or_else(|_| unreachable!("and read back"));
+        assert_eq!(NetCustomNetwork::from(back).is_testnet, None);
     }
 
     /// A record another client wrote must come back whole.

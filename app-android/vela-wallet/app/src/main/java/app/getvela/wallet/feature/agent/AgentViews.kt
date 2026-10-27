@@ -54,6 +54,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.SettingsTone
@@ -111,6 +112,10 @@ object AgentWords {
             "clear_storage_item" -> action.optString("item")
             "set_preference" -> action.optJSONObject("preference")?.let { "${it.optString("kind")}: ${it.opt("value")}" }
             "set_balance_privacy" -> strings.t(if (action.optBoolean("hidden")) "home.a11yHideBalance" else "home.a11yShowBalance")
+            // Spec 105: the space it switches to, by its own name.
+            "set_network_space" -> strings.t(
+                if (action.optString("space") == "testnet") I18nKeys.NetworkSpace.TESTNET else I18nKeys.NetworkSpace.MAINNET,
+            )
             else -> runCatching { JSONTokener(intentApprovalDetail(action.toString())).nextValue() as? String }.getOrNull()
         }
     }

@@ -289,40 +289,17 @@ pub fn network_id(chain_id: u32) -> String {
 }
 
 /// The chains the core validates a locked request against and synthesises
-/// placeholder tokens for: the built-ins plus whatever the person added.
+/// placeholder tokens for: the built-ins plus whatever the person added, of
+/// the space in front (spec 105).
 pub fn chain_infos() -> Vec<SendChainInfo> {
-    let mut out: Vec<SendChainInfo> = BUILTIN_CHAINS
-        .iter()
-        .map(|chain| SendChainInfo {
-            chain_id: chain.chain_id,
-            network: chain.id.to_owned(),
-            native_symbol: chain.native_symbol.to_owned(),
+    crate::network_space::space_networks()
+        .into_iter()
+        .map(|(chain_id, native_symbol)| SendChainInfo {
+            chain_id,
+            network: network_id(chain_id),
+            native_symbol,
         })
-        .collect();
-    if let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_CUSTOM_NETWORKS) {
-        for item in items {
-            let Some(chain_id) = item
-                .get("chainId")
-                .and_then(Value::as_u64)
-                .and_then(|id| u32::try_from(id).ok())
-            else {
-                continue;
-            };
-            if out.iter().any(|chain| chain.chain_id == chain_id) {
-                continue;
-            }
-            out.push(SendChainInfo {
-                chain_id,
-                network: network_id(chain_id),
-                native_symbol: item
-                    .get("nativeSymbol")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_owned(),
-            });
-        }
-    }
-    out
+        .collect()
 }
 
 /// A balance row as the send machine's token (`toSendToken`).

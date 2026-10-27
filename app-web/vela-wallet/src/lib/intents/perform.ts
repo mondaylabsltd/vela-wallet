@@ -9,6 +9,7 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { analyticsConsent } from '$lib/analytics/consent.svelte';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { agentSettings } from '$lib/agent/settings.svelte';
 import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 import type { IntentAction } from '$lib/core/generated/IntentAction';
@@ -257,6 +258,10 @@ export async function perform(
 		case 'set_balance_privacy':
 			// The eye is a toggle: pressed only when it is not already so.
 			if (balance.view.hidden !== action.hidden) balance.togglePrivacy();
+			return null;
+		case 'set_network_space':
+			// The device's space (spec 105): every list follows it.
+			networkSpace.set(action.space);
 			return null;
 		case 'refresh_balances':
 			// The home's refresh: balances read again, the feed looks again.

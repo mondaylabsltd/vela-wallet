@@ -53,6 +53,14 @@ data class WalletHeaderModel(
     val addressDisplay: String,
     /** Identicon seed (the full address); rendered via core/identicon. */
     val identiconSeed: String,
+    /**
+     * Spec 105: the space in front, beside the name — "Mainnet" / "Testnet".
+     * Tapping it offers the other space. `null` draws none (the gallery's
+     * header is a picture).
+     */
+    val space: String? = null,
+    /** The testnet space is in front: the label is drawn amber. */
+    val testnet: Boolean = false,
 )
 
 @Immutable
@@ -61,7 +69,12 @@ sealed interface NetworkPillModel {
     data class Single(val dot: Color, val label: String) : NetworkPillModel
 }
 
-enum class BalanceStateKind { Normal, ZeroLive, Loading, Hidden }
+/**
+ * [NoValue] (spec 105): the testnet space is in front, and nothing there has
+ * real value — no figure at all (a "$12" of test coins would read as money),
+ * [BalanceModel.noValueText] in its place.
+ */
+enum class BalanceStateKind { Normal, ZeroLive, Loading, Hidden, NoValue }
 
 enum class BalanceStatusKind { Warning, Refreshing }
 
@@ -101,6 +114,8 @@ data class BalanceModel(
     val a11yShow: String,
     /** Issue 462: the "↻ Updated <ago>" control under the figure; `null` draws none. */
     val refresh: BalanceRefreshModel? = null,
+    /** Spec 105: "Test assets · no real value" — drawn in the figure's place in the [BalanceStateKind.NoValue] state. */
+    val noValueText: String? = null,
 )
 
 /**

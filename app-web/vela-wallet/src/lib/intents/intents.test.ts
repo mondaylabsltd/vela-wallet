@@ -86,6 +86,7 @@ function world(): World {
 			analytics: false
 		},
 		agent: { enabled: true },
+		networkSpace: 'mainnet',
 		operations: [],
 		balance: null,
 		feed: null,
@@ -340,7 +341,8 @@ function net(
 		rpc_health: null,
 		explorer_health: null,
 		rpc_chain_mismatch: null,
-		rpc_save_deferred: false
+		rpc_save_deferred: false,
+		is_testnet: false
 	};
 }
 

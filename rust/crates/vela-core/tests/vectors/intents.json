@@ -525,6 +525,7 @@
       "expect": {
         "signed_in": false,
         "page": "wallet",
+        "network_space": "mainnet",
         "accounts": [],
         "balances": {
           "hidden": true,

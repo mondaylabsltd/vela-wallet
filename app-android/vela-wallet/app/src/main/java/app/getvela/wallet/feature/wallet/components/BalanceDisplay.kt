@@ -80,6 +80,7 @@ fun BalanceDisplay(
             BalanceStateKind.Normal, BalanceStateKind.ZeroLive -> HeroLine { AmountRow(model, onToggleVisibility) }
             BalanceStateKind.Loading -> HeroLine { SkeletonBalanceBlock() }
             BalanceStateKind.Hidden -> HeroLine { HiddenRow(model, onToggleVisibility) }
+            BalanceStateKind.NoValue -> HeroLine { NoValueRow(model.noValueText.orEmpty(), onToggleVisibility) }
         }
         // The status line's place: one line of the row a status draws, kept
         // whether or not there is one. What is said in it is the status —
@@ -208,6 +209,25 @@ private fun QuietIndicatorRow(text: String, dot: Color) {
             modifier = Modifier.weight(1f, fill = false),
         )
     }
+}
+
+/**
+ * Spec 105: the testnet space's hero — the words in the figure's place, on
+ * the figure's line ([HeroLine] holds its height), so a switch of space moves
+ * nothing under it. The amount's tap still hides the figures elsewhere.
+ */
+@Composable
+private fun NoValueRow(text: String, onToggle: () -> Unit) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.semibold,
+        fontSize = VelaTextSize.xl,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clickable(onClick = onToggle),
+    )
 }
 
 @Composable

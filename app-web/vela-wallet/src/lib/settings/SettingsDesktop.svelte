@@ -420,11 +420,14 @@
 			{:else if page === 'networks'}
 				<NetworksPanel
 					rows={model.networks.rows}
+					space={model.networks.space}
 					addLabel={model.networks.addLabel}
 					deleteLabel={model.networks.removeLabel}
 					expandable
 					onselect={(id) => onnetevent?.({ kind: 'select-network', id })}
 					ondelete={(id) => ask('remove-network', id, removeNetworkQuestion(model.networks, id))}
+					onmove={(id) => onnetevent?.({ kind: 'move-network', id })}
+					onswitch={() => onnetevent?.({ kind: 'switch-space' })}
 				>
 					{#snippet detail()}
 						<NetworkDetailPanel
@@ -520,6 +523,7 @@
 				oncustomrpc={(value) => onnetevent?.({ kind: 'custom-rpc', value })}
 				onprimary={() => onnetevent?.({ kind: 'confirm-add' })}
 				onrecheck={() => onnetevent?.({ kind: 'recheck' })}
+				onspace={(testnet) => onnetevent?.({ kind: 'add-space', testnet })}
 			/>
 		</Dialog>
 	{:else if overlay === 'rpc-fix'}

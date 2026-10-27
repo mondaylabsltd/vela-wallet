@@ -70,6 +70,7 @@ pub mod money;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
+pub mod network_space;
 pub mod payment_request;
 pub mod privacy;
 pub mod receive_watch;

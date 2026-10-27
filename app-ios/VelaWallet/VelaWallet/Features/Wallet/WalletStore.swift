@@ -80,8 +80,36 @@ final class WalletStore {
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
 
+    /// The core's view as it came, before the space's filter (spec 105).
+    @ObservationIgnored private var unfiltered: BalanceViewWire?
+    /// The space in front's chains; `nil` until the screen says.
+    @ObservationIgnored private var spaceChains: Set<Int>?
+
+    /// The space in front changed (spec 105), or its networks did: the other
+    /// space's holdings go now, and every chain of this one is read again.
+    func spaceChanged(_ chainIds: [Int]) {
+        let chains = Set(chainIds)
+        guard chains != spaceChains else { return }
+        let first = spaceChains == nil
+        spaceChains = chains
+        if let unfiltered { balance = inSpace(unfiltered) }
+        if !first, scopedTo != nil { refresh(pull: false) }
+    }
+
+    /// `view` with only the space in front's holdings; a total that counted
+    /// any other is not shown — the read under way will state this one's.
+    private func inSpace(_ view: BalanceViewWire) -> BalanceViewWire {
+        guard let spaceChains else { return view }
+        var out = view
+        out.tokens = view.tokens.filter { spaceChains.contains($0.chainId) }
+        out.unpricedTokens = view.unpricedTokens.filter { spaceChains.contains($0.chainId) }
+        if out.tokens.count != view.tokens.count { out.displayTotalUsd = nil }
+        return out
+    }
+
     private func viewArrived(_ view: BalanceViewWire) {
-        balance = view
+        unfiltered = view
+        balance = inSpace(view)
         let held = spin.core(busy: view.refreshing, now: Self.uptimeMs())
         if held != spin {
             spin = held

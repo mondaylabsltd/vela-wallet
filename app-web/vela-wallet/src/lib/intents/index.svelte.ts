@@ -3,6 +3,7 @@
  * UI and the AI agent both ask through it.
  */
 import { analyticsConsent } from '$lib/analytics/consent.svelte';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { agentSettings } from '$lib/agent/settings.svelte';
 import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 import { intentCheck, loadCore } from '$lib/core/client';
@@ -41,7 +42,8 @@ export function world(): World {
 		operations: transfers.list(),
 		balance: balance.view,
 		feed: feed.view,
-		networks: networkAdmin.view.loaded ? networkAdmin.view : null
+		networks: networkAdmin.view.loaded ? networkAdmin.view : null,
+		networkSpace: networkSpace.current
 	};
 }
 

@@ -32,6 +32,13 @@ const DAPP = "a dApp's own request, answered by the person to that dApp";
 const SHOWN = 'how the screen shows it';
 
 /** `<resident>.dispatch({ type })` in the screens, by the resident the screen names. */
+/**
+ * Spec 105: which space a network the person added belongs to is their word
+ * on what has real value. An agent that could move a testnet into the
+ * mainnet space could make test coins read as money.
+ */
+const SPACE_OF = 'which space a network belongs to is the person’s word on what has value';
+
 const DISPATCHED: Record<string, Place> = {
 	// The send form: drafting is the intents' prepare, confirming their submit.
 	'sendSession.select_token': { step: 'prepare_transfer' },
@@ -87,6 +94,8 @@ const DISPATCHED: Record<string, Place> = {
 	'networkAdmin.search_input': { step: 'add_network' },
 	'networkAdmin.chain_selected': { step: 'add_network' },
 	'networkAdmin.custom_rpc_edited': { step: 'add_network' },
+	'networkAdmin.wizard_testnet_chosen': { step: 'add_network' },
+	'networkAdmin.custom_space_changed': { none: SPACE_OF },
 	'networkAdmin.delete_confirmed': { intent: 'remove_network' },
 	'networkAdmin.override_expanded': { step: 'set_network_endpoint' },
 	'networkAdmin.override_field_edited': { step: 'set_network_endpoint' },
@@ -194,6 +203,9 @@ const SETTINGS: Record<string, Place> = {
 	'net.recheck': { step: 'add_network' },
 	'net.confirm-add': { intent: 'add_network' },
 	'net.delete-network': { intent: 'remove_network' },
+	'net.move-network': { none: SPACE_OF },
+	'net.switch-space': { intent: 'set_network_space' },
+	'net.add-space': { step: 'add_network' },
 	'net.select-network': { view: 'one network’s page shown' },
 	'net.detail-field': { step: 'set_network_endpoint' },
 	'net.detail-blur': { intent: 'set_network_endpoint' },
@@ -246,6 +258,7 @@ const PERSON = [
 	'set_balance_privacy',
 	'set_contact_groups',
 	'set_group_members',
+	'set_network_space',
 	'set_preference',
 	'sign_out',
 	'submit_transfer',

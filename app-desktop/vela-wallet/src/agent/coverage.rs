@@ -68,6 +68,10 @@ const BOUNDARY: &str = "where this account signs is the signing boundary itself 
 const SWEEP: &str = "several tokens to one address (sweep)";
 const SIGN: &str = "answering a dApp's signing request";
 const BROWSE: &str = "browsing in the in-app dApp browser";
+/// Spec 105: which space a network the person added belongs to is their word
+/// on what has real value. An agent that could move a testnet into the
+/// mainnet space could make test coins read as money.
+const SPACE_OF: &str = "which space a network belongs to is the person's word on what has value";
 
 /// The core events the screens send, by the name a screen spells them.
 const EVENTS: &[(&str, Place)] = &[
@@ -186,6 +190,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::AddByChainIdRequested", Step("add_network")),
     ("NetEvent::ChainSelected", Step("add_network")),
     ("NetEvent::CustomRpcEdited", Step("add_network")),
+    ("NetEvent::CustomSpaceChanged", NotOne(SPACE_OF)),
     ("NetEvent::DappAddApproved", NotOne(DAPP)),
     ("NetEvent::DappAddCancelled", NotOne(DAPP)),
     ("NetEvent::DappAddDeclined", NotOne(DAPP)),
@@ -209,6 +214,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::ProvidersOpened", Step("set_provider_key")),
     ("NetEvent::SearchInput", Step("add_network")),
     ("NetEvent::WizardReset", Step("add_network")),
+    ("NetEvent::WizardTestnetChosen", Step("add_network")),
     ("PagesEvent::PageAdded", NotOne(BOUNDARY)),
     ("PagesEvent::PageRemoved", NotOne(BOUNDARY)),
     ("PagesEvent::PageRenamed", NotOne(BOUNDARY)),
@@ -567,6 +573,7 @@ const PERSON: &[&str] = &[
     "set_balance_privacy",
     "set_contact_groups",
     "set_group_members",
+    "set_network_space",
     "set_preference",
     "sign_out",
     "submit_transfer",

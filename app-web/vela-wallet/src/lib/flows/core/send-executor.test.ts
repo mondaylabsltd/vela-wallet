@@ -44,6 +44,7 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 }));
 vi.mock('$lib/services/networks', () => ({
 	getAllNetworksSync: () => [],
+	spaceNetworksSync: () => [],
 	networkId: (id: number) => `chain-${id}`,
 	nativeSymbol: () => 'ETH',
 	chainName: (id: number) => `Chain ${id}`

@@ -193,6 +193,14 @@ struct BalanceDisplay: View {
             .frame(minHeight: WalletGeometry.skeletonBalanceHeight)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(verbatim: model.a11yShow))
+        case .noValue:
+            // Spec 105: the testnet space states no total; its words stand
+            // in the figure's place, at the skeleton's height.
+            Text(verbatim: model.noValueText ?? "")
+                .font(Typography.title.scaled(textScale).font)
+                .foregroundStyle(theme.warningBase)
+                .lineLimit(2)
+                .frame(minHeight: WalletGeometry.skeletonBalanceHeight, alignment: .leading)
         case .normal, .zeroLive:
             (Text(verbatim: model.integer ?? "")
                 .font(Typography.amountHero.scaled(textScale).font)

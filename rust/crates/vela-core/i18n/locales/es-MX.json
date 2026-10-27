@@ -158,6 +158,7 @@
         "deleteActivity": "Eliminar un registro de actividad",
         "setBalancePrivacy": "Ocultar o mostrar saldos",
         "refreshBalances": "Actualizar saldos",
+        "setNetworkSpace": "Cambiar de espacio de red",
         "setContactFavorite": "Cambiar un favorito",
         "addNetwork": "Agregar una red",
         "setNetworkEndpoint": "Cambiar el RPC o explorador de una red",
@@ -258,5 +259,23 @@
     "activity": "Actividad",
     "delete": "Eliminar",
     "connected": "Conectado"
+  },
+  "networkSpace": {
+    "mainnet": "Mainnet",
+    "testnet": "Testnet",
+    "bar": "Espacio testnet · nada aquí tiene valor real",
+    "title": "Espacio de red",
+    "mainnetHint": "Redes cuyos activos tienen valor real.",
+    "testnetHint": "Testnets y redes de desarrollo. Nada aquí tiene valor real.",
+    "toTestnet": "Cambiar al espacio testnet",
+    "toMainnet": "Cambiar al espacio mainnet",
+    "noValue": "Activos de prueba · sin valor real",
+    "moveToMainnet": "Mover al espacio mainnet",
+    "moveToTestnet": "Mover al espacio testnet",
+    "wizardQuestion": "¿A qué espacio pertenece esta red?",
+    "wizardTestnet": "Testnet — sin valor real",
+    "wizardMainnet": "Mainnet — valor real",
+    "headingMainnet": "Espacio mainnet",
+    "headingTestnet": "Espacio testnet"
   }
 }

@@ -205,6 +205,7 @@ class AgentCoverageTest {
             "session.signOutConfirmed" to Place.Step("sign_out"),
             "session.signOutDismissed" to Place.Step("sign_out"),
             "settings.addSigningPage" to Place.None(BOUNDARY),
+            "settings.chooseWizardSpace" to Place.Step("add_network"),
             "settings.commitEndpoint" to Place.Intent("set_service_endpoint"),
             "settings.commitOverride" to Place.Intent("set_network_endpoint"),
             "settings.commitProviderKey" to Place.Intent("set_provider_key"),
@@ -219,6 +220,11 @@ class AgentCoverageTest {
             "settings.refreshCurrency" to Place.Machine(BOOT),
             "settings.refreshFeeTier" to Place.Machine(BOOT),
             "settings.refreshSigningPages" to Place.Machine(BOOT),
+            // Spec 105: an agent that could move a testnet into the mainnet
+            // space could make test coins read as money.
+            "settings.moveNetwork" to Place.None(
+                "which space a network belongs to is the person's word on what has value",
+            ),
             "settings.removeSigningPage" to Place.None(BOUNDARY),
             "settings.renameSigningPage" to Place.None(BOUNDARY),
             "settings.resetWizard" to Place.Step("add_network"),
@@ -255,8 +261,8 @@ class AgentCoverageTest {
             "add_network", "clear_caches", "clear_storage_item", "configure_agent", "delete_activity",
             "delete_contact", "delete_group", "erase_device", "refresh_balances", "remove_network",
             "remove_wallet", "reset_service_endpoints", "save_contact", "save_group", "set_balance_privacy",
-            "set_contact_groups", "set_group_members", "set_preference", "sign_out", "submit_transfer",
-            "switch_account",
+            "set_contact_groups", "set_group_members", "set_network_space", "set_preference", "sign_out",
+            "submit_transfer", "switch_account",
         )
 
         /**

@@ -975,6 +975,11 @@ pub enum Event {
     PrivacyChanged { hidden: bool },
     /// The network chip filter (`selectedChainId`); `None` = all chains.
     ChainFilterChanged { chain_id: Option<u32> },
+    /// The chains of the space in front (spec 105,
+    /// [`super::network_space::space_chain_ids`]); `None` = every chain.
+    /// Records of the other space stay stored and are not drawn: switching
+    /// back shows them again.
+    SpaceChainsChanged { chain_ids: Option<Vec<u32>> },
     /// A contact's page opened (`Some`) or closed (`None`): the view then
     /// carries what passed between the account and that address
     /// ([`FeedView::contact_rows`]).
@@ -1086,6 +1091,8 @@ pub struct Model {
     /// (invariant ⑦).
     alias_attempted: BTreeSet<String>,
     chain_filter: Option<u32>,
+    /// The space's chains ([`Event::SpaceChainsChanged`]); `None` = all.
+    space_chains: Option<BTreeSet<u32>>,
     /// The contact whose page is open, lower-cased.
     contact_filter: Option<String>,
     privacy_hidden: bool,
@@ -1204,6 +1211,10 @@ impl App for ActivityFeed {
                 model.chain_filter = chain_id;
                 render()
             }
+            Event::SpaceChainsChanged { chain_ids } => {
+                model.space_chains = chain_ids.map(|ids| ids.into_iter().collect());
+                render()
+            }
             Event::ContactFilterChanged { address } => {
                 model.contact_filter = address
                     .map(|address| address.trim().to_lowercase())
@@ -1242,7 +1253,13 @@ impl App for ActivityFeed {
         // because each one precedes an item it heads.
         let mut home_len = 0;
         let mut items_seen = 0;
-        for item in &model.items {
+        let in_space = |item: &&FeedItem| {
+            model
+                .space_chains
+                .as_ref()
+                .is_none_or(|chains| chains.contains(&item.chain_id))
+        };
+        for item in model.items.iter().filter(in_space) {
             if let Some(chain) = model.chain_filter {
                 if item.chain_id != chain {
                     continue;
@@ -1273,6 +1290,7 @@ impl App for ActivityFeed {
                 model
                     .items
                     .iter()
+                    .filter(in_space)
                     .filter(|item| {
                         item.counterparty
                             .as_deref()

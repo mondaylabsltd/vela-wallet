@@ -17,6 +17,7 @@
 	import ChainMark from './ChainMark.svelte';
 	import CheckList from './CheckList.svelte';
 	import NetworkRow from './NetworkRow.svelte';
+	import SegmentedControl from './SegmentedControl.svelte';
 	import StatusPill from './StatusPill.svelte';
 	import UrlField from './UrlField.svelte';
 
@@ -28,9 +29,11 @@
 		/** Live wiring (spec 024). Absent = the gallery's pure picture. */
 		onsearch?: (query: string) => void;
 		oncustomrpc?: (value: string) => void;
+		/** Spec 105: the space the network goes to. */
+		onspace?: (testnet: boolean) => void;
 	}
 
-	let { panel, onselect, onprimary, onrecheck, onsearch, oncustomrpc }: Props = $props();
+	let { panel, onselect, onprimary, onrecheck, onsearch, oncustomrpc, onspace }: Props = $props();
 
 	/*
 	 * "Open Chain Setup Tool" (`panel.secondary`) is a link, and where it goes
@@ -103,6 +106,13 @@
 
 		{#if panel.customRpc !== undefined}
 			<UrlField field={panel.customRpc} oninput={(value) => oncustomrpc?.(value)} />
+		{/if}
+
+		{#if panel.space !== undefined}
+			<div class="space" data-testid="add-network-space">
+				<span class="question">{panel.space.label}</span>
+				<SegmentedControl model={panel.space} onselect={(id) => onspace?.(id === 'testnet')} />
+			</div>
 		{/if}
 
 		{#if panel.primary !== undefined}
@@ -179,6 +189,18 @@
 	.meta {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.space {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+	}
+
+	.question {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 	}
 
 	.recheck {

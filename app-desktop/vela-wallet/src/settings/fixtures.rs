@@ -424,6 +424,7 @@ pub fn refused_wizard(
         rpc_field: NetRpcField::None,
         rpc_field_label_key: None,
         can_add: false,
+        testnet: false,
     }
 }
 
@@ -1179,6 +1180,7 @@ pub fn network_rows() -> Vec<crate::settings::model::NetworkRowModel> {
                 chain_id: n.chain_id,
                 latency_ms: (!n.custom).then_some(n.latency_ms),
                 custom: n.custom,
+                testnet: false,
             }
         })
         .collect()

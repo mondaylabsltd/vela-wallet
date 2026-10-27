@@ -1114,6 +1114,22 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
  */
 export function minGasPriceWei(chain_id: number): string;
 
+/**
+ * Whether `chain_id` is a testnet (spec 105).
+ */
+export function networkChainIsTestnet(chain_id: number, custom_json: string): boolean;
+
+/**
+ * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
+ * as JSON. A JSON array.
+ */
+export function networkSpaceChainIds(space: string, rows_json: string): string;
+
+/**
+ * The space stored under `vela.networkSpace`, read (spec 105).
+ */
+export function networkSpaceRead(stored?: string | null): string;
+
 export function parsePublicKey(hex: string): P256PublicKey;
 
 /**
@@ -1889,6 +1905,9 @@ export interface InitOutput {
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
+    readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
+    readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly networkSpaceRead: (a: number, b: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

@@ -112,6 +112,8 @@ final class ActivityStore {
         // any gesture happens. Telling this core at open is what stops a
         // receipt toast announcing an amount over a hidden hero.
         privacyChanged(hidden: hidden)
+        // A core booted just now has not heard the space: say it again.
+        if let spaceChainIds { spaceChains(spaceChainIds) }
         startTicking()
     }
 
@@ -174,6 +176,15 @@ final class ActivityStore {
             "type": "reconcile_completed", "resolved_count": max(0, count),
         ]))
     }
+
+    /// The space in front's chains (spec 105): only their records are drawn.
+    /// The others stay stored, and switching back draws them again.
+    func spaceChains(_ chainIds: [Int]) {
+        spaceChainIds = chainIds
+        core.dispatch(CoreJSON.string(["type": "space_chains_changed", "chain_ids": chainIds]))
+    }
+
+    private var spaceChainIds: [Int]?
 
     func chainFilter(_ chainId: Int?) {
         core.dispatch(CoreJSON.string([

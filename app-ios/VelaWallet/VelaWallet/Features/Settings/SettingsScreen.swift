@@ -554,6 +554,11 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder private var networksBody: some View {
+        // Spec 105: which space these are, and the way to the other.
+        if let space = model.networkSpace {
+            NetworkSpaceHeading(model: space, onSwitch: networkActions.onSwitchSpace)
+                .padding(.bottom, Tokens.Space.s12)
+        }
         ForEach(model.networks) { row in
             // The tapped row's id is carried, not discarded (spec 050).
             //
@@ -577,7 +582,8 @@ struct SettingsScreen: View {
                     ask(SettingsLive.removeNetworkConfirm(row, loc: loc), in: .removeNetwork) {
                         remove(id)
                     }
-                } : nil
+                } : nil,
+                onMove: networkActions.isLive ? { id in networkActions.onMoveNetwork(id, !row.testnet) } : nil
             )
         }
         // A link, not a CTA: adding a network is navigation, and accent is
@@ -882,6 +888,28 @@ private struct AddNetworkBody: View {
                 // An outline CTA plus a re-check link when it cannot be added:
                 // an action you cannot take should not be dressed as the action
                 // you came for.
+                // Spec 105: which space it goes to — the person's word, a
+                // testnet unless they say otherwise.
+                if let space = panel.space {
+                    VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                        Text(space.question)
+                            .typeRole(Typography.fieldLabel)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.fgBase)
+                        SettingsSegmentedControl(
+                            model: SegmentedModel(
+                                label: space.question,
+                                segments: [
+                                    SegmentModel(id: "testnet", label: space.testnetLabel),
+                                    SegmentModel(id: "mainnet", label: space.mainnetLabel),
+                                ],
+                                selected: space.testnet ? "testnet" : "mainnet"
+                            ),
+                            onSelect: { actions.onAddSpace($0 == "testnet") }
+                        )
+                    }
+                    .accessibilityIdentifier("add-network-space")
+                }
                 if let primary = panel.primary {
                     VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
@@ -980,6 +1008,12 @@ struct SettingsNetworkActions {
     /// "Re-check with this RPC" / "Retry", with the RPC typed.
     var onRecheck: (String) -> Void = { _ in }
     var onConfirmAdd: () -> Void = {}
+    /// Spec 105: a network the person added, to that space (`true` testnet).
+    var onMoveNetwork: (String, Bool) -> Void = { _, _ in }
+    /// The switch of space, from the list's heading.
+    var onSwitchSpace: () -> Void = {}
+    /// The wizard's answer: the network goes to the testnet space (`true`).
+    var onAddSpace: (Bool) -> Void = { _ in }
     /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
     var isLive = false
 }

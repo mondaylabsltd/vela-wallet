@@ -60,7 +60,6 @@ use vela_core::app::balance_dashboard::{
     BalanceToken, NativeQuoteGroup, ReadKind, ReadSlot, StableRef, TokenRef, best_native_dex_price,
     choose_native_price, first_grouped_quote_price, read_plan,
 };
-use vela_core::app::network_admin::BUILTIN_CHAINS;
 
 use crate::executor::abi::{self, Call3, McResult};
 use crate::executor::chain_tokens::{self, ChainTokenData, DexInfo, IndexDoc, StableToken};
@@ -92,36 +91,11 @@ pub fn chain_ids() -> Vec<u32> {
     chains().into_iter().map(|(chain_id, _)| chain_id).collect()
 }
 
-/// Every chain the wallet reads for. The built-ins plus whatever the person
-/// added — a custom network nobody reads is a network nobody has.
+/// Every chain the wallet reads for: the built-ins plus whatever the person
+/// added — a custom network nobody reads is a network nobody has — of the
+/// space in front (spec 105), so the total counts only that space.
 fn chains() -> Vec<(u32, String)> {
-    let mut out: Vec<(u32, String)> = BUILTIN_CHAINS
-        .iter()
-        .map(|chain| (chain.chain_id, chain.native_symbol.to_owned()))
-        .collect();
-    if let Ok(Some(Value::Array(items))) =
-        crate::executor::storage::read_value(crate::executor::storage::KEY_CUSTOM_NETWORKS)
-    {
-        for item in items {
-            let Some(chain_id) = item
-                .get("chainId")
-                .and_then(Value::as_u64)
-                .and_then(|id| u32::try_from(id).ok())
-            else {
-                continue;
-            };
-            if out.iter().any(|(id, _)| *id == chain_id) {
-                continue;
-            }
-            let symbol = item
-                .get("nativeSymbol")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_owned();
-            out.push((chain_id, symbol));
-        }
-    }
-    out
+    crate::network_space::space_networks()
 }
 
 /// What a slot is, which is what decides how it gets priced.
@@ -946,6 +920,7 @@ fn collect_chain_answers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::app::network_admin::BUILTIN_CHAINS;
 
     /// Spec 092: a chain whose read never answers (a connection held open)
     /// is failed when the budget runs out, and the chain that answered still
@@ -1048,13 +1023,21 @@ mod tests {
         });
     }
 
-    /// Every built-in chain is read, and a custom network joins them.
+    /// Every built-in chain of the space in front is read, and a custom
+    /// network of that space joins them (spec 105).
     #[test]
     fn the_fetch_covers_builtins_and_custom_networks() {
         crate::executor::storage::tests::with_temp_state("balances-chains", || {
-            assert_eq!(chains().len(), BUILTIN_CHAINS.len());
+            let mainnets = BUILTIN_CHAINS.iter().filter(|chain| !chain.testnet).count();
+            let testnets = BUILTIN_CHAINS.len() - mainnets;
+            assert_eq!(chains().len(), mainnets);
+            assert!(
+                chains().iter().all(|(id, _)| *id != 11_155_111),
+                "no Sepolia"
+            );
 
-            let custom = json!([{ "chainId": 7_777_777, "nativeSymbol": "ETH" }]);
+            let custom =
+                json!([{ "chainId": 7_777_777, "nativeSymbol": "ETH", "isTestnet": false }]);
             if crate::executor::storage::write_value(
                 crate::executor::storage::KEY_CUSTOM_NETWORKS,
                 custom,
@@ -1064,7 +1047,7 @@ mod tests {
                 unreachable!("could not seed");
             }
             let all = chains();
-            assert_eq!(all.len(), BUILTIN_CHAINS.len() + 1);
+            assert_eq!(all.len(), mainnets + 1);
             assert!(all.iter().any(|(id, _)| *id == 7_777_777));
 
             // A custom network duplicating a built-in must not double-read it.
@@ -1077,7 +1060,28 @@ mod tests {
             {
                 unreachable!("could not seed");
             }
-            assert_eq!(chains().len(), BUILTIN_CHAINS.len());
+            assert_eq!(chains().len(), mainnets);
+
+            // The testnet space reads its own, and a network nobody called a
+            // mainnet is one of them.
+            let older = json!([{ "chainId": 7_777_777, "nativeSymbol": "ETH" }]);
+            assert!(
+                crate::executor::storage::write_value(
+                    crate::executor::storage::KEY_CUSTOM_NETWORKS,
+                    older,
+                )
+                .is_ok()
+            );
+            assert!(
+                crate::executor::storage::write_value(
+                    vela_core::app::network_space::KEY,
+                    json!("testnet"),
+                )
+                .is_ok()
+            );
+            let test = chains();
+            assert_eq!(test.len(), testnets + 1);
+            assert!(test.iter().all(|(id, _)| *id != 1), "no Ethereum");
         });
     }
 

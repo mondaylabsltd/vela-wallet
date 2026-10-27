@@ -27,6 +27,9 @@ export interface CustomNetworkRecord {
 	bundlerURL: string;
 	nativeSymbol: string;
 	addedAt: string;
+	/** Its space (spec 105): a testnet, unless the person said mainnet. Absent
+	 *  on a record written before it was asked — read as a testnet. */
+	isTestnet?: boolean;
 }
 
 export interface NetworkConfigRecord {

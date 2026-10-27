@@ -298,6 +298,7 @@ export * from './NetView';
 export * from './NetWizardErrorKind';
 export * from './NetWizardPhase';
 export * from './NetWizardView';
+export * from './NetworkSpace';
 export * from './NumberPreset';
 export * from './OriginLock';
 export * from './OutboxRecord';

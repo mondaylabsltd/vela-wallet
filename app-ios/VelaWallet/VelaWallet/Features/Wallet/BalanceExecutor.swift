@@ -325,16 +325,10 @@ final class BalanceExecutor {
         return !plan.contains { $0.kind == "native" }
     }
 
-    /// Which chains to read: the built-ins plus whatever the person added.
+    /// Which chains to read: the built-ins plus whatever the person added —
+    /// the space in front's (spec 105), so the total counts only that space.
     private func chainIds() -> [Int] {
-        var ids = ChainCatalog.chains.map(\.chainId)
-        for network in store.readList(VelaStore.Key.customNetworks) {
-            guard let chainId = (network["chainId"] as? NSNumber)?.intValue,
-                  !ids.contains(chainId)
-            else { continue }
-            ids.append(chainId)
-        }
-        return ids
+        NetworkSpace.chainIds(store: store)
     }
 
     /// The ERC-20s the wallet knows about on one chain, from
@@ -361,7 +355,11 @@ final class BalanceExecutor {
     /// An entry past its TTL is **dropped rather than returned stale**: the
     /// core would otherwise present a day-and-a-half-old figure as the last
     /// known one, and the screen has no way to say how old it is.
+    ///
+    /// The mainnet space's alone (spec 105): a testnet total is no money, and
+    /// one written there would stand in for the real figure on the way back.
     private func cache() -> [String: Double] {
+        guard NetworkSpace.read(store) == .mainnet else { return [:] }
         let now = Date().timeIntervalSince1970 * 1000
         var out: [String: Double] = [:]
         for (address, value) in store.readObject(VelaStore.Key.balanceCache) {
@@ -376,6 +374,7 @@ final class BalanceExecutor {
     }
 
     private func writeCache(address: String, usd: Double) {
+        guard NetworkSpace.read(store) == .mainnet else { return }
         var raw = store.readObject(VelaStore.Key.balanceCache)
         raw[address.lowercased()] = ["usd": usd, "at": Date().timeIntervalSince1970 * 1000]
         store.writeObject(VelaStore.Key.balanceCache, raw)

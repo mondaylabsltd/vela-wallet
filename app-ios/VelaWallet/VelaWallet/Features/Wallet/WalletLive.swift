@@ -190,14 +190,16 @@ enum WalletLive {
         loc: Loc,
         now: Date = Date(),
         spinning: Bool? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        noValue: String? = nil
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency, language: loc.resolvedLanguage)
         copy.balance = balance(view, display: display, fallback: model.balance, loc: loc,
-                               networks: networks)
+                               networks: networks, noValue: noValue)
         copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
-        copy.assetRows = assetRows(view, display: display, networks: networks)
+        copy.assetRows = assetRows(view, display: display, networks: networks,
+                                   noValue: noValue != nil)
         copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection, loc: loc)
         if let feed {
             // The feed's own flag, and the balance's while the two machines
@@ -282,14 +284,18 @@ enum WalletLive {
         display: Display = .usd,
         fallback: BalanceModel,
         loc: Loc? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// Spec 105: the testnet space's words in place of a total.
+        noValue: String? = nil
     ) -> BalanceModel {
         // Final note F19: while the first read of this account is out the
         // line under the total says "Checking…" (the core's `checkingKey`),
         // and nothing else — a cached figure under a first read is not
         // "still updating" yet, and no chain has failed to answer.
         let checking = loc.flatMap { loc in view.checkingKey.map { loc.t($0) } }
-        let kind = state(view, display: display)
+        // The testnet space (spec 105): no figure at all — "$12" of test
+        // coins would read as money. Hidden stays hidden.
+        let kind = noValue != nil && !view.hidden ? .noValue : state(view, display: display)
         var model = BalanceModel(
             label: fallback.label,
             // Named apart from the figure: the stored choice while it is on
@@ -306,7 +312,8 @@ enum WalletLive {
                 ? status(view, fallback: fallback, loc: loc, networks: networks) : nil,
             a11yHide: fallback.a11yHide,
             a11yShow: fallback.a11yShow,
-            checkingText: checking
+            checkingText: checking,
+            noValueText: kind == .noValue ? noValue : nil
         )
 
         // Hidden and loading both draw without a figure, so there is nothing to
@@ -473,7 +480,9 @@ enum WalletLive {
     static func assetRows(
         _ view: BalanceViewWire,
         display: Display = .usd,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// Spec 105: the testnet space — a row has no worth to show.
+        noValue: Bool = false
     ) -> [AssetRowModel] {
         view.tokens.map { token in
             AssetRowModel(
@@ -494,7 +503,7 @@ enum WalletLive {
                 // token's own page read 「•••• BNB」 (device walk 2026-10-10).
                 // The worth beside it is fiat, and stays the bare mask.
                 balance: view.hidden ? maskedAmount(unit: token.symbol) : tokenAmountText(token.balance),
-                fiat: fiat(token, hidden: view.hidden, display: display),
+                fiat: noValue && !view.hidden ? .none : fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
                 // badge disappears where it would repeat the coin — XDAI on

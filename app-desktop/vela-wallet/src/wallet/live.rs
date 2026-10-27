@@ -269,6 +269,42 @@ pub fn refresh_turning(
     core_refreshing || hold_until.is_some_and(|until| now < until)
 }
 
+/// The hero in the testnet space (spec 105): `words` in the figure's place —
+/// no figure, no currency code, nothing that reads as money. A hidden hero
+/// stays hidden; "Checking…", the time it was read and the refresh control
+/// stay, since they say what the wallet is doing rather than what it is worth.
+#[must_use]
+pub fn no_value(model: BalanceModel, words: SharedString) -> BalanceModel {
+    if model.state == BalanceState::Hidden {
+        return model;
+    }
+    BalanceModel {
+        currency: SharedString::default(),
+        state: BalanceState::NoValue,
+        integer: words,
+        decimals: None,
+        live: None,
+        status: None,
+        ..model
+    }
+}
+
+/// The home's holdings in the testnet space (spec 105): no worth on a row.
+/// A masked one stays masked — hiding is not the space's to undo.
+#[must_use]
+pub fn without_worth(rows: Vec<AssetRowModel>) -> Vec<AssetRowModel> {
+    rows.into_iter()
+        .map(|row| AssetRowModel {
+            fiat: if matches!(row.fiat, Fiat::Masked) {
+                Fiat::Masked
+            } else {
+                Fiat::None
+            },
+            ..row
+        })
+        .collect()
+}
+
 /// The balance hero.
 ///
 /// Four states, and the two that look like edge cases are the ones the core

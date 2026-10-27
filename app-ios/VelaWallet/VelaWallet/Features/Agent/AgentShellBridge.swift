@@ -44,6 +44,8 @@ nonisolated final class AgentShellBridge: AgentShell, @unchecked Sendable {
             parts.append("\"fee_tier\":\(graph.settings.feeTierJson ?? "null")")
         }
         parts.append("\"preferences\":\(CoreJSON.string(preferences(graph.preferences)))")
+        // The space in front (spec 105): the agent reads and drafts in it.
+        parts.append("\"network_space\":\"\(graph.space.current.rawValue)\"")
         return "{\(parts.joined(separator: ","))}"
     }
 

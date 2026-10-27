@@ -1,6 +1,6 @@
 # 105 — Mainnet and testnet spaces
 
-**Status:** design approved by the owner (2026-10-27); being implemented.
+**Status:** design approved by the owner (2026-10-27); implemented on all four shells (2026-10-27), automated suites green. Not yet run on the phones' test wallets.
 
 ## The problem
 
@@ -63,6 +63,18 @@ The risk: someone who added a real mainnet by hand, and whose registry lookup fa
 | 3 | Desktop | tests + a manual pass |
 | 4 | iOS, Android | tests + a run on the phones' test wallets |
 
+## Implementation notes (2026-10-27)
+
+- Built in: Sepolia, Base Sepolia, Arbitrum Sepolia, OP Sepolia, Polygon Amoy, BNB Smart Chain Testnet, Avalanche Fuji, Arc Testnet and Tempo Moderato, all in `BUILTIN_CHAINS` with `testnet: true`. The relay's float is empty on every one except Arc Testnet. The owner funds the relay address before sends work there.
+- The activity feed filters in the core (`SpaceChainsChanged`), so all four shells draw the same records.
+- Moving a network between spaces is the person's alone, with no intent and no agent action. An agent that could move a testnet into the mainnet space could make test coins read as money. All four coverage ledgers place it as `none`.
+- The balance cache (`vela.balanceCache`) is read and written only in the mainnet space. The token cache is keyed per space.
+- Tests that used Sepolia as "a chain the wallet does not have" now use Holesky (17000).
+
 ## Open
 
-- The wording of the bar and the labels (en/zh first; then every catalog language).
+- The wording of the bar and the labels: en and zh are reviewed; the other catalog languages are machine-quality.
+- Networks added before this are not classified by the chain registry on first launch. They read as testnet, and one tap moves them.
+- A balance read in flight while the space switches can, when it settles, write that space's total to the saved cache (Android and desktop guard on the space at write time; the window is one read).
+- The account switcher's per-account totals still count fiat in the testnet space on the desktop.
+- A device run on the phones' test wallets (phase 4 exit).

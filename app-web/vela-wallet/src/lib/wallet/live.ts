@@ -78,6 +78,12 @@ export interface WalletLiveInputs {
 	selectedToken?: BalanceToken;
 	/** Issue 462: the hero's refresh control — its clock and press hold. Absent, none. */
 	refresh?: BalanceRefreshInput;
+	/**
+	 * Spec 105: the testnet space is in front, and this is what it says in
+	 * place of a total. Nothing there has real value: no total, no worth on
+	 * a row. Absent, the mainnet space.
+	 */
+	noValue?: string;
 }
 
 /** A held token's key — chain, contract (or `native`), symbol — for a tap to name. */
@@ -525,7 +531,9 @@ export function liveBalance(
 	currency: CurrencyView,
 	m: WalletMessages,
 	/** Issue 462: the refresh control's clock and hold. Absent, no control. */
-	refreshInput?: BalanceRefreshInput
+	refreshInput?: BalanceRefreshInput,
+	/** Spec 105: the testnet space's words in place of a total. */
+	noValue?: string
 ): BalanceModel {
 	const base = {
 		label: m.balance.totalLabel,
@@ -543,6 +551,18 @@ export function liveBalance(
 			currency: figureCurrency(currency),
 			state: 'hidden',
 			integer: BALANCE_MASK
+		};
+	}
+
+	// The testnet space (spec 105): no figure at all — a "$12" of test coins
+	// would read as money. Said in the figure's place; the line under it
+	// still says what the wallet has to say.
+	if (noValue !== undefined) {
+		return {
+			...base,
+			state: 'no-value',
+			noValueText: noValue,
+			...(view.checking_key ? { checkingText: m.balance.said[view.checking_key] } : {})
 		};
 	}
 
@@ -653,17 +673,21 @@ export function liveAssetRow(
 	token: BalanceToken,
 	currency: CurrencyView,
 	m: WalletMessages,
-	hidden: boolean
+	hidden: boolean,
+	/** Spec 105: the testnet space — a row has no worth to show. */
+	noValue = false
 ): AssetRowModel {
 	const art = balanceTokenMark(token);
 	const fiat: AssetRowModel['fiat'] = hidden
 		? { kind: 'masked' }
-		: token.price_usd === null
-			? { kind: 'no-price', text: m.balance.noPrice }
-			: {
-					kind: 'value',
-					text: moneyText((parseFloat(token.balance) || 0) * token.price_usd, currency)
-				};
+		: noValue
+			? { kind: 'none' }
+			: token.price_usd === null
+				? { kind: 'no-price', text: m.balance.noPrice }
+				: {
+						kind: 'value',
+						text: moneyText((parseFloat(token.balance) || 0) * token.price_usd, currency)
+					};
 	return {
 		id: balanceTokenId(token),
 		ticker: token.symbol,
@@ -1109,7 +1133,7 @@ function liveSections(inputs: WalletLiveInputs) {
 	const tokens = filter === null ? view.tokens : view.tokens.filter((t) => t.chain_id === filter);
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
 	return {
-		balance: liveBalance(view, currency, m, inputs.refresh),
+		balance: liveBalance(view, currency, m, inputs.refresh, inputs.noValue),
 		// The filter's own case, not the core's empty wallet (`empty_key` is
 		// about the whole account, and this one HOLDS tokens): none of them is
 		// on the network picked.
@@ -1117,7 +1141,9 @@ function liveSections(inputs: WalletLiveInputs) {
 			filter !== null && tokens.length === 0 && view.tokens.length > 0
 				? ('empty' as const)
 				: assetsMode(view),
-		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
+		assetRows: tokens.map((t) =>
+			liveAssetRow(t, currency, m, view.hidden, inputs.noValue !== undefined)
+		),
 		activityMode: activityMode(view, feed),
 		// The home's Activity is the newest three (issue 469): the core's
 		// `home_rows`, never `rows` — a long history pushed Assets off the

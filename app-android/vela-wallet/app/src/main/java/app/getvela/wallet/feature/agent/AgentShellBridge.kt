@@ -9,6 +9,7 @@ import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.send.core.SendAlertKind
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.send.core.SendOpenParams
+import app.getvela.wallet.feature.settings.core.NetworkSpacePreference
 import app.getvela.wallet.feature.settings.core.SettingsController
 import app.getvela.wallet.feature.wallet.core.WalletController
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,9 @@ interface AgentWallet {
     val settings: SettingsController
     val send: SendController
     val preferences: Preferences
+
+    /** The device's space (spec 105): what every list shows. */
+    val networkSpace: NetworkSpacePreference
 
     /** The theme now. */
     val theme: ThemePreference
@@ -178,6 +182,9 @@ internal object AgentWorld {
             parts += "\"fee_tier\":${wallet.settings.feeTierJson.value ?: "null"}"
         }
         parts += "\"preferences\":${preferences(wallet)}"
+        // Spec 105: the space in front — the core reads only its networks and
+        // balances to the agent, and refuses a transfer on the other's.
+        parts += "\"network_space\":\"${wallet.networkSpace.space.value.wire}\""
         return "{${parts.joinToString(",")}}"
     }
 

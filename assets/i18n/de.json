@@ -158,6 +158,7 @@
     "deleteActivity": "Aktivitätseintrag löschen",
     "setBalancePrivacy": "Guthaben aus- oder einblenden",
     "refreshBalances": "Guthaben aktualisieren",
+    "setNetworkSpace": "Netzwerkbereich wechseln",
     "setContactFavorite": "Favoriten ändern",
     "addNetwork": "Netzwerk hinzufügen",
     "setNetworkEndpoint": "RPC oder Explorer eines Netzwerks ändern",
@@ -258,6 +259,24 @@
   "activity": "Aktivität",
   "delete": "Löschen",
   "connected": "Verbunden"
+ },
+ "networkSpace": {
+  "mainnet": "Mainnet",
+  "testnet": "Testnet",
+  "bar": "Testnet-Bereich · nichts hier hat echten Wert",
+  "title": "Netzwerkbereich",
+  "mainnetHint": "Netzwerke, deren Vermögenswerte echten Wert haben.",
+  "testnetHint": "Testnets und Entwicklernetzwerke. Nichts hier hat echten Wert.",
+  "toTestnet": "Zum Testnet-Bereich wechseln",
+  "toMainnet": "Zum Mainnet-Bereich wechseln",
+  "noValue": "Test-Vermögen · kein echter Wert",
+  "moveToMainnet": "In den Mainnet-Bereich verschieben",
+  "moveToTestnet": "In den Testnet-Bereich verschieben",
+  "wizardQuestion": "Zu welchem Bereich gehört dieses Netzwerk?",
+  "wizardTestnet": "Testnet — kein echter Wert",
+  "wizardMainnet": "Mainnet — echter Wert",
+  "headingMainnet": "Mainnet-Bereich",
+  "headingTestnet": "Testnet-Bereich"
  },
  "home": {
   "totalBalance": "Gesamtguthaben",

@@ -825,9 +825,16 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1934 (the person always confirms, spec 103, 2026-10-21): − the switch that
 //   let an agent confirm transfers (its title and hint). An agent's confirm
 //   only asks the person now. 1833 − 2 = 1831 leaves, 103 branches.
-if (PATHS.length !== 1934) fail(`expected 1934 paths (1831 leaf + 103 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1831) fail(`expected 1831 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 103) fail(`expected 103 branch paths, got ${branchSet.size}`);
+// 1935 (mainnet and testnet spaces, spec 105, 2026-10-27): + the agent's
+//   `settings.agent.action.setNetworkSpace`. 1831 + 1 = 1832 leaves, 103
+//   branches.
+// 1952 (the spaces' words, spec 105, 2026-10-27): + the `networkSpace`
+//   branch — the header label, the testnet bar, the switch, the wizard's
+//   question and the network list's headings. 1832 + 16 = 1848 leaves, 103 + 1
+//   = 104 branches.
+if (PATHS.length !== 1952) fail(`expected 1952 paths (1848 leaf + 104 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1848) fail(`expected 1848 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 104) fail(`expected 104 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

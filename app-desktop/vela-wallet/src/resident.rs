@@ -150,6 +150,13 @@ where
     /// comment warns that missing it "crosses the books" between accounts.
     fn boot_event(cx: &App) -> Self::Event;
 
+    /// What the machine is told right after [`Self::boot_event`]: a fact it
+    /// starts out needing besides whose data it is — the activity feed, the
+    /// space's chains (spec 105). None, for most.
+    fn boot_followups(_cx: &App) -> Vec<Self::Event> {
+        Vec::new()
+    }
+
     /// Perform one operation. Never fails outward — see `executor::mod`'s
     /// failure contract, which this inherits wholesale.
     fn perform(operation: &Op<Self>) -> Answer<Out<Self>, Self::Event>;
@@ -309,10 +316,16 @@ where
 
     // Read what the boot event needs BEFORE taking the entity's borrow.
     let event = A::boot_event(cx);
+    let followups = A::boot_followups(cx);
     // Timestamped like every other line (spec 082 G67).
     crate::diag::vlog!("core", "{} booting", A::LABEL);
     let entity = cx.new(|_| ResidentCore::<A>::new());
-    entity.update(cx, |resident, cx| resident.dispatch(event, cx));
+    entity.update(cx, |resident, cx| {
+        resident.dispatch(event, cx);
+        for followup in followups {
+            resident.dispatch(followup, cx);
+        }
+    });
 
     if !cx.has_global::<Residents>() {
         cx.set_global(Residents::default());

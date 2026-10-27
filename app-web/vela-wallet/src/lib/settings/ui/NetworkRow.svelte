@@ -19,9 +19,11 @@
 		deleteLabel?: string;
 		onselect?: (id: string) => void;
 		ondelete?: (id: string) => void;
+		/** Spec 105: a network the person added, to the other space. */
+		onmove?: (id: string) => void;
 	}
 
-	let { row, trailing = 'chevron', deleteLabel, onselect, ondelete }: Props = $props();
+	let { row, trailing = 'chevron', deleteLabel, onselect, ondelete, onmove }: Props = $props();
 </script>
 
 <div class="wrap">
@@ -38,6 +40,12 @@
 			<StatusPill pill={row.badge} />
 		{/if}
 	</button>
+
+	{#if row.move !== undefined && onmove !== undefined}
+		<button type="button" class="move" data-testid="move-network" onclick={() => onmove(row.id)}>
+			{row.move}
+		</button>
+	{/if}
 
 	{#if row.removable && deleteLabel !== undefined}
 		<button type="button" class="icon" aria-label={deleteLabel} onclick={() => ondelete?.(row.id)}>
@@ -108,6 +116,19 @@
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.move {
+		flex-shrink: 0;
+		min-height: var(--size-hitTarget);
+		padding-inline: var(--space-sm);
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-info-base);
+		cursor: pointer;
 	}
 
 	.icon {

@@ -107,6 +107,9 @@ fn one_of_each() -> Vec<Action> {
         },
         Action::SetBalancePrivacy { hidden: true },
         Action::RefreshBalances,
+        Action::SetNetworkSpace {
+            space: vela_core::app::network_space::NetworkSpace::Testnet,
+        },
         Action::SetContactFavorite {
             address: ALICE.to_owned(),
             favorite: true,
@@ -243,6 +246,29 @@ fn sharing_usage_statistics_is_manage_level() {
         preference: Preference::Theme("dark".to_owned()),
     };
     assert_eq!(authorize(Actor::Agent, &theme, &ON), Decision::Allow);
+}
+
+/// The space decides which networks the whole wallet shows (spec 105): an
+/// agent asks, the person allows.
+#[test]
+fn switching_spaces_is_the_persons_to_allow() {
+    use vela_core::app::network_space::NetworkSpace;
+    let switch = Action::SetNetworkSpace {
+        space: NetworkSpace::Testnet,
+    };
+    assert_eq!(switch.risk(), Risk::Manage);
+    assert_eq!(
+        authorize(Actor::Agent, &switch, &ON),
+        Decision::Approve {
+            by: Approver::Wallet
+        }
+    );
+    assert_eq!(authorize(Actor::Person, &switch, &ON), Decision::Allow);
+    let parsed: Action = serde_json::from_value(
+        serde_json::json!({ "type": "set_network_space", "space": "testnet" }),
+    )
+    .expect("an action");
+    assert_eq!(parsed, switch);
 }
 
 /// The active wallet is what an agent reads and drafts from: switching it is

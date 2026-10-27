@@ -78,6 +78,7 @@ private let CALLS: [String: Place] = [
     "activity.focusTick": .step("refresh_balances"),
     "activity.open": .machine(ACCOUNT),
     "activity.privacyChanged": .step("set_balance_privacy"),
+    "activity.spaceChains": .step("set_network_space"),
     "activity.reconciled": .machine(TRACKER),
     "activity.startLiveTicking": .machine("a tick"),
     "activity.stopLiveTicking": .machine("a tick"),
@@ -215,6 +216,11 @@ private let CALLS: [String: Place] = [
     "settings.removeSigningPage": .none(BOUNDARY),
     "settings.renameSigningPage": .none(BOUNDARY),
     "settings.resetWizard": .step("add_network"),
+    "settings.chooseWizardSpace": .step("add_network"),
+    // Spec 105: which space a network belongs to is the person's word on what
+    // has value — an agent that could move a testnet into the mainnet space
+    // could make test coins read as money.
+    "settings.moveNetwork": .none("which space a network belongs to is the person's word on what has value"),
     "settings.savedSigningPageUrls": .machine(READ),
     "settings.search": .step("add_network"),
     "settings.selectChain": .step("add_network"),
@@ -241,6 +247,7 @@ private let CALLS: [String: Place] = [
     "wallet.open": .machine(ACCOUNT),
     "wallet.pullRefresh": .intent("refresh_balances"),
     "wallet.refresh": .intent("refresh_balances"),
+    "wallet.spaceChanged": .step("set_network_space"),
     "wallet.settled": .machine(READ),
     "wallet.switcherClosed": .view("the account switcher shown"),
     "wallet.switcherOpened": .view("the account switcher shown"),
@@ -254,8 +261,8 @@ private let PERSON: Set<String> = [
     "add_network", "clear_caches", "clear_storage_item", "configure_agent", "delete_activity",
     "delete_contact", "delete_group", "erase_device", "refresh_balances", "remove_network",
     "remove_wallet", "reset_service_endpoints", "save_contact", "save_group", "set_balance_privacy",
-    "set_contact_groups", "set_group_members", "set_preference", "sign_out", "submit_transfer",
-    "switch_account",
+    "set_contact_groups", "set_group_members", "set_network_space", "set_preference", "sign_out",
+    "submit_transfer", "switch_account",
 ]
 
 /// The stores, the session and the neighbours a screen can reach, by the

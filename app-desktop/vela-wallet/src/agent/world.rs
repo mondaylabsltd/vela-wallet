@@ -1,5 +1,6 @@
 //! The wallet as the intents' judgements read it: the residents' views, the
-//! preferences this shell keeps itself, and the agent's switch.
+//! preferences this shell keeps itself, the space in front, and the agent's
+//! switch.
 //!
 //! The core's `World` takes "facts" — the views' own field names, only what
 //! the judgements read — so the views go in as they are, through their JSON.
@@ -63,6 +64,12 @@ pub fn views(cx: &mut App, operations: &[Operation], agent_enabled: bool) -> Val
     world.insert("operations".into(), json!(operations));
     world.insert("preferences".into(), preferences());
     world.insert("agent_enabled".into(), Value::Bool(agent_enabled));
+    // The space in front (spec 105): the agent reads only its networks, and
+    // a transfer on the other space's is refused.
+    world.insert(
+        "network_space".into(),
+        json!(crate::network_space::current()),
+    );
     Value::Object(world)
 }
 

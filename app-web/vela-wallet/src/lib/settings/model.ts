@@ -374,6 +374,19 @@ export interface NetworkRowModel {
 	removable?: boolean;
 	/** DST4: the desktop list expands in place instead of pushing a page. */
 	expanded?: boolean;
+	/** Spec 105: a network the person added moves to the other space — the control's words. */
+	move?: string;
+}
+
+/**
+ * Spec 105: which space the network list shows, under its heading, and the
+ * switch to the other one.
+ */
+export interface NetworkSpaceHeadingModel {
+	heading: string;
+	hint: string;
+	switchLabel: string;
+	testnet: boolean;
 }
 
 /** A labelled mono URL field, with an optional trailing status pill. */
@@ -443,6 +456,12 @@ export interface AddNetworkModel {
 	 */
 	secondary?: { label: string; href: string };
 	recheck?: string;
+	/**
+	 * Spec 105: the space the network goes to, the person's choice, shown
+	 * when the network may be added. Preselected to testnet unless the chain
+	 * registry calls it a mainnet.
+	 */
+	space?: SegmentedModel;
 }
 
 export interface ProviderCardModel {
@@ -922,6 +941,8 @@ export interface SettingsHomeModel {
 		title: string;
 		subtitle: string;
 		rows: NetworkRowModel[];
+		/** Spec 105: live only — the space the rows are. */
+		space?: NetworkSpaceHeadingModel;
 		addLabel: string;
 		/** The custom row's delete control (spec 028 Phase 8) — it used to borrow `addLabel`. */
 		removeLabel: string;
@@ -1159,6 +1180,8 @@ export interface SettingsDesktopModel {
 		removeLabel: string;
 		removeSheet: ConfirmSheetModel;
 		rows: NetworkRowModel[];
+		/** Spec 105: live only — the space the rows are. */
+		space?: NetworkSpaceHeadingModel;
 		detail: NetworkDetailModel;
 	};
 	rpcProviders: RpcProvidersModel;

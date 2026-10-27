@@ -13,6 +13,7 @@ import { loadCore } from '$lib/core/client';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
+import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -53,6 +54,15 @@ class Feed {
 				}
 				this.view = view;
 			});
+			// Spec 105: only the space in front's records are drawn; the
+			// network set changes with every switch of space.
+			const space = () =>
+				dispatchActivityFeed({
+					type: 'space_chains_changed',
+					chain_ids: spaceNetworksSync().map((n) => n.chainId)
+				});
+			space();
+			subscribeNetworks(space);
 			this.view = activityFeedView();
 		})();
 		return this.#booted;

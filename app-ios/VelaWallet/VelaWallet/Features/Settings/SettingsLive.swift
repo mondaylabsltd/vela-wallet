@@ -31,10 +31,22 @@ enum SettingsLive {
     static func withNetworks(
         _ view: NetViewWire,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        space: NetworkSpaceKind? = nil
     ) -> SettingsScreenModel {
         var copy = model
-        copy.networks = view.networks.map { row($0, loc: loc) }
+        // Spec 105: with a space, only that space's networks, under its
+        // heading; a network the person added carries the move to the other.
+        let shown = space.map { space in view.networks.filter { $0.isTestnet == (space == .testnet) } }
+            ?? view.networks
+        copy.networks = shown.map { network in
+            var drawn = row(network, loc: loc)
+            if space != nil, network.isCustom {
+                drawn.move = loc.t(network.isTestnet ? "networkSpace.moveToMainnet" : "networkSpace.moveToTestnet")
+            }
+            return drawn
+        }
+        copy.networkSpace = space.map { spaceHeading($0, loc: loc) }
         // One detail per chain, keyed by row id. A single `networkDetail` was
         // enough while the list was a fixture and became a lie the moment it
         // went live: every row opened the first chain's page, so tapping Gnosis
@@ -48,6 +60,14 @@ enum SettingsLive {
             copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
         }
         copy.addNetwork = wizard(view.wizard, loc: loc, fallback: model.addNetwork)
+        if space != nil, copy.addNetwork.primary != nil, view.wizard.canAdd {
+            copy.addNetwork.space = AddNetworkSpaceModel(
+                question: loc.t("networkSpace.wizardQuestion"),
+                testnetLabel: loc.t("networkSpace.wizardTestnet"),
+                mainnetLabel: loc.t("networkSpace.wizardMainnet"),
+                testnet: view.wizard.testnet
+            )
+        }
         // The advanced row counts THIS device's list, custom chains included —
         // it read the drawing's twelve on every phone.
         let count = loc.t(I18nKeys.SettingsUi.networkCount, vars: ["count": String(view.networks.count)])
@@ -1038,6 +1058,17 @@ enum SettingsLive {
         return CalloutModel(tone: .warning, text: loc.t(key))
     }
 
+    /// Spec 105: the network list's heading, and the switch beside it.
+    static func spaceHeading(_ space: NetworkSpaceKind, loc: Loc) -> NetworkSpaceHeadingModel {
+        let testnet = space == .testnet
+        return NetworkSpaceHeadingModel(
+            heading: loc.t(testnet ? "networkSpace.headingTestnet" : "networkSpace.headingMainnet"),
+            hint: loc.t(testnet ? "networkSpace.testnetHint" : "networkSpace.mainnetHint"),
+            switchLabel: loc.t(testnet ? "networkSpace.toMainnet" : "networkSpace.toTestnet"),
+            testnet: testnet
+        )
+    }
+
     /// One row of 设置 → 网络.
     static func row(_ network: NetNetworkRowWire, loc: Loc) -> SettingsNetworkRowModel {
         SettingsNetworkRowModel(
@@ -1048,7 +1079,8 @@ enum SettingsLive {
             meta: chainMeta(loc, network.chainId),
             badge: badge(network.rpcHealth),
             tag: network.isCustom ? loc.t(I18nKeys.SettingsUi.networkCustom) : nil,
-            removable: network.isCustom
+            removable: network.isCustom,
+            testnet: network.isTestnet
         )
     }
 

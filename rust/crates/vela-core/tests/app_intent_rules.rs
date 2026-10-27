@@ -188,7 +188,7 @@ fn world_needs_names_only_what_a_judgement_reads() {
         world_needs(&action(
             json!({ "type": "prepare_transfer", "chain_id": 56, "to": ALICE, "amount": "max" })
         )),
-        ["session", "balance"]
+        ["session", "balance", "networks", "network_space"]
     );
 }
 
@@ -402,6 +402,56 @@ fn an_approval_says_which_network_url_or_record_and_hides_a_key() {
         Some("ankr · ••••")
     );
     assert_eq!(detail(json!({ "type": "clear_caches" })), None);
+}
+
+/// Spec 105: an agent reads the space in front and only its networks; a
+/// testnet's coins have no total; a draft on the other space's chain is
+/// refused, naming the space; switching is already done when it is so.
+#[test]
+fn the_agent_reads_and_drafts_in_the_space_in_front() {
+    let chains = json!({ "networks": [
+        { "chain_id": 1, "display_name": "Ethereum", "is_testnet": false },
+        { "chain_id": 11155111, "display_name": "Sepolia", "is_testnet": true }
+    ] });
+    let session = json!({ "loaded": true, "has_wallet": true, "address": ALICE, "accounts": [] });
+    let balance = json!({ "hidden": false, "display_total_usd": 12.5, "tokens": [] });
+    let mainnet = world(json!({ "session": session, "balance": balance, "networks": chains }));
+    let testnet = world(json!({
+        "session": session, "balance": balance, "networks": chains, "network_space": "testnet"
+    }));
+
+    let state = agent_state(&mainnet, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["network_space"], "mainnet");
+    assert_eq!(
+        state["networks"]["chains"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(state["networks"]["chains"][0]["chain_id"], 1);
+    assert_eq!(state["balances"]["total_usd"], 12.5);
+    let state = agent_state(&testnet, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["network_space"], "testnet");
+    assert_eq!(state["networks"]["chains"][0]["chain_id"], 11_155_111);
+    assert_eq!(state["balances"]["total_usd"], Value::Null, "no real value");
+
+    let send = |chain: u32| {
+        action(json!({ "type": "prepare_transfer", "chain_id": chain, "to": BOB, "amount": "1" }))
+    };
+    assert_eq!(examine(&send(1), &mainnet), Examined::Go);
+    assert_eq!(
+        code(&examine(&send(11_155_111), &mainnet)),
+        Some(ReasonCode::Refused)
+    );
+    assert_eq!(
+        code(&examine(&send(1), &testnet)),
+        Some(ReasonCode::Refused)
+    );
+    assert_eq!(examine(&send(11_155_111), &testnet), Examined::Go);
+
+    let to_testnet = action(json!({ "type": "set_network_space", "space": "testnet" }));
+    assert_eq!(examine(&to_testnet, &mainnet), Examined::Go);
+    assert_eq!(examine(&to_testnet, &testnet), Examined::Already);
+    assert_eq!(world_needs(&to_testnet), ["network_space"]);
+    assert_eq!(approval_detail(&to_testnet).as_deref(), Some("testnet"));
 }
 
 #[test]

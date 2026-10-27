@@ -42,6 +42,12 @@ data class NetCustomNetwork(
     val native_symbol: String,
     /** ISO 8601 — stamped by the shell on the triggering event. */
     val added_at_iso: String,
+    /**
+     * The person's word on it (spec 105): a testnet, whose coins have no real
+     * value. `null` on a record written before it was asked, which the core
+     * reads as a testnet until the person moves it. Stored as `isTestnet`.
+     */
+    val is_testnet: Boolean? = null,
 )
 
 /** A per-network endpoint override — 1:1 with `vela.networkConfig`. */
@@ -178,6 +184,8 @@ data class NetNetworkRow(
     val display_name: String,
     val native_symbol: String,
     val is_custom: Boolean = false,
+    /** Its space (spec 105): a testnet's coins have no real value. */
+    val is_testnet: Boolean = false,
     val rpc_url: String = "",
     val explorer_url: String = "",
     val bundler_url: String = "",
@@ -336,6 +344,11 @@ data class NetWizardView(
      */
     val rpc_field_label_key: String? = null,
     val can_add: Boolean = false,
+    /**
+     * The space the network goes to (spec 105): a testnet, unless the person
+     * chose mainnet ([NetEvent.WizardTestnetChosen]).
+     */
+    val testnet: Boolean = false,
 )
 
 @Serializable
@@ -471,6 +484,16 @@ sealed class NetEvent {
     @Serializable
     @SerialName("wizard_reset")
     data object WizardReset : NetEvent()
+
+    /** Spec 105: the wizard's space choice — a testnet (no real value), or a mainnet. */
+    @Serializable
+    @SerialName("wizard_testnet_chosen")
+    data class WizardTestnetChosen(val testnet: Boolean) : NetEvent()
+
+    /** Spec 105: "Move to the other space" on a network the person added. */
+    @Serializable
+    @SerialName("custom_space_changed")
+    data class CustomSpaceChanged(val id: String, val testnet: Boolean) : NetEvent()
 
     @Serializable
     @SerialName("add_by_chain_id_requested")

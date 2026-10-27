@@ -62,6 +62,14 @@ import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetworkSpacePreference
+import app.getvela.wallet.feature.settings.core.NetworkSpaces
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.stateIn
 import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.feature.settings.core.DeviceStorage
@@ -140,6 +148,34 @@ class AppContainer(private val app: Application) {
         scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
         locale = { app.resources.configuration.locales[0] ?: java.util.Locale.getDefault() },
     ).also { it.load() }
+
+    /**
+     * Spec 105: the device's space — mainnet or testnet, one switch for every
+     * wallet. Read at launch, so the home's label and the testnet bar are right
+     * from the first frame.
+     */
+    val networkSpace = NetworkSpacePreference(
+        store = VelaStore(app),
+        scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+    ).also { it.load() }
+
+    /**
+     * Spec 105: the networks of the space in front — the network machine's
+     * view with only that space's rows (the core's `network_space_chain_ids`).
+     * Every list a person sees reads this: the balances and the total, assets,
+     * receive, send's chains and tokens, adding a token, the chains a dApp and
+     * the signing sheet may use. What must know every chain — the pool's
+     * endpoints, a chain's name or coin, Settings' own pages — reads
+     * [SettingsController.networks].
+     */
+    val spaceNetworks: StateFlow<NetView> by lazy {
+        combine(settings.networks, networkSpace.space) { view, space -> NetworkSpaces.view(space, view) }
+            .stateIn(
+                CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+                SharingStarted.Eagerly,
+                NetworkSpaces.view(networkSpace.space.value, settings.networks.value),
+            )
+    }
 
     val accountStore = AccountStore(app)
 
@@ -312,10 +348,10 @@ class AppContainer(private val app: Application) {
      * It reads its endpoints from the settings machine's own view, so there is
      * exactly one reader of what networks this person has.
      */
-    val wallet: WalletController by lazy {
+    private val walletOnce = lazy {
         WalletController(
             context = app,
-            networks = settings.networks,
+            networks = spaceNetworks,
             pool = pool,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
             // A payment from one of this person's OWN wallets should say so by
@@ -337,8 +373,10 @@ class AppContainer(private val app: Application) {
                 )
             },
             backgroundPoll = { TrackerWorker.enqueue(app) },
+            testnet = { networkSpace.space.value.testnet },
         )
     }
+    val wallet: WalletController by walletOnce
 
     /** The address book, on the same terms as [settings]. */
     /**
@@ -490,7 +528,8 @@ class AppContainer(private val app: Application) {
             feed = wallet.feedExecutor,
             accountStore = accountStore,
             balances = { wallet.balances.value },
-            networks = { settings.networks.value },
+            // Spec 105: send offers the space in front's chains only.
+            networks = { spaceNetworks.value },
             signer = {
                 ParallelSpaceHook.signer()
                     ?: passkeySigner
@@ -578,6 +617,7 @@ class AppContainer(private val app: Application) {
         override val settings get() = this@AppContainer.settings
         override val send get() = this@AppContainer.send
         override val preferences get() = this@AppContainer.preferences
+        override val networkSpace get() = this@AppContainer.networkSpace
         override val theme get() = themeRepository.current
         override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
         override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
@@ -612,6 +652,8 @@ class AppContainer(private val app: Application) {
         // Spec 091: the debug-mode key went with the rest — About hides the
         // switch again, and the browser follows.
         preferences.reloadDebugMode()
+        // Spec 105: and the space with it — the device starts over in mainnet.
+        networkSpace.reload()
         if (left.isEmpty()) {
             session.signOut()
             session.signOutConfirmed()
@@ -692,9 +734,10 @@ class AppContainer(private val app: Application) {
                     if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
                 }
             }
-            // The chains a page may switch to are the wallet's networks, live.
+            // The chains a page may switch to are the space in front's
+            // networks, live (spec 105): a switch of space is a change of them.
             follow.launch {
-                settings.networks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and
@@ -848,7 +891,8 @@ class AppContainer(private val app: Application) {
                 feed = wallet.feedExecutor,
                 accounts = accountPort,
                 signer = { ParallelSpaceHook.signer() ?: passkeySigner ?: error("no signer bound") },
-                knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
+                // Spec 105: the space in front's chains, as the page's are.
+                knownChains = { spaceNetworks.value.networks.map { it.chain_id.toInt() } },
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
@@ -1008,6 +1052,13 @@ class AppContainer(private val app: Application) {
         // Spec 102: the saved signing pages — read (and the 071 page imported)
         // before any account's venue choices are drawn.
         settings.refreshSigningPages()
+        // Spec 105: a switch of space — the person's or an approved agent's —
+        // reads the balances again, forced, so the total is the new space's.
+        // The lists follow [spaceNetworks] by themselves. Nothing to read for a
+        // wallet that has not been opened.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            networkSpace.space.drop(1).collect { if (walletOnce.isInitialized()) wallet.spaceChanged() }
+        }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->

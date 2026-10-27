@@ -132,12 +132,19 @@ fn last_settled(address: &str) -> Vec<BalanceToken> {
 /// two screens; the picker used to run a second fan-out of its own, which
 /// kept it blank for as long as the slowest chain took and could disagree
 /// with the column beside it.
+///
+/// Only the space in front's holdings (spec 105): a round read before a
+/// switch stands in for none of the other space's.
 pub fn settled(address: &str) -> Option<Settled> {
-    LAST_SETTLED
+    let mut round = LAST_SETTLED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .as_ref()
-        .and_then(|snapshots| snapshots.get(&address.to_lowercase()).cloned())
+        .and_then(|snapshots| snapshots.get(&address.to_lowercase()).cloned())?;
+    round
+        .tokens
+        .retain(|token| crate::network_space::in_space(token.chain_id));
+    Some(round)
 }
 
 /// Settle one round against the last one for this address, and remember it.
@@ -314,18 +321,25 @@ impl Machine for BalanceDashboard {
                 }))
             }
 
+            // The saved totals are the mainnet space's (spec 105): a
+            // testnet's coins have no value to remember, and the mainnet's
+            // never stand in for them.
             BalanceOperation::ReadBalanceCache { address } => {
                 Answer::Now(BalanceShellResult::CachedTotalLoaded {
                     address: address.clone(),
-                    usd: cached_usd(address, crate::executor::now_ms()),
+                    usd: (!crate::network_space::testnet())
+                        .then(|| cached_usd(address, crate::executor::now_ms()))
+                        .flatten(),
                 })
             }
 
             BalanceOperation::ReadBalanceCacheMany { addresses } => {
                 let now = crate::executor::now_ms();
+                let testnet = crate::network_space::testnet();
                 Answer::Now(BalanceShellResult::CachedBalancesLoaded {
                     balances: addresses
                         .iter()
+                        .filter(|_| !testnet)
                         .filter_map(|address| {
                             cached_usd(address, now).map(|usd| BalanceCacheEntry {
                                 address: address.clone(),
@@ -337,7 +351,9 @@ impl Machine for BalanceDashboard {
             }
 
             BalanceOperation::WriteBalanceCache { address, usd } => {
-                write_cached_usd(address, *usd, crate::executor::now_ms());
+                if !crate::network_space::testnet() {
+                    write_cached_usd(address, *usd, crate::executor::now_ms());
+                }
                 Answer::Now(BalanceShellResult::BalanceCacheWritten)
             }
 

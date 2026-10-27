@@ -3018,6 +3018,33 @@ pub fn still_qr_sizes(width: u32, height: u32) -> Vec<QrScanSize> {
         .collect()
 }
 
+/// The space stored under `vela.networkSpace`, read (spec 105): `mainnet`
+/// or `testnet`; anything missing or unreadable is `mainnet`.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_read(stored: Option<String>) -> String {
+    vela_core::app::network_space::NetworkSpace::parse(stored.as_deref())
+        .as_str()
+        .to_owned()
+}
+
+/// The chain ids of `space`'s networks (spec 105), from the network
+/// machine's rows as JSON: what the balances read, and send, receive and the
+/// dApps offer. A JSON array.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_chain_ids(space: String, rows_json: String) -> String {
+    vela_core::app::network_space::space_chain_ids_json(&space, &rows_json)
+}
+
+/// Whether `chain_id` is a testnet (spec 105): the built-in table's word,
+/// else the person's in `custom_json` (the stored custom networks), else yes.
+#[uniffi::export]
+#[must_use]
+pub fn network_chain_is_testnet(chain_id: u32, custom_json: String) -> bool {
+    vela_core::app::network_space::chain_is_testnet_json(chain_id, &custom_json)
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.

@@ -479,6 +479,7 @@
 				{:else if page === 'networks'}
 					<NetworksPanel
 						rows={model.networks.rows}
+						space={model.networks.space}
 						addLabel={model.networks.addLabel}
 						deleteLabel={model.networks.removeLabel}
 						onselect={(id) => {
@@ -490,6 +491,8 @@
 							onnetevent?.({ kind: 'open-add' });
 							page = 'add-network';
 						}}
+						onmove={(id) => onnetevent?.({ kind: 'move-network', id })}
+						onswitch={() => onnetevent?.({ kind: 'switch-space' })}
 					/>
 				{:else if page === 'network-detail'}
 					<NetworkDetailPanel
@@ -505,6 +508,7 @@
 						oncustomrpc={(value) => onnetevent?.({ kind: 'custom-rpc', value })}
 						onprimary={() => onnetevent?.({ kind: 'confirm-add' })}
 						onrecheck={() => onnetevent?.({ kind: 'recheck' })}
+						onspace={(testnet) => onnetevent?.({ kind: 'add-space', testnet })}
 					/>
 				{:else if page === 'rpc-providers'}
 					<RpcProvidersPanel

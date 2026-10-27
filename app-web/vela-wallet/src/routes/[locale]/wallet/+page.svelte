@@ -66,6 +66,7 @@
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
@@ -115,7 +116,11 @@
 		type ManageTokensSession
 	} from '$lib/wallet/core/manage-tokens-session';
 	import type { MtokView } from '$lib/core/generated/MtokView';
-	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
+	import {
+		spaceNetworksSync,
+		getCustomChainIdsSync,
+		networkId
+	} from '$lib/services/networks';
 	import {
 		formChainOf,
 		makeRecipientId,
@@ -532,7 +537,7 @@
 	 * throw and the field do nothing at all.
 	 */
 	function networkSnapshot(): { chain_id: number; name: string }[] {
-		return getAllNetworksSync()
+		return spaceNetworksSync()
 			.filter((n) => Number.isInteger(n.chainId) && n.chainId >= 0 && n.chainId <= 4_294_967_295)
 			.map((n) => ({ chain_id: n.chainId, name: n.displayName }));
 	}
@@ -1686,7 +1691,9 @@
 			selectedAssetId === null
 				? undefined
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
-		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' }
+		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' },
+		// Spec 105: the testnet space has no total and no worth on a row.
+		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined
 	});
 	const liveHome = $derived(
 		identity === null

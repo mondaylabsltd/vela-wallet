@@ -314,6 +314,17 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(["type": "wizard_reset"]))
     }
 
+    /// Spec 105: the wizard's network goes to this space.
+    func chooseWizardSpace(testnet: Bool) {
+        core.dispatch(CoreJSON.string(["type": "wizard_testnet_chosen", "testnet": testnet]))
+    }
+
+    /// Spec 105: a network the person added, to the other space. The
+    /// person's own word on what has value — no agent asks it.
+    func moveNetwork(id: String, testnet: Bool) {
+        core.dispatch(CoreJSON.string(["type": "custom_space_changed", "id": id, "testnet": testnet]))
+    }
+
     // MARK: - A page asks to add a network (spec 100)
 
     /// Set by the app: a page's add-network request is over — carry the ending

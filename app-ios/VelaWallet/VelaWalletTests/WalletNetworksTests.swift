@@ -28,7 +28,8 @@ struct WalletNetworksTests {
             id: custom ? "custom-\(chainId)" : name.lowercased(), chainId: chainId,
             displayName: name, nativeSymbol: coin, isCustom: custom,
             rpcUrl: "https://rpc.example/\(chainId)", explorerUrl: "", bundlerUrl: "",
-            rpcHealth: nil, explorerHealth: nil, rpcChainMismatch: nil, rpcSaveDeferred: false
+            rpcHealth: nil, explorerHealth: nil, rpcChainMismatch: nil, rpcSaveDeferred: false,
+            isTestnet: ChainCatalog.meta(chainId)?.testnet ?? false
         )
     }
 

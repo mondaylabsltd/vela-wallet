@@ -125,6 +125,8 @@ pub enum Fiat {
     /// never the placeholder's dollars, which would jump to the person's
     /// own money a moment later.
     Pending,
+    /// No worth at all: a holding in the testnet space (spec 105).
+    None,
 }
 
 #[derive(Clone)]
@@ -158,6 +160,9 @@ pub enum BalanceState {
     ZeroLive,
     Loading,
     Hidden,
+    /// The testnet space (spec 105): nothing there has a fiat worth, and its
+    /// words (`integer`) stand in the figure's place.
+    NoValue,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -398,8 +398,9 @@ pub fn resolve(address: &str) -> Option<ContactIdentity> {
         return Some(identity);
     }
 
-    // 4. Name services, in priority order — on the wallet's own networks.
-    let networks = crate::executor::network_admin::wallet_chain_ids();
+    // 4. Name services, in priority order — on the wallet's own networks,
+    // both spaces' (spec 105): a name is not a holding.
+    let networks = crate::executor::network_admin::all_wallet_chain_ids();
     let identity = name_service_identity(address, &networks, &pool_call)?;
     remember(address, &identity, now_ms);
     Some(identity)
@@ -631,7 +632,7 @@ mod tests {
     }
 
     fn named_by(chains: &Chains) -> Option<(String, String)> {
-        let networks = crate::executor::network_admin::wallet_chain_ids();
+        let networks = crate::executor::network_admin::all_wallet_chain_ids();
         name_service_identity(SOMEBODY, &networks, &|chain_id, to, data| {
             chains.call(chain_id, to, data)
         })
@@ -656,7 +657,7 @@ mod tests {
         storage::tests::with_temp_state("identity-wallet-networks", || {
             // The premise: `.g` is on 1625, the wallet has no such network,
             // and every other service is on one it does have.
-            let networks = crate::executor::network_admin::wallet_chain_ids();
+            let networks = crate::executor::network_admin::all_wallet_chain_ids();
             assert!(!networks.contains(&GRAVITY), "1625 is not built in");
             let elsewhere: Vec<u32> = NAME_SERVICES
                 .iter()
@@ -704,7 +705,7 @@ mod tests {
                 }]),
             );
             assert!(added.is_ok());
-            assert!(crate::executor::network_admin::wallet_chain_ids().contains(&GRAVITY));
+            assert!(crate::executor::network_admin::all_wallet_chain_ids().contains(&GRAVITY));
             let with_gravity = Chains::named(&[(GRAVITY, "somebody.g"), (1, "somebody.eth")]);
             assert_eq!(
                 named_by(&with_gravity),

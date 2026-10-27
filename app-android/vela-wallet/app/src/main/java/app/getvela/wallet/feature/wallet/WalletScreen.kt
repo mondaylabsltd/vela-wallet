@@ -93,16 +93,18 @@ fun WalletScreen(
      * is drawn inert and there is no pull.
      */
     onRefresh: (() -> Unit)? = null,
+    /** Spec 105: the header's space label — the switch prompt. */
+    onSpace: () -> Unit = {},
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
     }
 
     model.sheet?.let { sheet ->
@@ -132,6 +134,7 @@ private fun WalletHomeContent(
     onToggleVisibility: () -> Unit = {},
     onStatusClick: () -> Unit = {},
     onRefresh: (() -> Unit)? = null,
+    onSpace: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -197,6 +200,7 @@ private fun WalletHomeContent(
                         onIdenticon = { viewingIdenticon = true },
                         onSwitcher = onSwitcher,
                         identiconLabel = strings.t(I18nKeys.Wallet.IDENTICON_A11Y_OPEN),
+                        onSpace = onSpace,
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                     BalanceDisplay(

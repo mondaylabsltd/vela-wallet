@@ -159,6 +159,7 @@ function wallet() {
 			feeTier: null,
 			preferences: {} as never,
 			agent: { enabled: true },
+			networkSpace: 'mainnet',
 			operations: transfers.list(),
 			balance: null,
 			feed: null,

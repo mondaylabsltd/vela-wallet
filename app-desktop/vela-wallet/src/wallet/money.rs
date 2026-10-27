@@ -464,7 +464,8 @@ impl SendHost {
         // coming back — reaches an open picker too.
         let dashboard = resident::resident::<BalanceDashboard>(cx);
         cx.observe(&dashboard, |host, dashboard, cx| {
-            let view = dashboard.read(cx).view();
+            // The space in front's holdings only (spec 105).
+            let view = crate::network_space::in_space_view(dashboard.read(cx).view());
             host.on_holdings(&view, cx);
         })
         .detach();
@@ -554,7 +555,7 @@ impl SendHost {
         // Back on the picker from the form: a round that settled meanwhile
         // was held back (`on_holdings`), and is due now.
         if self.view.stage == SendStage::SelectToken && self.pending_tokens.is_none() {
-            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+            let view = crate::network_space::balance_view(cx);
             self.on_holdings(&view, cx);
         }
         cx.notify();
@@ -579,7 +580,7 @@ impl SendHost {
     /// `false` when the dashboard is reading another account: the executor's
     /// own fetch answers then.
     fn answer_tokens(&mut self, id: u64, cx: &mut Context<Self>) -> bool {
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         if !self.same_account(&view) {
             return false;
         }
@@ -686,7 +687,7 @@ impl SendHost {
             // Never settled: the first round is already out.
             return;
         };
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         if self.same_account(&view) && crate::executor::now_ms() - round.at_ms > HOLDINGS_FRESH_MS {
             balance_dashboard::dispatch(
                 BalanceEvent::RefreshRequested {

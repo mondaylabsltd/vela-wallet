@@ -741,6 +741,7 @@ mod tests {
             explorer_health: None,
             rpc_chain_mismatch: None,
             rpc_save_deferred: false,
+            is_testnet: false,
         }
     }
 
@@ -1244,6 +1245,7 @@ pub fn network_rows(view: &NetView) -> Vec<NetworkRowModel> {
                 _ => None,
             },
             custom: row.is_custom,
+            testnet: row.is_testnet,
         })
         .collect()
 }
@@ -1476,6 +1478,7 @@ mod wizard_tests {
                 expected_chain_id: expected,
             }),
             rpc_save_deferred: deferred,
+            is_testnet: false,
         }
     }
 

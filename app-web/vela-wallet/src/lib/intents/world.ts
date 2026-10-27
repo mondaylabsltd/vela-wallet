@@ -34,6 +34,8 @@ export type World = {
 	feed: FeedView | null;
 	/** The network ledger, once it has read its stores. */
 	networks: NetView | null;
+	/** The space in front (spec 105). */
+	networkSpace: 'mainnet' | 'testnet';
 };
 
 /** The world as the core's judgements read it (`intent_rules::World`): its spellings. */
@@ -56,7 +58,8 @@ function coreWorld(world: World): Record<string, unknown> {
 			time_format: world.preferences.timeFormat,
 			analytics: world.preferences.analytics
 		},
-		agent_enabled: world.agent.enabled
+		agent_enabled: world.agent.enabled,
+		network_space: world.networkSpace
 	};
 }
 

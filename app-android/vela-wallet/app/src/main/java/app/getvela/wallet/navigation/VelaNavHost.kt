@@ -62,6 +62,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -80,6 +81,10 @@ import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -459,7 +464,23 @@ fun VelaNavHost(
         }
     }
 
-    Box {
+    // Spec 105: the testnet space's bar over every route, in the flow of the
+    // layout — it takes the status bar's inset, and the routes under it lay
+    // out as if the bar were the top of the screen (their `statusBarsPadding`
+    // sees the inset consumed). The mainnet space draws nothing here.
+    val space by application.container.networkSpace.space.collectAsStateWithLifecycle()
+    val spaceSwitcherOpen by application.container.networkSpace.switcherOpen.collectAsStateWithLifecycle()
+    Column {
+    if (space.testnet) {
+        app.getvela.wallet.feature.wallet.components.NetworkSpaceBar(
+            onClick = { application.container.networkSpace.switcherOpen.value = true },
+        )
+    }
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .then(if (space.testnet) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
+    ) {
     // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
     // address opens it (see IdenticonImage.tappable), so twelve screens do not
     // each carry a sheet of their own.
@@ -608,7 +629,10 @@ fun VelaNavHost(
                 // The display currency the person chose, and the rate that makes it
                 // showable. Without a rate the core leaves the figure in dollars.
                 val currency by application.container.settings.currency.collectAsStateWithLifecycle()
-                val networks by application.container.settings.networks.collectAsStateWithLifecycle()
+                // Spec 105: the space in front's networks — receive, the chain
+                // filter and the assets' names are that space's alone.
+                val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
+                val noValue = space.testnet
                 val chainNames = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.display_name }
                 }
@@ -629,6 +653,9 @@ fun VelaNavHost(
                     val settings = application.container.settings
                     settings.startNetworks()
                     settings.networks.first { it.loaded }
+                    // Spec 105: and the space read, so the first round reads
+                    // the right networks and the right saved total.
+                    application.container.networkSpace.ready()
                     // The hero is a money figure, and which currency it is in is
                     // this machine's answer. Refreshed here rather than only on the
                     // settings screen, because somebody who never opens settings
@@ -850,7 +877,8 @@ fun VelaNavHost(
                         sheet = WalletLive.accountSwitcher(
                             session.accounts.map { it.name to it.address },
                             session.activeIndex,
-                            balances.switcher,
+                            // Spec 105: no account is worth anything in the testnet space.
+                            if (space.testnet) balances.switcher.copy(balances = emptyList()) else balances.switcher,
                             currency,
                             strings,
                         ),
@@ -1539,6 +1567,7 @@ fun VelaNavHost(
                         currency,
                         flows.selected,
                         manageTokens,
+                        noValue,
                         // Issue #266: every input the builder reads is a key. Without the
                         // filter, picking a network changed nothing until some OTHER key
                         // happened to move — Polygon "worked" because its feed differed,
@@ -1565,6 +1594,7 @@ fun VelaNavHost(
                                 manageTokens = manageTokens,
                                 chainFilter = chainFilter,
                                 explorers = explorers,
+                                noValue = noValue,
                             )
                         }
                     }
@@ -1697,7 +1727,8 @@ fun VelaNavHost(
                         // Spec 099: a tab back from a suspension, and the status lines put away.
                         val reloadedTab by browser.reloadedTab.collectAsStateWithLifecycle()
                         val statusSeen by browser.statusSeen.collectAsStateWithLifecycle()
-                        val networks by application.container.settings.networks.collectAsStateWithLifecycle()
+                        // Spec 105: the space in front's networks — the site's chain picker offers no other.
+                        val networks by application.container.spaceNetworks.collectAsStateWithLifecycle()
                         val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
                         val siteChain = tabView?.chain_id ?: app.getvela.wallet.feature.browser.core.DbrTabView("").chain_id
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
@@ -1935,10 +1966,22 @@ fun VelaNavHost(
                         }
                         val homeNow = remember(balances, ageTick) { System.currentTimeMillis() }
                         WalletScreen(
-                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter).let { home ->
+                            model = WalletLive.home(
+                                model, balances, feed, currency, strings, chainNames, now = homeNow, chainFilter = chainFilter,
+                                noValue = strings.t(I18nKeys.NetworkSpace.NO_VALUE).takeIf { noValue },
+                            ).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
+                            }.let { home ->
+                                // Spec 105: the space in front, beside the account name.
+                                home.copy(
+                                    header = home.header.copy(
+                                        space = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET else I18nKeys.NetworkSpace.MAINNET),
+                                        testnet = space.testnet,
+                                    ),
+                                )
                             },
+                            onSpace = { application.container.networkSpace.switcherOpen.value = true },
                             onSelectTab = select,
                             // The id says WHICH row was tapped. Without it every row
                             // opened the same detail, so this person's own POL showed
@@ -2472,10 +2515,13 @@ fun VelaNavHost(
                 // fields, never an address, a balance or an endpoint URL.
                 val feedbackFacts = reportFacts(i18nState.language, SettingsLive.unreachableNetworks(poolView.failed_chains, chainNamesNow, strings))
                 val liveModel = run {
+                    // Spec 105: the network list is the space in front's, under its
+                    // heading; the add wizard asks which space a network goes to.
                     var m = SettingsLive.withWizard(
-                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
+                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings, space = space),
                         networks,
                         strings,
+                        spaceChoice = true,
                     )
                     m = SettingsLive.withPreferences(
                         m, prefs, i18nState.language, strings,
@@ -2503,7 +2549,9 @@ fun VelaNavHost(
                     m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
                     m = SettingsLive.withFeedbackNotice(m, feedbackState.notice)
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                    m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
+                    m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex,
+                        // Spec 105: no account is worth anything in the testnet space.
+                        if (space.testnet) balanceView.switcher.copy(balances = emptyList()) else balanceView.switcher, currency, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
@@ -2678,6 +2726,17 @@ fun VelaNavHost(
                         // is a read rather than a second identity to keep in sync.
                         onSearchNetwork = { query -> settings.searchNetworks(query) },
                         onConfirmAddNetwork = { addCheckedNetwork(agent, settings) },
+                        // Spec 105: the list's switch opens the one switch prompt.
+                        onSwitchSpace = { application.container.networkSpace.switcherOpen.value = true },
+                        // A network the person added, to the space it is not in now.
+                        onMoveNetwork = { id ->
+                            settings.networks.value.networks.firstOrNull { it.id == id && it.is_custom }
+                                ?.let { row -> settings.moveNetwork(row.id, testnet = !row.is_testnet) }
+                        },
+                        onAddNetworkSpace = { testnet ->
+                            settingsHaptic(VelaHaptic.Select)
+                            settings.chooseWizardSpace(testnet)
+                        },
                         onPickNetwork = { chainId ->
                             settingsHaptic(VelaHaptic.Select)
                             chainId.toLongOrNull()?.let { settings.selectChain(it) }
@@ -2947,9 +3006,19 @@ fun VelaNavHost(
     // asked here in the wallet.
     AgentCapsule(agent)
     AgentApprovalDialog(agent)
+    // Spec 105: the switch prompt — the home's label, the testnet bar and
+    // Settings → Networks open it; the answer is the person's own
+    // `set_network_space`, the road an agent's request takes.
+    if (spaceSwitcherOpen) {
+        app.getvela.wallet.feature.wallet.components.NetworkSpaceSwitchSheet(to = space.other) { switching ->
+            application.container.networkSpace.switcherOpen.value = false
+            if (switching) agent.person(intent("set_network_space", "space" to space.other.wire))
+        }
+    }
     // Spec 043: the parallel space's badge, over every route while active;
     // nothing in release, nothing outside the space.
     ParallelSpaceHook.Badge()
+    }
     }
 }
 
@@ -3148,6 +3217,8 @@ private fun liveFlow(
     manageTokens: MtokView = MtokView(),
     chainFilter: Int? = null,
     explorers: Map<Int, String> = emptyMap(),
+    /** Spec 105: the testnet space is in front — no holding has a worth to show. */
+    noValue: Boolean = false,
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -3158,7 +3229,7 @@ private fun liveFlow(
         is FlowBase.History ->
             FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language, noValue = noValue))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {
@@ -3181,6 +3252,7 @@ private fun liveFlow(
             currency = currency,
             strings = strings,
             explorers = explorers,
+            noValue = noValue,
         )?.let(FlowSheet::TokenDetail)
         is FlowSheet.AddToken -> FlowSheet.AddToken(FlowLive.addToken(sheet.model, manageTokens, strings))
         else -> drawn.sheet

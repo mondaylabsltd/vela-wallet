@@ -94,20 +94,15 @@ final class ManageTokensStore {
 
     /// The twelve built-ins plus the person's own networks, in registry order —
     /// `getAllNetworksSync()`'s answer, which is shell domain.
+    /// The space in front's alone (spec 105).
     private func networks() -> [[String: Any]] {
-        var rows = ChainCatalog.chains.map { chain in
-            ["chain_id": chain.chainId, "name": chain.displayName] as [String: Any]
+        let customs = store.readList(VelaStore.Key.customNetworks)
+        return NetworkSpace.chainIds(store: store).map { chainId in
+            let name = ChainCatalog.meta(chainId)?.displayName
+                ?? customs.first { ($0["chainId"] as? NSNumber)?.intValue == chainId }?["displayName"]
+                as? String
+                ?? "\(chainId)"
+            return ["chain_id": chainId, "name": name] as [String: Any]
         }
-        var seen = Set(ChainCatalog.chains.map(\.chainId))
-        for network in store.readList(VelaStore.Key.customNetworks) {
-            guard let chainId = (network["chainId"] as? NSNumber)?.intValue,
-                  seen.insert(chainId).inserted
-            else { continue }
-            rows.append([
-                "chain_id": chainId,
-                "name": network["displayName"] as? String ?? "\(chainId)",
-            ])
-        }
-        return rows
     }
 }

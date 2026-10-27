@@ -13,6 +13,7 @@
 	 */
 	import type { IntentAction } from '$lib/core/generated/IntentAction';
 	import { intentApprovalDetail } from '$lib/core/client';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -51,6 +52,11 @@
 				return action.item;
 			case 'set_preference':
 				return `${action.preference.kind}: ${String(action.preference.value)}`;
+			case 'set_network_space': {
+				const words = networkSpace.words;
+				if (!words) return action.space;
+				return action.space === 'testnet' ? words.testnet : words.mainnet;
+			}
 			case 'set_balance_privacy':
 				return action.hidden ? messages.hideBalance : messages.showBalance;
 			default:

@@ -27,6 +27,9 @@ pub struct NetworkRowModel {
     /// only needs to know whether a number exists.
     pub latency_ms: Option<u32>,
     pub custom: bool,
+    /// Its space (spec 105): the core's `is_testnet`. What "Move to the
+    /// other space" moves a network the person added away from.
+    pub testnet: bool,
 }
 
 /// The brand tint for a chain, or `None` for one nothing has drawn.

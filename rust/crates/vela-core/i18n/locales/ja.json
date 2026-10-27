@@ -158,6 +158,7 @@
         "deleteActivity": "履歴を1件削除",
         "setBalancePrivacy": "残高を隠す/表示",
         "refreshBalances": "残高を更新",
+        "setNetworkSpace": "ネットワークスペースを切り替える",
         "setContactFavorite": "お気に入りを変更",
         "addNetwork": "ネットワークを追加",
         "setNetworkEndpoint": "ネットワークのRPC・エクスプローラーを変更",
@@ -258,5 +259,23 @@
     "activity": "アクティビティ",
     "delete": "削除",
     "connected": "接続"
+  },
+  "networkSpace": {
+    "mainnet": "メインネット",
+    "testnet": "テストネット",
+    "bar": "テストネットスペース · ここの資産に実際の価値はありません",
+    "title": "ネットワークスペース",
+    "mainnetHint": "資産に実際の価値があるネットワーク。",
+    "testnetHint": "テストネットと開発用ネットワーク。ここの資産に実際の価値はありません。",
+    "toTestnet": "テストネットスペースに切り替える",
+    "toMainnet": "メインネットスペースに切り替える",
+    "noValue": "テスト資産 · 実際の価値なし",
+    "moveToMainnet": "メインネットスペースへ移動",
+    "moveToTestnet": "テストネットスペースへ移動",
+    "wizardQuestion": "このネットワークはどちらのスペースに属しますか？",
+    "wizardTestnet": "テストネット — 実際の価値なし",
+    "wizardMainnet": "メインネット — 実際の価値あり",
+    "headingMainnet": "メインネットスペース",
+    "headingTestnet": "テストネットスペース"
   }
 }

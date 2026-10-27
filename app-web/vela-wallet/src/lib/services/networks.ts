@@ -9,6 +9,7 @@
  * did not change.
  */
 
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { CHAINS, chainIdToApiNetwork, chainMeta } from './chains';
 import { loadCustomNetworks, type CustomNetworkRecord } from './records';
 
@@ -29,6 +30,8 @@ export interface Network {
 	rpcURL: string;
 	explorerURL: string;
 	bundlerURL: string;
+	/** Its space (spec 105): a testnet's coins have no real value. */
+	isTestnet: boolean;
 }
 
 /** Base URL of Vela's per-chain ERC-4337 bundler. */
@@ -45,19 +48,32 @@ export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
 	isL2: c.isL2,
 	rpcURL: c.rpcURL,
 	explorerURL: c.explorerURL,
-	bundlerURL: `${BUNDLER_BASE}/${c.chainId}`
+	bundlerURL: `${BUNDLER_BASE}/${c.chainId}`,
+	isTestnet: c.testnet === true
 }));
+
+const BUILTIN_IDS = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetworkRecord[] = [];
 let _allNetworksSnapshot: Network[] = DEFAULT_NETWORKS;
 
+let _spaceSnapshot: Network[] = [];
+
 function rebuildNetworkSnapshot(): void {
+	// A network the person added that is now built in (Arc Testnet, say) is
+	// the built-in one: listed, and read, once.
+	const custom = _customNetworkCache.filter((n) => !BUILTIN_IDS.has(n.chainId));
 	_allNetworksSnapshot =
-		_customNetworkCache.length === 0
-			? DEFAULT_NETWORKS
-			: [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
+		custom.length === 0 ? DEFAULT_NETWORKS : [...DEFAULT_NETWORKS, ...custom.map(customToNetwork)];
+	rebuildSpaceSnapshot();
 }
+
+function rebuildSpaceSnapshot(): void {
+	const testnet = networkSpace.testnet;
+	_spaceSnapshot = _allNetworksSnapshot.filter((n) => n.isTestnet === testnet);
+}
+rebuildSpaceSnapshot();
 
 const _networkListeners = new Set<() => void>();
 
@@ -107,14 +123,39 @@ export function customToNetwork(cn: CustomNetworkRecord): Network {
 		isL2: cn.isL2,
 		rpcURL: cn.rpcURL,
 		explorerURL: cn.explorerURL,
-		bundlerURL: cn.bundlerURL
+		bundlerURL: cn.bundlerURL,
+		// Nobody vouched for it as a mainnet: a testnet (spec 105).
+		isTestnet: cn.isTestnet ?? true
 	};
 }
 
-/** Stable snapshot: default + custom. Populate via refreshCustomNetworks(). */
+/**
+ * Stable snapshot: default + custom, BOTH spaces. For what is not a person's
+ * list — the RPC pool, a lookup by id. What a person sees reads
+ * {@link spaceNetworksSync}.
+ */
 export function getAllNetworksSync(): Network[] {
 	return _allNetworksSnapshot;
 }
+
+/**
+ * The networks of the space in front (spec 105) — what the balances read and
+ * the total counts, and what receive, send and the dApps offer.
+ */
+export function spaceNetworksSync(): Network[] {
+	return _spaceSnapshot;
+}
+
+/** Whether `chainId` is in the space in front. */
+export function inSpace(chainId: number): boolean {
+	return _spaceSnapshot.some((n) => n.chainId === chainId);
+}
+
+// A switch of space is a change of the network set, for every subscriber.
+networkSpace.subscribe(() => {
+	rebuildSpaceSnapshot();
+	for (const l of _networkListeners) l();
+});
 
 /** The networks the person added (spec 038 #E9) — the snapshot minus the builtins. */
 export function getCustomChainIdsSync(): number[] {

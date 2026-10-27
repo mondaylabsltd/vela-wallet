@@ -53,8 +53,8 @@ class AddNetworkFromPageTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val origin = "http://127.0.0.1:8137"
-    private val sepolia = 11_155_111L
-    private val catalogRpc = "https://rpc.sepolia.example"
+    private val holesky = 17_000L
+    private val catalogRpc = "https://rpc.holesky.example"
     private val strings: VelaStrings = run {
         val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
         I18nRuntime { tag -> File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
@@ -80,17 +80,18 @@ class AddNetworkFromPageTest {
                 { tab, id, outcome -> browser.dispatch(DbrEvent.AddNetworkAnswered(tab, id, outcome, 1.0e12), DbrEvent.serializer()) }
             },
         )
-        // The network this test stands up: the catalog knows Sepolia and every
+        // The network this test stands up: the catalog knows Holesky (Sepolia
+        // is built in since spec 105, so a page cannot add it) and every
         // probe answers. Store writes and the ending are the real executor's.
         val network: suspend (NetOperation) -> NetShellResult = { operation ->
             when (operation) {
                 is NetOperation.FetchChainInfo -> NetShellResult.ChainInfo(
                     operation.chain_id,
-                    NetRawChainData(chain_id = sepolia, name = "Ethereum Sepolia", native_currency_symbol = "ETH", rpc = listOf(catalogRpc)),
+                    NetRawChainData(chain_id = holesky, name = "Ethereum Holesky", native_currency_symbol = "ETH", rpc = listOf(catalogRpc)),
                 )
                 is NetOperation.ProbeRpc -> {
                     probed += operation.url
-                    NetShellResult.Probed(operation.url, sepolia, 20)
+                    NetShellResult.Probed(operation.url, holesky, 20)
                 }
                 is NetOperation.RpcGetCode -> NetShellResult.Code(operation.url, operation.address, if (deployed) "0x6080604052" else "0x")
                 is NetOperation.RpcCallP256 -> NetShellResult.P256Call(operation.url, if (p256) "0x" + "0".repeat(63) + "1" else "0x")
@@ -135,11 +136,11 @@ class AddNetworkFromPageTest {
     private fun page(h: CoreHost<DbrView>, message: JSONObject) =
         h.dispatch(DbrEvent.PageMessage(tab = "t1", frame_origin = origin, is_main_frame = true, message_json = message.toString()), DbrEvent.serializer())
 
-    private fun addSepolia(h: CoreHost<DbrView>, id: String) = page(
+    private fun addHolesky(h: CoreHost<DbrView>, id: String) = page(
         h,
         JSONObject().put("t", "req").put("doc", "d1").put("id", id).put("method", "wallet_addEthereumChain").put(
             "params",
-            JSONArray().put(JSONObject().put("chainId", "0xaa36a7").put("chainName", "My Sepolia").put("rpcUrls", JSONArray().put("https://rpc.invalid"))),
+            JSONArray().put(JSONObject().put("chainId", "0x4268").put("chainName", "My Holesky").put("rpcUrls", JSONArray().put("https://rpc.invalid"))),
         ),
     )
 
@@ -154,34 +155,34 @@ class AddNetworkFromPageTest {
     @Test
     fun `an approved add is saved the Settings way and answers the page null with chainChanged`() = runBlocking<Unit> {
         val rig = rig(deployed = true)
-        addSepolia(rig.browser, "a1")
+        addHolesky(rig.browser, "a1")
         val sheet = rig.admin.sheet(NetDappAddPhase.Ready)
-        assertEquals("Ethereum Sepolia", sheet.name)
+        assertEquals("Ethereum Holesky", sheet.name)
         assertFalse("the page's RPC is never asked for a chain the catalog knows", probed.any { it.contains("rpc.invalid") })
         // The sheet, in Settings' words.
         val model = ExploreLive.addNetwork(sheet, strings)
         assertEquals("127.0.0.1:8137 asks to add a network", model.lead)
         assertEquals("Add Network", model.add)
-        assertEquals("Ethereum Sepolia", model.rows.first().second)
+        assertEquals("Ethereum Holesky", model.rows.first().second)
         assertNull(model.fromSite)
 
         rig.admin.dispatch(NetEvent.DappAddApproved("2026-10-04T12:00:00Z"), NetEvent.serializer())
         val answer = answerFor("a1")
         assertTrue("answered null", answer.has("result") && answer.isNull("result"))
         withTimeout(10_000) { while (delivered.none { it.optString("event") == "chainChanged" }) delay(10) }
-        assertEquals("0xaa36a7", delivered.first { it.optString("event") == "chainChanged" }.optString("data"))
+        assertEquals("0x4268", delivered.first { it.optString("event") == "chainChanged" }.optString("data"))
         assertTrue(
             "saved where every reader of custom networks looks",
-            rig.store.values[KeyValueStore.Keys.CUSTOM_NETWORKS].orEmpty().contains("11155111"),
+            rig.store.values[KeyValueStore.Keys.CUSTOM_NETWORKS].orEmpty().contains("17000"),
         )
-        assertEquals("11155111", rig.store.values["vela.chain.$origin"])
+        assertEquals("17000", rig.store.values["vela.chain.$origin"])
         assertNull(rig.admin.view.value.dapp_add)
     }
 
     @Test
     fun `an incompatible chain is refused 4902 and recorded, and nothing is saved`() = runBlocking<Unit> {
         val rig = rig(deployed = false)
-        addSepolia(rig.browser, "a1")
+        addHolesky(rig.browser, "a1")
         val sheet = rig.admin.sheet(NetDappAddPhase.NotCompatible)
         val model = ExploreLive.addNetwork(sheet, strings)
         assertNull("no Add for a chain this wallet refuses", model.add)
@@ -191,11 +192,11 @@ class AddNetworkFromPageTest {
         assertEquals("missing_contracts", sheet.compat?.blocker)
         assertEquals(strings.t("settingsModals.addNetwork.incompatibleHint"), model.note)
         assertEquals("Open Chain Setup Tool", model.setupTool?.label)
-        assertEquals("https://getvela.app/chain-setup?chain=11155111", model.setupTool?.url)
+        assertEquals("https://getvela.app/chain-setup?chain=17000", model.setupTool?.url)
 
         rig.admin.dispatch(NetEvent.DappAddDeclined, NetEvent.serializer())
         assertEquals(4902, answerFor("a1").getJSONObject("error").getInt("code"))
-        assertFalse(rig.store.values[KeyValueStore.Keys.CUSTOM_NETWORKS].orEmpty().contains("11155111"))
+        assertFalse(rig.store.values[KeyValueStore.Keys.CUSTOM_NETWORKS].orEmpty().contains("17000"))
         rig.browser.dispatch(DbrEvent.InspectorOpened("t1"), DbrEvent.serializer())
         val row = withTimeout(10_000) { rig.browser.view.first { it.inspector?.rows?.any { r -> r.id == "a1" && r.reason != null } == true } }
             .inspector!!.rows.first { it.id == "a1" }
@@ -211,7 +212,7 @@ class AddNetworkFromPageTest {
     @Test
     fun `a chain with no P-256 verifier is refused in its own words, with nothing to deploy`() = runBlocking<Unit> {
         val rig = rig(deployed = false, p256 = false)
-        addSepolia(rig.browser, "a1")
+        addHolesky(rig.browser, "a1")
         val sheet = rig.admin.sheet(NetDappAddPhase.NotCompatible)
         assertEquals("no_p256", sheet.compat?.blocker)
         assertNull(sheet.compat?.setup_url)
@@ -229,9 +230,9 @@ class AddNetworkFromPageTest {
     @Test
     fun `a second add while the sheet is open is -32002`() = runBlocking<Unit> {
         val rig = rig(deployed = true)
-        addSepolia(rig.browser, "a1")
+        addHolesky(rig.browser, "a1")
         rig.admin.sheet(NetDappAddPhase.Ready)
-        addSepolia(rig.browser, "a2")
+        addHolesky(rig.browser, "a2")
         assertEquals(-32002, answerFor("a2").getJSONObject("error").getInt("code"))
         rig.admin.dispatch(NetEvent.DappAddDeclined, NetEvent.serializer())
         assertEquals(4001, answerFor("a1").getJSONObject("error").getInt("code"))
@@ -239,7 +240,7 @@ class AddNetworkFromPageTest {
 
     @Test
     fun `the outcome wire round-trips every ending`() {
-        for (outcome in listOf(DappAddOutcome.Added(sepolia.toInt()), DappAddOutcome.Declined, DappAddOutcome.NotCompatible, DappAddOutcome.BadRpc, DappAddOutcome.Busy)) {
+        for (outcome in listOf(DappAddOutcome.Added(holesky.toInt()), DappAddOutcome.Declined, DappAddOutcome.NotCompatible, DappAddOutcome.BadRpc, DappAddOutcome.Busy)) {
             val json = app.getvela.wallet.core.crux.Wire.json.encodeToString(DappAddOutcome.serializer(), outcome)
             assertEquals(outcome, app.getvela.wallet.core.crux.Wire.json.decodeFromString(DappAddOutcome.serializer(), json))
         }

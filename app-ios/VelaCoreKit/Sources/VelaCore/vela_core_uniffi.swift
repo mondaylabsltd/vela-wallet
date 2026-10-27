@@ -17140,6 +17140,45 @@ public func netHealthStep(state: NetHealthState, reached: Bool, source: UInt32?,
 })
 }
 /**
+ * Whether `chain_id` is a testnet (spec 105): the built-in table's word,
+ * else the person's in `custom_json` (the stored custom networks), else yes.
+ */
+public func networkChainIsTestnet(chainId: UInt32, customJson: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_chain_is_testnet(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(customJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The chain ids of `space`'s networks (spec 105), from the network
+ * machine's rows as JSON: what the balances read, and send, receive and the
+ * dApps offer. A JSON array.
+ */
+public func networkSpaceChainIds(space: String, rowsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_space_chain_ids(
+        FfiConverterString.lower(space),
+        FfiConverterString.lower(rowsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The space stored under `vela.networkSpace`, read (spec 105): `mainnet`
+ * or `testnet`; anything missing or unreadable is `mainnet`.
+ */
+public func networkSpaceRead(stored: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_space_read(
+        FfiConverterOptionString.lower(stored),uniffiCallStatus
+    )
+})
+}
+/**
  * A shipped network's usual time to include an operation, in seconds; `None`
  * for a network Vela does not ship (the receipt then circles instead of
  * drawing a promise). The dApp signing sheet's wait reads the same number as
@@ -19437,6 +19476,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_net_health_step() != 51766) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_chain_is_testnet() != 17877) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_space_chain_ids() != 50383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_space_read() != 23345) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {

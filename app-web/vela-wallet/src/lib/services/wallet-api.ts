@@ -16,7 +16,8 @@
 
 import type { APIToken, CustomToken } from './tokens-model';
 import { tokenUsdValue, tokenChainId, isNativeToken } from './tokens-model';
-import { getAllNetworksSync, networkId, chainName, nativeSymbol } from './networks';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { spaceNetworksSync, networkId, chainName, nativeSymbol } from './networks';
 import { loadCustomTokens } from './records';
 import { poolRpcCall, getFailedRpcChains, PoolFailedError } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
@@ -242,7 +243,7 @@ export async function fetchTokens(
 	address: string,
 	options: FetchTokensOptions = {}
 ): Promise<APIToken[]> {
-	const cacheKey = address.trim().toLowerCase();
+	const cacheKey = tokenCacheKey(address);
 	const maxAgeMs = options.maxAgeMs ?? TOKEN_CACHE_TTL_MS;
 	const cached = tokenCache.get(cacheKey);
 	const now = Date.now();
@@ -315,9 +316,19 @@ export async function fetchTokens(
 	}
 }
 
+/**
+ * One cache entry per account and space (spec 105): the two spaces read
+ * different networks, and one's holdings must never stand in for the other's.
+ */
+function tokenCacheKey(address: string): string {
+	return `${address.trim().toLowerCase()}#${networkSpace.current}`;
+}
+
 export function clearTokenCache(address?: string): void {
-	if (address) tokenCache.delete(address.trim().toLowerCase());
-	else tokenCache.clear();
+	if (!address) return tokenCache.clear();
+	for (const space of ['mainnet', 'testnet']) {
+		tokenCache.delete(`${address.trim().toLowerCase()}#${space}`);
+	}
 }
 
 /**
@@ -328,7 +339,7 @@ export function clearTokenCache(address?: string): void {
  */
 export function getCachedHeldTokens(address: string | undefined, chainId: number): string[] {
 	if (!address) return [];
-	const entry = tokenCache.get(address.trim().toLowerCase());
+	const entry = tokenCache.get(tokenCacheKey(address));
 	if (!entry?.tokens?.length) return [];
 	const out: string[] = [];
 	for (const t of entry.tokens) {
@@ -374,7 +385,7 @@ export function getCachedNativePriceUsd(
 	chainId: number
 ): number | null {
 	if (!address) return null;
-	const entry = tokenCache.get(address.trim().toLowerCase());
+	const entry = tokenCache.get(tokenCacheKey(address));
 	if (!entry?.tokens?.length) return null;
 	const native = entry.tokens.find((t) => tokenChainId(t) === chainId && isNativeToken(t));
 	const price = native?.priceUsd ?? null;
@@ -407,7 +418,7 @@ async function fetchAllChainTokens(
 	const [customTokens, clPrices] = await Promise.all([loadCustomTokens(), fetchChainlinkPrices()]);
 
 	// Phase 2: query each chain in parallel, streaming results as each chain finishes
-	const networks = getAllNetworksSync();
+	const networks = spaceNetworksSync();
 	const accumulated: APIToken[] = [];
 	const answered = new Set<number>();
 	/** Chains whose read failed inside the app this round (PR 2 note 11). */

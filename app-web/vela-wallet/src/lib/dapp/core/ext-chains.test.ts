@@ -10,6 +10,7 @@ import { publicRpcUrls } from '$lib/core/client';
 import { DEFAULT_NETWORKS } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
 import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 
 // The stored endpoints live in local storage, which node does not have.
 const local = new Map<string, string>();
@@ -32,14 +33,35 @@ describe('the published network catalog', () => {
 
 	afterEach(() => local.clear());
 
-	it('lists every built-in chain by id, and nothing the wallet does not have', () => {
+	// Spec 105: a dApp is offered the space in front's chains — the mainnet
+	// space here, every built-in mainnet and no testnet.
+	const MAINNETS = DEFAULT_NETWORKS.filter((n) => !n.isTestnet);
+
+	it('lists every built-in chain of the space by id, and nothing the wallet does not have', () => {
 		expect(
 			Object.keys(catalog.chains)
 				.map(Number)
 				.sort((a, b) => a - b)
-		).toEqual(DEFAULT_NETWORKS.map((n) => n.chainId).sort((a, b) => a - b));
+		).toEqual(MAINNETS.map((n) => n.chainId).sort((a, b) => a - b));
+		expect(MAINNETS.length).toBeLessThan(DEFAULT_NETWORKS.length);
 		expect(catalog.version).toBe(1);
 		expect(catalog.updatedAtMs).toBe(1_800_000_000_000);
+	});
+
+	it('in the testnet space, offers the testnets and no mainnet', () => {
+		networkSpace.set('testnet');
+		try {
+			const ids = Object.keys(buildExtChainCatalog().chains).map(Number);
+			expect(ids.sort((a, b) => a - b)).toEqual(
+				DEFAULT_NETWORKS.filter((n) => n.isTestnet)
+					.map((n) => n.chainId)
+					.sort((a, b) => a - b)
+			);
+			expect(ids).toContain(11155111);
+			expect(ids).not.toContain(1);
+		} finally {
+			networkSpace.set('mainnet');
+		}
 	});
 
 	it('puts the default node first and the public nodes behind it, once each', () => {
@@ -49,7 +71,7 @@ describe('the published network catalog', () => {
 		// The public nodes are the core's curated list, in its order, behind
 		// the default — for every built-in chain.
 		expect(publicRpcUrls(100).length).toBeGreaterThan(0);
-		for (const network of DEFAULT_NETWORKS) {
+		for (const network of MAINNETS) {
 			const listed = catalog.chains[String(network.chainId)].rpc;
 			const curated = publicRpcUrls(network.chainId).filter((url) => url !== network.rpcURL);
 			expect(listed, network.displayName).toEqual([network.rpcURL, ...curated]);

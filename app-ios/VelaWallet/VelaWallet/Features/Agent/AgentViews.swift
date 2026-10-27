@@ -59,6 +59,8 @@ enum AgentWords {
             return "\(preference["kind"] ?? ""): \(preference["value"] ?? "")"
         case "set_balance_privacy":
             return loc.t(action["hidden"] as? Bool == true ? "home.a11yHideBalance" : "home.a11yShowBalance")
+        case "set_network_space":
+            return (action["space"] as? String).map { loc.t("networkSpace.\($0)") }
         default:
             // The core's: the network, URL or record it changes.
             let detail = intentApprovalDetail(actionJson: request.actionJson)

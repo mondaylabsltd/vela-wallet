@@ -419,7 +419,9 @@ final class SendExecutor {
         else {
             return CoreJSON.string(["type": "tokens_loaded", "tokens": NSNull(), "chains": []])
         }
-        let rows = networks()?.networks ?? []
+        // The space in front's (spec 105): send offers no chain of the other.
+        let testnet = NetworkSpace.read(store) == .testnet
+        let rows = (networks()?.networks ?? []).filter { $0.isTestnet == testnet }
         let chains = rows.map { row in
             [
                 "network": "chain-\(row.chainId)",

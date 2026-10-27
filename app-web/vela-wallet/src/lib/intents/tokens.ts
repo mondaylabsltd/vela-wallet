@@ -8,7 +8,7 @@
 import { loadCore } from '$lib/core/client';
 import type { IntentReason } from '$lib/core/generated/IntentReason';
 import type { MtokView } from '$lib/core/generated/MtokView';
-import { getAllNetworksSync } from '$lib/services/networks';
+import { spaceNetworksSync } from '$lib/services/networks';
 import { session as wallet } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { createManageTokensSession } from '$lib/wallet/core/manage-tokens-session';
@@ -29,7 +29,7 @@ async function until(read: () => boolean, ms: number): Promise<boolean> {
 
 /** Find the contract on `chainId` and add it: why not, or `null` once stored. */
 export async function addToken(chainId: number, address: string): Promise<IntentReason | null> {
-	const network = getAllNetworksSync().find((entry) => entry.chainId === chainId);
+	const network = spaceNetworksSync().find((entry) => entry.chainId === chainId);
 	if (!network) return reason('not_found', 'the wallet has no network with that chain id');
 	await loadCore();
 	let view: MtokView | null = null;

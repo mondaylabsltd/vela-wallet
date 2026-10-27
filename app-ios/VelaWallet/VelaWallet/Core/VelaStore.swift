@@ -72,6 +72,9 @@ struct VelaStore {
         /// The default transaction speed (spec 068; iOS's since 069). A bare
         /// tier name, judged by the core. Survives sign-out.
         static let feeTier = "vela.feeTier"
+        /// The space in front (spec 105): `mainnet` or `testnet`, bare, one
+        /// for the device. The core reads it (`networkSpaceRead`).
+        static let networkSpace = "vela.networkSpace"
 
         // Owned by `signing_pages` (spec 102). Raw, judged by the core;
         // survives sign-out.

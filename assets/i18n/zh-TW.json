@@ -158,6 +158,7 @@
     "deleteActivity": "刪除一筆紀錄",
     "setBalancePrivacy": "隱藏或顯示餘額",
     "refreshBalances": "重新整理餘額",
+    "setNetworkSpace": "切換網路空間",
     "setContactFavorite": "更改收藏",
     "addNetwork": "新增網路",
     "setNetworkEndpoint": "更改網路的 RPC 或瀏覽器",
@@ -258,6 +259,24 @@
   "activity": "活動",
   "delete": "刪除",
   "connected": "已連線"
+ },
+ "networkSpace": {
+  "mainnet": "主網",
+  "testnet": "測試網",
+  "bar": "測試網空間 · 這裡的資產沒有真實價值",
+  "title": "網路空間",
+  "mainnetHint": "資產有真實價值的網路。",
+  "testnetHint": "測試網和開發網路，這裡的資產沒有真實價值。",
+  "toTestnet": "切換到測試網空間",
+  "toMainnet": "切換到主網空間",
+  "noValue": "測試資產 · 無真實價值",
+  "moveToMainnet": "移到主網空間",
+  "moveToTestnet": "移到測試網空間",
+  "wizardQuestion": "這個網路屬於哪個空間？",
+  "wizardTestnet": "測試網 — 無真實價值",
+  "wizardMainnet": "主網 — 有真實價值",
+  "headingMainnet": "主網空間",
+  "headingTestnet": "測試網空間"
  },
  "home": {
   "totalBalance": "總餘額",

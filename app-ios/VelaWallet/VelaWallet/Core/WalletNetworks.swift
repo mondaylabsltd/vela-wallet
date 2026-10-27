@@ -33,13 +33,18 @@ struct WalletNetworks {
         self.chains = chains
     }
 
-    /// `network_admin`'s rows. Nothing yet → the catalogue.
-    init(_ rows: [NetNetworkRowWire]?) {
+    /// `network_admin`'s rows. Nothing yet → the catalogue. With a space
+    /// (spec 105), that space's alone — what every list a person sees shows.
+    init(_ rows: [NetNetworkRowWire]?, space: NetworkSpaceKind? = nil) {
         guard let rows, !rows.isEmpty else {
-            self = .builtin
+            let testnet = space == .testnet
+            self = WalletNetworks(chains: space == nil
+                ? ChainCatalog.chains
+                : ChainCatalog.chains.filter { $0.testnet == testnet })
             return
         }
-        chains = rows.map { row in
+        let shown = space.map { space in rows.filter { $0.isTestnet == (space == .testnet) } } ?? rows
+        chains = shown.map { row in
             if !row.isCustom, let shipped = ChainCatalog.meta(row.chainId) { return shipped }
             return ChainMeta(
                 id: row.id,

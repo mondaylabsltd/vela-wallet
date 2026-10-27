@@ -110,6 +110,8 @@
 	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
 	import { balance } from '$lib/wallet/core/balance.svelte';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import type { LiveSpace } from '$lib/settings/live';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -700,11 +702,18 @@
 		return signingVenueBlock(domain, { type: 'in_vela' }) === null ? undefined : domain;
 	});
 
+	/** Spec 105: the space in front — the network pages show only its networks. */
+	const liveSpace = $derived<LiveSpace | undefined>(
+		networkSpace.words === null
+			? undefined
+			: { current: networkSpace.current, words: networkSpace.words }
+	);
+
 	/** Fixture base → identity overlay → live network sections (research D7). */
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
 		let model = withLiveAccounts(homeWithIdentity(data.home, identity), accountsInput, m);
-		model = withLiveNetworks(model, net, m, selectedNetworkId);
+		model = withLiveNetworks(model, net, m, selectedNetworkId, liveSpace);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
@@ -746,7 +755,7 @@
 			accountsInput,
 			m
 		);
-		model = withLiveNetworksDesktop(model, net, m, selectedNetworkId);
+		model = withLiveNetworksDesktop(model, net, m, selectedNetworkId, liveSpace);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		// After the storage numbers, as on the phone: the connections row is the
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
@@ -835,6 +844,23 @@
 				} else networkAdmin.dispatch({ type: 'delete_confirmed', id: event.id });
 				return;
 			}
+			case 'move-network': {
+				// Spec 105: a network the person added, to the other space.
+				const row = net.networks.find((r) => r.id === event.id);
+				if (row !== undefined && row.is_custom)
+					networkAdmin.dispatch({
+						type: 'custom_space_changed',
+						id: row.id,
+						testnet: !row.is_testnet
+					});
+				return;
+			}
+			case 'switch-space':
+				networkSpace.openSwitcher();
+				return;
+			case 'add-space':
+				networkAdmin.dispatch({ type: 'wizard_testnet_chosen', testnet: event.testnet });
+				return;
 			case 'detail-field': {
 				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
 				if (chainId !== undefined) {

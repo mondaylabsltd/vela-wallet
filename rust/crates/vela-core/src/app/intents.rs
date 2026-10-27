@@ -257,6 +257,11 @@ pub enum Action {
     },
     /// Read the balances again now.
     RefreshBalances,
+    /// The mainnet space or the testnet space (spec 105): which networks the
+    /// whole wallet shows. The person approves an agent's switch.
+    SetNetworkSpace {
+        space: super::network_space::NetworkSpace,
+    },
     SetContactFavorite {
         address: String,
         favorite: bool,
@@ -336,7 +341,7 @@ const fn person_only(action: &'static str, description: &'static str) -> Entry {
 /// Every action, in one place: name, risk, and who may ask for it. The risk of
 /// an [`Action`] value is read from here, so a scale and its catalog cannot
 /// disagree.
-const CATALOG: [Entry; 30] = [
+const CATALOG: [Entry; 31] = [
     entry(
         "show",
         Risk::Operate,
@@ -446,6 +451,11 @@ const CATALOG: [Entry; 30] = [
         "Hide or show amounts on every money surface.",
     ),
     entry("refresh_balances", Risk::Operate, "Read the balances again now."),
+    entry(
+        "set_network_space",
+        Risk::Manage,
+        "Switch the wallet between the mainnet space (assets with real value) and the testnet space (testnets, no real value). Every list, balance and picker shows only the space's networks. The person approves it first.",
+    ),
     entry(
         "set_contact_favorite",
         Risk::Operate,
@@ -680,6 +690,10 @@ fn input_schema(kind: &str) -> serde_json::Value {
             &["id"],
         ),
         "set_balance_privacy" => object(json!({ "hidden": { "type": "boolean" } }), &["hidden"]),
+        "set_network_space" => object(
+            json!({ "space": { "type": "string", "enum": ["mainnet", "testnet"] } }),
+            &["space"],
+        ),
         "add_network" => object(
             json!({
                 "chain_id": { "type": "integer", "minimum": 1 },
@@ -749,6 +763,7 @@ impl Action {
             Self::DeleteActivity { .. } => "delete_activity",
             Self::SetBalancePrivacy { .. } => "set_balance_privacy",
             Self::RefreshBalances => "refresh_balances",
+            Self::SetNetworkSpace { .. } => "set_network_space",
             Self::SetContactFavorite { .. } => "set_contact_favorite",
             Self::AddNetwork { .. } => "add_network",
             Self::SetNetworkEndpoint { .. } => "set_network_endpoint",
@@ -1052,7 +1067,9 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         } => chain_named(*chain_id).and_then(|()| address(contract)),
         Action::DeleteActivity { id } => named(id, "activity id"),
         Action::SetContactFavorite { address: value, .. } => address(value),
-        Action::SetBalancePrivacy { .. } | Action::RefreshBalances => Ok(()),
+        Action::SetBalancePrivacy { .. }
+        | Action::RefreshBalances
+        | Action::SetNetworkSpace { .. } => Ok(()),
         Action::AddNetwork { chain_id, rpc_url } => {
             chain_named(*chain_id)?;
             rpc_url.as_deref().map_or(Ok(()), web_url)
@@ -1269,6 +1286,7 @@ pub fn shows(action: &Action) -> Option<Screen> {
         | Action::DeleteActivity { .. }
         | Action::SetBalancePrivacy { .. }
         | Action::RefreshBalances
+        | Action::SetNetworkSpace { .. }
         | Action::AddToken { .. } => Some(Screen::Home),
         Action::SetPreference { preference } => match preference {
             Preference::Theme(_) | Preference::Language(_) | Preference::TextScale(_) => {

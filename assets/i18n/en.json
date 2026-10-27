@@ -158,6 +158,7 @@
     "deleteActivity": "Delete an activity record",
     "setBalancePrivacy": "Hide or show balances",
     "refreshBalances": "Refresh balances",
+    "setNetworkSpace": "Switch network space",
     "setContactFavorite": "Change a favorite",
     "addNetwork": "Add a network",
     "setNetworkEndpoint": "Change a network's RPC or explorer",
@@ -258,6 +259,24 @@
   "connected": "Connected",
   "activity": "Activity",
   "delete": "Delete"
+ },
+ "networkSpace": {
+  "mainnet": "Mainnet",
+  "testnet": "Testnet",
+  "bar": "Testnet space · nothing here has real value",
+  "title": "Network space",
+  "mainnetHint": "Networks whose assets have real value.",
+  "testnetHint": "Testnets and developer networks. Nothing here has real value.",
+  "toTestnet": "Switch to the testnet space",
+  "toMainnet": "Switch to the mainnet space",
+  "noValue": "Test assets · no real value",
+  "moveToMainnet": "Move to the mainnet space",
+  "moveToTestnet": "Move to the testnet space",
+  "wizardQuestion": "Which space does this network belong to?",
+  "wizardTestnet": "Testnet — no real value",
+  "wizardMainnet": "Mainnet — real value",
+  "headingMainnet": "Mainnet space",
+  "headingTestnet": "Testnet space"
  },
  "home": {
   "totalBalance": "Total balance",

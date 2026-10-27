@@ -459,6 +459,8 @@ fun VelaNetworkRow(
     deleteLabel: String? = null,
     onClick: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
+    /** Spec 105: [NetworkRowModel.move]'s tap — the network the person added, to the other space. */
+    onMove: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -506,6 +508,20 @@ fun VelaNetworkRow(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
+                // Under the chain id, not beside the bin: a link, and the
+                // row's width belongs to the name.
+                if (row.move != null) {
+                    Text(
+                        text = row.move,
+                        color = colors.infoBase,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.semibold,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier
+                            .clickable { onMove(row.id) }
+                            .padding(vertical = VelaSpacing.xs),
+                    )
+                }
             }
             if (row.badge != null) VelaStatusPill(row.badge)
             if (row.removable && deleteLabel != null) {

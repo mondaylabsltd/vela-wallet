@@ -69,6 +69,13 @@ struct AgentPerform {
             return Self.done
         case "set_preference":
             return setPreference(action["preference"] as? [String: Any] ?? [:])
+        case "set_network_space":
+            // The person allowed it (manage-level): the same switch as theirs.
+            guard let space = NetworkSpaceKind(rawValue: text("space")) else {
+                return Self.refused("invalid_input", "no such space")
+            }
+            graph.space.set(space)
+            return Self.done
         case "save_contact":
             graph.contacts.save(address: text("address"), name: text("name"))
             return Self.done

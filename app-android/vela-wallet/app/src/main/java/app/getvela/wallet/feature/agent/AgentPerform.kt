@@ -12,6 +12,7 @@ import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetOverrideField
 import app.getvela.wallet.feature.settings.core.NetProviderId
+import app.getvela.wallet.feature.settings.core.NetworkSpace
 import kotlinx.coroutines.delay
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonPrimitive
@@ -101,6 +102,12 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
                 if (wallet.wallet.balances.value.hidden != action.optBoolean("hidden")) wallet.wallet.togglePrivacy()
             }
             "refresh_balances" -> DONE.also { wallet.wallet.pullRefresh() }
+            // The device's space (spec 105), as the person's own switch sets
+            // it: every list follows, and the balances are read again.
+            "set_network_space" -> when (val space = action.optString("space")) {
+                NetworkSpace.Mainnet.wire, NetworkSpace.Testnet.wire -> DONE.also { wallet.networkSpace.set(NetworkSpace.of(space)) }
+                else -> refused("invalid_input", "not a network space")
+            }
             "add_network" -> addNetwork(chainId, text("rpc_url").takeIf { !action.isNull("rpc_url") && it.isNotEmpty() })
             "set_network_endpoint" -> setNetworkEndpoint(chainId, action.optString("field"), text("url"))
             "remove_network" -> DONE.also {

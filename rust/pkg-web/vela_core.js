@@ -4686,6 +4686,63 @@ export function minGasPriceWei(chain_id) {
 }
 
 /**
+ * Whether `chain_id` is a testnet (spec 105).
+ * @param {number} chain_id
+ * @param {string} custom_json
+ * @returns {boolean}
+ */
+export function networkChainIsTestnet(chain_id, custom_json) {
+    const ptr0 = passStringToWasm0(custom_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.networkChainIsTestnet(chain_id, ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
+ * as JSON. A JSON array.
+ * @param {string} space
+ * @param {string} rows_json
+ * @returns {string}
+ */
+export function networkSpaceChainIds(space, rows_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(space, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(rows_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.networkSpaceChainIds(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The space stored under `vela.networkSpace`, read (spec 105).
+ * @param {string | null} [stored]
+ * @returns {string}
+ */
+export function networkSpaceRead(stored) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        var ptr0 = isLikeNone(stored) ? 0 : passStringToWasm0(stored, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.networkSpaceRead(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {string} hex
  * @returns {P256PublicKey}
  */

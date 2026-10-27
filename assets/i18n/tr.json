@@ -158,6 +158,7 @@
     "deleteActivity": "Bir etkinlik kaydını sil",
     "setBalancePrivacy": "Bakiyeleri gizle veya göster",
     "refreshBalances": "Bakiyeleri yenile",
+    "setNetworkSpace": "Ağ alanını değiştir",
     "setContactFavorite": "Favoriyi değiştir",
     "addNetwork": "Ağ ekle",
     "setNetworkEndpoint": "Bir ağın RPC veya gezginini değiştir",
@@ -258,6 +259,24 @@
   "activity": "Etkinlik",
   "delete": "Sil",
   "connected": "Bağlandı"
+ },
+ "networkSpace": {
+  "mainnet": "Ana ağ",
+  "testnet": "Test ağı",
+  "bar": "Test ağı alanı · buradaki hiçbir şeyin gerçek değeri yok",
+  "title": "Ağ alanı",
+  "mainnetHint": "Varlıkları gerçek değere sahip ağlar.",
+  "testnetHint": "Test ağları ve geliştirici ağları. Buradaki hiçbir şeyin gerçek değeri yok.",
+  "toTestnet": "Test ağı alanına geç",
+  "toMainnet": "Ana ağ alanına geç",
+  "noValue": "Test varlıkları · gerçek değer yok",
+  "moveToMainnet": "Ana ağ alanına taşı",
+  "moveToTestnet": "Test ağı alanına taşı",
+  "wizardQuestion": "Bu ağ hangi alana ait?",
+  "wizardTestnet": "Test ağı — gerçek değer yok",
+  "wizardMainnet": "Ana ağ — gerçek değer",
+  "headingMainnet": "Ana ağ alanı",
+  "headingTestnet": "Test ağı alanı"
  },
  "home": {
   "totalBalance": "Toplam bakiye",

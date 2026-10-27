@@ -8,11 +8,15 @@
  * the wasm being aboard (the Expo module relied on import-time init; here
  * `loadCore()` is awaited first, as every other web store does).
  *
- * Methods are one-liners forwarding typed events — no logic lives here.
+ * Methods are one-liners forwarding typed events — no logic lives here, but
+ * one rule (spec 105): the view is the space in front's. A switch of space
+ * reads the balances again, and until that round has settled the other
+ * space's holdings — and a total that counted them — are not shown.
  */
 
 import { loadCore } from '$lib/core/client';
-import { ensureCustomNetworks } from '$lib/services/networks';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { ensureCustomNetworks, inSpace } from '$lib/services/networks';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import {
 	balanceSettledFor,
@@ -23,6 +27,13 @@ import {
 	rereadHoldings,
 	subscribeBalanceDashboard
 } from './balance-resident';
+
+/** `view` with only the space in front's holdings; a total that counted any other is not shown. */
+function inSpaceView(view: BalanceView): BalanceView {
+	const tokens = view.tokens.filter((token) => inSpace(token.chain_id));
+	if (tokens.length === view.tokens.length) return view;
+	return { ...view, tokens, display_total_usd: null };
+}
 
 class Balance {
 	view = $state<BalanceView>(INITIAL_VIEW);
@@ -40,9 +51,13 @@ class Balance {
 			await Promise.all([ensureCustomNetworks(), loadCore()]);
 			ensureBalanceDashboard();
 			subscribeBalanceDashboard((view) => {
-				this.view = view;
+				this.view = inSpaceView(view);
 			});
-			this.view = balanceView();
+			this.view = inSpaceView(balanceView());
+			networkSpace.subscribe(() => {
+				this.view = inSpaceView(balanceView());
+				this.refresh(true);
+			});
 		})();
 		return this.#booted;
 	}

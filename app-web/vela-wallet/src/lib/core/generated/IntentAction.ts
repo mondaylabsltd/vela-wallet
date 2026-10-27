@@ -5,6 +5,7 @@ import type { IntentScreen } from "./IntentScreen";
 import type { NetEndpointField } from "./NetEndpointField";
 import type { NetOverrideField } from "./NetOverrideField";
 import type { NetProviderId } from "./NetProviderId";
+import type { NetworkSpace } from "./NetworkSpace";
 
 /**
  * Everything a person — or an agent — can ask the wallet to do, as the
@@ -18,4 +19,4 @@ export type IntentAction = { "type": "show", screen: IntentScreen, } | { "type":
  * for another review confirms nothing. An agent's submit only asks,
  * and names none.
  */
-review?: string, } | { "type": "cancel_transfer", operation: string, } | { "type": "prepare_batch_transfer", chain_id: number, token: string | null, recipients: Array<IntentRecipient>, } | { "type": "add_token", chain_id: number, address: string, } | { "type": "delete_activity", id: string, } | { "type": "set_balance_privacy", hidden: boolean, } | { "type": "refresh_balances" } | { "type": "set_contact_favorite", address: string, favorite: boolean, } | { "type": "add_network", chain_id: number, rpc_url: string | null, } | { "type": "set_network_endpoint", chain_id: number, field: NetOverrideField, url: string, } | { "type": "remove_network", chain_id: number, } | { "type": "set_provider_key", provider: NetProviderId, key: string, } | { "type": "set_service_endpoint", field: NetEndpointField, url: string, } | { "type": "reset_service_endpoints" };
+review?: string, } | { "type": "cancel_transfer", operation: string, } | { "type": "prepare_batch_transfer", chain_id: number, token: string | null, recipients: Array<IntentRecipient>, } | { "type": "add_token", chain_id: number, address: string, } | { "type": "delete_activity", id: string, } | { "type": "set_balance_privacy", hidden: boolean, } | { "type": "refresh_balances" } | { "type": "set_network_space", space: NetworkSpace, } | { "type": "set_contact_favorite", address: string, favorite: boolean, } | { "type": "add_network", chain_id: number, rpc_url: string | null, } | { "type": "set_network_endpoint", chain_id: number, field: NetOverrideField, url: string, } | { "type": "remove_network", chain_id: number, } | { "type": "set_provider_key", provider: NetProviderId, key: string, } | { "type": "set_service_endpoint", field: NetEndpointField, url: string, } | { "type": "reset_service_endpoints" };

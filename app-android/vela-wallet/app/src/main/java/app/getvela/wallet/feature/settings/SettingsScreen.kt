@@ -154,6 +154,7 @@ import app.getvela.wallet.feature.settings.components.VelaDangerCard
 import app.getvela.wallet.feature.settings.components.VelaKeyValueRow
 import app.getvela.wallet.feature.settings.components.VelaNetworkRow
 import app.getvela.wallet.feature.settings.components.VelaSegmentedControl
+import app.getvela.wallet.feature.settings.core.NetworkSpace
 import app.getvela.wallet.feature.settings.components.VelaSelectRow
 import app.getvela.wallet.feature.settings.components.VelaSettingsRow
 import app.getvela.wallet.feature.settings.components.VelaStatusPill
@@ -223,6 +224,12 @@ data class SettingsActions(
     val onPickNetwork: (String) -> Unit = {},
     /** Committing the chosen network, once the core's checks have passed. */
     val onConfirmAddNetwork: () -> Unit = {},
+    /** Spec 105: the network list's switch to the other space — the switch prompt. */
+    val onSwitchSpace: () -> Unit = {},
+    /** Spec 105: "Move to the other space" on a network the person added, by row id. */
+    val onMoveNetwork: (id: String) -> Unit = {},
+    /** Spec 105: the add wizard's space choice — a testnet, or a mainnet. */
+    val onAddNetworkSpace: (testnet: Boolean) -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
     /** The endpoints page opened: probe every service (the web's `endpoints_opened`). */
@@ -403,6 +410,9 @@ fun SettingsRoute(
         onSearchNetwork = actions.onSearchNetwork,
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
+        onSwitchSpace = actions.onSwitchSpace,
+        onMoveNetwork = actions.onMoveNetwork,
+        onAddNetworkSpace = actions.onAddNetworkSpace,
         onResetEndpoints = { overlay = SettingsOverlay.ResetEndpoints },
         onConfirmResetEndpoints = {
             overlay = SettingsOverlay.None
@@ -574,6 +584,9 @@ fun SettingsScreen(
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
+    onSwitchSpace: () -> Unit = {},
+    onMoveNetwork: (String) -> Unit = {},
+    onAddNetworkSpace: (Boolean) -> Unit = {},
     onResetEndpoints: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
@@ -703,6 +716,9 @@ fun SettingsScreen(
                             onSearchNetwork = onSearchNetwork,
                             onPickNetwork = onPickNetwork,
                             onConfirmAddNetwork = onConfirmAddNetwork,
+                            onSwitchSpace = onSwitchSpace,
+                            onMoveNetwork = onMoveNetwork,
+                            onAddNetworkSpace = onAddNetworkSpace,
                             onResetEndpoints = onResetEndpoints,
                             onStorageClear = onStorageClear,
                             onOpenLink = onOpenLink,
@@ -951,6 +967,9 @@ private fun SettingsPageBody(
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
+    onSwitchSpace: () -> Unit = {},
+    onMoveNetwork: (String) -> Unit = {},
+    onAddNetworkSpace: (Boolean) -> Unit = {},
     onResetEndpoints: () -> Unit = {},
     onStorageClear: (String) -> Unit = {},
     onOpenLink: (String) -> Unit = {},
@@ -985,12 +1004,16 @@ private fun SettingsPageBody(
         )
 
         SettingsPage.Networks -> {
+            // Spec 105: the space the rows are, under its heading, and the
+            // switch to the other one (live only — the gallery has none).
+            model.networksSpace?.let { space -> NetworkSpaceHeading(space, onSwitch = onSwitchSpace) }
             model.networks.forEach { row ->
                 VelaNetworkRow(
                     row = row,
                     deleteLabel = model.removeNetworkLabel.ifEmpty { null },
                     onClick = onOpenNetwork,
                     onDelete = onRemoveNetwork,
+                    onMove = onMoveNetwork,
                 )
             }
             Row(
@@ -1135,6 +1158,25 @@ private fun SettingsPageBody(
                 }
                 if (add.callout != null && !add.calloutAsksForRpc) {
                     VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
+                // Spec 105: where it goes — the person's word; the core
+                // preselects testnet unless the registry calls it a mainnet.
+                if (add.space != null) {
+                    Text(
+                        text = add.space.label,
+                        color = colors.fgBase,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.semibold,
+                        fontSize = VelaTextSize.base,
+                        modifier = Modifier.padding(bottom = VelaSpacing.md),
+                    )
+                    VelaSegmentedControl(
+                        label = add.space.label,
+                        segments = add.space.segments.map { Triple(it.id, it.label, null) },
+                        selectedId = add.space.selected,
+                        onSelect = { id -> onAddNetworkSpace(id == NetworkSpace.Testnet.wire) },
+                    )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
                 // An outline CTA plus a re-check link when it cannot be added:
@@ -1759,6 +1801,52 @@ private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)?
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier.clickable(enabled = onFooterLink != null) { onFooterLink?.invoke() }.padding(top = VelaSpacing.md),
+        )
+    }
+}
+
+/**
+ * Spec 105: the network list's head — which space its rows are, what that
+ * space holds, and the switch to the other one (the switch prompt). Amber in
+ * the testnet space, as the home's label and the bar are.
+ */
+@Composable
+private fun NetworkSpaceHeading(model: NetworkSpaceHeadingModel, onSwitch: () -> Unit) {
+    val colors = VelaTheme.colors
+    val shape = RoundedCornerShape(VelaRadius.lg)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = VelaSpacing.lg)
+            .clip(shape)
+            .background(if (model.testnet) colors.warningSoft else colors.bgRaised)
+            .border(VelaBorder.hairline, if (model.testnet) colors.warningBorder else colors.borderBase, shape)
+            .padding(VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+    ) {
+        Text(
+            text = model.heading,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.lg,
+        )
+        Text(
+            text = model.hint,
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+        // A link, not a CTA: a switch of space moves no value.
+        Text(
+            text = model.switchLabel,
+            color = colors.infoBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier
+                .clickable(onClick = onSwitch)
+                .padding(top = VelaSpacing.sm),
         )
     }
 }
