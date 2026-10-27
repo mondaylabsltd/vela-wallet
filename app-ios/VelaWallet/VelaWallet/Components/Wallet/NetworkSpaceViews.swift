@@ -54,7 +54,9 @@ struct TestnetBar: View {
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Tokens.Space.s4)
-                .background(theme.warningSoft)
+                // The amber runs up behind the status bar; the words stay
+                // under it.
+                .background(theme.warningSoft.ignoresSafeArea(edges: .top))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("testnet-bar")
@@ -63,8 +65,13 @@ struct TestnetBar: View {
 
 /// Over the whole app: the parallel space's marker (debug builds), the
 /// testnet bar, and the switch the header's label, the bar and Settings →
-/// Networks open. A safe-area inset rather than an overlay — it MOVES the
-/// content down instead of covering it; an overlay clipped the account name.
+/// Networks open.
+///
+/// The bar is stacked ABOVE the app, not set as a safe-area inset: the pages
+/// lay their tops out against the window, and an inset slid the home's header
+/// — the account's name and the very label that says "Testnet" — under it
+/// (iPhone 15 Pro, 2026-10-27). Stacked, the app below starts where the bar
+/// ends.
 struct NetworkSpaceLayer: ViewModifier {
     let space: NetworkSpace
     let loc: Loc
@@ -73,17 +80,17 @@ struct NetworkSpaceLayer: ViewModifier {
     let onSwitch: (NetworkSpaceKind) -> Void
 
     func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(spacing: 0) {
-                    #if DEBUG
-                    if parallelSpace { ParallelSpaceBadge() }
-                    #endif
-                    if space.testnet {
-                        TestnetBar(text: loc.t("networkSpace.bar")) { space.switcherOpen = true }
-                    }
-                }
+        VStack(spacing: 0) {
+            if space.testnet {
+                TestnetBar(text: loc.t("networkSpace.bar")) { space.switcherOpen = true }
             }
+            #if DEBUG
+            // Stacked for the same reason, and under the bar: the amber
+            // owns the status bar's band.
+            if parallelSpace { ParallelSpaceBadge() }
+            #endif
+            content
+        }
             .confirmationDialog(
                 loc.t("networkSpace.title"),
                 isPresented: Binding(get: { space.switcherOpen }, set: { space.switcherOpen = $0 }),
