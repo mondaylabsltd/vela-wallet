@@ -286,7 +286,14 @@ struct AgentSettingsBody: View {
                     onChange: { want in
                         var next = allowed.filter { $0.caseInsensitiveCompare(address) != .orderedSame }
                         if want { next.append(address) }
-                        agent.person(["type": "configure_agent", "wallets": next])
+                        // The whole action: what stays as it is, said as such.
+                        agent.person([
+                            "type": "configure_agent",
+                            "enabled": NSNull(),
+                            "bridge_url": NSNull(),
+                            "client_token": NSNull(),
+                            "wallets": next,
+                        ])
                     }
                 )
                 .accessibilityIdentifier("agent-wallet-\(address)")

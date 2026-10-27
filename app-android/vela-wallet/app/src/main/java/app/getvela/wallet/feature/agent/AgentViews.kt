@@ -418,7 +418,15 @@ private fun AgentWalletsSection(agent: AgentStore, allowed: List<String>) {
                 checked = on,
                 onCheckedChange = { want ->
                     val next = allowed.filterNot { it.equals(address, ignoreCase = true) } + listOfNotNull(address.takeIf { want })
-                    agent.person(JSONObject().put("type", "configure_agent").put("wallets", org.json.JSONArray(next)))
+                    // The whole action: what stays as it is, said as such.
+                    agent.person(
+                        JSONObject()
+                            .put("type", "configure_agent")
+                            .put("enabled", JSONObject.NULL)
+                            .put("bridge_url", JSONObject.NULL)
+                            .put("client_token", JSONObject.NULL)
+                            .put("wallets", org.json.JSONArray(next)),
+                    )
                 },
                 modifier = Modifier.testTag("agent-wallet-$address"),
             )
