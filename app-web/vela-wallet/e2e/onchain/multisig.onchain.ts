@@ -152,6 +152,9 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await expect(pageA.getByText('2 of 2 members approve').first()).toBeVisible();
 		// Nothing left waiting: the executed transaction is gone from the panel.
 		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
+		// Executed on device B, found on chain here, and in this device's activity.
+		await expect(pageA.getByRole('main').getByText(/0\.25/).first()).toBeVisible({ timeout: 60_000 });
+		await expect(pageA.getByText(/Not shared yet/)).toHaveCount(0);
 		await shot(pageA, 'x6-home-a-after');
 	});
 

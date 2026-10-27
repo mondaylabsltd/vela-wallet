@@ -27,6 +27,7 @@ import {
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { fetchProposals, submitApproval, type Proposal } from './service';
 import { multisig, type MultisigAccount } from './store.svelte';
+import { recordRemoteExecutions } from './records';
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */
@@ -143,6 +144,8 @@ class Proposals {
 	loading = $state(false);
 	/** The last refresh failed (offline, the service down): the list may be stale. */
 	stale = $state(false);
+	/** New activity was written: whoever shows it refreshes. */
+	onrecorded: (() => void) | null = null;
 	#address: string | null = null;
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#inflight: Promise<void> | null = null;
@@ -203,6 +206,10 @@ class Proposals {
 			if (sameAddress(this.#address, account.address)) {
 				this.chains = next.sort((a, b) => a.chainId - b.chainId);
 				this.stale = failed;
+				// Executed on another member's device: into this device's activity too.
+				void recordRemoteExecutions(account.address, this.items).then((wrote) => {
+					if (wrote) this.onrecorded?.();
+				});
 			}
 			this.loading = false;
 		})();

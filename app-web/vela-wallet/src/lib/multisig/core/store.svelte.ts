@@ -28,6 +28,11 @@ export interface MultisigAccount {
 	threshold: number;
 	/** Whether the registry is known to hold the genesis (else it is retried). */
 	recorded: boolean;
+	/**
+	 * Whether the genesis service can hand the genesis to another device — the
+	 * registry holds it, or the service keeps it until the record lands.
+	 */
+	shared?: boolean;
 	/** The networks it is used on: where its proposals are looked for. */
 	chainIds: number[];
 	addedMs: number;
@@ -145,7 +150,16 @@ class MultisigStore {
 	}
 
 	markRecorded(address: string): void {
-		this.accounts = this.accounts.map((a) => (sameAddress(a.address, address) ? { ...a, recorded: true } : a));
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, recorded: true, shared: true } : a
+		);
+		write(this.accounts);
+	}
+
+	markShared(address: string): void {
+		const row = this.find(address);
+		if (!row || row.shared) return;
+		this.accounts = this.accounts.map((a) => (sameAddress(a.address, address) ? { ...a, shared: true } : a));
 		write(this.accounts);
 	}
 

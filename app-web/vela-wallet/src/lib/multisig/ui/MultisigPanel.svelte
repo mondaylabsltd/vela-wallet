@@ -11,6 +11,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
+	import { names } from '../core/names.svelte';
 	import { actionTitle, chainName, memberLabel } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { proposals, type ProposalItem } from '../core/proposals.svelte';
@@ -66,7 +67,7 @@
 			<li class:mine>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 				<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
-				<span class="who">{memberLabel(owner)}</span>
+				<span class="who">{names.label(owner)}</span>
 				{#if mine}<span class="here">{m.panel.thisDevice}</span>{/if}
 			</li>
 		{/each}
@@ -75,7 +76,7 @@
 	{#if local.length === 0}
 		<p class="note">{m.panel.readOnly}</p>
 	{/if}
-	{#if !account.recorded}
+	{#if !account.recorded && !account.shared}
 		<p class="note">{m.panel.notShared}</p>
 	{/if}
 

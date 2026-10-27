@@ -91,8 +91,12 @@ export async function createMultisig(choice: CreateChoice, saltNonce: string): P
 	}
 	if (!recorded) writeProofs({ ...readProofs(), [draft.address.toLowerCase()]: proof });
 	const account = multisig.add(draft.address, draft.genesis, recorded, [choice.chainId]);
+	// Whatever the record's fate, the service may already hand it out.
+	if (!recorded && (await fetchGenesis(draft.address).catch(() => ({ found: false }))).found) {
+		multisig.markShared(draft.address);
+	}
 	multisig.activate(account.address);
-	return account;
+	return multisig.find(account.address) ?? account;
 }
 
 /** Ask again for every multisig the registry has not confirmed. Quiet on failure. */
@@ -105,6 +109,7 @@ export async function retryUnrecorded(): Promise<void> {
 				multisig.markRecorded(account.address);
 				continue;
 			}
+			if (known.found) multisig.markShared(account.address);
 			const proof = proofs[account.address.toLowerCase()];
 			if (proof && (await record(account.address, account.genesis, proof, account.chainIds[0] ?? REGISTRY_HOME_CHAIN_ID))) {
 				// Queued: confirmed by a later `fetchGenesis`.
@@ -170,6 +175,8 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
 	const account = multisig.add(address, genesis, !answer.pending, used.length > 0 ? used : chainIds.slice(0, 1));
+	// It came from the service: the service can hand it out.
+	multisig.markShared(account.address);
 	multisig.activate(account.address);
 	return { ok: true, account };
 }

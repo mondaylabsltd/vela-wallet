@@ -39,6 +39,7 @@
 
 	onMount(() => {
 		multisig.boot();
+		proposals.onrecorded = () => onchanged?.();
 		void retryUnrecorded();
 		void answerLink();
 		const onhash = () => void answerLink();
