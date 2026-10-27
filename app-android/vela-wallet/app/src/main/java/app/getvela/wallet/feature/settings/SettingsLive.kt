@@ -632,7 +632,8 @@ object SettingsLive {
                         if (row.id == "networks") {
                             row.copy(
                                 value = row.value.orEmpty()
-                                    .replaceFirst(Regex("\\d+"), view.networks.size.toString()),
+                                    // Spec 105: the space's — the list it opens.
+                                    .replaceFirst(Regex("\\d+"), shown.size.toString()),
                             )
                         } else {
                             row

@@ -67,6 +67,41 @@ object NetworkSpaces {
 }
 
 /**
+ * The moment after a switch of space, when the screen beneath has just been
+ * rebuilt for the other space and nothing on it is where it was (spec 105).
+ *
+ * A second tap of a quick double tap on the switch's confirm outlived the
+ * sheet: the sheet closed on the first, and the system handed the second to
+ * the app beneath — on Settings → Networks, to the row that had just moved
+ * under the finger (S22, 2026-10-27, the dispatcher's log). For [WINDOW_MS]
+ * after a switch the app beneath takes no new touch. The clock is monotonic
+ * (`System.nanoTime`, which a JVM test has too); the tests pass their own.
+ */
+class SpaceSwitchSettle(
+    private val windowMs: Long = WINDOW_MS,
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
+    @Volatile
+    private var switchedAt: Long? = null
+
+    /** The space switched at [nowMs] (uptime). */
+    fun switched(nowMs: Long) {
+        switchedAt = nowMs
+    }
+
+    /** Whether a touch that starts at [nowMs] belongs to the switch, not to the screen. */
+    fun blocks(nowMs: Long = clock()): Boolean = switchedAt?.let { nowMs - it in 0 until windowMs } ?: false
+
+    /** The space switched now. */
+    fun switchedNow() = switched(clock())
+
+    companion object {
+        /** Longer than a double tap's gap, shorter than a person reaching for the next thing. */
+        const val WINDOW_MS = 500L
+    }
+}
+
+/**
  * The device's space (spec 105): one value, `vela.networkSpace`, shared by
  * every wallet on the device. Read and validated by the core
  * (`network_space_read`) — anything missing or unreadable is the mainnet
@@ -91,6 +126,9 @@ class NetworkSpacePreference(
      * or Settings → Networks; drawn once, over every route.
      */
     val switcherOpen = MutableStateFlow(false)
+
+    /** The touches that belong to a switch just made, not to the screen beneath. */
+    val settle = SpaceSwitchSettle()
 
     private val loaded = CompletableDeferred<Unit>()
 
@@ -117,6 +155,7 @@ class NetworkSpacePreference(
      */
     fun set(space: NetworkSpace) {
         VelaLog.event("network.space", "set", "space" to space.wire)
+        if (space != _space.value) settle.switchedNow()
         chosen = true
         _space.value = space
         scope.launch {

@@ -120,7 +120,7 @@ private fun NetworkSpaceLabel(text: String, testnet: Boolean, onClick: (() -> Un
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(app.getvela.wallet.core.designsystem.tokens.VelaRadius.full)
     Text(
         text = text,
-        color = if (testnet) colors.fgBase else colors.fgMuted,
+        color = if (testnet) colors.warningBase else colors.fgMuted,
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
         fontSize = VelaTextSize.xs,

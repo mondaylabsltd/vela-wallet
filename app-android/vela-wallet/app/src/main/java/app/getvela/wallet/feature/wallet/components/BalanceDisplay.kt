@@ -220,7 +220,9 @@ private fun QuietIndicatorRow(text: String, dot: Color) {
 private fun NoValueRow(text: String, onToggle: () -> Unit) {
     Text(
         text = text,
-        color = VelaTheme.colors.fgMuted,
+        // Amber, as on the web and iOS: the line that says nothing here is
+        // money must not read as a quiet caption.
+        color = VelaTheme.colors.warningBase,
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
         fontSize = VelaTextSize.xl,

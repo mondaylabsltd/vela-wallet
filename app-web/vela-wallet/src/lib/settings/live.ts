@@ -545,8 +545,12 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
  * the fixture's 12 stood on the Networks row and in About for everyone.
  * `undefined` until then — an empty cell, never a guess.
  */
-function networkCount(view: NetView): number | undefined {
-	return view.loaded ? view.networks.length : undefined;
+/** The networks the list shows — with a space (spec 105), that space's. */
+function networkCount(view: NetView, space?: LiveSpace): number | undefined {
+	if (!view.loaded) return undefined;
+	if (space === undefined) return view.networks.length;
+	const testnet = space.current === 'testnet';
+	return view.networks.filter((row) => row.is_testnet === testnet).length;
 }
 
 /** About's network row, counted from the list. */
@@ -580,7 +584,7 @@ export function withLiveNetworks(
 	space?: LiveSpace
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
-	const count = networkCount(view);
+	const count = networkCount(view, space);
 	return {
 		...model,
 		sections: model.sections.map((section) => ({
@@ -618,7 +622,7 @@ export function withLiveNetworksDesktop(
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
-		about: aboutWithNetworkCount(model.about, networkCount(view), m),
+		about: aboutWithNetworkCount(model.about, networkCount(view, space), m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId, space),

@@ -12,7 +12,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -65,7 +72,7 @@ fun NetworkSpaceBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             Text(
                 text = strings.t(I18nKeys.NetworkSpace.BAR),
-                color = colors.fgBase,
+                color = colors.warningBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.sm,
@@ -95,7 +102,20 @@ fun NetworkSpaceSwitchSheet(
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
-    VelaModalSheet(onDismissRequest = { onAnswer(false) }, containerColor = colors.bgRaised) {
+    // The sheet slides away FIRST and the answer follows: while it is going
+    // its window is still on top and takes a quick second tap, which used to
+    // fall through to the screen beneath as the space changed under it. One
+    // answer, whichever comes first — the confirm, Cancel, a swipe, Back.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var answered by remember { mutableStateOf(false) }
+    val answer = { switching: Boolean ->
+        if (!answered) {
+            answered = true
+            scope.launch { sheetState.hide() }.invokeOnCompletion { onAnswer(switching) }
+        }
+    }
+    VelaModalSheet(onDismissRequest = { answer(false) }, sheetState = sheetState, containerColor = colors.bgRaised) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -120,13 +140,13 @@ fun NetworkSpaceSwitchSheet(
             Spacer(modifier = Modifier.height(VelaSpacing.xl4))
             VelaPrimaryButton(
                 text = strings.t(if (to.testnet) I18nKeys.NetworkSpace.TO_TESTNET else I18nKeys.NetworkSpace.TO_MAINNET),
-                onClick = { onAnswer(true) },
+                onClick = { answer(true) },
                 modifier = Modifier.fillMaxWidth().testTag(SPACE_SWITCH_CONFIRM_TAG),
             )
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             VelaSecondaryButton(
                 text = strings.t(I18nKeys.Common.CANCEL),
-                onClick = { onAnswer(false) },
+                onClick = { answer(false) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

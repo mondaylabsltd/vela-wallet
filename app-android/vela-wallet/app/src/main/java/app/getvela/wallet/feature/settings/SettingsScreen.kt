@@ -1066,7 +1066,7 @@ private fun SettingsPageBody(
                         fontSize = VelaTextSize.base,
                     )
                 }
-                VelaStatusPill(detail.badge)
+                VelaStatusPill(detail.badge, modifier = Modifier.weight(1f, fill = false))
             }
             // Spec 048: the overrides are typed here (the web's NetworkDetailPanel);
             // committed to the core when the field loses focus.
@@ -1135,7 +1135,14 @@ private fun SettingsPageBody(
                             fontSize = VelaTextSize.base,
                         )
                     }
-                    if (add.candidate.badge != null) VelaStatusPill(add.candidate.badge)
+                    // Weighted, not fill: a Row measures an unweighted child
+                    // first, and a long verdict ("Unable to verify — RPC
+                    // request failed") took the width and left the name one
+                    // letter a line (S22, 2026-10-27). Now it wraps within at
+                    // most its share, and the name keeps the rest.
+                    if (add.candidate.badge != null) {
+                        VelaStatusPill(add.candidate.badge, modifier = Modifier.weight(1f, fill = false))
+                    }
                 }
                 if (add.checksTitle != null) {
                     VelaCheckList(add.checksTitle, add.checks)

@@ -63,6 +63,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -476,10 +478,27 @@ fun VelaNavHost(
             onClick = { application.container.networkSpace.switcherOpen.value = true },
         )
     }
+    val settle = application.container.networkSpace.settle
     Box(
         modifier = Modifier
             .weight(1f)
-            .then(if (space.testnet) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
+            .then(if (space.testnet) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)
+            // Spec 105: a touch that starts just after a switch of space is
+            // the switch's (a double tap's second), not the rebuilt screen's.
+            // Consumed before any control below sees it.
+            .pointerInput(settle) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        if (event.changes.any { it.changedToDown() } &&
+                            settle.blocks()
+                        ) {
+                            VelaLog.event("network.space", "touch held back after the switch")
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+            },
     ) {
     // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
     // address opens it (see IdenticonImage.tappable), so twelve screens do not
@@ -2544,7 +2563,9 @@ fun VelaNavHost(
                         // While the registry is asked: the device's own rows, where they will stand.
                         device = deviceKeys?.takeIf { it.first == session.address }?.second,
                     )
-                    m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
+                    m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT,
+                        // Spec 105: the space in front's networks, as the list counts them.
+                        networks.networks.count { it.is_testnet == space.testnet }, strings)
                     m = SettingsLive.withFeedback(m, feedbackFacts, strings)
                     m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
                     m = SettingsLive.withFeedbackNotice(m, feedbackState.notice)

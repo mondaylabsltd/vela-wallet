@@ -13441,8 +13441,13 @@ impl WalletPage {
         // The network count is the CORE's, not the mock's: the drawn 12 was
         // the built-in list of a year ago, and About is the page somebody
         // opens to check what they are running.
+        // Spec 105: the space in front's, as Settings → Networks lists them.
+        let testnet = crate::network_space::testnet();
         let networks = u32::try_from(
-            vela_core::app::network_admin::BUILTIN_CHAINS.len()
+            vela_core::app::network_admin::BUILTIN_CHAINS
+                .iter()
+                .filter(|chain| chain.testnet == testnet)
+                .count()
                 + self
                     .identity
                     .is_some()
@@ -13452,7 +13457,7 @@ impl WalletPage {
                             .view()
                             .networks
                             .iter()
-                            .filter(|row| row.is_custom)
+                            .filter(|row| row.is_custom && row.is_testnet == testnet)
                             .count()
                     })
                     .unwrap_or(0),

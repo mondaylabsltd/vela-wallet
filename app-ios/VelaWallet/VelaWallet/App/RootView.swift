@@ -3697,8 +3697,8 @@ struct RootView: View {
         model = SettingsLive.withAbout(
             version: BuildInfo.version,
             commit: BuildInfo.commit,
-            networkCount: settings.networkAdmin?.networks.count
-                ?? ChainCatalog.chains.count,
+            // The space in front's (spec 105), as the list counts them.
+            networkCount: walletNetworks.chains.count,
             on: model, loc: loc
         )
         model = SettingsLive.withFeedback(feedbackFacts, on: model, loc: loc)

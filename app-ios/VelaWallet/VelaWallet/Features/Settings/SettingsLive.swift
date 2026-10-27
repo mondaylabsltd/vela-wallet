@@ -69,8 +69,9 @@ enum SettingsLive {
             )
         }
         // The advanced row counts THIS device's list, custom chains included —
-        // it read the drawing's twelve on every phone.
-        let count = loc.t(I18nKeys.SettingsUi.networkCount, vars: ["count": String(view.networks.count)])
+        // it read the drawing's twelve on every phone. With a space (spec
+        // 105), the space's: the list the row opens.
+        let count = loc.t(I18nKeys.SettingsUi.networkCount, vars: ["count": String(shown.count)])
         copy.sections = model.sections.map { section in
             var updated = section
             updated.rows = section.rows.map { row in

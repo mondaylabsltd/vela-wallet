@@ -9,6 +9,7 @@ import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.SettingsFixtures
 import app.getvela.wallet.feature.settings.SettingsLive
+import app.getvela.wallet.feature.settings.SettingsScreenModel
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.core.NetEvent
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
@@ -17,6 +18,7 @@ import app.getvela.wallet.feature.settings.core.NetShellResult
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetworkAdminExecutor
 import app.getvela.wallet.feature.settings.core.NetworkSpace
+import app.getvela.wallet.feature.settings.core.SpaceSwitchSettle
 import app.getvela.wallet.feature.settings.core.NetworkSpacePreference
 import app.getvela.wallet.feature.settings.core.NetworkSpaces
 import app.getvela.wallet.feature.wallet.AssetFiatModel
@@ -297,6 +299,24 @@ class NetworkSpaceTest {
         assertEquals(BalanceStateKind.Normal, mainnet.balance.state)
     }
 
+    // -- the moment after a switch ---------------------------------------------------
+
+    /**
+     * A quick double tap on the switch's confirm: the first switches, the
+     * second must not land on the rebuilt screen beneath (S22, 2026-10-27 —
+     * the dispatcher handed it to the app's main window).
+     */
+    @Test
+    fun aTouchJustAfterASwitchIsTheSwitchesNotTheScreens() {
+        val settle = SpaceSwitchSettle()
+        assertFalse("nothing switched yet", settle.blocks(10_000))
+        settle.switched(10_000)
+        assertTrue("a double tap's second, 60 ms on", settle.blocks(10_060))
+        assertTrue(settle.blocks(10_000 + SpaceSwitchSettle.WINDOW_MS - 1))
+        assertFalse("the next deliberate tap", settle.blocks(10_000 + SpaceSwitchSettle.WINDOW_MS))
+        assertFalse("a clock from before the switch is not inside it", settle.blocks(9_990))
+    }
+
     // -- the settings list ---------------------------------------------------------
 
     @Test
@@ -319,6 +339,15 @@ class NetworkSpaceTest {
 
         val mainnet = SettingsLive.withNetworks(base, view, strings, space = NetworkSpace.Mainnet)
         assertEquals(listOf("Ethereum"), mainnet.networks.map { it.name })
+        // The row that opens the list counts what the list shows — the space's
+        // networks, not both spaces' (S22, 2026-10-27: "33 networks" over a
+        // list of 24).
+        val countOf = { m: SettingsScreenModel ->
+            m.sections.flatMap { it.rows }.single { it.id == "networks" }.value.orEmpty()
+        }
+        assertTrue(countOf(testnet), countOf(testnet).contains("2"))
+        assertTrue(countOf(mainnet), countOf(mainnet).contains("1"))
+        assertFalse(countOf(mainnet), countOf(mainnet).contains("3"))
         // The gallery: every network, no heading.
         assertNull(SettingsLive.withNetworks(base, view, strings).networksSpace)
     }

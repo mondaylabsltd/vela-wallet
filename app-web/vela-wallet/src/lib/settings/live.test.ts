@@ -609,6 +609,37 @@ describe('the network count (spec 072)', () => {
 		);
 	});
 
+	// Spec 105: the row counts the list it opens — the space's (S22,
+	// 2026-10-27: "33 networks" over a list of 24).
+	it('counts the space in front’s networks, not both spaces’', () => {
+		const words = resolveNetworkSpaceMessages('en');
+		const view: NetView = {
+			...VIEW,
+			networks: [...VIEW.networks, { ...ROW, id: 'sepolia', chain_id: 11155111, is_testnet: true }]
+		};
+		const mainnet = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), view, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(homeCount(mainnet)).toBe(m.networks.count.replace('{{count}}', '2'));
+		expect(aboutCount(mainnet.about.rows)).toBe(
+			m.about.techNetworksValue.replace('{{count}}', '2')
+		);
+		const testnet = withLiveNetworksDesktop(
+			buildDesktopState('dst8', m, IDENTICON),
+			view,
+			m,
+			undefined,
+			{
+				current: 'testnet',
+				words
+			}
+		);
+		expect(aboutCount(testnet.about.rows)).toBe(
+			m.about.techNetworksValue.replace('{{count}}', '1')
+		);
+	});
+
 	it('says nothing until the ledger has been read', () => {
 		const unread = { ...VIEW, loaded: false, networks: [] };
 		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), unread, m);
