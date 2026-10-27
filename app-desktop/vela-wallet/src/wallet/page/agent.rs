@@ -186,9 +186,7 @@ impl WalletPage {
                 && explore.selected_tab.as_deref() == Some(consent.tab.as_str()))
             .then(|| format!("connect:{}", consent.tab))
         } else if let Some(signing) = &dapp.signing {
-            self.signing_host
-                .is_some()
-                .then(|| format!("sign:{}:{}", signing.tab, signing.id))
+            (!self.no_signing_host()).then(|| format!("sign:{}:{}", signing.tab, signing.id))
         } else {
             dapp.adding_network
                 .as_ref()
@@ -321,6 +319,7 @@ impl WalletPage {
                             );
                         });
                     }
+                    #[cfg(not(target_os = "linux"))]
                     "sign" => {
                         let Some(signing) = self.signing_host.clone() else {
                             return Some("the signing request is not on its sheet yet".to_owned());
@@ -331,6 +330,11 @@ impl WalletPage {
                                 cx,
                             );
                         });
+                    }
+                    // No signing column on Linux: no sheet to reject on.
+                    #[cfg(target_os = "linux")]
+                    "sign" => {
+                        return Some("the signing request is not on its sheet yet".to_owned());
                     }
                     "add_network" => {
                         let admin = self.network_admin(cx);
