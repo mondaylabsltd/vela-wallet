@@ -556,11 +556,15 @@ fn a_wallet_the_person_did_not_allow_is_neither_read_nor_used() {
         "balance": { "hidden": false, "display_total_usd": 99.0, "tokens": [] },
         "agent_enabled": true
     });
-    let denied = |world: &vela_core::app::intent_rules::World, action: Action| {
-        match check(Actor::Agent, &action, &grants(world)).decision {
-            Decision::Deny { reason } => Some(reason.code),
-            _ => None,
-        }
+    let denied = |world: &vela_core::app::intent_rules::World, action: Action| match check(
+        Actor::Agent,
+        &action,
+        &grants(world),
+    )
+    .decision
+    {
+        Decision::Deny { reason } => Some(reason.code),
+        _ => None,
     };
 
     // Nothing allowed (the default): nothing read, nothing done — but a
@@ -570,8 +574,19 @@ fn a_wallet_the_person_did_not_allow_is_neither_read_nor_used() {
     assert_eq!(state["wallet_allowed"], false);
     assert!(state["balances"].is_null());
     assert_eq!(state["accounts"][0]["agent_allowed"], false);
-    assert_eq!(denied(&closed, Action::RefreshBalances), Some(ReasonCode::WalletNotAllowed));
-    assert_eq!(denied(&closed, Action::Show { screen: Screen::Home }), None);
+    assert_eq!(
+        denied(&closed, Action::RefreshBalances),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    assert_eq!(
+        denied(
+            &closed,
+            Action::Show {
+                screen: Screen::Home
+            }
+        ),
+        None
+    );
 
     // Allowed: read and used; switching to a wallet not allowed is refused.
     let mut open = base;
@@ -582,7 +597,12 @@ fn a_wallet_the_person_did_not_allow_is_neither_read_nor_used() {
     assert_eq!(state["balances"]["total_usd"], 99.0);
     assert_eq!(denied(&open, Action::RefreshBalances), None);
     assert_eq!(
-        denied(&open, Action::SwitchAccount { address: format!("0x{}", "b".repeat(40)) }),
+        denied(
+            &open,
+            Action::SwitchAccount {
+                address: format!("0x{}", "b".repeat(40))
+            }
+        ),
         Some(ReasonCode::WalletNotAllowed)
     );
     // A person is never held to the agent's list.

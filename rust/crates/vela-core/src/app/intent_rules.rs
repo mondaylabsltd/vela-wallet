@@ -427,7 +427,9 @@ impl World {
     /// The person let the agent use `address` (E8).
     #[must_use]
     pub fn agent_may_use(&self, address: &str) -> bool {
-        self.agent_wallets.iter().any(|wallet| same(wallet, address))
+        self.agent_wallets
+            .iter()
+            .any(|wallet| same(wallet, address))
     }
 
     /// The wallet in front is one the agent may use — or nobody is in.
@@ -1688,7 +1690,10 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
             .and_then(|networks| network(networks, chain_id))
             .map(|row| row.display_name.trim())
             .filter(|name| !name.is_empty())
-            .map_or_else(|| format!("chain {chain_id}"), |name| format!("{name} ({chain_id})"))
+            .map_or_else(
+                || format!("chain {chain_id}"),
+                |name| format!("{name} ({chain_id})"),
+            )
     };
     let wallet = |address: &str| {
         let short = short_address(address);
@@ -1728,24 +1733,36 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
                 .and_then(|site| site.chain_id)
                 .map_or_else(|| "no network yet".to_owned(), network);
             let mut detail = format!("{} · {from} → {}", host(origin), network(*chain_id));
-            if let Some(address) = connected.map(|site| site.address.as_str()).filter(|a| !a.is_empty()) {
+            if let Some(address) = connected
+                .map(|site| site.address.as_str())
+                .filter(|a| !a.is_empty())
+            {
                 detail.push_str(&format!(" · {}", wallet(address)));
             }
             Some(detail)
         }
         Action::DisconnectSite { origin } => {
             let mut detail = host(origin);
-            if let Some(address) = site(origin).map(|site| site.address.as_str()).filter(|a| !a.is_empty()) {
+            if let Some(address) = site(origin)
+                .map(|site| site.address.as_str())
+                .filter(|a| !a.is_empty())
+            {
                 detail.push_str(&format!(" · {}", wallet(address)));
             }
             Some(detail)
         }
         Action::SwitchAccount { address } => {
             let to = wallet(address);
-            Some(match world.session.as_ref().map(|session| session.address.as_str()) {
-                Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
-                _ => to,
-            })
+            Some(
+                match world
+                    .session
+                    .as_ref()
+                    .map(|session| session.address.as_str())
+                {
+                    Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
+                    _ => to,
+                },
+            )
         }
         _ => approval_detail(action),
     }
@@ -1818,28 +1835,32 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                 })
                 .collect()
         }),
-        balances: world.balance.as_ref().filter(|_| allowed).map(|b| BalancesOut {
-            hidden,
-            // A testnet's coins have no value (spec 105): no total to read.
-            total_usd: if hidden || testnets {
-                None
-            } else {
-                b.display_total_usd
-            },
-            partial: b.balance_partial,
-            tokens: b
-                .tokens
-                .iter()
-                .filter(|t| !t.spam)
-                .map(|t| TokenOut {
-                    chain_id: t.chain_id,
-                    symbol: &t.symbol,
-                    token_address: t.token_address.as_deref(),
-                    balance: (!hidden).then_some(t.balance.as_str()),
-                    price_usd: t.price_usd,
-                })
-                .collect(),
-        }),
+        balances: world
+            .balance
+            .as_ref()
+            .filter(|_| allowed)
+            .map(|b| BalancesOut {
+                hidden,
+                // A testnet's coins have no value (spec 105): no total to read.
+                total_usd: if hidden || testnets {
+                    None
+                } else {
+                    b.display_total_usd
+                },
+                partial: b.balance_partial,
+                tokens: b
+                    .tokens
+                    .iter()
+                    .filter(|t| !t.spam)
+                    .map(|t| TokenOut {
+                        chain_id: t.chain_id,
+                        symbol: &t.symbol,
+                        token_address: t.token_address.as_deref(),
+                        balance: (!hidden).then_some(t.balance.as_str()),
+                        price_usd: t.price_usd,
+                    })
+                    .collect(),
+            }),
         recent_transactions: world.feed.as_ref().filter(|_| allowed).map(|f| {
             f.transactions
                 .iter()

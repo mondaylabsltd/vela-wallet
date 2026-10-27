@@ -17,7 +17,14 @@ pub fn begin(
     random: &[u8],
     now_ms: f64,
 ) -> String {
-    json::begin(site, redirect_uri, label, installation, random, now_ms as u64)
+    json::begin(
+        site,
+        redirect_uri,
+        label,
+        installation,
+        random,
+        now_ms as u64,
+    )
 }
 
 /// The code in the address the browser came back to, if it is this sign-in's.

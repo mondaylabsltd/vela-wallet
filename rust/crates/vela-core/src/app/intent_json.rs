@@ -172,8 +172,9 @@ pub fn explore_facts(
     // missing — opening a site starts it (the S22 run, 2026-10-27).
     let explore = serde_json::from_str(explore_json).unwrap_or_default();
     let dapp = serde_json::from_str(dapp_json).unwrap_or_default();
-    let history = serde_json::from_str(history_json)
-        .unwrap_or(super::browser_history::BhistView { entries: Vec::new() });
+    let history = serde_json::from_str(history_json).unwrap_or(super::browser_history::BhistView {
+        entries: Vec::new(),
+    });
     to_json(&intent_rules::explore_facts(
         &explore,
         &dapp,

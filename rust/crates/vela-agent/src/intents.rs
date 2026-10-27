@@ -401,7 +401,7 @@ mod tests {
     use std::cell::Cell;
 
     use futures::executor::block_on;
-    use vela_core::app::intents::{self, Grants};
+    use vela_core::app::intents;
 
     use super::*;
 

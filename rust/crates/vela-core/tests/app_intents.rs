@@ -1078,7 +1078,7 @@ fn every_action_shows_where_its_change_is_seen() {
 #[test]
 fn explore_reads_the_browser_machines_own_views() {
     use vela_core::app::browser_history::{BhistEntry, BhistView};
-    use vela_core::app::dapp_browser::{DbrConsentView, DbrSiteView, DbrSigningView, DbrView};
+    use vela_core::app::dapp_browser::{DbrConsentView, DbrSigningView, DbrSiteView, DbrView};
     use vela_core::app::explore_sites::ExploreView;
     use vela_core::app::intent_rules::{dapp_request_target, explore_facts};
 
@@ -1128,16 +1128,31 @@ fn explore_reads_the_browser_machines_own_views() {
     assert_eq!(facts.recent[0].origin, UNISWAP);
     assert_eq!(facts.connected[0].chain_id, Some(8453));
     let pending = facts.pending.expect("the connect request");
-    assert_eq!((pending.id.as_str(), pending.kind.as_str(), pending.shown), ("connect:t1", "connect", false));
+    assert_eq!(
+        (pending.id.as_str(), pending.kind.as_str(), pending.shown),
+        ("connect:t1", "connect", false)
+    );
     let shown = explore_facts(&explore, &dapp, &history, true, false, Some("connect:t1"));
     assert!(shown.pending.expect("shown").shown);
 
     dapp.consent = None;
-    dapp.signing = Some(DbrSigningView { tab: "t1".into(), id: "42".into() });
-    let signing = explore_facts(&explore, &dapp, &history, false, false, None).pending.expect("signing");
+    dapp.signing = Some(DbrSigningView {
+        tab: "t1".into(),
+        id: "42".into(),
+    });
+    let signing = explore_facts(&explore, &dapp, &history, false, false, None)
+        .pending
+        .expect("signing");
     assert_eq!(signing.id, "sign:t1:42");
     let target = dapp_request_target(&signing.id).expect("parses");
-    assert_eq!((target.kind.as_str(), target.tab.as_str(), target.id.as_deref()), ("sign", "t1", Some("42")));
+    assert_eq!(
+        (
+            target.kind.as_str(),
+            target.tab.as_str(),
+            target.id.as_deref()
+        ),
+        ("sign", "t1", Some("42"))
+    );
     assert_eq!(dapp_request_target("connect:t1").expect("connect").id, None);
     for bad in ["", "sign:t1", "connect:", "pay:t1:1", "sign::1"] {
         assert_eq!(dapp_request_target(bad), None, "{bad}");
@@ -1165,20 +1180,46 @@ fn a_sites_network_change_names_the_site_both_networks_and_the_wallet() {
     }))
     .expect("a world");
     assert_eq!(
-        approval_detail_in(&Action::SetSiteNetwork { origin: UNISWAP.into(), chain_id: 8453 }, &world).as_deref(),
+        approval_detail_in(
+            &Action::SetSiteNetwork {
+                origin: UNISWAP.into(),
+                chain_id: 8453
+            },
+            &world
+        )
+        .as_deref(),
         Some("app.uniswap.org · Ethereum (1) → Base (8453) · Agent test (0xaaaa…aaaa)")
     );
     assert_eq!(
-        approval_detail_in(&Action::DisconnectSite { origin: UNISWAP.into() }, &world).as_deref(),
+        approval_detail_in(
+            &Action::DisconnectSite {
+                origin: UNISWAP.into()
+            },
+            &world
+        )
+        .as_deref(),
         Some("app.uniswap.org · Agent test (0xaaaa…aaaa)")
     );
     assert_eq!(
-        approval_detail_in(&Action::SwitchAccount { address: ALICE.into() }, &world).as_deref(),
+        approval_detail_in(
+            &Action::SwitchAccount {
+                address: ALICE.into()
+            },
+            &world
+        )
+        .as_deref(),
         Some("Agent test (0xaaaa…aaaa) → Main (0x0000…05fa)")
     );
     // Without what it needs, it still says what it can.
     assert_eq!(
-        approval_detail_in(&Action::SetSiteNetwork { origin: UNISWAP.into(), chain_id: 10 }, &World::default()).as_deref(),
+        approval_detail_in(
+            &Action::SetSiteNetwork {
+                origin: UNISWAP.into(),
+                chain_id: 10
+            },
+            &World::default()
+        )
+        .as_deref(),
         Some("app.uniswap.org · no network yet → chain 10")
     );
 }
@@ -1187,9 +1228,10 @@ fn a_sites_network_change_names_the_site_both_networks_and_the_wallet() {
 /// agent still sees Explore (empty), so it can open a site, which starts it.
 #[test]
 fn a_browser_not_started_yet_reads_as_empty() {
-    let facts: serde_json::Value =
-        serde_json::from_str(&vela_core::app::intent_json::explore_facts("null", "null", "null", false, false, None))
-            .expect("json");
+    let facts: serde_json::Value = serde_json::from_str(
+        &vela_core::app::intent_json::explore_facts("null", "null", "null", false, false, None),
+    )
+    .expect("json");
     assert_eq!(facts["browser"], true);
     assert_eq!(facts["tabs"], serde_json::json!([]));
 }
