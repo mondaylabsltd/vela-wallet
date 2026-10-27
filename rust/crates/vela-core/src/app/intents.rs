@@ -342,10 +342,13 @@ const CATALOG: [Entry; 30] = [
         Risk::Operate,
         "Show a place in the wallet to the person.",
     ),
+    // Manage: the active wallet is what an agent reads and drafts from, so
+    // switching is reaching another wallet's balances and history — the
+    // person's to allow (the iPhone run, 2026-10-23).
     entry(
         "switch_account",
-        Risk::Operate,
-        "Make another wallet on this device the active one.",
+        Risk::Manage,
+        "Make another wallet on this device the active one. The person approves it first.",
     ),
     entry(
         "set_preference",

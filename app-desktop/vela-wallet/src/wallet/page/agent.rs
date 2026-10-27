@@ -611,7 +611,7 @@ impl WalletPage {
                         .map_or_else(|| id.clone(), |g| g.name.clone()),
                 )
             }
-            Action::RemoveWallet { address } => {
+            Action::RemoveWallet { address } | Action::SwitchAccount { address } => {
                 let view = session::view(cx);
                 let row = view
                     .accounts

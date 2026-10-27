@@ -103,7 +103,7 @@ object AgentWords {
                 val id = action.optString("id")
                 wallet.contacts.view.value.groups.firstOrNull { it.id == id }?.name ?: id
             }
-            "remove_wallet" -> {
+            "remove_wallet", "switch_account" -> {
                 val address = action.optString("address")
                 wallet.session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }
                     ?.let { "${it.name} · $address" } ?: address

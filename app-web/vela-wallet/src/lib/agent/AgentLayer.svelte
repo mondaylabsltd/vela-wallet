@@ -42,7 +42,8 @@
 			}
 			case 'delete_group':
 				return contactsBook.view?.groups.find((g) => g.id === action.id)?.name ?? action.id;
-			case 'remove_wallet': {
+			case 'remove_wallet':
+			case 'switch_account': {
 				const row = session.view.accounts.find((r) => same(r.account.address, action.address));
 				return row ? `${row.account.name} · ${action.address}` : action.address;
 			}

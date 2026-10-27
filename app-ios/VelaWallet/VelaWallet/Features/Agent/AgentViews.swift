@@ -48,7 +48,7 @@ enum AgentWords {
         case "delete_group":
             let id = action["id"] as? String ?? ""
             return graph.contacts.view?.groups.first { $0.id == id }?.name ?? id
-        case "remove_wallet":
+        case "remove_wallet", "switch_account":
             let address = action["address"] as? String ?? ""
             let row = graph.session.view.accounts.first { same($0.account.address, address) }
             return row.map { "\($0.account.name) · \(address)" } ?? address

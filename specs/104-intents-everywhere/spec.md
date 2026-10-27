@@ -212,8 +212,11 @@ The question: can any agent action bypass the person's confirmation, trigger a p
 | S6 | **Android's erase left the agent connected** with the token it forgot. | Off, and hung up. |
 | S7 | **Stop did not stop at once.** A draft under way went on to its review; requests in the moment before the setting was saved were answered as "on". | `Agent::stop` (and the desktop's) switches it off at once; a draft checks between its steps (`SendDesk::halted`: stopped, off or in the background) and leaves nothing open. |
 | S8 | **An approval could change under a tap.** Android's dialog was the same dialog with the next request's words. | One dialog or sheet per request, its Allow taking a tap only after 0.7 s (Android, iOS, the web; the desktop ignores an Allow click before then). |
+| S9 | **Another wallet, reached without asking** (found on the iPhone run, 2026-10-23). `switch_account` was operate-level, and the active wallet is what an agent reads and drafts from: it could switch to any wallet on the device and read its balances and history. | Manage-level: the person's Allow, the approval naming the wallet ("name · address") on every shell. Their own switch is unchanged. On the phones (2026-10-27): the Redmi K40 — Allow switched, Deny answered `denied` and nothing moved; the iPhone 15 Pro — Allow switched (twice, each meant as Deny: see below). |
 
 S1's delay is one of three links now; the others bind what the person saw to what is signed (below).
+
+**Found on the phones, to fix:** on iOS the approval sheet's Allow is the large red button on top and Deny the one below it; asked to tap Deny, the owner tapped Allow twice. The safe answer should be the easy one.
 
 **Left, low:** an agent-drafted review is not marked as the agent's on the review itself (the capsule says what the agent did last; on an Android flow, where it is compact, it shows only the link and Stop). Side-effect actions an agent may take without asking (show, refresh, save or favourite a contact) are visible and reversible.
 
@@ -244,6 +247,8 @@ Reviewed; what a token gives: connecting as this wallet's application to its bri
 - **Desktop:** `wallet.json` (with the RPC providers' keys), in the clear; until now created `0644`. macOS and Windows keep its folder private; a Linux `~/.config` is often readable by every account. **Fixed:** the document is written `0600` on Unix, an older copy's mode included (`storage::write_private`). Proposed: the OS keychain (Keychain, Credential Manager, Secret Service) for the token and the providers' keys.
 
 ### F3: a phone that went silent (ClientMCP)
+
+**Fixed in ClientMCP, deployed** (`2c6b0b2`, version `ed0aabcd` on `bridge.clientmcp.dev`, 2026-10-27; the previous one `c0b5e511`; the suite there 33 + 1 skipped). On the phones, airplane mode during an agent's call: the Redmi K40's failed "disconnected" after 74 s, the iPhone 15 Pro's after 54 s, the next call "offline" at once (before: the whole call timeout, and more). The fix: the Worker now applies the protocol's idle rule (SPEC §3.2, `CLIENTMCP_CLIENT_IDLE`, 90 s by default, the native bridge's too) — a client is last heard from at the later of its last message and the platform's record of its last answered ping, and one silent past the limit is closed: on any agent request, and every two seconds while a call waits. `tests/run-idle.sh` (3 s idle, 20 s call timeout): a call to a silent client fails in 4 s on the Worker, 3 s on the native bridge. Below is the problem as found.
 
 The Worker answers the client's pings at the edge (`setWebSocketAutoResponse`), so its Durable Object never learns that a client stopped pinging. A call to a phone that lost its network waits for the whole call timeout (120 s) and then fails. The fix belongs to ClientMCP's Worker: on a call, and while it waits, read `getWebSocketAutoResponseTimestamp` and fail the call — and close the socket — once the last pong is older than the client's ping interval and its grace (25 s + 10 s). worker-rs 0.8.7 does not expose that method; it needs a `wasm_bindgen` binding of its own. Then a production deploy.
 

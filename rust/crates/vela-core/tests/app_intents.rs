@@ -245,6 +245,23 @@ fn sharing_usage_statistics_is_manage_level() {
     assert_eq!(authorize(Actor::Agent, &theme, &ON), Decision::Allow);
 }
 
+/// The active wallet is what an agent reads and drafts from: switching it is
+/// the person's to allow. Their own switch is theirs at once.
+#[test]
+fn switching_wallets_is_the_persons_to_allow() {
+    let switch = Action::SwitchAccount {
+        address: MINE.to_owned(),
+    };
+    assert_eq!(switch.risk(), Risk::Manage);
+    assert_eq!(
+        authorize(Actor::Agent, &switch, &ON),
+        Decision::Approve {
+            by: Approver::Wallet
+        }
+    );
+    assert_eq!(authorize(Actor::Person, &switch, &ON), Decision::Allow);
+}
+
 /// Hiding the balances is the person's privacy: an agent may add to it, and
 /// asks before taking it away.
 #[test]
