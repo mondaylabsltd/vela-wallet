@@ -1,6 +1,6 @@
 # 108 — Swaps the agent can prepare, without reading a page
 
-**Status:** draft (2026-10-27), for the owner's review.
+**Status:** deferred by the owner (2026-10-27, "swap 108 先不做"). A draft kept for later; nothing is built.
 
 ## The problem
 
