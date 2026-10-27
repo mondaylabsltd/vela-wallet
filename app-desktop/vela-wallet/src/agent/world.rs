@@ -61,9 +61,26 @@ pub fn views(cx: &mut App, operations: &[Operation], agent_enabled: bool) -> Val
         world.insert("currency".into(), json!(currency));
         world.insert("fee_tier".into(), json!(fee_tier));
     }
+    // Spec 107: Explore — the tabs, the lists, a dApp's request.
+    if signed_in && let Some(page) = super::page(cx).and_then(|page| page.upgrade()) {
+        let explore = resident::resident::<vela_core::app::explore_sites::ExploreSites>(cx)
+            .read(cx)
+            .view();
+        let history = resident::resident::<vela_core::app::browser_history::BrowserHistory>(cx)
+            .read(cx)
+            .view();
+        let facts = page.read(cx).agent_explore_facts(&explore, &history, cx);
+        world.insert("explore".into(), json!(facts));
+    }
     world.insert("operations".into(), json!(operations));
     world.insert("preferences".into(), preferences());
     world.insert("agent_enabled".into(), Value::Bool(agent_enabled));
+    // Spec 107 E8: the wallets the person lets the agent use.
+    let wallets = cx
+        .try_global::<super::Agent>()
+        .map(|agent| agent.config.wallets.clone())
+        .unwrap_or_default();
+    world.insert("agent_wallets".into(), json!(wallets));
     // The space in front (spec 105): the agent reads only its networks, and
     // a transfer on the other space's is refused.
     world.insert(

@@ -28,6 +28,11 @@ import init, {
 	bestNativeDexPrice,
 	checksumAddress,
 	chooseNativePrice,
+	clientmcpInstallationId,
+	clientmcpLinkAccept,
+	clientmcpLinkBegin,
+	clientmcpLinkExchange,
+	clientmcpLinkReturned,
 	ApprovalGuardCore,
 	BalanceDashboardCore,
 	BatchImportCore,
@@ -68,6 +73,7 @@ import init, {
 	peggedNativeUsd,
 	intentAgentState,
 	intentApprovalDetail,
+	intentApprovalDetailIn,
 	intentBaseline,
 	intentCatalog,
 	intentCheck,
@@ -160,6 +166,16 @@ export { maskedAmount };
 // back as its code. Synchronous, callable once `loadCore()` has resolved.
 export { fiatSymbol };
 export { identiconNormalizeSeed, identiconSvgCircular };
+// Spec 106: connecting the agent with clientmcp.dev — the exchange's every
+// decision (`vela_core::clientmcp_link`), JSON in and out. Callable once
+// `loadCore()` has resolved.
+export {
+	clientmcpInstallationId,
+	clientmcpLinkAccept,
+	clientmcpLinkBegin,
+	clientmcpLinkExchange,
+	clientmcpLinkReturned
+};
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.
 export { i18nPluralSuffix };
@@ -194,6 +210,7 @@ export { intentCatalog, intentCheck };
 export {
 	intentAgentState,
 	intentApprovalDetail,
+	intentApprovalDetailIn,
 	intentBaseline,
 	intentExamine,
 	intentOperationProgress,

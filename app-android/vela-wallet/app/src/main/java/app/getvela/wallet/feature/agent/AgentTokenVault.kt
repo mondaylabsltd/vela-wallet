@@ -32,10 +32,16 @@ interface AgentTokenVault {
  * (`vela.agentToken`, swept with the rest on an erase, which deletes the key
  * too).
  */
-class KeystoreTokenVault(private val store: KeyValueStore) : AgentTokenVault {
+class KeystoreTokenVault(
+    private val store: KeyValueStore,
+    /** Where the sealed bytes are stored. */
+    private val key: String = KEY,
+    /** The Keystore key that seals them. */
+    private val alias: String = ALIAS,
+) : AgentTokenVault {
 
     override suspend fun read(): String? = runCatching {
-        val text = store.read(KEY) ?: return null
+        val text = store.read(key) ?: return null
         val (iv, sealed) = text.split(':').map { Base64.decode(it, Base64.NO_WRAP) }
         val cipher = Cipher.getInstance(CIPHER)
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, iv))
@@ -46,21 +52,21 @@ class KeystoreTokenVault(private val store: KeyValueStore) : AgentTokenVault {
         val cipher = Cipher.getInstance(CIPHER)
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val sealed = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        store.write(KEY, Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(sealed, Base64.NO_WRAP))
+        store.write(key, Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(sealed, Base64.NO_WRAP))
     }.getOrDefault(false)
 
     override suspend fun delete() {
-        store.remove(KEY)
-        runCatching { keyStore().deleteEntry(ALIAS) }
+        store.remove(key)
+        runCatching { keyStore().deleteEntry(alias) }
     }
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
     private fun key(): SecretKey {
-        (keyStore().getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore().getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER)
         generator.init(
-            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256)
@@ -73,6 +79,9 @@ class KeystoreTokenVault(private val store: KeyValueStore) : AgentTokenVault {
         /** The sealed token: `base64(iv):base64(ciphertext)`. */
         const val KEY = "vela.agentToken"
         private const val ALIAS = "vela.agent.token"
+        /** Spec 106: the agent's address, sealed the same way. */
+        const val AGENT_URL_KEY = "vela.agentUrl"
+        const val AGENT_URL_ALIAS = "vela.agent.url"
         private const val PROVIDER = "AndroidKeyStore"
         private const val CIPHER = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128

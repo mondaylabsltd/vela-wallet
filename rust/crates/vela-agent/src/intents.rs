@@ -443,9 +443,7 @@ mod tests {
             intents::check(
                 actor,
                 action,
-                &Grants {
-                    agent_enabled: self.world.agent_enabled,
-                },
+                &vela_core::app::intent_rules::grants(&self.world),
             )
         }
         fn world(&mut self) -> World {

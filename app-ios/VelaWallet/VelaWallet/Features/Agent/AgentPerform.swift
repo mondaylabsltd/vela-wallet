@@ -119,7 +119,8 @@ struct AgentPerform {
             agent.apply(
                 enabled: action["enabled"] as? Bool,
                 url: action["bridge_url"] as? String,
-                token: action["client_token"] as? String
+                token: action["client_token"] as? String,
+                wallets: action["wallets"] as? [String]
             )
             return Self.done
         case "add_token":
@@ -160,9 +161,116 @@ struct AgentPerform {
         case "reset_service_endpoints":
             graph.settings.resetEndpoints()
             return Self.done
+        // MARK: Explore (spec 107): the browser's own calls, as its controls make them.
+        case "open_site":
+            guard let page else { return Self.notOpen }
+            if let refusal = page.show(["type": "explore"]) { return Self.refused(refusal) }
+            let newTab = action["new_tab"] as? Bool ?? false
+            // Into the page in front, or (new_tab) without replacing it.
+            graph.browser.open(text("url"), kind: .address, onPage: !newTab && graph.browser.currentTab?.origin != nil)
+            return Self.done
+        case "browse":
+            switch action["to"] as? String {
+            case "back": graph.browser.goBack()
+            case "forward": graph.browser.goForward()
+            case "reload": graph.browser.reload()
+            default: return Self.refused("invalid_input", "back, forward or reload")
+            }
+            return Self.done
+        case "close_tab":
+            graph.browser.closeTab(text("id"))
+            return Self.done
+        case "close_all_tabs":
+            graph.browser.closeAllTabs()
+            return Self.done
+        case "set_site_favorite":
+            let url = text("url")
+            if action["favorite"] as? Bool == true {
+                graph.browser.addFavorite(url: url, title: nil)
+            } else if let site = graph.browser.explore.favorites.first(where: { Self.sameOrigin($0.url, url) }) {
+                graph.browser.removeFavorite(origin: site.origin)
+            }
+            return Self.done
+        case "clear_recent_sites":
+            graph.browser.clearRecent()
+            return Self.done
+        case "forget_site":
+            graph.browser.deleteRecent(origin: Self.siteOrigin(text("origin")))
+            return Self.done
+        case "disconnect_site":
+            graph.browser.revoke(origin: Self.siteOrigin(text("origin")))
+            return Self.done
+        case "set_site_network":
+            graph.browser.pickSiteChain(origin: Self.siteOrigin(text("origin")), chainId: chainId)
+            return Self.done
+        case "reject_dapp_request":
+            return rejectDappRequest(text("id"))
+        case "ask_person_dapp_request":
+            return askPerson(text("id"))
         default:
             return Self.refused("this wallet cannot do \(kind) here")
         }
+    }
+
+    // MARK: - Explore (spec 107)
+
+    /// The sheet's own "no": nothing signed, nothing shared.
+    private func rejectDappRequest(_ id: String) -> String {
+        guard let target = Self.target(id) else {
+            return Self.refused("not_found", "no dApp request with that id is waiting")
+        }
+        switch target["kind"] as? String {
+        case "connect":
+            graph.browser.consentRejected()
+        case "sign":
+            guard page?.rejectSigning() == true else {
+                return Self.refused("not_ready", "the signing request is not on its sheet yet")
+            }
+        case "add_network":
+            graph.settings.dappAddDeclined()
+        default:
+            return Self.refused("not_found", "no dApp request with that id is waiting")
+        }
+        return Self.done
+    }
+
+    /// Put the request in front of the person: a connect over its tab in
+    /// Explore; a signature's and a network's sheets are already the app's
+    /// own, in front wherever the person is.
+    private func askPerson(_ id: String) -> String {
+        guard let target = Self.target(id) else {
+            return Self.refused("not_found", "no dApp request with that id is waiting")
+        }
+        if target["kind"] as? String == "connect" {
+            guard let page else { return Self.notOpen }
+            graph.browser.selectTab(target["tab"] as? String ?? "")
+            if let refusal = page.show(["type": "explore"]) { return Self.refused(refusal) }
+        }
+        return Self.done
+    }
+
+    private static func target(_ id: String) -> [String: Any]? {
+        try? CoreJSON.object(intentDappRequestTarget(id: id))
+    }
+
+    /// A site's origin, as the browser keys its sites.
+    static func siteOrigin(_ text: String) -> String {
+        var origin = text.trimmingCharacters(in: .whitespaces)
+        while origin.hasSuffix("/") { origin.removeLast() }
+        return origin
+    }
+
+    static func sameOrigin(_ a: String, _ b: String) -> Bool {
+        guard let one = origin(of: a), let other = origin(of: b) else { return false }
+        return one == other
+    }
+
+    private static func origin(of url: String) -> String? {
+        guard let parts = URLComponents(string: url.trimmingCharacters(in: .whitespaces)),
+              let scheme = parts.scheme?.lowercased(), let host = parts.host?.lowercased()
+        else { return nil }
+        let port = parts.port.flatMap { (scheme == "https" && $0 == 443) || (scheme == "http" && $0 == 80) ? nil : $0 }
+        return "\(scheme)://\(host)\(port.map { ":\($0)" } ?? "")"
     }
 
     // MARK: - Preferences

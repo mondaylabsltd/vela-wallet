@@ -3984,6 +3984,11 @@ struct RootView: View {
         page.clearCaches = { clearSettingsCaches() }
         page.refreshBalances = { if wallet.pullRefresh() { activity.focusTick() } }
         page.switchAccount = { address in await switchAccountNow(address) }
+        page.rejectSigning = {
+            guard let signing else { return false }
+            signing.reject()
+            return true
+        }
         agent.page = page
     }
 
@@ -4031,6 +4036,10 @@ struct RootView: View {
             flows.close()
             section = .contacts
             contactsRoute = .group(id: id)
+        // Spec 107: Explore, at its tab in front.
+        case "explore":
+            flows.close()
+            section = .explore
         case "settings":
             flows.close()
             pendingSettingsPage = Self.settingsPage(screen["page"] as? String)

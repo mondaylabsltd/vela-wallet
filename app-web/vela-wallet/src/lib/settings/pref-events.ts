@@ -49,5 +49,10 @@ export type SettingsPrefEvent =
 	| { kind: 'agent'; on: boolean }
 	| { kind: 'agent-url'; value: string }
 	| { kind: 'agent-token'; value: string }
+	/** Spec 106: connect (or reconnect) with clientmcp.dev; disconnect from it. */
+	| { kind: 'agent-link' }
+	| { kind: 'agent-unlink' }
+	/** Spec 107 E8: one wallet the agent may use, on or off. */
+	| { kind: 'agent-wallet'; address: string; on: boolean }
 	/** The destructive one, confirmed. */
 	| { kind: 'erase' };

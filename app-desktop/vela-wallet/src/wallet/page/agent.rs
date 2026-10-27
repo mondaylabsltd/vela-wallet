@@ -156,6 +156,207 @@ impl WalletPage {
                     self.push_step(FlowStep::ReceiveQr);
                 }
             }
+            // Spec 107: Explore, at its tab in front.
+            Screen::Explore => self.section = Section::Explore,
+        }
+        cx.notify();
+        None
+    }
+
+    // -- Explore (spec 107) --------------------------------------------------
+
+    /// Explore as the agent reads it: the browser machines' own views
+    /// through the core's `explore_facts`.
+    pub(crate) fn agent_explore_facts(
+        &self,
+        explore: &vela_core::app::explore_sites::ExploreView,
+        history: &vela_core::app::browser_history::BhistView,
+        cx: &App,
+    ) -> vela_core::app::intent_rules::ExploreFacts {
+        let dapp = self
+            .browser_host
+            .as_ref()
+            .map(|host| host.read(cx).view.clone())
+            .unwrap_or_default();
+        // The request whose sheet the person sees: a connect's is Explore's,
+        // over its tab; a signature's is the signing sheet; a network's is
+        // the add-network sheet, up while the request is.
+        let sheet = if let Some(consent) = &dapp.consent {
+            (self.section == Section::Explore
+                && explore.selected_tab.as_deref() == Some(consent.tab.as_str()))
+            .then(|| format!("connect:{}", consent.tab))
+        } else if let Some(signing) = &dapp.signing {
+            self.signing_host
+                .is_some()
+                .then(|| format!("sign:{}:{}", signing.tab, signing.id))
+        } else {
+            dapp.adding_network
+                .as_ref()
+                .map(|adding| format!("add_network:{}:{}", adding.tab, adding.id))
+        };
+        vela_core::app::intent_rules::explore_facts(
+            explore,
+            &dapp,
+            history,
+            self.nav_enabled[0],
+            self.nav_enabled[1],
+            sheet.as_deref(),
+        )
+    }
+
+    /// Do one of Explore's actions as its own controls do; a refusal, in
+    /// words, when it cannot be done here.
+    pub(crate) fn agent_explore(
+        &mut self,
+        action: &Action,
+        cx: &mut Context<Self>,
+    ) -> Option<String> {
+        use crate::wallet::browser_host::Go;
+        use vela_core::app::intents::BrowseStep;
+        if self.identity.is_none() {
+            return Some("the wallet is not open".to_owned());
+        }
+        let explore = |cx: &mut Context<Self>, event: vela_core::app::explore_sites::Event| {
+            resident::resident::<ExploreSites>(cx)
+                .update(cx, |resident, cx| resident.dispatch(event, cx));
+        };
+        let history = |cx: &mut Context<Self>, event: vela_core::app::browser_history::Event| {
+            resident::resident::<BrowserHistory>(cx)
+                .update(cx, |resident, cx| resident.dispatch(event, cx));
+        };
+        let origin = |text: &str| text.trim().trim_end_matches('/').to_owned();
+        match action {
+            Action::OpenSite { url, new_tab } => {
+                self.section = Section::Explore;
+                if *new_tab {
+                    self.open_in_new_tab(url.trim().to_owned(), None, cx);
+                } else {
+                    self.browser_go(Go::Typed(url.trim().to_owned()), cx);
+                }
+            }
+            Action::Browse { to } => self.browser_go(
+                match to {
+                    BrowseStep::Back => Go::Back,
+                    BrowseStep::Forward => Go::Forward,
+                    BrowseStep::Reload => Go::Reload,
+                },
+                cx,
+            ),
+            Action::CloseTab { id } => self.close_browser_tab(id, cx),
+            Action::CloseAllTabs => {
+                self.close_browser_tabs(&vela_core::app::explore_sites::TabCloseScope::All, cx);
+            }
+            Action::SetSiteFavorite { url, favorite } => {
+                if *favorite {
+                    explore(
+                        cx,
+                        vela_core::app::explore_sites::Event::FavoriteAdded {
+                            url: url.trim().to_owned(),
+                            title: None,
+                            now_ms: crate::executor::now_ms(),
+                        },
+                    );
+                } else if let Some(site) = resident::resident::<ExploreSites>(cx)
+                    .read(cx)
+                    .view()
+                    .favorites
+                    .into_iter()
+                    .find(|site| {
+                        vela_core::app::dapp_permissions::origin_of(&site.url)
+                            == vela_core::app::dapp_permissions::origin_of(url.trim())
+                    })
+                {
+                    explore(
+                        cx,
+                        vela_core::app::explore_sites::Event::FavoriteRemoved {
+                            origin: site.origin,
+                        },
+                    );
+                }
+            }
+            Action::ClearRecentSites => {
+                history(cx, vela_core::app::browser_history::Event::ClearAll)
+            }
+            Action::ForgetSite { origin: site } => history(
+                cx,
+                vela_core::app::browser_history::Event::DeleteOrigin {
+                    origin: origin(site),
+                },
+            ),
+            Action::DisconnectSite { origin: site } => {
+                let host = self.browser_host(cx);
+                let site = origin(site);
+                host.update(cx, |host, cx| {
+                    host.dispatch(DbrEvent::RevokeRequested { origin: site }, cx)
+                });
+            }
+            Action::SetSiteNetwork {
+                origin: site,
+                chain_id,
+            } => {
+                let host = self.browser_host(cx);
+                let site = origin(site);
+                let chain_id = *chain_id;
+                host.update(cx, |host, cx| {
+                    host.dispatch(
+                        DbrEvent::SiteChainPicked {
+                            origin: site,
+                            chain_id,
+                        },
+                        cx,
+                    );
+                });
+            }
+            Action::RejectDappRequest { id } => {
+                let target = vela_core::app::intent_rules::dapp_request_target(id)?;
+                match target.kind.as_str() {
+                    "connect" => {
+                        let host = self.browser_host(cx);
+                        host.update(cx, |host, cx| {
+                            host.dispatch(
+                                DbrEvent::ConsentRejected {
+                                    now_ms: crate::executor::now_ms(),
+                                },
+                                cx,
+                            );
+                        });
+                    }
+                    "sign" => {
+                        let Some(signing) = self.signing_host.clone() else {
+                            return Some("the signing request is not on its sheet yet".to_owned());
+                        };
+                        signing.update(cx, |host, cx| {
+                            host.dispatch_sign(
+                                vela_core::app::sign_request::Event::RejectTapped,
+                                cx,
+                            );
+                        });
+                    }
+                    "add_network" => {
+                        let admin = self.network_admin(cx);
+                        admin.update(cx, |admin, cx| {
+                            admin.dispatch(
+                                vela_core::app::network_admin::Event::DappAddDeclined,
+                                cx,
+                            );
+                        });
+                    }
+                    _ => return Some("no dApp request with that id is waiting".to_owned()),
+                }
+            }
+            Action::AskPersonDappRequest { id } => {
+                let target = vela_core::app::intent_rules::dapp_request_target(id)?;
+                // A signature's and a network's sheets are the app's own, in
+                // front wherever the person is; a connect's is over its tab.
+                if target.kind == "connect" {
+                    self.section = Section::Explore;
+                    explore(
+                        cx,
+                        vela_core::app::explore_sites::Event::TabSelected { id: target.tab },
+                    );
+                }
+            }
+            _ => return Some("not one of Explore's actions".to_owned()),
         }
         cx.notify();
         None
@@ -305,6 +506,7 @@ impl WalletPage {
                 enabled: None,
                 bridge_url: url,
                 client_token: token,
+                wallets: None,
             },
             cx,
         );
@@ -335,8 +537,19 @@ impl WalletPage {
                 )),
         );
 
+        // Spec 106: the usual way in is clientmcp.dev; the fields fold under
+        // "Use your own bridge".
+        let linked = config.linked.clone();
+        col = col.child(self.agent_link_section(linked.as_ref(), theme, cx));
+        // Spec 107 E8: the wallets it may use — none unless switched on here.
+        col = col.child(self.agent_wallets_section(&config.wallets, theme, cx));
+        let own_open = linked.is_none()
+            && self
+                .agent_own_open
+                .unwrap_or(!config.token.trim().is_empty());
+
         let on = config.enabled;
-        col = col.child(toggle_row(
+        let mut toggle = Some(toggle_row(
             "settings-agent",
             theme,
             self.agent_text("settings.agent.enable"),
@@ -348,115 +561,140 @@ impl WalletPage {
                         enabled: Some(!on),
                         bridge_url: None,
                         client_token: None,
+                        wallets: None,
                     },
                     cx,
                 );
             },
         ));
-
-        let url = self.agent_url_draft.clone().unwrap_or(config.url);
-        let invalid = !url.trim().is_empty() && agent::settings::bridge_url_problem(&url).is_some();
-        let hint = if invalid {
-            self.agent_text("settings.agent.bridgeInvalid")
+        if linked.is_some() {
+            col = col.children(toggle.take());
         } else {
-            self.agent_text("settings.agent.bridgeHint")
-        };
-        col = col.child(editable_url_field(
-            "agent-bridge",
-            theme,
-            Some(self.agent_text("settings.agent.bridge")),
-            &url,
-            SharedString::from(BRIDGE_PLACEHOLDER),
-            None,
-            Some(hint),
-            invalid.then_some(Tone::Error),
-            &self.agent_url_focus,
-            window,
-            {
-                let page = page.clone();
-                move |text: String, _: &mut Window, cx: &mut App| {
-                    page.update(cx, |this, cx| {
-                        this.agent_url_draft = Some(text);
+            col = col.child(
+                div()
+                    .id("agent-own-bridge")
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(if own_open { "▾" } else { "▸" })
+                    .child(self.agent_text("settings.agent.ownBridge"))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.agent_own_open = Some(!own_open);
                         cx.notify();
-                    });
-                }
-            },
-            {
-                let page = page.clone();
-                move |_: &mut Window, cx: &mut App| {
-                    page.update(cx, |this, cx| this.agent_commit(cx))
-                }
-            },
-        ));
+                    })),
+            );
+        }
+        if own_open {
+            col = col.children(toggle.take());
 
-        // The token is a credential: drawn as bullets, like a security key's PIN.
-        let token = self.agent_token_draft.clone().unwrap_or(config.token);
-        let strings = crate::ui::NameFieldStrings {
-            label: SharedString::from(""),
-            placeholder: SharedString::from(""),
-            helper: SharedString::from(""),
-            too_long_hint: SharedString::from(""),
-        };
-        let token_field = crate::ui::text_field(
-            "agent-token",
-            theme,
-            &strings,
-            &token,
-            false,
-            true,
-            &self.agent_token_focus,
-            window,
-            {
-                let page = page.clone();
-                move |text: String, _: &mut Window, cx: &mut App| {
-                    page.update(cx, |this, cx| {
-                        this.agent_token_draft = Some(text);
-                        cx.notify();
-                    });
-                }
-            },
-        );
-        col = col.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(8.))
-                .on_key_down({
-                    let page = page.clone();
-                    move |event: &gpui::KeyDownEvent, _, cx| {
-                        if event.keystroke.key == "enter" {
-                            page.update(cx, |this, cx| this.agent_commit(cx));
-                        }
-                    }
-                })
-                .child(
-                    div()
-                        .text_size(theme::text_label())
-                        .text_color(theme.fg_subtle)
-                        .child(self.agent_text("settings.agent.token")),
-                )
-                .child(token_field)
-                .child(
-                    div()
-                        .text_size(theme::text_label())
-                        .line_height(px(16.))
-                        .text_color(theme.fg_subtle)
-                        .child(crate::ui::prose(
-                            self.agent_text("settings.agent.tokenHint"),
-                        )),
-                ),
-        );
-
-        if let Some(endpoint) = agent::settings::mcp_endpoint(&url) {
-            col = col.child(url_field(
+            let url = self.agent_url_draft.clone().unwrap_or(config.url);
+            let invalid =
+                !url.trim().is_empty() && agent::settings::bridge_url_problem(&url).is_some();
+            let hint = if invalid {
+                self.agent_text("settings.agent.bridgeInvalid")
+            } else {
+                self.agent_text("settings.agent.bridgeHint")
+            };
+            col = col.child(editable_url_field(
+                "agent-bridge",
                 theme,
-                Some(self.agent_text("settings.agent.endpoint")),
-                SharedString::from(endpoint),
+                Some(self.agent_text("settings.agent.bridge")),
+                &url,
+                SharedString::from(BRIDGE_PLACEHOLDER),
                 None,
-                Some(self.agent_text("settings.agent.endpointHint")),
-                None,
-                None,
+                Some(hint),
+                invalid.then_some(Tone::Error),
+                &self.agent_url_focus,
+                window,
+                {
+                    let page = page.clone();
+                    move |text: String, _: &mut Window, cx: &mut App| {
+                        page.update(cx, |this, cx| {
+                            this.agent_url_draft = Some(text);
+                            cx.notify();
+                        });
+                    }
+                },
+                {
+                    let page = page.clone();
+                    move |_: &mut Window, cx: &mut App| {
+                        page.update(cx, |this, cx| this.agent_commit(cx))
+                    }
+                },
             ));
+
+            // The token is a credential: drawn as bullets, like a security key's PIN.
+            let token = self.agent_token_draft.clone().unwrap_or(config.token);
+            let strings = crate::ui::NameFieldStrings {
+                label: SharedString::from(""),
+                placeholder: SharedString::from(""),
+                helper: SharedString::from(""),
+                too_long_hint: SharedString::from(""),
+            };
+            let token_field = crate::ui::text_field(
+                "agent-token",
+                theme,
+                &strings,
+                &token,
+                false,
+                true,
+                &self.agent_token_focus,
+                window,
+                {
+                    let page = page.clone();
+                    move |text: String, _: &mut Window, cx: &mut App| {
+                        page.update(cx, |this, cx| {
+                            this.agent_token_draft = Some(text);
+                            cx.notify();
+                        });
+                    }
+                },
+            );
+            col = col.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .on_key_down({
+                        let page = page.clone();
+                        move |event: &gpui::KeyDownEvent, _, cx| {
+                            if event.keystroke.key == "enter" {
+                                page.update(cx, |this, cx| this.agent_commit(cx));
+                            }
+                        }
+                    })
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(self.agent_text("settings.agent.token")),
+                    )
+                    .child(token_field)
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .line_height(px(16.))
+                            .text_color(theme.fg_subtle)
+                            .child(crate::ui::prose(
+                                self.agent_text("settings.agent.tokenHint"),
+                            )),
+                    ),
+            );
+
+            if let Some(endpoint) = agent::settings::mcp_endpoint(&url) {
+                col = col.child(url_field(
+                    theme,
+                    Some(self.agent_text("settings.agent.endpoint")),
+                    SharedString::from(endpoint),
+                    None,
+                    Some(self.agent_text("settings.agent.endpointHint")),
+                    None,
+                    None,
+                ));
+            }
         }
 
         // The agent's latest call, by its action's name and how it ended.
@@ -488,6 +726,459 @@ impl WalletPage {
             ));
         }
         col
+    }
+
+    // -- spec 106: connecting with clientmcp.dev -------------------------------
+
+    /// Connected through clientmcp.dev: whose it is, where the person connects
+    /// their agent, Reconnect and Disconnect. Otherwise the one button.
+    fn agent_link_section(
+        &mut self,
+        linked: Option<&agent::settings::AgentLinked>,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use crate::ui::{ButtonState, ButtonVariant, vela_button, vela_button_state};
+        let mut col = div().flex().flex_col().gap(px(12.));
+        if let Some(linked) = linked {
+            let who = self
+                .agent_text("settings.agent.connectedAs")
+                .replace("{{login}}", &linked.login);
+            let account = vela_core::clientmcp_link::account_url(&linked.site);
+            col = col
+                .child(
+                    div()
+                        .id("agent-linked")
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(who),
+                )
+                .child(
+                    div()
+                        .id("agent-client-id")
+                        .font_family(crate::theme::font_mono())
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(
+                            self.agent_text("settings.agent.clientId")
+                                .replace("{{id}}", &linked.client_id),
+                        ),
+                )
+                .children(self.agent_address(theme, cx))
+                .child(
+                    div()
+                        .id("agent-connect-agent")
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .p(px(12.))
+                        .rounded(px(theme::RADIUS_CTA))
+                        .bg(theme.bg_raised)
+                        .cursor_pointer()
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(format!(
+                                    "{} →",
+                                    self.agent_text("settings.agent.connectAgent")
+                                )),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .child(self.agent_text("settings.agent.connectAgentHint")),
+                        )
+                        .on_click(move |_, _, cx| cx.open_url(&account)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap(px(12.))
+                        .child(div().w(px(180.)).child(vela_button(
+                            "agent-reconnect",
+                            ButtonVariant::Secondary,
+                            self.agent_text("settings.agent.reconnect"),
+                            theme,
+                            cx.listener(|this, _, _, cx| this.agent_connect(cx)),
+                        )))
+                        .child(div().w(px(180.)).child(vela_button(
+                            "agent-disconnect",
+                            ButtonVariant::Secondary,
+                            self.agent_text("settings.agent.disconnect"),
+                            theme,
+                            |_, _, cx| {
+                                // Forgotten here; the client stays on
+                                // clientmcp.dev until deleted there.
+                                agent::invoke_person(
+                                    Action::ConfigureAgent {
+                                        enabled: Some(false),
+                                        bridge_url: Some(String::new()),
+                                        client_token: Some(String::new()),
+                                        wallets: None,
+                                    },
+                                    cx,
+                                );
+                            },
+                        ))),
+                );
+            if self.agent_link_waiting.is_some() {
+                col = col.child(self.agent_link_waiting_row(theme, cx));
+            }
+        } else {
+            let waiting = self.agent_link_waiting.is_some();
+            col = col.child(div().w(px(280.)).child(vela_button_state(
+                "agent-connect",
+                ButtonVariant::Secondary,
+                self.agent_text("settings.agent.connect"),
+                if waiting {
+                    ButtonState::Busy
+                } else {
+                    ButtonState::Enabled
+                },
+                theme,
+                cx.listener(|this, _, _, cx| this.agent_connect(cx)),
+            )));
+            col = col.child(if waiting {
+                self.agent_link_waiting_row(theme, cx)
+            } else {
+                div()
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.fg_muted)
+                    .child(crate::ui::prose(
+                        self.agent_text("settings.agent.connectHint"),
+                    ))
+            });
+        }
+        if let Some(problem) = &self.agent_link_problem {
+            col = col.child(
+                div()
+                    .id("agent-link-problem")
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.error_base)
+                    .child(self.agent_link_problem_text(problem)),
+            );
+        }
+        col
+    }
+
+    /// The MCP server address for the person's AI agent, to copy from here:
+    /// masked until Show — it is a credential.
+    fn agent_address(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::Stateful<Div>> {
+        let address = cx
+            .try_global::<Agent>()
+            .map(|agent| agent.config.agent_url.clone())
+            .filter(|url| !url.is_empty())?;
+        let shown = if self.agent_address_shown {
+            address.clone()
+        } else {
+            match address.rfind('/') {
+                Some(at) => format!("{}••••••••••••", &address[..=at]),
+                None => "••••••••••••".to_owned(),
+            }
+        };
+        let action = |id: &'static str, label: SharedString| {
+            div()
+                .id(id)
+                .cursor_pointer()
+                .px(px(12.))
+                .py(px(4.))
+                .rounded_full()
+                .border_1()
+                .border_color(theme.divider)
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(label)
+        };
+        Some(
+            div()
+                .id("agent-address")
+                .flex()
+                .flex_col()
+                .gap(px(8.))
+                .p(px(12.))
+                .rounded(px(theme::RADIUS_CTA))
+                .bg(theme.bg_raised)
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(self.agent_text("settings.agent.agentAddress")),
+                )
+                .child(
+                    div()
+                        .font_family(crate::theme::font_mono())
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(shown),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap(px(8.))
+                        .child(
+                            action(
+                                "agent-address-show",
+                                self.agent_text(if self.agent_address_shown {
+                                    "settings.agent.hide"
+                                } else {
+                                    "settings.agent.show"
+                                }),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.agent_address_shown = !this.agent_address_shown;
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            action(
+                                "agent-address-copy",
+                                self.agent_text(if self.agent_address_copied {
+                                    "settings.agent.copied"
+                                } else {
+                                    "settings.agent.copy"
+                                }),
+                            )
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                        address.clone(),
+                                    ));
+                                    this.agent_address_copied = true;
+                                    cx.notify();
+                                    cx.spawn(async move |page, cx| {
+                                        cx.background_executor()
+                                            .timer(std::time::Duration::from_millis(1800))
+                                            .await;
+                                        page.update(cx, |this, cx| {
+                                            this.agent_address_copied = false;
+                                            cx.notify();
+                                        })
+                                        .ok();
+                                    })
+                                    .detach();
+                                },
+                            )),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .line_height(px(16.))
+                        .text_color(theme.fg_subtle)
+                        .child(crate::ui::prose(
+                            self.agent_text("settings.agent.agentAddressHint"),
+                        )),
+                ),
+        )
+    }
+
+    /// Spec 107 E8: a switch per wallet on this device; the agent sees and
+    /// acts only in the ones on. Each change is the person's own
+    /// `configure_agent`, the list whole.
+    fn agent_wallets_section(
+        &self,
+        allowed: &[String],
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let accounts = session::view(cx).accounts;
+        let mut col = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.agent_text("settings.agent.wallets")),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(crate::ui::prose(
+                        self.agent_text("settings.agent.walletsHint"),
+                    )),
+            );
+        if allowed.is_empty() {
+            col = col.child(
+                div()
+                    .id("agent-wallets-none")
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.warning_base)
+                    .child(self.agent_text("settings.agent.walletsNone")),
+            );
+        }
+        for row in accounts {
+            let address = row.account.address.clone();
+            let on = allowed.iter().any(|w| w.eq_ignore_ascii_case(&address));
+            let list = allowed.to_vec();
+            let short = if address.len() > 12 {
+                format!("{}…{}", &address[..6], &address[address.len() - 4..])
+            } else {
+                address.clone()
+            };
+            col = col.child(toggle_row(
+                SharedString::from(format!("agent-wallet-{address}")),
+                theme,
+                SharedString::from(row.account.name.clone()),
+                SharedString::from(short),
+                on,
+                move |_, _, cx| {
+                    let mut next: Vec<String> = list
+                        .iter()
+                        .filter(|w| !w.eq_ignore_ascii_case(&address))
+                        .cloned()
+                        .collect();
+                    if !on {
+                        next.push(address.clone());
+                    }
+                    agent::invoke_person(
+                        Action::ConfigureAgent {
+                            enabled: None,
+                            bridge_url: None,
+                            client_token: None,
+                            wallets: Some(next),
+                        },
+                        cx,
+                    );
+                },
+            ));
+        }
+        col
+    }
+
+    /// "Waiting for clientmcp.dev…", and Cancel.
+    fn agent_link_waiting_row(&self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_muted)
+            .child(self.agent_text("settings.agent.connecting"))
+            .child(
+                div()
+                    .id("agent-link-cancel")
+                    .cursor_pointer()
+                    .underline()
+                    .child(self.agent_text("common.cancel"))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if let Some(cancel) = this.agent_link_waiting.take() {
+                            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        cx.notify();
+                    })),
+            )
+    }
+
+    fn agent_link_problem_text(&self, problem: &agent::link::Problem) -> String {
+        use vela_core::clientmcp_link::LinkError;
+        let key = match problem {
+            agent::link::Problem::Link(LinkError::Refused(reason)) => {
+                return self
+                    .agent_text("settings.agent.linkRefused")
+                    .replace("{{reason}}", reason);
+            }
+            agent::link::Problem::Link(LinkError::Unavailable) => "settings.agent.linkUnavailable",
+            agent::link::Problem::Link(LinkError::Expired) => "settings.agent.linkExpired",
+            agent::link::Problem::Link(LinkError::NotOurs) => "settings.agent.linkNotOurs",
+            agent::link::Problem::Network => "settings.agent.linkNetwork",
+            agent::link::Problem::Link(LinkError::Malformed(_))
+            | agent::link::Problem::Cancelled => "settings.agent.linkFailed",
+        };
+        self.agent_text(key).to_string()
+    }
+
+    /// Connect (or reconnect) with clientmcp.dev: listen on a loopback port,
+    /// open the browser at the site, and wait for it on a background thread.
+    pub(super) fn agent_connect(&mut self, cx: &mut Context<Self>) {
+        if self.agent_link_waiting.is_some() {
+            return;
+        }
+        self.agent_link_problem = None;
+        let started = match agent::link::start() {
+            Ok(started) => started,
+            Err(problem) => {
+                self.agent_link_problem = Some(problem);
+                cx.notify();
+                return;
+            }
+        };
+        cx.open_url(&started.pending.authorize_url);
+        let cancel = started.cancel.clone();
+        self.agent_link_waiting = Some(cancel.clone());
+        let site = started.pending.site.clone();
+        let done = self.agent_text("settings.agent.linkReturn").to_string();
+        cx.spawn(async move |page, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { agent::link::finish(started, &done) })
+                .await;
+            page.update(cx, |this, cx| {
+                // A sign-in cancelled (or replaced) meanwhile is not this one.
+                if this
+                    .agent_link_waiting
+                    .as_ref()
+                    .is_some_and(|waiting| std::sync::Arc::ptr_eq(waiting, &cancel))
+                {
+                    this.agent_link_waiting = None;
+                    this.agent_linked(result, site, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The sign-in's end: what clientmcp.dev issued, applied as the person's
+    /// own `configure_agent`, then whose it is.
+    fn agent_linked(
+        &mut self,
+        result: Result<vela_core::clientmcp_link::Linked, agent::link::Problem>,
+        site: String,
+        cx: &mut Context<Self>,
+    ) {
+        match result {
+            Ok(linked) => {
+                self.agent_link_problem = None;
+                let agent_url = linked.agent_url;
+                let whose = agent::settings::AgentLinked {
+                    site,
+                    login: linked.login,
+                    client_id: linked.client_id,
+                };
+                // E8: the first connection offers the wallet in front; a list
+                // the person already chose is kept.
+                let none_yet = cx
+                    .try_global::<Agent>()
+                    .is_none_or(|agent| agent.config.wallets.is_empty());
+                let active = session::view(cx).address;
+                let wallets = (none_yet && !active.is_empty()).then(|| vec![active]);
+                agent::invoke_person_then(
+                    Action::ConfigureAgent {
+                        enabled: Some(true),
+                        bridge_url: Some(linked.bridge_url),
+                        client_token: Some(linked.client_token),
+                        wallets,
+                    },
+                    cx,
+                    move |_, cx| agent::set_linked(Some(whose), agent_url, cx),
+                );
+            }
+            Err(agent::link::Problem::Cancelled) => {}
+            Err(problem) => self.agent_link_problem = Some(problem),
+        }
+        cx.notify();
     }
 
     /// The agent's request waiting for the person, if one is.
@@ -588,6 +1279,22 @@ impl WalletPage {
         )
     }
 
+    /// What an approval's detail reads around the action: the wallets, the
+    /// networks, Explore — from the page's own residents (the page is the
+    /// one drawing, so it is not read back through the agent's port).
+    fn agent_detail_world(&self, cx: &mut Context<Self>) -> vela_core::app::intent_rules::World {
+        let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let history = resident::resident::<BrowserHistory>(cx).read(cx).view();
+        let facts = self.agent_explore_facts(&explore, &history, cx);
+        let networks = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        serde_json::from_value(serde_json::json!({
+            "session": session::view(cx),
+            "networks": networks,
+            "explore": facts,
+        }))
+        .unwrap_or_default()
+    }
+
     /// What the request names, as the person knows it: a contact's or a
     /// wallet's name, the store, the preference.
     fn agent_request_detail(&self, action: &Action, cx: &mut Context<Self>) -> Option<String> {
@@ -611,7 +1318,14 @@ impl WalletPage {
                         .map_or_else(|| id.clone(), |g| g.name.clone()),
                 )
             }
-            Action::RemoveWallet { address } | Action::SwitchAccount { address } => {
+            // The wallet it leaves and the one it goes to (the core's).
+            Action::SwitchAccount { .. }
+            | Action::SetSiteNetwork { .. }
+            | Action::DisconnectSite { .. } => vela_core::app::intent_rules::approval_detail_in(
+                action,
+                &self.agent_detail_world(cx),
+            ),
+            Action::RemoveWallet { address } => {
                 let view = session::view(cx);
                 let row = view
                     .accounts

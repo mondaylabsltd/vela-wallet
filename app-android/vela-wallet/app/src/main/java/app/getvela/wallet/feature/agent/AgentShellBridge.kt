@@ -42,6 +42,15 @@ interface AgentWallet {
     /** The dApp signing request on its sheet (`SignRequestView` JSON), if any. */
     fun signingJson(): String?
 
+    /** Explore, the dApp browser (spec 107). */
+    val browser: app.getvela.wallet.feature.browser.core.BrowserController
+
+    /** Spec 107 E8: the wallets the person lets the agent use. */
+    fun agentWallets(): List<String>
+
+    /** The signing sheet in front, if one is (a dApp's request answered there). */
+    fun signingSheet(): app.getvela.wallet.feature.signing.core.SigningController?
+
     /** Erase This Device; what survived (empty when everything went). */
     suspend fun erase(): List<String>
 
@@ -70,7 +79,7 @@ internal class AgentShellBridge(private val agent: AgentStore) : AgentShell {
 
     // -- the wallet, read --------------------------------------------------------
 
-    override fun views(): String = AgentWorld.json(wallet)
+    override fun views(): String = AgentWorld.json(wallet, onMain { agent.page?.name() ?: "welcome" })
 
     override fun page(): String = onMain { agent.page?.name() ?: "welcome" }
 
@@ -168,7 +177,7 @@ internal object AgentWorld {
      * views, whole. While nobody is signed in only the session: the other
      * machines belong to an account.
      */
-    fun json(wallet: AgentWallet): String {
+    fun json(wallet: AgentWallet, page: String = "welcome"): String {
         val parts = mutableListOf("\"session\":${wallet.session.viewJson.value ?: "null"}")
         if (wallet.session.view.value.address.isNotEmpty()) {
             parts += "\"contacts\":${wallet.contacts.viewJson.value ?: "null"}"
@@ -180,12 +189,33 @@ internal object AgentWorld {
             }
             parts += "\"currency\":${wallet.settings.currencyJson.value ?: "null"}"
             parts += "\"fee_tier\":${wallet.settings.feeTierJson.value ?: "null"}"
+            // Spec 107: Explore — the tabs, the lists, a dApp's request.
+            parts += "\"explore\":${wallet.browser.agentFacts(sheet(wallet, page))}"
         }
         parts += "\"preferences\":${preferences(wallet)}"
+        // Spec 107 E8: the wallets the person lets the agent use.
+        parts += "\"agent_wallets\":${org.json.JSONArray(wallet.agentWallets())}"
         // Spec 105: the space in front — the core reads only its networks and
         // balances to the agent, and refuses a transfer on the other's.
         parts += "\"network_space\":\"${wallet.networkSpace.space.value.wire}\""
         return "{${parts.joinToString(",")}}"
+    }
+
+    /**
+     * The dApp request whose sheet the person sees: a connect's sheet is
+     * Explore's, over its tab; a signature's is the signing sheet; a network's
+     * is Settings' add-network sheet, up while the request is.
+     */
+    private fun sheet(wallet: AgentWallet, page: String): String? {
+        val dapp = wallet.browser.dapp.value
+        dapp.consent?.let { consent ->
+            val selected = wallet.browser.explore.value.selected_tab
+            return if (page == "explore" && selected == consent.tab) "connect:${consent.tab}" else null
+        }
+        dapp.signing?.let { signing ->
+            return if (wallet.signingSheet() != null) "sign:${signing.tab}:${signing.id}" else null
+        }
+        return dapp.adding_network?.let { "add_network:${it.tab}:${it.id}" }
     }
 
     /** The preferences in the catalog's spellings. The phone shares no usage statistics. */

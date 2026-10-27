@@ -560,6 +560,9 @@
 						onenable={(on) => onprefevent?.({ kind: 'agent', on })}
 						onbridge={(value) => onprefevent?.({ kind: 'agent-url', value })}
 						ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
+						onlink={() => onprefevent?.({ kind: 'agent-link' })}
+						onunlink={() => onprefevent?.({ kind: 'agent-unlink' })}
+						onwallet={(address, on) => onprefevent?.({ kind: 'agent-wallet', address, on })}
 					/>
 				{/if}
 			{/if}

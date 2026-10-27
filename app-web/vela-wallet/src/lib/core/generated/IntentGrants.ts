@@ -7,4 +7,13 @@ export type IntentGrants = {
 /**
  * The AI agent is switched on.
  */
-agent_enabled: boolean, };
+agent_enabled: boolean, 
+/**
+ * The wallets the person lets the agent use (spec 107 E8): none unless
+ * they say so.
+ */
+wallets: Array<string>, 
+/**
+ * The wallet in front; empty while nobody is in.
+ */
+wallet: string, };

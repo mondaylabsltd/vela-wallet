@@ -843,6 +843,16 @@ pub struct WalletPage {
     agent_token_focus: gpui::FocusHandle,
     agent_url_draft: Option<String>,
     agent_token_draft: Option<String>,
+    /// Spec 106: a clientmcp.dev sign-in under way (its cancel), and why the
+    /// last one did not connect.
+    agent_link_waiting: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    agent_link_problem: Option<crate::agent::link::Problem>,
+    /// "Use your own bridge" unfolded by the person (`None`: as the settings
+    /// say — unfolded when a token was entered by hand).
+    agent_own_open: Option<bool>,
+    /// The agent's address revealed (Show), and just copied.
+    agent_address_shown: bool,
+    agent_address_copied: bool,
     /// Send columns closed while their submit ran (spec 082 RA4, ruling 1):
     /// kept, unseen, until the core has the submit's result — which is what
     /// writes the payment's record and hands it to the tracker.
@@ -1777,6 +1787,11 @@ impl WalletPage {
             agent_token_focus,
             agent_url_draft: None,
             agent_token_draft: None,
+            agent_link_waiting: None,
+            agent_link_problem: None,
+            agent_own_open: None,
+            agent_address_shown: false,
+            agent_address_copied: false,
             send_background: Vec::new(),
             #[cfg(not(target_os = "linux"))]
             signing_host: None,

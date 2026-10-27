@@ -357,6 +357,12 @@ fun VelaNavHost(
                             agent.detail.value = screen
                             null
                         }
+                        // Spec 107: Explore, at its tab in front.
+                        "explore" -> {
+                            section = VelaTab.Explore
+                            navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                            null
+                        }
                         "settings" -> {
                             application.container.pendingSettingsPage.value =
                                 agentSettingsPage(screen.optString("page").takeIf { !screen.isNull("page") })

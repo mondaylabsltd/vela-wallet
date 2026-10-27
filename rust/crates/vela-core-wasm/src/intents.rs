@@ -94,3 +94,11 @@ pub fn intent_agent_state(
 pub fn intent_review(input_json: &str) -> String {
     intent_json::review(input_json)
 }
+
+/// What an agent's request changes, for its approval, with what the wallet
+/// knows around it (`world_json`, as for `intentExamine`).
+#[wasm_bindgen(js_name = intentApprovalDetailIn)]
+#[must_use]
+pub fn intent_approval_detail_in(action_json: &str, world_json: &str) -> String {
+    intent_json::approval_detail_in(action_json, world_json)
+}

@@ -17,6 +17,7 @@
 #[cfg(test)]
 mod coverage;
 pub use vela_agent::intents;
+pub mod link;
 mod perform;
 pub mod settings;
 pub mod tools;
@@ -136,6 +137,26 @@ pub(crate) fn configure(change: &AgentChange, cx: &mut App) {
         config.save();
         cx.update_global::<Agent, _>(|agent, _| agent.config = config);
         sync(cx);
+    }
+}
+
+/// Spec 106: after the person's `configure_agent` with what clientmcp.dev
+/// issued, whose it is — kept so Settings can say so.
+pub(crate) fn set_linked(
+    linked: Option<settings::AgentLinked>,
+    agent_url: Option<String>,
+    cx: &mut App,
+) {
+    if let Some(agent) = cx.try_global::<Agent>() {
+        let mut config = agent.config.clone();
+        config.agent_url = if linked.is_some() {
+            agent_url.unwrap_or_default()
+        } else {
+            String::new()
+        };
+        config.linked = linked;
+        config.save();
+        cx.update_global::<Agent, _>(|agent, _| agent.config = config);
     }
 }
 
@@ -262,6 +283,7 @@ pub fn stop(cx: &mut App) {
             enabled: Some(false),
             bridge_url: None,
             client_token: None,
+            wallets: None,
         },
         cx,
     );
@@ -281,8 +303,12 @@ pub(crate) struct Live<'a> {
 
 impl Deps for Live<'_> {
     fn check(&mut self, actor: Actor, action: &Action) -> Check {
-        let agent_enabled = self.cx.update(|cx| enabled(cx));
-        let mut checked = core_intents::check(actor, action, &Grants { agent_enabled });
+        // The switch, and the wallets the agent may use (spec 107 E8).
+        let grants = self.cx.update(|cx| Grants {
+            agent_enabled: enabled(cx),
+            ..vela_core::app::intent_rules::grants(&world::world(cx, &[], true))
+        });
+        let mut checked = core_intents::check(actor, action, &grants);
         if !matches!(checked.decision, Decision::Deny { .. })
             && let Some(reason) = perform::unavailable(action)
         {

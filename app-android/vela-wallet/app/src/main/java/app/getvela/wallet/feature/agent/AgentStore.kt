@@ -40,6 +40,8 @@ class AgentStore(
     private val scope: CoroutineScope,
     /** The client token's place: the Keystore's, never the record's. */
     private val vault: AgentTokenVault,
+    /** Spec 106: the agent's address's place — the Keystore's too. */
+    private val agentUrlVault: AgentTokenVault = MemoryTokenVault(),
 ) {
     private val _config = MutableStateFlow(AgentConfig())
     val config: StateFlow<AgentConfig> = _config
@@ -116,11 +118,16 @@ class AgentStore(
      */
     internal suspend fun load() {
         val stored = AgentConfig.from(runCatching { store.read(KEY) }.getOrNull())
-        _config.value = if (stored.token.isEmpty()) {
+        val withToken = if (stored.token.isEmpty()) {
             stored.copy(token = vault.read().orEmpty())
         } else {
             if (vault.write(stored.token)) store.write(KEY, stored.recordJson())
             stored
+        }
+        _config.value = if (withToken.linked != null) {
+            withToken.copy(agentUrl = agentUrlVault.read().orEmpty())
+        } else {
+            withToken
         }
     }
 
@@ -132,6 +139,7 @@ class AgentStore(
      */
     suspend fun forgetToken() {
         vault.delete()
+        agentUrlVault.delete()
         _config.value = AgentConfig()
         connect()
     }
@@ -152,13 +160,32 @@ class AgentStore(
         refresh()
     }
 
+    /** Spec 106: connecting with clientmcp.dev. */
+    val clientmcp = ClientMcpLink(store, scope, this)
+
+    /**
+     * Spec 106: after the person's `configure_agent` with what clientmcp.dev
+     * issued, whose it is — kept so Settings can say so.
+     */
+    suspend fun setLinked(linked: AgentLinkedTo?, agentUrl: String? = null) {
+        val url = if (linked == null) "" else agentUrl.orEmpty()
+        if (url.isEmpty()) agentUrlVault.delete() else agentUrlVault.write(url)
+        val next = _config.value.copy(linked = linked, agentUrl = url)
+        _config.value = next
+        if (!store.write(KEY, next.recordJson())) VelaLog.event("agent", "settings not saved")
+    }
+
     /** The `configure_agent` intent, performed: what is `null` stays as it is. */
-    suspend fun apply(enabled: Boolean?, url: String?, token: String?) {
+    suspend fun apply(enabled: Boolean?, url: String?, token: String?, wallets: List<String>? = null) {
         var next = _config.value
+        if (wallets != null) next = next.copy(wallets = wallets.map { it.trim() })
         if (enabled != null) next = next.copy(enabled = enabled)
         if (url != null) next = next.copy(url = url.trim())
         if (token != null) {
-            next = next.copy(token = token.trim())
+            // A token from anywhere else is no longer clientmcp.dev's, nor is
+            // the agent's address that came with it.
+            next = next.copy(token = token.trim(), linked = null, agentUrl = "")
+            agentUrlVault.delete()
             // The vault's; a token it would not keep is kept for this run only.
             if (next.token.isEmpty()) {
                 vault.delete()
@@ -261,6 +288,12 @@ data class AgentConfig(
     val url: String = "",
     /** A ClientMCP client token for this wallet. */
     val token: String = "",
+    /** Spec 106: whose the token is, when clientmcp.dev issued it. */
+    val linked: AgentLinkedTo? = null,
+    /** Spec 106: the MCP server address for the person's AI agent — the vault's, never the record's. */
+    val agentUrl: String = "",
+    /** Spec 107 E8: the wallets the agent may use; none unless the person says so. */
+    val wallets: List<String> = emptyList(),
 ) {
     /** Whether the bridge can be dialled with what is entered. */
     val ready: Boolean get() = enabled && agentBridgeUrlProblem(url) == null && token.isNotBlank()
@@ -272,7 +305,10 @@ data class AgentConfig(
     val endpoint: String? get() = agentMcpEndpoint(url)
 
     /** The record as stored: no token — that is the vault's. */
-    fun recordJson(): String = JSONObject().put("enabled", enabled).put("url", url).toString()
+    fun recordJson(): String = JSONObject().put("enabled", enabled).put("url", url)
+        .put("wallets", org.json.JSONArray(wallets))
+        .apply { linked?.let { put("linked", it.json()) } }
+        .toString()
 
     companion object {
         /** What is stored; anything unreadable reads as off. A `token` in it is an older build's. */
@@ -282,7 +318,25 @@ data class AgentConfig(
                 enabled = json.optBoolean("enabled", false),
                 url = json.optString("url"),
                 token = json.optString("token"),
+                linked = json.optJSONObject("linked")?.let(AgentLinkedTo::from),
+                wallets = json.optJSONArray("wallets")?.let { list ->
+                    (0 until list.length()).mapNotNull { list.optString(it).takeIf { s -> s.isNotEmpty() } }
+                }.orEmpty(),
             )
+        }
+    }
+}
+
+/** Who clientmcp.dev issued the token to — stored as the web stores it (`{ site, login, clientId }`). */
+data class AgentLinkedTo(val site: String, val login: String, val clientId: String) {
+    fun json(): JSONObject = JSONObject().put("site", site).put("login", login).put("clientId", clientId)
+
+    companion object {
+        fun from(json: JSONObject): AgentLinkedTo? {
+            val site = json.optString("site").takeIf { it.isNotEmpty() } ?: return null
+            val login = json.optString("login").takeIf { it.isNotEmpty() } ?: return null
+            val clientId = json.optString("clientId").takeIf { it.isNotEmpty() } ?: return null
+            return AgentLinkedTo(site, login, clientId)
         }
     }
 }

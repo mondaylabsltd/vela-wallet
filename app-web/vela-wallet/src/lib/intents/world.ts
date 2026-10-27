@@ -27,7 +27,8 @@ export type World = {
 		timeFormat: string;
 		analytics: boolean;
 	};
-	agent: { enabled: boolean };
+	/** `wallets`: the ones the person lets the agent use (spec 107 E8). */
+	agent: { enabled: boolean; wallets: string[] };
 	/** The transfers the wallet is following (`transfers.svelte.ts`), up to date. */
 	operations: IntentOperation[];
 	balance: BalanceView | null;
@@ -59,7 +60,20 @@ function coreWorld(world: World): Record<string, unknown> {
 			analytics: world.preferences.analytics
 		},
 		agent_enabled: world.agent.enabled,
-		network_space: world.networkSpace
+		agent_wallets: world.agent.wallets,
+		network_space: world.networkSpace,
+		// Spec 107 (E7): the web wallet has no browser of its own — dApps reach
+		// it through the extension. Only `open_site` means something here.
+		explore: {
+			browser: false,
+			tabs: [],
+			favorites: [],
+			recent: [],
+			connected: [],
+			pending: null,
+			can_go_back: false,
+			can_go_forward: false
+		}
 	};
 }
 

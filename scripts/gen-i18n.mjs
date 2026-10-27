@@ -832,8 +832,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   branch — the header label, the testnet bar, the switch, the wizard's
 //   question and the network list's headings. 1832 + 16 = 1848 leaves, 103 + 1
 //   = 104 branches.
-if (PATHS.length !== 1952) fail(`expected 1952 paths (1848 leaf + 104 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1848) fail(`expected 1848 leaf paths, got ${leafSet.size}`);
+// 1968 (connecting with clientmcp.dev, spec 106, 2026-10-27): + 16
+//   `settings.agent` words — the connect button, its waiting and connected
+//   states, reconnect and disconnect, "use your own bridge", and why a
+//   sign-in failed. 1848 + 16 = 1864 leaves, 104 branches.
+// 1975 (the agent's address in the wallet, spec 106, 2026-10-27): + 7
+//   `settings.agent` words — its label and hint, Show, Hide, Copy, Copied,
+//   Share. 1864 + 7 = 1871 leaves, 104 branches.
+// 1976 (which client, spec 106, 2026-10-27): + `settings.agent.clientId`.
+//   1871 + 1 = 1872 leaves, 104 branches.
+// 1987 (the agent in Explore, spec 107, 2026-10-27): + 11
+//   `settings.agent.action.*` names — opening a site, browsing, tabs,
+//   favorites, recent sites, a site's connection and network, a dApp's
+//   request. 1872 + 11 = 1883 leaves, 104 branches.
+// 1990 (the wallets an agent may use, spec 107 E8, 2026-10-27): + 3
+//   `settings.agent` words. 1883 + 3 = 1886 leaves, 104 branches.
+if (PATHS.length !== 1990) fail(`expected 1990 paths (1886 leaf + 104 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1886) fail(`expected 1886 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 104) fail(`expected 104 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

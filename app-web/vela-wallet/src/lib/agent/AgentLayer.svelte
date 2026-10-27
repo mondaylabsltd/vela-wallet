@@ -12,9 +12,10 @@
 	 *   uses); turning it back on is in Settings.
 	 */
 	import type { IntentAction } from '$lib/core/generated/IntentAction';
-	import { intentApprovalDetail } from '$lib/core/client';
+	import { intentApprovalDetailIn } from '$lib/core/client';
+	import { worldJson } from '$lib/intents/world';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { intents } from '$lib/intents/index.svelte';
+	import { intents, world } from '$lib/intents/index.svelte';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
@@ -43,8 +44,7 @@
 			}
 			case 'delete_group':
 				return contactsBook.view?.groups.find((g) => g.id === action.id)?.name ?? action.id;
-			case 'remove_wallet':
-			case 'switch_account': {
+			case 'remove_wallet': {
 				const row = session.view.accounts.find((r) => same(r.account.address, action.address));
 				return row ? `${row.account.name} · ${action.address}` : action.address;
 			}
@@ -60,7 +60,10 @@
 			case 'set_balance_privacy':
 				return action.hidden ? messages.hideBalance : messages.showBalance;
 			default:
-				return JSON.parse(intentApprovalDetail(JSON.stringify(action))) as string | null;
+				// The core's, read against the wallet: the wallet a switch leaves
+				// and the one it goes to (spec 107).
+				return JSON.parse(intentApprovalDetailIn(JSON.stringify(action), worldJson(world()))) as
+					string | null;
 		}
 	}
 

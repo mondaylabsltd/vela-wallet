@@ -606,6 +606,7 @@ class AppContainer(private val app: Application) {
             VelaStore(app),
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
             KeystoreTokenVault(VelaStore(app)),
+            KeystoreTokenVault(VelaStore(app), KeystoreTokenVault.AGENT_URL_KEY, KeystoreTokenVault.AGENT_URL_ALIAS),
         )
     }
 
@@ -622,6 +623,9 @@ class AppContainer(private val app: Application) {
         override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
         override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
         override fun signingJson(): String? = signing.value?.signJson?.value
+        override val browser get() = this@AppContainer.browser
+        override fun signingSheet() = signing.value
+        override fun agentWallets() = agent.config.value.wallets
         override suspend fun erase(): List<String> = eraseDevice()
         override suspend fun clearStorageItem(item: String) = this@AppContainer.clearStorageItem(item)
         override suspend fun clearCaches() = this@AppContainer.clearCaches()

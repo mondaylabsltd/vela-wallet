@@ -112,6 +112,8 @@
 	  `getvela.app` ride the `applinks:` entitlement, which has been there since
 	  019 with nothing behind it.
 	-->
+	<key>VelaClientMCPSite</key>
+	<string>$(VELA_CLIENTMCP_SITE)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

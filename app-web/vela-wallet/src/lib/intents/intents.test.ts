@@ -85,7 +85,7 @@ function world(): World {
 			timeFormat: 'auto',
 			analytics: false
 		},
-		agent: { enabled: true },
+		agent: { enabled: true, wallets: [session().address] },
 		networkSpace: 'mainnet',
 		operations: [],
 		balance: null,
@@ -106,7 +106,11 @@ function harness(apply: (action: IntentAction, now: World) => string | null | vo
 				intentCheck(
 					actor,
 					JSON.stringify(action),
-					JSON.stringify({ agent_enabled: seen.agent.enabled })
+					JSON.stringify({
+						agent_enabled: seen.agent.enabled,
+						wallets: seen.agent.wallets,
+						wallet: seen.session?.address ?? ''
+					})
 				)
 			) as IntentCheck,
 		world: () => now,
@@ -228,7 +232,7 @@ describe('who may ask', () => {
 
 	it('refuses a switched-off agent, and not the person', async () => {
 		const h = harness();
-		h.world = { ...h.world, agent: { enabled: false } };
+		h.world = { ...h.world, agent: { enabled: false, wallets: [] } };
 		expect(code(await h.intents.invoke('agent', saveBob))).toBe('agent_off');
 		void h.intents.invoke('person', saveBob);
 		await tick();

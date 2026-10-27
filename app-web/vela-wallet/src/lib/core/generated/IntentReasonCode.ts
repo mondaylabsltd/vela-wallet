@@ -4,4 +4,4 @@
  * Why a call ended without its change — the same codes on every shell, for
  * an agent to act on.
  */
-export type IntentReasonCode = "invalid_input" | "not_found" | "not_ready" | "person_only" | "agent_off" | "denied" | "approval_timed_out" | "stopped" | "refused" | "not_observed" | "busy";
+export type IntentReasonCode = "invalid_input" | "not_found" | "not_ready" | "person_only" | "agent_off" | "denied" | "approval_timed_out" | "stopped" | "refused" | "not_observed" | "busy" | "wallet_not_allowed";

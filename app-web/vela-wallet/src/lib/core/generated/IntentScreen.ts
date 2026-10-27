@@ -3,4 +3,4 @@
 /**
  * A place in the wallet to show. Each shell lays it out its own way.
  */
-export type IntentScreen = { "type": "home" } | { "type": "contacts" } | { "type": "contact", address: string, } | { "type": "group", id: string, } | { "type": "settings", page: string | null, } | { "type": "asset", chain_id: number, token: string | null, } | { "type": "activity", id: string, } | { "type": "receive", chain_id: number | null, };
+export type IntentScreen = { "type": "home" } | { "type": "contacts" } | { "type": "contact", address: string, } | { "type": "group", id: string, } | { "type": "settings", page: string | null, } | { "type": "asset", chain_id: number, token: string | null, } | { "type": "activity", id: string, } | { "type": "receive", chain_id: number | null, } | { "type": "explore" };

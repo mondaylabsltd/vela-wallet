@@ -84,6 +84,9 @@ function routeOf(
 			return '/[locale]/contacts';
 		case 'settings':
 			return '/[locale]/settings';
+		// No browser of its own (spec 107 E7); the core refuses to show it.
+		case 'explore':
+			return '/[locale]/wallet';
 	}
 }
 
@@ -235,6 +238,7 @@ export async function perform(
 			return null;
 		case 'configure_agent':
 			agentSettings.set({
+				...(action.wallets !== undefined && { wallets: action.wallets }),
 				...(action.enabled !== null && { enabled: action.enabled }),
 				...(action.bridge_url !== null && { url: action.bridge_url.trim() }),
 				...(action.client_token !== null && { token: action.client_token.trim() })
@@ -287,5 +291,22 @@ export async function perform(
 		case 'reset_service_endpoints':
 			await networks.resetServiceEndpoints();
 			return null;
+		// Spec 107 E7: no browser of its own — a site opens in a new browser
+		// tab, where the extension is the wallet's way in.
+		case 'open_site':
+			// `noopener` answers null whether or not the tab opened.
+			window.open(action.url.trim(), '_blank', 'noopener,noreferrer');
+			return null;
+		case 'browse':
+		case 'close_tab':
+		case 'close_all_tabs':
+		case 'set_site_favorite':
+		case 'clear_recent_sites':
+		case 'forget_site':
+		case 'disconnect_site':
+		case 'set_site_network':
+		case 'reject_dapp_request':
+		case 'ask_person_dapp_request':
+			return 'this wallet has no browser of its own (the web wallet): dApps reach it through the browser extension';
 	}
 }

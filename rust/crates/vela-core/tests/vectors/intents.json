@@ -567,7 +567,9 @@
         },
         "transfers": [],
         "waiting_for_person": [],
-        "recent_agent_actions": []
+        "recent_agent_actions": [],
+        "explore": null,
+        "wallet_allowed": true
       }
     },
     {

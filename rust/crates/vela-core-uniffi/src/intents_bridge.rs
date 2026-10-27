@@ -95,3 +95,41 @@ pub fn intent_agent_state(
 pub fn intent_review(input_json: String) -> String {
     intent_json::review(&input_json)
 }
+
+/// Explore as the agent reads it (spec 107), from the browser machines'
+/// views (each as JSON): `null` where one does not read. `sheet`: the id of
+/// the dApp request whose sheet is in front of the person.
+#[uniffi::export]
+#[must_use]
+pub fn intent_explore_facts(
+    explore_json: String,
+    dapp_json: String,
+    history_json: String,
+    can_go_back: bool,
+    can_go_forward: bool,
+    sheet: Option<String>,
+) -> String {
+    intent_json::explore_facts(
+        &explore_json,
+        &dapp_json,
+        &history_json,
+        can_go_back,
+        can_go_forward,
+        sheet.as_deref(),
+    )
+}
+
+/// What a dApp request's id names (`{kind, tab, id}`), or `null`.
+#[uniffi::export]
+#[must_use]
+pub fn intent_dapp_request_target(id: String) -> String {
+    intent_json::dapp_request_target(&id)
+}
+
+/// What an agent's request changes, for its approval, with what the wallet
+/// knows around it (`world_json`: the shell's views, as for `intent_examine`).
+#[uniffi::export]
+#[must_use]
+pub fn intent_approval_detail_in(action_json: String, world_json: String) -> String {
+    intent_json::approval_detail_in(&action_json, &world_json)
+}

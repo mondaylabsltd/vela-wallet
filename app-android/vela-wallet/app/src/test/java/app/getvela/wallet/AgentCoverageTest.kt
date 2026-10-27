@@ -51,12 +51,10 @@ class AgentCoverageTest {
         const val SWEEP = "several tokens to one address (sweep)"
         const val SIGN = "answering a dApp's signing request"
         const val GUARD = "limiting a dApp's approval"
-        const val BROWSE = "browsing in the in-app dApp browser"
         const val CAMERA = "the camera, which an agent has no use for"
         const val CODE = "a code handed to the send — the camera's or a pay link's"
         const val FEE_TOKEN = "paying the fee in another token, per transfer"
         const val DEBUG = "a developer's switch (spec 091), hidden in a release build"
-        const val ONE_SITE = "disconnecting one connected site (clear_storage_item dapps disconnects them all)"
         const val READ = "a read"
         const val BOOT = "boot"
         const val FEE = "the fee quote"
@@ -71,33 +69,33 @@ class AgentCoverageTest {
 
         /** The calls the screens make, by `receiver.method`. */
         val CALLS: Map<String, Place> = mapOf(
-            "browser.askChain" to Place.Later(BROWSE),
-            "browser.askToOpen" to Place.Later(BROWSE),
-            "browser.back" to Place.Later(BROWSE),
-            "browser.clearRecent" to Place.Later(BROWSE),
-            "browser.close" to Place.Later(BROWSE),
-            "browser.closeAllTabs" to Place.Later(BROWSE),
-            "browser.closeOtherTabs" to Place.Later(BROWSE),
-            "browser.closeTab" to Place.Later(BROWSE),
-            "browser.closeTabsToRight" to Place.Later(BROWSE),
+            "browser.askChain" to Place.Intent("set_site_network"),
+            "browser.askToOpen" to Place.Step("open_site"),
+            "browser.back" to Place.Intent("browse"),
+            "browser.clearRecent" to Place.Intent("clear_recent_sites"),
+            "browser.close" to Place.View("the page left for Explore's start page"),
+            "browser.closeAllTabs" to Place.Intent("close_all_tabs"),
+            "browser.closeOtherTabs" to Place.Step("close_tab"),
+            "browser.closeTab" to Place.Intent("close_tab"),
+            "browser.closeTabsToRight" to Place.Step("close_tab"),
             "browser.closedBy" to Place.Machine(READ),
             "browser.consentApproved" to Place.None(DAPP),
-            "browser.consentRejected" to Place.None(DAPP),
+            "browser.consentRejected" to Place.Intent("reject_dapp_request"),
             "browser.debugCrashRenderer" to Place.None(DEBUG),
-            "browser.forward" to Place.Later(BROWSE),
+            "browser.forward" to Place.Intent("browse"),
             "browser.inspectorClosed" to Place.View("a site's connection shown"),
-            "browser.landedHome" to Place.Later(BROWSE),
+            "browser.landedHome" to Place.View("Explore's start page shown"),
             "browser.networkCameBack" to Place.Machine("the network back"),
-            "browser.newTab" to Place.Later(BROWSE),
-            "browser.open" to Place.Later(BROWSE),
+            "browser.newTab" to Place.Step("open_site"),
+            "browser.open" to Place.Intent("open_site"),
             "browser.putStatusAway" to Place.View("a page's status line seen"),
-            "browser.reload" to Place.Later(BROWSE),
-            "browser.revoke" to Place.Later(ONE_SITE),
-            "browser.selectTab" to Place.Later(BROWSE),
-            "browser.setSystemGroupHidden" to Place.Later(BROWSE),
+            "browser.reload" to Place.Intent("browse"),
+            "browser.revoke" to Place.Intent("disconnect_site"),
+            "browser.selectTab" to Place.Later("switching to another open tab; open_site reopens a site in front instead"),
+            "browser.setSystemGroupHidden" to Place.View("a section of Explore's start page hidden or shown"),
             "browser.start" to Place.Machine(BOOT),
-            "browser.stop" to Place.Later(BROWSE),
-            "browser.toggleFavorite" to Place.Later(BROWSE),
+            "browser.stop" to Place.View("a page's load stopped; browse reloads it"),
+            "browser.toggleFavorite" to Place.Intent("set_site_favorite"),
             "browser.waitingTab" to Place.Machine(READ),
             "contacts.acknowledgeImport" to Place.None(FILE),
             "contacts.exportBook" to Place.None(FILE),
@@ -106,7 +104,7 @@ class AgentCoverageTest {
             "contacts.open" to Place.Machine(ACCOUNT),
             "contacts.toggleFavourite" to Place.Intent("set_contact_favorite"),
             "container.applyLanguage" to Place.Machine(BOOT),
-            "container.clearStorageItem" to Place.Later(ONE_SITE),
+            "container.clearStorageItem" to Place.Intent("disconnect_site"),
             "container.deviceKeysOf" to Place.Machine(READ),
             "container.foundingKeyOf" to Place.Machine(READ),
             "container.openEthereumBackup" to Place.Later(

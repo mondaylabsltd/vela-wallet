@@ -18260,6 +18260,92 @@ public func agentMcpEndpoint(url: String) -> String?  {
 })
 }
 /**
+ * The site's account page, where the person connects their AI agent.
+ */
+public func clientmcpAccountUrl(site: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_account_url(
+        FfiConverterString.lower(site),uniffiCallStatus
+    )
+})
+}
+/**
+ * The phones' return address, as registered on clientmcp.dev.
+ */
+public func clientmcpAppRedirect() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_app_redirect(uniffiCallStatus
+    )
+})
+}
+/**
+ * A new installation ID from 16 random bytes.
+ */
+public func clientmcpInstallationId(random: Data) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_installation_id(
+        FfiConverterData.lower(random),uniffiCallStatus
+    )
+})
+}
+/**
+ * The site's answer: the bridge address and client token, or why not.
+ */
+public func clientmcpLinkAccept(status: UInt16, body: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_link_accept(
+        FfiConverterUInt16.lower(status),
+        FfiConverterString.lower(body),uniffiCallStatus
+    )
+})
+}
+/**
+ * Starts a sign-in: the pending sign-in to keep, with the page to open.
+ * `random` is at least 64 bytes from the platform's secure generator.
+ */
+public func clientmcpLinkBegin(site: String, redirectUri: String, label: String, installation: String, random: Data, nowMs: UInt64) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_link_begin(
+        FfiConverterString.lower(site),
+        FfiConverterString.lower(redirectUri),
+        FfiConverterString.lower(label),
+        FfiConverterString.lower(installation),
+        FfiConverterData.lower(random),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * The one request that trades the code: `{url, body}`, POSTed as JSON.
+ */
+public func clientmcpLinkExchange(pendingJson: String, code: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_link_exchange(
+        FfiConverterString.lower(pendingJson),
+        FfiConverterString.lower(code),uniffiCallStatus
+    )
+})
+}
+/**
+ * The code in the address the browser came back to, if it is this sign-in's.
+ */
+public func clientmcpLinkReturned(pendingJson: String, url: String, nowMs: UInt64) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clientmcp_link_returned(
+        FfiConverterString.lower(pendingJson),
+        FfiConverterString.lower(url),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+/**
  * The WebSocket tunnel URL to open, from the decrypted advert plaintext. `None`
  * if the secrets or the advert are malformed, or the advert names an unknown
  * tunnel domain.
@@ -18490,6 +18576,19 @@ public func intentApprovalDetail(actionJson: String) -> String  {
 })
 }
 /**
+ * What an agent's request changes, for its approval, with what the wallet
+ * knows around it (`world_json`: the shell's views, as for `intent_examine`).
+ */
+public func intentApprovalDetailIn(actionJson: String, worldJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_approval_detail_in(
+        FfiConverterString.lower(actionJson),
+        FfiConverterString.lower(worldJson),uniffiCallStatus
+    )
+})
+}
+/**
  * What was true when the call began.
  */
 public func intentBaseline(actionJson: String, worldJson: String) -> String  {
@@ -18526,6 +18625,17 @@ public func intentCheck(actor: String, actionJson: String, grantsJson: String) -
 })
 }
 /**
+ * What a dApp request's id names (`{kind, tab, id}`), or `null`.
+ */
+public func intentDappRequestTarget(id: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_dapp_request_target(
+        FfiConverterString.lower(id),uniffiCallStatus
+    )
+})
+}
+/**
  * Does what the action names exist, and is it already so?
  */
 public func intentExamine(actionJson: String, worldJson: String) -> String  {
@@ -18534,6 +18644,24 @@ public func intentExamine(actionJson: String, worldJson: String) -> String  {
     uniffi_vela_core_uniffi_fn_func_intent_examine(
         FfiConverterString.lower(actionJson),
         FfiConverterString.lower(worldJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Explore as the agent reads it (spec 107), from the browser machines'
+ * views (each as JSON): `null` where one does not read. `sheet`: the id of
+ * the dApp request whose sheet is in front of the person.
+ */
+public func intentExploreFacts(exploreJson: String, dappJson: String, historyJson: String, canGoBack: Bool, canGoForward: Bool, sheet: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_explore_facts(
+        FfiConverterString.lower(exploreJson),
+        FfiConverterString.lower(dappJson),
+        FfiConverterString.lower(historyJson),
+        FfiConverterBool.lower(canGoBack),
+        FfiConverterBool.lower(canGoForward),
+        FfiConverterOptionString.lower(sheet),uniffiCallStatus
     )
 })
 }
@@ -19712,6 +19840,27 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_agent_mcp_endpoint() != 16137) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_account_url() != 30374) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_app_redirect() != 37312) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_installation_id() != 64908) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_link_accept() != 6117) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_link_begin() != 16250) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_link_exchange() != 59037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clientmcp_link_returned() != 36244) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_cable_connect_url() != 43371) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19757,6 +19906,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_intent_approval_detail() != 4323) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_approval_detail_in() != 28618) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_intent_baseline() != 4167) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19766,7 +19918,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_intent_check() != 43094) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_dapp_request_target() != 7523) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_intent_examine() != 29526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_explore_facts() != 61960) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_operation_progress() != 49202) {

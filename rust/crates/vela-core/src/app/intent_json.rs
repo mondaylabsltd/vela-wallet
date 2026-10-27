@@ -145,3 +145,47 @@ pub fn review(input_json: &str) -> String {
     let input = serde_json::from_str::<ReviewInput>(input_json).unwrap_or_default();
     to_json(&intent_rules::review(&input))
 }
+
+/// What an agent's request changes, for its approval, with what the wallet
+/// knows around it (`world_json`, as for [`examine`]): `null` where the
+/// action's name is enough.
+#[must_use]
+pub fn approval_detail_in(action_json: &str, world_json: &str) -> String {
+    to_json(
+        &action_of(action_json)
+            .and_then(|action| intent_rules::approval_detail_in(&action, &world_of(world_json))),
+    )
+}
+
+/// Explore as the agent reads it (spec 107), from the browser machines'
+/// own views; one that does not read (a browser not started yet) is empty.
+#[must_use]
+pub fn explore_facts(
+    explore_json: &str,
+    dapp_json: &str,
+    history_json: &str,
+    can_go_back: bool,
+    can_go_forward: bool,
+    sheet: Option<&str>,
+) -> String {
+    // A browser not started yet has no views: it reads as empty, not as
+    // missing — opening a site starts it (the S22 run, 2026-10-27).
+    let explore = serde_json::from_str(explore_json).unwrap_or_default();
+    let dapp = serde_json::from_str(dapp_json).unwrap_or_default();
+    let history = serde_json::from_str(history_json)
+        .unwrap_or(super::browser_history::BhistView { entries: Vec::new() });
+    to_json(&intent_rules::explore_facts(
+        &explore,
+        &dapp,
+        &history,
+        can_go_back,
+        can_go_forward,
+        sheet,
+    ))
+}
+
+/// What a dApp request's id names (`{kind, tab, id}`), or `null`.
+#[must_use]
+pub fn dapp_request_target(id: &str) -> String {
+    to_json(&intent_rules::dapp_request_target(id))
+}

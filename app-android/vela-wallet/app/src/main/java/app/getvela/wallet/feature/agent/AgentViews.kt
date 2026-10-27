@@ -37,6 +37,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -64,7 +67,8 @@ import kotlinx.coroutines.delay
 import org.json.JSONObject
 import org.json.JSONTokener
 import uniffi.vela_core_uniffi.AgentLink
-import uniffi.vela_core_uniffi.intentApprovalDetail
+import uniffi.vela_core_uniffi.clientmcpAccountUrl
+import uniffi.vela_core_uniffi.intentApprovalDetailIn
 
 /** The agent's words, as the person reads them — the core catalog's `settings.agent.*`. */
 object AgentWords {
@@ -104,7 +108,7 @@ object AgentWords {
                 val id = action.optString("id")
                 wallet.contacts.view.value.groups.firstOrNull { it.id == id }?.name ?: id
             }
-            "remove_wallet", "switch_account" -> {
+            "remove_wallet" -> {
                 val address = action.optString("address")
                 wallet.session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }
                     ?.let { "${it.name} · $address" } ?: address
@@ -116,7 +120,12 @@ object AgentWords {
             "set_network_space" -> strings.t(
                 if (action.optString("space") == "testnet") I18nKeys.NetworkSpace.TESTNET else I18nKeys.NetworkSpace.MAINNET,
             )
-            else -> runCatching { JSONTokener(intentApprovalDetail(action.toString())).nextValue() as? String }.getOrNull()
+            // The core's: the network, URL or record it changes — and, read
+            // against the wallet, a site's networks and wallet, or the wallet
+            // a switch leaves (spec 107).
+            else -> runCatching {
+                JSONTokener(intentApprovalDetailIn(action.toString(), AgentWorld.json(wallet))).nextValue() as? String
+            }.getOrNull()
         }
     }
 }
@@ -288,6 +297,146 @@ private fun AgentApprovalAlert(strings: VelaStrings, text: String, armed: Boolea
 }
 
 /**
+ * Spec 106: the MCP server address for the person's AI agent, to copy from
+ * here — masked until Show: it is a credential.
+ */
+@Composable
+private fun AgentAddress(url: String) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf(false) }
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1800)
+            copied = false
+        }
+    }
+    val masked = url.lastIndexOf('/').let { at -> if (at < 0) "••••••••••••" else url.substring(0, at + 1) + "••••••••••••" }
+    val action = @Composable { label: String, tag: String, onClick: () -> Unit ->
+        Text(
+            text = label,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier
+                .clip(RoundedCornerShape(VelaRadius.full))
+                .clickable(onClick = onClick)
+                .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.sm)
+                .testTag(tag),
+        )
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(VelaRadius.lg))
+            .background(colors.bgSunken)
+            .padding(VelaSpacing.lg)
+            .testTag("agent-address"),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Text(
+            text = strings.t("settings.agent.agentAddress"),
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+        Text(
+            text = if (shown) url else masked,
+            color = colors.fgBase,
+            fontFamily = VelaMonoFontFamily,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier.testTag("agent-address-value"),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xs, Alignment.End),
+        ) {
+            action(strings.t(if (shown) "settings.agent.hide" else "settings.agent.show"), "agent-address-show") { shown = !shown }
+            action(strings.t("settings.agent.share"), "agent-address-share") {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(android.content.Intent.EXTRA_TEXT, url)
+                runCatching { context.startActivity(android.content.Intent.createChooser(send, null)) }
+            }
+            action(strings.t(if (copied) "settings.agent.copied" else "settings.agent.copy"), "agent-address-copy") {
+                clipboard.setText(AnnotatedString(url))
+                copied = true
+            }
+        }
+        Text(
+            text = strings.t("settings.agent.agentAddressHint"),
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+    }
+}
+
+/**
+ * Spec 107 E8: a switch per wallet on this device; the agent sees and acts
+ * only in the ones on. Each change is the person's own `configure_agent`,
+ * the list whole.
+ */
+@Composable
+private fun AgentWalletsSection(agent: AgentStore, allowed: List<String>) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    val session by agent.wallet.session.view.collectAsStateWithLifecycle()
+    Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md), modifier = Modifier.testTag("agent-wallets")) {
+        Text(
+            text = strings.t("settings.agent.wallets"),
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = VelaTextSize.base,
+        )
+        Text(
+            text = strings.t("settings.agent.walletsHint"),
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+        if (allowed.isEmpty()) {
+            Text(
+                text = strings.t("settings.agent.walletsNone"),
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.testTag("agent-wallets-none"),
+            )
+        }
+        session.accounts.forEach { row ->
+            val address = row.address
+            val on = allowed.any { it.equals(address, ignoreCase = true) }
+            VelaSwitchRow(
+                title = row.name,
+                body = if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address,
+                checked = on,
+                onCheckedChange = { want ->
+                    val next = allowed.filterNot { it.equals(address, ignoreCase = true) } + listOfNotNull(address.takeIf { want })
+                    agent.person(JSONObject().put("type", "configure_agent").put("wallets", org.json.JSONArray(next)))
+                },
+                modifier = Modifier.testTag("agent-wallet-$address"),
+            )
+        }
+    }
+}
+
+/** Why connecting with clientmcp.dev did not work, in the person's words. */
+internal fun linkProblemWords(problem: LinkProblem, strings: VelaStrings): String = when (problem) {
+    is LinkProblem.Refused -> strings.t("settings.agent.linkRefused").replace("{{reason}}", problem.reason)
+    LinkProblem.Unavailable -> strings.t("settings.agent.linkUnavailable")
+    LinkProblem.Expired -> strings.t("settings.agent.linkExpired")
+    LinkProblem.NotOurs -> strings.t("settings.agent.linkNotOurs")
+    LinkProblem.Network -> strings.t("settings.agent.linkNetwork")
+    LinkProblem.Failed -> strings.t("settings.agent.linkFailed")
+}
+
+/**
  * Settings → AI agent: whether this wallet answers a remote AI agent through
  * a ClientMCP bridge, and which bridge (spec 103 D1). Every change is the
  * person's own, through the `configure_agent` intent — an agent can never
@@ -305,6 +454,11 @@ fun AgentSettingsBody(agent: AgentStore, modifier: Modifier = Modifier) {
     var urlFocused by remember { mutableStateOf(false) }
     var tokenFocused by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val uris = LocalUriHandler.current
+    val linking by agent.clientmcp.linking.collectAsStateWithLifecycle()
+    val problem by agent.clientmcp.problem.collectAsStateWithLifecycle()
+    // "Use your own bridge" unfolded by the person (`null`: unfolded when a token was entered by hand).
+    var ownOpen by remember { mutableStateOf<Boolean?>(null) }
     val configure = { change: JSONObject -> agent.person(change.put("type", "configure_agent")) }
     Column(
         modifier = modifier.fillMaxWidth().padding(bottom = CapsuleClearance),
@@ -316,13 +470,137 @@ fun AgentSettingsBody(agent: AgentStore, modifier: Modifier = Modifier) {
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
         )
-        VelaSwitchRow(
-            title = strings.t("settings.agent.enable"),
-            body = AgentWords.link(link, strings),
-            checked = config.enabled,
-            onCheckedChange = { on -> configure(JSONObject().put("enabled", on)) },
-            modifier = Modifier.testTag("agent-enable"),
-        )
+        val enableRow = @Composable {
+            VelaSwitchRow(
+                title = strings.t("settings.agent.enable"),
+                body = AgentWords.link(link, strings),
+                checked = config.enabled,
+                onCheckedChange = { on -> configure(JSONObject().put("enabled", on)) },
+                modifier = Modifier.testTag("agent-enable"),
+            )
+        }
+        val problemLine = @Composable {
+            problem?.let {
+                Text(
+                    text = linkProblemWords(it, strings),
+                    color = colors.errorBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.testTag("agent-link-problem"),
+                )
+            }
+        }
+        val linked = config.linked
+        // Spec 106: connected through clientmcp.dev — whose it is, where the
+        // person connects their agent, Reconnect and Disconnect.
+        if (linked != null) {
+            Text(
+                text = strings.t("settings.agent.connectedAs").replace("{{login}}", linked.login),
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = VelaTextSize.lg,
+                modifier = Modifier.testTag("agent-linked"),
+            )
+            Text(
+                text = strings.t("settings.agent.clientId").replace("{{id}}", linked.clientId),
+                color = colors.fgSubtle,
+                fontFamily = VelaMonoFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.testTag("agent-client-id"),
+            )
+            if (config.agentUrl.isNotEmpty()) AgentAddress(config.agentUrl)
+            enableRow()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(VelaRadius.lg))
+                    .background(colors.bgSunken)
+                    .clickable { uris.openUri(clientmcpAccountUrl(linked.site)) }
+                    .padding(VelaSpacing.lg)
+                    .testTag("agent-connect-agent"),
+                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+            ) {
+                Text(
+                    text = "${strings.t("settings.agent.connectAgent")} →",
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = VelaTextSize.base,
+                )
+                Text(
+                    text = strings.t("settings.agent.connectAgentHint"),
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+                VelaSecondaryButton(
+                    text = strings.t("settings.agent.reconnect"),
+                    onClick = { agent.clientmcp.start() },
+                    loading = linking,
+                    modifier = Modifier.weight(1f).testTag("agent-reconnect"),
+                )
+                VelaSecondaryButton(
+                    text = strings.t("settings.agent.disconnect"),
+                    // Forgotten here; the client stays on clientmcp.dev until deleted there.
+                    onClick = {
+                        configure(JSONObject().put("enabled", false).put("bridge_url", "").put("client_token", ""))
+                    },
+                    modifier = Modifier.weight(1f).testTag("agent-disconnect"),
+                )
+            }
+            problemLine()
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+                VelaSecondaryButton(
+                    text = strings.t("settings.agent.connect"),
+                    onClick = { agent.clientmcp.start() },
+                    loading = linking,
+                    busyLabel = true,
+                    modifier = Modifier.fillMaxWidth().testTag("agent-connect"),
+                )
+                if (linking) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = strings.t("settings.agent.connecting"),
+                            color = colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.sm,
+                        )
+                        Text(
+                            text = strings.t("common.cancel"),
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.sm,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { agent.clientmcp.cancel() }.testTag("agent-link-cancel"),
+                        )
+                    }
+                } else {
+                    Text(
+                        text = strings.t("settings.agent.connectHint"),
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                    )
+                }
+                problemLine()
+            }
+            val open = ownOpen ?: config.token.isNotEmpty()
+            Text(
+                text = "${if (open) "▾" else "▸"}  ${strings.t("settings.agent.ownBridge")}",
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.clickable { ownOpen = !open }.testTag("agent-own-bridge"),
+            )
+            if (open) {
+        enableRow()
         VelaUrlField(
             label = strings.t("settings.agent.bridge"),
             value = url ?: config.url,
@@ -401,6 +679,9 @@ fun AgentSettingsBody(agent: AgentStore, modifier: Modifier = Modifier) {
                 )
             }
         }
+            }
+        }
+        AgentWalletsSection(agent, config.wallets)
         activity.firstOrNull()?.let { latest ->
             Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(

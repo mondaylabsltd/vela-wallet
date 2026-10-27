@@ -232,6 +232,7 @@ export * from './IntentAction';
 export * from './IntentActor';
 export * from './IntentApprover';
 export * from './IntentBaseline';
+export * from './IntentBrowseStep';
 export * from './IntentCatalogEntry';
 export * from './IntentCeremony';
 export * from './IntentCheck';

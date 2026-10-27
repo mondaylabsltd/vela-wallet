@@ -239,8 +239,10 @@ pub async fn perform(
             enabled,
             bridge_url,
             client_token,
+            wallets,
         } => {
             let change = super::settings::AgentChange {
+                wallets: wallets.clone(),
                 enabled: *enabled,
                 url: bridge_url.clone(),
                 token: client_token.clone(),
@@ -335,6 +337,24 @@ pub async fn perform(
         Action::ResetServiceEndpoints => {
             cx.update(|cx| net(cx, NetEvent::ResetEndpointsToDefaults));
             Performed::Done
+        }
+        // Spec 107: Explore — the page's browser, as its own controls drive it.
+        Action::OpenSite { .. }
+        | Action::Browse { .. }
+        | Action::CloseTab { .. }
+        | Action::CloseAllTabs
+        | Action::SetSiteFavorite { .. }
+        | Action::ClearRecentSites
+        | Action::ForgetSite { .. }
+        | Action::DisconnectSite { .. }
+        | Action::SetSiteNetwork { .. }
+        | Action::RejectDappRequest { .. }
+        | Action::AskPersonDappRequest { .. } => {
+            match super::on_page(cx, |page, _, cx| page.agent_explore(action, cx)) {
+                None => page_gone(),
+                Some(Some(refusal)) => Performed::refused(refusal),
+                Some(None) => Performed::Done,
+            }
         }
     }
 }

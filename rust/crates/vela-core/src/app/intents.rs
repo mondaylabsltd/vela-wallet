@@ -113,6 +113,18 @@ pub enum Screen {
     Receive {
         chain_id: Option<u32>,
     },
+    /// Explore, the dApp browser: its start page, or its current tab (spec 107).
+    Explore,
+}
+
+/// Where a tab goes ([`Action::Browse`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentBrowseStep"))]
+pub enum BrowseStep {
+    Back,
+    Forward,
+    Reload,
 }
 
 /// One recipient of a transfer to several.
@@ -204,6 +216,11 @@ pub enum Action {
         enabled: Option<bool>,
         bridge_url: Option<String>,
         client_token: Option<String>,
+        /// The wallets the agent may use (spec 107 E8), whole; absent keeps
+        /// them as they are.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        wallets: Option<Vec<String>>,
     },
     /// A transfer, drafted into the wallet's own review — the screen a person
     /// reaches by filling the form. Nothing moves until it is submitted.
@@ -295,6 +312,52 @@ pub enum Action {
         url: String,
     },
     ResetServiceEndpoints,
+    // -- Explore, the dApp browser (spec 107) --------------------------------
+    /// Open a site in Explore: in the current tab, or a new one. What a site
+    /// may do stays the person's: it reaches nothing until they connect it.
+    OpenSite {
+        url: String,
+        #[serde(default)]
+        new_tab: bool,
+    },
+    /// The current tab: back, forward, or reload.
+    Browse {
+        to: BrowseStep,
+    },
+    CloseTab {
+        id: String,
+    },
+    CloseAllTabs,
+    /// Pin a site to Explore's favorites, or unpin it.
+    SetSiteFavorite {
+        url: String,
+        favorite: bool,
+    },
+    /// Forget every recently visited site.
+    ClearRecentSites,
+    /// Forget one recently visited site.
+    ForgetSite {
+        origin: String,
+    },
+    /// Disconnect a site: it no longer sees the wallet's address.
+    DisconnectSite {
+        origin: String,
+    },
+    /// The network a connected site sees.
+    SetSiteNetwork {
+        origin: String,
+        chain_id: u32,
+    },
+    /// Turn down a dApp's pending request (connect, sign, send, add a
+    /// network): nothing is signed or shared.
+    RejectDappRequest {
+        id: String,
+    },
+    /// Put a dApp's pending request in front of the person. Only they answer
+    /// it, on the wallet's own sheet; the agent never approves one.
+    AskPersonDappRequest {
+        id: String,
+    },
 }
 
 /// One entry of the catalog: what the action is for, as an agent reads it.
@@ -341,7 +404,7 @@ const fn person_only(action: &'static str, description: &'static str) -> Entry {
 /// Every action, in one place: name, risk, and who may ask for it. The risk of
 /// an [`Action`] value is read from here, so a scale and its catalog cannot
 /// disagree.
-const CATALOG: [Entry; 31] = [
+const CATALOG: [Entry; 42] = [
     entry(
         "show",
         Risk::Operate,
@@ -413,7 +476,7 @@ const CATALOG: [Entry; 31] = [
     ),
     person_only(
         "configure_agent",
-        "The AI agent's connection: on or off, its bridge and its token.",
+        "The AI agent's connection: on or off, its bridge and its token, and the wallets it may use.",
     ),
     entry(
         "prepare_transfer",
@@ -490,6 +553,57 @@ const CATALOG: [Entry; 31] = [
         "reset_service_endpoints",
         Risk::Manage,
         "Put every service back on its default URL.",
+    ),
+    // Explore (spec 107, owner 2026-10-27): browsing shows the person a page
+    // and changes nothing of value — a site reaches nothing until the person
+    // connects it — so it is ordinary use (E1). What a site may do stays the
+    // person's (E3).
+    entry(
+        "open_site",
+        Risk::Operate,
+        "Open a website in Explore, the wallet's dApp browser, for the person: in the current tab, or a new one (new_tab). https only (http only on this device's own network). The site gets nothing from the wallet unless the person connects it on the wallet's own sheet. Not on the web wallet, which has no browser of its own: there it opens a new browser tab.",
+    ),
+    entry(
+        "browse",
+        Risk::Operate,
+        "Go back, forward, or reload in Explore's current tab.",
+    ),
+    entry("close_tab", Risk::Operate, "Close one of Explore's tabs, by its id (vela_state explore.tabs)."),
+    entry("close_all_tabs", Risk::Operate, "Close every Explore tab."),
+    entry(
+        "set_site_favorite",
+        Risk::Operate,
+        "Pin a site to Explore's favorites, or unpin it.",
+    ),
+    entry(
+        "clear_recent_sites",
+        Risk::Operate,
+        "Forget every site in Explore's recently visited list.",
+    ),
+    entry(
+        "forget_site",
+        Risk::Operate,
+        "Forget one site from Explore's recently visited list, by its origin.",
+    ),
+    entry(
+        "disconnect_site",
+        Risk::Manage,
+        "Disconnect a connected site: it no longer sees the wallet's address. The person approves it first.",
+    ),
+    entry(
+        "set_site_network",
+        Risk::Manage,
+        "Change which network a connected site sees. The person approves it first.",
+    ),
+    entry(
+        "reject_dapp_request",
+        Risk::Operate,
+        "Turn down a dApp's pending request (vela_state explore.pending): a connection, a signature, a transaction, a network to add. Nothing is signed or shared.",
+    ),
+    entry(
+        "ask_person_dapp_request",
+        Risk::Operate,
+        "Put a dApp's pending request in front of the person on the wallet's own sheet. Only the person approves a dApp's request — you cannot — and their passkey signs anything it signs. Read it with vela_review first and tell them what it does.",
     ),
 ];
 
@@ -578,6 +692,7 @@ fn input_schema(kind: &str) -> serde_json::Value {
                     screen("receive", json!({
                         "chain_id": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] }
                     }), &[]),
+                    screen("explore", json!({}), &[]),
                 ] } }),
                 &["screen"],
             )
@@ -635,7 +750,8 @@ fn input_schema(kind: &str) -> serde_json::Value {
             json!({
                 "enabled": { "type": ["boolean", "null"] },
                 "bridge_url": { "type": ["string", "null"] },
-                "client_token": { "type": ["string", "null"] }
+                "client_token": { "type": ["string", "null"] },
+                "wallets": { "type": ["array", "null"], "items": address.clone() }
             }),
             &[],
         ),
@@ -731,6 +847,40 @@ fn input_schema(kind: &str) -> serde_json::Value {
             json!({ "address": address, "favorite": { "type": "boolean" } }),
             &["address", "favorite"],
         ),
+        "open_site" => object(
+            json!({
+                "url": { "type": "string", "pattern": "^https?://\\S+$", "description": "The page to open." },
+                "new_tab": { "type": "boolean", "description": "Open it in a new tab (default: the current one)." }
+            }),
+            &["url"],
+        ),
+        "browse" => object(
+            json!({ "to": strings(&["back", "forward", "reload"]) }),
+            &["to"],
+        ),
+        "close_tab" => object(
+            json!({ "id": { "type": "string", "description": "explore.tabs[].id" } }),
+            &["id"],
+        ),
+        "set_site_favorite" => object(
+            json!({ "url": { "type": "string", "pattern": "^https?://\\S+$" }, "favorite": { "type": "boolean" } }),
+            &["url", "favorite"],
+        ),
+        "forget_site" | "disconnect_site" => object(
+            json!({ "origin": { "type": "string", "description": "A site's origin, e.g. https://app.uniswap.org" } }),
+            &["origin"],
+        ),
+        "set_site_network" => object(
+            json!({
+                "origin": { "type": "string", "description": "A connected site's origin (explore.connected[].origin)." },
+                "chain_id": { "type": "integer", "minimum": 1 }
+            }),
+            &["origin", "chain_id"],
+        ),
+        "reject_dapp_request" | "ask_person_dapp_request" => object(
+            json!({ "id": { "type": "string", "description": "explore.pending.id" } }),
+            &["id"],
+        ),
         _ => object(json!({}), &[]),
     }
 }
@@ -771,6 +921,17 @@ impl Action {
             Self::SetProviderKey { .. } => "set_provider_key",
             Self::SetServiceEndpoint { .. } => "set_service_endpoint",
             Self::ResetServiceEndpoints => "reset_service_endpoints",
+            Self::OpenSite { .. } => "open_site",
+            Self::Browse { .. } => "browse",
+            Self::CloseTab { .. } => "close_tab",
+            Self::CloseAllTabs => "close_all_tabs",
+            Self::SetSiteFavorite { .. } => "set_site_favorite",
+            Self::ClearRecentSites => "clear_recent_sites",
+            Self::ForgetSite { .. } => "forget_site",
+            Self::DisconnectSite { .. } => "disconnect_site",
+            Self::SetSiteNetwork { .. } => "set_site_network",
+            Self::RejectDappRequest { .. } => "reject_dapp_request",
+            Self::AskPersonDappRequest { .. } => "ask_person_dapp_request",
         }
     }
 
@@ -876,6 +1037,8 @@ pub enum ReasonCode {
     /// Something of the person's is under way where this would go (an open
     /// send); finish or close it first.
     Busy,
+    /// The person has not let the agent use this wallet (spec 107 E8).
+    WalletNotAllowed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -972,7 +1135,10 @@ fn preference(preference: &Preference) -> Result<(), Reason> {
 pub fn validate(action: &Action) -> Result<(), Reason> {
     match action {
         Action::Show { screen } => match screen {
-            Screen::Home | Screen::Contacts | Screen::Receive { chain_id: None } => Ok(()),
+            Screen::Home
+            | Screen::Contacts
+            | Screen::Explore
+            | Screen::Receive { chain_id: None } => Ok(()),
             Screen::Receive {
                 chain_id: Some(chain),
             } => chain_named(*chain),
@@ -1099,6 +1265,16 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
             }
         }
         Action::ResetServiceEndpoints => Ok(()),
+        Action::OpenSite { url, .. } | Action::SetSiteFavorite { url, .. } => site_url(url),
+        Action::ForgetSite { origin } | Action::DisconnectSite { origin } => site_origin(origin),
+        Action::SetSiteNetwork { origin, chain_id } => {
+            site_origin(origin)?;
+            chain_named(*chain_id)
+        }
+        Action::CloseTab { id }
+        | Action::RejectDappRequest { id }
+        | Action::AskPersonDappRequest { id } => named(id, "id"),
+        Action::Browse { .. } | Action::CloseAllTabs | Action::ClearRecentSites => Ok(()),
         Action::SignOut
         | Action::EraseDevice
         | Action::ClearCaches
@@ -1123,6 +1299,32 @@ fn web_url(url: &str) -> Result<(), Reason> {
         invalid(format!("not an http(s) URL: {url}"))
     } else {
         Ok(())
+    }
+}
+
+/// A page an agent may open (E2, spec 107): what the browser itself would
+/// load from a typed address — `https`, or `http` only on this device or the
+/// person's own network, where a public `http` page is refused as the
+/// browser warns of it.
+fn site_url(url: &str) -> Result<(), Reason> {
+    web_url(url)?;
+    let Some(origin) = super::dapp_permissions::origin_of(url.trim()) else {
+        return invalid(format!("not a web page: {url}"));
+    };
+    if super::dapp_permissions::is_insecure_public_origin(&origin) {
+        return invalid(format!(
+            "{origin} is plain http on the public internet: open its https address"
+        ));
+    }
+    Ok(())
+}
+
+/// A site's origin, as the browser keys its sites: scheme, host, port.
+fn site_origin(origin: &str) -> Result<(), Reason> {
+    match super::dapp_permissions::origin_of(origin.trim()) {
+        Some(parsed) if parsed == origin.trim().trim_end_matches('/') => Ok(()),
+        Some(parsed) => invalid(format!("an origin has no path: {parsed}")),
+        None => invalid(format!("not a site's origin: {origin}")),
     }
 }
 
@@ -1162,11 +1364,25 @@ fn transfer_amount(amount: &str) -> Result<(), Reason> {
 // ---------------------------------------------------------------------------
 
 /// What the person has allowed an agent, as Settings → AI agent holds it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentGrants"))]
 pub struct Grants {
     /// The AI agent is switched on.
     pub agent_enabled: bool,
+    /// The wallets the person lets the agent use (spec 107 E8): none unless
+    /// they say so.
+    pub wallets: Vec<String>,
+    /// The wallet in front; empty while nobody is in.
+    pub wallet: String,
+}
+
+impl Grants {
+    fn allows(&self, address: &str) -> bool {
+        self.wallets
+            .iter()
+            .any(|wallet| wallet.trim().eq_ignore_ascii_case(address.trim()))
+    }
 }
 
 /// Who approves a request before it is done.
@@ -1213,6 +1429,26 @@ pub fn authorize(actor: Actor, action: &Action, grants: &Grants) -> Decision {
     if !grants.agent_enabled {
         return Decision::Deny {
             reason: reason(ReasonCode::AgentOff, "the AI agent is switched off"),
+        };
+    }
+    // E8: only the wallets the person allowed. Showing a screen reads nothing.
+    if matches!(action, Action::SwitchAccount { address } if !grants.allows(address)) {
+        return Decision::Deny {
+            reason: reason(
+                ReasonCode::WalletNotAllowed,
+                "the person has not let the agent use that wallet (Settings → AI agent)",
+            ),
+        };
+    }
+    if !grants.wallet.trim().is_empty()
+        && !grants.allows(&grants.wallet)
+        && !matches!(action, Action::Show { .. })
+    {
+        return Decision::Deny {
+            reason: reason(
+                ReasonCode::WalletNotAllowed,
+                "the person has not let the agent use the wallet in front (Settings → AI agent)",
+            ),
         };
     }
     match action {
@@ -1315,6 +1551,18 @@ pub fn shows(action: &Action) -> Option<Screen> {
         | Action::RemoveNetwork { .. } => settings("networks"),
         Action::SetProviderKey { .. } => settings("rpc-providers"),
         Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => settings("endpoints"),
+        // Explore shows itself: the page, the tabs, the lists.
+        Action::OpenSite { .. }
+        | Action::Browse { .. }
+        | Action::CloseTab { .. }
+        | Action::CloseAllTabs
+        | Action::SetSiteFavorite { .. }
+        | Action::ClearRecentSites
+        | Action::ForgetSite { .. }
+        | Action::DisconnectSite { .. }
+        | Action::SetSiteNetwork { .. } => Some(Screen::Explore),
+        // The request's own sheet is where it shows.
+        Action::RejectDappRequest { .. } | Action::AskPersonDappRequest { .. } => None,
         Action::SignOut
         | Action::EraseDevice
         | Action::ConfigureAgent { .. }

@@ -13,6 +13,7 @@ uniffi::setup_scaffolding!();
 // The AI agent (spec 104 phase 7): `vela-agent` behind a shell Swift and
 // Kotlin implement.
 mod agent_bridge;
+mod clientmcp_bridge;
 mod ctap_bridge;
 mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).

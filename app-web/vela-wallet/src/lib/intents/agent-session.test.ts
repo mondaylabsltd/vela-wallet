@@ -149,7 +149,11 @@ function wallet() {
 				intentCheck(
 					actor,
 					JSON.stringify(action),
-					JSON.stringify({ agent_enabled: seen.agent.enabled })
+					JSON.stringify({
+						agent_enabled: seen.agent.enabled,
+						wallets: seen.agent.wallets,
+						wallet: seen.session?.address ?? ''
+					})
 				)
 			) as IntentCheck,
 		world: () => ({
@@ -158,7 +162,7 @@ function wallet() {
 			currency: null,
 			feeTier: null,
 			preferences: {} as never,
-			agent: { enabled: true },
+			agent: { enabled: true, wallets: [session().address] },
 			networkSpace: 'mainnet',
 			operations: transfers.list(),
 			balance: null,

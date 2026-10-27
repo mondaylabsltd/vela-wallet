@@ -92,6 +92,7 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
                     enabled = if (action.has("enabled") && !action.isNull("enabled")) action.optBoolean("enabled") else null,
                     url = action.optString("bridge_url").takeIf { action.has("bridge_url") && !action.isNull("bridge_url") },
                     token = action.optString("client_token").takeIf { action.has("client_token") && !action.isNull("client_token") },
+                    wallets = action.optJSONArray("wallets")?.let { list -> (0 until list.length()).map { list.optString(it) } },
                 )
             }
             "add_token" -> addToken(chainId.toInt(), text("address"))
@@ -118,9 +119,76 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
             "set_provider_key" -> setProviderKey(action.optString("provider"), text("key"))
             "set_service_endpoint" -> setServiceEndpoint(action.optString("field"), text("url"))
             "reset_service_endpoints" -> DONE.also { wallet.settings.resetEndpoints() }
+            // -- Explore (spec 107): the browser's own calls, as its controls make them.
+            "open_site" -> openSite(text("url"), action.optBoolean("new_tab"))
+            "browse" -> when (action.optString("to")) {
+                "back" -> DONE.also { wallet.browser.back() }
+                "forward" -> DONE.also { wallet.browser.forward() }
+                "reload" -> DONE.also { wallet.browser.reload() }
+                else -> refused("invalid_input", "back, forward or reload")
+            }
+            "close_tab" -> DONE.also { wallet.browser.closeTab(action.optString("id")) }
+            "close_all_tabs" -> DONE.also { wallet.browser.closeAllTabs() }
+            "set_site_favorite" -> DONE.also {
+                val url = text("url")
+                if (action.optBoolean("favorite")) {
+                    wallet.browser.addFavorite(url)
+                } else {
+                    wallet.browser.explore.value.favorites
+                        .firstOrNull { sameOrigin(it.url, url) }
+                        ?.let { wallet.browser.removeFavorite(it.origin) }
+                }
+            }
+            "clear_recent_sites" -> DONE.also { wallet.browser.clearRecent() }
+            "forget_site" -> DONE.also { wallet.browser.forgetRecent(siteOrigin(text("origin"))) }
+            "disconnect_site" -> DONE.also { wallet.browser.revoke(siteOrigin(text("origin"))) }
+            "set_site_network" -> DONE.also { wallet.browser.setSiteChain(siteOrigin(text("origin")), chainId.toInt()) }
+            "reject_dapp_request" -> rejectDappRequest(text("id"))
+            "ask_person_dapp_request" -> askPerson(text("id"))
             else -> refused("this wallet cannot do $kind here")
         }
     }
+
+    // -- Explore (spec 107) --------------------------------------------------------
+
+    /** As the address bar opens one: into the page in front, or (new_tab) without replacing it. */
+    private fun openSite(url: String, newTab: Boolean): String {
+        val page = agent.page ?: return NOT_OPEN
+        page.show(JSONObject().put("type", "explore"))?.let { return refused(it) }
+        val onPage = !newTab && wallet.browser.currentTabView()?.origin != null
+        wallet.browser.open(url, app.getvela.wallet.feature.browser.core.ExploreOpenKind.Address, onPage = onPage, fromOutside = newTab)
+        return DONE
+    }
+
+    /** The sheet's own "no": nothing signed, nothing shared. */
+    private fun rejectDappRequest(id: String): String {
+        val target = target(id) ?: return refused("not_found", "no dApp request with that id is waiting")
+        when (target.optString("kind")) {
+            "connect" -> wallet.browser.consentRejected()
+            "sign" -> wallet.signingSheet()?.reject() ?: return refused("not_ready", "the signing request is not on its sheet yet")
+            "add_network" -> wallet.settings.dappAddDeclined()
+            else -> return refused("not_found", "no dApp request with that id is waiting")
+        }
+        return DONE
+    }
+
+    /**
+     * Put the request in front of the person: a connect over its tab in
+     * Explore; a signature's and a network's sheets are already the app's
+     * own, in front wherever the person is.
+     */
+    private fun askPerson(id: String): String {
+        val target = target(id) ?: return refused("not_found", "no dApp request with that id is waiting")
+        if (target.optString("kind") == "connect") {
+            val page = agent.page ?: return NOT_OPEN
+            wallet.browser.selectTab(target.optString("tab"))
+            page.show(JSONObject().put("type", "explore"))?.let { return refused(it) }
+        }
+        return DONE
+    }
+
+    private fun target(id: String): JSONObject? =
+        runCatching { JSONObject(uniffi.vela_core_uniffi.intentDappRequestTarget(id)) }.getOrNull()
 
     // -- preferences -------------------------------------------------------------
 
@@ -331,6 +399,18 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
         fun refused(detail: String): String = refused("refused", detail)
 
         /** A core value by its own name, as a refusal reads it: an enum's word, or a tagged one's `type`. */
+        /** A site's origin, as the browser keys its sites. */
+        fun siteOrigin(text: String): String = text.trim().trimEnd('/')
+
+        fun sameOrigin(a: String, b: String): Boolean =
+            originOf(a) != null && originOf(a) == originOf(b)
+
+        private fun originOf(url: String): String? = runCatching {
+            val uri = java.net.URI(url.trim())
+            val port = if (uri.port == -1 || (uri.scheme == "https" && uri.port == 443) || (uri.scheme == "http" && uri.port == 80)) "" else ":${uri.port}"
+            "${uri.scheme}://${uri.host}$port".lowercase()
+        }.getOrNull()
+
         private fun name(value: Any?): String = when (value) {
             is String -> value
             is JSONObject -> value.optString("type").ifEmpty { value.toString() }

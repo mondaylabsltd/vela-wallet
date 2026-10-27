@@ -23,14 +23,17 @@ nonisolated final class AgentShellBridge: AgentShell, @unchecked Sendable {
     // MARK: - The wallet, read
 
     func views() -> String {
-        onMain { store?.graph.map(Self.views) ?? "{}" }
+        onMain {
+            guard let graph = store?.graph else { return "{}" }
+            return Self.views(graph, page: store?.page)
+        }
     }
 
     /// The views as JSON, under the names the core's `World` reads — the
     /// machines' own views, whole. While nobody is signed in only the
     /// session: the other machines belong to an account.
     @MainActor
-    static func views(_ graph: AppGraph) -> String {
+    static func views(_ graph: AppGraph, page: AgentPage? = nil) -> String {
         var parts = ["\"session\":\(graph.session.viewJson ?? "null")"]
         if !graph.session.view.address.isEmpty {
             parts.append("\"contacts\":\(graph.contacts.viewJson ?? "null")")
@@ -42,11 +45,34 @@ nonisolated final class AgentShellBridge: AgentShell, @unchecked Sendable {
             }
             parts.append("\"currency\":\(graph.settings.currencyJson ?? "null")")
             parts.append("\"fee_tier\":\(graph.settings.feeTierJson ?? "null")")
+            // Spec 107: Explore — the tabs, the lists, a dApp's request.
+            parts.append("\"explore\":\(graph.browser.agentFacts(sheet: sheet(graph, page: page)))")
         }
         parts.append("\"preferences\":\(CoreJSON.string(preferences(graph.preferences)))")
+        // Spec 107 E8: the wallets the person lets the agent use.
+        if let wallets = try? JSONSerialization.data(withJSONObject: graph.agent.config.wallets),
+           let text = String(data: wallets, encoding: .utf8) {
+            parts.append("\"agent_wallets\":\(text)")
+        }
         // The space in front (spec 105): the agent reads and drafts in it.
         parts.append("\"network_space\":\"\(graph.space.current.rawValue)\"")
         return "{\(parts.joined(separator: ","))}"
+    }
+
+    /// The dApp request whose sheet the person sees: a connect's is
+    /// Explore's, over its tab; a signature's is the signing sheet; a
+    /// network's is Settings' add-network sheet, up while the request is.
+    @MainActor
+    private static func sheet(_ graph: AppGraph, page: AgentPage?) -> String? {
+        let dbr = graph.browser.dbr
+        if let consent = dbr.consent {
+            let inFront = page?.name() == "explore" && graph.browser.explore.selectedTab == consent.tab
+            return inFront ? "connect:\(consent.tab)" : nil
+        }
+        if let signing = dbr.signing {
+            return page?.signing() != nil ? "sign:\(signing.tab):\(signing.id)" : nil
+        }
+        return dbr.addingNetwork.map { "add_network:\($0.tab):\($0.id)" }
     }
 
     /// The preferences in the catalog's spellings. The phone shares no usage

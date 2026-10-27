@@ -7,15 +7,24 @@ import { expect, type Page, type WebSocketRoute } from '@playwright/test';
 
 export const BRIDGE = 'ws://localhost:18999/connect';
 
+/** The parallel space's fixture wallets (`/parallel`), which the agent may use. */
+const FIXTURE_WALLETS = [
+	'0xD400866e00B055B20752a826CD5C89b811de130b',
+	'0x031d7D57c99CAF891e1C250554691Fd12D84772b',
+	'0x58cd0ce6A27099220543b31710d7860d75Ba1d3d',
+	'0x88cCA0EeDbF2C4426110bbFc998F048689266894'
+];
+
 /** Settings → AI agent as the person leaves it: on, and this bridge. */
 export async function enableAgent(page: Page): Promise<void> {
 	await page.evaluate(
-		(url) =>
+		({ url, wallets }) =>
 			localStorage.setItem(
 				'vela.agent',
-				JSON.stringify({ enabled: true, url, token: 'e2e-token' })
+				// Spec 107 E8: the parallel space's fixture wallets, allowed.
+				JSON.stringify({ enabled: true, url, token: 'e2e-token', wallets })
 			),
-		BRIDGE
+		{ url: BRIDGE, wallets: FIXTURE_WALLETS }
 	);
 }
 

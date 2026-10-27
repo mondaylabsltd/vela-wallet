@@ -136,6 +136,49 @@ struct AgentTests {
         #expect(agent.urlProblem == "insecure")
     }
 
+    /// Spec 106: whose the token is, when clientmcp.dev issued it — kept as
+    /// the web keeps it, and dropped when a token comes from anywhere else.
+    @Test func whoseTheTokenIsIsKeptUntilAnotherTokenComes() {
+        let defaults = UserDefaults(suiteName: "vela.tests.agent.\(UUID().uuidString)")!
+        let shelf = VelaStore(defaults: defaults)
+        let addresses = MemoryTokenVault()
+        let agent = AgentStore(shelf: shelf, vault: MemoryTokenVault(), agentUrlVault: addresses)
+        agent.apply(enabled: true, url: "wss://bridge.clientmcp.dev/connect", token: "issued")
+        agent.setLinked(
+            AgentLinkedTo(site: "https://clientmcp.dev", login: "alice", clientId: "c-1"),
+            agentUrl: "https://bridge.clientmcp.dev/mcp/agent-tok"
+        )
+        #expect(addresses.read() == "https://bridge.clientmcp.dev/mcp/agent-tok", "the agent's address is the vault's")
+        let record = shelf.readObject(VelaStore.Key.agent)
+        #expect(record["linked"] as? [String: String] == ["site": "https://clientmcp.dev", "login": "alice", "clientId": "c-1"])
+        #expect(record["token"] == nil, "the token stays the Keychain's")
+        #expect(record["agentUrl"] == nil, "and so does the agent's address")
+        let again = AgentStore(shelf: shelf, vault: MemoryTokenVault(), agentUrlVault: addresses)
+        #expect(again.config.linked?.login == "alice")
+        #expect(again.config.agentUrl == "https://bridge.clientmcp.dev/mcp/agent-tok")
+
+        agent.apply(enabled: nil, url: nil, token: "typed-by-hand")
+        #expect(agent.config.linked == nil)
+        #expect(agent.config.agentUrl.isEmpty)
+        #expect(addresses.read() == nil)
+        #expect(shelf.readObject(VelaStore.Key.agent)["linked"] == nil)
+    }
+
+    /// Spec 107 E8: the wallets the agent may use — none by default, kept
+    /// in the record, whole on each change.
+    @Test func theWalletsTheAgentMayUseAreKept() {
+        let defaults = UserDefaults(suiteName: "vela.tests.agent.\(UUID().uuidString)")!
+        let shelf = VelaStore(defaults: defaults)
+        let agent = AgentStore(shelf: shelf, vault: MemoryTokenVault(), agentUrlVault: MemoryTokenVault())
+        #expect(agent.config.wallets.isEmpty, "none unless the person says so")
+        agent.apply(enabled: nil, url: nil, token: nil, wallets: [" 0xAbC "])
+        #expect(agent.config.wallets == ["0xAbC"])
+        #expect(shelf.readObject(VelaStore.Key.agent)["wallets"] as? [String] == ["0xAbC"])
+        #expect(AgentStore(shelf: shelf, vault: MemoryTokenVault()).config.wallets == ["0xAbC"])
+        agent.apply(enabled: true, url: nil, token: nil)
+        #expect(agent.config.wallets == ["0xAbC"], "absent keeps them")
+    }
+
     @Test func aTokenAnOlderBuildKeptInTheRecordMovesToTheVault() {
         let defaults = UserDefaults(suiteName: "vela.tests.agent.\(UUID().uuidString)")!
         let shelf = VelaStore(defaults: defaults)

@@ -52,7 +52,6 @@ private let ONBOARD = "signing in or creating a wallet: the passkey's own ceremo
 private let BOUNDARY = "where this account signs is the signing boundary itself (spec 102)"
 private let SWEEP = "several tokens to one address (sweep)"
 private let SIGN = "answering a dApp's signing request"
-private let BROWSE = "browsing in the in-app dApp browser"
 private let CAMERA = "the camera, which an agent has no use for"
 private let FEE_TOKEN = "paying the fee in another token, per transfer"
 private let SPEED = "choosing one transfer's own speed (the default is set_preference fee_speed)"
@@ -91,13 +90,41 @@ private let CALLS: [String: Place] = [
     "batch.setText": .step("prepare_batch_transfer"),
     "batch.setUnit": .step("prepare_batch_transfer"),
     "browser.accountsChanged": .step("switch_account"),
+    // Spec 107: Explore's own screen, its browser controller.
+    "controller.browsingVisible": .view("Explore on screen or not"),
+    "controller.clearRecent": .intent("clear_recent_sites"),
+    "controller.closeAllTabs": .intent("close_all_tabs"),
+    "controller.closeTab": .intent("close_tab"),
+    "controller.closeTabs": .step("close_tab"),
+    "controller.consentApproved": .none(DAPP),
+    "controller.consentRejected": .intent("reject_dapp_request"),
+    "controller.inFlightChanged": .machine("the page's requests in flight"),
+    "controller.inspectorClosed": .view("a site's connection shown"),
+    "controller.landedHome": .view("Explore's start page shown"),
+    "controller.landing": .machine(READ),
+    "controller.newTab": .step("open_site"),
+    "controller.open": .intent("open_site"),
+    "controller.pickSiteChain": .intent("set_site_network"),
+    "controller.trackerChanged": .machine("the chain tracker"),
+    "controller.dismissStatus": .view("a page's status line seen"),
+    "controller.goBack": .intent("browse"),
+    "controller.goForward": .intent("browse"),
+    "controller.inspectorOpened": .view("a site's connection shown"),
+    "controller.litTab": .machine(READ),
+    "controller.openSite": .intent("open_site"),
+    "controller.reload": .intent("browse"),
+    "controller.revoke": .intent("disconnect_site"),
+    "controller.selectTab": .later("switching to another open tab; open_site reopens a site in front instead"),
+    "controller.setSystemGroupHidden": .view("a section of Explore's start page hidden or shown"),
+    "controller.stop": .view("a page's load stopped; browse reloads it"),
+    "controller.toggleFavorite": .intent("set_site_favorite"),
     "browser.addNetworkAnswered": .none(DAPP),
-    "browser.answerExternal": .later(BROWSE),
+    "browser.answerExternal": .step("open_site"),
     "browser.appActive": .machine("the app in front or not"),
-    "browser.askToOpen": .later(BROWSE),
+    "browser.askToOpen": .step("open_site"),
     "browser.networksChanged": .machine("the networks"),
-    "browser.open": .later(BROWSE),
-    "browser.revoke": .later("disconnecting one connected site (clear_storage_item dapps disconnects them all)"),
+    "browser.open": .intent("open_site"),
+    "browser.revoke": .intent("disconnect_site"),
     "browser.revokeAll": .step("clear_storage_item"),
     "browser.setDebugMode": .none("a developer's switch (spec 091), hidden in a release build"),
     "browser.signingAnswered": .none(DAPP),
@@ -226,6 +253,8 @@ private let CALLS: [String: Place] = [
     "settings.selectChain": .step("add_network"),
     "settings.testProvider": .later("testing a provider key; its answer is only drawn in Settings"),
     "signing.approve": .later(SIGN),
+    // Spec 107: the agent's reject, through the sheet's own.
+    "signing.reject": .intent("reject_dapp_request"),
     "signing.feeTapped": .later(SIGN),
     "signing.guardCustomAmount": .later("limiting a dApp's approval"),
     "signing.guardLegCustomAmount": .later("limiting a dApp's approval"),
@@ -273,6 +302,8 @@ private let RECEIVERS = [
     "fees", "flows", "graph", "notifier", "onboarding", "paymentRequest", "pool", "preferences",
     "relayClient", "router", "send", "session", "settings", "signing", "tokens", "tracker", "trust",
     "wallet", "welcome", "identity", "netWatch", "spine", "trustedSigner",
+    // Explore's screen holds its browser as `controller` (spec 107: the gate saw none of it).
+    "controller",
 ]
 
 @MainActor

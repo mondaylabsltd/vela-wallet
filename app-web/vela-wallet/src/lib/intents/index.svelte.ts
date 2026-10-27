@@ -38,7 +38,7 @@ export function world(): World {
 			timeFormat: preferences.timeFormat,
 			analytics: analyticsConsent.enabled
 		},
-		agent: { enabled: agentSettings.enabled },
+		agent: { enabled: agentSettings.enabled, wallets: agentSettings.wallets },
 		operations: transfers.list(),
 		balance: balance.view,
 		feed: feed.view,
@@ -54,7 +54,12 @@ export const intents = new Intents({
 			intentCheck(
 				actor,
 				JSON.stringify(action),
-				JSON.stringify({ agent_enabled: seen.agent.enabled })
+				// The switch, and the wallets it may use (spec 107 E8).
+				JSON.stringify({
+					agent_enabled: seen.agent.enabled,
+					wallets: seen.agent.wallets,
+					wallet: seen.session?.address ?? ''
+				})
 			)
 		) as IntentCheck,
 	world,

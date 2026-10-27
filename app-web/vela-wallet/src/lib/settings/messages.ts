@@ -64,7 +64,35 @@ export interface SettingsMessages {
 		| 'statusOnline'
 		| 'statusOffline'
 		| 'statusRefused'
-		| 'lastAction',
+		| 'lastAction'
+		// Spec 106: connecting with clientmcp.dev.
+		| 'connect'
+		| 'connectHint'
+		| 'connecting'
+		| 'connectedAs'
+		| 'connectAgent'
+		| 'connectAgentHint'
+		| 'reconnect'
+		| 'disconnect'
+		| 'ownBridge'
+		| 'linkRefused'
+		| 'linkUnavailable'
+		| 'linkExpired'
+		| 'linkNotOurs'
+		| 'linkNetwork'
+		| 'linkFailed'
+		| 'linkReturn'
+		| 'agentAddress'
+		| 'agentAddressHint'
+		| 'show'
+		| 'hide'
+		| 'copy'
+		| 'copied'
+		| 'share'
+		| 'clientId'
+		| 'wallets'
+		| 'walletsHint'
+		| 'walletsNone',
 		string
 	>;
 	appearance: {
@@ -769,6 +797,33 @@ export const SETTINGS_KEYS = [
 	'settings.agent.statusOffline',
 	'settings.agent.statusRefused',
 	'settings.agent.lastAction',
+	'settings.agent.connect',
+	'settings.agent.connectHint',
+	'settings.agent.connecting',
+	'settings.agent.connectedAs',
+	'settings.agent.connectAgent',
+	'settings.agent.connectAgentHint',
+	'settings.agent.reconnect',
+	'settings.agent.disconnect',
+	'settings.agent.ownBridge',
+	'settings.agent.linkRefused',
+	'settings.agent.linkUnavailable',
+	'settings.agent.linkExpired',
+	'settings.agent.linkNotOurs',
+	'settings.agent.linkNetwork',
+	'settings.agent.linkFailed',
+	'settings.agent.linkReturn',
+	'settings.agent.agentAddress',
+	'settings.agent.agentAddressHint',
+	'settings.agent.show',
+	'settings.agent.hide',
+	'settings.agent.copy',
+	'settings.agent.copied',
+	'settings.agent.share',
+	'settings.agent.clientId',
+	'settings.agent.wallets',
+	'settings.agent.walletsHint',
+	'settings.agent.walletsNone',
 	'settings.appearance.themeTitle',
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',

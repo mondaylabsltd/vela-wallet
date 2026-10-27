@@ -6,6 +6,7 @@ import app.getvela.wallet.feature.agent.AgentConfig
 import app.getvela.wallet.feature.agent.AgentOutcome
 import app.getvela.wallet.feature.agent.AgentStore
 import app.getvela.wallet.feature.agent.AgentWords
+import app.getvela.wallet.feature.agent.AgentLinkedTo
 import app.getvela.wallet.feature.agent.MemoryTokenVault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +76,49 @@ class AgentTest {
         assertNull(vault.read())
         assertEquals("", agent.config.value.token)
         assertEquals("and switched off, as the sweep left it", AgentConfig(), agent.config.value)
+    }
+
+    /** Spec 106: whose the token is — kept as the web keeps it, dropped when a token comes from anywhere else. */
+    @Test
+    fun whoseTheTokenIsIsKeptUntilAnotherTokenComes() = runBlocking {
+        val store = FakeStore()
+        val vault = MemoryTokenVault()
+        val addresses = MemoryTokenVault()
+        val agent = AgentStore(store, CoroutineScope(Dispatchers.Unconfined), vault, addresses)
+        agent.apply(enabled = true, url = "wss://bridge.clientmcp.dev/connect", token = "issued")
+        agent.setLinked(
+            AgentLinkedTo(site = "https://clientmcp.dev", login = "alice", clientId = "c-1"),
+            agentUrl = "https://bridge.clientmcp.dev/mcp/agent-tok",
+        )
+        assertEquals("the agent's address is the vault's", "https://bridge.clientmcp.dev/mcp/agent-tok", addresses.read())
+        val record = JSONObject(store.values.getValue(AgentStore.KEY))
+        assertEquals("alice", record.getJSONObject("linked").getString("login"))
+        assertEquals("c-1", record.getJSONObject("linked").getString("clientId"))
+        assertFalse("the token stays the vault's", record.has("token"))
+        assertFalse("and so does the agent's address", record.has("agentUrl"))
+        val again = AgentStore(store, CoroutineScope(Dispatchers.Unconfined), vault, addresses).also { it.load() }
+        assertEquals("alice", again.config.value.linked?.login)
+        assertEquals("https://bridge.clientmcp.dev/mcp/agent-tok", again.config.value.agentUrl)
+
+        agent.apply(enabled = null, url = null, token = "typed-by-hand")
+        assertNull(agent.config.value.linked)
+        assertEquals("", agent.config.value.agentUrl)
+        assertNull(addresses.read())
+        assertFalse(JSONObject(store.values.getValue(AgentStore.KEY)).has("linked"))
+    }
+
+    /** Spec 107 E8: the wallets the agent may use — none by default, kept in the record, whole on each change. */
+    @Test
+    fun theWalletsTheAgentMayUseAreKept() = runBlocking {
+        val store = FakeStore()
+        val agent = agent(store, MemoryTokenVault())
+        assertEquals(emptyList<String>(), agent.config.value.wallets)
+        agent.apply(enabled = null, url = null, token = null, wallets = listOf(" 0xAbC "))
+        assertEquals(listOf("0xAbC"), agent.config.value.wallets)
+        assertEquals("0xAbC", JSONObject(store.values.getValue(AgentStore.KEY)).getJSONArray("wallets").getString(0))
+        assertEquals(listOf("0xAbC"), agent(store, MemoryTokenVault()).also { it.load() }.config.value.wallets)
+        agent.apply(enabled = true, url = null, token = null)
+        assertEquals("absent keeps them", listOf("0xAbC"), agent.config.value.wallets)
     }
 
     @Test

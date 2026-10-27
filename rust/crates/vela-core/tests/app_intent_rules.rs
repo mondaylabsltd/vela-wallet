@@ -415,9 +415,12 @@ fn the_agent_reads_and_drafts_in_the_space_in_front() {
     ] });
     let session = json!({ "loaded": true, "has_wallet": true, "address": ALICE, "accounts": [] });
     let balance = json!({ "hidden": false, "display_total_usd": 12.5, "tokens": [] });
-    let mainnet = world(json!({ "session": session, "balance": balance, "networks": chains }));
+    let mainnet = world(json!({
+        "session": session, "balance": balance, "networks": chains, "agent_wallets": [ALICE]
+    }));
     let testnet = world(json!({
-        "session": session, "balance": balance, "networks": chains, "network_space": "testnet"
+        "session": session, "balance": balance, "networks": chains, "network_space": "testnet",
+        "agent_wallets": [ALICE]
     }));
 
     let state = agent_state(&mainnet, "wallet", &json!([]), &json!([]));
@@ -538,4 +541,53 @@ fn a_review_reads_the_send_and_hands_a_dapps_words_over_as_data() {
     );
     let nothing = review(&ReviewInput::default());
     assert_eq!(nothing["pending"], "nothing is waiting to be signed");
+}
+
+/// Spec 107 E8: the agent uses only the wallets the person allowed — and
+/// reads nothing of one it may not use.
+#[test]
+fn a_wallet_the_person_did_not_allow_is_neither_read_nor_used() {
+    use vela_core::app::intent_rules::grants;
+    use vela_core::app::intents::{check, Action, Actor, Decision, ReasonCode, Screen};
+    let base = json!({
+        "session": { "has_wallet": true, "address": ALICE, "active_index": 0, "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ] },
+        "balance": { "hidden": false, "display_total_usd": 99.0, "tokens": [] },
+        "agent_enabled": true
+    });
+    let denied = |world: &vela_core::app::intent_rules::World, action: Action| {
+        match check(Actor::Agent, &action, &grants(world)).decision {
+            Decision::Deny { reason } => Some(reason.code),
+            _ => None,
+        }
+    };
+
+    // Nothing allowed (the default): nothing read, nothing done — but a
+    // screen may still be shown.
+    let closed = world(base.clone());
+    let state = agent_state(&closed, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["wallet_allowed"], false);
+    assert!(state["balances"].is_null());
+    assert_eq!(state["accounts"][0]["agent_allowed"], false);
+    assert_eq!(denied(&closed, Action::RefreshBalances), Some(ReasonCode::WalletNotAllowed));
+    assert_eq!(denied(&closed, Action::Show { screen: Screen::Home }), None);
+
+    // Allowed: read and used; switching to a wallet not allowed is refused.
+    let mut open = base;
+    open["agent_wallets"] = json!([ALICE]);
+    let open = world(open);
+    let state = agent_state(&open, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["wallet_allowed"], true);
+    assert_eq!(state["balances"]["total_usd"], 99.0);
+    assert_eq!(denied(&open, Action::RefreshBalances), None);
+    assert_eq!(
+        denied(&open, Action::SwitchAccount { address: format!("0x{}", "b".repeat(40)) }),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    // A person is never held to the agent's list.
+    assert!(matches!(
+        check(Actor::Person, &Action::RefreshBalances, &grants(&closed)).decision,
+        Decision::Allow
+    ));
 }

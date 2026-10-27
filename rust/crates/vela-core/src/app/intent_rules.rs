@@ -23,7 +23,7 @@ use ts_rs::TS;
 
 use super::fee_policy::FeeTier;
 use super::intents::{
-    Action, Actor, Operation, OperationState, Preference, Reason, ReasonCode, Screen,
+    Action, Actor, BrowseStep, Operation, OperationState, Preference, Reason, ReasonCode, Screen,
 };
 use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
 
@@ -204,6 +204,200 @@ pub struct FeeTierFacts {
     pub committed: bool,
 }
 
+/// One of Explore's tabs.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentTabFacts"))]
+pub struct TabFacts {
+    pub id: String,
+    /// What it shows; empty for a new tab's start page.
+    pub url: String,
+    pub title: String,
+    pub current: bool,
+}
+
+/// A site in one of Explore's lists.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentSiteFacts"))]
+pub struct SiteFacts {
+    pub origin: String,
+    pub url: String,
+    pub title: String,
+}
+
+/// A site the person connected: what it sees.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentConnectedSite"))]
+pub struct ConnectedSiteFacts {
+    pub origin: String,
+    /// The network it sees; absent until it asked for one.
+    pub chain_id: Option<u32>,
+    /// The wallet it sees.
+    pub address: String,
+}
+
+/// A dApp's request waiting for the person's answer.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentDappRequest"))]
+pub struct DappRequestFacts {
+    pub id: String,
+    /// `connect`, `sign`, `transaction`, `add_network`.
+    pub kind: String,
+    pub origin: String,
+    /// Its sheet is in front of the person.
+    pub shown: bool,
+}
+
+/// Explore, the dApp browser (spec 107), as the agent reads it. Page content
+/// is never part of it: what a site wrote is data, not instructions.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentExploreFacts"))]
+pub struct ExploreFacts {
+    /// This shell has a browser of its own (the web wallet has not: E7).
+    pub browser: bool,
+    pub tabs: Vec<TabFacts>,
+    pub favorites: Vec<SiteFacts>,
+    pub recent: Vec<SiteFacts>,
+    pub connected: Vec<ConnectedSiteFacts>,
+    pub pending: Option<DappRequestFacts>,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
+/// Explore as the agent reads it, from the browser's own machines' views —
+/// one mapping for every shell with a browser. `sheet` names the request
+/// whose sheet is in front of the person (a [`DappRequestFacts::id`]).
+///
+/// A request's id says what it is and where: `connect:<tab>`,
+/// `sign:<tab>:<id>`, `add_network:<tab>:<id>` ([`dapp_request_target`]).
+#[must_use]
+pub fn explore_facts(
+    explore: &super::explore_sites::ExploreView,
+    dapp: &super::dapp_browser::DbrView,
+    history: &super::browser_history::BhistView,
+    can_go_back: bool,
+    can_go_forward: bool,
+    sheet: Option<&str>,
+) -> ExploreFacts {
+    let selected = explore.selected_tab.as_deref();
+    let pending = dapp
+        .consent
+        .as_ref()
+        .map(|consent| DappRequestFacts {
+            id: format!("connect:{}", consent.tab),
+            kind: "connect".into(),
+            origin: consent.origin.clone(),
+            shown: false,
+        })
+        .or_else(|| {
+            dapp.signing.as_ref().map(|signing| DappRequestFacts {
+                id: format!("sign:{}:{}", signing.tab, signing.id),
+                kind: "sign".into(),
+                origin: tab_origin(dapp, &signing.tab),
+                shown: false,
+            })
+        })
+        .or_else(|| {
+            dapp.adding_network.as_ref().map(|adding| DappRequestFacts {
+                id: format!("add_network:{}:{}", adding.tab, adding.id),
+                kind: "add_network".into(),
+                origin: tab_origin(dapp, &adding.tab),
+                shown: false,
+            })
+        })
+        .map(|mut request| {
+            request.shown = sheet == Some(request.id.as_str());
+            request
+        });
+    ExploreFacts {
+        browser: true,
+        tabs: explore
+            .tabs
+            .iter()
+            .map(|tab| TabFacts {
+                id: tab.id.clone(),
+                url: tab.url.clone().unwrap_or_default(),
+                title: tab.title.clone(),
+                current: selected == Some(tab.id.as_str()),
+            })
+            .collect(),
+        favorites: explore
+            .favorites
+            .iter()
+            .map(|site| SiteFacts {
+                origin: site.origin.clone(),
+                url: site.url.clone(),
+                title: site.name.clone(),
+            })
+            .collect(),
+        recent: history
+            .entries
+            .iter()
+            .map(|entry| SiteFacts {
+                origin: entry.origin.clone(),
+                url: entry.url.clone(),
+                title: entry.title.clone(),
+            })
+            .collect(),
+        connected: dapp
+            .sites
+            .iter()
+            .map(|site| ConnectedSiteFacts {
+                origin: site.origin.clone(),
+                chain_id: Some(site.chain_id),
+                address: site.address.clone(),
+            })
+            .collect(),
+        pending,
+        can_go_back,
+        can_go_forward,
+    }
+}
+
+fn tab_origin(dapp: &super::dapp_browser::DbrView, tab: &str) -> String {
+    dapp.tabs
+        .iter()
+        .find(|view| view.tab == tab)
+        .and_then(|view| view.origin.clone())
+        .unwrap_or_default()
+}
+
+/// What a dApp request's id names: its kind, its tab, and the request's own
+/// id within the tab (none for a connect).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "IntentDappTarget"))]
+pub struct DappRequestTarget {
+    pub kind: String,
+    pub tab: String,
+    pub id: Option<String>,
+}
+
+/// The parts of an id [`explore_facts`] made; `None` for anything else.
+#[must_use]
+pub fn dapp_request_target(id: &str) -> Option<DappRequestTarget> {
+    let (kind, rest) = id.split_once(':')?;
+    match kind {
+        "connect" if !rest.is_empty() && !rest.contains(':') => Some(DappRequestTarget {
+            kind: kind.into(),
+            tab: rest.into(),
+            id: None,
+        }),
+        "sign" | "add_network" => {
+            let (tab, request) = rest.split_once(':')?;
+            (!tab.is_empty() && !request.is_empty()).then(|| DappRequestTarget {
+                kind: kind.into(),
+                tab: tab.into(),
+                id: Some(request.into()),
+            })
+        }
+        _ => None,
+    }
+}
+
 /// What the shell sees, one view per resident. A view a judgement does not
 /// read may be left out ([`world_needs`]).
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -222,6 +416,44 @@ pub struct World {
     /// The space in front (spec 105): what every list shows.
     #[serde(default)]
     pub network_space: super::network_space::NetworkSpace,
+    /// Explore (spec 107).
+    pub explore: Option<ExploreFacts>,
+    /// The wallets the person lets the agent use (spec 107 E8): none by
+    /// default.
+    pub agent_wallets: Vec<String>,
+}
+
+impl World {
+    /// The person let the agent use `address` (E8).
+    #[must_use]
+    pub fn agent_may_use(&self, address: &str) -> bool {
+        self.agent_wallets.iter().any(|wallet| same(wallet, address))
+    }
+
+    /// The wallet in front is one the agent may use — or nobody is in.
+    #[must_use]
+    pub fn agent_may_use_active(&self) -> bool {
+        self.session
+            .as_ref()
+            .map(|session| session.address.trim())
+            .filter(|address| !address.is_empty())
+            .is_none_or(|address| self.agent_may_use(address))
+    }
+}
+
+/// What the person allows the agent, as the check reads it: its switch, and
+/// the wallets it may use (E8) — from the same world the judgements read.
+#[must_use]
+pub fn grants(world: &World) -> super::intents::Grants {
+    super::intents::Grants {
+        agent_enabled: world.agent_enabled,
+        wallets: world.agent_wallets.clone(),
+        wallet: world
+            .session
+            .as_ref()
+            .map(|session| session.address.clone())
+            .unwrap_or_default(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -436,9 +668,170 @@ fn examine_show(screen: &Screen, world: &World) -> Examined {
             Some(book) if group(book, id).is_some() => Examined::Go,
             Some(_) => refused(ReasonCode::NotFound, "no group has that id"),
         },
+        Screen::Explore => match &world.explore {
+            None => not_ready("Explore"),
+            Some(explore) if !explore.browser => no_browser(),
+            Some(_) => Examined::Go,
+        },
         Screen::Home | Screen::Contacts | Screen::Settings { .. } | Screen::Receive { .. } => {
             Examined::Go
         }
+    }
+}
+
+/// E7: the web wallet has no browser of its own.
+fn no_browser() -> Examined {
+    refused(
+        ReasonCode::Refused,
+        "this wallet has no browser of its own (the web wallet): dApps reach it through the browser extension",
+    )
+}
+
+fn same_origin(url: &str, origin: &str) -> bool {
+    super::dapp_permissions::origin_of(url.trim())
+        .zip(super::dapp_permissions::origin_of(origin.trim()))
+        .is_some_and(|(a, b)| a == b)
+}
+
+fn current_tab(explore: &ExploreFacts) -> Option<&TabFacts> {
+    explore.tabs.iter().find(|tab| tab.current)
+}
+
+/// Explore's actions, against what it shows (spec 107).
+fn examine_explore(action: &Action, explore: &ExploreFacts) -> Examined {
+    // On the web, only opening a site has a meaning (a new browser tab).
+    if !explore.browser && !matches!(action, Action::OpenSite { .. }) {
+        return no_browser();
+    }
+    let favorite = |url: &str| {
+        explore
+            .favorites
+            .iter()
+            .any(|site| same_origin(url, &site.origin))
+    };
+    let connected = |origin: &str| {
+        explore
+            .connected
+            .iter()
+            .find(|site| same_origin(origin, &site.origin))
+    };
+    let pending = |id: &str| explore.pending.as_ref().filter(|request| request.id == id);
+    match action {
+        Action::OpenSite { .. } => Examined::Go,
+        Action::Browse { to } => match current_tab(explore) {
+            None => refused(ReasonCode::NotFound, "no tab is open"),
+            Some(_) if *to == BrowseStep::Back && !explore.can_go_back => refused(
+                ReasonCode::Refused,
+                "the current tab has nothing to go back to",
+            ),
+            Some(_) if *to == BrowseStep::Forward && !explore.can_go_forward => refused(
+                ReasonCode::Refused,
+                "the current tab has nothing to go forward to",
+            ),
+            Some(_) => Examined::Go,
+        },
+        Action::CloseTab { id } => {
+            if explore.tabs.iter().any(|tab| &tab.id == id) {
+                Examined::Go
+            } else {
+                refused(ReasonCode::NotFound, "no tab has that id")
+            }
+        }
+        Action::CloseAllTabs => go_unless(explore.tabs.is_empty()),
+        Action::SetSiteFavorite { url, favorite: on } => go_unless(favorite(url) == *on),
+        Action::ClearRecentSites => go_unless(explore.recent.is_empty()),
+        Action::ForgetSite { origin } => {
+            if explore
+                .recent
+                .iter()
+                .any(|site| same_origin(origin, &site.origin))
+            {
+                Examined::Go
+            } else {
+                refused(
+                    ReasonCode::NotFound,
+                    "no recently visited site has that origin",
+                )
+            }
+        }
+        Action::DisconnectSite { origin } => match connected(origin) {
+            Some(_) => Examined::Go,
+            None => refused(ReasonCode::NotFound, "no connected site has that origin"),
+        },
+        Action::SetSiteNetwork { origin, chain_id } => match connected(origin) {
+            Some(site) => go_unless(site.chain_id == Some(*chain_id)),
+            None => refused(ReasonCode::NotFound, "no connected site has that origin"),
+        },
+        Action::RejectDappRequest { id } => match pending(id) {
+            Some(_) => Examined::Go,
+            None => refused(
+                ReasonCode::NotFound,
+                "no dApp request with that id is waiting",
+            ),
+        },
+        Action::AskPersonDappRequest { id } => match pending(id) {
+            Some(request) => go_unless(request.shown),
+            None => refused(
+                ReasonCode::NotFound,
+                "no dApp request with that id is waiting",
+            ),
+        },
+        _ => Examined::Go,
+    }
+}
+
+/// Has Explore's change held?
+fn verdict_explore(action: &Action, explore: Option<&ExploreFacts>) -> Verdict {
+    let Some(explore) = explore else {
+        return Verdict::NotYet;
+    };
+    match action {
+        // The page is the engine's to load: asked is done, and vela_state
+        // shows where the tab went.
+        Action::OpenSite { url, .. } => held(
+            !explore.browser || current_tab(explore).is_some_and(|tab| same_origin(&tab.url, url)),
+        ),
+        Action::CloseTab { id } => held(!explore.tabs.iter().any(|tab| &tab.id == id)),
+        Action::CloseAllTabs => held(explore.tabs.is_empty()),
+        Action::SetSiteFavorite { url, favorite } => held(
+            explore
+                .favorites
+                .iter()
+                .any(|site| same_origin(url, &site.origin))
+                == *favorite,
+        ),
+        Action::ClearRecentSites => held(explore.recent.is_empty()),
+        Action::ForgetSite { origin } => held(
+            !explore
+                .recent
+                .iter()
+                .any(|site| same_origin(origin, &site.origin)),
+        ),
+        Action::DisconnectSite { origin } => held(
+            !explore
+                .connected
+                .iter()
+                .any(|site| same_origin(origin, &site.origin)),
+        ),
+        Action::SetSiteNetwork { origin, chain_id } => held(
+            explore
+                .connected
+                .iter()
+                .any(|site| same_origin(origin, &site.origin) && site.chain_id == Some(*chain_id)),
+        ),
+        Action::RejectDappRequest { id } => held(
+            !explore
+                .pending
+                .as_ref()
+                .is_some_and(|request| &request.id == id),
+        ),
+        Action::AskPersonDappRequest { id } => held(
+            explore
+                .pending
+                .as_ref()
+                .is_some_and(|request| &request.id == id && request.shown),
+        ),
+        _ => Verdict::Held,
     }
 }
 
@@ -641,6 +1034,20 @@ pub fn examine(action: &Action, world: &World) -> Examined {
                 not_ready("the network settings")
             }
         }
+        Action::OpenSite { .. }
+        | Action::Browse { .. }
+        | Action::CloseTab { .. }
+        | Action::CloseAllTabs
+        | Action::SetSiteFavorite { .. }
+        | Action::ClearRecentSites
+        | Action::ForgetSite { .. }
+        | Action::DisconnectSite { .. }
+        | Action::SetSiteNetwork { .. }
+        | Action::RejectDappRequest { .. }
+        | Action::AskPersonDappRequest { .. } => match &world.explore {
+            None => not_ready("Explore"),
+            Some(explore) => examine_explore(action, explore),
+        },
     }
 }
 
@@ -837,6 +1244,18 @@ pub fn verdict(action: &Action, world: &World, baseline: &mut Baseline) -> Verdi
         | Action::SetProviderKey { .. }
         | Action::SetServiceEndpoint { .. }
         | Action::ResetServiceEndpoints => verdict_networks(action, world.networks.as_ref()),
+        // Back, forward, reload: asked of the page's engine, which is done.
+        Action::Browse { .. } => Verdict::Held,
+        Action::OpenSite { .. }
+        | Action::CloseTab { .. }
+        | Action::CloseAllTabs
+        | Action::SetSiteFavorite { .. }
+        | Action::ClearRecentSites
+        | Action::ForgetSite { .. }
+        | Action::DisconnectSite { .. }
+        | Action::SetSiteNetwork { .. }
+        | Action::RejectDappRequest { .. }
+        | Action::AskPersonDappRequest { .. } => verdict_explore(action, world.explore.as_ref()),
     }
 }
 
@@ -849,6 +1268,7 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
             Screen::Asset { .. } => &["balance"],
             Screen::Activity { .. } => &["feed"],
             Screen::Contact { .. } | Screen::Group { .. } => &["contacts"],
+            Screen::Explore => &["explore"],
             _ => &[],
         },
         Action::SwitchAccount { .. } | Action::RemoveWallet { .. } | Action::SignOut => {
@@ -879,6 +1299,17 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         | Action::ClearStorageItem { .. }
         | Action::ClearCaches
         | Action::ConfigureAgent { .. } => &[],
+        Action::OpenSite { .. }
+        | Action::Browse { .. }
+        | Action::CloseTab { .. }
+        | Action::CloseAllTabs
+        | Action::SetSiteFavorite { .. }
+        | Action::ClearRecentSites
+        | Action::ForgetSite { .. }
+        | Action::DisconnectSite { .. }
+        | Action::SetSiteNetwork { .. }
+        | Action::RejectDappRequest { .. }
+        | Action::AskPersonDappRequest { .. } => &["explore"],
     }
 }
 
@@ -1068,6 +1499,8 @@ struct AccountOut<'a> {
     address: &'a str,
     name: &'a str,
     active: bool,
+    /// The person lets the agent use it (E8).
+    agent_allowed: bool,
 }
 
 #[derive(Serialize)]
@@ -1157,6 +1590,10 @@ struct NetworksOut<'a> {
 #[derive(Serialize)]
 struct AgentState<'a> {
     signed_in: bool,
+    /// The wallet in front is one the person lets the agent use (E8). When
+    /// it is not, nothing of it is read: no balances, activity, contacts or
+    /// sites.
+    wallet_allowed: bool,
     page: &'a str,
     /// The space in front (spec 105): the networks and balances below are
     /// its own.
@@ -1168,6 +1605,9 @@ struct AgentState<'a> {
     groups: Option<Vec<GroupOut<'a>>>,
     preferences: PrefsOut<'a>,
     networks: Option<NetworksOut<'a>>,
+    /// Explore (spec 107): tabs, favorites, recent and connected sites, a
+    /// dApp's pending request — never what a page says.
+    explore: Option<&'a ExploreFacts>,
     transfers: &'a [Operation],
     waiting_for_person: &'a Value,
     recent_agent_actions: &'a Value,
@@ -1226,8 +1666,98 @@ pub fn approval_detail(action: &Action) -> Option<String> {
         Action::SetServiceEndpoint { field, url } => Some(format!("{}{}", word(field), to(url))),
         Action::DeleteActivity { id } => Some(id.clone()),
         Action::SetNetworkSpace { space } => Some(space.as_str().to_owned()),
+        // Which site — its origin, never anything the site wrote.
+        Action::DisconnectSite { origin } => Some(origin.trim().to_owned()),
+        Action::SetSiteNetwork { origin, chain_id } => {
+            Some(format!("{} · chain {chain_id}", origin.trim()))
+        }
         _ => None,
     }
+}
+
+/// [`approval_detail`], with what the wallet knows around the action — the
+/// part a person approving it must see to know what they allow (owner,
+/// 2026-10-27: a site's network change shows the site, the network it is
+/// on, the one it would move to, and the wallet it affects).
+#[must_use]
+pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
+    let network = |chain_id: u32| {
+        world
+            .networks
+            .as_ref()
+            .and_then(|networks| network(networks, chain_id))
+            .map(|row| row.display_name.trim())
+            .filter(|name| !name.is_empty())
+            .map_or_else(|| format!("chain {chain_id}"), |name| format!("{name} ({chain_id})"))
+    };
+    let wallet = |address: &str| {
+        let short = short_address(address);
+        world
+            .session
+            .as_ref()
+            .and_then(|session| {
+                session
+                    .accounts
+                    .iter()
+                    .find(|row| same(&row.account.address, address))
+            })
+            .map(|row| row.account.name.trim())
+            .filter(|name| !name.is_empty())
+            .map_or_else(|| short.clone(), |name| format!("{name} ({short})"))
+    };
+    let host = |origin: &str| {
+        let origin = origin.trim();
+        origin
+            .split_once("://")
+            .map_or(origin, |(_, host)| host)
+            .trim_end_matches('/')
+            .to_owned()
+    };
+    let site = |origin: &str| {
+        world.explore.as_ref().and_then(|explore| {
+            explore
+                .connected
+                .iter()
+                .find(|site| same_origin(origin, &site.origin))
+        })
+    };
+    match action {
+        Action::SetSiteNetwork { origin, chain_id } => {
+            let connected = site(origin);
+            let from = connected
+                .and_then(|site| site.chain_id)
+                .map_or_else(|| "no network yet".to_owned(), network);
+            let mut detail = format!("{} · {from} → {}", host(origin), network(*chain_id));
+            if let Some(address) = connected.map(|site| site.address.as_str()).filter(|a| !a.is_empty()) {
+                detail.push_str(&format!(" · {}", wallet(address)));
+            }
+            Some(detail)
+        }
+        Action::DisconnectSite { origin } => {
+            let mut detail = host(origin);
+            if let Some(address) = site(origin).map(|site| site.address.as_str()).filter(|a| !a.is_empty()) {
+                detail.push_str(&format!(" · {}", wallet(address)));
+            }
+            Some(detail)
+        }
+        Action::SwitchAccount { address } => {
+            let to = wallet(address);
+            Some(match world.session.as_ref().map(|session| session.address.as_str()) {
+                Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
+                _ => to,
+            })
+        }
+        _ => approval_detail(action),
+    }
+}
+
+/// `0x066e…d704`.
+fn short_address(address: &str) -> String {
+    let address = address.trim();
+    if address.len() <= 12 || !address.is_ascii() {
+        return address.to_owned();
+    }
+    format!("{}…{}", &address[..6], &address[address.len() - 4..])
 }
 
 /// A URL as an agent reads it: where it goes, not what it carries. Keys ride
@@ -1269,8 +1799,12 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
     let hidden = world.balance.as_ref().is_some_and(|b| b.hidden);
     let book = read_book(world);
     let testnets = world.network_space == super::network_space::NetworkSpace::Testnet;
+    // E8: a wallet the agent may not use is not read at all.
+    let allowed = world.agent_may_use_active();
+    let book = book.filter(|_| allowed);
     let state = AgentState {
         signed_in: session.is_some_and(|s| s.has_wallet),
+        wallet_allowed: allowed,
         page,
         network_space: world.network_space,
         accounts: session.map_or_else(Vec::new, |s| {
@@ -1280,10 +1814,11 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     address: &row.account.address,
                     name: &row.account.name,
                     active: row.index == s.active_index,
+                    agent_allowed: world.agent_may_use(&row.account.address),
                 })
                 .collect()
         }),
-        balances: world.balance.as_ref().map(|b| BalancesOut {
+        balances: world.balance.as_ref().filter(|_| allowed).map(|b| BalancesOut {
             hidden,
             // A testnet's coins have no value (spec 105): no total to read.
             total_usd: if hidden || testnets {
@@ -1305,7 +1840,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                 })
                 .collect(),
         }),
-        recent_transactions: world.feed.as_ref().map(|f| {
+        recent_transactions: world.feed.as_ref().filter(|_| allowed).map(|f| {
             f.transactions
                 .iter()
                 .take(RECENT_KEPT)
@@ -1388,6 +1923,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                 })
                 .collect(),
         }),
+        explore: world.explore.as_ref().filter(|_| allowed),
         transfers: &world.operations,
         waiting_for_person: approvals,
         recent_agent_actions: activity,

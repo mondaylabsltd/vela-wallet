@@ -48,7 +48,7 @@ enum AgentWords {
         case "delete_group":
             let id = action["id"] as? String ?? ""
             return graph.contacts.view?.groups.first { $0.id == id }?.name ?? id
-        case "remove_wallet", "switch_account":
+        case "remove_wallet":
             let address = action["address"] as? String ?? ""
             let row = graph.session.view.accounts.first { same($0.account.address, address) }
             return row.map { "\($0.account.name) · \(address)" } ?? address
@@ -62,8 +62,12 @@ enum AgentWords {
         case "set_network_space":
             return (action["space"] as? String).map { loc.t("networkSpace.\($0)") }
         default:
-            // The core's: the network, URL or record it changes.
-            let detail = intentApprovalDetail(actionJson: request.actionJson)
+            // The core's: the network, URL or record it changes — and, read
+            // against the wallet, a site's networks and wallet, or the wallet
+            // a switch leaves (spec 107).
+            let detail = intentApprovalDetailIn(
+                actionJson: request.actionJson, worldJson: AgentShellBridge.views(graph)
+            )
             return (try? JSONSerialization.jsonObject(with: Data(detail.utf8), options: .fragmentsAllowed)) as? String
         }
     }
@@ -202,12 +206,22 @@ struct AgentApprovalSheet: View {
 /// never make it.
 struct AgentSettingsBody: View {
     @Environment(\.theme) private var theme
+    @Environment(\.openURL) private var openURL
     let agent: AgentStore
     let loc: Loc
 
     @State private var url: String?
     @State private var token: String?
     @FocusState private var tokenFocused: Bool
+    /// Spec 106: a clientmcp.dev sign-in under way, and why the last did not connect.
+    @State private var linking = false
+    @State private var problem: AgentLinkProblem?
+    /// "Use your own bridge" unfolded by the person (`nil`: unfolded when a
+    /// token was entered by hand).
+    @State private var ownOpen: Bool?
+    /// The agent's address revealed (Show), and just copied.
+    @State private var addressShown = false
+    @State private var addressCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s24) {
@@ -216,51 +230,16 @@ struct AgentSettingsBody: View {
                 .foregroundStyle(theme.fgMuted)
                 .contentShape(Rectangle())
                 .onTapGesture { SettingsFocus.release() }
-            SettingsSwitchRow(
-                title: loc.t("settings.agent.enable"),
-                detail: AgentWords.link(agent.link, loc: loc).words,
-                isOn: agent.config.enabled,
-                onChange: { on in configure(enabled: on) }
-            )
-            .accessibilityIdentifier("agent-enable")
-            SettingsUrlField(
-                field: UrlFieldModel(
-                    id: "agent-bridge",
-                    label: loc.t("settings.agent.bridge"),
-                    value: agent.config.url,
-                    placeholder: "wss://bridge.clientmcp.dev/connect",
-                    hint: loc.t(agent.urlProblem == nil ? "settings.agent.bridgeHint" : "settings.agent.bridgeInvalid"),
-                    tone: agent.urlProblem == nil ? nil : .error
-                ),
-                text: Binding(get: { url ?? agent.config.url }, set: { url = $0 }),
-                onCommit: { if let url { configure(url: url) } },
-                commitsOnBlur: true
-            )
-            .accessibilityIdentifier("agent-bridge")
-            tokenField
-            if let endpoint = agent.endpoint {
-                VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                    Text(loc.t("settings.agent.endpoint"))
-                        .typeRole(Typography.label)
-                        .foregroundStyle(theme.fgSubtle)
-                    Button {
-                        UIPasteboard.general.string = endpoint
-                        VelaHaptic.select.play()
-                    } label: {
-                        Text(endpoint)
-                            .font(Font.system(size: Tokens.TextSize.t13, design: .monospaced))
-                            .foregroundStyle(theme.fgBase)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(Tokens.Space.s12)
-                            .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-                    Text(loc.t("settings.agent.endpointHint"))
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.fgSubtle)
+            if let linked = agent.config.linked {
+                linkedSection(linked)
+            } else {
+                connectSection
+                ownBridgeToggle
+                if ownOpen ?? !agent.config.token.isEmpty {
+                    ownBridge
                 }
             }
+            walletsSection
             if let latest = agent.activity.first {
                 VStack(alignment: .leading, spacing: Tokens.Space.s4) {
                     Text(loc.t("settings.agent.lastAction"))
@@ -274,6 +253,256 @@ struct AgentSettingsBody: View {
         }
         // The page ends above the capsule that floats over it.
         .padding(.bottom, AgentCapsule.clearance)
+    }
+
+    // MARK: Spec 107 E8 — the wallets the agent may use
+
+    /// A switch per wallet on this device; the agent sees and acts only in
+    /// the ones on. Each change is the person's own `configure_agent`, the
+    /// list whole.
+    private var walletsSection: some View {
+        let allowed = agent.config.wallets
+        let accounts = agent.graph?.session.view.accounts ?? []
+        return VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            Text(loc.t("settings.agent.wallets"))
+                .typeRole(Typography.rowTitle)
+                .foregroundStyle(theme.fgBase)
+            Text(loc.t("settings.agent.walletsHint"))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgMuted)
+            if allowed.isEmpty {
+                Text(loc.t("settings.agent.walletsNone"))
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.warningBase)
+                    .accessibilityIdentifier("agent-wallets-none")
+            }
+            ForEach(accounts, id: \.account.address) { row in
+                let address = row.account.address
+                let on = allowed.contains { $0.caseInsensitiveCompare(address) == .orderedSame }
+                SettingsSwitchRow(
+                    title: row.account.name,
+                    detail: "\(address.prefix(6))…\(address.suffix(4))",
+                    isOn: on,
+                    onChange: { want in
+                        var next = allowed.filter { $0.caseInsensitiveCompare(address) != .orderedSame }
+                        if want { next.append(address) }
+                        agent.person(["type": "configure_agent", "wallets": next])
+                    }
+                )
+                .accessibilityIdentifier("agent-wallet-\(address)")
+            }
+        }
+    }
+
+    // MARK: Spec 106 — connecting with clientmcp.dev
+
+    private var enableRow: some View {
+        SettingsSwitchRow(
+            title: loc.t("settings.agent.enable"),
+            detail: AgentWords.link(agent.link, loc: loc).words,
+            isOn: agent.config.enabled,
+            onChange: { on in configure(enabled: on) }
+        )
+        .accessibilityIdentifier("agent-enable")
+    }
+
+    /// The one button, its hint, and why the last attempt did not connect.
+    private var connectSection: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            VelaButton(
+                title: loc.t("settings.agent.connect"),
+                kind: .secondary,
+                loading: linking,
+                busyTitle: loc.t("settings.agent.connecting"),
+                action: connect
+            )
+            .accessibilityIdentifier("agent-connect")
+            Text(loc.t("settings.agent.connectHint"))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgMuted)
+            problemLine
+        }
+    }
+
+    @ViewBuilder private var problemLine: some View {
+        if let problem, problem != .cancelled {
+            Text(problem.words(loc))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.errorBase)
+                .accessibilityIdentifier("agent-link-problem")
+        }
+    }
+
+    private var ownBridgeToggle: some View {
+        let open = ownOpen ?? !agent.config.token.isEmpty
+        return Button {
+            ownOpen = !open
+        } label: {
+            HStack(spacing: Tokens.Space.s8) {
+                Image(systemName: open ? "chevron.down" : "chevron.right")
+                    .font(.system(size: Tokens.TextSize.t13, weight: .semibold))
+                Text(loc.t("settings.agent.ownBridge"))
+                    .typeRole(Typography.flowCaption)
+            }
+            .foregroundStyle(theme.fgMuted)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("agent-own-bridge")
+    }
+
+    /// Connected through clientmcp.dev: whose it is, where the person connects
+    /// their agent, Reconnect and Disconnect.
+    private func linkedSection(_ linked: AgentLinkedTo) -> some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            Text(loc.t("settings.agent.connectedAs").replacingOccurrences(of: "{{login}}", with: linked.login))
+                .typeRole(Typography.rowTitle)
+                .foregroundStyle(theme.fgBase)
+                .accessibilityIdentifier("agent-linked")
+            Text(loc.t("settings.agent.clientId").replacingOccurrences(of: "{{id}}", with: linked.clientId))
+                .font(Font.system(size: Tokens.TextSize.t13, design: .monospaced))
+                .foregroundStyle(theme.fgSubtle)
+                .textSelection(.enabled)
+                .padding(.top, -Tokens.Space.s8)
+                .accessibilityIdentifier("agent-client-id")
+            if !agent.config.agentUrl.isEmpty {
+                agentAddress(agent.config.agentUrl)
+            }
+            enableRow
+            Button {
+                if let account = URL(string: clientmcpAccountUrl(site: linked.site)) { openURL(account) }
+            } label: {
+                VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                    Text("\(loc.t("settings.agent.connectAgent")) →")
+                        .typeRole(Typography.bodyStrong)
+                        .foregroundStyle(theme.fgBase)
+                    Text(loc.t("settings.agent.connectAgentHint"))
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Tokens.Space.s12)
+                .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("agent-connect-agent")
+            HStack(spacing: Tokens.Space.s12) {
+                VelaButton(
+                    title: loc.t("settings.agent.reconnect"),
+                    kind: .secondary,
+                    loading: linking,
+                    busyTitle: loc.t("settings.agent.connecting"),
+                    action: connect
+                )
+                .accessibilityIdentifier("agent-reconnect")
+                VelaButton(title: loc.t("settings.agent.disconnect"), kind: .secondary) {
+                    // Forgotten here; the client stays on clientmcp.dev until deleted there.
+                    configure(enabled: false, url: "", token: "")
+                }
+                .accessibilityIdentifier("agent-disconnect")
+            }
+            problemLine
+        }
+    }
+
+    /// The MCP server address for the person's AI agent, to copy from here:
+    /// masked until Show — it is a credential.
+    private func agentAddress(_ url: String) -> some View {
+        let masked: String = {
+            guard let slash = url.lastIndex(of: "/") else { return "••••••••••••" }
+            return String(url[...slash]) + "••••••••••••"
+        }()
+        return VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+            Text(loc.t("settings.agent.agentAddress"))
+                .typeRole(Typography.label)
+                .foregroundStyle(theme.fgSubtle)
+            Text(addressShown ? url : masked)
+                .font(Font.system(size: Tokens.TextSize.t13, design: .monospaced))
+                .foregroundStyle(theme.fgBase)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("agent-address-value")
+            HStack(spacing: Tokens.Space.s16) {
+                Spacer()
+                Button(loc.t(addressShown ? "settings.agent.hide" : "settings.agent.show")) {
+                    addressShown.toggle()
+                }
+                .accessibilityIdentifier("agent-address-show")
+                ShareLink(item: url) { Text(loc.t("settings.agent.share")) }
+                    .accessibilityIdentifier("agent-address-share")
+                Button(loc.t(addressCopied ? "settings.agent.copied" : "settings.agent.copy")) {
+                    UIPasteboard.general.string = url
+                    VelaHaptic.select.play()
+                    addressCopied = true
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.8))
+                        addressCopied = false
+                    }
+                }
+                .fontWeight(.semibold)
+                .accessibilityIdentifier("agent-address-copy")
+            }
+            .font(.system(size: Tokens.TextSize.t13))
+            .foregroundStyle(theme.fgBase)
+            Text(loc.t("settings.agent.agentAddressHint"))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgSubtle)
+        }
+        .padding(Tokens.Space.s12)
+        .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("agent-address")
+    }
+
+    private func connect() {
+        guard !linking else { return }
+        linking = true
+        problem = nil
+        Task { @MainActor in
+            problem = await agent.connectWithClientMCP()
+            linking = false
+        }
+    }
+
+    // MARK: Your own bridge (spec 103)
+
+    @ViewBuilder private var ownBridge: some View {
+        enableRow
+        SettingsUrlField(
+            field: UrlFieldModel(
+                id: "agent-bridge",
+                label: loc.t("settings.agent.bridge"),
+                value: agent.config.url,
+                placeholder: "wss://bridge.clientmcp.dev/connect",
+                hint: loc.t(agent.urlProblem == nil ? "settings.agent.bridgeHint" : "settings.agent.bridgeInvalid"),
+                tone: agent.urlProblem == nil ? nil : .error
+            ),
+            text: Binding(get: { url ?? agent.config.url }, set: { url = $0 }),
+            onCommit: { if let url { configure(url: url) } },
+            commitsOnBlur: true
+        )
+        .accessibilityIdentifier("agent-bridge")
+        tokenField
+        if let endpoint = agent.endpoint {
+            VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                Text(loc.t("settings.agent.endpoint"))
+                    .typeRole(Typography.label)
+                    .foregroundStyle(theme.fgSubtle)
+                Button {
+                    UIPasteboard.general.string = endpoint
+                    VelaHaptic.select.play()
+                } label: {
+                    Text(endpoint)
+                        .font(Font.system(size: Tokens.TextSize.t13, design: .monospaced))
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Tokens.Space.s12)
+                        .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                Text(loc.t("settings.agent.endpointHint"))
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgSubtle)
+            }
+        }
     }
 
     /// The client token: a credential, so it is not shown once entered.

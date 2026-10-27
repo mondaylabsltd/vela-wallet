@@ -11,18 +11,27 @@
 #![cfg(feature = "crux")]
 
 use vela_core::app::fee_policy::FeeTier;
+use vela_core::app::intent_rules::{
+    approval_detail, examine, verdict, Baseline, ConnectedSiteFacts, DappRequestFacts, Examined,
+    ExploreFacts, SiteFacts, TabFacts, Verdict, World,
+};
 use vela_core::app::intents::{
-    authorize, catalog, check, check_json, validate, Action, Actor, Approver, Decision, Grants,
-    Preference, ReasonCode, Recipient, Risk, Screen, MAX_RECIPIENTS,
+    authorize, catalog, check, check_json, shows, validate, Action, Actor, Approver, BrowseStep,
+    Decision, Grants, Preference, ReasonCode, Recipient, Risk, Screen, MAX_RECIPIENTS,
 };
 use vela_core::app::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
 
 const ALICE: &str = "0x00000000219ab540356cbb839cbe05303d7705fa";
 const MINE: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-const ON: Grants = Grants {
-    agent_enabled: true,
-};
+/// The agent on, with the test wallets allowed (spec 107 E8).
+fn on() -> Grants {
+    Grants {
+        agent_enabled: true,
+        wallets: vec![MINE.to_owned(), ALICE.to_owned()],
+        wallet: MINE.to_owned(),
+    }
+}
 
 fn one_of_each() -> Vec<Action> {
     vec![
@@ -70,6 +79,7 @@ fn one_of_each() -> Vec<Action> {
             enabled: Some(true),
             bridge_url: None,
             client_token: None,
+            wallets: None,
         },
         Action::PrepareTransfer {
             chain_id: 1,
@@ -133,7 +143,289 @@ fn one_of_each() -> Vec<Action> {
             url: "https://rates.example".to_owned(),
         },
         Action::ResetServiceEndpoints,
+        Action::OpenSite {
+            url: "https://app.uniswap.org".to_owned(),
+            new_tab: false,
+        },
+        Action::Browse {
+            to: BrowseStep::Back,
+        },
+        Action::CloseTab {
+            id: "t1".to_owned(),
+        },
+        Action::CloseAllTabs,
+        Action::SetSiteFavorite {
+            url: "https://app.uniswap.org".to_owned(),
+            favorite: true,
+        },
+        Action::ClearRecentSites,
+        Action::ForgetSite {
+            origin: "https://app.uniswap.org".to_owned(),
+        },
+        Action::DisconnectSite {
+            origin: "https://app.uniswap.org".to_owned(),
+        },
+        Action::SetSiteNetwork {
+            origin: "https://app.uniswap.org".to_owned(),
+            chain_id: 8453,
+        },
+        Action::RejectDappRequest {
+            id: "r1".to_owned(),
+        },
+        Action::AskPersonDappRequest {
+            id: "r1".to_owned(),
+        },
     ]
+}
+
+// ---------------------------------------------------------------------------
+// Explore (spec 107)
+// ---------------------------------------------------------------------------
+
+const UNISWAP: &str = "https://app.uniswap.org";
+
+fn explore() -> ExploreFacts {
+    ExploreFacts {
+        browser: true,
+        tabs: vec![
+            TabFacts {
+                id: "t1".into(),
+                url: format!("{UNISWAP}/swap"),
+                title: "Uniswap".into(),
+                current: true,
+            },
+            TabFacts {
+                id: "t2".into(),
+                url: String::new(),
+                title: String::new(),
+                current: false,
+            },
+        ],
+        favorites: vec![],
+        recent: vec![SiteFacts {
+            origin: UNISWAP.into(),
+            url: format!("{UNISWAP}/swap"),
+            title: "Uniswap".into(),
+        }],
+        connected: vec![ConnectedSiteFacts {
+            origin: UNISWAP.into(),
+            chain_id: Some(1),
+            address: MINE.into(),
+        }],
+        pending: Some(DappRequestFacts {
+            id: "r1".into(),
+            kind: "sign".into(),
+            origin: UNISWAP.into(),
+            shown: false,
+        }),
+        can_go_back: true,
+        can_go_forward: false,
+    }
+}
+
+fn world_with(explore: ExploreFacts) -> World {
+    World {
+        explore: Some(explore),
+        ..World::default()
+    }
+}
+
+#[test]
+fn an_agent_opens_sites_like_a_typed_address() {
+    let open = |url: &str| Action::OpenSite {
+        url: url.to_owned(),
+        new_tab: true,
+    };
+    assert_eq!(validate(&open(UNISWAP)), Ok(()));
+    assert_eq!(
+        validate(&open("http://192.168.1.20:3000")),
+        Ok(()),
+        "the person's own network"
+    );
+    assert_eq!(validate(&open("http://localhost:5173/x")), Ok(()));
+    for refused in [
+        "http://example.com",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "uniswap.org",
+        "",
+    ] {
+        assert!(validate(&open(refused)).is_err(), "{refused}");
+    }
+    // Browsing is ordinary use: no approval (E1). What a site may do is the person's (E3).
+    assert_eq!(
+        authorize(Actor::Agent, &open(UNISWAP), &on()),
+        Decision::Allow
+    );
+    assert_eq!(
+        authorize(
+            Actor::Agent,
+            &Action::RejectDappRequest { id: "r1".into() },
+            &on()
+        ),
+        Decision::Allow
+    );
+    for manage in [
+        Action::DisconnectSite {
+            origin: UNISWAP.into(),
+        },
+        Action::SetSiteNetwork {
+            origin: UNISWAP.into(),
+            chain_id: 8453,
+        },
+    ] {
+        assert_eq!(
+            authorize(Actor::Agent, &manage, &on()),
+            Decision::Approve {
+                by: Approver::Wallet
+            },
+            "{manage:?}"
+        );
+    }
+    assert!(
+        validate(&Action::DisconnectSite {
+            origin: format!("{UNISWAP}/swap")
+        })
+        .is_err(),
+        "an origin, not a page"
+    );
+    assert_eq!(shows(&open(UNISWAP)), Some(Screen::Explore));
+    assert_eq!(
+        approval_detail(&Action::SetSiteNetwork {
+            origin: UNISWAP.into(),
+            chain_id: 8453
+        })
+        .as_deref(),
+        Some("https://app.uniswap.org · chain 8453")
+    );
+}
+
+#[test]
+fn explore_actions_are_judged_against_what_explore_shows() {
+    let world = world_with(explore());
+    let go = |action: Action| examine(&action, &world);
+    assert_eq!(
+        go(Action::Browse {
+            to: BrowseStep::Back
+        }),
+        Examined::Go
+    );
+    assert!(matches!(
+        go(Action::Browse {
+            to: BrowseStep::Forward
+        }),
+        Examined::Refused { .. }
+    ));
+    assert!(matches!(
+        go(Action::CloseTab { id: "t9".into() }),
+        Examined::Refused { .. }
+    ));
+    assert_eq!(
+        go(Action::SetSiteNetwork {
+            origin: UNISWAP.into(),
+            chain_id: 1
+        }),
+        Examined::Already
+    );
+    assert_eq!(
+        go(Action::SetSiteNetwork {
+            origin: UNISWAP.into(),
+            chain_id: 8453
+        }),
+        Examined::Go
+    );
+    assert!(matches!(
+        go(Action::DisconnectSite {
+            origin: "https://evil.example".into()
+        }),
+        Examined::Refused { .. }
+    ));
+    assert_eq!(
+        go(Action::AskPersonDappRequest { id: "r1".into() }),
+        Examined::Go
+    );
+    assert!(matches!(
+        go(Action::RejectDappRequest { id: "r2".into() }),
+        Examined::Refused { .. }
+    ));
+    assert!(
+        matches!(
+            examine(
+                &Action::OpenSite {
+                    url: UNISWAP.into(),
+                    new_tab: false
+                },
+                &World::default()
+            ),
+            Examined::Refused { .. }
+        ),
+        "not ready without Explore's view"
+    );
+
+    // Held once Explore shows it.
+    let mut baseline = Baseline::default();
+    let mut after = explore();
+    after.pending = None;
+    after.connected.clear();
+    after.tabs.retain(|tab| tab.id != "t2");
+    let world_after = world_with(after);
+    for action in [
+        Action::RejectDappRequest { id: "r1".into() },
+        Action::DisconnectSite {
+            origin: UNISWAP.into(),
+        },
+        Action::CloseTab { id: "t2".into() },
+        Action::OpenSite {
+            url: format!("{UNISWAP}/pool"),
+            new_tab: false,
+        },
+    ] {
+        assert_eq!(
+            verdict(&action, &world_after, &mut baseline),
+            Verdict::Held,
+            "{action:?}"
+        );
+        assert_eq!(
+            verdict(&action, &world, &mut baseline),
+            if matches!(action, Action::OpenSite { .. }) {
+                Verdict::Held
+            } else {
+                Verdict::NotYet
+            },
+            "{action:?} before"
+        );
+    }
+}
+
+#[test]
+fn the_web_wallet_only_opens_a_site_in_a_browser_tab() {
+    let mut web = explore();
+    web.browser = false;
+    let world = world_with(web);
+    assert_eq!(
+        examine(
+            &Action::OpenSite {
+                url: UNISWAP.into(),
+                new_tab: true
+            },
+            &world
+        ),
+        Examined::Go
+    );
+    for action in [
+        Action::Browse {
+            to: BrowseStep::Reload,
+        },
+        Action::CloseAllTabs,
+        Action::Show {
+            screen: Screen::Explore,
+        },
+    ] {
+        assert!(
+            matches!(examine(&action, &world), Examined::Refused { .. }),
+            "{action:?}"
+        );
+    }
 }
 
 fn is_transfer(action: &Action) -> bool {
@@ -166,8 +458,9 @@ fn an_agent_may_not_touch_its_own_connection() {
         enabled: None,
         bridge_url: Some("wss://elsewhere.example/connect".to_owned()),
         client_token: None,
+        wallets: None,
     }] {
-        for grants in [ON, Grants::default()] {
+        for grants in [on(), Grants::default()] {
             let decision = authorize(Actor::Agent, &action, &grants);
             assert_eq!(
                 denied(&decision),
@@ -214,7 +507,7 @@ fn an_agents_manage_level_request_waits_for_the_person() {
         if action.person_only() || is_transfer(&action) {
             continue;
         }
-        let decision = authorize(Actor::Agent, &action, &ON);
+        let decision = authorize(Actor::Agent, &action, &on());
         match action.risk() {
             Risk::Observe | Risk::Operate => assert_eq!(decision, Decision::Allow, "{action:?}"),
             Risk::Manage | Risk::Transact => {
@@ -237,7 +530,7 @@ fn sharing_usage_statistics_is_manage_level() {
     };
     assert_eq!(analytics.risk(), Risk::Manage);
     assert_eq!(
-        authorize(Actor::Agent, &analytics, &ON),
+        authorize(Actor::Agent, &analytics, &on()),
         Decision::Approve {
             by: Approver::Wallet
         }
@@ -245,7 +538,7 @@ fn sharing_usage_statistics_is_manage_level() {
     let theme = Action::SetPreference {
         preference: Preference::Theme("dark".to_owned()),
     };
-    assert_eq!(authorize(Actor::Agent, &theme, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Agent, &theme, &on()), Decision::Allow);
 }
 
 /// The space decides which networks the whole wallet shows (spec 105): an
@@ -258,12 +551,12 @@ fn switching_spaces_is_the_persons_to_allow() {
     };
     assert_eq!(switch.risk(), Risk::Manage);
     assert_eq!(
-        authorize(Actor::Agent, &switch, &ON),
+        authorize(Actor::Agent, &switch, &on()),
         Decision::Approve {
             by: Approver::Wallet
         }
     );
-    assert_eq!(authorize(Actor::Person, &switch, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Person, &switch, &on()), Decision::Allow);
     let parsed: Action = serde_json::from_value(
         serde_json::json!({ "type": "set_network_space", "space": "testnet" }),
     )
@@ -280,12 +573,12 @@ fn switching_wallets_is_the_persons_to_allow() {
     };
     assert_eq!(switch.risk(), Risk::Manage);
     assert_eq!(
-        authorize(Actor::Agent, &switch, &ON),
+        authorize(Actor::Agent, &switch, &on()),
         Decision::Approve {
             by: Approver::Wallet
         }
     );
-    assert_eq!(authorize(Actor::Person, &switch, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Person, &switch, &on()), Decision::Allow);
 }
 
 /// Hiding the balances is the person's privacy: an agent may add to it, and
@@ -295,14 +588,14 @@ fn showing_hidden_balances_is_the_persons_to_allow() {
     let show = Action::SetBalancePrivacy { hidden: false };
     assert_eq!(show.risk(), Risk::Manage);
     assert_eq!(
-        authorize(Actor::Agent, &show, &ON),
+        authorize(Actor::Agent, &show, &on()),
         Decision::Approve {
             by: Approver::Wallet
         }
     );
     let hide = Action::SetBalancePrivacy { hidden: true };
-    assert_eq!(authorize(Actor::Agent, &hide, &ON), Decision::Allow);
-    assert_eq!(authorize(Actor::Person, &show, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Agent, &hide, &on()), Decision::Allow);
+    assert_eq!(authorize(Actor::Person, &show, &on()), Decision::Allow);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,15 +690,16 @@ fn the_check_refuses_who_before_what() {
         enabled: None,
         bridge_url: Some("not a url".to_owned()),
         client_token: None,
+        wallets: None,
     };
-    let checked = check(Actor::Agent, &malformed_and_forbidden, &ON);
+    let checked = check(Actor::Agent, &malformed_and_forbidden, &on());
     assert_eq!(denied(&checked.decision), Some(ReasonCode::PersonOnly));
     assert_eq!(checked.kind.as_deref(), Some("configure_agent"));
 
     let malformed = Action::DeleteContact {
         address: "0x1".to_owned(),
     };
-    let checked = check(Actor::Agent, &malformed, &ON);
+    let checked = check(Actor::Agent, &malformed, &on());
     assert_eq!(denied(&checked.decision), Some(ReasonCode::InvalidInput));
     assert_eq!(checked.risk, Some(Risk::Manage));
 }
@@ -418,7 +712,7 @@ fn json_that_is_no_action_is_refused_saying_why() {
         r#"{"type":"launch_rockets"}"#,
         r#"{"type":"save_contact"}"#,
     ] {
-        let checked = check_json(Actor::Agent, json, &ON);
+        let checked = check_json(Actor::Agent, json, &on());
         assert_eq!(checked.kind, None, "{json}");
         assert_eq!(
             denied(&checked.decision),
@@ -429,7 +723,7 @@ fn json_that_is_no_action_is_refused_saying_why() {
     let checked = check_json(
         Actor::Agent,
         r#"{"type":"set_preference","preference":{"kind":"fee_speed","value":"fast"}}"#,
-        &ON,
+        &on(),
     );
     assert_eq!(checked.decision, Decision::Allow);
     assert_eq!(checked.kind.as_deref(), Some("set_preference"));
@@ -475,7 +769,7 @@ fn actions_read_and_write_their_wire_form() {
             }
         }
     );
-    let check = serde_json::to_value(check(Actor::Agent, &Action::SignOut, &ON)).expect("json");
+    let check = serde_json::to_value(check(Actor::Agent, &Action::SignOut, &on())).expect("json");
     assert_eq!(
         check,
         serde_json::json!({
@@ -578,7 +872,7 @@ fn an_agent_may_prepare_a_transfer_without_a_grant() {
         amount: "max".to_owned(),
     };
     assert_eq!(prepare.risk(), Risk::Transact);
-    assert_eq!(authorize(Actor::Agent, &prepare, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Agent, &prepare, &on()), Decision::Allow);
 }
 
 /// An agent's confirm only asks the person (owner, 2026-10-21): it signs
@@ -589,8 +883,8 @@ fn an_agents_confirm_only_asks_the_person() {
         operation: "transfer-1".to_owned(),
         review: None,
     };
-    assert_eq!(authorize(Actor::Agent, &submit, &ON), Decision::Allow);
-    assert_eq!(authorize(Actor::Person, &submit, &ON), Decision::Allow);
+    assert_eq!(authorize(Actor::Agent, &submit, &on()), Decision::Allow);
+    assert_eq!(authorize(Actor::Person, &submit, &on()), Decision::Allow);
     assert_eq!(
         denied(&authorize(Actor::Agent, &submit, &Grants::default())),
         Some(ReasonCode::AgentOff)
@@ -653,7 +947,7 @@ fn a_batch_needs_real_recipients_each_with_an_amount() {
     };
     assert!(validate(&with(vec![stranger])).is_err());
     assert_eq!(
-        authorize(Actor::Agent, &with(vec![to("1")]), &ON),
+        authorize(Actor::Agent, &with(vec![to("1")]), &on()),
         Decision::Allow,
         "a draft, like one recipient's"
     );
@@ -734,7 +1028,7 @@ fn network_changes_are_manage_level_and_need_real_urls() {
         )
     }) {
         assert_eq!(
-            authorize(Actor::Agent, &action, &ON),
+            authorize(Actor::Agent, &action, &on()),
             Decision::Approve {
                 by: Approver::Wallet
             },
@@ -746,7 +1040,7 @@ fn network_changes_are_manage_level_and_need_real_urls() {
 /// Every change an agent makes opens where it is seen — or shows itself.
 #[test]
 fn every_action_shows_where_its_change_is_seen() {
-    use vela_core::app::intents::{shows, Screen, SETTINGS_PAGES};
+    use vela_core::app::intents::SETTINGS_PAGES;
     for action in one_of_each() {
         match shows(&action) {
             Some(Screen::Settings { page: Some(page) }) => {
@@ -757,7 +1051,12 @@ fn every_action_shows_where_its_change_is_seen() {
                 is_transfer(&action)
                     || matches!(
                         action,
-                        Action::SignOut | Action::EraseDevice | Action::ConfigureAgent { .. }
+                        Action::SignOut
+                            | Action::EraseDevice
+                            | Action::ConfigureAgent { .. }
+                            // A dApp's request shows on its own sheet.
+                            | Action::RejectDappRequest { .. }
+                            | Action::AskPersonDappRequest { .. }
                     ),
                 "{} shows nothing",
                 action.kind()
@@ -774,4 +1073,123 @@ fn every_action_shows_where_its_change_is_seen() {
             address: "0x1111111111111111111111111111111111111111".into()
         })
     );
+}
+
+#[test]
+fn explore_reads_the_browser_machines_own_views() {
+    use vela_core::app::browser_history::{BhistEntry, BhistView};
+    use vela_core::app::dapp_browser::{DbrConsentView, DbrSiteView, DbrSigningView, DbrView};
+    use vela_core::app::explore_sites::ExploreView;
+    use vela_core::app::intent_rules::{dapp_request_target, explore_facts};
+
+    let mut explore: ExploreView = serde_json::from_value(serde_json::json!({
+        "favorites": [], "tabs": [], "selected_tab": null, "favorites_hidden": false,
+        "recent_hidden": false, "favorites_full": false, "tabs_full": false
+    }))
+    .unwrap_or_default();
+    explore.tabs = serde_json::from_value(serde_json::json!([
+        { "id": "t1", "url": "https://app.uniswap.org/swap", "title": "Uniswap", "host": "app.uniswap.org" },
+        { "id": "t2", "url": null, "title": "", "host": "" }
+    ]))
+    .expect("tabs");
+    explore.selected_tab = Some("t1".into());
+    let history = BhistView {
+        entries: vec![BhistEntry {
+            origin: UNISWAP.into(),
+            url: format!("{UNISWAP}/swap"),
+            host: "app.uniswap.org".into(),
+            title: "Uniswap".into(),
+            favicon: String::new(),
+            last_visited_ms: 1.0,
+        }],
+    };
+    let mut dapp = DbrView {
+        sites: vec![DbrSiteView {
+            origin: UNISWAP.into(),
+            address: MINE.into(),
+            chain_id: 8453,
+            granted_at_ms: 1.0,
+        }],
+        ..DbrView::default()
+    };
+    dapp.consent = Some(DbrConsentView {
+        tab: "t1".into(),
+        origin: UNISWAP.into(),
+        methods: vec!["eth_requestAccounts".into()],
+        address: Some(MINE.into()),
+        chain_id: 1,
+        lock: Default::default(),
+    });
+
+    let facts = explore_facts(&explore, &dapp, &history, true, false, None);
+    assert_eq!(facts.tabs.len(), 2);
+    assert!(facts.tabs[0].current);
+    assert_eq!(facts.tabs[1].url, "");
+    assert_eq!(facts.recent[0].origin, UNISWAP);
+    assert_eq!(facts.connected[0].chain_id, Some(8453));
+    let pending = facts.pending.expect("the connect request");
+    assert_eq!((pending.id.as_str(), pending.kind.as_str(), pending.shown), ("connect:t1", "connect", false));
+    let shown = explore_facts(&explore, &dapp, &history, true, false, Some("connect:t1"));
+    assert!(shown.pending.expect("shown").shown);
+
+    dapp.consent = None;
+    dapp.signing = Some(DbrSigningView { tab: "t1".into(), id: "42".into() });
+    let signing = explore_facts(&explore, &dapp, &history, false, false, None).pending.expect("signing");
+    assert_eq!(signing.id, "sign:t1:42");
+    let target = dapp_request_target(&signing.id).expect("parses");
+    assert_eq!((target.kind.as_str(), target.tab.as_str(), target.id.as_deref()), ("sign", "t1", Some("42")));
+    assert_eq!(dapp_request_target("connect:t1").expect("connect").id, None);
+    for bad in ["", "sign:t1", "connect:", "pay:t1:1", "sign::1"] {
+        assert_eq!(dapp_request_target(bad), None, "{bad}");
+    }
+}
+
+#[test]
+fn a_sites_network_change_names_the_site_both_networks_and_the_wallet() {
+    use vela_core::app::intent_rules::approval_detail_in;
+    let world: World = serde_json::from_value(serde_json::json!({
+        "session": {
+            "address": MINE,
+            "accounts": [
+                { "index": 0, "account": { "address": MINE, "name": "Agent test" } },
+                { "index": 1, "account": { "address": ALICE, "name": "Main" } }
+            ]
+        },
+        "networks": { "networks": [
+            { "chain_id": 1, "display_name": "Ethereum" },
+            { "chain_id": 8453, "display_name": "Base" }
+        ] },
+        "explore": { "browser": true, "connected": [
+            { "origin": UNISWAP, "chain_id": 1, "address": MINE }
+        ] }
+    }))
+    .expect("a world");
+    assert_eq!(
+        approval_detail_in(&Action::SetSiteNetwork { origin: UNISWAP.into(), chain_id: 8453 }, &world).as_deref(),
+        Some("app.uniswap.org · Ethereum (1) → Base (8453) · Agent test (0xaaaa…aaaa)")
+    );
+    assert_eq!(
+        approval_detail_in(&Action::DisconnectSite { origin: UNISWAP.into() }, &world).as_deref(),
+        Some("app.uniswap.org · Agent test (0xaaaa…aaaa)")
+    );
+    assert_eq!(
+        approval_detail_in(&Action::SwitchAccount { address: ALICE.into() }, &world).as_deref(),
+        Some("Agent test (0xaaaa…aaaa) → Main (0x0000…05fa)")
+    );
+    // Without what it needs, it still says what it can.
+    assert_eq!(
+        approval_detail_in(&Action::SetSiteNetwork { origin: UNISWAP.into(), chain_id: 10 }, &World::default()).as_deref(),
+        Some("app.uniswap.org · no network yet → chain 10")
+    );
+}
+
+/// The S22 run: a browser the person has not opened yet has no views — the
+/// agent still sees Explore (empty), so it can open a site, which starts it.
+#[test]
+fn a_browser_not_started_yet_reads_as_empty() {
+    let facts: serde_json::Value =
+        serde_json::from_str(&vela_core::app::intent_json::explore_facts("null", "null", "null", false, false, None))
+            .expect("json");
+    assert_eq!(facts["browser"], true);
+    assert_eq!(facts["tabs"], serde_json::json!([]));
 }

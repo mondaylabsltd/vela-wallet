@@ -123,7 +123,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-de")]
         "de" => Some((
             de::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&de::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&de::OFFSETS),
             &de::PRESENT,
         )),
         #[cfg(feature = "i18n-ru")]

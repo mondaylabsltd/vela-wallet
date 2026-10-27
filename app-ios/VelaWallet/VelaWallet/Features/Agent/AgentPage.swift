@@ -37,4 +37,6 @@ final class AgentPage {
     var refreshBalances: () -> Void = {}
     /// Make `address` the account in front; `false` when no wallet has it.
     var switchAccount: (_ address: String) async -> Bool = { _ in false }
+    /// Spec 107: the signing sheet's own "no"; `false` when no sheet is up.
+    var rejectSigning: () -> Bool = { false }
 }

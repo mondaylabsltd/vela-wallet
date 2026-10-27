@@ -109,6 +109,12 @@ android {
             .map { if (it.length >= 7) it.take(7) else "unknown" }
             .getOrElse("unknown")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+        // Spec 106: clientmcp.dev, unless a development build names another
+        // (`-PvelaClientmcpSite=https://staging.clientmcp.dev`).
+        val clientmcpSite = providers.gradleProperty("velaClientmcpSite")
+            .orElse("https://clientmcp.dev")
+            .get()
+        buildConfigField("String", "CLIENTMCP_SITE", "\"$clientmcpSite\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

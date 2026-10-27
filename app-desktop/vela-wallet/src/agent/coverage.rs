@@ -67,7 +67,6 @@ const ONBOARD: &str = "signing in or creating a wallet: the passkey's own ceremo
 const BOUNDARY: &str = "where this account signs is the signing boundary itself (spec 102)";
 const SWEEP: &str = "several tokens to one address (sweep)";
 const SIGN: &str = "answering a dApp's signing request";
-const BROWSE: &str = "browsing in the in-app dApp browser";
 /// Spec 105: which space a network the person added belongs to is their word
 /// on what has real value. An agent that could move a testnet into the
 /// mainnet space could make test coins read as money.
@@ -126,7 +125,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("CreateEvent::Submit", Later(ONBOARD)),
     ("DbrEvent::AddNetworkAnswered", NotOne(DAPP)),
     ("DbrEvent::ConsentApproved", NotOne(DAPP)),
-    ("DbrEvent::ConsentRejected", NotOne(DAPP)),
+    ("DbrEvent::ConsentRejected", Intent("reject_dapp_request")),
     (
         "DbrEvent::InspectorClosed",
         View("a site's connection shown"),
@@ -142,12 +141,9 @@ const EVENTS: &[(&str, Place)] = &[
     ),
     ("DbrEvent::RendererGone", Machine("the page in the browser")),
     ("DbrEvent::RevokeAll", Step("clear_storage_item")),
-    (
-        "DbrEvent::RevokeRequested",
-        Later("disconnecting one connected site (clear_storage_item dapps disconnects them all)"),
-    ),
+    ("DbrEvent::RevokeRequested", Intent("disconnect_site")),
     ("DbrEvent::SigningAnswered", NotOne(DAPP)),
-    ("DbrEvent::SiteChainPicked", NotOne(DAPP)),
+    ("DbrEvent::SiteChainPicked", Intent("set_site_network")),
     ("FeeEvent::BalanceChangesMeasured", Machine("the fee quote")),
     ("FeeEvent::QuoteRequested", Machine("the fee quote")),
     ("FeeEvent::Requote", Machine("the fee quote")),
@@ -388,11 +384,11 @@ const EVENTS: &[(&str, Place)] = &[
     ),
     (
         "browser_history::Event::ClearAll",
-        Step("clear_storage_item"),
+        Intent("clear_recent_sites"),
     ),
     (
         "browser_history::Event::DeleteOrigin",
-        Later("forgetting one site of the browsing history"),
+        Intent("forget_site"),
     ),
     (
         "browser_history::Event::VisitRecorded",
@@ -400,18 +396,39 @@ const EVENTS: &[(&str, Place)] = &[
     ),
     ("create_wallet::Event::SigningPageChosen", Later(ONBOARD)),
     ("create_wallet::Event::Start", Later(ONBOARD)),
-    ("explore_sites::Event::FavoriteAdded", Later(BROWSE)),
-    ("explore_sites::Event::FavoriteRemoved", Later(BROWSE)),
-    ("explore_sites::Event::FavoriteRenamed", Later(BROWSE)),
+    (
+        "explore_sites::Event::FavoriteAdded",
+        Intent("set_site_favorite"),
+    ),
+    (
+        "explore_sites::Event::FavoriteRemoved",
+        Intent("set_site_favorite"),
+    ),
+    (
+        "explore_sites::Event::FavoriteRenamed",
+        Later("renaming a favorite site's tile"),
+    ),
     (
         "explore_sites::Event::PageLoaded",
         Machine("the page in the browser"),
     ),
-    ("explore_sites::Event::TabClosed", Later(BROWSE)),
-    ("explore_sites::Event::TabNavigated", Later(BROWSE)),
-    ("explore_sites::Event::TabOpened", Later(BROWSE)),
-    ("explore_sites::Event::TabSelected", Later(BROWSE)),
-    ("explore_sites::Event::TabsClosed", Later(BROWSE)),
+    ("explore_sites::Event::TabClosed", Intent("close_tab")),
+    ("explore_sites::Event::TabNavigated", Step("open_site")),
+    ("explore_sites::Event::TabOpened", Step("open_site")),
+    (
+        "explore_sites::Event::TabSelected",
+        Later("switching to another open tab; open_site reopens a site in front instead"),
+    ),
+    ("explore_sites::Event::TabsClosed", Intent("close_all_tabs")),
+    // Spec 107: the agent's own reject, on the sheets' own events.
+    (
+        "network_admin::Event::DappAddDeclined",
+        Intent("reject_dapp_request"),
+    ),
+    (
+        "sign_request::Event::RejectTapped",
+        Intent("reject_dapp_request"),
+    ),
     ("login::Event::SignIn", Later(ONBOARD)),
     ("login::Event::Start", Later(ONBOARD)),
     (
@@ -537,6 +554,70 @@ const CALLS: &[(&str, Place)] = &[
         "session::account_established",
         Machine("the account the pages were given"),
     ),
+    // Spec 107: the browser's own calls (webview, opener).
+    (
+        "opener::open",
+        NotOne("a link opened in the system browser"),
+    ),
+    (
+        "opener::open_from_page",
+        NotOne("a page handed to the system browser"),
+    ),
+    ("webview::back", Intent("browse")),
+    ("webview::built", Machine("a read of the page's engine")),
+    ("webview::clear_browsing_data", Step("clear_storage_item")),
+    (
+        "webview::close",
+        View("the page's view placed, shown or hidden"),
+    ),
+    (
+        "webview::committed_url",
+        Machine("a read of the page's engine"),
+    ),
+    (
+        "webview::current_url",
+        Machine("a read of the page's engine"),
+    ),
+    (
+        "webview::cut_out",
+        View("the page's view placed, shown or hidden"),
+    ),
+    ("webview::deliver", Machine("the page in the browser")),
+    ("webview::engine", Machine("a read of the page's engine")),
+    (
+        "webview::engine_failure",
+        Machine("a read of the page's engine"),
+    ),
+    (
+        "webview::focus_parent",
+        View("the page's view placed, shown or hidden"),
+    ),
+    ("webview::forward", Intent("browse")),
+    (
+        "webview::hide",
+        View("the page's view placed, shown or hidden"),
+    ),
+    ("webview::is_live", Machine("a read of the page's engine")),
+    ("webview::live_tabs", Machine("a read of the page's engine")),
+    ("webview::navigate", Step("open_site")),
+    ("webview::on_leave_to", Machine("the page in the browser")),
+    ("webview::on_load_to", Machine("the page in the browser")),
+    ("webview::on_message_to", Machine("the page in the browser")),
+    ("webview::on_meta_to", Machine("the page in the browser")),
+    (
+        "webview::place",
+        View("the page's view placed, shown or hidden"),
+    ),
+    ("webview::reload", Intent("browse")),
+    ("webview::retry_engine", Step("browse")),
+    (
+        "webview::set_debug_mode",
+        NotOne("a developer's switch (spec 091), hidden in a release build"),
+    ),
+    (
+        "webview::show",
+        View("the page's view placed, shown or hidden"),
+    ),
     ("session::add_account", Later(ONBOARD)),
     ("session::add_account_cancelled", Later(ONBOARD)),
     ("session::adding_account", Machine("a read")),
@@ -658,7 +739,10 @@ fn events(text: &str, found: &mut BTreeMap<String, String>, file: &str) {
 
 /// `session::switch_account(`, `resident::forget::<Contacts>(` …
 fn calls(text: &str, found: &mut BTreeMap<String, String>, file: &str) {
-    const MODULES: [&str; 8] = [
+    const MODULES: [&str; 10] = [
+        // Spec 107: the browser's own calls — the gate saw none of them.
+        "webview",
+        "opener",
         "session",
         "preferences",
         "format_prefs",

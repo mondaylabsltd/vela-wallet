@@ -572,6 +572,52 @@ export interface AgentPanelModel {
 	endpoint?: { label: string; value: string; hint: string };
 	/** The control the agent pressed last. */
 	lastAction?: { label: string; value: string };
+	/** Spec 106: connecting with clientmcp.dev — the usual way in. */
+	link: AgentLinkModel;
+	/** Spec 107 E8: the wallets the agent may use, a switch each. */
+	wallets: {
+		title: string;
+		hint: string;
+		/** Said when none is on: the agent can do nothing. */
+		none?: string;
+		rows: SwitchRowModel[];
+	};
+}
+
+/** Spec 106: Settings → AI agent's clientmcp.dev part. */
+export interface AgentLinkModel {
+	/** "Connected as @login" — present when clientmcp.dev issued the token. */
+	connectedAs?: string;
+	/** "Client c-…": which of the person's clients this wallet is (spec 106). */
+	clientId?: string;
+	connect: string;
+	connectHint: string;
+	/** On the way to clientmcp.dev, or trading the code: what the button says meanwhile. */
+	busy?: string;
+	/** Why the last attempt did not connect, in the person's words. */
+	problem?: string;
+	/** Where the person connects their AI agent (the site's account page). */
+	agent?: { label: string; hint: string; href: string };
+	/**
+	 * The MCP server address for the person's AI agent, to copy from here —
+	 * masked until Show (a credential).
+	 */
+	agentAddress?: {
+		label: string;
+		hint: string;
+		value: string;
+		show: string;
+		hide: string;
+		copy: string;
+		copied: string;
+		share: string;
+	};
+	reconnect: string;
+	disconnect: string;
+	/** "Use your own bridge": the address and token fields, folded. */
+	ownBridge: string;
+	/** The fields start unfolded: a token was entered by hand. */
+	ownOpen: boolean;
 }
 
 export interface AboutModel {

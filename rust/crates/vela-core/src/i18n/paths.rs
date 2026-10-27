@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1952 paths = 1848 leaf + 104 branch. Repeated per locale these key bytes
-//! would cost 785415 bytes; interned once they cost 54308.
+//! 1990 paths = 1886 leaf + 104 branch. Repeated per locale these key bytes
+//! would cost 801150 bytes; interned once they cost 55357.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1952] = [
+pub(crate) static PATHS: [&str; 1990] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -1652,16 +1652,25 @@ pub(crate) static PATHS: [&str; 1952] = [
     "settings.agent.action",
     "settings.agent.action.addNetwork",
     "settings.agent.action.addToken",
+    "settings.agent.action.askPersonDappRequest",
+    "settings.agent.action.browse",
     "settings.agent.action.cancelTransfer",
     "settings.agent.action.clearCaches",
+    "settings.agent.action.clearRecentSites",
     "settings.agent.action.clearStorageItem",
+    "settings.agent.action.closeAllTabs",
+    "settings.agent.action.closeTab",
     "settings.agent.action.deleteActivity",
     "settings.agent.action.deleteContact",
     "settings.agent.action.deleteGroup",
+    "settings.agent.action.disconnectSite",
     "settings.agent.action.eraseDevice",
+    "settings.agent.action.forgetSite",
+    "settings.agent.action.openSite",
     "settings.agent.action.prepareBatchTransfer",
     "settings.agent.action.prepareTransfer",
     "settings.agent.action.refreshBalances",
+    "settings.agent.action.rejectDappRequest",
     "settings.agent.action.removeNetwork",
     "settings.agent.action.removeWallet",
     "settings.agent.action.resetServiceEndpoints",
@@ -1676,22 +1685,48 @@ pub(crate) static PATHS: [&str; 1952] = [
     "settings.agent.action.setPreference",
     "settings.agent.action.setProviderKey",
     "settings.agent.action.setServiceEndpoint",
+    "settings.agent.action.setSiteFavorite",
+    "settings.agent.action.setSiteNetwork",
     "settings.agent.action.show",
     "settings.agent.action.signOut",
     "settings.agent.action.submitTransfer",
     "settings.agent.action.switchAccount",
+    "settings.agent.agentAddress",
+    "settings.agent.agentAddressHint",
     "settings.agent.allow",
     "settings.agent.approveHint",
     "settings.agent.approveTitle",
     "settings.agent.bridge",
     "settings.agent.bridgeHint",
     "settings.agent.bridgeInvalid",
+    "settings.agent.clientId",
+    "settings.agent.connect",
+    "settings.agent.connectAgent",
+    "settings.agent.connectAgentHint",
+    "settings.agent.connectHint",
+    "settings.agent.connectedAs",
+    "settings.agent.connecting",
+    "settings.agent.copied",
+    "settings.agent.copy",
     "settings.agent.deny",
     "settings.agent.description",
+    "settings.agent.disconnect",
     "settings.agent.enable",
     "settings.agent.endpoint",
     "settings.agent.endpointHint",
+    "settings.agent.hide",
     "settings.agent.lastAction",
+    "settings.agent.linkExpired",
+    "settings.agent.linkFailed",
+    "settings.agent.linkNetwork",
+    "settings.agent.linkNotOurs",
+    "settings.agent.linkRefused",
+    "settings.agent.linkReturn",
+    "settings.agent.linkUnavailable",
+    "settings.agent.ownBridge",
+    "settings.agent.reconnect",
+    "settings.agent.share",
+    "settings.agent.show",
     "settings.agent.statusConnecting",
     "settings.agent.statusOff",
     "settings.agent.statusOffline",
@@ -1702,6 +1737,9 @@ pub(crate) static PATHS: [&str; 1952] = [
     "settings.agent.title",
     "settings.agent.token",
     "settings.agent.tokenHint",
+    "settings.agent.wallets",
+    "settings.agent.walletsHint",
+    "settings.agent.walletsNone",
     "settings.analytics",
     "settings.analytics.subtitle",
     "settings.analytics.title",
@@ -1967,7 +2005,7 @@ pub(crate) static PATHS: [&str; 1952] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 244] = [
+pub(crate) static IS_BRANCH: [u8; 249] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00,
     0x00, 0x00, 0x01, 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0x60, 0x00, 0x00, 0x11, 0x42, 0x00, 0x00,
     0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x80, 0x42, 0x22, 0x04, 0x00, 0x00, 0x20, 0x10, 0x02, 0x0a,
@@ -1981,13 +2019,13 @@ pub(crate) static IS_BRANCH: [u8; 244] = [
     0x00, 0x10, 0x00, 0x42, 0x00, 0x00, 0x9c, 0x24, 0x49, 0x08, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00,
     0x00, 0x00, 0x40, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
     0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x98, 0x10, 0x80, 0x01, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x20, 0x01, 0x42, 0x80, 0x24, 0x44, 0x80, 0x40, 0x20, 0x40, 0x00, 0x20, 0x00,
-    0x00, 0x00, 0x04, 0x30, 0x04, 0x00, 0x00, 0x80, 0x40, 0x00, 0x80, 0x08, 0x80, 0x00, 0x08, 0x80,
-    0x40, 0x00, 0x41, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x80, 0x10, 0x20, 0x09, 0x11, 0x20, 0x10,
+    0x08, 0x10, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x0c, 0x01, 0x00, 0x00, 0x20, 0x10, 0x00, 0x20,
+    0x02, 0x20, 0x00, 0x02, 0x20, 0x10, 0x40, 0x10, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1952;
+pub(crate) const N_PATHS: usize = 1990;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

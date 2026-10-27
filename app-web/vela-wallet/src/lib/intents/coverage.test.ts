@@ -136,7 +136,72 @@ const DISPATCHED: Record<string, Place> = {
 };
 
 /** Resident methods the screens call. */
+/** Spec 107: the committing modules' functions a screen calls. */
+const FUNCTIONS: Record<string, Place> = {
+	'dapp/host.hostLabel': { view: 'what the sheet draws' },
+	'dapp/grants.getOriginChain': { machine: 'a read' },
+	'dapp/request.approve': { none: DAPP },
+	'dapp/request.evaluate': { machine: 'a read' },
+	'dapp/transport.answerRequest': { machine: 'the answer, sent to the page that asked' },
+	'dapp/transport.readRequest': { machine: 'a read' },
+	'dapp/transport.rejectRequest': {
+		later:
+			"answering a dApp's request in the extension's window: the web wallet's agent has no browser (spec 107 E7)"
+	},
+	'dapp/add-network.addNetworkCard': { view: 'what the sheet draws' },
+	'dapp/panel-surface.isPanelDocument': { machine: 'a read' },
+	'dapp/panel-surface.panelNeedsWallet': { machine: 'a read' },
+	'dapp/transport.inExtension': { machine: 'a read' },
+	'dapp/connections.listGrants': { machine: 'a read' },
+	'dapp/connections.revokeAll': { step: 'clear_storage_item' },
+	'dapp/connections.revokeGrant': {
+		later:
+			"disconnecting one site the extension connected: the web wallet's agent has no browser (spec 107 E7)"
+	},
+	'signing/dapp-receipt.trackEntryFor': { machine: 'a read' },
+	'signing/live.approveOptsOf': { machine: 'a read' },
+	'signing/live.buildSigningModel': { view: 'what the sheet draws' },
+	'signing/live.signingCloseEvent': { machine: 'a read' },
+	'signing/fee-calls.feeCallsOf': { machine: 'a read' },
+	'signing/fee-balance-changes.simulateRequest': { machine: 'the review simulated' },
+	'signing/dapp-receipt.dappReceiptModel': { view: 'what the sheet draws' },
+	'signing/dapp-receipt.endsOnSignedTick': { machine: 'a read' },
+	'signing/dapp-receipt.landingCloseAction': { machine: 'a read' },
+	'signing/dapp-receipt.landingFor': { machine: 'a read' },
+	'signing/dapp-receipt.withSheetRefusal': { machine: 'a read' },
+	'signing/dapp-receipt.handoffLands': { machine: 'a read' },
+	'signing/dapp-receipt.landingToRaise': { machine: 'a read' },
+	'signing/dapp-receipt.autoCloseAfterMs': { machine: 'a read' },
+	'backup/ethereum-backup.foundingKeyOf': { machine: 'a read' },
+	'backup/ethereum-backup.startEthereumBackup': {
+		later: "copying the wallet's record to Ethereum (spec 107 phase 4)"
+	}
+};
+
 const CALLED: Record<string, Place> = {
+	// Spec 107: residents the gate did not see.
+	'scanner.start': { none: 'the camera, for a code the person scans' },
+	'scanner.stop': { none: 'the camera, for a code the person scans' },
+	'scanner.clear': { none: 'the camera, for a code the person scans' },
+	'scanner.toggleTorch': { none: 'the camera, for a code the person scans' },
+	'scanner.flip': { none: 'the camera, for a code the person scans' },
+	'scanner.pick': { none: 'an image the person picks, for its code' },
+	'networkSpace.openSwitcher': { step: 'set_network_space' },
+	'networkSpace.boot': { machine: 'boot' },
+	'signingSheet.present': { view: 'the signing sheet shown' },
+	'signingSheet.dismiss': {
+		later:
+			"answering a dApp's request in the extension's window: the web wallet's agent has no browser (spec 107 E7)"
+	},
+	'signingSheet.dispatchGuard': { later: "limiting a dApp's approval" },
+	'agentLink.returned': { machine: 'clientmcp.dev sent the browser back (spec 106)' },
+	'agentLink.start': {
+		none: "the person's own sign-in on clientmcp.dev (spec 106); what it gives is applied as configure_agent"
+	},
+	'relayReportSend.done': { view: 'a report sheet closed' },
+	'relayReportSend.send': { later: 'sending a report to the wallet’s makers' },
+	'relayReportSend.surface': { view: 'a report sheet shown' },
+
 	'session.signOut': { intent: 'sign_out' },
 	'session.confirmSignOut': { step: 'sign_out' },
 	'session.dismissSignOut': { step: 'sign_out' },
@@ -230,6 +295,11 @@ const SETTINGS: Record<string, Place> = {
 	'pref.agent': { intent: 'configure_agent' },
 	'pref.agent-url': { intent: 'configure_agent' },
 	'pref.agent-token': { intent: 'configure_agent' },
+	'pref.agent-link': {
+		none: "the person's own sign-in on clientmcp.dev (spec 106); what it gives is applied as configure_agent"
+	},
+	'pref.agent-unlink': { intent: 'configure_agent' },
+	'pref.agent-wallet': { intent: 'configure_agent' },
 	'pref.signing-venue': {
 		none: 'where this account signs is the signing boundary itself (spec 102)'
 	}
@@ -267,7 +337,17 @@ const PERSON = [
 
 const ROOT = join(__dirname, '../..');
 const RESIDENTS =
-	'session|balance|feed|contactsBook|networkAdmin|chainFilter|preferences|currency|feeTierPreference|analyticsConsent|agentSettings|identiconViewer|reportSend|signRequest';
+	'session|balance|feed|contactsBook|networkAdmin|chainFilter|preferences|currency|feeTierPreference|analyticsConsent|agentSettings|identiconViewer|reportSend|signRequest|' +
+	// Spec 107: residents the gate did not see.
+	'relayReportSend|signingSheet|networkSpace|scanner|agentLink';
+
+/**
+ * Spec 107: the modules whose functions commit something of the person's —
+ * a dApp's answer, a site's connection, a backup, a signature. A screen that
+ * imports one of their functions and calls it is placed like a resident's
+ * call, under `module/function`.
+ */
+const COMMITTING_MODULES = /from '\$lib\/(dapp|backup|signing)\/([a-z-]+)(?:\.svelte)?'/;
 
 function screens(dir: string, found: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {
@@ -328,6 +408,34 @@ describe('every capability the person has is an intent (spec 103)', () => {
 			(m) => `${m[1]}.${m[2]}`
 		);
 		check(CALLED, found.keys(), found);
+	});
+
+	it('places every committing function a screen calls (spec 107)', () => {
+		const found = new Map<string, string>();
+		for (const file of screens(ROOT)) {
+			const source = readFileSync(file, 'utf8');
+			for (const line of source.matchAll(/import\s*\{([^}]*)\}\s*(from '[^']*')/g)) {
+				const module = COMMITTING_MODULES.exec(line[2]);
+				if (!module) continue;
+				const names = line[1]
+					.split(',')
+					.map((name) =>
+						name
+							.trim()
+							.split(/\s+as\s+/)
+							.pop()!
+							.trim()
+					)
+					.filter((name) => /^[a-z]\w*$/.test(name));
+				for (const name of names) {
+					if (new RegExp(`(?<![\\w.])${name}\\(`).test(source.replace(line[0], ''))) {
+						const key = `${module[1]}/${module[2]}.${name}`;
+						if (!found.has(key)) found.set(key, relative(ROOT, file));
+					}
+				}
+			}
+		}
+		check(FUNCTIONS, found.keys(), found);
 	});
 
 	it('places every event of Settings’ own vocabularies', () => {

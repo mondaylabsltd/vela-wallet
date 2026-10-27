@@ -715,6 +715,32 @@ export function checksumAddress(address_hex: string): string;
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
 
+/**
+ * A new installation ID from 16 random bytes.
+ */
+export function clientmcpInstallationId(random: Uint8Array): string;
+
+/**
+ * The site's answer: the bridge address and client token, or why not.
+ */
+export function clientmcpLinkAccept(status: number, body: string): string;
+
+/**
+ * Starts a sign-in: the pending sign-in to keep, with the page to open.
+ * `random` is at least 64 bytes from `crypto.getRandomValues`.
+ */
+export function clientmcpLinkBegin(site: string, redirect_uri: string, label: string, installation: string, random: Uint8Array, now_ms: number): string;
+
+/**
+ * The one request that trades the code: `{url, body}`, POSTed as JSON.
+ */
+export function clientmcpLinkExchange(pending_json: string, code: string): string;
+
+/**
+ * The code in the address the browser came back to, if it is this sign-in's.
+ */
+export function clientmcpLinkReturned(pending_json: string, url: string, now_ms: number): string;
+
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
 /**
@@ -1020,6 +1046,12 @@ export function intentAgentState(world_json: string, page: string, approvals_jso
  * record the action's name does not say (a JSON string, or `null`).
  */
 export function intentApprovalDetail(action_json: string): string;
+
+/**
+ * What an agent's request changes, for its approval, with what the wallet
+ * knows around it (`world_json`, as for `intentExamine`).
+ */
+export function intentApprovalDetailIn(action_json: string, world_json: string): string;
 
 /**
  * What was true when the call began.
@@ -1776,6 +1808,11 @@ export interface InitOutput {
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly clearsigningcore_view: (a: number) => [number, number, number, number];
+    readonly clientmcpInstallationId: (a: number, b: number) => [number, number];
+    readonly clientmcpLinkAccept: (a: number, b: number, c: number) => [number, number];
+    readonly clientmcpLinkBegin: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly clientmcpLinkExchange: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly clientmcpLinkReturned: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly computeSafeAddress: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly computeSafeAddressMulti: (a: number, b: number) => [number, number, number];
     readonly computeSelector: (a: number, b: number) => [number, number, number, number];
@@ -1881,6 +1918,7 @@ export interface InitOutput {
     readonly inFlightOps: (a: number, b: number) => [number, number];
     readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly intentApprovalDetail: (a: number, b: number) => [number, number];
+    readonly intentApprovalDetailIn: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentBaseline: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentCatalog: () => [number, number];
     readonly intentCheck: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];

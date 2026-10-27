@@ -56,6 +56,8 @@
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
 	import { agentSettings, bridgeUrlProblem, mcpEndpoint } from '$lib/agent/settings.svelte';
+	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
+	import { fill } from '$lib/wallet/messages';
 	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
 	import {
 		switcherBalances,
@@ -334,6 +336,32 @@
 		return shown.open(screen.page) ? null : 'this layout has no such settings page';
 	}
 	onMount(() => screenDesk.attach(['settings'], present));
+
+	// Spec 106: back from clientmcp.dev — finish the sign-in where it began
+	// (its language), then show the AI agent page with the result.
+	onMount(() => {
+		const back = agentLink.returned();
+		if (!back.here) return;
+		if (back.elsewhere !== null) {
+			location.replace(back.elsewhere);
+			return;
+		}
+		void agentLink
+			.finish(async (linked) => {
+				// E8: the first connection offers the wallet in front; a list the
+				// person already chose is kept.
+				const active = session.view.address;
+				await intents.invoke('person', {
+					type: 'configure_agent',
+					enabled: true,
+					bridge_url: linked.bridge_url,
+					client_token: linked.client_token,
+					...(agentSettings.wallets.length === 0 && active !== '' && { wallets: [active] })
+				});
+				syncAgent();
+			})
+			.then(() => present({ type: 'settings', page: 'agent' }));
+	});
 	let backupOpening = false;
 	function startBackup(): void {
 		// What a tap does is the core's (`BackupRow.action`). `retry` — only
@@ -447,6 +475,26 @@
 			case 'agent-token':
 				configureAgent({ enabled: null, bridge_url: null, client_token: event.value });
 				return;
+			case 'agent-link':
+				void agentLink.start(location.pathname, 'Web browser');
+				return;
+			case 'agent-wallet': {
+				// The list whole, as the person now wants it (spec 107 E8).
+				const others = agentSettings.wallets.filter(
+					(w) => w.toLowerCase() !== event.address.toLowerCase()
+				);
+				configureAgent({
+					enabled: null,
+					bridge_url: null,
+					client_token: null,
+					wallets: event.on ? [...others, event.address] : others
+				});
+				return;
+			}
+			case 'agent-unlink':
+				// Forgotten here; the client stays on clientmcp.dev until deleted there.
+				configureAgent({ enabled: false, bridge_url: '', client_token: '' });
+				return;
 			case 'erase':
 				void erase();
 				return;
@@ -463,6 +511,7 @@
 		enabled: boolean | null;
 		bridge_url: string | null;
 		client_token: string | null;
+		wallets?: string[];
 	}): void {
 		void intents.invoke('person', { type: 'configure_agent', ...change }).then(syncAgent);
 	}
@@ -653,9 +702,80 @@
 				endpoint === null
 					? undefined
 					: { label: a.endpoint, value: endpoint, hint: a.endpointHint },
-			lastAction: last === null ? undefined : { label: a.lastAction, value: last }
+			lastAction: last === null ? undefined : { label: a.lastAction, value: last },
+			link: {
+				connectedAs:
+					agentSettings.linked === null
+						? undefined
+						: fill(a.connectedAs, { login: agentSettings.linked.login }),
+				clientId:
+					agentSettings.linked === null
+						? undefined
+						: fill(a.clientId, { id: agentSettings.linked.clientId }),
+				connect: a.connect,
+				connectHint: a.connectHint,
+				busy: agentLink.phase === 'idle' ? undefined : a.connecting,
+				problem: agentLink.problem === null ? undefined : linkProblem(agentLink.problem),
+				agent:
+					agentSettings.linked === null
+						? undefined
+						: {
+								label: a.connectAgent,
+								hint: a.connectAgentHint,
+								href: `${agentSettings.linked.site}/account`
+							},
+				agentAddress:
+					agentSettings.linked === null || agentSettings.agentUrl === ''
+						? undefined
+						: {
+								label: a.agentAddress,
+								hint: a.agentAddressHint,
+								value: agentSettings.agentUrl,
+								show: a.show,
+								hide: a.hide,
+								copy: a.copy,
+								copied: a.copied,
+								share: a.share
+							},
+				reconnect: a.reconnect,
+				disconnect: a.disconnect,
+				ownBridge: a.ownBridge,
+				ownOpen: agentSettings.token.trim() !== ''
+			},
+			wallets: {
+				title: a.wallets,
+				hint: a.walletsHint,
+				none: agentSettings.wallets.length === 0 ? a.walletsNone : undefined,
+				rows: session.view.accounts.map((row) => ({
+					id: `agent-wallet-${row.account.address}`,
+					title: row.account.name,
+					subtitle: `${row.account.address.slice(0, 6)}…${row.account.address.slice(-4)}`,
+					on: agentSettings.wallets.some(
+						(w) => w.toLowerCase() === row.account.address.toLowerCase()
+					)
+				}))
+			}
 		};
 	});
+
+	/** Why connecting with clientmcp.dev did not work, in the person's words. */
+	function linkProblem(problem: LinkProblem): string {
+		const a = m.agent;
+		switch (problem.kind) {
+			case 'refused':
+				return fill(a.linkRefused, { reason: problem.detail });
+			case 'unavailable':
+				return a.linkUnavailable;
+			case 'expired':
+				return a.linkExpired;
+			case 'not_ours':
+				return a.linkNotOurs;
+			case 'network':
+				return a.linkNetwork;
+			default:
+				return a.linkFailed;
+		}
+	}
 
 	/** Its row, in 高级 after the service endpoints — the other "which server" row. */
 	const agentRow = $derived<SettingsRowModel>({

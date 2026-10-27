@@ -32,11 +32,20 @@ struct AgentConfig: Equatable {
     var url = ""
     /// A ClientMCP client token for this wallet.
     var token = ""
+    /// Spec 106: whose the token is, when clientmcp.dev issued it.
+    var linked: AgentLinkedTo?
+    /// Spec 106: the MCP server address clientmcp.dev gave for the person's
+    /// AI agent, its token in the path — the Keychain's, like the token.
+    var agentUrl = ""
+    /// Spec 107 E8: the wallets the agent may use; none unless the person
+    /// says so. Stored in the record (not a secret).
+    var wallets: [String] = []
 
-    init(enabled: Bool = false, url: String = "", token: String = "") {
+    init(enabled: Bool = false, url: String = "", token: String = "", linked: AgentLinkedTo? = nil) {
         self.enabled = enabled
         self.url = url
         self.token = token
+        self.linked = linked
     }
 
     /// What is stored; anything unreadable reads as off. A `token` in the
@@ -45,16 +54,46 @@ struct AgentConfig: Equatable {
         enabled = object["enabled"] as? Bool ?? false
         url = object["url"] as? String ?? ""
         token = object["token"] as? String ?? ""
+        linked = (object["linked"] as? [String: Any]).flatMap(AgentLinkedTo.init)
+        wallets = object["wallets"] as? [String] ?? []
     }
 
     /// The record as stored: no token.
-    var record: [String: Any] { ["enabled": enabled, "url": url] }
+    var record: [String: Any] {
+        var record: [String: Any] = ["enabled": enabled, "url": url, "wallets": wallets]
+        if let linked { record["linked"] = linked.record }
+        return record
+    }
 
     /// Whether the bridge can be dialled with what is entered.
     var ready: Bool {
         enabled && agentBridgeUrlProblem(url: url) == nil
             && !token.trimmingCharacters(in: .whitespaces).isEmpty
     }
+}
+
+/// Who clientmcp.dev issued the token to — stored as the web stores it
+/// (`{ site, login, clientId }`), not a secret.
+struct AgentLinkedTo: Equatable {
+    let site: String
+    let login: String
+    let clientId: String
+
+    init(site: String, login: String, clientId: String) {
+        self.site = site
+        self.login = login
+        self.clientId = clientId
+    }
+
+    init?(_ object: [String: Any]) {
+        guard let site = object["site"] as? String,
+              let login = object["login"] as? String,
+              let clientId = object["clientId"] as? String
+        else { return nil }
+        self.init(site: site, login: login, clientId: clientId)
+    }
+
+    var record: [String: Any] { ["site": site, "login": login, "clientId": clientId] }
 }
 
 /// One of the agent's requests waiting for the person.
@@ -127,6 +166,8 @@ final class AgentStore {
     @ObservationIgnored private let shelf: VelaStore
     /// The client token's place: the Keychain.
     @ObservationIgnored private let vault: AgentTokenVault
+    /// Spec 106: the agent's address's place: the Keychain too.
+    @ObservationIgnored private let agentUrlVault: AgentTokenVault
     @ObservationIgnored private var core: AgentCore!
     /// Whether the app is in front: the agent answers only then. Not until
     /// the scene says so — a launch into the background dials nothing.
@@ -135,9 +176,14 @@ final class AgentStore {
     /// nothing is not a reconnect.
     @ObservationIgnored private var dialled: AgentConfig?
 
-    init(shelf: VelaStore, vault: AgentTokenVault = KeychainTokenVault()) {
+    init(
+        shelf: VelaStore,
+        vault: AgentTokenVault = KeychainTokenVault(),
+        agentUrlVault: AgentTokenVault = KeychainTokenVault(account: "agent-url")
+    ) {
         self.shelf = shelf
         self.vault = vault
+        self.agentUrlVault = agentUrlVault
         var config = AgentConfig(shelf.readObject(VelaStore.Key.agent))
         if config.token.isEmpty {
             config.token = vault.read() ?? ""
@@ -146,6 +192,7 @@ final class AgentStore {
             // the record written again without it.
             shelf.writeObject(VelaStore.Key.agent, config.record)
         }
+        if config.linked != nil { config.agentUrl = agentUrlVault.read() ?? "" }
         self.config = config
         let bridge = AgentShellBridge()
         self.core = AgentCore(shell: bridge, device: "phone")
@@ -172,7 +219,9 @@ final class AgentStore {
     /// values the sweep finds.
     func forgetToken() {
         vault.delete()
+        agentUrlVault.delete()
         config.token = ""
+        config.agentUrl = ""
     }
 
     private func connect() {
@@ -184,18 +233,65 @@ final class AgentStore {
     }
 
     /// The `configure_agent` intent, performed: what is `nil` stays as it is.
-    func apply(enabled: Bool?, url: String?, token: String?) {
+    func apply(enabled: Bool?, url: String?, token: String?, wallets: [String]? = nil) {
         var next = config
+        if let wallets { next.wallets = wallets.map { $0.trimmingCharacters(in: .whitespaces) } }
         if let enabled { next.enabled = enabled }
         if let url { next.url = url.trimmingCharacters(in: .whitespaces) }
         if let token {
             next.token = token.trimmingCharacters(in: .whitespaces)
+            // A token from anywhere else is no longer clientmcp.dev's, nor is
+            // the agent's address that came with it.
+            next.linked = nil
+            next.agentUrl = ""
+            agentUrlVault.delete()
             // The Keychain's; a token it would not keep is kept for this run only.
             if next.token.isEmpty { vault.delete() } else { vault.write(next.token) }
         }
         config = next
         shelf.writeObject(VelaStore.Key.agent, next.record)
         connect()
+    }
+
+    /// Spec 106: after the person's `configure_agent` with what clientmcp.dev
+    /// issued, whose it is — kept so Settings can say so.
+    func setLinked(_ linked: AgentLinkedTo?, agentUrl: String? = nil) {
+        config.linked = linked
+        let url = linked == nil ? "" : (agentUrl ?? "")
+        config.agentUrl = url
+        if url.isEmpty { agentUrlVault.delete() } else { agentUrlVault.write(url) }
+        shelf.writeObject(VelaStore.Key.agent, config.record)
+    }
+
+    /// Spec 106: connect (or reconnect) with clientmcp.dev — the person signs
+    /// in there; what it issues is applied as their own `configure_agent`.
+    /// `nil` when connected, else why not (`.cancelled` included).
+    func connectWithClientMCP() async -> AgentLinkProblem? {
+        let session = AgentLinkSession()
+        do {
+            let (linked, site) = try await session.run(shelf: shelf)
+            var change: [String: Any] = [
+                "type": "configure_agent",
+                "enabled": true,
+                "bridge_url": linked.bridgeUrl,
+                "client_token": linked.clientToken,
+            ]
+            // E8: the first connection offers the wallet in front; a list the
+            // person already chose is kept.
+            let active = graph?.session.view.address ?? ""
+            if config.wallets.isEmpty, !active.isEmpty { change["wallets"] = [active] }
+            let outcome = await person(change)
+            guard outcome.done else { return .failed }
+            setLinked(
+                AgentLinkedTo(site: site, login: linked.login, clientId: linked.clientId),
+                agentUrl: linked.agentUrl
+            )
+            return nil
+        } catch let problem as AgentLinkProblem {
+            return problem
+        } catch {
+            return .failed
+        }
     }
 
     /// Read again what the core holds — on its `changed`.

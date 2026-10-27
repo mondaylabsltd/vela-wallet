@@ -1438,6 +1438,36 @@ class BrowserController(
         exploreHost.dispatch(ExploreEvent.SystemGroupHiddenSet(group, hidden), ExploreEvent.serializer())
     fun clearRecent() = bhistHost.dispatch(BhistEvent.ClearAll, BhistEvent.serializer())
 
+    // -- the AI agent (spec 107) ---------------------------------------------------
+
+    /** Forget one recently visited site. */
+    fun forgetRecent(origin: String) = bhistHost.dispatch(BhistEvent.DeleteOrigin(origin), BhistEvent.serializer())
+
+    /** Pin a site by its address (the page in front's star pins only that page). */
+    fun addFavorite(url: String) = whenReady {
+        exploreHost.dispatch(ExploreEvent.FavoriteAdded(url = url, title = null, now_ms = now()), ExploreEvent.serializer())
+    }
+
+    /** The network a connected site sees — any site's, not only the page in front's. */
+    fun setSiteChain(origin: String, chainId: Int) = dispatch(DbrEvent.SiteChainPicked(origin, chainId))
+
+    /**
+     * Explore as the agent reads it (the core's `explore_facts`, `ExploreFacts`
+     * JSON): the tabs, the lists, the connected sites, a dApp's request.
+     * [sheet]: the request whose sheet the person sees.
+     */
+    fun agentFacts(sheet: String?): String {
+        val engine = _current.value?.state?.value
+        return uniffi.vela_core_uniffi.intentExploreFacts(
+            exploreHost.viewJson.value ?: "null",
+            dbrHost.viewJson.value ?: "null",
+            bhistHost.viewJson.value ?: "null",
+            engine?.canBack == true,
+            engine?.canForward == true,
+            sheet,
+        )
+    }
+
     private companion object {
         /** How long an open waits for the core to apply it before carrying on regardless. */
         const val SETTLE_MS = 5_000L

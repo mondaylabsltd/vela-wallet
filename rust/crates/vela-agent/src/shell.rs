@@ -276,6 +276,7 @@ impl Agent {
                 enabled: Some(false),
                 bridge_url: None,
                 client_token: None,
+                wallets: None,
             },
             None,
         );
@@ -364,8 +365,16 @@ impl Live {
 
 impl Deps for Live {
     fn check(&mut self, actor: Actor, action: &Action) -> Check {
+        // The switch is the core's own state; the wallets it may use are the
+        // world's (spec 107 E8).
         let agent_enabled = self.inner.state().enabled;
-        core_intents::check(actor, action, &Grants { agent_enabled })
+        let world: vela_core::app::intent_rules::World =
+            serde_json::from_value(self.views()).unwrap_or_default();
+        let grants = Grants {
+            agent_enabled,
+            ..vela_core::app::intent_rules::grants(&world)
+        };
+        core_intents::check(actor, action, &grants)
     }
 
     fn world(&mut self) -> World {
