@@ -1,0 +1,78 @@
+/**
+ * What a multisig is on a chain RIGHT NOW, read through the wallet's own RPC
+ * pool — never through the genesis service, which is only how other devices
+ * find things. Who may approve, from which nonce, decides what the wallet
+ * signs, so it is read from the chain itself.
+ */
+import { poolRpcCall } from '$lib/services/rpc-pool';
+import { genesisMembers, type Genesis } from './kernel';
+
+const GET_OWNERS = '0xa0e67e2b';
+const GET_THRESHOLD = '0xe75235b8';
+const NONCE = '0xaffed0e0';
+
+/** The chain did not answer: nothing about the multisig can be said. */
+export class ChainUnavailableError extends Error {
+	constructor(
+		readonly chainId: number,
+		detail: string
+	) {
+		super(`chain ${chainId} unavailable: ${detail}`);
+		this.name = 'ChainUnavailableError';
+	}
+}
+
+async function rpc<T>(chainId: number, method: string, params: unknown[]): Promise<T> {
+	const answer = await poolRpcCall(method, params, chainId);
+	if (answer.error) throw new ChainUnavailableError(chainId, answer.error.message);
+	return answer.result as T;
+}
+
+export async function hasCode(chainId: number, address: string): Promise<boolean> {
+	const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
+	return typeof code === 'string' && code !== '0x' && code !== '0x0';
+}
+
+function ethCall(chainId: number, to: string, data: string): Promise<string> {
+	return rpc<string>(chainId, 'eth_call', [{ to, data }, 'latest']);
+}
+
+function word(hex: string, index: number): string {
+	const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+	return clean.slice(index * 64, index * 64 + 64);
+}
+
+function decodeAddresses(hex: string): string[] {
+	const offset = parseInt(word(hex, 0), 16) / 32;
+	const count = parseInt(word(hex, offset), 16);
+	const out: string[] = [];
+	for (let i = 0; i < count && i < 64; i += 1) out.push(`0x${word(hex, offset + 1 + i).slice(24)}`);
+	return out;
+}
+
+export interface ChainMembers {
+	/** Whether the multisig has code on this chain. When it has not, the rest is what its genesis creates there. */
+	deployed: boolean;
+	owners: string[];
+	threshold: number;
+	nonce: bigint;
+}
+
+/** The multisig's owners, threshold and nonce on `chainId`, from the chain (or, undeployed, its genesis). */
+export async function readMembers(chainId: number, safe: string, genesis: Genesis): Promise<ChainMembers> {
+	if (!(await hasCode(chainId, safe))) {
+		const { owners, threshold } = genesisMembers(genesis);
+		return { deployed: false, owners, threshold, nonce: 0n };
+	}
+	const [owners, threshold, nonce] = await Promise.all([
+		ethCall(chainId, safe, GET_OWNERS),
+		ethCall(chainId, safe, GET_THRESHOLD),
+		ethCall(chainId, safe, NONCE)
+	]);
+	return {
+		deployed: true,
+		owners: decodeAddresses(owners),
+		threshold: Number(BigInt(threshold)),
+		nonce: BigInt(nonce)
+	};
+}

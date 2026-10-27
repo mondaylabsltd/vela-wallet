@@ -26,6 +26,10 @@
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import type { MultisigMessages } from '$lib/multisig/messages';
+	import { multisig, type MultisigAccount } from '$lib/multisig/core/store.svelte';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import MultisigSwitcherSection from '$lib/multisig/ui/MultisigSwitcherSection.svelte';
 
 	interface Props {
 		copy: { accounts: SettingsMessages['accounts']; close: string };
@@ -34,9 +38,11 @@
 		oncreate: () => void;
 		onsignin: () => void;
 		onclose: () => void;
+		/** The multisig section's copy; absent draws no section (the settings page). */
+		multisigCopy?: MultisigMessages;
 	}
 
-	let { copy, wide, oncreate, onsignin, onclose }: Props = $props();
+	let { copy, wide, oncreate, onsignin, onclose, multisigCopy }: Props = $props();
 
 	const view = $derived(session.view);
 
@@ -53,7 +59,8 @@
 		return liveAccountsSheet(
 			{
 				rows: view.accounts,
-				activeIndex: view.active_index,
+				// A multisig shown: no Vela row is the active account.
+				activeIndex: multisig.active ? -1 : view.active_index,
 				balances,
 				hidden,
 				currency: currency.view,
@@ -66,6 +73,7 @@
 	// The switcher is on screen: the balance core refreshes every row's total
 	// for as long as it is, and stops when it goes.
 	onMount(() => {
+		multisig.boot();
 		void currency.boot();
 		balance.openSwitcher(session.view.accounts.map((row) => row.account.address));
 		return () => balance.closeSwitcher();
@@ -73,9 +81,20 @@
 
 	function select(position: number): void {
 		const row = view.accounts[position];
+		multisig.activate(null);
 		if (row !== undefined)
 			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 		onclose();
+	}
+
+	function selectMultisig(account: MultisigAccount): void {
+		multisig.activate(account.address);
+		onclose();
+	}
+
+	function openMultisig(kind: 'create' | 'add'): void {
+		onclose();
+		multisigUi.open({ kind });
 	}
 
 	/**
@@ -101,9 +120,24 @@
 			{oncreate}
 			{onsignin}
 		/>
+		{@render multisigSection()}
 	</Dialog>
 {:else}
 	<BottomSheet title={sheet.title} closeLabel={copy.close} height="tall" {onclose}>
 		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin} />
+		{@render multisigSection()}
 	</BottomSheet>
 {/if}
+
+{#snippet multisigSection()}
+	{#if multisigCopy}
+		<MultisigSwitcherSection
+			m={multisigCopy}
+			removeLabel={sheet.remove ?? ''}
+			cancelLabel={sheet.removeCancel ?? ''}
+			onselect={selectMultisig}
+			oncreate={() => openMultisig('create')}
+			onadd={() => openMultisig('add')}
+		/>
+	{/if}
+{/snippet}

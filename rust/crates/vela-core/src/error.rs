@@ -53,6 +53,8 @@ pub enum CoreError {
     RegistryMetadata(String),
     #[error("registry group proof could not be built: {0}")]
     RegistryProof(String),
+    #[error("multisig: {0}")]
+    Multisig(String),
     #[error("internal invariant violated: {0}")]
     Internal(String),
 }
@@ -83,6 +85,7 @@ impl CoreError {
             CoreError::I18nCatalogParse(_) => "I18nCatalogParse",
             CoreError::RegistryMetadata(_) => "RegistryMetadata",
             CoreError::RegistryProof(_) => "RegistryProof",
+            CoreError::Multisig(_) => "Multisig",
             CoreError::Internal(_) => "Internal",
         }
     }

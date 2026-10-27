@@ -103,7 +103,8 @@ impl From<vela_core::CoreError> for CoreError {
             E::I18nCatalogParse(_) => CoreError::I18nCatalogParse(msg),
             E::RegistryMetadata(_) => CoreError::RegistryMetadata(msg),
             E::RegistryProof(_) => CoreError::RegistryProof(msg),
-            E::Internal(_) => CoreError::Internal(msg),
+            // Multisig rules reach the phones only once they integrate it.
+            E::Multisig(_) | E::Internal(_) => CoreError::Internal(msg),
         }
     }
 }

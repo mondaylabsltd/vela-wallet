@@ -42,6 +42,7 @@ mod identicon_features;
 #[cfg(feature = "identicon-raster")]
 pub mod identicon_raster;
 pub mod l10n;
+pub mod multisig;
 pub mod passkey;
 mod passkey_catalog;
 pub mod prefs;

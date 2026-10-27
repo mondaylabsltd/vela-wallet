@@ -2947,3 +2947,12 @@ mod core_082_exports {
         assert!(balance_read_plan_inner(8453, "{", None, "").is_err());
     }
 }
+
+/// **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
+/// arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
+/// the executor's calls and the review. The shell moves JSON; the rules are
+/// the core's.
+#[wasm_bindgen(js_name = multisigCall)]
+pub fn multisig_call(method: &str, args_json: &str) -> JsResult<String> {
+    vela_core::multisig::call_json(method, args_json).map_err(err)
+}

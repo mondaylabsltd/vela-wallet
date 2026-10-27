@@ -74,6 +74,11 @@
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
+	import { fillTemplate } from '$lib/i18n/fill';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import MultisigPanel from '$lib/multisig/ui/MultisigPanel.svelte';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
@@ -190,14 +195,25 @@
 	 * rendered from the address, never from the name.
 	 */
 	const identity = $derived<WalletIdentity | null>(
-		signedIn
-			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
-					address: view.address,
-					identiconSvg: identiconSvgForClient(view.address)
-				}
-			: null
+		!signedIn
+			? null
+			: multisig.active
+				? {
+						// A multisig has no name of its own: its rule stands in for one.
+						name: fillTemplate(data.multisigMessages.switcher.rowName, {
+							m: multisig.active.threshold,
+							n: multisig.active.owners.length
+						}),
+						address: multisig.active.address,
+						identiconSvg: identiconSvgForClient(multisig.active.address)
+					}
+				: {
+						name: view.accounts[view.active_index]?.account.name ?? '',
+						address: view.address,
+						identiconSvg: identiconSvgForClient(view.address)
+					}
 	);
+	$effect(() => multisig.boot());
 
 	/**
 	 * The account switcher (founder call, 2026-09-05), opened from the header's
@@ -1961,6 +1977,11 @@
 		// except the token screen and the token's code, which ARE the asset.
 		if (entry !== 'token-detail' && entry !== 'receive-token') selectedAssetId = null;
 		if (detail?.assetId !== undefined) selectedAssetId = detail.assetId;
+		// A multisig's send is a proposal its members approve (docs/multisig-vault-design.md §5).
+		if (entry === 'send' && multisig.active) {
+			multisigUi.open({ kind: 'propose', assetId: detail?.assetId });
+			return;
+		}
 		if (entry === 'send') {
 			nav.enter(entry);
 			const token =
@@ -2406,6 +2427,9 @@
 <!-- "Get Vela on your phone" — draws nothing until the store links exist
      (`$lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
+	{#if multisig.active}
+		<MultisigPanel m={data.multisigMessages} account={multisig.active} />
+	{/if}
 	<AppPrompt placement="home" messages={data.appPrompt} />
 {/snippet}
 
@@ -2514,6 +2538,18 @@
 		oncreate={() => void goto(createHref)}
 		onsignin={() => void goto(welcome)}
 		onclose={() => (switching = false)}
+		multisigCopy={data.multisigMessages}
+	/>
+{/if}
+
+{#if identity}
+	<MultisigHost
+		m={data.multisigMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={data.walletMessages.identiconViewer.close}
+		current={view.address || null}
+		tokens={balance.view.tokens}
 	/>
 {/if}
 

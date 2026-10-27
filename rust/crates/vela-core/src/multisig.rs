@@ -1,0 +1,974 @@
+//! Multisig accounts: a standard Safe (v1.4.1, M-of-N) whose owners are Vela
+//! accounts (and possibly other addresses). See
+//! `docs/multisig-vault-design.md`.
+//!
+//! Everything here is a pure rule — the shell fetches, stores and signs:
+//!
+//! - **Genesis** ([`multisig_genesis`]): a multisig is created without being
+//!   deployed. Its address is fixed by its genesis — owners IN THE ORDER GIVEN,
+//!   threshold, a salt nonce — on every chain; the first execution on a chain
+//!   deploys it. The genesis is recorded in the Safe Genesis Registry, so
+//!   another device needs only the address.
+//! - **Approvals** ([`approval_challenge`], [`approval_from_assertion`],
+//!   [`verify_approval`]): an owner that is a Vela account approves a SafeTx
+//!   through EIP-1271. A v1.4.1 Safe calls the owner's legacy
+//!   `isValidSignature(txHashData, sig)`; the owner's handler (Safe4337Module
+//!   inherits `CompatibilityFallbackHandler`) checks
+//!   `SafeMessage(keccak256(txHashData))` — i.e. `SafeMessage(safeTxHash)` —
+//!   under the OWNER's domain, which is what the owner's passkey signs. NOT
+//!   [`crate::user_op::compute_safe_message_hash`], whose extra keccak is the
+//!   dApp path (`isValidSignature(bytes32, …)`): a dApp signature can never
+//!   pass for an approval.
+//! - **Execution** ([`execution_calls`]): the executor — an owner that is a
+//!   Vela account on this device — sends ONE user operation: deploy the
+//!   multisig and any approving owner that has no code there yet (both are
+//!   permissionless, from their geneses), then `execTransaction`. The
+//!   executor counts as an approval of its own (`v = 1`, `msg.sender`).
+//! - **Review** ([`review`]): what a SafeTx does, decoded by the core, and
+//!   whether Vela signs it at all. Vela signs only shapes it can read in full,
+//!   with no delegatecall (except to MultiSendCallOnly) and no gas refund.
+
+use alloy_primitives::{Address, B256, U256, keccak256};
+use serde::{Deserialize, Serialize};
+
+use crate::error::CoreError;
+use crate::primitives;
+use crate::P256PublicKey;
+use crate::safe;
+use crate::user_op::{self, WalletKey};
+
+/// Safe v1.4.1 `CompatibilityFallbackHandler`: what a multisig's EIP-1271
+/// answers come from.
+pub const COMPATIBILITY_FALLBACK_HANDLER: &str = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99";
+/// Safe v1.4.1 `MultiSendCallOnly`: the one delegatecall target Vela signs.
+pub const MULTI_SEND_CALL_ONLY: &str = "0x9641d764fc13c8B624c04430C7356C1C7C8102e2";
+/// The most owners a multisig Vela creates may have.
+pub const MAX_OWNERS: usize = 20;
+/// Safe's owner linked-list sentinel.
+const SENTINEL: Address = Address::new([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+
+const SAFE_TX_TYPEHASH_PREIMAGE: &str = "SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)";
+
+fn err(message: impl Into<String>) -> CoreError {
+    CoreError::Multisig(message.into())
+}
+
+fn addr(s: &str) -> Result<Address, CoreError> {
+    s.parse::<Address>().map_err(|_| err(format!("not an address: {s}")))
+}
+
+fn word_u256(v: U256) -> [u8; 32] {
+    v.to_be_bytes::<32>()
+}
+
+fn word_addr(a: Address) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[12..].copy_from_slice(a.as_slice());
+    w
+}
+
+fn word_usize(n: usize) -> [u8; 32] {
+    word_u256(U256::from(n))
+}
+
+fn pad32(len: usize) -> usize {
+    (32 - len % 32) % 32
+}
+
+/// `abi.encode(bytes)` tail: length word, data, zero padding.
+fn bytes_tail(data: &[u8]) -> Vec<u8> {
+    let mut out = word_usize(data.len()).to_vec();
+    out.extend_from_slice(data);
+    out.extend(std::iter::repeat_n(0u8, pad32(data.len())));
+    out
+}
+
+fn selector(signature: &str) -> [u8; 4] {
+    let h = keccak256(signature.as_bytes());
+    [h[0], h[1], h[2], h[3]]
+}
+
+fn hex(data: &[u8]) -> String {
+    primitives::to_hex(data, true)
+}
+
+fn unhex(s: &str) -> Result<Vec<u8>, CoreError> {
+    primitives::from_hex(s)
+}
+
+fn quantity(s: &str) -> Result<U256, CoreError> {
+    let clean = s.trim();
+    if let Some(h) = clean.strip_prefix("0x") {
+        if h.is_empty() {
+            return Ok(U256::ZERO);
+        }
+        U256::from_str_radix(h, 16).map_err(|_| err(format!("not a quantity: {s}")))
+    } else {
+        U256::from_str_radix(clean, 10).map_err(|_| err(format!("not a quantity: {s}")))
+    }
+}
+
+fn hex_quantity(v: U256) -> String {
+    format!("{v:#x}")
+}
+
+// ---------------------------------------------------------------------------
+// Wire types (JSON, the same shapes the genesis service speaks)
+// ---------------------------------------------------------------------------
+
+/// A Safe's creation parameters, as the registry stores them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Genesis {
+    pub factory: String,
+    pub singleton: String,
+    /// Hex quantity.
+    pub salt_nonce: String,
+    pub initializer: String,
+}
+
+/// A multisig created here: its genesis and the address it gives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultisigGenesis {
+    pub address: String,
+    pub genesis: Genesis,
+    pub owners: Vec<String>,
+    pub threshold: u64,
+}
+
+/// A Safe transaction, as `execTransaction` takes it. Quantities are hex.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeTx {
+    pub to: String,
+    pub value: String,
+    pub data: String,
+    pub operation: u8,
+    pub safe_tx_gas: String,
+    pub base_gas: String,
+    pub gas_price: String,
+    pub gas_token: String,
+    pub refund_receiver: String,
+    pub nonce: String,
+}
+
+/// One owner's approval of a safeTxHash, by one of its passkeys — the
+/// genesis service's `PasskeyApproval`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyApproval {
+    pub owner: String,
+    pub owner_genesis: Genesis,
+    pub signer: String,
+    pub authenticator_data: String,
+    pub client_data_fields: String,
+    /// Hex quantities.
+    pub r: String,
+    pub s: String,
+}
+
+/// One call of the executor's user operation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Call {
+    pub to: String,
+    /// Hex quantity.
+    pub value: String,
+    pub data: String,
+}
+
+// ---------------------------------------------------------------------------
+// Genesis
+// ---------------------------------------------------------------------------
+
+/// `setup(owners, threshold, 0, "", handler, 0, 0, 0)`.
+fn encode_setup(owners: &[Address], threshold: u64, fallback_handler: Address) -> Vec<u8> {
+    let mut out = selector("setup(address[],uint256,address,bytes,address,address,uint256,address)").to_vec();
+    out.extend_from_slice(&word_usize(0x100)); // owners offset (8 head words)
+    out.extend_from_slice(&word_u256(U256::from(threshold)));
+    out.extend_from_slice(&word_addr(Address::ZERO)); // no setup hook
+    out.extend_from_slice(&word_usize(0x100 + 32 + owners.len() * 32)); // data offset
+    out.extend_from_slice(&word_addr(fallback_handler));
+    out.extend_from_slice(&word_addr(Address::ZERO));
+    out.extend_from_slice(&word_u256(U256::ZERO));
+    out.extend_from_slice(&word_addr(Address::ZERO));
+    out.extend_from_slice(&word_usize(owners.len()));
+    for o in owners {
+        out.extend_from_slice(&word_addr(*o));
+    }
+    out.extend_from_slice(&word_usize(0)); // data: empty bytes
+    out
+}
+
+fn proxy_init_code_hash() -> Result<B256, CoreError> {
+    let mut code = unhex(safe::PROXY_CREATION_CODE)?;
+    code.extend_from_slice(&word_addr(addr(safe::SAFE_SINGLETON)?));
+    Ok(keccak256(code))
+}
+
+/// The address a genesis deploys to through Safe's v1.4.1 factory.
+pub fn genesis_address(g: &Genesis) -> Result<String, CoreError> {
+    if !g.factory.eq_ignore_ascii_case(safe::SAFE_PROXY_FACTORY) || !g.singleton.eq_ignore_ascii_case(safe::SAFE_SINGLETON) {
+        return Err(err("only Safe v1.4.1 (L2) geneses are supported"));
+    }
+    let init = unhex(&g.initializer)?;
+    let mut salt = keccak256(&init).to_vec();
+    salt.extend_from_slice(&word_u256(quantity(&g.salt_nonce)?));
+    let salt = keccak256(salt);
+    let a = addr(safe::SAFE_PROXY_FACTORY)?.create2(salt, proxy_init_code_hash()?);
+    Ok(a.to_checksum(None))
+}
+
+/// A new multisig's genesis: Safe L2 v1.4.1 — the singleton every Vela account
+/// uses, so the address is the same on every chain — with
+/// `CompatibilityFallbackHandler`, no setup hook, no module. `owners` keep the
+/// order given: it is part of the address.
+pub fn multisig_genesis(owners: &[String], threshold: u64, salt_nonce: &str) -> Result<MultisigGenesis, CoreError> {
+    if owners.is_empty() {
+        return Err(err("a multisig needs at least one owner"));
+    }
+    if owners.len() > MAX_OWNERS {
+        return Err(err(format!("at most {MAX_OWNERS} owners")));
+    }
+    let parsed = owners.iter().map(|o| addr(o)).collect::<Result<Vec<_>, _>>()?;
+    for (i, o) in parsed.iter().enumerate() {
+        if *o == Address::ZERO || *o == SENTINEL {
+            return Err(err(format!("{o} cannot be an owner")));
+        }
+        if parsed[..i].contains(o) {
+            return Err(err(format!("{o} is listed twice")));
+        }
+    }
+    if threshold == 0 || threshold as usize > parsed.len() {
+        return Err(err("the threshold must be between 1 and the number of owners"));
+    }
+    let genesis = Genesis {
+        factory: addr(safe::SAFE_PROXY_FACTORY)?.to_checksum(None),
+        singleton: addr(safe::SAFE_SINGLETON)?.to_checksum(None),
+        salt_nonce: hex_quantity(quantity(salt_nonce)?),
+        initializer: hex(&encode_setup(&parsed, threshold, addr(COMPATIBILITY_FALLBACK_HANDLER)?)),
+    };
+    Ok(MultisigGenesis {
+        address: genesis_address(&genesis)?,
+        genesis,
+        owners: parsed.iter().map(|o| o.to_checksum(None)).collect(),
+        threshold,
+    })
+}
+
+/// A Vela account's own genesis, from its founding keys (`keys[0]` first, as
+/// the account stores them).
+pub fn vela_account_genesis(keys: &[WalletKey]) -> Result<(String, Genesis), CoreError> {
+    let parsed = keys.iter().map(|k| safe::parse_public_key(&k.public_key_hex)).collect::<Result<Vec<_>, _>>()?;
+    let info = safe::compute_safe_address_multi(&parsed)?;
+    Ok((
+        info.address.clone(),
+        Genesis {
+            factory: addr(safe::SAFE_PROXY_FACTORY)?.to_checksum(None),
+            singleton: addr(safe::SAFE_SINGLETON)?.to_checksum(None),
+            salt_nonce: hex_quantity(U256::from_be_slice(&info.salt_nonce)),
+            initializer: hex(&info.setup_data),
+        },
+    ))
+}
+
+/// `createProxyWithNonce(singleton, initializer, saltNonce)`: deploys a genesis.
+pub fn deploy_call(g: &Genesis) -> Result<Call, CoreError> {
+    let init = unhex(&g.initializer)?;
+    let mut data = selector("createProxyWithNonce(address,bytes,uint256)").to_vec();
+    data.extend_from_slice(&word_addr(addr(&g.singleton)?));
+    data.extend_from_slice(&word_usize(0x60));
+    data.extend_from_slice(&word_u256(quantity(&g.salt_nonce)?));
+    data.extend(bytes_tail(&init));
+    Ok(Call { to: addr(&g.factory)?.to_checksum(None), value: "0x0".into(), data: hex(&data) })
+}
+
+/// The owners and threshold a genesis creates (only for geneses this module
+/// writes or Vela accounts' — a plain `setup` call).
+pub fn genesis_members(g: &Genesis) -> Result<(Vec<String>, u64), CoreError> {
+    let init = unhex(&g.initializer)?;
+    if init.len() < 4 + 9 * 32 || init[..4] != selector("setup(address[],uint256,address,bytes,address,address,uint256,address)") {
+        return Err(err("not a Safe setup call"));
+    }
+    let body = &init[4..];
+    let word = |i: usize| -> Result<U256, CoreError> {
+        body.get(i..i + 32).map(U256::from_be_slice).ok_or_else(|| err("truncated setup"))
+    };
+    let offset: usize = word(0)?.try_into().map_err(|_| err("bad owners offset"))?;
+    let threshold: u64 = word(32)?.try_into().map_err(|_| err("bad threshold"))?;
+    let count: usize = word(offset)?.try_into().map_err(|_| err("bad owners length"))?;
+    if count > 64 {
+        return Err(err("too many owners"));
+    }
+    let mut owners = Vec::with_capacity(count);
+    for i in 0..count {
+        let w = word(offset + 32 + i * 32)?;
+        owners.push(Address::from_word(B256::from(w)).to_checksum(None));
+    }
+    Ok((owners, threshold))
+}
+
+// ---------------------------------------------------------------------------
+// Hashes
+// ---------------------------------------------------------------------------
+
+fn domain_separator(chain_id: u64, safe: Address) -> B256 {
+    let mut d = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)").to_vec();
+    d.extend_from_slice(&word_u256(U256::from(chain_id)));
+    d.extend_from_slice(&word_addr(safe));
+    keccak256(d)
+}
+
+fn eip712(domain: B256, struct_hash: B256) -> B256 {
+    let mut p = vec![0x19, 0x01];
+    p.extend_from_slice(domain.as_slice());
+    p.extend_from_slice(struct_hash.as_slice());
+    keccak256(p)
+}
+
+struct ParsedTx {
+    to: Address,
+    value: U256,
+    data: Vec<u8>,
+    operation: u8,
+    safe_tx_gas: U256,
+    base_gas: U256,
+    gas_price: U256,
+    gas_token: Address,
+    refund_receiver: Address,
+    nonce: U256,
+}
+
+fn parse_tx(tx: &SafeTx) -> Result<ParsedTx, CoreError> {
+    Ok(ParsedTx {
+        to: addr(&tx.to)?,
+        value: quantity(&tx.value)?,
+        data: unhex(&tx.data)?,
+        operation: tx.operation,
+        safe_tx_gas: quantity(&tx.safe_tx_gas)?,
+        base_gas: quantity(&tx.base_gas)?,
+        gas_price: quantity(&tx.gas_price)?,
+        gas_token: addr(&tx.gas_token)?,
+        refund_receiver: addr(&tx.refund_receiver)?,
+        nonce: quantity(&tx.nonce)?,
+    })
+}
+
+/// The safeTxHash of `tx` for `safe` on `chain_id`.
+pub fn safe_tx_hash(chain_id: u64, safe: &str, tx: &SafeTx) -> Result<String, CoreError> {
+    let t = parse_tx(tx)?;
+    let mut s = keccak256(SAFE_TX_TYPEHASH_PREIMAGE).to_vec();
+    s.extend_from_slice(&word_addr(t.to));
+    s.extend_from_slice(&word_u256(t.value));
+    s.extend_from_slice(keccak256(&t.data).as_slice());
+    s.extend_from_slice(&word_u256(U256::from(t.operation)));
+    s.extend_from_slice(&word_u256(t.safe_tx_gas));
+    s.extend_from_slice(&word_u256(t.base_gas));
+    s.extend_from_slice(&word_u256(t.gas_price));
+    s.extend_from_slice(&word_addr(t.gas_token));
+    s.extend_from_slice(&word_addr(t.refund_receiver));
+    s.extend_from_slice(&word_u256(t.nonce));
+    Ok(hex(eip712(domain_separator(chain_id, addr(safe)?), keccak256(s)).as_slice()))
+}
+
+/// What an owner's passkey signs to approve `safe_tx_hash`: the hash the
+/// owner's compatibility handler checks for a v1.4.1 Safe asking it,
+/// `SafeMessage(safeTxHash)` under the OWNER's domain.
+pub fn approval_challenge(chain_id: u64, owner: &str, safe_tx_hash: &str) -> Result<String, CoreError> {
+    let h = unhex(safe_tx_hash)?;
+    if h.len() != 32 {
+        return Err(err("safeTxHash must be 32 bytes"));
+    }
+    let mut s = keccak256("SafeMessage(bytes message)").to_vec();
+    s.extend_from_slice(&h);
+    Ok(hex(eip712(domain_separator(chain_id, addr(owner)?), keccak256(s)).as_slice()))
+}
+
+// ---------------------------------------------------------------------------
+// Approvals
+// ---------------------------------------------------------------------------
+
+/// A passkey assertion over [`approval_challenge`], as an approval the genesis
+/// service and the multisig accept. `keys` are the owner account's founding
+/// keys (`keys[0]` first); `credential_id` the key that signed.
+pub fn approval_from_assertion(
+    keys: &[WalletKey],
+    credential_id: &str,
+    authenticator_data_hex: &str,
+    client_data_json_hex: &str,
+    signature_der_hex: &str,
+) -> Result<PasskeyApproval, CoreError> {
+    let authenticator_data = unhex(authenticator_data_hex)?;
+    let client_data_json = unhex(client_data_json_hex)?;
+    crate::webauthn::validate_client_data(crate::ClientDataKind::Get, &client_data_json, &authenticator_data)?;
+    let raw = crate::webauthn::der_signature_to_raw_low_s(&unhex(signature_der_hex)?)?;
+    let (owner, owner_genesis) = vela_account_genesis(keys)?;
+    let signer = user_op::signer_address_for(keys, Some(credential_id))?;
+    Ok(PasskeyApproval {
+        owner: addr(&owner)?.to_checksum(None),
+        owner_genesis,
+        signer: addr(&signer)?.to_checksum(None),
+        authenticator_data: hex(&authenticator_data),
+        client_data_fields: user_op::extract_client_data_fields(&client_data_json),
+        r: hex_quantity(U256::from_be_slice(&raw[..32])),
+        s: hex_quantity(U256::from_be_slice(&raw[32..])),
+    })
+}
+
+/// The owner keys a Vela account's setup carries: the shared signer's
+/// `configure`d key first, then each `createSigner` key in setup order.
+fn vela_setup_keys(initializer: &[u8]) -> Result<Vec<P256PublicKey>, CoreError> {
+    let configure = selector("configure((uint256,uint256,uint176))");
+    let create_signer = selector("createSigner(uint256,uint256,uint176)");
+    let mut keys = Vec::new();
+    // Scan for the two calls the Vela setup MultiSend carries; the result is
+    // trusted only after the keys rebuild the very same initializer (below).
+    let mut i = 0;
+    while i + 4 + 64 <= initializer.len() {
+        let sel = &initializer[i..i + 4];
+        if sel == configure || sel == create_signer {
+            keys.push(P256PublicKey {
+                x: initializer[i + 4..i + 36].to_vec(),
+                y: initializer[i + 36..i + 68].to_vec(),
+            });
+            i += 68;
+        } else {
+            i += 1;
+        }
+    }
+    if keys.is_empty() {
+        return Err(err("not a Vela account setup"));
+    }
+    Ok(keys)
+}
+
+/// Check an approval the way the chain will: the owner genesis is a Vela
+/// account's (its keys rebuild exactly that initializer, and it deploys to
+/// `owner`), `signer` is one of its keys' signers, the assertion is
+/// user-verified and its signature is that key's over the approval challenge.
+pub fn verify_approval(chain_id: u64, safe_tx_hash: &str, a: &PasskeyApproval) -> Result<(), CoreError> {
+    let initializer = unhex(&a.owner_genesis.initializer)?;
+    let keys = vela_setup_keys(&initializer)?;
+    let info = safe::compute_safe_address_multi(&keys)?;
+    if info.setup_data != initializer
+        || U256::from_be_slice(&info.salt_nonce) != quantity(&a.owner_genesis.salt_nonce)?
+        || addr(&info.address)? != addr(&a.owner)?
+        || genesis_address(&a.owner_genesis)? != addr(&a.owner)?.to_checksum(None)
+    {
+        return Err(err("the owner genesis is not this owner's Vela account"));
+    }
+    let signer = addr(&a.signer)?;
+    let key = keys
+        .iter()
+        .enumerate()
+        .find(|(i, k)| {
+            let s = if *i == 0 {
+                safe::WEBAUTHN_SIGNER.to_owned()
+            } else {
+                safe::compute_webauthn_signer_address(&k.x, &k.y).unwrap_or_default()
+            };
+            s.parse::<Address>().ok() == Some(signer)
+        })
+        .map(|(_, k)| k)
+        .ok_or_else(|| err("the signer is not one of the owner's keys"))?;
+    let auth = unhex(&a.authenticator_data)?;
+    if auth.len() < 37 || auth[32] & 0x04 == 0 {
+        return Err(err("the approval is not user-verified"));
+    }
+    let challenge = unhex(&approval_challenge(chain_id, &a.owner, safe_tx_hash)?)?;
+    let json = format!(
+        "{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",{}}}",
+        primitives::to_base64url(&challenge),
+        a.client_data_fields
+    );
+    let digest = crate::webauthn::webauthn_signing_hash(&auth, json.as_bytes());
+    let mut rs = word_u256(quantity(&a.r)?).to_vec();
+    rs.extend_from_slice(&word_u256(quantity(&a.s)?));
+    let sig = p256::ecdsa::Signature::from_slice(&rs).map_err(|_| err("unreadable signature"))?;
+    let mut point = vec![0x04];
+    point.extend_from_slice(&key.x);
+    point.extend_from_slice(&key.y);
+    let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&point).map_err(|_| err("bad owner key"))?;
+    use p256::ecdsa::signature::hazmat::PrehashVerifier;
+    let sig = sig.normalize_s();
+    vk.verify_prehash(&digest, &sig).map_err(|_| err("the approval signature does not verify"))
+}
+
+/// The signature bytes `execTransaction` takes: one entry per approval,
+/// ordered by owner address as Safe requires — a contract signature
+/// (`r = owner, s = offset, v = 0`, the owner's own EIP-1271 envelope in the
+/// tail) per passkey approval, and `r = executor, v = 1` for the executor,
+/// whose `msg.sender` approves on its own. An executor that also sent an
+/// approval counts once.
+pub fn assemble_signatures(approvals: &[PasskeyApproval], executor: Option<&str>) -> Result<String, CoreError> {
+    enum Entry {
+        Contract(Vec<u8>),
+        Sender,
+    }
+    let executor = executor.map(addr).transpose()?;
+    let mut entries: Vec<(Address, Entry)> = Vec::new();
+    for a in approvals {
+        let owner = addr(&a.owner)?;
+        if Some(owner) == executor || entries.iter().any(|(o, _)| *o == owner) {
+            continue;
+        }
+        let inner = user_op::build_eip1271_signature(
+            &unhex(&a.authenticator_data)?,
+            &a.client_data_fields,
+            &word_u256(quantity(&a.r)?),
+            &word_u256(quantity(&a.s)?),
+            &a.signer,
+        )?;
+        entries.push((owner, Entry::Contract(inner)));
+    }
+    if let Some(e) = executor {
+        entries.push((e, Entry::Sender));
+    }
+    entries.sort_by_key(|(o, _)| *o);
+    let head_len = entries.len() * 65;
+    let mut head = Vec::with_capacity(head_len);
+    let mut tail = Vec::new();
+    for (owner, entry) in &entries {
+        head.extend_from_slice(&word_addr(*owner));
+        match entry {
+            Entry::Contract(inner) => {
+                head.extend_from_slice(&word_usize(head_len + tail.len()));
+                head.push(0);
+                tail.extend_from_slice(&word_usize(inner.len()));
+                tail.extend_from_slice(inner);
+            }
+            Entry::Sender => {
+                head.extend_from_slice(&[0u8; 32]);
+                head.push(1);
+            }
+        }
+    }
+    head.extend(tail);
+    Ok(hex(&head))
+}
+
+/// `execTransaction(...)` calldata.
+pub fn exec_transaction_data(tx: &SafeTx, signatures: &str) -> Result<String, CoreError> {
+    let t = parse_tx(tx)?;
+    let sigs = unhex(signatures)?;
+    let mut out = selector(
+        "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
+    )
+    .to_vec();
+    let data_tail = bytes_tail(&t.data);
+    out.extend_from_slice(&word_addr(t.to));
+    out.extend_from_slice(&word_u256(t.value));
+    out.extend_from_slice(&word_usize(10 * 32)); // data offset
+    out.extend_from_slice(&word_u256(U256::from(t.operation)));
+    out.extend_from_slice(&word_u256(t.safe_tx_gas));
+    out.extend_from_slice(&word_u256(t.base_gas));
+    out.extend_from_slice(&word_u256(t.gas_price));
+    out.extend_from_slice(&word_addr(t.gas_token));
+    out.extend_from_slice(&word_addr(t.refund_receiver));
+    out.extend_from_slice(&word_usize(10 * 32 + data_tail.len())); // signatures offset
+    out.extend(data_tail);
+    out.extend(bytes_tail(&sigs));
+    Ok(hex(&out))
+}
+
+/// What a multisig's execution needs deployed first.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionPlan {
+    pub multisig: String,
+    /// The multisig's genesis, when it has no code on the chain yet.
+    pub deploy_multisig: Option<Genesis>,
+    /// Approving owners with no code on the chain yet: their checks need it.
+    pub deploy_owners: Vec<Genesis>,
+    pub tx: SafeTx,
+    pub approvals: Vec<PasskeyApproval>,
+    /// The executor: an owner sending this as its own user operation.
+    pub executor: String,
+}
+
+/// The executor's calls: deploy what has no code yet, then `execTransaction`.
+pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
+    let mut calls = Vec::new();
+    if let Some(g) = &plan.deploy_multisig {
+        if genesis_address(g)? != addr(&plan.multisig)?.to_checksum(None) {
+            return Err(err("the genesis does not deploy this multisig"));
+        }
+        calls.push(deploy_call(g)?);
+    }
+    for g in &plan.deploy_owners {
+        calls.push(deploy_call(g)?);
+    }
+    let signatures = assemble_signatures(&plan.approvals, Some(&plan.executor))?;
+    calls.push(Call {
+        to: addr(&plan.multisig)?.to_checksum(None),
+        value: "0x0".into(),
+        data: exec_transaction_data(&plan.tx, &signatures)?,
+    });
+    Ok(calls)
+}
+
+// ---------------------------------------------------------------------------
+// Building and reading transactions
+// ---------------------------------------------------------------------------
+
+fn plain_tx(to: Address, value: U256, data: Vec<u8>, operation: u8, nonce: U256) -> SafeTx {
+    let zero = "0x0".to_owned();
+    SafeTx {
+        to: to.to_checksum(None),
+        value: hex_quantity(value),
+        data: hex(&data),
+        operation,
+        safe_tx_gas: zero.clone(),
+        base_gas: zero.clone(),
+        gas_price: zero,
+        gas_token: Address::ZERO.to_checksum(None),
+        refund_receiver: Address::ZERO.to_checksum(None),
+        nonce: hex_quantity(nonce),
+    }
+}
+
+/// One transfer: native when `token` is empty, else an ERC-20 `transfer`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transfer {
+    #[serde(default)]
+    pub token: Option<String>,
+    pub to: String,
+    /// Base units, hex or decimal.
+    pub amount: String,
+}
+
+fn transfer_call(t: &Transfer) -> Result<(Address, U256, Vec<u8>), CoreError> {
+    let to = addr(&t.to)?;
+    let amount = quantity(&t.amount)?;
+    match t.token.as_deref().filter(|s| !s.is_empty()) {
+        None => Ok((to, amount, Vec::new())),
+        Some(token) => {
+            let mut d = selector("transfer(address,uint256)").to_vec();
+            d.extend_from_slice(&word_addr(to));
+            d.extend_from_slice(&word_u256(amount));
+            Ok((addr(token)?, U256::ZERO, d))
+        }
+    }
+}
+
+/// A SafeTx for one or more transfers; several go through MultiSendCallOnly.
+pub fn transfers_tx(transfers: &[Transfer], nonce: &str) -> Result<SafeTx, CoreError> {
+    let nonce = quantity(nonce)?;
+    match transfers {
+        [] => Err(err("nothing to send")),
+        [one] => {
+            let (to, value, data) = transfer_call(one)?;
+            Ok(plain_tx(to, value, data, 0, nonce))
+        }
+        many => {
+            let mut packed = Vec::new();
+            for t in many {
+                let (to, value, data) = transfer_call(t)?;
+                packed.push(0u8);
+                packed.extend_from_slice(to.as_slice());
+                packed.extend_from_slice(&word_u256(value));
+                packed.extend_from_slice(&word_usize(data.len()));
+                packed.extend_from_slice(&data);
+            }
+            let mut d = selector("multiSend(bytes)").to_vec();
+            d.extend_from_slice(&word_usize(0x20));
+            d.extend(bytes_tail(&packed));
+            Ok(plain_tx(addr(MULTI_SEND_CALL_ONLY)?, U256::ZERO, d, 1, nonce))
+        }
+    }
+}
+
+/// The transaction that voids every proposal at `nonce`: nothing, sent to the
+/// multisig itself.
+pub fn cancel_tx(multisig: &str, nonce: &str) -> Result<SafeTx, CoreError> {
+    Ok(plain_tx(addr(multisig)?, U256::ZERO, Vec::new(), 0, quantity(nonce)?))
+}
+
+/// What a SafeTx does, as the core reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum Action {
+    /// A native transfer (`data` empty) or an ERC-20 `transfer`.
+    Transfer { token: Option<String>, to: String, amount: String },
+    /// Several of the above, through MultiSendCallOnly.
+    Batch { transfers: Vec<Action> },
+    /// Nothing, to the multisig itself: voids its nonce.
+    Cancel,
+    AddOwner { owner: String, threshold: String },
+    RemoveOwner { owner: String, threshold: String },
+    SwapOwner { old_owner: String, new_owner: String },
+    ChangeThreshold { threshold: String },
+}
+
+/// The core's reading of a SafeTx and whether Vela signs it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Review {
+    pub safe_tx_hash: String,
+    pub nonce: String,
+    /// `None` when the transaction is not one Vela signs; `refusal` says why.
+    pub action: Option<Action>,
+    pub refusal: Option<String>,
+}
+
+fn read_transfer(to: Address, value: U256, data: &[u8]) -> Option<Action> {
+    if data.is_empty() {
+        return Some(Action::Transfer { token: None, to: to.to_checksum(None), amount: value.to_string() });
+    }
+    if value.is_zero() && data.len() == 68 && data[..4] == selector("transfer(address,uint256)") && data[4..16] == [0u8; 12] {
+        let recipient = Address::from_slice(&data[16..36]);
+        let amount = U256::from_be_slice(&data[36..68]);
+        return Some(Action::Transfer {
+            token: Some(to.to_checksum(None)),
+            to: recipient.to_checksum(None),
+            amount: amount.to_string(),
+        });
+    }
+    None
+}
+
+fn read_owner_management(data: &[u8]) -> Option<Action> {
+    let w = |i: usize| data.get(4 + i * 32..4 + (i + 1) * 32).map(U256::from_be_slice);
+    let a = |i: usize| w(i).map(|v| Address::from_word(B256::from(v)).to_checksum(None));
+    let sel = data.get(..4)?;
+    if sel == selector("addOwnerWithThreshold(address,uint256)") && data.len() == 68 {
+        return Some(Action::AddOwner { owner: a(0)?, threshold: w(1)?.to_string() });
+    }
+    if sel == selector("removeOwner(address,address,uint256)") && data.len() == 100 {
+        return Some(Action::RemoveOwner { owner: a(1)?, threshold: w(2)?.to_string() });
+    }
+    if sel == selector("swapOwner(address,address,address)") && data.len() == 100 {
+        return Some(Action::SwapOwner { old_owner: a(1)?, new_owner: a(2)? });
+    }
+    if sel == selector("changeThreshold(uint256)") && data.len() == 36 {
+        return Some(Action::ChangeThreshold { threshold: w(0)?.to_string() });
+    }
+    None
+}
+
+fn read_batch(data: &[u8]) -> Option<Vec<Action>> {
+    if data.get(..4)? != selector("multiSend(bytes)") || U256::from_be_slice(data.get(4..36)?) != U256::from(0x20) {
+        return None;
+    }
+    let len: usize = U256::from_be_slice(data.get(36..68)?).try_into().ok()?;
+    let packed = data.get(68..68 + len)?;
+    // Canonical encoding only: nothing may hide in padding or trailing bytes.
+    if data.len() != 68 + len + pad32(len) || data[68 + len..].iter().any(|b| *b != 0) {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < packed.len() {
+        let leg = packed.get(i..i + 85)?;
+        if leg[0] != 0 {
+            return None;
+        }
+        let to = Address::from_slice(&leg[1..21]);
+        let value = U256::from_be_slice(&leg[21..53]);
+        let n: usize = U256::from_be_slice(&leg[53..85]).try_into().ok()?;
+        let d = packed.get(i + 85..i + 85 + n)?;
+        if to == Address::ZERO {
+            return None;
+        }
+        out.push(read_transfer(to, value, d)?);
+        i += 85 + n;
+    }
+    (out.len() >= 2).then_some(out)
+}
+
+/// Read `tx` for `multisig` on `chain_id`. Vela signs only: transfers (one, or
+/// a batch through MultiSendCallOnly), owner management and cancellation sent
+/// to the multisig itself — with every gas field zero, so execution can never
+/// pay a refund out of the multisig.
+pub fn review(chain_id: u64, multisig: &str, tx: &SafeTx) -> Result<Review, CoreError> {
+    let t = parse_tx(tx)?;
+    let me = addr(multisig)?;
+    let hash = safe_tx_hash(chain_id, multisig, tx)?;
+    let refuse = |why: &str| Review { safe_tx_hash: hash.clone(), nonce: t.nonce.to_string(), action: None, refusal: Some(why.to_owned()) };
+    if !(t.safe_tx_gas.is_zero() && t.base_gas.is_zero() && t.gas_price.is_zero())
+        || t.gas_token != Address::ZERO
+        || t.refund_receiver != Address::ZERO
+    {
+        return Ok(refuse("pays gas or a refund out of the multisig"));
+    }
+    let action = match t.operation {
+        1 if t.to == addr(MULTI_SEND_CALL_ONLY)? && t.value.is_zero() => read_batch(&t.data).map(|transfers| Action::Batch { transfers }),
+        1 => return Ok(refuse("delegatecall to a contract Vela does not sign for")),
+        0 if t.to == me => {
+            if t.value.is_zero() && t.data.is_empty() {
+                Some(Action::Cancel)
+            } else if t.value.is_zero() {
+                read_owner_management(&t.data)
+            } else {
+                None
+            }
+        }
+        0 => read_transfer(t.to, t.value, &t.data),
+        _ => return Ok(refuse("unknown operation")),
+    };
+    Ok(match action {
+        Some(action) => Review { safe_tx_hash: hash, nonce: t.nonce.to_string(), action: Some(action), refusal: None },
+        None => refuse("not a transaction Vela signs (only transfers, member changes and cancellations)"),
+    })
+}
+
+/// What an owner's passkey signs to ask the genesis service to record a
+/// multisig deployed nowhere yet (its `ownerProof`):
+/// `keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)`.
+pub fn sponsor_challenge(multisig: &str) -> Result<String, CoreError> {
+    let mut p = b"safe-genesis-registry/sponsor/v1".to_vec();
+    p.extend_from_slice(addr(multisig)?.as_slice());
+    Ok(hex(keccak256(p).as_slice()))
+}
+
+/// The one door the shells use: `method` and its arguments as a JSON object,
+/// the answer as JSON. Every rule stays here; the shell only moves JSON.
+pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
+    let args: serde_json::Value = serde_json::from_str(args_json).map_err(|e| err(format!("arguments: {e}")))?;
+    fn arg<T: serde::de::DeserializeOwned>(args: &serde_json::Value, name: &str) -> Result<T, CoreError> {
+        serde_json::from_value(args.get(name).cloned().unwrap_or(serde_json::Value::Null))
+            .map_err(|e| err(format!("argument {name}: {e}")))
+    }
+    let out = |v: serde_json::Value| Ok(v.to_string());
+    let json = |v: &dyn erased::Ser| v.to_value();
+    match method {
+        "genesis" => out(json(&multisig_genesis(&arg::<Vec<String>>(&args, "owners")?, arg(&args, "threshold")?, &arg::<String>(&args, "saltNonce")?)?)),
+        "genesisAddress" => out(serde_json::json!(genesis_address(&arg(&args, "genesis")?)?)),
+        "genesisMembers" => {
+            let (owners, threshold) = genesis_members(&arg(&args, "genesis")?)?;
+            out(serde_json::json!({"owners": owners, "threshold": threshold}))
+        }
+        "velaAccountGenesis" => {
+            let (address, genesis) = vela_account_genesis(&arg::<Vec<KeyArg>>(&args, "keys")?.into_iter().map(Into::into).collect::<Vec<_>>())?;
+            out(serde_json::json!({"address": address, "genesis": genesis}))
+        }
+        "deployCall" => out(json(&deploy_call(&arg(&args, "genesis")?)?)),
+        "safeTxHash" => out(serde_json::json!(safe_tx_hash(arg(&args, "chainId")?, &arg::<String>(&args, "safe")?, &arg(&args, "tx")?)?)),
+        "approvalChallenge" => out(serde_json::json!(approval_challenge(
+            arg(&args, "chainId")?,
+            &arg::<String>(&args, "owner")?,
+            &arg::<String>(&args, "safeTxHash")?
+        )?)),
+        "sponsorChallenge" => out(serde_json::json!(sponsor_challenge(&arg::<String>(&args, "multisig")?)?)),
+        "approvalFromAssertion" => out(json(&approval_from_assertion(
+            &arg::<Vec<KeyArg>>(&args, "keys")?.into_iter().map(Into::into).collect::<Vec<_>>(),
+            &arg::<String>(&args, "credentialId")?,
+            &arg::<String>(&args, "authenticatorData")?,
+            &arg::<String>(&args, "clientDataJSON")?,
+            &arg::<String>(&args, "signature")?,
+        )?)),
+        "verifyApproval" => out(serde_json::json!(
+            verify_approval(arg(&args, "chainId")?, &arg::<String>(&args, "safeTxHash")?, &arg(&args, "approval")?).is_ok()
+        )),
+        "executionCalls" => out(json(&execution_calls(&arg(&args, "plan")?)?)),
+        "review" => out(json(&review(arg(&args, "chainId")?, &arg::<String>(&args, "multisig")?, &arg(&args, "tx")?)?)),
+        "transfersTx" => out(json(&transfers_tx(&arg::<Vec<Transfer>>(&args, "transfers")?, &arg::<String>(&args, "nonce")?)?)),
+        "cancelTx" => out(json(&cancel_tx(&arg::<String>(&args, "multisig")?, &arg::<String>(&args, "nonce")?)?)),
+        other => Err(err(format!("unknown multisig method {other}"))),
+    }
+}
+
+/// A founding key as the shells store it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyArg {
+    credential_id: String,
+    public_key_hex: String,
+}
+
+impl From<KeyArg> for WalletKey {
+    fn from(k: KeyArg) -> Self {
+        WalletKey { credential_id: k.credential_id, public_key_hex: k.public_key_hex }
+    }
+}
+
+mod erased {
+    pub trait Ser {
+        fn to_value(&self) -> serde_json::Value;
+    }
+    impl<T: serde::Serialize> Ser for T {
+        fn to_value(&self) -> serde_json::Value {
+            serde_json::to_value(self).unwrap_or(serde_json::Value::Null)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const A: &str = "0x1111111111111111111111111111111111111111";
+    const B: &str = "0x2222222222222222222222222222222222222222";
+
+    #[test]
+    fn owner_order_is_part_of_the_address() {
+        let ab = multisig_genesis(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let ba = multisig_genesis(&[B.into(), A.into()], 2, "0x7").unwrap();
+        assert_ne!(ab.address, ba.address);
+        assert_eq!(genesis_members(&ab.genesis).unwrap(), (vec![primitives::checksum_address(A).unwrap(), primitives::checksum_address(B).unwrap()], 2));
+        assert_eq!(genesis_address(&ab.genesis).unwrap(), ab.address);
+    }
+
+    #[test]
+    fn a_genesis_that_could_never_deploy_is_refused() {
+        assert!(multisig_genesis(&[A.into(), A.into()], 1, "0x1").is_err());
+        assert!(multisig_genesis(&["0x0000000000000000000000000000000000000001".into()], 1, "0x1").is_err());
+        assert!(multisig_genesis(&[A.into()], 2, "0x1").is_err());
+        assert!(multisig_genesis(&[A.into()], 0, "0x1").is_err());
+        assert!(multisig_genesis(&[], 1, "0x1").is_err());
+    }
+
+    #[test]
+    fn the_review_signs_only_what_it_reads() {
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        let one = transfers_tx(&[Transfer { token: None, to: B.into(), amount: "1000".into() }], "0").unwrap();
+        assert!(matches!(review(100, &ms, &one).unwrap().action, Some(Action::Transfer { token: None, .. })));
+        let batch = transfers_tx(
+            &[Transfer { token: None, to: B.into(), amount: "1".into() }, Transfer { token: Some(A.into()), to: B.into(), amount: "2".into() }],
+            "0",
+        )
+        .unwrap();
+        assert!(matches!(review(100, &ms, &batch).unwrap().action, Some(Action::Batch { .. })));
+        assert!(matches!(review(100, &ms, &cancel_tx(&ms, "3").unwrap()).unwrap().action, Some(Action::Cancel)));
+
+        let mut refund = one.clone();
+        refund.gas_price = "0x1".into();
+        assert!(review(100, &ms, &refund).unwrap().refusal.is_some());
+        let mut delegate = one.clone();
+        delegate.operation = 1;
+        assert!(review(100, &ms, &delegate).unwrap().refusal.is_some());
+        let mut call = one.clone();
+        call.data = "0x12345678".into();
+        assert!(review(100, &ms, &call).unwrap().refusal.is_some());
+        // A self-call that is not member management.
+        let mut module = cancel_tx(&ms, "0").unwrap();
+        module.data = hex(&[&selector("enableModule(address)")[..], &word_addr(addr(A).unwrap())[..]].concat());
+        assert!(review(100, &ms, &module).unwrap().refusal.is_some());
+        // A batch with trailing garbage.
+        let mut tail = batch.clone();
+        tail.data.push_str("00000000000000000000000000000000000000000000000000000000000000ff");
+        assert!(review(100, &ms, &tail).unwrap().refusal.is_some());
+    }
+
+    #[test]
+    fn the_executor_counts_once_and_signatures_are_sorted() {
+        let a = |owner: &str| PasskeyApproval {
+            owner: owner.into(),
+            owner_genesis: Genesis { factory: String::new(), singleton: String::new(), salt_nonce: "0x0".into(), initializer: "0x".into() },
+            signer: safe::WEBAUTHN_SIGNER.into(),
+            authenticator_data: hex(&[0u8; 37]),
+            client_data_fields: "\"origin\":\"https://getvela.app\",\"crossOrigin\":false".into(),
+            r: "0x1".into(),
+            s: "0x2".into(),
+        };
+        let sigs = unhex(&assemble_signatures(&[a(B), a(A)], Some(B)).unwrap()).unwrap();
+        // A (contract signature) before B (the executor, v = 1).
+        assert_eq!(&sigs[12..32], addr(A).unwrap().as_slice());
+        assert_eq!(sigs[64], 0);
+        assert_eq!(U256::from_be_slice(&sigs[32..64]), U256::from(130));
+        assert_eq!(&sigs[65 + 12..65 + 32], addr(B).unwrap().as_slice());
+        assert_eq!(sigs[129], 1);
+    }
+}

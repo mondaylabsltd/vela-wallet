@@ -105,13 +105,13 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-es-mx")]
         "es-MX" => Some((
             es_mx::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&es_mx::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&es_mx::OFFSETS),
             &es_mx::PRESENT,
         )),
         #[cfg(feature = "i18n-pt-br")]
         "pt-BR" => Some((
             pt_br::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&pt_br::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&pt_br::OFFSETS),
             &pt_br::PRESENT,
         )),
         #[cfg(feature = "i18n-fr")]
@@ -135,7 +135,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-it")]
         "it" => Some((
             it::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&it::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&it::OFFSETS),
             &it::PRESENT,
         )),
         _ => None,

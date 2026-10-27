@@ -1147,6 +1147,14 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 export function minGasPriceWei(chain_id: number): string;
 
 /**
+ * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
+ * arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
+ * the executor's calls and the review. The shell moves JSON; the rules are
+ * the core's.
+ */
+export function multisigCall(method: string, args_json: string): string;
+
+/**
  * Whether `chain_id` is a testnet (spec 105).
  */
 export function networkChainIsTestnet(chain_id: number, custom_json: string): boolean;
@@ -1943,6 +1951,7 @@ export interface InitOutput {
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
+    readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
     readonly networkSpaceRead: (a: number, b: number) => [number, number];

@@ -33,6 +33,7 @@ import type { RequestMessages } from '$lib/dapp/messages';
 import type { AgentMessages } from '$lib/agent/messages';
 import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
+import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
 import {
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
@@ -1419,4 +1420,17 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		expiredValue: k('componentsUi.signing.expiredValue'),
 		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract')
 	};
+}
+
+/** The multisig screens' copy: every leaf of `home.multisig`, by the shape's keys. */
+export function resolveMultisigMessages(locale: Locale): MultisigMessages {
+	activate(locale);
+	const walk = (node: Record<string, unknown>, prefix: string): Record<string, unknown> =>
+		Object.fromEntries(
+			Object.entries(node).map(([key, value]) => [
+				key,
+				typeof value === 'string' ? t(locale, `${prefix}.${key}`) : walk(value as Record<string, unknown>, `${prefix}.${key}`)
+			])
+		);
+	return walk(MULTISIG_SHAPE as unknown as Record<string, unknown>, 'home.multisig') as unknown as MultisigMessages;
 }
