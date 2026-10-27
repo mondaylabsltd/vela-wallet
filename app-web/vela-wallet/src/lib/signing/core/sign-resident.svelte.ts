@@ -43,7 +43,7 @@
 import { loadCore } from '$lib/core/client';
 import type { SignEvent } from '$lib/core/generated/SignEvent';
 import type { SignView } from '$lib/core/generated/SignView';
-import { getAllNetworksSync } from '$lib/services/networks';
+import { spaceNetworksSync } from '$lib/services/networks';
 import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
 import {
 	dispatchTxTracker,
@@ -365,7 +365,7 @@ class SignRequest {
 	 * dropped, so it costs one string compare.
 	 */
 	syncNetworks(): void {
-		const chainIds = getAllNetworksSync().map((network) => network.chainId);
+		const chainIds = spaceNetworksSync().map((network) => network.chainId);
 		const key = chainIds.join(',');
 		if (key === this.#networksKey) return;
 		this.#networksKey = key;
@@ -373,7 +373,7 @@ class SignRequest {
 	}
 
 	#networksEvent(): SignEvent {
-		const chainIds = getAllNetworksSync().map((network) => network.chainId);
+		const chainIds = spaceNetworksSync().map((network) => network.chainId);
 		this.#networksKey = chainIds.join(',');
 		return { type: 'networks_changed', chain_ids: chainIds };
 	}

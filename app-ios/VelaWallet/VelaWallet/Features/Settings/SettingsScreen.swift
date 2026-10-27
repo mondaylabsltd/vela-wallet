@@ -91,6 +91,9 @@ struct SettingsScreen: View {
     /// unchanged — the wizard stays a picture there, which is what keeps the
     /// screenshot sweep meaningful.
     var networkActions = SettingsNetworkActions()
+    /// Settings → AI agent's page reads and changes it (spec 103). Absent in
+    /// the gallery, where the row is drawn and its page is empty.
+    var agent: AgentStore?
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
@@ -143,7 +146,8 @@ struct SettingsScreen: View {
         signingActions: SigningSettingsActions? = nil,
         onOpenLink: ((String) -> Void)? = nil,
         onRevealDebugMode: (() -> Void)? = nil,
-        onDebugMode: ((Bool) -> Void)? = nil
+        onDebugMode: ((Bool) -> Void)? = nil,
+        agent: AgentStore? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -167,6 +171,7 @@ struct SettingsScreen: View {
         self.onOpenLink = onOpenLink
         self.onRevealDebugMode = onRevealDebugMode
         self.onDebugMode = onDebugMode
+        self.agent = agent
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -388,6 +393,7 @@ struct SettingsScreen: View {
         case .storage: (model.storage.title, model.storage.subtitle)
         case .about: (model.about.title, nil)
         case .signingPages: (model.signingPages?.title ?? "", model.signingPages?.subtitle)
+        case .agent: (loc.t("settings.agent.title"), loc.t("settings.agent.subtitle"))
         case .home: (model.title, nil)
         }
     }
@@ -450,6 +456,8 @@ struct SettingsScreen: View {
             if let panel = model.signingPages {
                 SigningPagesBody(loc: loc, panel: panel, actions: signingActions)
             }
+        case .agent:
+            if let agent { AgentSettingsBody(agent: agent, loc: loc) }
         case .about: AboutBody(
             panel: model.about,
             onOpenLink: onOpenLink,
@@ -546,6 +554,11 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder private var networksBody: some View {
+        // Spec 105: which space these are, and the way to the other.
+        if let space = model.networkSpace {
+            NetworkSpaceHeading(model: space, onSwitch: networkActions.onSwitchSpace)
+                .padding(.bottom, Tokens.Space.s12)
+        }
         ForEach(model.networks) { row in
             // The tapped row's id is carried, not discarded (spec 050).
             //
@@ -569,7 +582,8 @@ struct SettingsScreen: View {
                     ask(SettingsLive.removeNetworkConfirm(row, loc: loc), in: .removeNetwork) {
                         remove(id)
                     }
-                } : nil
+                } : nil,
+                onMove: networkActions.isLive ? { id in networkActions.onMoveNetwork(id, !row.testnet) } : nil
             )
         }
         // A link, not a CTA: adding a network is navigation, and accent is
@@ -643,6 +657,7 @@ struct SettingsScreen: View {
         case "storage": page = .storage
         case "about": page = .about
         case SigningPagesPageModel.rowId: page = .signingPages
+        case SettingsFixtures.agentRow: page = .agent
         case SettingsLive.ethereumBackupRow: onEthereumBackup?()
         default: break
         }
@@ -873,6 +888,28 @@ private struct AddNetworkBody: View {
                 // An outline CTA plus a re-check link when it cannot be added:
                 // an action you cannot take should not be dressed as the action
                 // you came for.
+                // Spec 105: which space it goes to — the person's word, a
+                // testnet unless they say otherwise.
+                if let space = panel.space {
+                    VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                        Text(space.question)
+                            .typeRole(Typography.fieldLabel)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.fgBase)
+                        SettingsSegmentedControl(
+                            model: SegmentedModel(
+                                label: space.question,
+                                segments: [
+                                    SegmentModel(id: "testnet", label: space.testnetLabel),
+                                    SegmentModel(id: "mainnet", label: space.mainnetLabel),
+                                ],
+                                selected: space.testnet ? "testnet" : "mainnet"
+                            ),
+                            onSelect: { actions.onAddSpace($0 == "testnet") }
+                        )
+                    }
+                    .accessibilityIdentifier("add-network-space")
+                }
                 if let primary = panel.primary {
                     VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
@@ -971,6 +1008,12 @@ struct SettingsNetworkActions {
     /// "Re-check with this RPC" / "Retry", with the RPC typed.
     var onRecheck: (String) -> Void = { _ in }
     var onConfirmAdd: () -> Void = {}
+    /// Spec 105: a network the person added, to that space (`true` testnet).
+    var onMoveNetwork: (String, Bool) -> Void = { _, _ in }
+    /// The switch of space, from the list's heading.
+    var onSwitchSpace: () -> Void = {}
+    /// The wizard's answer: the network goes to the testnet space (`true`).
+    var onAddSpace: (Bool) -> Void = { _ in }
     /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
     var isLive = false
 }

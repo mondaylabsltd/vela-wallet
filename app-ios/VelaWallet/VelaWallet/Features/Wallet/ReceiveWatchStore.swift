@@ -198,15 +198,9 @@ final class ReceiveWatchStore {
         ]
     }
 
+    /// The space in front's chains (spec 105).
     private func chainIds() -> [Int] {
-        var ids = ChainCatalog.chains.map(\.chainId)
-        for network in store.readList(VelaStore.Key.customNetworks) {
-            guard let chainId = (network["chainId"] as? NSNumber)?.intValue,
-                  !ids.contains(chainId)
-            else { continue }
-            ids.append(chainId)
-        }
-        return ids
+        NetworkSpace.chainIds(store: store)
     }
 
     private func customTokens(chainId: Int) -> [CustomTokenRef] {

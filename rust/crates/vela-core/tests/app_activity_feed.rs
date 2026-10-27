@@ -1191,6 +1191,43 @@ fn chain_filter_regroups_headers_over_the_filtered_list() {
     assert_eq!(sut.view().rows.len(), 5, "unfiltered again");
 }
 
+/// Spec 105: the feed draws only the space in front's records. The others
+/// stay stored, and switching back draws them again.
+#[test]
+fn the_feed_shows_only_the_space_in_front() {
+    let mut on_sepolia = recv("t", "0xBob", "1", "ETH", 200_000.0);
+    on_sepolia.chain_id = 11_155_111;
+    let mut on_mainnet = send("m", "0xU1", "0xBob", "3", 100_000.0);
+    on_mainnet.chain_id = 1;
+    let mut sut = boot(vec![on_sepolia, on_mainnet]);
+    drain_aliases(&mut sut);
+
+    sut.dispatch(Event::SpaceChainsChanged {
+        chain_ids: Some(vec![1, 8453]),
+    });
+    assert_eq!(item_ids(&sut.view().rows), ["m"]);
+    assert_eq!(item_ids(&sut.view().home_rows), ["m"]);
+
+    sut.dispatch(Event::SpaceChainsChanged {
+        chain_ids: Some(vec![11_155_111]),
+    });
+    assert_eq!(item_ids(&sut.view().rows), ["t"]);
+
+    sut.dispatch(Event::ContactFilterChanged {
+        address: Some("0xBob".to_owned()),
+    });
+    let contact: Vec<String> = sut
+        .view()
+        .contact_rows
+        .iter()
+        .map(|i| i.id.clone())
+        .collect();
+    assert_eq!(contact, ["t"], "a contact's page is the space's too");
+
+    sut.dispatch(Event::SpaceChainsChanged { chain_ids: None });
+    assert_eq!(item_ids(&sut.view().rows), ["t", "m"]);
+}
+
 // ---------------------------------------------------------------------------
 // Issue #469 — the home draws the newest three; History draws every row
 // ---------------------------------------------------------------------------

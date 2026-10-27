@@ -233,6 +233,14 @@ can_continue: boolean,
  */
 can_confirm: boolean, 
 /**
+ * On the review: which review this is — a digest of exactly what the
+ * passkey would sign (the account, the chain, every transfer, the fee;
+ * [`crate::signed_review::SignedReview::digest`]). The confirm button
+ * sends it back as drawn ([`Event::SlideConfirm`]). `None` off the
+ * review.
+ */
+review_digest: string | null, 
+/**
  * The account's previous transaction on this network is still going
  * through, so the confirm is held (part of `can_confirm`): this one
  * would take the same nonce. Drawn as its `key` under the confirm — the

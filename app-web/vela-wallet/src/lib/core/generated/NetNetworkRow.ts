@@ -12,6 +12,10 @@ export type NetNetworkRow = { id: string, chain_id: number, display_name: string
  */
 is_custom: boolean, 
 /**
+ * Its space (spec 105): a testnet's coins have no real value.
+ */
+is_testnet: boolean, 
+/**
  * Draft if the card is open, else override value, else the default —
  * `savedConfig?.rpcURL ?? network.rpcURL` semantics (an override's empty
  * string passes through, verbatim).

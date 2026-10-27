@@ -10,7 +10,12 @@ uniffi::setup_scaffolding!();
 
 // The Crux state machines (spec 019-onboarding-live-wiring), exported with the
 // same JSON surface the web gets from `vela-core-wasm`.
+// The AI agent (spec 104 phase 7): `vela-agent` behind a shell Swift and
+// Kotlin implement.
+mod agent_bridge;
+mod clientmcp_bridge;
 mod ctap_bridge;
+mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
@@ -1876,6 +1881,24 @@ pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>
     )?)
 }
 
+/// The SafeOp hash for a send — only when the draft is exactly the review
+/// the person confirmed (`SubmitUserOp.review`, as JSON): its sender, chain
+/// and every call, decoded back out of its calldata. Anything else is
+/// refused and nothing is signed.
+#[uniffi::export]
+pub fn user_op_reviewed_safe_op_hash(
+    draft: UserOpDraft,
+    chain_id: u32,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::from_json(&review_json)?;
+    Ok(vela_core::signed_review::reviewed_safe_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+        &review,
+    )?)
+}
+
 /// The EntryPoint v0.7 `getUserOpHash` of the draft on `chain_id`, 0x-lower-case
 /// (spec 082 RA6). The signature is not part of it, so it is known before the
 /// passkey signs: a client computes it before the first submit POST and
@@ -2994,6 +3017,33 @@ pub fn still_qr_sizes(width: u32, height: u32) -> Vec<QrScanSize> {
         .into_iter()
         .map(|(width, height)| QrScanSize { width, height })
         .collect()
+}
+
+/// The space stored under `vela.networkSpace`, read (spec 105): `mainnet`
+/// or `testnet`; anything missing or unreadable is `mainnet`.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_read(stored: Option<String>) -> String {
+    vela_core::app::network_space::NetworkSpace::parse(stored.as_deref())
+        .as_str()
+        .to_owned()
+}
+
+/// The chain ids of `space`'s networks (spec 105), from the network
+/// machine's rows as JSON: what the balances read, and send, receive and the
+/// dApps offer. A JSON array.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_chain_ids(space: String, rows_json: String) -> String {
+    vela_core::app::network_space::space_chain_ids_json(&space, &rows_json)
+}
+
+/// Whether `chain_id` is a testnet (spec 105): the built-in table's word,
+/// else the person's in `custom_json` (the stored custom networks), else yes.
+#[uniffi::export]
+#[must_use]
+pub fn network_chain_is_testnet(chain_id: u32, custom_json: String) -> bool {
+    vela_core::app::network_space::chain_is_testnet_json(chain_id, &custom_json)
 }
 
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's

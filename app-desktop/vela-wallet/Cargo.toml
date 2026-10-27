@@ -199,8 +199,9 @@ vela-passkey-win = { path = "../vela-passkey-win" }
 #   * qrcode — the FIDO:/ payload as a module matrix the onboarding screen draws.
 tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
 btleplug = "0.11"
-# `net` here is the I/O DRIVER, not networking — nothing in this shell opens a
-# socket through tokio (the tunnel is blocking tungstenite). tokio gates
+# `net` here is the I/O DRIVER, not networking — the cable tunnel opens no
+# socket through tokio (it is blocking tungstenite; the AI agent's socket, in
+# `clientmcp-client` below, brings its own tokio features). tokio gates
 # `Builder::enable_io` behind `cfg_io_driver` = `net`, or unix-only `process` /
 # `signal`; without one of them `scan_for_advert`'s `.enable_io()` does not
 # exist, and the error reads "private field, not a method" because the Builder
@@ -212,6 +213,19 @@ btleplug = "0.11"
 # transport that only one of the three desktops compiles.
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "net"] }
 futures = { version = "0.3", default-features = false, features = ["std"] }
+# The AI agent's bridge (spec 103, spec 104 phase 5): ClientMCP's Rust client,
+# vendored beside the core (`rust/vendor/clientmcp-client`, shared with the
+# phones' library; its manifest says from where and how to refresh it). It is
+# async — tokio, tokio-tungstenite, rustls with ring — and runs on one thread
+# of its own (`agent::runtime`), dialling through the app's proxy route the
+# way the cable tunnel does (`agent::dial`).
+clientmcp-client = { path = "../../rust/vendor/clientmcp-client" }
+# The agent's shared core (spec 104 phase 7): the runner, transfers, the tools
+# and the connection, one copy with the phones.
+vela-agent = { path = "../../rust/crates/vela-agent" }
+# The bridge's address, parsed to tell `wss:` from `ws:` to this machine (already
+# in the graph through ureq).
+url = "2"
 qrcode = { version = "0.14", default-features = false }
 # The other direction: a QR code READ out of a picture. Pure Rust (no zbar, no
 # C toolchain), which is what keeps the Windows and Linux builds honest — the

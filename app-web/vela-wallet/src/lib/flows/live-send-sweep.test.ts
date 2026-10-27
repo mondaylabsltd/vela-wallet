@@ -116,6 +116,7 @@ const BASE: SendView = {
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
+	review_digest: null,
 	previous_pending: null,
 	sending: false,
 	tx_status: 'idle',

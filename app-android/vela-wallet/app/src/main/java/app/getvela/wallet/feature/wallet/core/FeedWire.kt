@@ -668,6 +668,14 @@ sealed class FeedEvent {
     @SerialName("chain_filter_changed")
     data class ChainFilterChanged(val chain_id: Int? = null) : FeedEvent()
 
+    /**
+     * Spec 105: the chains of the space in front (`null` = every chain). The
+     * other space's records stay stored and are not drawn.
+     */
+    @Serializable
+    @SerialName("space_chains_changed")
+    data class SpaceChainsChanged(val chain_ids: List<Int>? = null) : FeedEvent()
+
     /** Spec 093: a contact's page opened (its address) or closed (`null`) — the view's [FeedView.contact_rows]. */
     @Serializable
     @SerialName("contact_filter_changed")

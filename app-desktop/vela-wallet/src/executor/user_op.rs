@@ -45,6 +45,7 @@ use vela_core::app::fee_policy::{
 use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
+use vela_core::signed_review::{SignedReview, reviewed_safe_op_hash};
 use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
@@ -557,6 +558,7 @@ pub fn submit(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
+    review: Option<&SignedReview>,
     edges: Edges<'_>,
     asked: Asked<'_>,
     before_post: BeforePost<'_>,
@@ -571,6 +573,7 @@ pub fn submit(
         quoted_fee,
         Tail {
             head: None,
+            review,
             edges,
             asked,
             before_post,
@@ -644,6 +647,10 @@ fn submit_inner(
 /// that asked is still there (RB2), and the write-ahead (RJ1).
 struct Tail<'a> {
     head: Option<std::thread::JoinHandle<Option<u64>>>,
+    /// A send: the review the person confirmed. The passkey's hash is
+    /// computed only for the operation that is exactly it; `None` for a
+    /// site's request, reviewed on its sheet.
+    review: Option<&'a SignedReview>,
     edges: Edges<'a>,
     asked: Asked<'a>,
     before_post: BeforePost<'a>,
@@ -1008,8 +1015,16 @@ fn sign_and_submit(
     tier: Option<FeeTier>,
     tail: Tail<'_>,
 ) -> Result<Submitted, SubmitFailure> {
-    let safe_op_hash =
-        calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
+    let safe_op_hash = match tail.review {
+        Some(review) => reviewed_safe_op_hash(&op, u64::from(chain_id), review).map_err(|e| {
+            other(format!(
+                "the operation is not the one on the review; nothing was signed: {e}"
+            ))
+        })?,
+        None => {
+            calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?
+        }
+    };
     let assertion = signer.sign(
         &safe_op_hash,
         chain_id,

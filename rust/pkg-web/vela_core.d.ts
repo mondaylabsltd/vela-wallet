@@ -625,6 +625,14 @@ export function amountTextCaret(raw: string, clean: string, caret: number): numb
 export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
 
 /**
+ * The SafeOp hash for a send — only when the operation is exactly the
+ * review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
+ * chain and every call, decoded back out of its calldata. Anything else is
+ * refused and nothing is signed.
+ */
+export function attestReviewedSafeOpHash(op_json: string, review_json: string, chain_id: bigint): Uint8Array;
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  */
@@ -706,6 +714,32 @@ export function checksumAddress(address_hex: string): string;
  * The source ladder and its sanity band — `choose_native_price`.
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
+
+/**
+ * A new installation ID from 16 random bytes.
+ */
+export function clientmcpInstallationId(random: Uint8Array): string;
+
+/**
+ * The site's answer: the bridge address and client token, or why not.
+ */
+export function clientmcpLinkAccept(status: number, body: string): string;
+
+/**
+ * Starts a sign-in: the pending sign-in to keep, with the page to open.
+ * `random` is at least 64 bytes from `crypto.getRandomValues`.
+ */
+export function clientmcpLinkBegin(site: string, redirect_uri: string, label: string, installation: string, random: Uint8Array, now_ms: number): string;
+
+/**
+ * The one request that trades the code: `{url, body}`, POSTed as JSON.
+ */
+export function clientmcpLinkExchange(pending_json: string, code: string): string;
+
+/**
+ * The code in the address the browser came back to, if it is this sign-in's.
+ */
+export function clientmcpLinkReturned(pending_json: string, url: string, now_ms: number): string;
 
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
@@ -1002,6 +1036,69 @@ export function identiconSvgCircular(seed: string): string;
  */
 export function inFlightOps(track_view_json: string): string;
 
+/**
+ * `vela_state`: the wallet as an agent reads it.
+ */
+export function intentAgentState(world_json: string, page: string, approvals_json: string, activity_json: string): string;
+
+/**
+ * What an agent's request changes, for its approval: the network, URL or
+ * record the action's name does not say (a JSON string, or `null`).
+ */
+export function intentApprovalDetail(action_json: string): string;
+
+/**
+ * What an agent's request changes, for its approval, with what the wallet
+ * knows around it (`world_json`, as for `intentExamine`).
+ */
+export function intentApprovalDetailIn(action_json: string, world_json: string): string;
+
+/**
+ * What was true when the call began.
+ */
+export function intentBaseline(action_json: string, world_json: string): string;
+
+/**
+ * Every action, with how much it matters and who may ask for it.
+ */
+export function intentCatalog(): string;
+
+/**
+ * Whether `actor` may ask for the action, and whether its input is well formed.
+ */
+export function intentCheck(actor: string, action_json: string, grants_json: string): string;
+
+/**
+ * Does what the action names exist, and is it already so?
+ */
+export function intentExamine(action_json: string, world_json: string): string;
+
+/**
+ * Where a transfer stands now.
+ */
+export function intentOperationProgress(progress_json: string, send_json: string, ceremony_json: string, tracker_json: string): string;
+
+/**
+ * `vela_review`: what the person is being asked to sign.
+ */
+export function intentReview(input_json: string): string;
+
+/**
+ * Where the action's change is seen: the screen to open once an agent's
+ * request is done (a screen's JSON, or `null`).
+ */
+export function intentShows(action_json: string): string;
+
+/**
+ * Has the change held? `{ verdict, baseline }`.
+ */
+export function intentVerdict(action_json: string, world_json: string, baseline_json: string): string;
+
+/**
+ * The views a judgement of the action reads.
+ */
+export function intentWorldNeeds(action_json: string): string;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1048,6 +1145,22 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
  * carrying its own copy of the number.
  */
 export function minGasPriceWei(chain_id: number): string;
+
+/**
+ * Whether `chain_id` is a testnet (spec 105).
+ */
+export function networkChainIsTestnet(chain_id: number, custom_json: string): boolean;
+
+/**
+ * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
+ * as JSON. A JSON array.
+ */
+export function networkSpaceChainIds(space: string, rows_json: string): string;
+
+/**
+ * The space stored under `vela.networkSpace`, read (spec 105).
+ */
+export function networkSpaceRead(stored?: string | null): string;
 
 export function parsePublicKey(hex: string): P256PublicKey;
 
@@ -1664,6 +1777,7 @@ export interface InitOutput {
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
+    readonly attestReviewedSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly balanceChainReadDeadlineMs: () => number;
@@ -1694,6 +1808,11 @@ export interface InitOutput {
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly clearsigningcore_view: (a: number) => [number, number, number, number];
+    readonly clientmcpInstallationId: (a: number, b: number) => [number, number];
+    readonly clientmcpLinkAccept: (a: number, b: number, c: number) => [number, number];
+    readonly clientmcpLinkBegin: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly clientmcpLinkExchange: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly clientmcpLinkReturned: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly computeSafeAddress: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly computeSafeAddressMulti: (a: number, b: number) => [number, number, number];
     readonly computeSelector: (a: number, b: number) => [number, number, number, number];
@@ -1797,6 +1916,18 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly intentApprovalDetail: (a: number, b: number) => [number, number];
+    readonly intentApprovalDetailIn: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly intentBaseline: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly intentCatalog: () => [number, number];
+    readonly intentCheck: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly intentExamine: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly intentOperationProgress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly intentReview: (a: number, b: number) => [number, number];
+    readonly intentShows: (a: number, b: number) => [number, number];
+    readonly intentVerdict: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly intentWorldNeeds: (a: number, b: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
@@ -1812,6 +1943,9 @@ export interface InitOutput {
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
+    readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
+    readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly networkSpaceRead: (a: number, b: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

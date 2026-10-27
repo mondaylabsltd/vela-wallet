@@ -51,6 +51,10 @@ final class ActivityStore {
 
     private let executor: ActivityExecutor
     private var core: CoreStore<FeedViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     private var scopedTo: String?
     private var ticker: Task<Void, Never>?
     private var liveTicker: Task<Void, Never>?
@@ -73,7 +77,9 @@ final class ActivityStore {
                 return answer
             },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] activity_feed fault: \($0)") }
+            onFault: { print("[vela-wallet] activity_feed fault: \($0)") },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
     }
 
@@ -106,6 +112,8 @@ final class ActivityStore {
         // any gesture happens. Telling this core at open is what stops a
         // receipt toast announcing an amount over a hidden hero.
         privacyChanged(hidden: hidden)
+        // A core booted just now has not heard the space: say it again.
+        if let spaceChainIds { spaceChains(spaceChainIds) }
         startTicking()
     }
 
@@ -168,6 +176,15 @@ final class ActivityStore {
             "type": "reconcile_completed", "resolved_count": max(0, count),
         ]))
     }
+
+    /// The space in front's chains (spec 105): only their records are drawn.
+    /// The others stay stored, and switching back draws them again.
+    func spaceChains(_ chainIds: [Int]) {
+        spaceChainIds = chainIds
+        core.dispatch(CoreJSON.string(["type": "space_chains_changed", "chain_ids": chainIds]))
+    }
+
+    private var spaceChainIds: [Int]?
 
     func chainFilter(_ chainId: Int?) {
         core.dispatch(CoreJSON.string([

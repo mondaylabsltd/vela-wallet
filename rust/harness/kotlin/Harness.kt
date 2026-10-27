@@ -257,6 +257,34 @@ fun runCase(fn: String, input: JSONObject): Any? = when (fn) {
             .put("languages", JSONArray(st.languages))
     }
 
+    // --- intents (app::intent_json): JSON in as the text a shell sends ---
+    "intent_check" -> JSONObject(
+        intentCheck(input.getString("actor"), input.get("action").toString(), input.get("grants").toString())
+    )
+    "intent_examine" -> JSONObject(intentExamine(input.get("action").toString(), input.get("world").toString()))
+    "intent_baseline" -> JSONObject(intentBaseline(input.get("action").toString(), input.get("world").toString()))
+    "intent_verdict" -> JSONObject(
+        intentVerdict(input.get("action").toString(), input.get("world").toString(), input.get("baseline").toString())
+    )
+    "intent_world_needs" -> JSONArray(intentWorldNeeds(input.get("action").toString()))
+    "intent_operation_progress" -> JSONObject(
+        intentOperationProgress(
+            input.get("progress").toString(),
+            input.get("send").toString(),
+            input.get("ceremony").toString(),
+            input.get("tracker").toString(),
+        )
+    )
+    "intent_agent_state" -> JSONObject(
+        intentAgentState(
+            input.get("world").toString(),
+            input.getString("page"),
+            input.get("approvals").toString(),
+            input.get("activity").toString(),
+        )
+    )
+    "intent_review" -> JSONObject(intentReview(input.get("input").toString()))
+
     // --- marks (app::remote_mark) ---
     "token_mark" -> markJson(
         tokenMark(
@@ -318,7 +346,7 @@ val REQUIRED_SUITES = listOf(
     "abi", "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
     "i18n-behaviour", "i18n-exhaustive", "i18n-plural", "i18n-plural-legacy",
-    "identicon", "identicon-bulk", "marks", "primitives", "relative-time", "safe", "safe-multi",
+    "identicon", "identicon-bulk", "intents", "marks", "primitives", "relative-time", "safe", "safe-multi",
     "webauthn",
 )
 

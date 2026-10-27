@@ -1386,37 +1386,11 @@ fn deposits(
 }
 
 /// The chains a payment can arrive on: the built-ins plus whatever the person
-/// added. The same list the balance fetch reads, for the same reason — a
-/// network nobody can be paid on is a network nobody has.
+/// added, of the space in front (spec 105). The same list the balance fetch
+/// reads, for the same reason — a network nobody can be paid on is a network
+/// nobody has.
 pub fn receivable_chains() -> Vec<(u32, String)> {
-    let mut out: Vec<(u32, String)> = BUILTIN_CHAINS
-        .iter()
-        .map(|chain| (chain.chain_id, chain.native_symbol.to_owned()))
-        .collect();
-    if let Ok(Some(serde_json::Value::Array(items))) =
-        crate::executor::storage::read_value(crate::executor::storage::KEY_CUSTOM_NETWORKS)
-    {
-        for item in items {
-            let Some(chain_id) = item
-                .get("chainId")
-                .and_then(serde_json::Value::as_u64)
-                .and_then(|id| u32::try_from(id).ok())
-            else {
-                continue;
-            };
-            if out.iter().any(|(id, _)| *id == chain_id) {
-                continue;
-            }
-            out.push((
-                chain_id,
-                item.get("nativeSymbol")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("")
-                    .to_owned(),
-            ));
-        }
-    }
-    out
+    crate::network_space::space_networks()
 }
 
 /// The wallet's one shortening — by character, never by byte (083 H2
@@ -1483,8 +1457,8 @@ fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
 }
 
 /// A network's own coin: the built-in's, or the one the person gave a network
-/// they added (`receivable_chains` reads the same list). Empty only for a
-/// chain the wallet does not know.
+/// they added, in either space. Empty only for a chain the wallet does not
+/// know.
 pub(crate) fn native_symbol(chain_id: u32) -> String {
     if let Some(chain) = BUILTIN_CHAINS
         .iter()
@@ -1492,7 +1466,7 @@ pub(crate) fn native_symbol(chain_id: u32) -> String {
     {
         return chain.native_symbol.to_owned();
     }
-    receivable_chains()
+    crate::network_space::all_networks()
         .into_iter()
         .find(|(id, _)| *id == chain_id)
         .map_or_else(String::new, |(_, symbol)| symbol)
@@ -6460,17 +6434,23 @@ mod tests {
     fn every_receive_row_shows_one_address() {
         crate::executor::storage::tests::with_temp_state("flows-receive", || {
             const ADDR: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+            // The mainnet space's (spec 105): a device starts there.
+            let mainnets = BUILTIN_CHAINS.iter().filter(|chain| !chain.testnet).count();
             let list = receive_list(ADDR, &strings());
-            assert_eq!(list.rows.len(), BUILTIN_CHAINS.len());
+            assert_eq!(list.rows.len(), mainnets);
             let first = list.rows[0].address.clone();
             for row in &list.rows {
                 assert_eq!(row.address, first, "one address, every chain");
             }
-            assert!(list.subtitle.contains(&BUILTIN_CHAINS.len().to_string()));
+            assert!(list.subtitle.contains(&mainnets.to_string()));
 
-            // A network the person added joins the list, named by their name.
+            // A network the person added to this space joins the list, named
+            // by their name.
             let networks = serde_json::json!([
-                { "chainId": 7_777_777, "nativeSymbol": "TST", "displayName": "My testnet" }
+                {
+                    "chainId": 7_777_777, "nativeSymbol": "TST",
+                    "displayName": "My testnet", "isTestnet": false
+                }
             ]);
             if crate::executor::storage::write_value(
                 crate::executor::storage::KEY_CUSTOM_NETWORKS,
@@ -6481,7 +6461,7 @@ mod tests {
                 unreachable!("could not seed");
             }
             let list = receive_list(ADDR, &strings());
-            assert_eq!(list.rows.len(), BUILTIN_CHAINS.len() + 1);
+            assert_eq!(list.rows.len(), mainnets + 1);
             assert!(list.rows.iter().any(|row| row.name == "My testnet"));
         });
     }
@@ -8282,7 +8262,7 @@ mod tests {
                         Fiat::Value(v) => v.to_string(),
                         Fiat::NoPrice(v) => v.to_string(),
                         Fiat::Masked => "•••".to_owned(),
-                        Fiat::Pending => String::new(),
+                        Fiat::Pending | Fiat::None => String::new(),
                     }
                 );
             }

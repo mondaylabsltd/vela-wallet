@@ -10,6 +10,7 @@
  * exports; money code imports THIS module and nothing from the wasm glue
  * directly.
  */
+import type { SignedReview } from '$lib/core/generated/SignedReview';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
@@ -646,6 +647,21 @@ export function attestSafeOpHash(
 					});
 		return wasm.attestSafeOpHash(opJson, callsJson, BigInt(chainId));
 	});
+}
+
+/**
+ * The SafeOp hash for a send, as the core computes it — only when the
+ * operation is exactly the review the person confirmed (`SubmitUserOp.review`):
+ * its sender, chain and every call, decoded back out of its calldata.
+ */
+export function attestReviewedSafeOpHash(
+	op: AttestOp,
+	review: SignedReview,
+	chainId: number
+): Uint8Array {
+	return translated(() =>
+		wasm.attestReviewedSafeOpHash(attestOpJson(op), JSON.stringify(review), BigInt(chainId))
+	);
 }
 
 /** The Safe message hash (EIP-1271) as the core computes it. */

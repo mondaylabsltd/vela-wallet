@@ -42,6 +42,9 @@ class ContactsController(
         identity = identity,
     )
 
+    /** The view as the core wrote it — the AI agent reads the wallet whole (`AgentShellBridge.views`, spec 104). */
+    val viewJson: StateFlow<String?> get() = host.viewJson
+
     private val host = CoreHost(
         bridge = ContactsCore().asBridge(),
         scope = scope,

@@ -16,8 +16,9 @@ import VelaCore
 @testable import VelaWallet
 
 private let page = "http://127.0.0.1:8137"
-private let sepolia = 11_155_111
-private let catalogRpc = "https://rpc.sepolia.example"
+// Holesky: a chain this wallet does not have built in (Sepolia is, spec 105).
+private let sepolia = 17_000
+private let catalogRpc = "https://rpc.holesky.example"
 
 @MainActor
 struct Spec100Tests {
@@ -42,7 +43,7 @@ struct Spec100Tests {
                 executor: executor,
                 reported: { _ in sepolia },
                 chains: [sepolia: [
-                    "chain_id": sepolia, "name": "Ethereum Sepolia",
+                    "chain_id": sepolia, "name": "Ethereum Holesky",
                     "native_currency_symbol": "ETH", "rpc": [catalogRpc],
                 ]]
             )
@@ -97,7 +98,7 @@ struct Spec100Tests {
         func addSepolia(id: String) async {
             await harness.ask(
                 "t1", doc: "d1", origin: page, id: id, method: "wallet_addEthereumChain",
-                params: [["chainId": "0xaa36a7", "chainName": "My Sepolia", "rpcUrls": ["https://rpc.invalid"]]]
+                params: [["chainId": "0x4268", "chainName": "My Holesky", "rpcUrls": ["https://rpc.invalid"]]]
             )
         }
 
@@ -124,14 +125,14 @@ struct Spec100Tests {
         await rig.boot()
         await rig.addSepolia(id: "a1")
         let sheet = try #require(await rig.sheet(.ready))
-        #expect(sheet.name == "Ethereum Sepolia")
+        #expect(sheet.name == "Ethereum Holesky")
         #expect(!rig.probes.value.contains { $0.contains("rpc.invalid") }, "the page's RPC is never asked for a chain the catalog knows")
 
         // The sheet, in Settings' words.
         let model = ExploreLive.addNetwork(sheet, loc: Loc(overrideTag: "en", preferredLanguages: []))
         #expect(model.lead == "127.0.0.1:8137 asks to add a network")
         #expect(model.add == "Add Network")
-        #expect(model.rows.first?.value == "Ethereum Sepolia")
+        #expect(model.rows.first?.value == "Ethereum Holesky")
         #expect(model.fromSite == nil)
 
         rig.settings.dappAddApproved()
@@ -139,7 +140,7 @@ struct Spec100Tests {
         #expect(answer.errorCode == nil)
         #expect(answer.result is NSNull)
         await rig.harness.until { rig.harness.events("t1").contains { $0.event == "chainChanged" } }
-        #expect(rig.harness.events("t1").last { $0.event == "chainChanged" }?.message["data"] as? String == "0xaa36a7")
+        #expect(rig.harness.events("t1").last { $0.event == "chainChanged" }?.message["data"] as? String == "0x4268")
         #expect(rig.shelf.readList(VelaStore.Key.customNetworks).contains { ($0["chainId"] as? NSNumber)?.intValue == sepolia })
         #expect(rig.settings.networkAdmin?.dappAdd == nil)
     }
@@ -158,7 +159,7 @@ struct Spec100Tests {
         #expect(model.note == "Some contracts Vela needs aren't on this network yet. "
                 + "Chain Setup shows which ones and who can deploy them.")
         #expect(model.setupTool == "Open Chain Setup Tool")
-        #expect(model.setupUrl == "https://getvela.app/chain-setup?chain=11155111")
+        #expect(model.setupUrl == "https://getvela.app/chain-setup?chain=17000")
         #expect(model.checks.last?.ok == true, "the P-256 row is the precompile's, and it answered")
 
         rig.settings.dappAddDeclined()

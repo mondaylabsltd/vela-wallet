@@ -827,6 +827,7 @@ fn a_chain_the_wallet_already_has_settles_added_without_a_sheet() {
         bundler_url: String::new(),
         native_symbol: "M".to_owned(),
         added_at_iso: NOW_ISO.to_owned(),
+        is_testnet: None,
     }]);
     let ops = requested(&mut sut, site_ask(NEW_CHAIN, &[SITE_RPC]));
     assert_eq!(

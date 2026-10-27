@@ -85,12 +85,17 @@ final class AppGraph {
     let documents: UIKitDocumentPorts
     let paymentRequest: PaymentRequestStore
     let preferences: Preferences
+    /// The space in front (spec 105): which networks every list shows.
+    let space: NetworkSpace
     let batch: BatchStore
     let deposits: ReceiveWatchStore
     let welcome: WelcomeModel
     /// The camera behind the scanner (spec 055): its capture session survives
     /// the surface's rebuilds.
     let camera: CameraScanner
+    /// The AI agent (spec 103, spec 104 phase 7): the core's, answering
+    /// through this graph's stores. Off unless the person turns it on.
+    let agent: AgentStore
 
     /// The launch sequence has started (`launch`).
     private(set) var launched = false
@@ -402,6 +407,7 @@ final class AppGraph {
         // hidden — off — again.
         browserController.setDebugMode(prefs.debugMode.isOn)
         self.preferences = prefs
+        self.space = NetworkSpace(store: shelf)
         self.batch = BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
             documents: { documentPorts }
@@ -413,6 +419,13 @@ final class AppGraph {
             onDeposit: { [weak wallet] in wallet?.refresh(pull: false) }
         )
         self.camera = CameraScanner()
+        // The client token is the Keychain's; a graph over a test's own
+        // storage keeps it in memory, as it keeps everything else apart.
+        let agent = AgentStore(shelf: shelf, vault: defaults == nil ? KeychainTokenVault() : MemoryTokenVault())
+        self.agent = agent
+        // The passkey's ceremony, for the agent's transfers to follow: a
+        // transfer is awaiting its passkey once the prompt is up.
+        sendStore.onCeremony = { [weak agent] event in agent?.ceremony(event) }
         self.welcome = WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -426,6 +439,7 @@ final class AppGraph {
                 onboarding.showSignInMethods = true
             }
         }
+        agent.graph = self
         Self.built += 1
     }
 
@@ -454,5 +468,8 @@ final class AppGraph {
         // screen. The pending set is derived from the transaction store, so a
         // force-quit mid-send loses nothing — the next launch picks it up here.
         tracker.boot()
+        // The AI agent connects as set up — after the session, whose view its
+        // first request reads.
+        agent.start()
     }
 }

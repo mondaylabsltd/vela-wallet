@@ -46,9 +46,9 @@ const RECORD = {
 	type: 'send'
 };
 
-async function seedWalletWithRecord(page: Page): Promise<void> {
+async function seedWalletWithRecord(page: Page, records: object[] = [RECORD]): Promise<void> {
 	await page.addInitScript(
-		([record, safe, key]) => {
+		([records, safe, key]) => {
 			localStorage.setItem('vela.intro.seen', String(Date.now()));
 			if (localStorage.getItem('vela.accounts') === null) {
 				localStorage.setItem(
@@ -71,16 +71,15 @@ async function seedWalletWithRecord(page: Page): Promise<void> {
 					open.result
 						.transaction('kv', 'readwrite')
 						.objectStore('kv')
-						.put(JSON.stringify([record]), 'vela.transactionHistory');
+						.put(JSON.stringify(records), 'vela.transactionHistory');
 				};
 			}
 		},
-		[RECORD, SAFE, FIXTURE_PUBLIC_KEY] as const
+		[records, SAFE, FIXTURE_PUBLIC_KEY] as const
 	);
 }
 
 test.beforeEach(async ({ page }) => {
-	await seedWalletWithRecord(page);
 	await denyOffOrigin(page);
 	await stubChainRegistry(page, {
 		1: {
@@ -122,6 +121,7 @@ async function openHome(page: Page): Promise<void> {
 }
 
 test('the detail’s delete removes the row, the record, and stays removed', async ({ page }) => {
+	await seedWalletWithRecord(page);
 	await openHome(page);
 
 	// The seeded send is the one activity row: "Sent", −0.5 ETH.
@@ -144,4 +144,33 @@ test('the detail’s delete removes the row, the record, and stays removed', asy
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect(page.getByText(en('home.emptyNoActivity'))).toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText('\u22120.5', { exact: true })).toHaveCount(0);
+});
+
+/**
+ * A batch's row is named by its operation's hash, not by a record: the store's
+ * delete used to match nothing, and the reload painted the row back (spec 103,
+ * found while mapping deletes for the intents).
+ */
+test('a batch’s row deletes every record of the batch, and stays deleted', async ({ page }) => {
+	const BATCH = '0x' + 'c7'.repeat(32);
+	await seedWalletWithRecord(page, [
+		{ ...RECORD, id: 'batch-1', userOpHash: BATCH, to: '0x' + 'a1'.repeat(20), value: '0.5' },
+		{ ...RECORD, id: 'batch-2', userOpHash: BATCH, to: '0x' + 'a2'.repeat(20), value: '0.25' }
+	]);
+	await openHome(page);
+
+	// One folded row for the two records: −0.75 ETH in all.
+	await expect(page.getByText('\u22120.75', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await page
+		.getByRole('button', { name: new RegExp(en('history.labelSent')) })
+		.first()
+		.click();
+	const sheet = page.getByRole('dialog');
+	await sheet.getByRole('button', { name: en('history.deleteRecord') }).click();
+	await expect(page.getByText('\u22120.75', { exact: true })).toHaveCount(0);
+
+	await expect.poll(async () => (await readKv(page, 'vela.transactionHistory')) ?? '[]').toBe('[]');
+	await page.reload();
+	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
+	await expect(page.getByText(en('home.emptyNoActivity'))).toBeVisible({ timeout: 20_000 });
 });

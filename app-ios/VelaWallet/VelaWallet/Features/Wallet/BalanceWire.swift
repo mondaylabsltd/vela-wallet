@@ -155,8 +155,9 @@ struct BalanceViewWire: Decodable, Equatable {
     /// `nil` before an account is known — the neutral surface's trigger.
     let address: String?
     /// `nil` means **no total can be stated**, which is not the same as zero
-    /// and must never render as `$0.00`.
-    let displayTotalUsd: Double?
+    /// and must never render as `$0.00`. `var`: the store withholds a total
+    /// that counted the other space's holdings (spec 105).
+    var displayTotalUsd: Double?
     /// Nothing is known yet.
     let balanceUnknown: Bool
     /// Some chains answered and some did not. The total is a floor, not a sum,
@@ -172,9 +173,9 @@ struct BalanceViewWire: Decodable, Equatable {
     let hidden: Bool
     let refreshing: Bool
     let lastRefreshedAtMs: Double?
-    let tokens: [BalanceTokenWire]
+    var tokens: [BalanceTokenWire]
     /// Held but unpriceable — listed separately so the total stays honest.
-    let unpricedTokens: [BalanceTokenWire]
+    var unpricedTokens: [BalanceTokenWire]
     let failedChainIds: [Int]
     /// The transient subset. A chain here keeps its cached balance and must
     /// **never** be offered the "swap in your own RPC" banner (invariant ④).

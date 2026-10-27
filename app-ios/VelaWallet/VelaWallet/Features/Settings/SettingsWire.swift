@@ -118,6 +118,37 @@ struct NetNetworkRowWire: Decodable, Equatable {
     let rpcChainMismatch: NetChainMismatchWire?
     /// An edited RPC the core is holding back until its probe answers.
     let rpcSaveDeferred: Bool
+    /// The testnet space's (spec 105). Absent from an older view (a stored
+    /// fixture, an older core): mainnet, as the core said before it asked.
+    let isTestnet: Bool
+}
+
+/// Decoded by hand, in an extension so the memberwise initialiser stays:
+/// a row written before `is_testnet` still decodes.
+extension NetNetworkRowWire {
+    private enum CodingKeys: String, CodingKey {
+        case id, chainId, displayName, nativeSymbol, isCustom, rpcUrl, explorerUrl, bundlerUrl
+        case rpcHealth, explorerHealth, rpcChainMismatch, rpcSaveDeferred, isTestnet
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            chainId: try c.decode(Int.self, forKey: .chainId),
+            displayName: try c.decode(String.self, forKey: .displayName),
+            nativeSymbol: try c.decode(String.self, forKey: .nativeSymbol),
+            isCustom: try c.decode(Bool.self, forKey: .isCustom),
+            rpcUrl: try c.decode(String.self, forKey: .rpcUrl),
+            explorerUrl: try c.decode(String.self, forKey: .explorerUrl),
+            bundlerUrl: try c.decode(String.self, forKey: .bundlerUrl),
+            rpcHealth: try c.decodeIfPresent(NetProbeHealthWire.self, forKey: .rpcHealth),
+            explorerHealth: try c.decodeIfPresent(NetProbeHealthWire.self, forKey: .explorerHealth),
+            rpcChainMismatch: try c.decodeIfPresent(NetChainMismatchWire.self, forKey: .rpcChainMismatch),
+            rpcSaveDeferred: try c.decode(Bool.self, forKey: .rpcSaveDeferred),
+            isTestnet: try c.decodeIfPresent(Bool.self, forKey: .isTestnet) ?? false
+        )
+    }
 }
 
 // MARK: - The add-network wizard
@@ -269,6 +300,9 @@ struct NetWizardViewWire: Decodable, Equatable {
     /// candidate addable, and a second opinion here is how a screen offers to
     /// add a chain the core will refuse.
     let canAdd: Bool
+    /// The space the network goes to (spec 105): a testnet unless the person
+    /// chose mainnet. Absent from an older view: a testnet, the core's default.
+    var testnet: Bool = true
 }
 
 /// Decoded by hand, in an extension so the memberwise initialiser stays: a
@@ -279,7 +313,7 @@ struct NetWizardViewWire: Decodable, Equatable {
 extension NetWizardViewWire {
     private enum CodingKeys: String, CodingKey {
         case phase, query, customRpc, suggestions, chainInfo, compat, error, errorKey
-        case rpcField, rpcFieldLabelKey, canAdd
+        case rpcField, rpcFieldLabelKey, canAdd, testnet
     }
 
     init(from decoder: Decoder) throws {
@@ -296,7 +330,8 @@ extension NetWizardViewWire {
             rpcField: try c.decodeIfPresent(String.self, forKey: .rpcField)
                 .flatMap(NetRpcFieldWire.init(rawValue:)) ?? .none,
             rpcFieldLabelKey: try c.decodeIfPresent(String.self, forKey: .rpcFieldLabelKey),
-            canAdd: try c.decode(Bool.self, forKey: .canAdd)
+            canAdd: try c.decode(Bool.self, forKey: .canAdd),
+            testnet: try c.decodeIfPresent(Bool.self, forKey: .testnet) ?? true
         )
     }
 }

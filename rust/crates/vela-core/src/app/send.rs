@@ -72,6 +72,7 @@ use super::fee_policy::{
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
+use crate::signed_review::{ReviewedFee, ReviewedTransfer, SignedReview};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -1191,6 +1192,10 @@ pub enum SendOperation {
         gas_fee_token: Option<String>,
         /// Present ⇔ in-band: sign EXACTLY this (invariant ①).
         quoted_fee: Option<SendQuotedFee>,
+        /// The review the person confirmed. The passkey's hash is computed
+        /// with [`crate::signed_review::reviewed_safe_op_hash`] against it:
+        /// an operation that is not exactly this is never signed.
+        review: SignedReview,
     },
     /// `Passkey.cancelSign()`.
     CancelPasskeySign,
@@ -1570,7 +1575,17 @@ pub enum Event {
     },
     /// The confirm button was tapped. The name (and its `slide_confirm`
     /// wire tag) predates the tap: every shell dispatches it, so it stays.
-    SlideConfirm,
+    ///
+    /// `review` is the [`SendView::review_digest`] of the review the tapped
+    /// button was drawn on: a confirm drawn for another review — one that
+    /// changed, or another send's that took its place before the tap was
+    /// handled — confirms nothing. `None` only from a stop's own retry,
+    /// which is drawn over the review it retries.
+    SlideConfirm {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        review: Option<String>,
+    },
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
     /// Inside `SubmitUserOp`: the op is signed and its hash computed, and
@@ -1971,6 +1986,9 @@ pub struct Model {
     treasury_watch: Option<TreasuryWatch>,
     relay_unreachable: Option<SendRelayUnreachable>,
     lock: ReentryLock,
+    /// The review the person confirmed, frozen at the confirm: the submit
+    /// signs this or nothing ([`submit_user_op`]).
+    confirmed_review: Option<SignedReview>,
     /// The ported `sendCancelledRef` intent: every pre-sign hop checks it.
     cancelled: bool,
     tx: SendTxStatus,
@@ -2408,6 +2426,13 @@ pub struct SendView {
     /// refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
     /// the same predicate; a shell adds nothing to it (issue 424).
     pub can_confirm: bool,
+    /// On the review: which review this is — a digest of exactly what the
+    /// passkey would sign (the account, the chain, every transfer, the fee;
+    /// [`crate::signed_review::SignedReview::digest`]). The confirm button
+    /// sends it back as drawn ([`Event::SlideConfirm`]). `None` off the
+    /// review.
+    #[serde(default)]
+    pub review_digest: Option<String>,
     /// The account's previous transaction on this network is still going
     /// through, so the confirm is held (part of `can_confirm`): this one
     /// would take the same nonce. Drawn as its `key` under the confirm — the
@@ -2655,7 +2680,12 @@ impl Send {
                 });
                 render()
             }
-            Event::SlideConfirm => slide_confirm(model),
+            Event::SlideConfirm { review } => match review {
+                // Drawn for another review than the one up now: nothing is
+                // confirmed, and the review in front is what is drawn next.
+                Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => render(),
+                _ => slide_confirm(model),
+            },
             Event::SigningStarted => {
                 // Order is preparing → submitting → signing, as today
                 // (`setTxStatus('submitting')` precedes `signFn`).
@@ -2932,6 +2962,9 @@ impl Send {
             same_asset_fee_issue: issue,
             can_continue,
             can_confirm,
+            review_digest: (stage == SendStage::Confirm)
+                .then(|| review_digest(model))
+                .flatten(),
             previous_pending: (stage == SendStage::Confirm)
                 .then(|| previous_in_flight(model))
                 .flatten()
@@ -5553,6 +5586,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     let Some(gen) = model.lock.begin() else {
         return Command::done();
     };
+    // What this confirm is for, frozen: the submit signs it or nothing.
+    model.confirmed_review = submit_plan(model).as_ref().and_then(signed_review);
     model.cancelled = false;
     model.tx = SendTxStatus::Preparing;
     model.tx_hash = None;
@@ -5631,11 +5666,23 @@ fn quoted_fee_token(model: &Model, fee: Option<&FeeEstimate>) -> Option<String> 
     }
 }
 
-/// Build the submit batch + activity lines and hand them to the shell's
-/// sign→submit orchestration.
-fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
+/// What a confirm signs, built once from the model: the batch, its activity
+/// lines, the fee. The review the person confirmed ([`signed_review`]) and
+/// the submit both read it, so they cannot be two derivations.
+struct SubmitPlan {
+    chain_id: u32,
+    account: String,
+    max_fee_per_gas: Option<String>,
+    gas_fee_token: Option<String>,
+    quoted_fee: Option<SendQuotedFee>,
+    calls: Vec<FeeCall>,
+    lines: Vec<SendLine>,
+}
+
+/// `None` when the batch cannot be built — the submit's generic error.
+fn submit_plan(model: &Model) -> Option<SubmitPlan> {
     let (Some(token), Some(account)) = (model.selected_token.clone(), model.account.clone()) else {
-        return Command::done();
+        return None;
     };
     let chain_id = token.chain_id;
 
@@ -5753,11 +5800,91 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         })
     };
 
-    let Some((calls, lines)) = built else {
+    let (calls, lines) = built?;
+    Some(SubmitPlan {
+        chain_id,
+        account: account.address,
+        max_fee_per_gas,
+        gas_fee_token: quoted_fee_token(model, current_fee.as_ref()),
+        quoted_fee,
+        calls,
+        lines,
+    })
+}
+
+/// The review as the passkey's operation must carry it: every line the
+/// confirm screen shows, as base units from its own displayed figure — not
+/// from the calls, so a builder that drifted from the screen is caught too —
+/// and the quoted fee, in the coin it is paid in.
+fn signed_review(plan: &SubmitPlan) -> Option<SignedReview> {
+    let transfers = plan
+        .lines
+        .iter()
+        .map(|line| {
+            Some(ReviewedTransfer {
+                to: line.to.trim().to_owned(),
+                token: line.token_address.clone(),
+                amount: to_base_units(&line.amount, line.decimals)?.to_string(),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let fee = plan.quoted_fee.as_ref().map(|fee| ReviewedFee {
+        recipient: fee.recipient.clone(),
+        // Tempo names its default TIP-20 as no coin at all.
+        token: plan
+            .gas_fee_token
+            .clone()
+            .or_else(|| is_tempo_chain(plan.chain_id).then(|| TEMPO_DEFAULT_FEE_TOKEN.to_owned())),
+        amount: fee.amount.clone(),
+    });
+    Some(SignedReview {
+        chain_id: plan.chain_id,
+        account: plan.account.clone(),
+        transfers,
+        fee,
+    })
+}
+
+/// The digest of the review the model holds now ([`SendView::review_digest`]).
+fn review_digest(model: &Model) -> Option<String> {
+    submit_plan(model)
+        .as_ref()
+        .and_then(signed_review)
+        .map(|review| review.digest())
+}
+
+/// Build the submit batch + activity lines and hand them to the shell's
+/// sign→submit orchestration — with the review the person confirmed, which
+/// the operation's hash is only computed against
+/// ([`crate::signed_review::reviewed_safe_op_hash`]).
+fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
+    let Some(plan) = submit_plan(model) else {
         // Any build refusal is what a thrown `BatchSendError` became: the
         // generic catch — calm, localized, semantic (invariant ⑮).
         return submit_generic_error(model, gen);
     };
+    let Some(review) = signed_review(&plan) else {
+        return submit_generic_error(model, gen);
+    };
+    // What the confirm froze is what is signed. Anything that moved since —
+    // a re-quote that landed during the confirm's own checks — puts the
+    // review back in front of the person with its new figures, unsigned.
+    if model.confirmed_review.as_ref() != Some(&review) {
+        model.confirmed_review = None;
+        model.pipeline = Pipeline::Idle;
+        model.tx = SendTxStatus::Idle;
+        model.lock.end(gen);
+        return render();
+    }
+    let SubmitPlan {
+        chain_id,
+        account,
+        max_fee_per_gas,
+        gas_fee_token,
+        quoted_fee,
+        calls,
+        lines,
+    } = plan;
 
     model.tx = SendTxStatus::Submitting;
     let id = next(model);
@@ -5772,12 +5899,13 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
             id,
             SendOperation::SubmitUserOp {
                 chain_id,
-                account: account.address,
+                account,
                 public_key_hex,
                 calls,
                 max_fee_per_gas,
-                gas_fee_token: quoted_fee_token(model, current_fee.as_ref()),
+                gas_fee_token,
                 quoted_fee,
+                review,
             },
         ),
         render(),

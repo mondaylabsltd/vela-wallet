@@ -8,13 +8,15 @@
 	 * the list does not have to know what an editor is.
 	 */
 	import type { Snippet } from 'svelte';
-	import type { NetworkRowModel } from '../model';
+	import type { NetworkRowModel, NetworkSpaceHeadingModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import NetworkRow from './NetworkRow.svelte';
 
 	interface Props {
 		rows: NetworkRowModel[];
+		/** Spec 105: the space the rows are, and the switch (live only). */
+		space?: NetworkSpaceHeadingModel;
 		addLabel: string;
 		deleteLabel?: string;
 		expandable?: boolean;
@@ -23,19 +25,36 @@
 		onselect?: (id: string) => void;
 		ondelete?: (id: string) => void;
 		onadd?: () => void;
+		onmove?: (id: string) => void;
+		onswitch?: () => void;
 	}
 
 	let {
 		rows,
+		space,
 		addLabel,
 		deleteLabel,
 		expandable = false,
 		detail,
 		onselect,
 		ondelete,
-		onadd
+		onadd,
+		onmove,
+		onswitch
 	}: Props = $props();
 </script>
+
+{#if space !== undefined}
+	<div class="space" class:testnet={space.testnet} data-testid="networks-space">
+		<span class="text">
+			<span class="heading">{space.heading}</span>
+			<span class="hint">{space.hint}</span>
+		</span>
+		{#if onswitch !== undefined}
+			<button type="button" class="switch" onclick={onswitch}>{space.switchLabel}</button>
+		{/if}
+	</div>
+{/if}
 
 <div class="list">
 	{#each rows as row (row.id)}
@@ -45,6 +64,7 @@
 			{deleteLabel}
 			{onselect}
 			{ondelete}
+			{onmove}
 		/>
 		{#if row.expanded && detail !== undefined}
 			<div class="detail">{@render detail()}</div>
@@ -60,6 +80,53 @@
 {/if}
 
 <style>
+	.space {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		padding: var(--space-lg);
+		margin-block-end: var(--space-lg);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+		border: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.space.testnet {
+		background: var(--color-warning-soft);
+		border-color: var(--color-warning-base);
+	}
+
+	.space .text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		flex: 1;
+		min-width: 0;
+	}
+
+	.heading {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.hint {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.switch {
+		flex-shrink: 0;
+		min-height: var(--size-hitTarget);
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-info-base);
+		cursor: pointer;
+	}
+
 	.list {
 		display: flex;
 		flex-direction: column;

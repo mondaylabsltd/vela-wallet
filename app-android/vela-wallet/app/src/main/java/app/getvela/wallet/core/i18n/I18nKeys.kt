@@ -1296,6 +1296,30 @@ object I18nKeys {
         const val REASON_SIGNER_FAILED = "componentsUi.browserStatus.reason.signerFailed"
     }
 
+    /**
+     * Spec 105: the mainnet space and the testnet space — the home's label,
+     * the testnet bar, the switch, the add-network wizard's question and the
+     * network list's headings.
+     */
+    object NetworkSpace {
+        const val MAINNET = "networkSpace.mainnet"
+        const val TESTNET = "networkSpace.testnet"
+        const val BAR = "networkSpace.bar"
+        const val TITLE = "networkSpace.title"
+        const val MAINNET_HINT = "networkSpace.mainnetHint"
+        const val TESTNET_HINT = "networkSpace.testnetHint"
+        const val TO_TESTNET = "networkSpace.toTestnet"
+        const val TO_MAINNET = "networkSpace.toMainnet"
+        const val NO_VALUE = "networkSpace.noValue"
+        const val MOVE_TO_MAINNET = "networkSpace.moveToMainnet"
+        const val MOVE_TO_TESTNET = "networkSpace.moveToTestnet"
+        const val WIZARD_QUESTION = "networkSpace.wizardQuestion"
+        const val WIZARD_TESTNET = "networkSpace.wizardTestnet"
+        const val WIZARD_MAINNET = "networkSpace.wizardMainnet"
+        const val HEADING_MAINNET = "networkSpace.headingMainnet"
+        const val HEADING_TESTNET = "networkSpace.headingTestnet"
+    }
+
     /** The in-app browser's words that code names (the rest arrive as the core's `reason_key`). */
     object Explore {
         /**

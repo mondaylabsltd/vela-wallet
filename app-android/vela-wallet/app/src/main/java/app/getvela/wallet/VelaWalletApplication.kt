@@ -12,6 +12,10 @@ import app.getvela.wallet.core.diagnostics.CrashReport
 import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.signing.SigningAftercare
 import android.app.Application
+import app.getvela.wallet.core.data.ThemePreference
+import app.getvela.wallet.feature.agent.AgentStore
+import app.getvela.wallet.feature.agent.AgentWallet
+import app.getvela.wallet.feature.agent.KeystoreTokenVault
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -58,8 +62,17 @@ import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetworkSpacePreference
+import app.getvela.wallet.feature.settings.core.NetworkSpaces
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.stateIn
 import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
+import app.getvela.wallet.feature.settings.core.DeviceStorage
 import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
@@ -135,6 +148,34 @@ class AppContainer(private val app: Application) {
         scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
         locale = { app.resources.configuration.locales[0] ?: java.util.Locale.getDefault() },
     ).also { it.load() }
+
+    /**
+     * Spec 105: the device's space — mainnet or testnet, one switch for every
+     * wallet. Read at launch, so the home's label and the testnet bar are right
+     * from the first frame.
+     */
+    val networkSpace = NetworkSpacePreference(
+        store = VelaStore(app),
+        scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+    ).also { it.load() }
+
+    /**
+     * Spec 105: the networks of the space in front — the network machine's
+     * view with only that space's rows (the core's `network_space_chain_ids`).
+     * Every list a person sees reads this: the balances and the total, assets,
+     * receive, send's chains and tokens, adding a token, the chains a dApp and
+     * the signing sheet may use. What must know every chain — the pool's
+     * endpoints, a chain's name or coin, Settings' own pages — reads
+     * [SettingsController.networks].
+     */
+    val spaceNetworks: StateFlow<NetView> by lazy {
+        combine(settings.networks, networkSpace.space) { view, space -> NetworkSpaces.view(space, view) }
+            .stateIn(
+                CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+                SharingStarted.Eagerly,
+                NetworkSpaces.view(networkSpace.space.value, settings.networks.value),
+            )
+    }
 
     val accountStore = AccountStore(app)
 
@@ -307,10 +348,10 @@ class AppContainer(private val app: Application) {
      * It reads its endpoints from the settings machine's own view, so there is
      * exactly one reader of what networks this person has.
      */
-    val wallet: WalletController by lazy {
+    private val walletOnce = lazy {
         WalletController(
             context = app,
-            networks = settings.networks,
+            networks = spaceNetworks,
             pool = pool,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
             // A payment from one of this person's OWN wallets should say so by
@@ -332,8 +373,10 @@ class AppContainer(private val app: Application) {
                 )
             },
             backgroundPoll = { TrackerWorker.enqueue(app) },
+            testnet = { networkSpace.space.value.testnet },
         )
     }
+    val wallet: WalletController by walletOnce
 
     /** The address book, on the same terms as [settings]. */
     /**
@@ -485,7 +528,8 @@ class AppContainer(private val app: Application) {
             feed = wallet.feedExecutor,
             accountStore = accountStore,
             balances = { wallet.balances.value },
-            networks = { settings.networks.value },
+            // Spec 105: send offers the space in front's chains only.
+            networks = { spaceNetworks.value },
             signer = {
                 ParallelSpaceHook.signer()
                     ?: passkeySigner
@@ -547,7 +591,100 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
                 wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
             }
+            // The passkey's ceremony, for the AI agent's transfers to follow:
+            // a transfer is awaiting its passkey once the prompt is up.
+            controller.onCeremony = { event -> agent.ceremony(event) }
         }
+    }
+
+    /**
+     * The AI agent (spec 103, spec 104 phase 7): the core's, answering through
+     * this container's controllers. Off unless the person turns it on.
+     */
+    val agent: AgentStore by lazy {
+        AgentStore(
+            VelaStore(app),
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            KeystoreTokenVault(VelaStore(app)),
+            KeystoreTokenVault(VelaStore(app), KeystoreTokenVault.AGENT_URL_KEY, KeystoreTokenVault.AGENT_URL_ALIAS),
+        )
+    }
+
+    /** What the agent reaches, here — resolved as it is asked for, so nothing is built early. */
+    private val agentWallet = object : AgentWallet {
+        override val session get() = this@AppContainer.session
+        override val contacts get() = this@AppContainer.contacts
+        override val wallet get() = this@AppContainer.wallet
+        override val settings get() = this@AppContainer.settings
+        override val send get() = this@AppContainer.send
+        override val preferences get() = this@AppContainer.preferences
+        override val networkSpace get() = this@AppContainer.networkSpace
+        override val theme get() = themeRepository.current
+        override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
+        override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
+        override fun signingJson(): String? = signing.value?.signJson?.value
+        override val browser get() = this@AppContainer.browser
+        override fun signingSheet() = signing.value
+        override fun agentWallets() = agent.config.value.wallets
+        override suspend fun erase(): List<String> = eraseDevice()
+        override suspend fun clearStorageItem(item: String) = this@AppContainer.clearStorageItem(item)
+        override suspend fun clearCaches() = this@AppContainer.clearCaches()
+        override suspend fun switchAccount(address: String): Boolean {
+            val current = session.view.value
+            if (current.address.equals(address, ignoreCase = true)) return true
+            val row = current.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) } ?: return false
+            session.switchAccount(row.index)
+            return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                session.view.first { it.address.equals(address, ignoreCase = true) }
+            } != null
+        }
+    }
+
+    /**
+     * Erase This Device: what survived (empty when everything went). What an
+     * erase removes is the CORE's rule (`is_erasable_key`); what it sweeps is
+     * `eraseDevice`'s — the second theme store, the crash record, the logs, the
+     * caches and every browsed site's data (spec 081 FR-017). Live pages hear
+     * their sites disconnected first. On a clean sweep the session ends.
+     */
+    suspend fun eraseDevice(): List<String> {
+        browser.revokeAll()
+        val left = DeviceStorage.eraseDevice(app, VelaStore(app))
+        // The AI agent's token: its sealed bytes went with the sweep; its key
+        // leaves the Keystore.
+        agent.forgetToken()
+        // Spec 091: the debug-mode key went with the rest — About hides the
+        // switch again, and the browser follows.
+        preferences.reloadDebugMode()
+        // Spec 105: and the space with it — the device starts over in mainnet.
+        networkSpace.reload()
+        if (left.isEmpty()) {
+            session.signOut()
+            session.signOutConfirmed()
+        }
+        return left
+    }
+
+    /** One of the storage page's items, cleared (spec 058). */
+    suspend fun clearStorageItem(itemId: String) {
+        when {
+            // One connected site (spec 070): the core revokes it, writes the
+            // store and tells any open page.
+            "://" in itemId -> browser.revoke(itemId)
+            // Every grant: gone from the store AND from the live core, which
+            // used to keep them until a restart.
+            itemId == "dapps" -> {
+                DeviceStorage.clear(VelaStore(app), itemId)
+                browser.revokeAll()
+            }
+            else -> DeviceStorage.clear(VelaStore(app), itemId)
+        }
+    }
+
+    /** The caches this app can rebuild, cleared; the balances read again. */
+    suspend fun clearCaches() {
+        DeviceStorage.clearCaches(VelaStore(app))
+        wallet.refresh()
     }
 
     /** Set once [browser] exists: a memory warning has no engines to let go of before that. */
@@ -601,9 +738,10 @@ class AppContainer(private val app: Application) {
                     if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
                 }
             }
-            // The chains a page may switch to are the wallet's networks, live.
+            // The chains a page may switch to are the space in front's
+            // networks, live (spec 105): a switch of space is a change of them.
             follow.launch {
-                settings.networks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and
@@ -757,7 +895,8 @@ class AppContainer(private val app: Application) {
                 feed = wallet.feedExecutor,
                 accounts = accountPort,
                 signer = { ParallelSpaceHook.signer() ?: passkeySigner ?: error("no signer bound") },
-                knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
+                // Spec 105: the space in front's chains, as the page's are.
+                knownChains = { spaceNetworks.value.networks.map { it.chain_id.toInt() } },
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
@@ -889,11 +1028,17 @@ class AppContainer(private val app: Application) {
         override fun onActivityStarted(activity: android.app.Activity) {
             foregroundActivities += 1
             wallet.focused()
+            // The AI agent answers only while the wallet is in front.
+            agent.sceneActive(true)
         }
 
         override fun onActivityStopped(activity: android.app.Activity) {
             foregroundActivities = (foregroundActivities - 1).coerceAtLeast(0)
-            if (foregroundActivities == 0) wallet.backgrounded()
+            if (foregroundActivities == 0) {
+                wallet.backgrounded()
+                // In the background it hangs up, and what waited is withdrawn.
+                agent.sceneActive(false)
+            }
         }
 
         override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) = Unit
@@ -911,6 +1056,13 @@ class AppContainer(private val app: Application) {
         // Spec 102: the saved signing pages — read (and the 071 page imported)
         // before any account's venue choices are drawn.
         settings.refreshSigningPages()
+        // Spec 105: a switch of space — the person's or an approved agent's —
+        // reads the balances again, forced, so the total is the new space's.
+        // The lists follow [spaceNetworks] by themselves. Nothing to read for a
+        // wallet that has not been opened.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            networkSpace.space.drop(1).collect { if (walletOnce.isInitialized()) wallet.spaceChanged() }
+        }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->
@@ -930,11 +1082,20 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
                 DebugSeed.apply(app, VelaStore(app))
                 session.boot()
+                startAgent()
             }
         } else {
             session.boot()
+            startAgent()
         }
     }
+
+    /**
+     * The AI agent connects as set up (spec 103) — off unless the person
+     * turned it on. After the session's boot, whose view its first request
+     * reads (and after a debug seed, which may hold its settings).
+     */
+    private fun startAgent() = agent.start(agentWallet)
 
     /** Re-resolves the system locale (activity recreation on locale change). */
     fun applySystemLocale() {

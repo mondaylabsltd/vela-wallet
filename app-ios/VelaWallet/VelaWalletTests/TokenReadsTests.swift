@@ -133,7 +133,9 @@ struct TokenReadsTests {
     /// big" threshold, which would also reject a genuine whale.
     @Test func tempoIsMarkedSoItsNativeBalanceIsNeverRead() {
         #expect(ChainCatalog.meta(4_217)?.gasModel == .tempo)
-        #expect(ChainCatalog.chains.filter { $0.gasModel == .tempo }.count == 1)
+        // …and its testnet, Moderato (spec 105).
+        #expect(ChainCatalog.meta(42_431)?.gasModel == .tempo)
+        #expect(ChainCatalog.chains.filter { $0.gasModel == .tempo }.count == 2)
     }
 
     // MARK: - The read plan (spec 082 T119, RE9, G24)

@@ -212,7 +212,11 @@
 				panel={model.panels.assetDetail}
 				onsend={() => onflow?.('send', { assetId: model.panels.assetDetail.id })}
 				onreceive={() => onflow?.('receive-token', { assetId: model.panels.assetDetail.id })}
-				onselect={(row) => onactivity?.(row)}
+				onselect={(row) => {
+					// As a home row: the record's detail opens in the column.
+					onactivity?.(row);
+					onflow?.('tx-detail');
+				}}
 			/>
 		</ThirdPanel>
 	{:else if column !== undefined}

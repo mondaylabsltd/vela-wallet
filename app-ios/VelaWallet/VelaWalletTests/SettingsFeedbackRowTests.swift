@@ -65,7 +65,7 @@ struct SettingsFeedbackRowTests {
     @Test func everyHomeRowIsRouted() {
         let pages: Set<String> = [
             "networks", "rpc-providers", "add-network", "endpoints", "storage", "about",
-            SigningPagesPageModel.rowId,
+            SigningPagesPageModel.rowId, SettingsFixtures.agentRow,
         ]
         for row in liveHome().sections.flatMap(\.rows) {
             let routed = SettingsScreen.overlay(forRow: row.id) != nil

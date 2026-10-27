@@ -419,7 +419,9 @@ final class SendExecutor {
         else {
             return CoreJSON.string(["type": "tokens_loaded", "tokens": NSNull(), "chains": []])
         }
-        let rows = networks()?.networks ?? []
+        // The space in front's (spec 105): send offers no chain of the other.
+        let testnet = NetworkSpace.read(store) == .testnet
+        let rows = (networks()?.networks ?? []).filter { $0.isTestnet == testnet }
         let chains = rows.map { row in
             [
                 "network": "chain-\(row.chainId)",
@@ -608,6 +610,14 @@ final class SendExecutor {
                 tier: fee["tier"] as? String
             )
         }
+        // The review the person confirmed: the passkey's hash is computed only
+        // for the operation that is exactly it. A submit without one signs
+        // nothing.
+        guard let review = (operation["review"] as? [String: Any]).map(CoreJSON.string) else {
+            return CoreJSON.string([
+                "type": "submit_failed", "failure": ["type": "other", "message": NSNull()],
+            ])
+        }
         let task = Task<UserOpSpine.Submitted, Error> { [spine, ports, gate, clearanceWaitMs] in
             try await spine.submit(
                 chainId: chainId,
@@ -615,6 +625,7 @@ final class SendExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                review: review,
                 signingStarted: { ports.signingStarted() },
                 // The records before the bytes (RJ1).
                 writeAhead: { hash, block in

@@ -2734,8 +2734,9 @@ mod tests {
             NetStoredEndpoints, NetworkAdmin,
         };
 
-        const CHAIN: u32 = 11_155_111;
-        const RPC: &str = "https://rpc.sepolia.example";
+        // Not built in: Sepolia is, since spec 105.
+        const CHAIN: u32 = 17_000;
+        const RPC: &str = "https://rpc.holesky.example";
 
         /// Answer every operation the way a reachable, compatible chain does;
         /// the store writes and the ending go through the real executor.
@@ -2746,7 +2747,7 @@ mod tests {
                         chain_id: *chain_id,
                         data: Some(NetRawChainData {
                             chain_id: Some(CHAIN),
-                            name: Some("Ethereum Sepolia".to_owned()),
+                            name: Some("Ethereum Holesky".to_owned()),
                             native_currency_symbol: Some("ETH".to_owned()),
                             rpc: vec![RPC.to_owned()],
                             ..NetRawChainData::default()
@@ -2784,7 +2785,7 @@ mod tests {
                 "d1",
                 "a1",
                 "wallet_addEthereumChain",
-                json!([{"chainId":"0xaa36a7","chainName":"My Sepolia","rpcUrls":["https://rpc.invalid"]}]),
+                json!([{"chainId":"0x4268","chainName":"My Holesky","rpcUrls":["https://rpc.invalid"]}]),
             );
             let order = out.into_iter().find_map(|next| match next {
                 Outbound::Signing(SigningOrder::AddNetwork {
@@ -2830,7 +2831,7 @@ mod tests {
             let sheet = admin.view().dapp_add;
             assert_eq!(
                 sheet.as_ref().map(|add| (add.name.as_str(), add.can_add)),
-                Some(("Ethereum Sepolia", true))
+                Some(("Ethereum Holesky", true))
             );
             let pending = admin.dispatch(NetEvent::DappAddApproved {
                 now_iso: "2026-10-04T12:00:00.000Z".to_owned(),
@@ -2863,7 +2864,7 @@ mod tests {
                 .filter(|(_, message)| message["dir"] == "evt")
                 .map(|(_, message)| (message["event"].clone(), message["data"].clone()))
                 .collect();
-            assert_eq!(events, vec![(json!("chainChanged"), json!("0xaa36a7"))]);
+            assert_eq!(events, vec![(json!("chainChanged"), json!("0x4268"))]);
             assert_eq!(driver.view().tabs[0].chain_id, CHAIN);
         });
     }

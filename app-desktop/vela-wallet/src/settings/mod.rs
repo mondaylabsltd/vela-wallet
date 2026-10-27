@@ -37,6 +37,7 @@ pub struct SettingsStrings {
     /// The default transaction speed (spec 069): the nav row, and the page's
     /// title and the sentence under it.
     pub nav_fee_speed: SharedString,
+    pub nav_agent: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
     /// Settings → Signing pages (spec 102): the nav row and the sentence
@@ -370,6 +371,7 @@ impl SettingsStrings {
             nav_endpoints: s("settings.advanced.endpointsTitle"),
             nav_storage: s("settings.storage.title"),
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
+            nav_agent: s("settings.agent.title"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
             nav_signing: s("settings.signing.title"),

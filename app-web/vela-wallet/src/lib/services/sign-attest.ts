@@ -22,12 +22,14 @@
  */
 
 import {
+	attestReviewedSafeOpHash,
 	attestSafeMessageHash,
 	attestSafeOpHash,
 	fromBase64Url,
 	type AttestCalls,
 	type AttestOp
 } from '$lib/core/kernels';
+import type { SignedReview } from '$lib/core/generated/SignedReview';
 
 export class SignAttestError extends Error {
 	override readonly name = 'SignAttestError';
@@ -47,19 +49,36 @@ function reason(error: unknown): string {
 /**
  * The SafeOp hash both implementations agree on, or a refusal. `shellHash` is
  * what `calculateSafeOpHash` produced; `calls` is what the confirm showed
- * (`null` where the caller only has finished calldata).
+ * (`null` where the caller only has finished calldata). A send also hands
+ * the `review` the person confirmed: the core decodes the operation's calls
+ * and refuses one that is not exactly it — a fee re-quoted after the review
+ * included.
  */
 export function attestedSafeOpHash(
 	op: AttestOp,
 	chainId: number,
 	calls: AttestCalls | null,
-	shellHash: Uint8Array
+	shellHash: Uint8Array,
+	review: SignedReview | null = null
 ): Uint8Array {
 	let coreHash: Uint8Array;
 	try {
 		coreHash = attestSafeOpHash(op, calls, chainId);
 	} catch (error) {
 		throw new SignAttestError(`The core refused to attest this operation: ${reason(error)}`);
+	}
+	if (review !== null) {
+		let reviewed: Uint8Array;
+		try {
+			reviewed = attestReviewedSafeOpHash(op, review, chainId);
+		} catch (error) {
+			throw new SignAttestError(
+				`The operation is not the one on the review; nothing was signed: ${reason(error)}`
+			);
+		}
+		if (!sameBytes(reviewed, coreHash)) {
+			throw new SignAttestError('The operation is not the one on the review; nothing was signed.');
+		}
 	}
 	if (!sameBytes(coreHash, shellHash)) {
 		throw new SignAttestError(

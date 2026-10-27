@@ -121,6 +121,9 @@ enum class SettingsPage {
 
     /** Spec 102: this account's "Where you review and sign". */
     Venue,
+
+    /** Spec 103: whether an AI agent may use this wallet, and through which bridge. */
+    Agent,
     ;
 
     /**
@@ -202,6 +205,8 @@ enum class SettingsIcon {
     Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload, LogOut,
     /** Spec 102: where you review and sign (the web's lucide `eye`), and the signing pages. */
     Eye, FileText,
+    /** Spec 103: the AI agent's row. */
+    Power,
     /** Settings → Community: the brands' own monochrome marks. */
     BrandX, BrandTelegram, BrandDiscord,
 }
@@ -449,6 +454,20 @@ data class NetworkRowModel(
     /** ST9: custom networks carry a 自定义 tag and a bin. */
     val tag: String? = null,
     val removable: Boolean = false,
+    /** Spec 105: a network the person added moves to the other space — the control's words. */
+    val move: String? = null,
+)
+
+/**
+ * Spec 105: which space the network list shows, under its heading, and the
+ * switch to the other one.
+ */
+@Immutable
+data class NetworkSpaceHeadingModel(
+    val heading: String,
+    val hint: String,
+    val switchLabel: String,
+    val testnet: Boolean,
 )
 
 @Immutable
@@ -508,6 +527,12 @@ data class AddNetworkModel(
     /** Where [secondary] goes: the core's `setup_url`, Chain Setup opened on this chain. */
     val secondaryUrl: String? = null,
     val recheck: String? = null,
+    /**
+     * Spec 105: the space the network goes to, the person's choice, shown
+     * when the network may be added. Preselected to testnet unless the chain
+     * registry calls it a mainnet.
+     */
+    val space: SegmentedModel? = null,
 )
 
 @Immutable
@@ -947,6 +972,8 @@ data class SettingsScreenModel(
     val networksTitle: String,
     val networksSubtitle: String,
     val networks: List<NetworkRowModel>,
+    /** Spec 105: live only — the space the rows are, and its switch. */
+    val networksSpace: NetworkSpaceHeadingModel? = null,
     val addNetworkLabel: String,
     /** Spec 072: the trash icon's name, and the question it asks. */
     val removeNetworkLabel: String = "",
@@ -985,6 +1012,9 @@ data class SettingsScreenModel(
     /** Scrim title behind a rescue sheet — "钱包", "转账", "设备存储". */
     val backdropTitle: String,
     val closeLabel: String,
+    /** Spec 103: Settings → AI agent's header. */
+    val agentTitle: String = "",
+    val agentSubtitle: String? = null,
 ) {
     /** The signed-in identity, swapped over the fixture account (spec 019). */
     fun withIdentity(name: String, address: String, display: String): SettingsScreenModel = copy(

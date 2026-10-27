@@ -91,6 +91,10 @@ final class TrackerStore {
     }
 
     private var core: CoreStore<TrackViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     private let executor: TrackerExecutor
 
     /// No effect in flight — `CoreDriver.isIdle`. The foreground tick is not

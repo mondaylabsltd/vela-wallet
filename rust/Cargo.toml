@@ -12,6 +12,10 @@ members = [
   # would otherwise fold `cli` — and `uniffi_bindgen` — back into the library
   # that goes to the App Store.
   "crates/vela-uniffi-bindgen",
+  # The AI agent's shared core (spec 104 phase 7) and ClientMCP's Rust client,
+  # vendored (see its manifest).
+  "crates/vela-agent",
+  "vendor/clientmcp-client",
 ]
 default-members = [
   "crates/vela-core",

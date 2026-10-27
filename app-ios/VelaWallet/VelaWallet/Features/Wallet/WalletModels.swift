@@ -49,7 +49,9 @@ enum NetworkPillModel {
 }
 
 enum BalanceStateKind {
-    case normal, zeroLive, loading, hidden
+    /// `noValue`: the testnet space (spec 105) — nothing there has a fiat
+    /// worth, so no total is stated; `noValueText` says so in its place.
+    case normal, zeroLive, loading, hidden, noValue
 }
 
 struct BalanceStatusModel {
@@ -80,6 +82,8 @@ struct BalanceModel {
     /// cached figure alike: until a round has ended no chain has said the
     /// wallet is live and none has failed to answer.
     var checkingText: String? = nil
+    /// Spec 105: what the testnet space says in place of a total.
+    var noValueText: String? = nil
 }
 
 /// The hero's refresh control (issue 462) — the same control on all four

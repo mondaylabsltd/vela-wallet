@@ -18,6 +18,7 @@
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
+		AgentPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsDesktopModel,
@@ -29,6 +30,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
+	import AgentPanel from './ui/AgentPanel.svelte';
 	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
@@ -69,6 +71,11 @@
 		 * Absent in the gallery.
 		 */
 		analytics?: SwitchRowModel;
+		/**
+		 * Spec 103: Settings → AI agent, with its live state — web only, so the
+		 * route adds its nav entry. Absent in the gallery.
+		 */
+		agent?: AgentPanelModel;
 		/** The sidebar's network filter was used. Absent in the gallery. */
 		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 		/**
@@ -107,6 +114,7 @@
 		onnetevent,
 		onprefevent,
 		analytics,
+		agent,
 		onchainselect,
 		onaccountselect,
 		onaccountcreate,
@@ -172,6 +180,8 @@
 				return { title: model.community.title, description: undefined };
 			case 'about':
 				return { title: model.about.title, description: undefined };
+			case 'agent':
+				return { title: agent?.title ?? model.title, description: undefined };
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -196,6 +206,35 @@
 		page = id;
 		const opened = OPENED_EVENT[id];
 		if (opened !== undefined) onnetevent?.(opened);
+	}
+
+	/** The panels of the second-level nav; the account's venue is part of the account's. */
+	const PANELS = new Set<string>([
+		'account',
+		'appearance',
+		'localization',
+		'networks',
+		'rpc-providers',
+		'endpoints',
+		'storage',
+		'fee-speed',
+		'feedback',
+		'community',
+		'about',
+		'agent',
+		'signing-pages'
+	]);
+
+	/**
+	 * Open a settings page by name (spec 103's `show`): its nav entry.
+	 * `false` when the desktop has no such panel.
+	 */
+	export function open(id: string): boolean {
+		const panel = id === 'signing-venue' ? 'account' : id;
+		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
+		closeOverlay();
+		openPage(panel as SettingsPageId);
+		return true;
 	}
 
 	function closeOverlay() {
@@ -381,11 +420,14 @@
 			{:else if page === 'networks'}
 				<NetworksPanel
 					rows={model.networks.rows}
+					space={model.networks.space}
 					addLabel={model.networks.addLabel}
 					deleteLabel={model.networks.removeLabel}
 					expandable
 					onselect={(id) => onnetevent?.({ kind: 'select-network', id })}
 					ondelete={(id) => ask('remove-network', id, removeNetworkQuestion(model.networks, id))}
+					onmove={(id) => onnetevent?.({ kind: 'move-network', id })}
+					onswitch={() => onnetevent?.({ kind: 'switch-space' })}
 				>
 					{#snippet detail()}
 						<NetworkDetailPanel
@@ -456,6 +498,16 @@
 					{analytics}
 					onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
 				/>
+			{:else if page === 'agent' && agent !== undefined}
+				<AgentPanel
+					panel={agent}
+					onenable={(on) => onprefevent?.({ kind: 'agent', on })}
+					onbridge={(value) => onprefevent?.({ kind: 'agent-url', value })}
+					ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
+					onlink={() => onprefevent?.({ kind: 'agent-link' })}
+					onunlink={() => onprefevent?.({ kind: 'agent-unlink' })}
+					onwallet={(address, on) => onprefevent?.({ kind: 'agent-wallet', address, on })}
+				/>
 			{/if}
 		</div>
 	</main>
@@ -474,6 +526,7 @@
 				oncustomrpc={(value) => onnetevent?.({ kind: 'custom-rpc', value })}
 				onprimary={() => onnetevent?.({ kind: 'confirm-add' })}
 				onrecheck={() => onnetevent?.({ kind: 'recheck' })}
+				onspace={(testnet) => onnetevent?.({ kind: 'add-space', testnet })}
 			/>
 		</Dialog>
 	{:else if overlay === 'rpc-fix'}

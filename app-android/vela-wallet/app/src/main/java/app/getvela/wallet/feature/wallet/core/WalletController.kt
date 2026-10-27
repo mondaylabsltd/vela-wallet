@@ -11,6 +11,11 @@ import app.getvela.wallet.feature.send.core.MtokNetwork
 import app.getvela.wallet.feature.send.core.MtokExecutor
 import app.getvela.wallet.feature.send.core.MtokEvent
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import uniffi.vela_core_uniffi.TxTrackerCore
@@ -70,8 +75,28 @@ internal fun refreshOnArrival(scope: CoroutineScope, feed: StateFlow<FeedView>, 
     }
 }
 
+/**
+ * Spec 105: [view] with only the space in front's holdings — [chains], the
+ * space's chain ids; `null` before the network list is read (nothing to
+ * narrow by). A total that counted a holding of the other space is not shown
+ * (`display_total_usd` withheld): the switch reads the balances again, and
+ * until that round lands the other space's coins never stand in for these.
+ */
+internal fun inSpace(view: BalanceView, chains: Set<Int>?): BalanceView {
+    if (chains == null) return view
+    val tokens = view.tokens.filter { it.chain_id in chains }
+    val unpriced = view.unpriced_tokens.filter { it.chain_id in chains }
+    if (tokens.size == view.tokens.size && unpriced.size == view.unpriced_tokens.size) return view
+    return view.copy(tokens = tokens, unpriced_tokens = unpriced, display_total_usd = null)
+}
+
 class WalletController(
     context: Context,
+    /**
+     * The networks of the space in front (spec 105) — the chains the balances
+     * read, receive offers and a token is looked up on. The pool reads every
+     * chain's endpoints from the whole list, not from this.
+     */
     private val networks: StateFlow<NetView>,
     /**
      * The one way this app reads a chain.
@@ -101,6 +126,8 @@ class WalletController(
     notifyConfirmed: (userOpHash: String, chainId: Int, txHash: String) -> Unit = { _, _, _ -> },
     /** Pending hashes remain and the app went to the background: keep polling from a worker. */
     backgroundPoll: () -> Unit = {},
+    /** Spec 105: the testnet space is in front — no saved total is read or written. */
+    testnet: () -> Boolean = { false },
 ) {
 
     private val store = VelaStore(context)
@@ -125,10 +152,14 @@ class WalletController(
         store = store,
         chainInfo = chains::read,
         mainnetPrices = ChainlinkPrices(pool)::prices,
+        testnet = testnet,
     )
 
     /** The last `FetchSettled` the executor answered: whose, and its `now_ms`. */
     private val lastSettle = java.util.concurrent.atomic.AtomicReference<Pair<String, Double>?>(null)
+
+    /** The balances' view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val balanceJson: StateFlow<String?> get() = balanceHost.viewJson
 
     private val balanceHost = CoreHost(
         bridge = BalanceDashboardCore().asBridge(),
@@ -225,6 +256,9 @@ class WalletController(
                 .orEmpty()
         },
     )
+
+    /** The activity feed's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val feedJson: StateFlow<String?> get() = feedHost.viewJson
 
     private val feedHost = CoreHost(
         bridge = ActivityFeedCore().asBridge(),
@@ -457,6 +491,9 @@ class WalletController(
         )
     }
 
+    /** The chain tracker's view as the core wrote it (`null` without a tracker) — for the AI agent's transfers (spec 104). */
+    val trackerJson: String? get() = trackerHost?.viewJson?.value
+
     private val trackerHost: CoreHost<TrackView>? = trackerExecutor?.let { tracker ->
         CoreHost(
             bridge = TxTrackerCore().asBridge(),
@@ -621,8 +658,16 @@ class WalletController(
         }
     }
 
-    /** What the home screen renders. */
-    val balances: StateFlow<BalanceView> = balanceHost.view
+    /**
+     * The space in front's chains (spec 105), `null` before the network list
+     * is read — what the balances and the feed are narrowed to.
+     */
+    private fun spaceChains(view: NetView): Set<Int>? =
+        view.takeIf { it.loaded && it.networks.isNotEmpty() }?.networks?.map { it.chain_id.toInt() }?.toSet()
+
+    /** What the home screen renders: the space in front's holdings (spec 105). */
+    val balances: StateFlow<BalanceView> = combine(balanceHost.view, networks) { view, nets -> inSpace(view, spaceChains(nets)) }
+        .stateIn(scope, SharingStarted.Eagerly, inSpace(balanceHost.view.value, spaceChains(networks.value)))
 
     private val _holdingsRound = MutableStateFlow<HoldingsRound?>(null)
 
@@ -640,7 +685,7 @@ class WalletController(
 
     /** The asset list's holdings, as Send reads them. */
     val holdings: HoldingsFeed = object : HoldingsFeed {
-        override val view: StateFlow<BalanceView> = balanceHost.view
+        override val view: StateFlow<BalanceView> = balances
         override val settled: StateFlow<HoldingsRound?> = _holdingsRound
     }
 
@@ -654,10 +699,27 @@ class WalletController(
                     view.last_refreshed_at_ms == stamp &&
                     _holdingsRound.value?.let { it.atMs == stamp && it.address.equals(address, ignoreCase = true) } != true
                 ) {
-                    _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = view)
+                    _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = inSpace(view, spaceChains(networks.value)))
                 }
             }
         }
+        // Spec 105: the feed draws only the space in front's records — told on
+        // boot (once the list is read) and on every change of the list, which a
+        // switch of space is. The other space's records stay stored.
+        scope.launch {
+            networks.map(::spaceChains).distinctUntilChanged().collect { chains ->
+                if (chains != null) feedHost.dispatch(FeedEvent.SpaceChainsChanged(chains.toList()), FeedEvent.serializer())
+            }
+        }
+    }
+
+    /**
+     * Spec 105: the space in front changed — every chain read again (forced:
+     * past the background gate), so the total is the new space's.
+     */
+    fun spaceChanged() {
+        VelaLog.event("balance", "space changed")
+        refresh(force = true)
     }
 
     /**

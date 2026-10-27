@@ -309,6 +309,10 @@ class MainActivity : ComponentActivity() {
         }
         (application as VelaWalletApplication).container.documents = app.getvela.wallet.feature.documents.ActivityDocumentPorts(this)
         (application as VelaWalletApplication).container.trustedSignerTab = app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab(this)
+        // Spec 106: clientmcp.dev's sign-in opens in the same kind of tab.
+        (application as VelaWalletApplication).container.agent.clientmcp.openPage = { url ->
+            (application as VelaWalletApplication).container.trustedSignerTab?.open(url) ?: false
+        }
         bluetoothPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
         ) { grants ->
@@ -529,6 +533,11 @@ class MainActivity : ComponentActivity() {
      */
     private fun routeDeepLink(intent: android.content.Intent?, container: AppContainer) {
         val data = intent?.data ?: return
+        // Spec 106: clientmcp.dev's return, with the code — the sign-in that started it finishes it.
+        if (data.scheme == app.getvela.wallet.feature.agent.ClientMcpLink.SCHEME) {
+            container.agent.clientmcp.returned(data.toString())
+            return
+        }
         when (val link = PayLink.parse(data.toString())) {
             is PayLink.Open -> container.browser.askToOpen(link.url)
             is PayLink.Pay -> container.pendingPayLink.value = data

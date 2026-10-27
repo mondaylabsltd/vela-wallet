@@ -289,6 +289,10 @@ class NetworkAdminExecutor(
                 bundler_url = record.string("bundlerURL"),
                 native_symbol = record.string("nativeSymbol"),
                 added_at_iso = record.string("addedAt"),
+                // Spec 105: absent on a record from before the question — the
+                // core reads that as a testnet; a flag that is not a boolean
+                // is read as absent rather than guessed at.
+                is_testnet = record.opt("isTestnet") as? Boolean,
             )
         }
 
@@ -306,6 +310,8 @@ class NetworkAdminExecutor(
         put("bundlerURL", network.bundler_url)
         put("nativeSymbol", network.native_symbol)
         put("addedAt", network.added_at_iso)
+        // Only when the person said: an absent flag must stay absent (spec 105).
+        network.is_testnet?.let { put("isTestnet", it) }
     }
 
     private fun decodeNetworkConfigs(raw: String?): List<NetNetworkConfig> =

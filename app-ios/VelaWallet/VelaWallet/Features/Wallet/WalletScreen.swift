@@ -50,6 +50,10 @@ struct WalletScreen: View {
     /// The header's name line opens the account switcher (spec 047's rule, on
     /// the shell that still lacked it). Absent = a fixture board.
     var onOpenAccounts: (() -> Void)?
+    /// The space in front (spec 105), named beside the account; a tap offers
+    /// the other. Absent = a fixture board.
+    var space: (label: String, testnet: Bool)?
+    var onSpace: (() -> Void)?
     /// Pull to refresh. Also absent in the gallery: a fixture cannot refresh,
     /// and a spinner over one would be a promise nothing keeps.
     ///
@@ -157,12 +161,19 @@ struct WalletScreen: View {
     /// 2026-08-26). The pill's sheet keeps its fixture states for the gallery;
     /// what it lost is its entry point on this screen.
     private var headerRow: some View {
-        WalletHeaderView(
-            model: model.header,
-            onIdenticon: { viewingIdenticon = true },
-            identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen"),
-            onName: onOpenAccounts
-        )
+        HStack(spacing: Tokens.Space.s8) {
+            WalletHeaderView(
+                model: model.header,
+                onIdenticon: { viewingIdenticon = true },
+                identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen"),
+                onName: onOpenAccounts
+            )
+            .layoutPriority(1)
+            if let space, let onSpace {
+                Spacer(minLength: 0)
+                NetworkSpaceChip(label: space.label, testnet: space.testnet, onTap: onSpace)
+            }
+        }
     }
 
     // MARK: - Sections

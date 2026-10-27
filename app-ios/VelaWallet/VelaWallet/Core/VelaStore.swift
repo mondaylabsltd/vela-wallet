@@ -72,6 +72,9 @@ struct VelaStore {
         /// The default transaction speed (spec 068; iOS's since 069). A bare
         /// tier name, judged by the core. Survives sign-out.
         static let feeTier = "vela.feeTier"
+        /// The space in front (spec 105): `mainnet` or `testnet`, bare, one
+        /// for the device. The core reads it (`networkSpaceRead`).
+        static let networkSpace = "vela.networkSpace"
 
         // Owned by `signing_pages` (spec 102). Raw, judged by the core;
         // survives sign-out.
@@ -126,6 +129,9 @@ struct VelaStore {
         /// version has been tapped seven times, absent until then. The core's
         /// `prefs::keys::DEBUG_MODE`; what is stored is `prefsDebugModeValue`'s.
         static let debugMode = "vela.debugMode"
+        /// Settings → AI agent (spec 103 D1): `{ enabled, url, token }`, as
+        /// the web and the desktop store it. Erase sweeps it with the rest.
+        static let agent = "vela.agent"
     }
 
     private let defaults: UserDefaults

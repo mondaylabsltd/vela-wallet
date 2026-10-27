@@ -192,6 +192,15 @@ for (const shell of SHELLS) {
 				skipped++;
 				continue;
 			}
+			// A literal that shares no key with ANY declaration of its name is
+			// another shape wearing the same tag, not a broken event: an
+			// activity record `{"type":"receive", id, txHash, …}` against the
+			// agent's `receive` screen `{chain_id}` (spec 107). Unattributable,
+			// so skipped and counted, as a payload built elsewhere is.
+			if (options.every((o) => o.fields.length && !keys.some((k) => o.fields.includes(k)))) {
+				skipped++;
+				continue;
+			}
 			checked++;
 			// Score every declaration; the closest one is the one this site meant.
 			const scored = options

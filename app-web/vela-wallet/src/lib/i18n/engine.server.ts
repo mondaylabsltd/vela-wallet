@@ -30,6 +30,8 @@ import { INTRO_KEYS } from '$lib/intro/slides';
 import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
+import type { AgentMessages } from '$lib/agent/messages';
+import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import {
 	SIM_SAID_KEYS,
@@ -436,6 +438,52 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		analytics: {
 			title: k('settings.analytics.title'),
 			subtitle: k('settings.analytics.subtitle')
+		},
+		agent: {
+			title: k('settings.agent.title'),
+			subtitle: k('settings.agent.subtitle'),
+			description: k('settings.agent.description'),
+			enable: k('settings.agent.enable'),
+			bridge: k('settings.agent.bridge'),
+			bridgeHint: k('settings.agent.bridgeHint'),
+			bridgeInvalid: k('settings.agent.bridgeInvalid'),
+			token: k('settings.agent.token'),
+			tokenHint: k('settings.agent.tokenHint'),
+			endpoint: k('settings.agent.endpoint'),
+			endpointHint: k('settings.agent.endpointHint'),
+			statusOff: k('settings.agent.statusOff'),
+			statusConnecting: k('settings.agent.statusConnecting'),
+			statusOnline: k('settings.agent.statusOnline'),
+			statusOffline: k('settings.agent.statusOffline'),
+			statusRefused: k('settings.agent.statusRefused'),
+			lastAction: k('settings.agent.lastAction'),
+			connect: k('settings.agent.connect'),
+			connectHint: k('settings.agent.connectHint'),
+			connecting: k('settings.agent.connecting'),
+			connectedAs: k('settings.agent.connectedAs'),
+			connectAgent: k('settings.agent.connectAgent'),
+			connectAgentHint: k('settings.agent.connectAgentHint'),
+			reconnect: k('settings.agent.reconnect'),
+			disconnect: k('settings.agent.disconnect'),
+			ownBridge: k('settings.agent.ownBridge'),
+			linkRefused: k('settings.agent.linkRefused'),
+			linkUnavailable: k('settings.agent.linkUnavailable'),
+			linkExpired: k('settings.agent.linkExpired'),
+			linkNotOurs: k('settings.agent.linkNotOurs'),
+			linkNetwork: k('settings.agent.linkNetwork'),
+			linkFailed: k('settings.agent.linkFailed'),
+			linkReturn: k('settings.agent.linkReturn'),
+			agentAddress: k('settings.agent.agentAddress'),
+			agentAddressHint: k('settings.agent.agentAddressHint'),
+			show: k('settings.agent.show'),
+			hide: k('settings.agent.hide'),
+			copy: k('settings.agent.copy'),
+			copied: k('settings.agent.copied'),
+			share: k('settings.agent.share'),
+			clientId: k('settings.agent.clientId'),
+			wallets: k('settings.agent.wallets'),
+			walletsHint: k('settings.agent.walletsHint'),
+			walletsNone: k('settings.agent.walletsNone')
 		},
 		appearance: {
 			themeTitle: k('settings.appearance.themeTitle'),
@@ -939,7 +987,82 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 	};
 }
 
+/** The spaces' words (spec 105), on every `[locale]` page. */
+export function resolveNetworkSpaceMessages(locale: Locale): NetworkSpaceMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, `networkSpace.${key}`);
+	return {
+		mainnet: k('mainnet'),
+		testnet: k('testnet'),
+		bar: k('bar'),
+		title: k('title'),
+		mainnetHint: k('mainnetHint'),
+		testnetHint: k('testnetHint'),
+		toTestnet: k('toTestnet'),
+		toMainnet: k('toMainnet'),
+		noValue: k('noValue'),
+		moveToMainnet: k('moveToMainnet'),
+		moveToTestnet: k('moveToTestnet'),
+		wizardQuestion: k('wizardQuestion'),
+		wizardTestnet: k('wizardTestnet'),
+		wizardMainnet: k('wizardMainnet'),
+		headingMainnet: k('headingMainnet'),
+		headingTestnet: k('headingTestnet'),
+		cancel: t(locale, 'common.cancel')
+	};
+}
+
 /** The packaged extension's notices (spec 094), on every `[locale]` page. */
+/** The agent's layer over every page (spec 103). Keys by action `type`. */
+export function resolveAgentMessages(locale: Locale): AgentMessages {
+	activate(locale);
+	const k = (key: string) => t(locale, key);
+	const action = (name: string) => k(`settings.agent.action.${name}`);
+	return {
+		title: k('settings.agent.title'),
+		connected: k('settings.agent.statusOnline'),
+		approveTitle: k('settings.agent.approveTitle'),
+		approveHint: k('settings.agent.approveHint'),
+		allow: k('settings.agent.allow'),
+		deny: k('settings.agent.deny'),
+		stop: k('settings.agent.stop'),
+		showBalance: k('home.a11yShowBalance'),
+		hideBalance: k('home.a11yHideBalance'),
+		actions: {
+			show: action('show'),
+			switch_account: action('switchAccount'),
+			set_preference: action('setPreference'),
+			save_contact: action('saveContact'),
+			delete_contact: action('deleteContact'),
+			save_group: action('saveGroup'),
+			delete_group: action('deleteGroup'),
+			set_group_members: action('setGroupMembers'),
+			set_contact_groups: action('setContactGroups'),
+			remove_wallet: action('removeWallet'),
+			sign_out: action('signOut'),
+			erase_device: action('eraseDevice'),
+			clear_storage_item: action('clearStorageItem'),
+			clear_caches: action('clearCaches'),
+			prepare_transfer: action('prepareTransfer'),
+			submit_transfer: action('submitTransfer'),
+			cancel_transfer: action('cancelTransfer'),
+			prepare_batch_transfer: action('prepareBatchTransfer'),
+			add_token: action('addToken'),
+			delete_activity: action('deleteActivity'),
+			set_balance_privacy: action('setBalancePrivacy'),
+			set_network_space: action('setNetworkSpace'),
+			refresh_balances: action('refreshBalances'),
+			set_contact_favorite: action('setContactFavorite'),
+			add_network: action('addNetwork'),
+			set_network_endpoint: action('setNetworkEndpoint'),
+			remove_network: action('removeNetwork'),
+			set_provider_key: action('setProviderKey'),
+			set_service_endpoint: action('setServiceEndpoint'),
+			reset_service_endpoints: action('resetServiceEndpoints')
+		}
+	};
+}
+
 export function resolveExtensionMessages(locale: Locale): ExtensionMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);

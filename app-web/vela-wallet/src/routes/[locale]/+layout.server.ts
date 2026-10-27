@@ -2,6 +2,8 @@ import { error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { SUPPORTED_LOCALES, textDirectionOf, type Locale } from '$lib/i18n/locales';
 import {
+	resolveAgentMessages,
+	resolveNetworkSpaceMessages,
 	resolveExtensionMessages,
 	resolveFlowMessages,
 	resolveIntroMessages,
@@ -30,6 +32,10 @@ export const load: LayoutServerLoad = ({ params }) => {
 		/** First-run intro copy (spec 020), same raw-template contract. */
 		intro: resolveIntroMessages(locale),
 		/** The packaged extension's notices (spec 094); unused on the site. */
-		extension: resolveExtensionMessages(locale)
+		extension: resolveExtensionMessages(locale),
+		/** The AI agent's layer over every page (spec 103). */
+		agent: resolveAgentMessages(locale),
+		/** The spaces' words (spec 105): the header label, the testnet bar, the switch. */
+		space: resolveNetworkSpaceMessages(locale)
 	};
 };

@@ -13,6 +13,7 @@ import {
 	liveEndpoints,
 	liveNetworkDetail,
 	liveNetworkRows,
+	liveSpaceHeading,
 	liveRelayer,
 	liveRelayReport,
 	liveRpcProviders,
@@ -28,6 +29,7 @@ import {
 	withLiveNetworksDesktop
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
+import { resolveNetworkSpaceMessages } from '$lib/i18n/engine.server';
 import { fill } from '$lib/wallet/messages';
 import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
@@ -53,7 +55,8 @@ const ROW: NetNetworkRow = {
 	rpc_health: { type: 'ok', latency_ms: 45 },
 	explorer_health: null,
 	rpc_chain_mismatch: null,
-	rpc_save_deferred: false
+	rpc_save_deferred: false,
+	is_testnet: false
 };
 
 const CUSTOM: NetNetworkRow = {
@@ -77,7 +80,8 @@ const WIZARD_IDLE: NetWizardView = {
 	error_key: null,
 	rpc_field: 'none',
 	rpc_field_label_key: null,
-	can_add: false
+	can_add: false,
+	testnet: true
 };
 
 const VIEW: NetView = {
@@ -124,6 +128,52 @@ describe('liveNetworkRows', () => {
 		});
 		// A custom network's mark is its initial on the neutral colour.
 		expect(rows[1].mark.letter).toBe('X');
+	});
+});
+
+// Spec 105: the network pages show the space in front, and the person moves
+// a network they added from one space to the other.
+describe('the network list in a space', () => {
+	const words = resolveNetworkSpaceMessages('en');
+	const SEPOLIA: NetNetworkRow = {
+		...ROW,
+		id: 'sepolia',
+		chain_id: 11155111,
+		display_name: 'Sepolia',
+		is_testnet: true
+	};
+	const MINE_TEST: NetNetworkRow = {
+		...CUSTOM,
+		id: 'custom-31337',
+		chain_id: 31337,
+		is_testnet: true
+	};
+	const view: NetView = { ...VIEW, networks: [ROW, CUSTOM, SEPOLIA, MINE_TEST] };
+
+	it('lists only the space in front, and offers an added network the other space', () => {
+		const mainnet = liveNetworkRows(view, m, undefined, { current: 'mainnet', words });
+		expect(mainnet.map((r) => r.id)).toEqual(['ethereum', 'xlayer']);
+		expect(mainnet[0].move).toBeUndefined();
+		expect(mainnet[1].move).toBe(words.moveToTestnet);
+
+		const testnet = liveNetworkRows(view, m, undefined, { current: 'testnet', words });
+		expect(testnet.map((r) => r.id)).toEqual(['sepolia', 'custom-31337']);
+		expect(testnet[0].move, 'a built-in stays where it is').toBeUndefined();
+		expect(testnet[1].move).toBe(words.moveToMainnet);
+	});
+
+	it('names the space it shows and offers the other', () => {
+		expect(liveSpaceHeading({ current: 'mainnet', words })).toEqual({
+			heading: words.headingMainnet,
+			hint: words.mainnetHint,
+			switchLabel: words.toTestnet,
+			testnet: false
+		});
+		expect(liveSpaceHeading({ current: 'testnet', words }).switchLabel).toBe(words.toMainnet);
+	});
+
+	it('without the words, the whole list as before', () => {
+		expect(liveNetworkRows(view, m).map((r) => r.id)).toHaveLength(4);
 	});
 });
 
@@ -183,6 +233,38 @@ describe('liveAddNetwork', () => {
 		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
 		expect(model.candidate?.badge?.label).toBe(m.addNetwork.compatible);
 		expect(model.checks?.every((c) => c.ok)).toBe(true);
+	});
+
+	it('asks which space a network it may add goes to — testnet unless the person says', () => {
+		const words = resolveNetworkSpaceMessages('en');
+		const checked: NetWizardView = {
+			...WIZARD_IDLE,
+			phase: 'checked',
+			chain_info: info,
+			compat: {
+				chain_id: 7777777,
+				compatible: true,
+				multi_key_ready: true,
+				contracts: [],
+				p256_available: true,
+				best_rpc_url: 'https://rpc.zora.energy',
+				best_rpc_latency_ms: null,
+				rpc_failure: null,
+				blocker: null,
+				hint_key: null,
+				setup_url: null
+			},
+			can_add: true
+		};
+		const asked = liveAddNetwork(checked, m, words).space;
+		expect(asked?.label).toBe(words.wizardQuestion);
+		expect(asked?.segments.map((s) => s.id)).toEqual(['testnet', 'mainnet']);
+		expect(asked?.selected).toBe('testnet');
+		expect(liveAddNetwork({ ...checked, testnet: false }, m, words).space?.selected).toBe(
+			'mainnet'
+		);
+		// Nothing to add, nothing to ask.
+		expect(liveAddNetwork(WIZARD_IDLE, m, words).space).toBeUndefined();
 	});
 
 	it('says so when a compatible chain cannot hold a wallet with several keys', () => {
@@ -524,6 +606,37 @@ describe('the network count (spec 072)', () => {
 		const desktop = withLiveNetworksDesktop(buildDesktopState('dst8', m, IDENTICON), VIEW, m);
 		expect(aboutCount(desktop.about.rows)).toBe(
 			m.about.techNetworksValue.replace('{{count}}', '2')
+		);
+	});
+
+	// Spec 105: the row counts the list it opens — the space's (S22,
+	// 2026-10-27: "33 networks" over a list of 24).
+	it('counts the space in front’s networks, not both spaces’', () => {
+		const words = resolveNetworkSpaceMessages('en');
+		const view: NetView = {
+			...VIEW,
+			networks: [...VIEW.networks, { ...ROW, id: 'sepolia', chain_id: 11155111, is_testnet: true }]
+		};
+		const mainnet = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), view, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(homeCount(mainnet)).toBe(m.networks.count.replace('{{count}}', '2'));
+		expect(aboutCount(mainnet.about.rows)).toBe(
+			m.about.techNetworksValue.replace('{{count}}', '2')
+		);
+		const testnet = withLiveNetworksDesktop(
+			buildDesktopState('dst8', m, IDENTICON),
+			view,
+			m,
+			undefined,
+			{
+				current: 'testnet',
+				words
+			}
+		);
+		expect(aboutCount(testnet.about.rows)).toBe(
+			m.about.techNetworksValue.replace('{{count}}', '1')
 		);
 	});
 

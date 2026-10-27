@@ -64,11 +64,16 @@ struct AccountFollowTests {
     }
 
     /// The switcher no longer asks for a refresh of the account the stores
-    /// are still pointed at, nor re-points anything itself.
+    /// are still pointed at, nor re-points anything itself. The pick goes
+    /// through the intents (spec 103 D3); the switch they perform is
+    /// `switchAccountNow`.
     @Test func theSwitcherLeavesTheStoresToTheFollow() throws {
-        let switcher = try body(of: "switchToAccount", in: rootView())
-        #expect(switcher.contains("session.switchAccount(index: index)"))
-        #expect(!switcher.contains { $0.hasPrefix("wallet.refresh(") })
-        #expect(!switcher.contains { $0.hasPrefix("contacts.open(") })
+        let lines = try rootView()
+        let switcher = try body(of: "switchToAccount", in: lines)
+        #expect(switcher.contains { $0.hasPrefix("agent.person([\"type\": \"switch_account\"") })
+        let switching = try body(of: "switchAccountNow", in: lines)
+        #expect(switching.contains("session.switchAccount(index: index)"))
+        #expect(!switching.contains { $0.hasPrefix("wallet.refresh(") })
+        #expect(!switching.contains { $0.hasPrefix("contacts.open(") })
     }
 }

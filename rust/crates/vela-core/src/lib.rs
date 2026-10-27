@@ -22,6 +22,7 @@ pub mod app;
 /// advert decrypt, tunnel-server domain decode. The radio and the socket
 /// belong to a platform shell. See `specs/019-onboarding-live-wiring/`.
 pub mod cable;
+pub mod clientmcp_link;
 /// A CTAP2 client with no I/O in it: framing, commands, COSE, PIN/UV. The
 /// transport belongs to a platform shell; what is identical on every one of
 /// them lives here. See `specs/019-onboarding-live-wiring/research.md` D4.
@@ -58,6 +59,7 @@ pub mod safe;
 pub mod sign_message;
 /// Where a person reviews and signs — in Vela, or on a page they trust — and
 /// the rules that keep that choice able to reach the account's keys (spec 102).
+pub mod signed_review;
 pub mod signing_venue;
 pub mod storage_catalog;
 pub mod trusted_signer;

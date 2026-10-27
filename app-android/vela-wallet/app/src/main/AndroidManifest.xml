@@ -171,6 +171,14 @@
                 <data android:scheme="velawallet" android:host="pay" />
                 <data android:scheme="velawallet" android:host="open" />
             </intent-filter>
+            <!-- Spec 106: clientmcp.dev's return after the person signs in
+                 (`app.getvela.wallet:/clientmcp?code=…&state=…`, RFC 8252 §7.1). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app.getvela.wallet" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

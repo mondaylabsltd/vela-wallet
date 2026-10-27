@@ -13,7 +13,7 @@
  * Nothing is decided here; the pool's ban and latency state stays where it is
  * (core state, on the wallet's side of the boundary).
  */
-import { DEFAULT_NETWORKS, getAllNetworksSync, nativeSymbol } from '$lib/services/networks';
+import { DEFAULT_NETWORKS, spaceNetworksSync, nativeSymbol } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
 import { CHAINS_KEY } from '../keys';
 
@@ -76,7 +76,7 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	// using. A custom network keeps its own bundler, which is the one the
 	// person typed when they added it.
 	const builtinChainIds = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
-	for (const network of getAllNetworksSync()) {
+	for (const network of spaceNetworksSync()) {
 		const rpc: string[] = [];
 		const add = (url: string | undefined) => {
 			if (url && !rpc.includes(url)) rpc.push(url);

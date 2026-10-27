@@ -52,6 +52,7 @@ import {
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
 import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
+import type { SignedReview } from '$lib/core/generated/SignedReview';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
 import { clearEstimateReverts, recordEstimateReverts } from './estimate-verdict';
@@ -428,7 +429,10 @@ export async function sendBatchCalls(
 	// Pay gas in this whitelisted stablecoin (null/omitted = native).
 	gasFeeToken?: string | null,
 	// In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	// A send: the review the person confirmed. The operation is signed only
+	// if it is exactly this (`attestedSafeOpHash`).
+	review: SignedReview | null = null
 ): Promise<SubmitResult> {
 	const byteCalls: MultiSendCall[] = calls.map((c) => ({
 		to: c.to,
@@ -445,7 +449,8 @@ export async function sendBatchCalls(
 			chainId,
 			publicKeyHex,
 			signFn,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 
@@ -456,7 +461,8 @@ export async function sendBatchCalls(
 		chainId,
 		publicKeyHex,
 		signFn,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -1838,7 +1844,8 @@ async function sendUserOpTempo(
 	chainId: number,
 	publicKeyHex: WalletSigner,
 	signFn: SignFn,
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	review: SignedReview | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -1977,7 +1984,8 @@ async function sendUserOpTempo(
 			fee: { gasFeeToken: feeToken, recipient: feeCollector, amount: reimbursement },
 			alwaysMultiSend: true
 		},
-		calculateSafeOpHash(userOp, chainId)
+		calculateSafeOpHash(userOp, chainId),
+		review
 	);
 	const assertion = await signFn(safeOpHash, operationToSign(userOp, innerCalls));
 	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
@@ -2088,7 +2096,9 @@ async function sendUserOpInBand(
 	signFn: SignFn,
 	/** The fee the confirm UI displayed (amount in the fee asset's own units +
 	 *  recipient). Signed VERBATIM — what the user saw is what executes. */
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	/** A send: the review the person confirmed; signed only if it is exactly this. */
+	review: SignedReview | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -2250,7 +2260,8 @@ async function sendUserOpInBand(
 			fee: { gasFeeToken, recipient: feeRecipient, amount: feeAmount },
 			alwaysMultiSend: true
 		},
-		calculateSafeOpHash(userOp, chainId)
+		calculateSafeOpHash(userOp, chainId),
+		review
 	);
 	const assertion = await signFn(safeOpHash, operationToSign(userOp, innerCalls));
 	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);

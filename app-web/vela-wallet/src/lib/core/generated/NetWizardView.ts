@@ -43,4 +43,9 @@ rpc_field_label_key: string | null,
 /**
  * The "Add network" button renders only when this is true.
  */
-can_add: boolean, };
+can_add: boolean, 
+/**
+ * The space the network goes to (spec 105): a testnet, unless the
+ * person chose mainnet ([`Event::WizardTestnetChosen`]).
+ */
+testnet: boolean, };

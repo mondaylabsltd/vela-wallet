@@ -554,6 +554,12 @@ impl Machine for ActivityFeed {
         }
     }
 
+    /// Only the space in front's records are drawn (spec 105); the others
+    /// stay stored, and a switch back shows them again.
+    fn boot_followups(_cx: &App) -> Vec<Event> {
+        vec![crate::network_space::feed_event()]
+    }
+
     fn perform(operation: &FeedOperation) -> Answer<FeedShellResult, Self::Event> {
         match operation {
             FeedOperation::ReadTxStore { read_id, .. } => {

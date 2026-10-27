@@ -98,7 +98,10 @@ test('every network is listed, the tapped one is the code’s, and the image sav
 	const showCode = page.getByRole('button', { name: en('componentsUi.funding.showQr') });
 	await expect(showCode.first()).toBeVisible({ timeout: 20_000 });
 	const rows = await showCode.count();
-	expect(rows, 'one row per network the wallet knows').toBe(CHAINS.length);
+	// Spec 105: the mainnet space's networks — a device starts there.
+	expect(rows, 'one row per network of the space in front').toBe(
+		CHAINS.filter((c) => !c.testnet).length
+	);
 	await expect(page.getByText(String(rows)).first()).toBeVisible();
 
 	// The second network's code: its name in the title, not the first's.

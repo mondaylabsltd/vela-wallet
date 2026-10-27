@@ -12,4 +12,10 @@ id: string, display_name: string, chain_id: number, icon_label: string, icon_col
 /**
  * ISO 8601 — stamped by the shell (`now_iso` on the triggering event).
  */
-added_at_iso: string, };
+added_at_iso: string, 
+/**
+ * The person's word on it (spec 105): a testnet, whose coins have no
+ * real value. `None` on a record written before it was asked, which
+ * [`custom_is_testnet`] reads as a testnet until the person moves it.
+ */
+is_testnet?: boolean, };

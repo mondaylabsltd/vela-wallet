@@ -39,6 +39,10 @@ final class WalletStore {
 
     private let executor: BalanceExecutor
     private var core: CoreStore<BalanceViewWire>!
+
+    /// The view as the core wrote it — the AI agent reads the wallet whole
+    /// (`AgentShellBridge.views`, spec 104).
+    var viewJson: String? { core.json }
     /// The address the dashboard is currently reading for, so re-entering the
     /// tab does not re-announce the same account and throw away its holdings.
     private var scopedTo: String?
@@ -64,7 +68,9 @@ final class WalletStore {
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.viewArrived(view) },
-            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) },
+            // The view as the core wrote it, for the AI agent's world (spec 104).
+            keepsJson: true
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.
@@ -74,8 +80,36 @@ final class WalletStore {
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
 
+    /// The core's view as it came, before the space's filter (spec 105).
+    @ObservationIgnored private var unfiltered: BalanceViewWire?
+    /// The space in front's chains; `nil` until the screen says.
+    @ObservationIgnored private var spaceChains: Set<Int>?
+
+    /// The space in front changed (spec 105), or its networks did: the other
+    /// space's holdings go now, and every chain of this one is read again.
+    func spaceChanged(_ chainIds: [Int]) {
+        let chains = Set(chainIds)
+        guard chains != spaceChains else { return }
+        let first = spaceChains == nil
+        spaceChains = chains
+        if let unfiltered { balance = inSpace(unfiltered) }
+        if !first, scopedTo != nil { refresh(pull: false) }
+    }
+
+    /// `view` with only the space in front's holdings; a total that counted
+    /// any other is not shown — the read under way will state this one's.
+    private func inSpace(_ view: BalanceViewWire) -> BalanceViewWire {
+        guard let spaceChains else { return view }
+        var out = view
+        out.tokens = view.tokens.filter { spaceChains.contains($0.chainId) }
+        out.unpricedTokens = view.unpricedTokens.filter { spaceChains.contains($0.chainId) }
+        if out.tokens.count != view.tokens.count { out.displayTotalUsd = nil }
+        return out
+    }
+
     private func viewArrived(_ view: BalanceViewWire) {
-        balance = view
+        unfiltered = view
+        balance = inSpace(view)
         let held = spin.core(busy: view.refreshing, now: Self.uptimeMs())
         if held != spin {
             spin = held

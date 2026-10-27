@@ -209,20 +209,24 @@ final class BrowserController {
             bridge: ExploreSitesCore(),
             perform: { [exploreExecutor] in await exploreExecutor.perform($0) },
             onView: { [weak self] view in self?.commitExplore(view) },
-            onFault: { VelaLog.failure(.browser, kind: "explore_sites_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.browser, kind: "explore_sites_fault", VelaLog.error($0)) },
+            // Spec 107: the agent reads the views whole (`agentFacts`).
+            keepsJson: true
         )
         historyCore = CoreStore(
             bridge: BrowserHistoryCore(),
             perform: { [historyExecutor] in await historyExecutor.perform($0) },
             onView: { [weak self] view in self?.history = view },
-            onFault: { VelaLog.failure(.browser, kind: "browser_history_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.browser, kind: "browser_history_fault", VelaLog.error($0)) },
+            keepsJson: true
         )
         dbrCore = CoreStore(
             bridge: DappBrowserCore(),
             perform: { [dbrExecutor] in await dbrExecutor.perform($0) },
             onView: { [weak self] view in self?.commitDbr(view) },
             onFault: { VelaLog.failure(.browser, kind: "dapp_browser_fault", VelaLog.error($0)) },
-            neutralAnswer: { DbrExecutor.neutralAnswer($0) }
+            neutralAnswer: { DbrExecutor.neutralAnswer($0) },
+            keepsJson: true
         )
 
         wirePorts()
@@ -619,6 +623,20 @@ final class BrowserController {
               let ids = (try? JSONSerialization.jsonObject(with: data)) as? [String]
         else { return [] }
         return ids
+    }
+
+    /// Explore as the agent reads it (spec 107; the core's `explore_facts`,
+    /// `ExploreFacts` JSON): the tabs, the lists, the connected sites, a
+    /// dApp's request. `sheet`: the request whose sheet the person sees.
+    func agentFacts(sheet: String?) -> String {
+        intentExploreFacts(
+            exploreJson: exploreCore.json ?? "null",
+            dappJson: dbrCore.json ?? "null",
+            historyJson: historyCore.json ?? "null",
+            canGoBack: current?.canGoBack == true,
+            canGoForward: current?.canGoForward == true,
+            sheet: sheet
+        )
     }
 
     func goBack() { current?.goBack() }

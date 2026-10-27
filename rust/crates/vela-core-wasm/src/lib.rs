@@ -19,6 +19,8 @@ use wasm_bindgen::prelude::*;
 /// function exports below — pure kernels the app calls — these are stateful
 /// cores the web shell drives with events and effect results.
 mod bridge;
+mod clientmcp;
+mod intents;
 mod onboarding;
 mod settings;
 /// Where an account's signatures go: its sign-in key.
@@ -1035,6 +1037,30 @@ pub fn bundler_quote_cacheable(max_fee_per_gas: &str) -> bool {
     vela_core::app::fee_policy::bundler_quote_cacheable(max_fee_per_gas)
 }
 
+/// The space stored under `vela.networkSpace`, read (spec 105).
+#[wasm_bindgen(js_name = networkSpaceRead)]
+#[must_use]
+pub fn network_space_read(stored: Option<String>) -> String {
+    vela_core::app::network_space::NetworkSpace::parse(stored.as_deref())
+        .as_str()
+        .to_owned()
+}
+
+/// The chain ids of `space`'s networks (spec 105), from `NetView.networks`
+/// as JSON. A JSON array.
+#[wasm_bindgen(js_name = networkSpaceChainIds)]
+#[must_use]
+pub fn network_space_chain_ids(space: &str, rows_json: &str) -> String {
+    vela_core::app::network_space::space_chain_ids_json(space, rows_json)
+}
+
+/// Whether `chain_id` is a testnet (spec 105).
+#[wasm_bindgen(js_name = networkChainIsTestnet)]
+#[must_use]
+pub fn network_chain_is_testnet(chain_id: u32, custom_json: &str) -> bool {
+    vela_core::app::network_space::chain_is_testnet_json(chain_id, custom_json)
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.
@@ -1838,6 +1864,27 @@ fn attest_operation(
 #[wasm_bindgen(js_name = attestSafeOpHash)]
 pub fn attest_safe_op_hash(op_json: &str, calls_json: &str, chain_id: u64) -> JsResult<Vec<u8>> {
     attest_safe_op_hash_inner(op_json, calls_json, chain_id).map_err(err)
+}
+
+/// The SafeOp hash for a send — only when the operation is exactly the
+/// review the person confirmed (`SubmitUserOp.review`, as JSON): its sender,
+/// chain and every call, decoded back out of its calldata. Anything else is
+/// refused and nothing is signed.
+#[wasm_bindgen(js_name = attestReviewedSafeOpHash)]
+pub fn attest_reviewed_safe_op_hash(
+    op_json: &str,
+    review_json: &str,
+    chain_id: u64,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let op: AttestOp = serde_json::from_str(op_json)
+            .map_err(|e| vela_core::CoreError::Internal(format!("attest: operation: {e}")))?;
+        let call_data = attest_bytes(&op.call_data_hex)?;
+        let user_op = attest_operation(op, call_data)?;
+        let review = vela_core::signed_review::from_json(review_json)?;
+        vela_core::signed_review::reviewed_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`

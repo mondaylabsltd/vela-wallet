@@ -804,9 +804,52 @@ for (let i = 1; i < PATHS.length; i++) {
 //   device or the person's own network, which is neither the padlock nor the
 //   warning. (`componentsUi.bugReport.previewRpc` is reworded, not added.)
 //   1778 + 2 = 1780 leaves, 101 branches.
-if (PATHS.length !== 1881) fail(`expected 1881 paths (1780 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
+// 1899 (AI agent bridge, spec 103, 2026-10-20): + the `settings.agent` branch
+//   — the Settings page where a person lets an AI agent use the wallet through
+//   a ClientMCP bridge: the switch, the bridge address and token fields, the
+//   endpoint to give the agent, the connection status and the last action.
+//   1780 + 17 = 1797 leaves, 101 + 1 = 102 branches.
+// 1919 (AI agent intents, spec 103, 2026-10-20): + the agent's request the
+//   person approves in the wallet (its title, hint, Allow and Deny), the Stop
+//   on the agent's bar, and `settings.agent.action` — what each of the
+//   fourteen actions an agent may ask for is called.
+//   1797 + 5 + 14 = 1816 leaves, 102 + 1 = 103 branches.
+// 1924 (transfers through the intents, spec 103, 2026-10-20): + the switch
+//   that lets an agent confirm transfers (its title and the line saying the
+//   passkey still signs), and the names of the three transfer actions.
+//   1816 + 5 = 1821 leaves, 103 branches.
+// 1936 (the rest of the person's capabilities, spec 103, 2026-10-20): + the
+//   agent bar's name for each new action (batch transfer, token, activity,
+//   balance privacy and refresh, favorite, six network and service actions).
+//   1821 + 12 = 1833 leaves, 103 branches.
+// 1934 (the person always confirms, spec 103, 2026-10-21): − the switch that
+//   let an agent confirm transfers (its title and hint). An agent's confirm
+//   only asks the person now. 1833 − 2 = 1831 leaves, 103 branches.
+// 1935 (mainnet and testnet spaces, spec 105, 2026-10-27): + the agent's
+//   `settings.agent.action.setNetworkSpace`. 1831 + 1 = 1832 leaves, 103
+//   branches.
+// 1952 (the spaces' words, spec 105, 2026-10-27): + the `networkSpace`
+//   branch — the header label, the testnet bar, the switch, the wizard's
+//   question and the network list's headings. 1832 + 16 = 1848 leaves, 103 + 1
+//   = 104 branches.
+// 1968 (connecting with clientmcp.dev, spec 106, 2026-10-27): + 16
+//   `settings.agent` words — the connect button, its waiting and connected
+//   states, reconnect and disconnect, "use your own bridge", and why a
+//   sign-in failed. 1848 + 16 = 1864 leaves, 104 branches.
+// 1975 (the agent's address in the wallet, spec 106, 2026-10-27): + 7
+//   `settings.agent` words — its label and hint, Show, Hide, Copy, Copied,
+//   Share. 1864 + 7 = 1871 leaves, 104 branches.
+// 1976 (which client, spec 106, 2026-10-27): + `settings.agent.clientId`.
+//   1871 + 1 = 1872 leaves, 104 branches.
+// 1987 (the agent in Explore, spec 107, 2026-10-27): + 11
+//   `settings.agent.action.*` names — opening a site, browsing, tabs,
+//   favorites, recent sites, a site's connection and network, a dApp's
+//   request. 1872 + 11 = 1883 leaves, 104 branches.
+// 1990 (the wallets an agent may use, spec 107 E8, 2026-10-27): + 3
+//   `settings.agent` words. 1883 + 3 = 1886 leaves, 104 branches.
+if (PATHS.length !== 1990) fail(`expected 1990 paths (1886 leaf + 104 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1886) fail(`expected 1886 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 104) fail(`expected 104 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

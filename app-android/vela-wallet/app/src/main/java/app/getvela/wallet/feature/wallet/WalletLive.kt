@@ -112,17 +112,23 @@ object WalletLive {
          * and the hero total stays the whole wallet's.
          */
         chainFilter: Int? = null,
+        /**
+         * Spec 105: the testnet space is in front, and this is what it says in
+         * place of a total. Nothing there has real value: no total, no worth
+         * on a row. `null`, the mainnet space.
+         */
+        noValue: String? = null,
     ): WalletHomeModel {
         // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
         val money = Money.of(currency, strings.language)
-        val rows = assetRows(view, chainNames, currency, strings.language)
+        val rows = assetRows(view, chainNames, currency, strings.language, noValue = noValue != null)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Issue #469: the home draws the core's short list (`home_rows`, the
         // newest three); History keeps every row. The cut is the core's — the
         // shared helper below also builds History, so it never caps.
         val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
         return fallback.copy(
-            balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
+            balance = balance(fallback.balance, view, strings, money, chainNames, noValue).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
@@ -401,9 +407,11 @@ object WalletLive {
         currency: CurrencyView,
         /** The language a worth's symbol is written for — the screen's own when it has strings in hand. */
         language: String = AppLanguage.tag,
+        /** Spec 105: the testnet space — a row has no worth to show. */
+        noValue: Boolean = false,
     ): List<AssetRowModel> {
         val money = Money.of(currency, language)
-        return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden) }
+        return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden, noValue) }
     }
 
     /**
@@ -418,6 +426,8 @@ object WalletLive {
         strings: VelaStrings,
         money: Money,
         chainNames: Map<Int, String>,
+        /** Spec 105: the testnet space's words in place of a total. */
+        noValue: String? = null,
     ): BalanceModel {
         val drawn = balanceVisible(fallback, view, money)
             // The label names the currency in EVERY state — it used to keep
@@ -442,6 +452,21 @@ object WalletLive {
         // The hero's mask is the wider one (`privacy::BALANCE_MASK`), as the
         // gallery's hidden state always drew it.
         if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
+        // The testnet space (spec 105): no figure at all, and no currency
+        // beside the label — said in the figure's place, as the web says it.
+        // The line under it says only "Checking…" while the first read is
+        // out: "live" and "can't reach" are about money this space has none of.
+        if (noValue != null) {
+            return live.copy(
+                state = BalanceStateKind.NoValue,
+                integer = null,
+                decimals = null,
+                currency = "",
+                noValueText = noValue,
+                liveText = null,
+                status = null,
+            )
+        }
         return live
     }
 
@@ -626,6 +651,8 @@ object WalletLive {
         money: Money,
         /** Balance privacy (`privacy`): the amount is the mask and its coin, its worth the mask alone. */
         hidden: Boolean,
+        /** Spec 105: the testnet space — no worth line at all. */
+        noValue: Boolean = false,
     ): AssetRowModel {
         val mark = mark(token.chain_id, token.symbol, token.token_address)
         return AssetRowModel(
@@ -645,6 +672,7 @@ object WalletLive {
             balance = if (hidden) maskedAmount(token.symbol) else "${tokenAmountText(token.balance)} ${token.symbol}",
             fiat = when {
                 hidden -> AssetFiatModel.Masked
+                noValue -> AssetFiatModel.None
                 // A holding's worth is a figure in the display currency: it
                 // waits with the total while that is not the person's yet
                 // (the helper answers `null`), its line's room kept.

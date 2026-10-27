@@ -39,7 +39,8 @@ const EMPTY_VIEW: NetView = {
 		error_key: null,
 		rpc_field: 'none',
 		rpc_field_label_key: null,
-		can_add: false
+		can_add: false,
+		testnet: true
 	},
 	endpoints: [],
 	providers: [],

@@ -279,6 +279,8 @@ struct SettingsNetworkRow: View {
     /// The bin, as a button — the host asks before anything goes. `nil` keeps
     /// the drawn glyph, which is what every gallery board shows.
     var onRemove: ((String) -> Void)?
+    /// Spec 105: the move to the other space, for a network the person added.
+    var onMove: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -303,6 +305,16 @@ struct SettingsNetworkRow: View {
                     Text(row.meta)
                         .typeRole(Typography.monoSmall)
                         .foregroundStyle(theme.fgSubtle)
+                    if let move = row.move, let onMove {
+                        Button { onMove(row.id) } label: {
+                            Text(move)
+                                .typeRole(Typography.label)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(theme.infoBase)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("move-network")
+                    }
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if let badge = row.badge { StatusPill(pill: badge) }
@@ -589,5 +601,40 @@ struct DangerCard: View {
         // rule), so the whole card is made a shape before it takes the tap.
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+}
+
+/// Spec 105: the network list's heading — which space it shows, what that
+/// means, and the switch to the other.
+struct NetworkSpaceHeading: View {
+    @Environment(\.theme) private var theme
+    let model: NetworkSpaceHeadingModel
+    var onSwitch: () -> Void = {}
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Tokens.Space.s12) {
+            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                Text(model.heading)
+                    .typeRole(Typography.fieldLabel)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(theme.fgBase)
+                Text(model.hint)
+                    .typeRole(Typography.label)
+                    .foregroundStyle(theme.fgSubtle)
+            }
+            Spacer(minLength: Tokens.Space.s8)
+            Button(action: onSwitch) {
+                Text(model.switchLabel)
+                    .typeRole(Typography.label)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(theme.infoBase)
+                    .multilineTextAlignment(.trailing)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(Tokens.Space.s12)
+        .background(model.testnet ? theme.warningSoft : theme.bgSunken,
+                    in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+        .accessibilityIdentifier("networks-space")
     }
 }

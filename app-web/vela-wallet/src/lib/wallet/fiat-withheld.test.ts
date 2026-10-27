@@ -122,6 +122,28 @@ const accounts = (currency: CurrencyView): LiveAccountsInput => ({
 	identicon
 });
 
+// Spec 105: the testnet space has nothing of real value — no total, and no
+// worth on a holding's row, whatever the coins' pegs say.
+describe('the testnet space', () => {
+	const NO_VALUE = 'Test assets · no real value';
+
+	it('says so in the total’s place, and gives no row a worth', () => {
+		const total = liveBalance(balance, COMMITTED, m, undefined, NO_VALUE);
+		expect(total).toMatchObject({ state: 'no-value', noValueText: NO_VALUE });
+		expect(total.integer).toBeUndefined();
+		expect(total.currency).toBeUndefined();
+		const priced = balance.tokens.find((t) => t.price_usd !== null)!;
+		expect(liveAssetRow(priced, COMMITTED, m, false).fiat.kind).toBe('value');
+		expect(liveAssetRow(priced, COMMITTED, m, false, true).fiat).toEqual({ kind: 'none' });
+	});
+
+	it('hidden stays hidden', () => {
+		expect(liveBalance({ ...balance, hidden: true }, COMMITTED, m, undefined, NO_VALUE).state).toBe(
+			'hidden'
+		);
+	});
+});
+
 describe('no fiat figure before the display currency commits — every surface the core names', () => {
 	it('home_total: the skeleton, the currency on its way named — never the placeholder’s dollars', () => {
 		expectWithheld('home_total', (currency) => liveBalance(balance, currency, m), {

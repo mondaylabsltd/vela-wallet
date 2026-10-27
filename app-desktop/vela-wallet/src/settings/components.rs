@@ -809,6 +809,9 @@ pub fn network_row(
     removable: bool,
     expanded: bool,
     on_remove: Option<crate::contacts::components::MenuAction>,
+    // Spec 105: a network the person added, to the other space — the
+    // control's words and its press. `None` draws no control.
+    on_move: Option<(gpui::SharedString, crate::contacts::components::MenuAction)>,
 ) -> Stateful<Div> {
     let mut name_row = div().flex().items_center().gap(px(8.)).child(
         div()
@@ -856,6 +859,25 @@ pub fn network_row(
         );
     if let Some(badge) = badge {
         row = row.child(status_pill(theme, badge));
+    }
+    if let Some((label, action)) = on_move {
+        // Its own target, as the trash beside it: the row's click expands.
+        row = row.child(
+            div()
+                .id("network-move")
+                .flex_none()
+                .px(px(6.))
+                .py(px(4.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.info_base)
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(label)
+                .on_click(move |event, window, cx| action(event, window, cx)),
+        );
     }
     if removable {
         // Its OWN target, and it stops there. Inside the row's own click this

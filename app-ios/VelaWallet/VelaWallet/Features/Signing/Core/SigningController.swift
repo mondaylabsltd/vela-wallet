@@ -187,6 +187,10 @@ final class SigningController {
     }
 
     private var signCore: CoreStore<SignViewWire>!
+    /// The request's view as the core wrote it — what the AI agent's
+    /// `vela_review` reads, so it can tell the person what they are asked to
+    /// sign (spec 103).
+    var signViewJson: String? { signCore.json }
     private var clearCore: CoreStore<ClearSigningViewWire>!
     private var guardCore: CoreStore<GuardViewWire>!
     /// The fee sessions and the speed control — the very store the send form

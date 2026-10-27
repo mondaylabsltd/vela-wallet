@@ -16,6 +16,7 @@ import uniffi.vela_core_uniffi.SignerIntegrityLine
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.components.tokenGlyph
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
+import app.getvela.wallet.feature.settings.core.NetworkSpace
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
@@ -405,6 +406,8 @@ object SettingsLive {
         model: SettingsScreenModel,
         view: NetView,
         strings: VelaStrings,
+        /** Spec 105: offer the space choice (live only — the gallery's wizard is a picture). */
+        spaceChoice: Boolean = false,
     ): SettingsScreenModel {
         val wizard = view.wizard
         val info = wizard.chain_info
@@ -578,16 +581,47 @@ object SettingsLive {
                 // "Re-check with this RPC" reads the field, so it is drawn
                 // exactly where the field is (the core's one rule, above).
                 recheck = strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC).takeIf { rpcField },
+                // Spec 105: where it goes, the person's word — offered with the
+                // Add button; the core preselects (`wizard.testnet`).
+                space = if (spaceChoice && wizard.can_add) spaceChoice(wizard.testnet, strings) else null,
             ),
         )
     }
+
+    /** Spec 105: the wizard's two-way choice, testnet first (the default for a network nobody vouched for). */
+    private fun spaceChoice(testnet: Boolean, strings: VelaStrings): SegmentedModel {
+        val question = strings.t(I18nKeys.NetworkSpace.WIZARD_QUESTION)
+        return SegmentedModel(
+            label = question,
+            segments = listOf(
+                SegmentModel(NetworkSpace.Testnet.wire, strings.t(I18nKeys.NetworkSpace.WIZARD_TESTNET)),
+                SegmentModel(NetworkSpace.Mainnet.wire, strings.t(I18nKeys.NetworkSpace.WIZARD_MAINNET)),
+            ),
+            selected = if (testnet) NetworkSpace.Testnet.wire else NetworkSpace.Mainnet.wire,
+        )
+    }
+
+    /** Spec 105: the network list's heading, and the switch beside it. */
+    fun spaceHeading(space: NetworkSpace, strings: VelaStrings): NetworkSpaceHeadingModel = NetworkSpaceHeadingModel(
+        heading = strings.t(if (space.testnet) I18nKeys.NetworkSpace.HEADING_TESTNET else I18nKeys.NetworkSpace.HEADING_MAINNET),
+        hint = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TESTNET_HINT else I18nKeys.NetworkSpace.MAINNET_HINT),
+        switchLabel = strings.t(if (space.testnet) I18nKeys.NetworkSpace.TO_MAINNET else I18nKeys.NetworkSpace.TO_TESTNET),
+        testnet = space.testnet,
+    )
 
     fun withNetworks(
         model: SettingsScreenModel,
         view: NetView,
         strings: VelaStrings,
+        /**
+         * Spec 105: the space in front. With one, the list is only that
+         * space's networks under its heading, and a network the person added
+         * carries the move to the other one. `null`, every network (the gallery).
+         */
+        space: NetworkSpace? = null,
     ): SettingsScreenModel {
         if (!view.loaded) return model
+        val shown = space?.let { s -> view.networks.filter { it.is_testnet == s.testnet } } ?: view.networks
         return model.copy(
             // The row that opens the list said "12 个网络" from the fixture
             // while the list beside it was live — so adding a custom network
@@ -598,7 +632,8 @@ object SettingsLive {
                         if (row.id == "networks") {
                             row.copy(
                                 value = row.value.orEmpty()
-                                    .replaceFirst(Regex("\\d+"), view.networks.size.toString()),
+                                    // Spec 105: the space's — the list it opens.
+                                    .replaceFirst(Regex("\\d+"), shown.size.toString()),
                             )
                         } else {
                             row
@@ -606,7 +641,8 @@ object SettingsLive {
                     },
                 )
             },
-            networks = view.networks.map { row ->
+            networksSpace = space?.let { spaceHeading(it, strings) },
+            networks = shown.map { row ->
                 NetworkRowModel(
                     id = row.id,
                     mark = ChainMarkModel(
@@ -629,6 +665,11 @@ object SettingsLive {
                         null
                     },
                     removable = row.is_custom,
+                    move = if (space != null && row.is_custom) {
+                        strings.t(if (space.testnet) I18nKeys.NetworkSpace.MOVE_TO_MAINNET else I18nKeys.NetworkSpace.MOVE_TO_TESTNET)
+                    } else {
+                        null
+                    },
                 )
             },
             endpoints = model.endpoints.copy(

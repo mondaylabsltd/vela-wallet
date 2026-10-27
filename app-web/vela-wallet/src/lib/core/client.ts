@@ -28,6 +28,11 @@ import init, {
 	bestNativeDexPrice,
 	checksumAddress,
 	chooseNativePrice,
+	clientmcpInstallationId,
+	clientmcpLinkAccept,
+	clientmcpLinkBegin,
+	clientmcpLinkExchange,
+	clientmcpLinkReturned,
 	ApprovalGuardCore,
 	BalanceDashboardCore,
 	BatchImportCore,
@@ -57,12 +62,27 @@ import init, {
 	ManageTokensCore,
 	maskedAmount,
 	NetworkAdminCore,
+	networkChainIsTestnet,
+	networkSpaceChainIds,
+	networkSpaceRead,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
 	passkeyFallbackIconDataUri,
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	intentAgentState,
+	intentApprovalDetail,
+	intentApprovalDetailIn,
+	intentBaseline,
+	intentCatalog,
+	intentCheck,
+	intentExamine,
+	intentOperationProgress,
+	intentReview,
+	intentShows,
+	intentVerdict,
+	intentWorldNeeds,
 	prefsMigrations,
 	prefsRead,
 	publicRpcUrls,
@@ -130,6 +150,9 @@ export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which
 // Arc discards a transaction without saying so.
 export { minGasPriceWei, peggedNativeUsd };
+// The mainnet and testnet spaces (spec 105): which space a stored value names,
+// which chains a space holds, whether a chain is a testnet.
+export { networkChainIsTestnet, networkSpaceChainIds, networkSpaceRead };
 // A hidden amount as balance privacy draws it — the mask, and the unit kept:
 // "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
 // kept a mirror of it (`maskedFigure`) until the core exported its own.
@@ -143,6 +166,16 @@ export { maskedAmount };
 // back as its code. Synchronous, callable once `loadCore()` has resolved.
 export { fiatSymbol };
 export { identiconNormalizeSeed, identiconSvgCircular };
+// Spec 106: connecting the agent with clientmcp.dev — the exchange's every
+// decision (`vela_core::clientmcp_link`), JSON in and out. Callable once
+// `loadCore()` has resolved.
+export {
+	clientmcpInstallationId,
+	clientmcpLinkAccept,
+	clientmcpLinkBegin,
+	clientmcpLinkExchange,
+	clientmcpLinkReturned
+};
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.
 export { i18nPluralSuffix };
@@ -169,6 +202,23 @@ export { registryResolveKeyStep, registryResolveUnitStep };
 // read, and what each stored key IS — its storage row, whether "clear all
 // caches" takes it, whether an erase does. JSON in and out, like the machines.
 export { prefsMigrations, prefsRead };
+// The wallet's intents (spec 103): the catalog, and the check every request
+// passes — who may ask, and whether the input is well formed. JSON in and out.
+export { intentCatalog, intentCheck };
+// Their judgements over the wallet's state (spec 104): examine, verdict, a
+// transfer's progress, and what an agent reads. JSON in and out.
+export {
+	intentAgentState,
+	intentApprovalDetail,
+	intentApprovalDetailIn,
+	intentBaseline,
+	intentExamine,
+	intentOperationProgress,
+	intentReview,
+	intentShows,
+	intentVerdict,
+	intentWorldNeeds
+};
 export {
 	storageIsCacheKey,
 	storageIsErasableKey,

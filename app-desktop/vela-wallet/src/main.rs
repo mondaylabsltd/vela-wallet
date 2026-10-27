@@ -5,6 +5,7 @@
     windows_subsystem = "windows"
 )]
 
+mod agent;
 mod app_menu;
 mod ceremony;
 mod contacts;
@@ -24,6 +25,7 @@ mod intro;
 mod intro_art;
 mod loc;
 mod marks;
+mod network_space;
 mod onboarding;
 mod onboarding_flow;
 mod outcome;
@@ -452,6 +454,9 @@ fn main() {
             crate::executor::registry::set_registry_url(&url);
         }
         session::boot(cx);
+        // The AI agent (spec 103): its settings read, and its bridge dialled
+        // if the person turned it on.
+        agent::boot(cx);
 
         // The menu bar and its actions (spec 082 RJ17, spec 095): About, Edit
         // (the web page's clipboard), View, Window — see `app_menu`.

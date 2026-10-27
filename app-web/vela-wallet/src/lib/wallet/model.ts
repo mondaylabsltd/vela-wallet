@@ -26,7 +26,8 @@ export interface WalletHeaderModel {
 	identiconSvg: string;
 }
 
-export type BalanceStateKind = 'normal' | 'zero-live' | 'loading' | 'hidden';
+/** `no-value`: the testnet space (spec 105) — nothing there has a fiat worth. */
+export type BalanceStateKind = 'normal' | 'zero-live' | 'loading' | 'hidden' | 'no-value';
 
 export interface BalanceModel {
 	label: string;
@@ -49,6 +50,8 @@ export interface BalanceModel {
 	 */
 	decimalMark?: string;
 	liveText?: string;
+	/** Spec 105: what the testnet space says in place of a figure (`no-value`). */
+	noValueText?: string;
 	/**
 	 * "Checking…" — the first read of this account is still out
 	 * (`BalanceView.checking_key`). Said on the status line, quietly, and in

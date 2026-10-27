@@ -32,6 +32,8 @@ import uniffi.vela_core_uniffi.userOpDraft
 import uniffi.vela_core_uniffi.userOpFloors
 import uniffi.vela_core_uniffi.userOpHasContractCall
 import uniffi.vela_core_uniffi.userOpRelayJson
+import uniffi.vela_core_uniffi.CoreException
+import uniffi.vela_core_uniffi.userOpReviewedSafeOpHash
 import uniffi.vela_core_uniffi.userOpSafeOpHash
 import uniffi.vela_core_uniffi.userOpSign
 import uniffi.vela_core_uniffi.userOpWithCalls
@@ -374,6 +376,12 @@ class UserOpSpine(
         calls: List<UserOpCall>,
         gasFeeToken: String?,
         quotedFee: Quoted?,
+        /**
+         * A send: the review the person confirmed (`SubmitUserOp.review`, as
+         * JSON). The passkey's hash is computed only for the operation that is
+         * exactly it. `null` for a site's request, reviewed on its sheet.
+         */
+        review: String? = null,
         signingStarted: () -> Unit = {},
         /** A site's request (spec 071); `null` for the wallet's own send. */
         intent: TrustedSignerIntent? = null,
@@ -385,7 +393,7 @@ class UserOpSpine(
         // and the ceremony, taken only if it came back before the POST.
         val head = async { runCatching { relay.headBlock(chainId) }.getOrNull() }
         try {
-            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, signingStarted, intent, ceremonyDone, beforePost) {
+            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, review, signingStarted, intent, ceremonyDone, beforePost) {
                 withTimeoutOrNull(HEAD_WAIT_MS) { head.await() }
             }
         } finally {
@@ -399,6 +407,7 @@ class UserOpSpine(
         calls: List<UserOpCall>,
         gasFeeToken: String?,
         quotedFee: Quoted?,
+        review: String?,
         signingStarted: () -> Unit,
         intent: TrustedSignerIntent?,
         ceremonyDone: () -> Unit,
@@ -475,7 +484,16 @@ class UserOpSpine(
             }
         }
         draft = userOpWithCalls(draft, calls, settled)
-        val challenge = userOpSafeOpHash(draft, chainId.toUInt())
+        val challenge = if (review == null) {
+            userOpSafeOpHash(draft, chainId.toUInt())
+        } else {
+            try {
+                userOpReviewedSafeOpHash(draft, chainId.toUInt(), review)
+            } catch (mismatch: CoreException) {
+                VelaLog.event("sign", "not_the_review ${mismatch.message}")
+                other("The operation is not the one you reviewed. Nothing was signed.")
+            }
+        }
         signingStarted()
         val assembled = draft
         val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels, allowed, keyRoute ->

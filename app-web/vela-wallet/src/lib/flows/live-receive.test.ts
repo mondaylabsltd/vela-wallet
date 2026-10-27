@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
-import { getAllNetworksSync } from '$lib/services/networks';
+import { spaceNetworksSync } from '$lib/services/networks';
 import { PaymentRequestCore } from '$lib/core/client';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
 import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
@@ -81,7 +81,7 @@ describe('the receive list (T481)', () => {
 		const live = withLiveFlow(buildFlowState('r1', fm, identicon), inputs);
 		if (live.base.kind !== 'receive-list') throw new Error('r1 is the list');
 		const rows = live.base.model.rows;
-		expect(rows.length).toBe(getAllNetworksSync().length);
+		expect(rows.length).toBe(spaceNetworksSync().length);
 		expect(live.base.model.subtitle).toContain(String(rows.length));
 		expect(rows.map((r) => r.chainId)).toEqual(receiveNetworks().map((n) => n.chainId));
 		expect(rows[0]!.addressFull).toBe(identity.address);

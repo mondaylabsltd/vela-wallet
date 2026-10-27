@@ -98,6 +98,9 @@ class SettingsController(
     /** Spec 045: the same rate waterfall, for a code the batch prices in (`null` = cannot price, never 1). */
     suspend fun fiatRate(code: String): Double? = rates?.resolve(code)
 
+    /** The display currency's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val currencyJson: StateFlow<String?> get() = currencyHost.viewJson
+
     private val currencyHost = CoreHost(
         bridge = DisplayCurrencyCore().asBridge(),
         scope = scope,
@@ -140,6 +143,9 @@ class SettingsController(
      */
     var onDappAddSettled: ((tab: String, id: String, outcome: app.getvela.wallet.feature.browser.core.DappAddOutcome) -> Unit)? = null
 
+    /** The network ledger's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val networksJson: StateFlow<String?> get() = networkHost.viewJson
+
     private val networkHost = CoreHost(
         bridge = NetworkAdminCore().asBridge(),
         scope = scope,
@@ -167,6 +173,9 @@ class SettingsController(
     // -- the default transaction speed (spec 068; Android's since 069) --------
 
     private val feeTierExecutor = FeeTierExecutor(store)
+
+    /** The fee speed preference's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
+    val feeTierJson: StateFlow<String?> get() = feeTierHost.viewJson
 
     private val feeTierHost = CoreHost(
         bridge = FeeTierPrefCore().asBridge(),
@@ -344,6 +353,12 @@ class SettingsController(
     }
 
     fun resetWizard() = net(NetEvent.WizardReset)
+
+    /** Spec 105: the wizard's space choice — a testnet (no real value), or a mainnet. */
+    fun chooseWizardSpace(testnet: Boolean) = net(NetEvent.WizardTestnetChosen(testnet))
+
+    /** Spec 105: "Move to the other space" on a network the person added. */
+    fun moveNetwork(id: String, testnet: Boolean) = net(NetEvent.CustomSpaceChanged(id, testnet))
 
     // -- spec 100: a page asks to add a network ------------------------------
     //

@@ -40,6 +40,11 @@ export interface ChainMeta {
 	 * no native coin where gas is paid in a USD stablecoin — see services/tempo.ts.
 	 */
 	gasModel?: 'native' | 'tempo';
+	/**
+	 * A testnet (spec 105): its coins have no real value, and it belongs to the
+	 * testnet space. The core's `BUILTIN_CHAINS` says the same.
+	 */
+	testnet?: boolean;
 }
 
 export const CHAINS: ChainMeta[] = [
@@ -367,6 +372,136 @@ export const CHAINS: ChainMeta[] = [
 		isL2: false,
 		rpcURL: 'https://rpc.xrplevm.org',
 		explorerURL: 'https://explorer.xrplevm.org'
+	},
+	// The testnet space (spec 105): common public testnets where this wallet
+	// works, in the core's order. Their API id is the custom-network form, so a
+	// network someone added before it was built in reads the same.
+	{
+		id: 'sepolia',
+		displayName: 'Sepolia',
+		chainId: 11155111,
+		apiNetworkId: 'chain-11155111',
+		nativeSymbol: 'ETH',
+		iconLabel: 'ETH',
+		iconColor: '#627EEA',
+		iconBg: '#EEF0F8',
+		isL2: false,
+		rpcURL: 'https://ethereum-sepolia-rpc.publicnode.com',
+		explorerURL: 'https://sepolia.etherscan.io',
+		testnet: true
+	},
+	{
+		id: 'base-sepolia',
+		displayName: 'Base Sepolia',
+		chainId: 84532,
+		apiNetworkId: 'chain-84532',
+		nativeSymbol: 'ETH',
+		iconLabel: 'BASE',
+		iconColor: '#0052FF',
+		iconBg: '#E6EEFF',
+		isL2: true,
+		rpcURL: 'https://sepolia.base.org',
+		explorerURL: 'https://sepolia.basescan.org',
+		testnet: true
+	},
+	{
+		id: 'arbitrum-sepolia',
+		displayName: 'Arbitrum Sepolia',
+		chainId: 421614,
+		apiNetworkId: 'chain-421614',
+		nativeSymbol: 'ETH',
+		iconLabel: 'ARB',
+		iconColor: '#28A0F0',
+		iconBg: '#E8F5FD',
+		isL2: true,
+		rpcURL: 'https://sepolia-rollup.arbitrum.io/rpc',
+		explorerURL: 'https://sepolia.arbiscan.io',
+		testnet: true
+	},
+	{
+		id: 'optimism-sepolia',
+		displayName: 'OP Sepolia',
+		chainId: 11155420,
+		apiNetworkId: 'chain-11155420',
+		nativeSymbol: 'ETH',
+		iconLabel: 'OP',
+		iconColor: '#FF0420',
+		iconBg: '#FFE8EA',
+		isL2: true,
+		rpcURL: 'https://sepolia.optimism.io',
+		explorerURL: 'https://sepolia-optimism.etherscan.io',
+		testnet: true
+	},
+	{
+		id: 'polygon-amoy',
+		displayName: 'Polygon Amoy',
+		chainId: 80002,
+		apiNetworkId: 'chain-80002',
+		nativeSymbol: 'POL',
+		iconLabel: 'POL',
+		iconColor: '#8247E5',
+		iconBg: '#F3EEFC',
+		isL2: false,
+		rpcURL: 'https://polygon-amoy-bor-rpc.publicnode.com',
+		explorerURL: 'https://amoy.polygonscan.com',
+		testnet: true
+	},
+	{
+		id: 'bnb-testnet',
+		displayName: 'BNB Chain Testnet',
+		chainId: 97,
+		apiNetworkId: 'chain-97',
+		nativeSymbol: 'tBNB',
+		iconLabel: 'BNB',
+		iconColor: '#F0B90B',
+		iconBg: '#FFF8E1',
+		isL2: false,
+		rpcURL: 'https://bsc-testnet-rpc.publicnode.com',
+		explorerURL: 'https://testnet.bscscan.com',
+		testnet: true
+	},
+	{
+		id: 'avalanche-fuji',
+		displayName: 'Avalanche Fuji',
+		chainId: 43113,
+		apiNetworkId: 'chain-43113',
+		nativeSymbol: 'AVAX',
+		iconLabel: 'AVAX',
+		iconColor: '#E84142',
+		iconBg: '#FDECEC',
+		isL2: false,
+		rpcURL: 'https://api.avax-test.network/ext/bc/C/rpc',
+		explorerURL: 'https://testnet.snowscan.xyz',
+		testnet: true
+	},
+	{
+		id: 'arc-testnet',
+		displayName: 'Arc Testnet',
+		chainId: 5042002,
+		apiNetworkId: 'chain-5042002',
+		nativeSymbol: 'USDC',
+		iconLabel: 'USDC',
+		iconColor: '#2775CA',
+		iconBg: '#E6F0FB',
+		isL2: false,
+		rpcURL: 'https://rpc.testnet.arc.network',
+		explorerURL: 'https://testnet.arcscan.app',
+		testnet: true
+	},
+	{
+		id: 'tempo-moderato',
+		displayName: 'Tempo Moderato',
+		chainId: 42431,
+		apiNetworkId: 'chain-42431',
+		nativeSymbol: 'USD',
+		iconLabel: 'USD',
+		iconColor: '#0B0B0B',
+		iconBg: '#ECECEC',
+		isL2: false,
+		rpcURL: 'https://rpc.moderato.tempo.xyz',
+		explorerURL: 'https://explore.testnet.tempo.xyz',
+		gasModel: 'tempo',
+		testnet: true
 	}
 ];
 

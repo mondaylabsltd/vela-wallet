@@ -464,7 +464,8 @@ impl SendHost {
         // coming back — reaches an open picker too.
         let dashboard = resident::resident::<BalanceDashboard>(cx);
         cx.observe(&dashboard, |host, dashboard, cx| {
-            let view = dashboard.read(cx).view();
+            // The space in front's holdings only (spec 105).
+            let view = crate::network_space::in_space_view(dashboard.read(cx).view());
             host.on_holdings(&view, cx);
         })
         .detach();
@@ -488,6 +489,14 @@ impl SendHost {
     // -- the two machines ----------------------------------------------------
 
     pub fn dispatch(&mut self, event: SendEvent, cx: &mut Context<Self>) {
+        // The passkey's ceremony, as the intents count it (spec 103): its
+        // prompt went up, or it signed. What tells "waiting for the passkey"
+        // from "signed, on its way" — the core's own `submitting` comes first.
+        match &event {
+            SendEvent::SigningStarted => crate::agent::transfers::ceremony("started", cx),
+            SendEvent::OpSigned { .. } => crate::agent::transfers::ceremony("signed", cx),
+            _ => {}
+        }
         let pending = self.send.dispatch(event);
         self.pump_send(pending, cx);
     }
@@ -546,7 +555,7 @@ impl SendHost {
         // Back on the picker from the form: a round that settled meanwhile
         // was held back (`on_holdings`), and is due now.
         if self.view.stage == SendStage::SelectToken && self.pending_tokens.is_none() {
-            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+            let view = crate::network_space::balance_view(cx);
             self.on_holdings(&view, cx);
         }
         cx.notify();
@@ -571,7 +580,7 @@ impl SendHost {
     /// `false` when the dashboard is reading another account: the executor's
     /// own fetch answers then.
     fn answer_tokens(&mut self, id: u64, cx: &mut Context<Self>) -> bool {
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         if !self.same_account(&view) {
             return false;
         }
@@ -678,7 +687,7 @@ impl SendHost {
             // Never settled: the first round is already out.
             return;
         };
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let view = crate::network_space::balance_view(cx);
         if self.same_account(&view) && crate::executor::now_ms() - round.at_ms > HOLDINGS_FRESH_MS {
             balance_dashboard::dispatch(
                 BalanceEvent::RefreshRequested {
@@ -2112,6 +2121,12 @@ mod tests {
             max_fee_per_gas: None,
             gas_fee_token: None,
             quoted_fee: None,
+            review: vela_core::signed_review::SignedReview {
+                chain_id: 100,
+                account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                transfers: Vec::new(),
+                fee: None,
+            },
         };
         assert!(submits.started(&submit));
         assert!(submits.running(), "closed now, it runs on unseen");
@@ -2425,7 +2440,7 @@ mod tests {
                 println!("stopping before the confirm: set VELA_LIVE_SEND=1 to spend dust");
                 return;
             }
-            money.dispatch(SendEvent::SlideConfirm);
+            money.dispatch(SendEvent::SlideConfirm { review: None });
             let view = money.view();
             println!(
                 "after confirm: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",

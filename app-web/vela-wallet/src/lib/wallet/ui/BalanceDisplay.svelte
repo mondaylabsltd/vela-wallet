@@ -161,6 +161,12 @@
 		     arrives — the first read landing, or the display currency
 		     committing — nothing under it moves. -->
 		<div class="amount-slot"><SkeletonRow kind="block" /></div>
+	{:else if balance.state === 'no-value'}
+		<!-- Spec 105: the testnet space has no total; its words stand in the
+		     figure's slot, so switching spaces moves nothing under the hero. -->
+		<div class="amount-slot">
+			<p class="no-value" data-testid="balance-no-value">{balance.noValueText}</p>
+		</div>
 	{:else if balance.state === 'hidden'}
 		<p class="amount hidden-row">
 			<span class="mask">{balance.integer}</span>
@@ -380,6 +386,13 @@
 		/* A figure wider than the slot is LAID OUT that wide and drawn to fit;
 		   its layout box must not give the page a sideways scroll. */
 		overflow-x: clip;
+	}
+
+	.no-value {
+		margin: 0;
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-warning-base);
 	}
 
 	/* The hero's one line: one line of the status, its own padding included,

@@ -214,6 +214,49 @@ fn preset<T: Copy>(table: &[(T, &'static str)], word: Option<&str>) -> Option<T>
     table.iter().find(|(_, w)| *w == word).map(|(p, _)| *p)
 }
 
+/// The choice in the catalog's words — `auto` where none was made — as the
+/// intents read and set it (spec 103): number, date, time.
+#[must_use]
+pub fn words() -> (&'static str, &'static str, &'static str) {
+    let choice = choice();
+    (
+        word(&NUMBER_WORDS, choice.number),
+        word(&DATE_WORDS, choice.date),
+        word(&TIME_WORDS, choice.time),
+    )
+}
+
+/// One preset's catalog word, `auto` for none (a Settings pick, as the
+/// intents name it).
+#[must_use]
+pub fn number_word(preset: Option<NumberPreset>) -> &'static str {
+    word(&NUMBER_WORDS, preset)
+}
+
+#[must_use]
+pub fn date_choice_word(preset: Option<DatePreset>) -> &'static str {
+    word(&DATE_WORDS, preset)
+}
+
+#[must_use]
+pub fn time_choice_word(preset: Option<TimePreset>) -> &'static str {
+    word(&TIME_WORDS, preset)
+}
+
+/// Set one of the three by its catalog word; `auto` (or a word this build
+/// does not know, which the core's check has already refused) is Automatic.
+pub fn set_number_word(value: &str) {
+    set_number(preset(&NUMBER_WORDS, Some(value)));
+}
+
+pub fn set_date_word(value: &str) {
+    set_date(preset(&DATE_WORDS, Some(value)));
+}
+
+pub fn set_time_word(value: &str) {
+    set_time(preset(&TIME_WORDS, Some(value)));
+}
+
 /// The shared record, spelled by the core.
 #[must_use]
 pub fn encode(choice: Choice) -> Value {

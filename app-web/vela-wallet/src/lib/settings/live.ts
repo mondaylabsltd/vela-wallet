@@ -53,6 +53,8 @@ import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/
 import { chainLogoURL } from '$lib/flows/marks';
 import { chainMeta, feedbackPanel, languageRows, markFor, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
+import type { NetworkSpaceMessages } from '$lib/network-space/messages';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type {
 	AboutModel,
 	AddNetworkModel,
@@ -68,6 +70,7 @@ import type {
 	FeedbackModel,
 	NetworkDetailModel,
 	NetworkRowModel,
+	NetworkSpaceHeadingModel,
 	RpcProvidersModel,
 	SelectRowModel,
 	SelectSheetModel,
@@ -152,12 +155,26 @@ function chainMark(id: string, name: string, chainId?: number): ChainMarkModel {
 	return chainId === undefined ? drawn : { ...drawn, logoUrl: chainLogoURL(chainId) };
 }
 
+/** Spec 105: the space in front, and its words — what the network pages show. */
+export interface LiveSpace {
+	current: NetworkSpace;
+	words: NetworkSpaceMessages;
+}
+
+/**
+ * The network list. With a space (spec 105), only that space's networks, and
+ * a network the person added carries the move to the other one.
+ */
 export function liveNetworkRows(
 	view: NetView,
 	m: SettingsMessages,
-	expandedId?: string
+	expandedId?: string,
+	space?: LiveSpace
 ): NetworkRowModel[] {
-	return view.networks.map((row) => ({
+	const testnet = space?.current === 'testnet';
+	const rows =
+		space === undefined ? view.networks : view.networks.filter((row) => row.is_testnet === testnet);
+	return rows.map((row) => ({
 		id: row.id,
 		mark: chainMark(row.id, row.display_name, row.chain_id),
 		name: row.display_name,
@@ -165,8 +182,22 @@ export function liveNetworkRows(
 		badge: row.is_custom ? undefined : probePill(row.rpc_health, m),
 		tag: row.is_custom ? m.networks.custom : undefined,
 		removable: row.is_custom,
-		expanded: expandedId === row.id
+		expanded: expandedId === row.id,
+		...(space !== undefined && row.is_custom
+			? { move: testnet ? space.words.moveToMainnet : space.words.moveToTestnet }
+			: {})
 	}));
+}
+
+/** Spec 105: the network list's heading, and the switch beside it. */
+export function liveSpaceHeading(space: LiveSpace): NetworkSpaceHeadingModel {
+	const testnet = space.current === 'testnet';
+	return {
+		heading: testnet ? space.words.headingTestnet : space.words.headingMainnet,
+		hint: testnet ? space.words.testnetHint : space.words.mainnetHint,
+		switchLabel: testnet ? space.words.toMainnet : space.words.toTestnet,
+		testnet
+	};
 }
 
 export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): NetworkDetailModel {
@@ -220,7 +251,11 @@ function suggestionRow(entry: NetChainIndexEntry, m: SettingsMessages): NetworkR
 	};
 }
 
-export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddNetworkModel {
+export function liveAddNetwork(
+	wizard: NetWizardView,
+	m: SettingsMessages,
+	space?: NetworkSpaceMessages
+): AddNetworkModel {
 	const base = {
 		title: m.advanced.addNetworkTitle,
 		subtitle: m.addNetwork.description,
@@ -367,7 +402,20 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				? undefined
 				: { tone: 'warning', text: m.addNetwork.singleKeyOnly },
 			...rpc,
-			primary: m.addNetwork.addNetworkBtn
+			primary: m.addNetwork.addNetworkBtn,
+			// Spec 105: where it goes, the person's word (the core preselects).
+			...(space === undefined
+				? {}
+				: {
+						space: {
+							label: space.wizardQuestion,
+							segments: [
+								{ id: 'testnet', label: space.wizardTestnet },
+								{ id: 'mainnet', label: space.wizardMainnet }
+							],
+							selected: wizard.testnet ? 'testnet' : 'mainnet'
+						}
+					})
 		};
 	}
 
@@ -497,8 +545,12 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
  * the fixture's 12 stood on the Networks row and in About for everyone.
  * `undefined` until then — an empty cell, never a guess.
  */
-function networkCount(view: NetView): number | undefined {
-	return view.loaded ? view.networks.length : undefined;
+/** The networks the list shows — with a space (spec 105), that space's. */
+function networkCount(view: NetView, space?: LiveSpace): number | undefined {
+	if (!view.loaded) return undefined;
+	if (space === undefined) return view.networks.length;
+	const testnet = space.current === 'testnet';
+	return view.networks.filter((row) => row.is_testnet === testnet).length;
 }
 
 /** About's network row, counted from the list. */
@@ -528,10 +580,11 @@ export function withLiveNetworks(
 	model: SettingsHomeModel,
 	view: NetView,
 	m: SettingsMessages,
-	expandedId?: string
+	expandedId?: string,
+	space?: LiveSpace
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
-	const count = networkCount(view);
+	const count = networkCount(view, space);
 	return {
 		...model,
 		sections: model.sections.map((section) => ({
@@ -546,9 +599,13 @@ export function withLiveNetworks(
 			)
 		})),
 		about: aboutWithNetworkCount(model.about, count, m),
-		networks: { ...model.networks, rows: liveNetworkRows(view, m, expandedId) },
+		networks: {
+			...model.networks,
+			rows: liveNetworkRows(view, m, expandedId, space),
+			...(space === undefined ? {} : { space: liveSpaceHeading(space) })
+		},
 		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
-		addNetwork: liveAddNetwork(view.wizard, m),
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
 		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};
@@ -559,18 +616,20 @@ export function withLiveNetworksDesktop(
 	model: SettingsDesktopModel,
 	view: NetView,
 	m: SettingsMessages,
-	expandedId?: string
+	expandedId?: string,
+	space?: LiveSpace
 ): SettingsDesktopModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
-		about: aboutWithNetworkCount(model.about, networkCount(view), m),
+		about: aboutWithNetworkCount(model.about, networkCount(view, space), m),
 		networks: {
 			...model.networks,
-			rows: liveNetworkRows(view, m, expandedId),
+			rows: liveNetworkRows(view, m, expandedId, space),
+			...(space === undefined ? {} : { space: liveSpaceHeading(space) }),
 			detail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networks.detail
 		},
-		addNetwork: liveAddNetwork(view.wizard, m),
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
 		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};

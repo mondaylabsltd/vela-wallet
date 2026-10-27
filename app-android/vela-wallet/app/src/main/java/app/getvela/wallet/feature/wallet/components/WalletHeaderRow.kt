@@ -1,10 +1,13 @@
 package app.getvela.wallet.feature.wallet.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -14,7 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -45,6 +50,8 @@ fun WalletHeaderRow(
     identiconLabel: String? = null,
     /** Spec 047: the name line with its chevron opens the account switcher (the web's header switcher, 028 phase 9). */
     onSwitcher: (() -> Unit)? = null,
+    /** Spec 105: the space label's tap — the switch prompt. */
+    onSpace: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -97,5 +104,36 @@ fun WalletHeaderRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // The space in front (spec 105), beside the account it shows: a quiet
+        // pill in the mainnet space, amber in the testnet space.
+        header.space?.let { space ->
+            Spacer(modifier = Modifier.width(VelaSpacing.md))
+            NetworkSpaceLabel(text = space, testnet = header.testnet, onClick = onSpace)
+        }
     }
 }
+
+/** The header's space label — tapping it offers the other space. */
+@Composable
+private fun NetworkSpaceLabel(text: String, testnet: Boolean, onClick: (() -> Unit)?) {
+    val colors = VelaTheme.colors
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(app.getvela.wallet.core.designsystem.tokens.VelaRadius.full)
+    Text(
+        text = text,
+        color = if (testnet) colors.warningBase else colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.semibold,
+        fontSize = VelaTextSize.xs,
+        maxLines = 1,
+        modifier = Modifier
+            .testTag(NETWORK_SPACE_LABEL_TAG)
+            .clip(shape)
+            .background(if (testnet) colors.warningSoft else colors.bgRaised)
+            .border(VelaBorder.hairline, if (testnet) colors.warningBorder else colors.borderBase, shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.sm),
+    )
+}
+
+/** The header's space label (spec 105). */
+const val NETWORK_SPACE_LABEL_TAG = "network-space-label"

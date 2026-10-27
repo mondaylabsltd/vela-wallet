@@ -67,6 +67,12 @@ class BalanceExecutor(
      * file's own. A test passes a short one.
      */
     private val chainDeadlineMs: Long = balanceChainReadDeadlineMs().toLong(),
+    /**
+     * The testnet space is in front (spec 105). The saved totals are the
+     * mainnet space's: a testnet's coins have no value to remember, and must
+     * never stand in for a real total — nor a real one for theirs.
+     */
+    private val testnet: () -> Boolean = { false },
 ) {
 
     /**
@@ -92,11 +98,11 @@ class BalanceExecutor(
 
         is BalanceOperation.ReadBalanceCache -> BalanceShellResult.CachedTotalLoaded(
             address = operation.address,
-            usd = readCache()[operation.address.lowercase()],
+            usd = if (testnet()) null else readCache()[operation.address.lowercase()],
         )
 
         is BalanceOperation.ReadBalanceCacheMany -> {
-            val cache = readCache()
+            val cache = if (testnet()) emptyMap() else readCache()
             BalanceShellResult.CachedBalancesLoaded(
                 balances = operation.addresses.mapNotNull { address ->
                     cache[address.lowercase()]?.let { BalanceCacheEntry(address, it) }
@@ -105,7 +111,7 @@ class BalanceExecutor(
         }
 
         is BalanceOperation.WriteBalanceCache -> {
-            writeCache(operation.address, operation.usd)
+            if (!testnet()) writeCache(operation.address, operation.usd)
             BalanceShellResult.BalanceCacheWritten
         }
 

@@ -46,6 +46,55 @@ export interface SettingsMessages {
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
 	analytics: { title: string; subtitle: string };
+	/** "AI agent" — a remote agent using the wallet through a ClientMCP bridge (spec 103). */
+	agent: Record<
+		| 'title'
+		| 'subtitle'
+		| 'description'
+		| 'enable'
+		| 'bridge'
+		| 'bridgeHint'
+		| 'bridgeInvalid'
+		| 'token'
+		| 'tokenHint'
+		| 'endpoint'
+		| 'endpointHint'
+		| 'statusOff'
+		| 'statusConnecting'
+		| 'statusOnline'
+		| 'statusOffline'
+		| 'statusRefused'
+		| 'lastAction'
+		// Spec 106: connecting with clientmcp.dev.
+		| 'connect'
+		| 'connectHint'
+		| 'connecting'
+		| 'connectedAs'
+		| 'connectAgent'
+		| 'connectAgentHint'
+		| 'reconnect'
+		| 'disconnect'
+		| 'ownBridge'
+		| 'linkRefused'
+		| 'linkUnavailable'
+		| 'linkExpired'
+		| 'linkNotOurs'
+		| 'linkNetwork'
+		| 'linkFailed'
+		| 'linkReturn'
+		| 'agentAddress'
+		| 'agentAddressHint'
+		| 'show'
+		| 'hide'
+		| 'copy'
+		| 'copied'
+		| 'share'
+		| 'clientId'
+		| 'wallets'
+		| 'walletsHint'
+		| 'walletsNone',
+		string
+	>;
 	appearance: {
 		themeTitle: string;
 		themeLight: string;
@@ -731,6 +780,50 @@ export const SETTINGS_KEYS = [
 	'settings.feedback.subtitle',
 	'settings.analytics.title',
 	'settings.analytics.subtitle',
+	'settings.agent.title',
+	'settings.agent.subtitle',
+	'settings.agent.description',
+	'settings.agent.enable',
+	'settings.agent.bridge',
+	'settings.agent.bridgeHint',
+	'settings.agent.bridgeInvalid',
+	'settings.agent.token',
+	'settings.agent.tokenHint',
+	'settings.agent.endpoint',
+	'settings.agent.endpointHint',
+	'settings.agent.statusOff',
+	'settings.agent.statusConnecting',
+	'settings.agent.statusOnline',
+	'settings.agent.statusOffline',
+	'settings.agent.statusRefused',
+	'settings.agent.lastAction',
+	'settings.agent.connect',
+	'settings.agent.connectHint',
+	'settings.agent.connecting',
+	'settings.agent.connectedAs',
+	'settings.agent.connectAgent',
+	'settings.agent.connectAgentHint',
+	'settings.agent.reconnect',
+	'settings.agent.disconnect',
+	'settings.agent.ownBridge',
+	'settings.agent.linkRefused',
+	'settings.agent.linkUnavailable',
+	'settings.agent.linkExpired',
+	'settings.agent.linkNotOurs',
+	'settings.agent.linkNetwork',
+	'settings.agent.linkFailed',
+	'settings.agent.linkReturn',
+	'settings.agent.agentAddress',
+	'settings.agent.agentAddressHint',
+	'settings.agent.show',
+	'settings.agent.hide',
+	'settings.agent.copy',
+	'settings.agent.copied',
+	'settings.agent.share',
+	'settings.agent.clientId',
+	'settings.agent.wallets',
+	'settings.agent.walletsHint',
+	'settings.agent.walletsNone',
 	'settings.appearance.themeTitle',
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',

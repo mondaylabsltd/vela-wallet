@@ -154,7 +154,11 @@ pub type HeaderClick = Box<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpu
 /// opens the account switcher (078 H-01). The chevron promised a disclosure
 /// for as long as the desktop drew it, and nothing was listening. `None`
 /// leaves that half a picture — the gallery's header, or no account yet.
-#[allow(clippy::too_many_arguments, reason = "the header and its two targets")]
+///
+/// `space` is the network space in front (spec 105) — its label, whether it
+/// is the testnet space, and what pressing it does: a small label beside the
+/// account, amber in the testnet space. `None` draws no label.
+#[allow(clippy::too_many_arguments, reason = "the header and its targets")]
 pub fn wallet_header(
     theme: &Theme,
     icons: &mut IconCache,
@@ -164,6 +168,7 @@ pub fn wallet_header(
     address: SharedString,
     on_identicon: Option<HeaderClick>,
     on_account: Option<HeaderClick>,
+    space: Option<(SharedString, bool, HeaderClick)>,
 ) -> Div {
     let mut avatar = div()
         .id("wallet-header-identicon")
@@ -227,6 +232,36 @@ pub fn wallet_header(
         .min_w(px(0.))
         .child(avatar)
         .child(account)
+        .when_some(space, |header, (label, testnet, on_space)| {
+            header.child(space_label(theme, label, testnet).on_click(on_space))
+        })
+}
+
+/// The header's network-space label (spec 105): a pill at the row's end, its
+/// own width — the name beside it shrinks, the label does not. Quiet in the
+/// mainnet space; the warning's wash and border in the testnet space, which
+/// must be unmistakable.
+fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Div> {
+    let (bg, border, fg) = if testnet {
+        (theme.warning_soft, theme.warning_border, theme.fg_base)
+    } else {
+        (theme.bg_raised, theme.divider, theme.fg_muted)
+    };
+    div()
+        .id("wallet-header-space")
+        .flex_none()
+        .ml_auto()
+        .px(px(8.))
+        .py(px(2.))
+        .rounded_full()
+        .border_1()
+        .border_color(border)
+        .bg(bg)
+        .cursor_pointer()
+        .text_size(theme::text_label())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(fg)
+        .child(label)
 }
 
 /// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
@@ -488,6 +523,21 @@ pub fn balance_display(
                                 block.opacity(1. - 0.6 * t)
                             },
                         ),
+                ),
+        )),
+        // The testnet space (spec 105): its words in the figure's line box, so
+        // a switch of space moves nothing under the hero.
+        BalanceState::NoValue => root.child(figure(
+            div()
+                .h(theme::text_balance_hero() * 1.12)
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .text_size(theme::text_section())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.warning_base)
+                        .child(model.integer.clone()),
                 ),
         )),
         BalanceState::Hidden => root.child(figure(pressable(
@@ -1387,6 +1437,10 @@ pub fn asset_row(
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
             .child(super::fixtures::MASK),
+        // No worth to show (the testnet space): the line's height, empty.
+        Fiat::None => div()
+            .text_size(theme::text_row_sub())
+            .child(div().invisible().child("\u{200b}")),
         // The figure's own line box, holding a skeleton bar: the row is
         // exactly as tall with the bar as with the figure, so nothing moves
         // when the figure lands.

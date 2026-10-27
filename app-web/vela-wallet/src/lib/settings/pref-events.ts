@@ -45,5 +45,14 @@ export type SettingsPrefEvent =
 	 * only — no core: the phone and desktop apps carry no analytics).
 	 */
 	| { kind: 'analytics'; on: boolean }
+	/** Spec 103: the AI agent — on/off, the bridge's address, the wallet's token. */
+	| { kind: 'agent'; on: boolean }
+	| { kind: 'agent-url'; value: string }
+	| { kind: 'agent-token'; value: string }
+	/** Spec 106: connect (or reconnect) with clientmcp.dev; disconnect from it. */
+	| { kind: 'agent-link' }
+	| { kind: 'agent-unlink' }
+	/** Spec 107 E8: one wallet the agent may use, on or off. */
+	| { kind: 'agent-wallet'; address: string; on: boolean }
 	/** The destructive one, confirmed. */
 	| { kind: 'erase' };

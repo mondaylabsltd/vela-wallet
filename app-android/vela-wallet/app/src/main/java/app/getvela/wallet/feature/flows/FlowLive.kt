@@ -707,9 +707,11 @@ object FlowLive {
         emptyCopy: AssetsEmptyModel? = fallback.empty,
         /** The language a worth's symbol is written for (`fiatSymbol`); the app's unless a board says its own. */
         language: String = app.getvela.wallet.core.i18n.AppLanguage.tag,
+        /** Spec 105: the testnet space — no row has a worth to show. */
+        noValue: Boolean = false,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
-        val rows = WalletLive.assetRows(view, chainNames, currency, language)
+        val rows = WalletLive.assetRows(view, chainNames, currency, language, noValue = noValue)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Empty when the core says so (`empty_key`: the first read ended and
         // found nothing held) — it was this builder's own "no rows, not
@@ -745,6 +747,8 @@ object FlowLive {
         strings: VelaStrings,
         now: Long = System.currentTimeMillis(),
         explorers: Map<Int, String> = emptyMap(),
+        /** Spec 105: the testnet space — the holding has no worth, nor its coin a price. */
+        noValue: Boolean = false,
     ): TokenDetailModel? {
         val token = view.tokens
             .firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }
@@ -757,6 +761,7 @@ object FlowLive {
             chainNames,
             currency,
             strings.language,
+            noValue = noValue,
         ).single()
 
         val theirs = FeedView(
@@ -788,7 +793,7 @@ object FlowLive {
             // USDT's price, its Ethereum contract, 6 decimals — under every
             // token's header, POL on Polygon included. The web's
             // `liveTokenDetail` facts, row for row.
-            facts = tokenFacts(token, chainNames, currency, strings),
+            facts = tokenFacts(token, chainNames, currency, strings, noValue),
             rows = WalletLive.activity(theirs, strings, now, chainNames).flatMap { it.rows },
         )
     }
@@ -798,19 +803,22 @@ object FlowLive {
         chainNames: Map<Int, String>,
         currency: CurrencyView,
         strings: VelaStrings,
+        noValue: Boolean = false,
     ): List<FactRowModel> {
         val money = WalletLive.Money.of(currency, strings.language)
         val contract = token.token_address
+        // Spec 105: a testnet coin's "price" would be a figure for nothing of value.
+        val price = token.price_usd.takeUnless { noValue }
         return listOf(
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_PRICE),
                 // Unpriced is said, never a confident "$0.00". A price IS a
                 // fiat figure: withheld (`null`) until the display currency
                 // is the person's, the row's value empty and its room kept.
-                value = token.price_usd?.let { price ->
-                    money.fiat(price)?.let { strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to it)) }.orEmpty()
+                value = price?.let { usd ->
+                    money.fiat(usd)?.let { strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to it)) }.orEmpty()
                 } ?: strings.t(I18nKeys.Wallet.NO_PRICE),
-                withheld = token.price_usd != null && !money.settled,
+                withheld = price != null && !money.settled,
             ),
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_CONTRACT),

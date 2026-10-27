@@ -37,7 +37,7 @@
 
 	<div class="box {field.tone ?? 'default'}" data-field data-tone={field.tone}>
 		<input
-			type="text"
+			type={field.secret === true ? 'password' : 'text'}
 			value={field.value}
 			placeholder={field.placeholder ?? ''}
 			aria-label={field.label}

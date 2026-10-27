@@ -54,8 +54,9 @@ struct ReadPathContractTests {
         let tokens = reply["tokens"] as? [[String: Any]] ?? []
 
         // Every chain with a native coin to read failed — Tempo has none, so it
-        // asks nothing and cannot fail.
-        let expected = ChainCatalog.chains.filter { $0.gasModel != .tempo }.map(\.chainId)
+        // asks nothing and cannot fail. The mainnet space's (spec 105): a
+        // device starts there, and the testnets are not read.
+        let expected = ChainCatalog.chains.filter { $0.gasModel != .tempo && !$0.testnet }.map(\.chainId)
         #expect(Set(failed) == Set(expected), "failed: \(failed)")
         #expect(tokens.isEmpty, "an unreachable chain contributed a holding: \(tokens)")
         // And the account's own switcher read answers `null`, not an empty
