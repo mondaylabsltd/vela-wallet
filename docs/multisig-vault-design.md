@@ -22,8 +22,11 @@
 - 执行手续费由执行者账户按现有方式在交易内支付，执行前不单独展示金额（按 relay 当时报价签名）。
 - 只支持 Vela 创建的那种 genesis（Safe v1.4.1 factory + SafeL2 singleton）；其他 Safe 地址添加时提示"暂不支持这个版本"。
 
-**上线前还需要**：部署 `genesis-cf`（含信箱，`wrangler deploy`、`safe-genesis.getvela.app` 域名、代付私钥），
-并在主网用真实 passkey 做一次小额全流程。
+**上线前还需要**：
+
+- 部署 `genesis-cf`（含信箱，`wrangler deploy`、`safe-genesis.getvela.app` 域名、代付私钥）；
+- 信箱按 owner 限流（现在只要求批准能核对通过，一个有效 owner 可以对自己的多签无限提交提案）；
+- 在主网用真实 passkey 做一次小额全流程。
 
 **与第一版的区别**（owner，2026-10-27）：多签不再是 Vela 里的内置应用，而是**和 Vela 账户平级的账户**。
 "多签账户本质也是账户，只是在 Vela 里创建的多签账户的 owner 是 Vela 账户而已。"
