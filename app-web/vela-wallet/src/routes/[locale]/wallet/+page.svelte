@@ -2550,6 +2550,10 @@
 		closeLabel={data.walletMessages.identiconViewer.close}
 		current={view.address || null}
 		tokens={balance.view.tokens}
+		onchanged={() => {
+			refreshBalances();
+			feed.focusTick();
+		}}
 	/>
 {/if}
 

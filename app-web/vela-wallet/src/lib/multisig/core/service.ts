@@ -76,6 +76,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<Answer<T>> 
 
 export interface GenesisAnswer {
 	found: boolean;
+	/** Proven but not recorded on chain yet (the service's mailbox holds it). */
+	pending?: boolean;
 	genesis?: Genesis;
 	recordedOn?: number[];
 	verified?: boolean | null;

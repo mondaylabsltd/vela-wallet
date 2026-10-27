@@ -43,8 +43,9 @@
 	});
 
 	function statusOf(item: ProposalItem): { label: string; tone: 'turn' | 'success' | 'muted' } {
-		if (item.status === 'ready' || item.canExecute.length > 0) return { label: m.status.ready, tone: 'success' };
 		if (item.status === 'queued') return { label: m.status.queued, tone: 'muted' };
+		if (item.status === 'ready') return { label: m.status.ready, tone: 'success' };
+		// This device can give the approval still missing (and, giving the last, execute).
 		if (item.canApprove.length > 0) return { label: m.status.yourTurn, tone: 'turn' };
 		return { label: m.status.waiting, tone: 'muted' };
 	}

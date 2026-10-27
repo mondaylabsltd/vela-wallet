@@ -21,6 +21,7 @@
 		chainName,
 		explorerTxUrl,
 		formatUnits,
+		localName,
 		memberLabel,
 		shortenAddress,
 		tokenInfo
@@ -28,7 +29,7 @@
 	import { sameAddress } from '../core/kernel';
 	import { proposalLink } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
-	import { approve, execute, proposals, proposeCancel } from '../core/proposals.svelte';
+	import { approve, execute, proposals, proposeCancel, type ProposalItem } from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -41,9 +42,11 @@
 		wide: boolean;
 		closeLabel: string;
 		onclose: () => void;
+		/** It was executed from this device: the transaction is on chain. */
+		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
 	}
 
-	let { m, account, chainId, safeTxHash, locale, wide, closeLabel, onclose }: Props = $props();
+	let { m, account, chainId, safeTxHash, locale, wide, closeLabel, onclose, onexecuted }: Props = $props();
 
 	const item = $derived(
 		proposals.chain(chainId)?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null
@@ -82,7 +85,7 @@
 	type Phase =
 		| { kind: 'idle' }
 		| { kind: 'busy'; what: 'approve' | 'execute' | 'reject' }
-		| { kind: 'sent'; txHash: string | null }
+		| { kind: 'sent'; txHash: string | null; by: string }
 		| { kind: 'failed'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
 	let rejecting = $state(false);
@@ -118,10 +121,12 @@
 		if (!item || !actor || !members) return;
 		phase = { kind: 'busy', what: 'execute' };
 		try {
+			const by = actor.address;
 			const result = await execute(account, item, actor, members);
-			phase = { kind: 'sent', txHash: null };
+			phase = { kind: 'sent', txHash: null, by };
 			const txHash = await result.waitForTxHash(180_000).catch(() => null);
-			phase = { kind: 'sent', txHash };
+			phase = { kind: 'sent', txHash, by };
+			if (txHash) onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
 			await proposals.refresh(account, account.chainIds);
 		} catch (error) {
 			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
@@ -162,6 +167,13 @@
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 	const busy = $derived(phase.kind === 'busy');
 	const recipient = $derived(item ? actionRecipient(item.review.action) : null);
+	/** The executor approves as `msg.sender`: once it has sent, it counts. */
+	const shownApproved = $derived.by(() => {
+		if (!item) return 0;
+		const p = phase;
+		if (p.kind !== 'sent') return item.approved;
+		return item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by)) ? item.approved : item.approved + 1;
+	});
 </script>
 
 <Sheet title={m.proposal.title} {closeLabel} {wide} {busy} {onclose}>
@@ -175,7 +187,7 @@
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 					<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(recipient)}</span>
 					<span class="to-label">{m.action.to}</span>
-					<span class="to-who">{memberLabel(recipient)}</span>
+					{#if localName(recipient)}<span class="to-who">{localName(recipient)}</span>{/if}
 					<span class="to-address">{shortenAddress(recipient)}</span>
 				</p>
 			{/if}
@@ -203,21 +215,24 @@
 		<section class="approvals" aria-label={m.proposal.approvals}>
 			<h3>
 				{m.proposal.approvals}
-				<span class="count">{fillTemplate(m.status.progress, { approved: item.approved, threshold: item.threshold })}</span>
+				<span class="count">{fillTemplate(m.status.progress, { approved: shownApproved, threshold: item.threshold })}</span>
 			</h3>
 			<div class="bar" aria-hidden="true">
-				<span class="fill" style:width="{Math.min(100, (item.approved / Math.max(1, item.threshold)) * 100)}%"></span>
+				<span class="fill" style:width="{Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"></span>
 			</div>
 			<ul>
 				{#each members?.owners ?? [] as owner (owner)}
 					{@const row = item.approvals.find((a) => a.counts && sameAddress(a.owner, owner))}
+					{@const executedBy = phase.kind === 'sent' && sameAddress(phase.by, owner)}
 					{@const mine = localOwners([owner]).length > 0}
-					<li class:done={!!row}>
+					<li class:done={!!row || executedBy}>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
 						<span class="who">{memberLabel(owner)}{#if mine}<span class="here"> · {m.panel.thisDevice}</span>{/if}</span>
 						<span class="state">
-							{#if row}
+							{#if executedBy}
+								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.executed}
+							{:else if row}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.approved}
 							{:else}
 								{m.proposal.waiting}
@@ -228,7 +243,7 @@
 			</ul>
 		</section>
 
-		{#if item.status === 'done'}
+		{#if item.status === 'done' && phase.kind !== 'sent'}
 			<p class="quiet">{m.proposal.doneNote}</p>
 		{:else if item.status === 'queued'}
 			<p class="quiet">{fillTemplate(m.proposal.queuedNote, { nonce: (proposals.chain(chainId)?.members.nonce ?? 0n).toString() })}</p>

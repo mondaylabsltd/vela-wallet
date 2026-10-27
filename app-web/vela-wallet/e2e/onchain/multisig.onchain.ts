@@ -78,7 +78,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 	await test.step('approve and execute as the second member', async () => {
 		const before = await balanceOf(RECIPIENT);
 		await page.getByRole('button', { name: 'Approve and execute' }).click();
-		await expect(page.getByText('Executed', { exact: true })).toBeVisible({ timeout: 120_000 });
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({ timeout: 120_000 });
 		await shot(page, '10-executed');
 		const after = await balanceOf(RECIPIENT);
 		expect(after - before).toBe(15n * 10n ** 17n);
@@ -86,4 +86,77 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 
 	expect(thrown).toEqual([]);
 	void FIXTURES;
+});
+
+test('two devices: one proposes, the other opens the link, approves and executes', async ({ browser }) => {
+	const a = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	const b = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(a);
+	await useHarness(b);
+	const pageA = await a.newPage();
+	const pageB = await b.newPage();
+	const thrownA = errors(pageA);
+	const thrownB = errors(pageB);
+	await enterParallel(pageA, [FIXTURES.one]);
+	await enterParallel(pageB, [FIXTURES.two]);
+
+	await test.step('device A creates a 2-of-2 with a member added by address', async () => {
+		await pageA.getByRole('button', { name: /Parallel One/ }).first().click();
+		await pageA.getByRole('button', { name: 'Create multisig' }).click();
+		await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
+		await pageA.getByRole('button', { name: 'Add', exact: true }).click();
+		await expect(pageA.getByText('Members · 2')).toBeVisible();
+		await pageA.getByRole('button', { name: 'Next' }).click();
+		await expect(pageA.getByText('2 of 2')).toBeVisible();
+		await expect(pageA.getByText(/Every member must approve/)).toBeVisible();
+		await shot(pageA, 'x1-threshold-all');
+		await pageA.getByRole('button', { name: 'Next' }).click();
+		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
+		await pageA.getByRole('button', { name: 'Done' }).click();
+		await expect(pageA.getByText(/This device/i).first()).toBeVisible();
+		await shot(pageA, 'x2-home-a');
+	});
+
+	const multisig = (await pageA.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	await setBalance(multisig, 3n * 10n ** 18n);
+
+	let link = '';
+	await test.step('device A proposes and shares the link', async () => {
+		await pageA.reload();
+		await pageA.getByRole('button', { name: /Send/ }).first().click();
+		await expect(pageA.getByText('xDAI').first()).toBeVisible({ timeout: 60_000 });
+		await pageA.getByPlaceholder('0', { exact: true }).fill('0.25');
+		await pageA.getByPlaceholder('0x…').fill(RECIPIENT);
+		await pageA.getByRole('button', { name: 'Propose and approve' }).click();
+		await expect(pageA.getByText('1/2 approved').first()).toBeVisible();
+		// Device A cannot finish it: the other member must approve.
+		await expect(pageA.getByRole('button', { name: 'Approve and execute' })).toHaveCount(0);
+		link = (await pageA.locator('code.link').textContent())!.trim();
+		await shot(pageA, 'x3-proposal-a');
+	});
+	expect(link).toContain('#ms=100.');
+
+	await test.step('device B opens the link, approves and executes', async () => {
+		const before = await balanceOf(RECIPIENT);
+		await pageB.goto(link);
+		await expect(pageB.getByText('Send 0.25 xDAI').first()).toBeVisible({ timeout: 90_000 });
+		await shot(pageB, 'x4-proposal-b');
+		await pageB.getByRole('button', { name: 'Approve and execute' }).click();
+		await expect(pageB.getByText('Executed', { exact: true }).first()).toBeVisible({ timeout: 120_000 });
+		await shot(pageB, 'x5-executed-b');
+		expect((await balanceOf(RECIPIENT)) - before).toBe(25n * 10n ** 16n);
+	});
+
+	await test.step('device A sees it done', async () => {
+		await pageA.reload();
+		await expect(pageA.getByText('2 of 2 members approve').first()).toBeVisible();
+		// Nothing left waiting: the executed transaction is gone from the panel.
+		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
+		await shot(pageA, 'x6-home-a-after');
+	});
+
+	expect(thrownA).toEqual([]);
+	expect(thrownB).toEqual([]);
+	await a.close();
+	await b.close();
 });

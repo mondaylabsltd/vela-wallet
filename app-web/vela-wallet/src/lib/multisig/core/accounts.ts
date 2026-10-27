@@ -101,7 +101,7 @@ export async function retryUnrecorded(): Promise<void> {
 	for (const account of multisig.accounts.filter((a) => !a.recorded)) {
 		try {
 			const known = await fetchGenesis(account.address);
-			if (known.found) {
+			if (known.found && !known.pending) {
 				multisig.markRecorded(account.address);
 				continue;
 			}
@@ -137,6 +137,12 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	let answer;
 	try {
 		answer = await fetchGenesis(address);
+		// A multisig created moments ago: its record may still be on its way
+		// to the registry. Ask again for a little while before giving up.
+		for (let wait = 0; !answer.found && wait < 4; wait += 1) {
+			await new Promise((r) => setTimeout(r, 5000));
+			answer = await fetchGenesis(address);
+		}
 	} catch {
 		return { ok: false, reason: 'unavailable' };
 	}
@@ -163,7 +169,7 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
-	const account = multisig.add(address, genesis, true, used.length > 0 ? used : chainIds.slice(0, 1));
+	const account = multisig.add(address, genesis, !answer.pending, used.length > 0 ? used : chainIds.slice(0, 1));
 	multisig.activate(account.address);
 	return { ok: true, account };
 }

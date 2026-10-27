@@ -11,6 +11,7 @@
 	import { addMultisig, retryUnrecorded } from '../core/accounts';
 	import { parseAddLink, parseProposalLink } from '../core/link';
 	import { proposals } from '../core/proposals.svelte';
+	import { recordExecution } from '../core/records';
 	import { multisig } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
@@ -28,9 +29,11 @@
 		current: string | null;
 		/** The active multisig's holdings (the balance core follows the address shown). */
 		tokens: BalanceToken[];
+		/** Something moved on chain from here: balances and activity are stale. */
+		onchanged?: () => void;
 	}
 
-	let { m, locale, wide, closeLabel, current, tokens }: Props = $props();
+	let { m, locale, wide, closeLabel, current, tokens, onchanged }: Props = $props();
 
 	let addPrefill = $state('');
 
@@ -139,6 +142,9 @@
 		{wide}
 		{closeLabel}
 		onclose={() => multisigUi.close()}
+		onexecuted={({ item, txHash, userOpHash }) => {
+			void recordExecution(active.address, item, txHash, userOpHash).finally(() => onchanged?.());
+		}}
 	/>
 {:else if sheet?.kind === 'invite' && active}
 	<InviteSheet {m} account={active} {locale} {wide} {closeLabel} onclose={() => multisigUi.close()} />
