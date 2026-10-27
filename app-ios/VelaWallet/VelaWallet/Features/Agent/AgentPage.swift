@@ -28,7 +28,7 @@ final class AgentPage {
     /// Whether a send screen is up.
     var sendShowing: () -> Bool = { false }
     /// Erase This Device; a refusal, in words, when something survived.
-    var erase: () async -> String? = { "the wallet is not open" }
+    var erase: @MainActor () async -> String? = { "the wallet is not open" }
     /// Clear one of the storage page's items.
     var clearStorageItem: (_ item: String) -> Void = { _ in }
     /// Clear the caches.
@@ -36,7 +36,7 @@ final class AgentPage {
     /// Read the balances again, as a pull does.
     var refreshBalances: () -> Void = {}
     /// Make `address` the account in front; `false` when no wallet has it.
-    var switchAccount: (_ address: String) async -> Bool = { _ in false }
+    var switchAccount: @MainActor (_ address: String) async -> Bool = { _ in false }
     /// Spec 107: the signing sheet's own "no"; `false` when no sheet is up.
     var rejectSigning: () -> Bool = { false }
 }
