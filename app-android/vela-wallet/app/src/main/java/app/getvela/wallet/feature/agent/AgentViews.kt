@@ -266,17 +266,17 @@ private fun AgentApprovalAlert(strings: VelaStrings, text: String, armed: Boolea
         onDismissRequest = { answer(false) },
         title = { Text(strings.t("settings.agent.approveTitle")) },
         text = { Text(text) },
+        // The safe answer is the easy one: Deny where a dialog's answer sits,
+        // in the accent; Allow beside it, quiet. Asked to tap Deny, the owner
+        // twice hit the red Allow that used to sit there (2026-10-27).
         confirmButton = {
-            TextButton(onClick = { answer(true) }, enabled = armed, modifier = Modifier.testTag("agent-allow")) {
-                Text(
-                    strings.t("settings.agent.allow"),
-                    color = if (armed) VelaTheme.colors.errorBase else VelaTheme.colors.fgMuted,
-                )
+            TextButton(onClick = { answer(false) }, modifier = Modifier.testTag("agent-deny")) {
+                Text(strings.t("settings.agent.deny"), color = VelaTheme.colors.accentBase, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
-            TextButton(onClick = { answer(false) }, modifier = Modifier.testTag("agent-deny")) {
-                Text(strings.t("settings.agent.deny"))
+            TextButton(onClick = { answer(true) }, enabled = armed, modifier = Modifier.testTag("agent-allow")) {
+                Text(strings.t("settings.agent.allow"), color = VelaTheme.colors.fgMuted)
             }
         },
     )

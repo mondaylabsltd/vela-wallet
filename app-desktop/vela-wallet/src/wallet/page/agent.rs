@@ -668,9 +668,11 @@ impl WalletPage {
             body: SharedString::from(body),
             callout: None,
             note: None,
-            confirm: self.agent_text("settings.agent.allow"),
-            cancel: Some(self.agent_text("settings.agent.deny")),
-            danger: true,
+            // The safe answer is the easy one: Deny is the sheet's answer,
+            // on top and in the accent; Allow is the quiet one under it.
+            confirm: self.agent_text("settings.agent.deny"),
+            cancel: Some(self.agent_text("settings.agent.allow")),
+            danger: false,
         };
         let id = pending.id;
         // Allow counts only once the request has been up a moment: the next
@@ -680,12 +682,12 @@ impl WalletPage {
         let sheet = confirm_sheet(
             theme,
             copy,
+            cx.listener(move |_, _: &gpui::ClickEvent, _, cx| agent::answer(id, false, cx)),
             cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
                 if vela_agent::transfers::wall_ms() - since >= APPROVAL_ARM_MS {
                     agent::answer(id, true, cx);
                 }
             }),
-            cx.listener(move |_, _: &gpui::ClickEvent, _, cx| agent::answer(id, false, cx)),
         );
         Some(
             crate::ui::dialog::dialog(

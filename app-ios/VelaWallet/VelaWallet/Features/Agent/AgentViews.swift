@@ -167,11 +167,14 @@ struct AgentApprovalSheet: View {
                 .foregroundStyle(theme.fgBase)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, Tokens.Space.s24)
-            VelaButton(title: loc.t("settings.agent.allow"), kind: .danger, enabled: armed) { onAnswer(true) }
+            // The safe answer is the easy one: Deny on top and filled, Allow
+            // below it and quiet. Asked to tap Deny on the phone, the owner
+            // twice hit the large red Allow that used to lead (2026-10-27).
+            VelaButton(title: loc.t("settings.agent.deny"), kind: .primary) { onAnswer(false) }
                 .padding(.bottom, Tokens.Space.s12)
-                .accessibilityIdentifier("agent-allow")
-            VelaButton(title: loc.t("settings.agent.deny"), kind: .secondary) { onAnswer(false) }
                 .accessibilityIdentifier("agent-deny")
+            VelaButton(title: loc.t("settings.agent.allow"), kind: .secondary, enabled: armed) { onAnswer(true) }
+                .accessibilityIdentifier("agent-allow")
         }
         .padding(Tokens.Space.s24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

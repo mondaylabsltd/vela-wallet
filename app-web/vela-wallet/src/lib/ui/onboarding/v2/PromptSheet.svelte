@@ -25,9 +25,20 @@
 		onAnswer: (accepted: boolean) => void;
 		/** The confirm takes no tap yet (an agent's request just up). */
 		confirmDisabled?: boolean;
+		/**
+		 * The refusal leads: first and primary, the confirm quiet under it —
+		 * for a question whose safe answer is no (an agent's request).
+		 */
+		refuseFirst?: boolean;
 	}
 
-	let { copy, dismissLabel, onAnswer, confirmDisabled = false }: Props = $props();
+	let {
+		copy,
+		dismissLabel,
+		onAnswer,
+		confirmDisabled = false,
+		refuseFirst = false
+	}: Props = $props();
 
 	const desktop = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 	let sheet = $state<{ requestClose: () => void }>();
@@ -56,7 +67,14 @@
 		<h2 class="title">{copy.title}</h2>
 		<p class="message">{copy.message}</p>
 		<div class="actions">
-			{#if copy.confirm}
+			{#if copy.confirm && refuseFirst}
+				<Button variant="primary" shape="rounded" onclick={decline}
+					>{copy.confirm.cancelLabel}</Button
+				>
+				<Button variant="secondary" shape="rounded" disabled={confirmDisabled} onclick={accept}
+					>{copy.confirm.confirmLabel}</Button
+				>
+			{:else if copy.confirm}
 				<Button variant="primary" shape="rounded" disabled={confirmDisabled} onclick={accept}
 					>{copy.confirm.confirmLabel}</Button
 				>

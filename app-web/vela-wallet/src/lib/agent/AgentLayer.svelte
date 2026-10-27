@@ -112,6 +112,7 @@
 			}}
 			dismissLabel={messages.deny}
 			confirmDisabled={!armed}
+			refuseFirst
 			onAnswer={(approved) => intents.answer(pending.id, approved)}
 		/>
 	{/key}
