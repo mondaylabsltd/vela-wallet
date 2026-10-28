@@ -162,6 +162,7 @@
     "setContactFavorite": "Đổi mục yêu thích",
     "addNetwork": "Thêm mạng",
     "setNetworkEndpoint": "Đổi RPC hoặc trình khám phá của mạng",
+    "setOnlyMyNode": "Đổi “Chỉ dùng node của tôi”",
     "removeNetwork": "Gỡ mạng",
     "setProviderKey": "Đổi khoá nhà cung cấp RPC",
     "setServiceEndpoint": "Đổi endpoint dịch vụ",
@@ -2223,7 +2224,11 @@
    "checkSafe": "Hợp đồng Safe L2",
    "checkSigner": "Precompile P-256",
    "checkRemaining": "{{count}} hợp đồng còn lại",
-   "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
+   "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
+   "discardTitle": "Bỏ mạng này?",
+   "discardBody": "Những gì bạn đã nhập ở đây sẽ mất.",
+   "discardConfirm": "Bỏ",
+   "discardCancel": "Tiếp tục sửa"
   },
   "treasury": {
    "modalTitle": "Ngân quỹ",
@@ -2267,6 +2272,10 @@
   "searchPlaceholder": "Tìm tên, ENS hoặc địa chỉ",
   "filterAll": "Tất cả",
   "sectionFavorites": "Yêu thích",
+  "favoriteAdd": "Thêm vào yêu thích",
+  "favoriteRemove": "Bỏ khỏi yêu thích",
+  "noteLabel": "Ghi chú",
+  "notePlaceholder": "Không bắt buộc — chỉ bạn thấy",
   "sectionRecent": "Gần đây",
   "sectionSaved": "Đã lưu",
   "empty": "Chưa có liên hệ nào",

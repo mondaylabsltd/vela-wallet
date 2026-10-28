@@ -162,6 +162,7 @@
     "setContactFavorite": "Изменить избранное",
     "addNetwork": "Добавить сеть",
     "setNetworkEndpoint": "Изменить RPC или обозреватель сети",
+    "setOnlyMyNode": "Изменить «Только мой узел»",
     "removeNetwork": "Удалить сеть",
     "setProviderKey": "Изменить ключ RPC-провайдера",
     "setServiceEndpoint": "Изменить адрес сервиса",
@@ -2237,7 +2238,11 @@
    "checkSafe": "Контракты Safe L2",
    "checkSigner": "Прекомпайл P-256",
    "checkRemaining": "ещё контрактов: {{count}}",
-   "singleKeyOnly": "Кошелёк с несколькими passkey нельзя создать в этой сети: фабрика подписантов passkey от Safe здесь не развёрнута.\nКошелёк с одним passkey работает как обычно."
+   "singleKeyOnly": "Кошелёк с несколькими passkey нельзя создать в этой сети: фабрика подписантов passkey от Safe здесь не развёрнута.\nКошелёк с одним passkey работает как обычно.",
+   "discardTitle": "Отменить добавление сети?",
+   "discardBody": "Всё, что вы ввели здесь, будет потеряно.",
+   "discardConfirm": "Отменить",
+   "discardCancel": "Продолжить"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -2281,6 +2286,10 @@
   "searchPlaceholder": "Имя, ENS или адрес",
   "filterAll": "Все",
   "sectionFavorites": "Избранное",
+  "favoriteAdd": "Добавить в избранное",
+  "favoriteRemove": "Убрать из избранного",
+  "noteLabel": "Заметка",
+  "notePlaceholder": "Необязательно — видна только вам",
   "sectionRecent": "Недавние",
   "sectionSaved": "Сохранённые",
   "empty": "Контактов пока нет",

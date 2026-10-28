@@ -45,7 +45,8 @@ rpc_field_label_key: string | null,
  */
 can_add: boolean, 
 /**
- * The space the network goes to (spec 105): a testnet, unless the
- * person chose mainnet ([`Event::WizardTestnetChosen`]).
+ * The space the network goes to (spec 105): the person's choice
+ * ([`Event::WizardTestnetChosen`]), else what the chain registry says the
+ * chain is (set-5), else a testnet.
  */
 testnet: boolean, };

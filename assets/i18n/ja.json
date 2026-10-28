@@ -162,6 +162,7 @@
     "setContactFavorite": "お気に入りを変更",
     "addNetwork": "ネットワークを追加",
     "setNetworkEndpoint": "ネットワークのRPC・エクスプローラーを変更",
+    "setOnlyMyNode": "「自分のノードだけを使う」を変更",
     "removeNetwork": "ネットワークを削除",
     "setProviderKey": "RPCプロバイダーのキーを変更",
     "setServiceEndpoint": "サービスのエンドポイントを変更",
@@ -2223,7 +2224,11 @@
    "checkSafe": "Safe L2 コントラクト",
    "checkSigner": "P-256 プリコンパイル",
    "checkRemaining": "その他 {{count}} 件のコントラクト",
-   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。"
+   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。",
+   "discardTitle": "このネットワークの追加をやめますか？",
+   "discardBody": "ここで入力した内容は失われます。",
+   "discardConfirm": "破棄",
+   "discardCancel": "編集を続ける"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -2267,6 +2272,10 @@
   "searchPlaceholder": "名前・ENS・アドレスで検索",
   "filterAll": "すべて",
   "sectionFavorites": "お気に入り",
+  "favoriteAdd": "お気に入りに追加",
+  "favoriteRemove": "お気に入りから外す",
+  "noteLabel": "メモ",
+  "notePlaceholder": "任意・あなただけに表示されます",
   "sectionRecent": "最近",
   "sectionSaved": "保存済み",
   "empty": "連絡先はまだありません",

@@ -162,6 +162,7 @@
     "setContactFavorite": "Cambiare un preferito",
     "addNetwork": "Aggiungere una rete",
     "setNetworkEndpoint": "Cambiare RPC o explorer di una rete",
+    "setOnlyMyNode": "Cambiare “Usa solo il mio nodo”",
     "removeNetwork": "Rimuovere una rete",
     "setProviderKey": "Cambiare una chiave del provider RPC",
     "setServiceEndpoint": "Cambiare un endpoint di servizio",
@@ -2230,7 +2231,11 @@
    "checkSafe": "Contratti Safe L2",
    "checkSigner": "Precompilato P-256",
    "checkRemaining": "altri {{count}} contratti",
-   "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente."
+   "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente.",
+   "discardTitle": "Scartare questa rete?",
+   "discardBody": "Quello che hai inserito qui andrà perso.",
+   "discardConfirm": "Scarta",
+   "discardCancel": "Continua a modificare"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -2274,6 +2279,10 @@
   "searchPlaceholder": "Cerca nome, ENS o indirizzo",
   "filterAll": "Tutti",
   "sectionFavorites": "Preferiti",
+  "favoriteAdd": "Aggiungi ai preferiti",
+  "favoriteRemove": "Rimuovi dai preferiti",
+  "noteLabel": "Nota",
+  "notePlaceholder": "Facoltativa: la vedi solo tu",
   "sectionRecent": "Recenti",
   "sectionSaved": "Salvati",
   "empty": "Ancora nessun contatto",

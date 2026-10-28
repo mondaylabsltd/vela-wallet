@@ -162,6 +162,7 @@
     "setContactFavorite": "Ubah favorit",
     "addNetwork": "Tambah jaringan",
     "setNetworkEndpoint": "Ubah RPC atau explorer jaringan",
+    "setOnlyMyNode": "Ubah “Hanya pakai node saya”",
     "removeNetwork": "Hapus jaringan",
     "setProviderKey": "Ubah kunci penyedia RPC",
     "setServiceEndpoint": "Ubah endpoint layanan",
@@ -2223,7 +2224,11 @@
    "checkSafe": "Kontrak Safe L2",
    "checkSigner": "Precompile P-256",
    "checkRemaining": "{{count}} kontrak lainnya",
-   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
+   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
+   "discardTitle": "Buang jaringan ini?",
+   "discardBody": "Yang Anda masukkan di sini akan hilang.",
+   "discardConfirm": "Buang",
+   "discardCancel": "Lanjut mengedit"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -2267,6 +2272,10 @@
   "searchPlaceholder": "Cari nama, ENS, atau alamat",
   "filterAll": "Semua",
   "sectionFavorites": "Favorit",
+  "favoriteAdd": "Tambah ke favorit",
+  "favoriteRemove": "Hapus dari favorit",
+  "noteLabel": "Catatan",
+  "notePlaceholder": "Opsional — hanya Anda yang melihatnya",
   "sectionRecent": "Terbaru",
   "sectionSaved": "Tersimpan",
   "empty": "Belum ada kontak",
