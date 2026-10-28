@@ -513,7 +513,7 @@ function allowanceBlock(
 		return {
 			kind: 'allowance',
 			leg: extra.leg,
-			label: m.labelOperator,
+			label: m.terms.labelApproved ?? m.labelOperator,
 			value: picked === 'grant' ? m.certain.chipGrantAll : picked === 'revoke' ? m.chipRevoke : '—',
 			valueTone: picked === 'grant' ? 'danger' : 'neutral',
 			chips: allowanceChips(editor, m, true)

@@ -264,7 +264,7 @@ test('clear signing on the web sheet', async () => {
 			await win.getByTestId('signing-confirm').waitFor({ timeout: 30000 }).catch(() => {});
 			for (let i = 0; i < 40; i++) {
 				const t = await textOf(win);
-				if (!/Loading…|Checking…/.test(t)) break;
+				if (!/Loading|Checking/.test(t)) break;
 				await win.waitForTimeout(500);
 			}
 			await win.waitForTimeout(2500);
