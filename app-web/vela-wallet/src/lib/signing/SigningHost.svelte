@@ -29,6 +29,8 @@
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
 	import { simulateRequest } from '$lib/signing/fee-balance-changes';
+	import type { FeeCall } from '$lib/core/generated/FeeCall';
+	import { poolRpcCall } from '$lib/services/rpc-pool';
 	import type { SimEnded } from '$lib/signing/verdict';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
@@ -399,7 +401,10 @@
 		// store themselves; the extension's request window has only this host,
 		// and without this its figures would wait for ever. Idempotent.
 		void currency.boot();
-		return () => speedControl.dispose();
+		return () => {
+			stopNodeWatch();
+			speedControl.dispose();
+		};
 	});
 
 	// A transaction is shown WITH what it costs (the founder's standing rule:
@@ -420,6 +425,86 @@
 	let checked = $state<{ requestId: string; sim: SimEnded } | null>(null);
 	/** A simulation that ended with no reply to read: "could not check". */
 	const UNREAD: SimEnded = { verdict: null, judged: null };
+	/**
+	 * dapp-15: the request whose simulation is being asked AGAIN — its node
+	 * answers again, or the person pressed "Check again". The last verdict
+	 * stays on the sheet, marked stale, until the new one lands.
+	 */
+	let recheckingFor = $state<string | null>(null);
+	/** How often a node that could not be reached is asked whether it is back. */
+	const NODE_BACK_POLL_MS = 5_000;
+	let nodeWatch: ReturnType<typeof setInterval> | null = null;
+	/** "Check again", for the verdict on the sheet — or nothing to check again. */
+	let simAgain = $state<(() => void) | null>(null);
+	function stopNodeWatch(): void {
+		if (nodeWatch !== null) clearInterval(nodeWatch);
+		nodeWatch = null;
+		simAgain = null;
+	}
+
+	/**
+	 * Run request `requestId`'s simulation and put its verdict on the sheet.
+	 * A verdict the core marks as about the network (`recheck` — no node
+	 * answered) is asked again, by itself, once the chain answers a plain read
+	 * again, and on the person's "Check again" (dapp-15). The core is told of
+	 * every run (`sim_started` / `sim_settled`): a second run holds the confirm
+	 * again for its own short wait, so nobody signs over a verdict about to
+	 * change.
+	 */
+	function simulateOnSheet(
+		requestId: string,
+		from: string,
+		calls: FeeCall[],
+		chainId: number,
+		again: boolean
+	): void {
+		stopNodeWatch();
+		if (again) recheckingFor = requestId;
+		signRequest.dispatch({ type: 'sim_started', id: requestId });
+		// However the read ends — a verdict, no reply to read, or a throw — the
+		// verdict's place is no longer "Checking…": what ended with nothing to
+		// report is "could not check" (`landedVerdict`), never a place left
+		// waiting. Said and told to the core in ONE step, so no frame draws a
+		// verdict over a confirm that still waits for it. For a request that
+		// has gone nothing is said: its wait went with it.
+		const settled = (sim: SimEnded) => {
+			if (quotedFor !== requestId) return;
+			checked = { requestId, sim };
+			if (recheckingFor === requestId) recheckingFor = null;
+			signRequest.dispatch({ type: 'sim_settled', id: requestId });
+			if (sim.verdict?.recheck !== true) return;
+			const askAgain = () => {
+				if (quotedFor === requestId && recheckingFor !== requestId) {
+					simulateOnSheet(requestId, from, calls, chainId, true);
+				}
+			};
+			simAgain = askAgain;
+			let asking = false;
+			nodeWatch = setInterval(() => {
+				if (quotedFor !== requestId) return stopNodeWatch();
+				if (asking) return;
+				asking = true;
+				void poolRpcCall('eth_blockNumber', [], chainId)
+					.then((answer) => typeof answer.result === 'string')
+					.catch(() => false)
+					.then((back) => {
+						asking = false;
+						if (back) askAgain();
+					});
+			}, NODE_BACK_POLL_MS);
+		};
+		void simulateRequest(
+			speedControl,
+			{ from, calls, chainId },
+			() => quotedFor === requestId
+		).then(
+			(sim) => {
+				// `null`: the request went while the node was answering.
+				if (sim !== null) settled(sim);
+			},
+			() => settled(UNREAD)
+		);
+	}
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
@@ -434,6 +519,8 @@
 			}
 			quotedFor = '';
 			checked = null;
+			recheckingFor = null;
+			stopNodeWatch();
 			return;
 		}
 		if (quotedFor === request.id) return;
@@ -493,29 +580,7 @@
 		// seconds at most on a timer of its own. Nothing here holds the
 		// confirm or keeps a clock. A message never reaches this line: it has
 		// no calls.
-		signRequest.dispatch({ type: 'sim_started', id: requestId });
-		// However the read ends — a verdict, no reply to read, or a throw — the
-		// verdict's place is no longer "Checking…": what ended with nothing to
-		// report is "could not check" (`landedVerdict`), never a place left
-		// waiting. Said and told to the core in ONE step, so no frame draws a
-		// verdict over a confirm that still waits for it. For a request that
-		// has gone nothing is said: its wait went with it.
-		const settled = (sim: SimEnded) => {
-			if (quotedFor !== requestId) return;
-			checked = { requestId, sim };
-			signRequest.dispatch({ type: 'sim_settled', id: requestId });
-		};
-		void simulateRequest(
-			speedControl,
-			{ from: identity.address, calls, chainId: request.chain_id },
-			() => quotedFor === requestId
-		).then(
-			(sim) => {
-				// `null`: the request went while the node was answering.
-				if (sim !== null) settled(sim);
-			},
-			() => settled(UNREAD)
-		);
+		untrack(() => simulateOnSheet(requestId, identity.address, calls, request.chain_id, false));
 	});
 
 	/**
@@ -592,6 +657,7 @@
 			progress: signRequest.progress,
 			// This request's own simulation, and no other's.
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
+			simRechecking: recheckingFor !== null && recheckingFor === signView.request?.id,
 			messageUnread: unreadFor !== null && unreadFor === signView.request?.id,
 			feeOpen,
 			speed: {
@@ -717,6 +783,7 @@
 		onretry={() => signRequest.dispatch({ type: 'retry_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onmessageunread={(unread) => (unreadFor = unread ? (signView.request?.id ?? null) : null)}
+		onrecheck={() => simAgain?.()}
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {

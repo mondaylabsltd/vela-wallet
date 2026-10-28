@@ -264,6 +264,13 @@ export const CHAIN_PREFIX = 'vela.chain.';
  */
 export const CHAINS_KEY = 'vela.ext.chains';
 /**
+ * The network the person last put a site on, per space — `vela.ext.lastChain`
+ * → `{ mainnet?: number, testnet?: number }`. Written by the worker when a site
+ * switches chain; read for where a NEW site starts (dapp-17,
+ * `startChainOf`).
+ */
+export const LAST_CHAIN_KEY = 'vela.ext.lastChain';
+/**
  * Where a request is answered — `vela.ext.surface`: `'panel'` (the default:
  * the asking tab's side panel, falling back to a window when there is no user
  * gesture to open one on) or `'window'` (always the dedicated window). A
@@ -705,6 +712,43 @@ export function chainEndpoints(catalog, chainId, bundler) {
 }
 
 /** Does the wallet's catalog know this chain at all? */
+/**
+ * A TWIN of the core's `network_space::site_start_chain` (dapp-17), pinned to
+ * it through the wasm by `instant.test.ts`: the chain a site with no chain of
+ * its own starts on — `lastUsed` while it is one of the space's networks
+ * (`order`, the wallet's list order), else the space's first, else Ethereum.
+ */
+export function siteStartChain(order, lastUsed) {
+	if (typeof lastUsed === 'number' && order.includes(lastUsed)) return lastUsed;
+	return order.length > 0 ? order[0] : 1;
+}
+
+/**
+ * Where a new site starts, from what the wallet published: its catalog's
+ * space and list order, and the chain last used in that space (`lastBySpace`,
+ * `LAST_CHAIN_KEY`'s value). `0` when the catalog says neither — one written
+ * before dapp-17 — and the caller keeps its old default.
+ */
+export function startChainOf(catalog, lastBySpace) {
+	if (!catalog || typeof catalog !== 'object') return 0;
+	const order = Array.isArray(catalog.order)
+		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	if (order.length === 0) return 0;
+	const space = typeof catalog.space === 'string' ? catalog.space : '';
+	const last =
+		space && lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[space]) : 0;
+	return siteStartChain(order, last > 0 ? last : null);
+}
+
+/** `LAST_CHAIN_KEY`'s value once `chainId` was used in the catalog's space; `null`: nothing to write. */
+export function withLastChain(catalog, lastBySpace, chainId) {
+	const space = catalog && typeof catalog.space === 'string' ? catalog.space : '';
+	if (!space || !(chainId > 0)) return null;
+	const before = lastBySpace && typeof lastBySpace === 'object' ? lastBySpace : {};
+	return before[space] === chainId ? null : { ...before, [space]: chainId };
+}
+
 export function chainKnown(catalog, chainId) {
 	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
 	return !!(chains && typeof chains === 'object' && chains[String(chainId)]);
@@ -856,11 +900,12 @@ export function resolveGrantedAccounts(grant, signedIn) {
  * in that wallet, and a site still showing it connected is the defect itself.
  * Signing back in tells the sites of that account their account again.
  *
- * Signed in to ANOTHER account, a site that loses its answer is NOT told `[]`
- * here: the wallet re-pins its grant to the new account, or drops it, right
- * after it publishes the snapshot, and that grant write is what the page hears
- * (`accountsChanged([new])`, or `[]` and `disconnect`). A `[]` first would end
- * a connection that is about to follow — wagmi disconnects on it.
+ * Signed in to ANOTHER account, a site that loses its answer IS told `[]`
+ * (dapp-17): its grant stays on the account it was given for — the wallet no
+ * longer re-pins it to the new one, which handed the site an account nobody
+ * connected to it — so nothing else would tell it. Switching back tells it its
+ * own account again. A grant whose account left the device is dropped by the
+ * wallet, and that write is what the page hears (`[]` and `disconnect`).
  */
 export function signedInChangeEvent(grant, before, after) {
 	const told = resolveGrantedAccounts(grant, before);
@@ -869,7 +914,6 @@ export function signedInChangeEvent(grant, before, after) {
 		told.length === tell.length &&
 		told.every((address, i) => address.toLowerCase() === tell[i].toLowerCase());
 	if (same) return null;
-	if (tell.length === 0 && typeof after === 'string' && after.length > 0) return null;
 	return tell;
 }
 

@@ -71,7 +71,10 @@ with the chain, `eth_chainId` answers it, and Settings lists the network.
 
 1. **Given** a chain Vela's catalog knows, **Then** the sheet shows the catalog's name and coin
    and the network is saved with the catalog's vetted RPC; the page's `rpcUrls`, name and symbol are
-   not used.
+   not used. *Amended (round 3, dapp-13):* when the catalog lists no RPC Vela may use (a dev chain
+   such as 1337, whose only listed RPC is `http://127.0.0.1:8545`), the page's RPCs are tried
+   instead — held to `eth_chainId` exactly as in 2 and 3 — and the sheet says the RPC is the site's.
+   Before this the sheet said "Unable to verify — RPC request failed" without asking any RPC.
 2. **Given** a chain the catalog does not know, **Then** only the page's `https://` RPC URLs are
    tried (`http://` only where the debug-mode rule offers http pages the wallet), each must answer
    `eth_chainId` with the requested id, and the sheet says the name and coin are the site's.
@@ -91,7 +94,13 @@ with the chain, `eth_chainId` answers it, and Settings lists the network.
    **Then** the sheet shows Settings' verdict ("Incompatible", the hint, "Open Chain Setup Tool"),
    Add is not offered, nothing is added, and closing the sheet answers the page 4902.
 2. **Given** a chain whose RPCs do not answer, **Then** the sheet says "Unable to verify — RPC
-   request failed" with Retry; closing it is the person's decline (4001).
+   request failed" with Retry; closing it is the person's decline (4001). *Amended (round 3,
+   dapp-13, EIP-3085 best practice):* it also says why (no RPC Vela may use; or the RPC host could
+   not be reached — down, slow, or not letting Vela in, as local nodes often do), and is not a dead
+   end: with an RPC to save that never answered for another chain, "Add without verifying" shows
+   what that risks and adds it only on its explicit confirmation ("Add unverified network",
+   `network_admin` `DappAddApprovedUnverified`). An RPC that answered another chain id still
+   refuses.
 
 ---
 

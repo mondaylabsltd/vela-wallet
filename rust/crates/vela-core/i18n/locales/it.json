@@ -224,6 +224,12 @@
         "fiatRates": "Tassi fiat"
       }
     },
+    "sites": {
+      "title": "Siti collegati",
+      "subtitle": "I siti che possono vedere il tuo indirizzo",
+      "listLabel": "Scollegando un sito gli togli ciò che può vedere; la prossima volta te lo chiederà di nuovo.",
+      "empty": "Nessun sito è collegato."
+    },
     "about": {
       "title": "Informazioni",
       "subtitle": "Vela Wallet v{{version}}"

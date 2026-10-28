@@ -16,7 +16,7 @@ import type { ConfirmSheetModel, NetworkRowModel, StorageModel } from './model';
  * address book on one click, with nothing in between.
  */
 export function storageClearQuestion(
-	storage: StorageModel,
+	storage: Pick<StorageModel, 'groups'>,
 	id: string,
 	cancel: string
 ): ConfirmSheetModel | undefined {

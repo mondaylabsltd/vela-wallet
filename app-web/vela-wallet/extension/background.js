@@ -50,6 +50,7 @@ import {
 	CHAIN_PREFIX,
 	CHAINS_KEY,
 	DOC_PORT,
+	LAST_CHAIN_KEY,
 	ENDPOINTS_KEY,
 	ERR,
 	PANEL_HELLO_WAIT_MS,
@@ -85,9 +86,11 @@ import {
 	resolveGrantedAccounts,
 	rpcError,
 	signedInChangeEvent,
+	startChainOf,
 	switchChainParam,
 	toHexChainId,
-	unreachableChainMessage
+	unreachableChainMessage,
+	withLastChain
 } from './lib/protocol.js';
 import {
 	affectedBy,
@@ -1010,6 +1013,10 @@ function chainOf(origin, all) {
 	const grant = all[PERM_PREFIX + origin];
 	const connectedOn = grant && typeof grant === 'object' ? parseChainId(grant.chainId) : 0;
 	if (connectedOn > 0) return connectedOn;
+	// dapp-17: a new site starts on the network last used in this space, not
+	// on mainnet — a testnet-space wallet put every new site on 0x1.
+	const start = startChainOf(all[CHAINS_KEY], all[LAST_CHAIN_KEY]);
+	if (start > 0) return start;
 	const snapshot = all[EXT_CACHE_KEY];
 	return snapshot && typeof snapshot === 'object' ? parseChainId(snapshot.chain_id) : 0;
 }
@@ -1042,7 +1049,13 @@ function grantedAccounts(grant, snapshot) {
  * the wallet is signed in to).
  */
 async function answerFromSnapshot(method, origin) {
-	const all = await readLocal([PERM_PREFIX + origin, CHAIN_PREFIX + origin, EXT_CACHE_KEY]);
+	const all = await readLocal([
+		PERM_PREFIX + origin,
+		CHAIN_PREFIX + origin,
+		EXT_CACHE_KEY,
+		CHAINS_KEY,
+		LAST_CHAIN_KEY
+	]);
 	const grant = all[PERM_PREFIX + origin] ?? null;
 	const snapshot = all[EXT_CACHE_KEY] ?? null;
 	const accounts = grantedAccounts(grant, snapshot);
@@ -1098,7 +1111,8 @@ async function switchChain(method, params, origin) {
 		CHAINS_KEY,
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
-		EXT_CACHE_KEY
+		EXT_CACHE_KEY,
+		LAST_CHAIN_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
@@ -1110,6 +1124,15 @@ async function switchChain(method, params, origin) {
 			await chrome.storage.local.set({ [CHAIN_PREFIX + origin]: chainId });
 		} catch {
 			return { error: rpcError(ERR.INTERNAL, 'Could not record the chain switch') };
+		}
+	}
+	// dapp-17: where the next new site in this space starts. Best-effort.
+	const last = withLastChain(catalog, all[LAST_CHAIN_KEY], chainId);
+	if (last) {
+		try {
+			await chrome.storage.local.set({ [LAST_CHAIN_KEY]: last });
+		} catch {
+			/* best-effort: the next new site starts on the space's first */
 		}
 	}
 	return { result: null };
@@ -1237,7 +1260,8 @@ async function forwardRead(method, params, origin) {
 		CHAINS_KEY,
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
-		EXT_CACHE_KEY
+		EXT_CACHE_KEY,
+		LAST_CHAIN_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };

@@ -460,6 +460,12 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			title: k('settings.analytics.title'),
 			subtitle: k('settings.analytics.subtitle')
 		},
+		sites: {
+			title: k('settings.sites.title'),
+			subtitle: k('settings.sites.subtitle'),
+			listLabel: k('settings.sites.listLabel'),
+			empty: k('settings.sites.empty')
+		},
 		agent: {
 			title: k('settings.agent.title'),
 			subtitle: k('settings.agent.subtitle'),
@@ -1025,6 +1031,12 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
+			rpcFromSite: k('connect.browser.addRpcFromSite'),
+			whyNoRpc: k('connect.browser.addWhyNoRpc'),
+			whyUnreachable: k('connect.browser.addWhyUnreachable'),
+			addUnverified: k('connect.browser.addUnverified'),
+			unverifiedWarning: k('connect.browser.addUnverifiedWarning'),
+			addUnverifiedConfirm: k('connect.browser.addUnverifiedConfirm'),
 			wrongRpc: k('assets.rpcFixWrongChain'),
 			noRpc: k('componentsUi.browserStatus.reason.badRpc'),
 			checksTitle: k('settingsModals.addNetwork.compatibilityCheck'),
@@ -1445,6 +1457,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
 		balancesTitle: k('componentsUi.signing.balanceChangesTitle'),
 		simChecking: k('componentsUi.funding.checking'),
+		simRecheck: k('componentsUi.signing.simRecheck'),
+		simRechecking: k('componentsUi.signing.simRechecking'),
 		balanceUnverifiedToken: k('componentsUi.signing.balanceUnverifiedToken'),
 		// PR 3 device round: the verdict's quiet line, by the key the core names.
 		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),

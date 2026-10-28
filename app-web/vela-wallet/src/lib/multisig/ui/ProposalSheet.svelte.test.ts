@@ -219,6 +219,101 @@ describe("a dApp's transaction from a multisig (dapp-1)", () => {
 	});
 });
 
+describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, G2)", () => {
+	it('is proposed and executed in one go, and the site is handed the real transaction', async () => {
+		const TX = `0x${'cd'.repeat(32)}`;
+		const one = { ...members, threshold: 1 };
+		const mine = [{ owner: ME, counts: true, approval: {}, createdMs: 1 }];
+		fake.draft = {
+			chain: { chainId: 100, members: one, items: [], mailbox: true },
+			item: item({ threshold: 1, canExecute: [local] })
+		};
+		fake.chain = {
+			chainId: 100,
+			members: one,
+			mailbox: true,
+			items: [
+				item({
+					threshold: 1,
+					approved: 1,
+					approvals: mine,
+					status: 'ready',
+					canApprove: [],
+					canExecute: [local]
+				})
+			]
+		};
+		fake.execution = { maybeSent: false, userOpHash: '0x01', waitForTxHash: async () => TX };
+		const executed = vi.fn();
+		const base = {
+			rid: 'r1',
+			address: SAFE,
+			chainId: 100,
+			method: 'eth_sendTransaction',
+			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
+			origin: 'https://app.example',
+			safeTxHash: null as string | null,
+			decline: () => {},
+			close: () => {},
+			executed
+		};
+		let screen: ReturnType<typeof show> | null = null;
+		const draft = {
+			...base,
+			// What the host does once it is in the mailbox: the sheet shows the proposal.
+			propose: async () => {
+				await screen?.rerender({ draft: { ...draft, safeTxHash: HASH }, safeTxHash: HASH });
+				return HASH;
+			}
+		};
+		screen = show({ draft, safeTxHash: '' });
+		await settle();
+		// One door, worded for what it does: no wait for approvals nobody else gives.
+		expect(buttons()).toContain('proposal.approveAndExecute');
+		expect(buttons()).not.toContain('send.propose');
+		press('proposal.approveAndExecute');
+		await settle();
+		expect(fake.calls).toEqual(['execute']);
+		expect(executed).toHaveBeenCalledWith(TX);
+		await screen.unmount();
+	});
+
+	it('waiting for others, says how many approvals it still needs, and that the site was told', async () => {
+		fake.chain.items = [
+			item({
+				approved: 1,
+				canApprove: [],
+				approvals: [{ owner: ME, counts: true, approval: {}, createdMs: 1 }]
+			})
+		];
+		const words2 = words();
+		words2.proposal.stillNeeded = 'needed {{missing}}';
+		const draft = {
+			rid: 'r1',
+			address: SAFE,
+			chainId: 100,
+			method: 'eth_sendTransaction',
+			calls: [{ to: TO, value: '0x0', data: '0x' }],
+			origin: 'https://app.example',
+			safeTxHash: HASH,
+			propose: async () => HASH,
+			decline: () => {},
+			close: () => {},
+			executed: () => {}
+		};
+		const screen = show({ draft, m: words2 });
+		await settle();
+		expect(document.body.textContent).toContain('needed 1');
+		expect(document.body.textContent).toContain('proposal.siteWaits');
+		await screen.rerender({ draft: { ...draft, siteTold: true } });
+		await settle();
+		expect(document.body.textContent).toContain('proposal.siteTold');
+		expect(document.body.textContent).not.toContain('proposal.siteWaits');
+		expect(document.body.textContent).not.toContain('needed 1');
+		await screen.unmount();
+	});
+});
+
 describe('a member who would execute it (ms-5)', () => {
 	it('can approve without executing, beside Approve and execute', async () => {
 		fake.chain.items = [item({ approved: 1, canExecute: [local] })];

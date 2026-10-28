@@ -62,7 +62,7 @@ export type SurfaceCaller = { kind: 'panel'; windowId: number } | { kind: 'windo
 export type ClaimPhase = 'approve' | 'sign' | 'submit';
 export type SurfaceAnswer = {
 	result?: unknown;
-	error?: { code: number; message: string };
+	error?: { code: number; message: string; data?: unknown };
 };
 /**
  * What a `submit` claim carries (RJ2): the operation's hash and chain, sent

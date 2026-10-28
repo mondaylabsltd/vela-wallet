@@ -124,6 +124,7 @@ const DISPATCHED: Record<string, Place> = {
 	'networkAdmin.endpoint_blurred': { intent: 'set_service_endpoint' },
 	'networkAdmin.dapp_add_requested': { none: DAPP },
 	'networkAdmin.dapp_add_approved': { none: DAPP },
+	'networkAdmin.dapp_add_approved_unverified': { none: DAPP },
 	'networkAdmin.dapp_add_declined': { none: DAPP },
 	'networkAdmin.dapp_add_cancelled': { none: DAPP },
 	'networkAdmin.dapp_add_retried': { none: DAPP },

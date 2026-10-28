@@ -16,7 +16,8 @@
  * one piece of wallet state the worker may see, and it is a fact the core
  * authored — never a decision the worker makes.
  */
-import { CHAIN_PREFIX, PERM_PREFIX } from './keys';
+import { siteStartChain } from '$lib/core/kernels';
+import { CHAIN_PREFIX, CHAINS_KEY, LAST_CHAIN_KEY, PERM_PREFIX } from './keys';
 
 /** The stored grant. `grantedAt` is kept even though no rule reads it — a wire
  *  shape that drops what is persisted is a wire shape that lies. */
@@ -79,23 +80,46 @@ export async function revokeGrant(origin: string): Promise<void> {
 /**
  * The chain a site is on: its own switch (`vela.chain.<origin>`, written by
  * the worker on `wallet_switchEthereumChain`), else the chain it connected
- * on, else `fallback` (the snapshot's default). The same resolution the worker
- * uses for `eth_chainId`, so the chain a signature is asked on is the chain
- * the site believes it is on.
+ * on, else where a new site starts (dapp-17: the network last used in this
+ * space, else the space's first — the core's `siteStartChain`, over the
+ * catalog the wallet published), else `fallback` (the snapshot's default).
+ * The same resolution the worker uses for `eth_chainId`, so the chain a
+ * connect or a signature is asked on is the chain the site believes it is on.
  */
 export async function getOriginChain(origin: string, fallback: number): Promise<number> {
 	const store = area();
 	if (!store) return fallback;
 	try {
-		const all = await store.get([CHAIN_PREFIX + origin, grantKey(origin)]);
+		const all = await store.get([
+			CHAIN_PREFIX + origin,
+			grantKey(origin),
+			CHAINS_KEY,
+			LAST_CHAIN_KEY
+		]);
 		const picked = all[CHAIN_PREFIX + origin];
 		if (typeof picked === 'number' && Number.isFinite(picked) && picked > 0) return picked;
 		const grant = all[grantKey(origin)];
 		if (isGrant(grant) && grant.chainId > 0) return grant.chainId;
+		const start = startChain(all[CHAINS_KEY], all[LAST_CHAIN_KEY]);
+		if (start > 0) return start;
 	} catch {
 		/* unreadable → the default */
 	}
 	return fallback;
+}
+
+/** Where a new site starts, from the published catalog; `0` for a catalog that does not say. */
+function startChain(catalog: unknown, lastBySpace: unknown): number {
+	if (!catalog || typeof catalog !== 'object') return 0;
+	const { order, space } = catalog as { order?: unknown; space?: unknown };
+	if (!Array.isArray(order)) return 0;
+	const ids = order.filter((id): id is number => Number.isInteger(id) && id > 0);
+	if (ids.length === 0) return 0;
+	const last =
+		typeof space === 'string' && lastBySpace && typeof lastBySpace === 'object'
+			? (lastBySpace as Record<string, unknown>)[space]
+			: undefined;
+	return siteStartChain(ids, typeof last === 'number' && last > 0 ? last : null);
 }
 
 function isGrant(value: unknown): value is DAppGrant {

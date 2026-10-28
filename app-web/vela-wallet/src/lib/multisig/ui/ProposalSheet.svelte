@@ -17,7 +17,7 @@
 	 * Decline — nothing is signed until the person has seen what the site
 	 * asks. Once proposed it is the transaction like any other.
 	 */
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -247,16 +247,29 @@
 		return error instanceof Error ? error.message : String(error);
 	}
 
+	/**
+	 * A dApp's transaction that the proposer's own approval makes ready (a
+	 * one-approval multisig, nothing ahead of it): proposed and executed in
+	 * one go, so the site gets its transaction — not a wait for approvals
+	 * nobody else has to give.
+	 */
+	const executeNow = $derived(drafting && !!item && item.canExecute.length > 0);
+
 	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
 	async function onPropose() {
 		if (!draft || !item) return;
+		const thenExecute = executeNow;
 		phase = { kind: 'busy', what: 'propose' };
 		try {
 			await draft.propose();
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+			return;
 		}
+		// The proposal as the mailbox has it now: executed if it is ready.
+		await tick();
+		if (thenExecute && item?.status === 'ready' && actor) await onExecute();
 	}
 
 	async function onApprove() {
@@ -310,6 +323,8 @@
 			}
 			phase = { kind: 'sent', txHash, by };
 			onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
+			// A dApp's transaction: its site gets the transaction, now.
+			draft?.executed(txHash);
 		} catch (error) {
 			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
 		}
@@ -608,10 +623,13 @@
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
 						disabled={busy}
-						onclick={onPropose}>{m.send.propose}</Button
+						onclick={onPropose}>{executeNow ? m.proposal.approveAndExecute : m.send.propose}</Button
 					>
 				{/if}
 			</div>
+			{#if executeNow && item.review.action !== null}
+				<p class="fine">{m.proposal.feeNote}</p>
+			{/if}
 		{:else if phase.kind === 'sent'}
 			<div class="sent" class:pending={!phase.txHash} role="status" aria-busy={!phase.txHash}>
 				<!-- The check is for what is on chain; on its way, it is only said. -->
@@ -691,10 +709,20 @@
 		{/if}
 
 		{#if draft && !drafting && item.status !== 'done'}
-			<!-- A batch's site was given its id; a transaction's waits for its hash. -->
+			<!-- A batch's site was given its id; a transaction's waits for its hash
+			     (until the request's limit, when it is told it was proposed). -->
+			{#if draft.method !== 'wallet_sendCalls' && !draft.siteTold && shownApproved < item.threshold}
+				<p class="fine" role="status">
+					{fillTemplate(m.proposal.stillNeeded, { missing: item.threshold - shownApproved })}
+				</p>
+			{/if}
 			<p class="fine">
 				{fillTemplate(
-					draft.method === 'wallet_sendCalls' ? m.proposal.siteFollows : m.proposal.siteWaits,
+					draft.method === 'wallet_sendCalls'
+						? m.proposal.siteFollows
+						: draft.siteTold
+							? m.proposal.siteTold
+							: m.proposal.siteWaits,
 					{ host: site }
 				)}
 			</p>

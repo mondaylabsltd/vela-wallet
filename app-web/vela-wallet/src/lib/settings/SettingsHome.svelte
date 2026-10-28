@@ -21,6 +21,7 @@
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
 		AgentPanelModel,
+		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsHomeModel,
@@ -56,6 +57,7 @@
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import SitesPanel from './ui/SitesPanel.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -99,6 +101,8 @@
 		 * route adds the row that opens it. Absent in the gallery.
 		 */
 		agent?: AgentPanelModel;
+		/** dapp-11: Settings › Connected sites — the extension only (no grants elsewhere). */
+		sites?: SitesPanelModel;
 		/**
 		 * The account switcher (spec 028 Phase 8). A row is picked by its
 		 * POSITION in the sheet — the session's own order — and the two buttons
@@ -153,6 +157,7 @@
 		onprefevent,
 		analytics,
 		agent,
+		sites,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
@@ -193,7 +198,8 @@
 		// Spec 102: the account's venue, and the pages this device trusts.
 		'signing-venue': 'signing-venue',
 		'signing-pages': 'signing-pages',
-		agent: 'agent'
+		agent: 'agent',
+		sites: 'sites'
 	};
 
 	const OVERLAY_OF: Partial<Record<string, SettingsOverlayId>> = {
@@ -285,6 +291,8 @@
 				return { title: model.about.title, subtitle: undefined };
 			case 'agent':
 				return agent && { title: agent.title, subtitle: undefined };
+			case 'sites':
+				return sites && { title: sites.title, subtitle: sites.subtitle };
 			case 'signing-venue':
 				return model.venue && { title: model.venue.title, subtitle: model.venue.subtitle };
 			case 'signing-pages':
@@ -566,6 +574,17 @@
 						panel={model.about}
 						{analytics}
 						onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+					/>
+				{:else if page === 'sites' && sites !== undefined}
+					<SitesPanel
+						panel={sites}
+						ondisconnect={(id) =>
+							// Asked first, as every storage row is.
+							ask(
+								'clear-storage-item',
+								id,
+								storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
+							)}
 					/>
 				{:else if page === 'agent' && agent !== undefined}
 					<AgentPanel

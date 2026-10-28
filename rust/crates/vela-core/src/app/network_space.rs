@@ -107,6 +107,19 @@ pub fn space_chain_ids_json(space: &str, rows_json: &str) -> String {
         .unwrap_or_else(|_| "[]".to_owned())
 }
 
+/// The chain a site with no chain of its own starts on (dapp-17) — no switch
+/// of its own and no grant: the network the person last put a site on in
+/// this space (`last_used`), while it is still one of the space's networks;
+/// else the space's first network (`space_chain_ids`, in the list's order);
+/// else Ethereum. A testnet-space wallet no longer starts a site on mainnet.
+#[must_use]
+pub fn site_start_chain(space_chain_ids: &[u32], last_used: Option<u32>) -> u32 {
+    match last_used {
+        Some(chain_id) if space_chain_ids.contains(&chain_id) => chain_id,
+        _ => space_chain_ids.first().copied().unwrap_or(1),
+    }
+}
+
 /// [`chain_is_testnet`] for a shell holding the stored `vela.customNetworks`
 /// as JSON (the core's own snake-case records; unreadable is none).
 #[must_use]
@@ -118,6 +131,24 @@ pub fn chain_is_testnet_json(chain_id: u32, custom_json: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_site_starts_on_the_network_last_used_in_this_space() {
+        // Last used, and still in the space.
+        assert_eq!(site_start_chain(&[1, 8453, 100], Some(100)), 100);
+        // Never used, or used in the other space / no longer there: the space's first.
+        assert_eq!(site_start_chain(&[1, 8453, 100], None), 1);
+        assert_eq!(
+            site_start_chain(&[11_155_111, 84_532], Some(8453)),
+            11_155_111
+        );
+        assert_eq!(
+            site_start_chain(&[11_155_111, 84_532], Some(84_532)),
+            84_532
+        );
+        // A space with no network at all: Ethereum, as before.
+        assert_eq!(site_start_chain(&[], Some(100)), 1);
+    }
 
     fn custom(chain_id: u32, is_testnet: Option<bool>) -> NetCustomNetwork {
         NetCustomNetwork {

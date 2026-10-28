@@ -6,8 +6,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+	ANSWER_MARGIN_MS,
 	DECLINED,
 	DappGoneError,
+	PROPOSED_CODE,
 	leftProposed,
 	multisigRefusal,
 	openMultisigReview,
@@ -46,6 +48,7 @@ function harness(overrides: Partial<HandOff> = {}) {
 		propose,
 		settle: (answer) => answers.push(answer),
 		follow: () => events.push('following'),
+		tellProposed: (hash) => events.push(`told ${hash.slice(0, 4)}`),
 		answerBatch: (hash, nonce, fromBlock) =>
 			events.push(`batch ${hash.slice(0, 4)} ${nonce} ${fromBlock}`),
 		...overrides
@@ -92,6 +95,68 @@ describe("a dApp's transaction from a multisig", () => {
 		expect(answers[0].error?.message).toMatch(/Proposed/);
 	});
 
+	it('"proposed" is a JSON-RPC server error carrying the proposal — never 4001, 4900 or a hash', () => {
+		const answer = leftProposed(HASH);
+		expect(answer.code).toBe(PROPOSED_CODE);
+		expect(answer.code).toBe(-32000);
+		expect(answer.data).toEqual({ safeTxHash: HASH, status: 'proposed' });
+	});
+
+	it('executed from the sheet: the site gets the real transaction hash, and no "proposed" later', async () => {
+		vi.useFakeTimers();
+		try {
+			const TX = `0x${'cd'.repeat(32)}`;
+			const { sheet, answers, events } = harness({ limitMs: 300_000 });
+			await sheet().propose();
+			sheet().executed(TX);
+			expect(answers).toEqual([{ result: TX }]);
+			vi.advanceTimersByTime(300_000);
+			expect(events.some((e) => e.startsWith('told'))).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('waiting for approvals, the site is told it was proposed before the request limit', async () => {
+		vi.useFakeTimers();
+		try {
+			let clock = 1_000;
+			const { sheet, answers, events } = harness({
+				limitMs: 300_000,
+				now: () => clock,
+				// The passkey takes 30 s: the limit counts from the claim before it.
+				propose: async () => {
+					clock += 30_000;
+					return { safeTxHash: HASH, nonce: '0x3' };
+				}
+			});
+			await sheet().propose();
+			// 270 s after the claim minus the margin, measured from now (30 s in).
+			vi.advanceTimersByTime(300_000 - ANSWER_MARGIN_MS - 30_000 - 1);
+			expect(events).not.toContain('told 0xab');
+			vi.advanceTimersByTime(1);
+			expect(events).toContain('told 0xab');
+			// Told, not settled here: the host answers once (its own guard).
+			expect(answers).toEqual([]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('a close after proposing stops the limit: answered once', async () => {
+		vi.useFakeTimers();
+		try {
+			const { sheet, answers, events } = harness({ limitMs: 300_000 });
+			await sheet().propose();
+			sheet().close();
+			vi.advanceTimersByTime(300_000);
+			expect(answers).toEqual([{ error: leftProposed(HASH) }]);
+			expect(events.some((e) => e.startsWith('told'))).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('a page that left before the passkey gets nothing signed', async () => {
 		const { sheet, propose, events } = harness({ claim: async () => false });
 		await expect(sheet().propose()).rejects.toBeInstanceOf(DappGoneError);
@@ -129,6 +194,9 @@ describe("a dApp's transaction from a multisig", () => {
 		// it took, never followed for an execution hash.
 		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL, SECOND]);
 		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'batch 0xab 0x3 0x10']);
+		expect(answers).toEqual([]);
+		// Its site already has the id: an execution here answers nothing more.
+		sheet().executed(`0x${'cd'.repeat(32)}`);
 		expect(answers).toEqual([]);
 	});
 });

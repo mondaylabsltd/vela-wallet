@@ -348,6 +348,13 @@ pub struct SimVerdict {
     /// [`KEY_NO_CHANGE`] when the answer was a check and nothing of the
     /// person's moves: the quiet line the verdict's place says then.
     pub no_change_key: Option<String>,
+    /// No node answered (`unreachable`): the could-not-check line is about
+    /// the network, not the transaction, so a sheet asks again once the
+    /// chain answers — and on the person's "Check again" (dapp-15). A node
+    /// that spoke and did not simulate (`not_offered`) is not asked again:
+    /// it would say the same.
+    #[serde(default)]
+    pub recheck: bool,
 }
 
 /// [`classify`] and what the sheet says for it, in one record.
@@ -362,6 +369,7 @@ pub fn verdict(reply: SimReply, user: &str) -> SimVerdict {
         SimOutcome::NotOffered => "not_offered",
         SimOutcome::Unreachable => "unreachable",
     };
+    let recheck = outcome == SimOutcome::Unreachable;
     let (deltas, revert_reason) = match outcome {
         SimOutcome::Deltas { deltas } => (deltas, None),
         SimOutcome::Reverts { reason } => (Vec::new(), reason),
@@ -374,6 +382,7 @@ pub fn verdict(reply: SimReply, user: &str) -> SimVerdict {
         notice_risk: notice.as_ref().map(|notice| notice.risk),
         notice_key: notice.map(|notice| notice.key.to_owned()),
         no_change_key,
+        recheck,
     }
 }
 

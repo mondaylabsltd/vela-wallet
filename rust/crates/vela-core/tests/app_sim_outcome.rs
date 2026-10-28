@@ -507,6 +507,7 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             notice_risk: None,
             notice_key: None,
             no_change_key: Some(KEY_NO_CHANGE.to_owned()),
+            recheck: false,
         }
     );
     let moves = verdict(
@@ -541,6 +542,7 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             "notice_risk": null,
             "notice_key": null,
             "no_change_key": KEY_NO_CHANGE,
+            "recheck": false,
         })
     );
     let unreadable: Value = serde_json::from_str(&verdict_json(ME, "not json")).expect("a record");
@@ -552,6 +554,31 @@ fn the_verdict_is_the_outcome_and_its_lines() {
         serde_json::from_str(&verdict_json(ME, r#"{"unreachable":true}"#)).expect("a record");
     assert_eq!(gone["kind"], "unreachable");
     assert_eq!(gone["no_change_key"], Value::Null);
+}
+
+/// dapp-15: only a node nobody reached is worth asking again — a node that
+/// spoke and did not simulate, a revert and a check are answers.
+#[test]
+fn only_an_unreachable_node_is_checked_again() {
+    assert!(verdict(SimReply::Unreachable, ME).recheck);
+    let not_offered = verdict(
+        SimReply::Error {
+            code: Some(-32601),
+            message: Some("the method eth_simulateV1 does not exist".to_owned()),
+        },
+        ME,
+    );
+    assert_eq!(not_offered.kind, "not_offered");
+    assert!(!not_offered.recheck);
+    assert!(!verdict(result(vec![ok_call(vec![])]), ME).recheck);
+    assert!(!verdict(result(vec![reverted_call(&error_string("nope"))]), ME).recheck);
+    // A record written before the field reads as "not again".
+    let old: SimVerdict = serde_json::from_value(json!({
+        "kind": "unreachable", "deltas": [], "revert_reason": null,
+        "notice_risk": "caution", "notice_key": KEY_UNAVAILABLE, "no_change_key": null,
+    }))
+    .unwrap();
+    assert!(!old.recheck);
 }
 
 // ---------------------------------------------------------------------------

@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Aucun descripteur ERC-7730 pour ce contrat — les valeurs ci-dessus sont un décodage direct de l’ABI vérifiée on-chain. Vérifiez-les.",
       "bestEffortSummary": "Appel de {{fn}} — lu depuis la signature publique de la fonction, pas depuis un descripteur vérifié.",
       "simUnavailableWarning": "Vela n’a pas pu vérifier ce que fait cette transaction. Relisez-la avant de signer.",
+      "simRecheck": "Vérifier à nouveau",
+      "simRechecking": "Nouvelle vérification…",
       "drainSummary": "Le site présente cela comme une réclamation gratuite, mais la simulation montre des actifs qui quittent votre portefeuille.",
       "drainWarning": "Des actifs partent alors que le site ne les a jamais mentionnés — cela ressemble fortement à un siphonnage. Refusez.",
       "selectorNotListed": "Décodage impossible — aucun descripteur ERC-7730 et sélecteur non répertorié ({{bytes}} octets)",

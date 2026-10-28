@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Este contrato não tem descritor ERC-7730 — os valores acima são a decodificação direta da ABI verificada on-chain. Confira-os.",
       "bestEffortSummary": "Chamando {{fn}} — lido da assinatura pública da função, não de um descritor verificado.",
       "simUnavailableWarning": "A Vela não conseguiu verificar o que esta transação faz. Revise antes de assinar.",
+      "simRecheck": "Verificar de novo",
+      "simRechecking": "Verificando de novo…",
       "drainSummary": "O site chama isto de resgate gratuito, mas a simulação mostra ativos saindo da sua carteira.",
       "drainWarning": "Saem ativos que o site nunca mencionou — isso se parece muito com um esvaziamento. Recuse.",
       "selectorNotListed": "Não foi possível decodificar — sem descritor ERC-7730 e com seletor não catalogado ({{bytes}} bytes)",

@@ -295,3 +295,68 @@ describe('where you review and sign (spec 102)', () => {
 		expect(screen.container.querySelectorAll('li.page')).toHaveLength(0);
 	});
 });
+
+/**
+ * dapp-11: connected sites were only under Advanced › Device storage. They
+ * have their own page now (the route adds its row beside the AI agent), each
+ * with a Disconnect that asks first and acts only on its confirm.
+ */
+describe('Connected sites', () => {
+	const sites = {
+		title: 'Connected sites',
+		subtitle: 'Sites that can see your address',
+		empty: 'No site is connected.',
+		group: {
+			label: 'Disconnecting a site takes back what it may see.',
+			items: [
+				{
+					id: 'https://app.example',
+					label: 'app.example',
+					meta: '0xAbC…123',
+					action: 'Disconnect',
+					destructive: true
+				}
+			]
+		}
+	};
+
+	async function opened(panel: typeof sites) {
+		const cleared: string[] = [];
+		const screen = render(SettingsHome, {
+			props: {
+				model: buildMobileState('st1', m, IDENTICON),
+				sites: panel,
+				onstorageclear: (id: string) => cleared.push(id)
+			}
+		});
+		await tick();
+		expect(screen.component.open('sites')).toBe(true);
+		await tick();
+		return { cleared, root: screen.container };
+	}
+
+	it('lists every site with its account, and disconnects one only on confirm', async () => {
+		const { cleared, root } = await opened(sites);
+		expect(root.textContent).toContain('Connected sites');
+		expect(root.textContent).toContain('app.example');
+		expect(root.textContent).toContain('0xAbC…123');
+		[...root.querySelectorAll('li button')]
+			.find((b) => b.textContent?.trim() === 'Disconnect')
+			?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await tick();
+		expect(cleared).toEqual([]);
+		const sheet = root.querySelector<HTMLElement>('[role="dialog"]');
+		expect(sheet?.getAttribute('aria-label')).toBe('app.example');
+		expect(sheet?.textContent).toContain(sites.group.label);
+		[...(sheet?.querySelectorAll('button') ?? [])]
+			.find((b) => b.textContent?.trim() === 'Disconnect')
+			?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await tick();
+		expect(cleared).toEqual(['https://app.example']);
+	});
+
+	it('says so when no site is connected', async () => {
+		const { root } = await opened({ ...sites, group: { ...sites.group, items: [] } });
+		expect(root.textContent).toContain('No site is connected.');
+	});
+});

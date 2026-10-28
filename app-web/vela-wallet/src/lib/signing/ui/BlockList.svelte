@@ -29,9 +29,11 @@
 		oncustom?: (text: string, leg?: number) => void;
 		/** cs-10: a message to read to its end has, or has not, been read (`CodeBlock`). */
 		onmessageunread?: (unread: boolean) => void;
+		/** dapp-15: "Check again" on a could-not-check line (`WarningBlock.recheck`). */
+		onrecheck?: () => void;
 	}
 
-	let { blocks, onchip, oncustom, onmessageunread }: Props = $props();
+	let { blocks, onchip, oncustom, onmessageunread, onrecheck }: Props = $props();
 </script>
 
 {#each blocks as block, i (i)}
@@ -70,7 +72,13 @@
 	{:else if block.kind === 'rows'}
 		<KeyValueRows rows={block.rows} />
 	{:else if block.kind === 'warning'}
-		<WarningBanner tone={block.tone} text={block.text} verdict={block.verdict} />
+		<WarningBanner
+			tone={block.tone}
+			text={block.text}
+			verdict={block.verdict}
+			recheck={block.recheck}
+			{onrecheck}
+		/>
 	{:else if block.kind === 'positive'}
 		<PositiveNote text={block.text} />
 	{:else if block.kind === 'code'}
@@ -82,7 +90,7 @@
 	{:else if block.kind === 'card'}
 		<DetailCard title={block.title} rows={block.rows} tone={block.tone} />
 	{:else if block.kind === 'verdict'}
-		<VerdictPlace inner={block.inner} rooms={block.rooms} landed={block.landed} />
+		<VerdictPlace inner={block.inner} rooms={block.rooms} landed={block.landed} {onrecheck} />
 	{:else}
 		<BalanceChanges
 			title={block.title}

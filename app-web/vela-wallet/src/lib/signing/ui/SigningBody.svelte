@@ -43,6 +43,8 @@
 		onopenpage?: () => void;
 		/** cs-10: the message has, or has not, been read to its end. */
 		onmessageunread?: (unread: boolean) => void;
+		/** dapp-15: "Check again" on the verdict's could-not-check line. */
+		onrecheck?: () => void;
 		/**
 		 * The host draws the action (`SigningAction`) in its own pinned foot:
 		 * nothing is drawn after the signing account here.
@@ -63,7 +65,8 @@
 		onspeedpick,
 		onfeerefresh,
 		onopenpage,
-		onmessageunread
+		onmessageunread,
+		onrecheck
 	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
@@ -92,7 +95,7 @@
 	<HandoffCard handoff={model.handoff} onopen={onopenpage} />
 {:else}
 	<div class="blocks">
-		<BlockList blocks={model.blocks} {onchip} {oncustom} {onmessageunread} />
+		<BlockList blocks={model.blocks} {onchip} {oncustom} {onmessageunread} {onrecheck} />
 	</div>
 
 	{#if model.advice}

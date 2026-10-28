@@ -167,7 +167,8 @@ test.describe('a provider a dApp can use', () => {
 		const page = await context.newPage();
 		await page.goto(`http://localhost:${DAPP_PORT}/`);
 
-		// The snapshot's default chain, before any pick.
+		// Where a new site starts before any pick: the space's first network,
+		// nothing having been used in it yet (dapp-17).
 		expect(((await page.evaluate(() => window.__ask('eth_chainId'))) as AskResult).result).toBe(
 			'0x1'
 		);
@@ -276,7 +277,7 @@ test.describe('a provider a dApp can use', () => {
 		await context.close();
 	});
 
-	test('a site follows the account the wallet switches to', async () => {
+	test('a site hears its grant move to another account', async () => {
 		const context = await loadExtension();
 		const id = extensionId();
 		const wallet = await seedWallet(context, id);
@@ -284,18 +285,18 @@ test.describe('a provider a dApp can use', () => {
 		await page.goto(`http://localhost:${DAPP_PORT}/`);
 		await connect(context, page);
 
-		// What the wallet page does on a switch, driven directly: the core
-		// re-pins the grant to the new address (`follow.ts`), and the worker
-		// tells every tab of the origin. A second address is a fact the test
-		// supplies — the fixture keyset has one — so the re-pin is exercised
-		// without a second passkey.
+		// A grant moving to another address (the site connected again, on
+		// another account — a switch no longer re-pins it, dapp-17), driven
+		// directly: the worker tells every tab of the origin. A second address
+		// is a fact the test supplies — the fixture keyset has one — so the
+		// grant change is exercised without a second passkey.
 		const OTHER = '0x24fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d2e';
 		await wallet.evaluate(
 			async ([origin, other, first]) => {
 				const local = (window as unknown as ChromeStorage).chrome.storage.local;
 				const all = await local.get('vela.perm.' + origin);
 				const grant = all['vela.perm.' + origin] as { address: string; chainId: number };
-				// The grant is re-pinned the way `followActiveAccount` writes it.
+				// The grant moves the way a reconnect writes it.
 				await local.set({
 					['vela.perm.' + origin]: { ...grant, address: other, grantedAt: Date.now() }
 				});

@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "이 컨트랙트에는 ERC-7730 디스크립터가 없습니다 — 위 값은 검증된 온체인 ABI를 직접 디코딩한 것입니다. 값을 확인하세요.",
       "bestEffortSummary": "{{fn}} 호출 — 검증된 디스크립터가 아니라 공개 함수 시그니처에서 읽은 것입니다.",
       "simUnavailableWarning": "Vela가 이 거래의 결과를 확인하지 못했습니다. 내용을 확인한 뒤 서명하세요.",
+      "simRecheck": "다시 확인",
+      "simRechecking": "다시 확인하는 중…",
       "drainSummary": "사이트는 무료 클레임이라고 하지만, 시뮬레이션에서는 자산이 지갑에서 빠져나갑니다.",
       "drainWarning": "사이트가 밝힌 의도에 없던 자산 유출입니다 — 탈취일 가능성이 매우 큽니다. 거부하세요.",
       "selectorNotListed": "디코딩할 수 없음 — ERC-7730 디스크립터가 없고 셀렉터도 등록되지 않음({{bytes}}바이트)",

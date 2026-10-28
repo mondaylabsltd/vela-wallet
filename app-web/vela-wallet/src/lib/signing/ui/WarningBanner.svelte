@@ -15,9 +15,16 @@
 		 * the sheet says it.
 		 */
 		room?: boolean;
+		/**
+		 * dapp-15: the line is about the network, not the transaction —
+		 * "Check again" (a button), or, while a new check is out, the line
+		 * marked stale with "Checking again…".
+		 */
+		recheck?: { label: string; checking: boolean };
+		onrecheck?: () => void;
 	}
 
-	let { tone, text, verdict = false, room = false }: Props = $props();
+	let { tone, text, verdict = false, room = false, recheck, onrecheck }: Props = $props();
 </script>
 
 <div
@@ -30,7 +37,14 @@
 	{#if room}
 		<p data-room={text}></p>
 	{:else}
-		<p>{text}</p>
+		<div class="said" class:stale={recheck?.checking === true}>
+			<p>{text}</p>
+			{#if recheck?.checking}
+				<p class="again" role="status" aria-busy="true">{recheck.label}</p>
+			{:else if recheck && onrecheck}
+				<button type="button" class="again" data-tap onclick={onrecheck}>{recheck.label}</button>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -54,6 +68,37 @@
 		background: var(--color-error-soft);
 		border-color: var(--color-error-base);
 		color: var(--color-error-base);
+	}
+
+	.said {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		min-width: 0;
+	}
+
+	/* The line a new check is about to replace: still there, plainly not current. */
+	.stale > p:first-child {
+		opacity: var(--opacity-disabled);
+	}
+
+	.again {
+		align-self: flex-start;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	p.again {
+		margin: 0;
+		text-decoration: none;
+		cursor: default;
 	}
 
 	p {

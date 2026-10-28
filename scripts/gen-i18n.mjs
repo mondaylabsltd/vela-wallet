@@ -947,10 +947,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
 //   cue to it, instead of a scroll that takes the person from where they
 //   were reading. 2207 + 2 = 2209 leaves, 119 branches.
-if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
-if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
+// 2343 (round 3, the dApp group, 2026-10-29): + `connect.browser.{addRpcFromSite,
+//   addWhyNoRpc, addWhyUnreachable, addUnverified, addUnverifiedWarning,
+//   addUnverifiedConfirm}` (dapp-13: why a network could not be verified, and
+//   adding it unverified on a confirmation), `componentsUi.signing.{simRecheck,
+//   simRechecking}` (dapp-15), `home.multisig.proposal.{stillNeeded, siteTold}`
+//   (a multisig's eth_sendTransaction before the request limit) and
+//   `settings.sites.{title, subtitle, listLabel, empty}` (dapp-11).
+//   2209 + 14 = 2223 leaves, 119 + 1 = 120 branches.
+if (PATHS.length !== 2343) fail(`expected 2343 paths (2223 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2223) fail(`expected 2223 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
+if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

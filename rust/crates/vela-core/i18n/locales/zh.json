@@ -224,6 +224,12 @@
         "fiatRates": "法币汇率"
       }
     },
+    "sites": {
+      "title": "已连接的网站",
+      "subtitle": "能看到你地址的网站",
+      "listLabel": "断开后，网站将不能再看到这些；下次它会再次征求你的同意。",
+      "empty": "没有已连接的网站。"
+    },
     "about": {
       "title": "关于",
       "subtitle": "Vela 钱包 v{{version}}"

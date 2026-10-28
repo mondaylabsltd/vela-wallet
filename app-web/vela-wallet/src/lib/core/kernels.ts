@@ -1433,6 +1433,15 @@ export function signNotConfirmedDetail(userOpHash: string): string {
 	return wasm.signNotConfirmedDetail(userOpHash);
 }
 
+/**
+ * The chain a site with no chain of its own starts on (dapp-17) — the core's
+ * `network_space::site_start_chain`: the network last put a site on in this
+ * space while it is one of `spaceChainIds`, else the space's first.
+ */
+export function siteStartChain(spaceChainIds: number[], lastUsed: number | null): number {
+	return wasm.siteStartChain(Uint32Array.from(spaceChainIds), lastUsed ?? undefined);
+}
+
 /** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */
 export function signRequestTtlMs(): number {
 	return wasm.signRequestTtlMs();

@@ -24,8 +24,15 @@ export interface DappProposal {
 	origin: string;
 	/** Set once it is in the mailbox. */
 	safeTxHash: string | null;
+	/**
+	 * The site was told it is proposed and waiting (the request's limit came
+	 * first): it gets no hash from here on. The sheet says so.
+	 */
+	siteTold?: boolean;
 	/** The person confirmed the review: propose it (one passkey prompt). Resolves its safeTxHash. */
 	propose(): Promise<string>;
+	/** Executed from this sheet: an `eth_sendTransaction`'s site gets the transaction's hash. */
+	executed(txHash: string): void;
 	/** Decline before it is proposed: the site is told the person rejected it. */
 	decline(): void;
 	/** The sheet was closed (any way out): the request answers as things stand. */
@@ -57,6 +64,13 @@ class MultisigUi {
 		const sheet = this.sheet;
 		if (sheet?.kind !== 'dapp' || sheet.request.rid !== rid) return;
 		this.sheet = { kind: 'dapp', request: { ...sheet.request, safeTxHash } };
+	}
+
+	/** The site of `rid` was told it is proposed: its sheet says so. */
+	told(rid: string): void {
+		const sheet = this.sheet;
+		if (sheet?.kind !== 'dapp' || sheet.request.rid !== rid) return;
+		this.sheet = { kind: 'dapp', request: { ...sheet.request, siteTold: true } };
 	}
 
 	/** Close the dApp sheet of `rid`, if it is the one open. */

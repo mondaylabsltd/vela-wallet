@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Bu sözleşmenin ERC-7730 tanımlayıcısı yok — yukarıdaki değerler doğrulanmış zincir üstü ABI’nin doğrudan çözümüdür. Değerleri kontrol edin.",
       "bestEffortSummary": "{{fn}} çağrılıyor — doğrulanmış bir tanımlayıcıdan değil, herkese açık fonksiyon imzasından okundu.",
       "simUnavailableWarning": "Vela bu işlemin ne yapacağını denetleyemedi. İmzalamadan önce gözden geçirin.",
+      "simRecheck": "Yeniden denetle",
+      "simRechecking": "Yeniden denetleniyor…",
       "drainSummary": "Site bunu ücretsiz bir talep olarak gösteriyor, ancak simülasyon varlıkların cüzdanınızdan çıktığını gösteriyor.",
       "drainWarning": "Sitenin belirttiği amaçta hiç geçmeyen varlıklar çıkıyor — bu büyük olasılıkla bir boşaltma. Reddedin.",
       "selectorNotListed": "Çözülemiyor — ERC-7730 tanımlayıcısı yok, seçici de kayıtlı değil ({{bytes}} bayt)",

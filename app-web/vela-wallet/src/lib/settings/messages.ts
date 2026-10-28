@@ -46,6 +46,11 @@ export interface SettingsMessages {
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
 	analytics: { title: string; subtitle: string };
+	/**
+	 * dapp-11: Settings › Connected sites — the sites holding a grant, beside
+	 * the AI agent row (`listLabel` is the consequence of disconnecting one).
+	 */
+	sites: { title: string; subtitle: string; listLabel: string; empty: string };
 	/** "AI agent" — a remote agent using the wallet through a ClientMCP bridge (spec 103). */
 	agent: Record<
 		| 'title'
@@ -803,6 +808,10 @@ export type BackupExplainKey = (typeof BACKUP_EXPLAIN_KEYS)[number];
  */
 export const SETTINGS_KEYS = [
 	'settings.title',
+	'settings.sites.title',
+	'settings.sites.subtitle',
+	'settings.sites.listLabel',
+	'settings.sites.empty',
 	'componentsUi.mainNav.wallet',
 	'componentsUi.mainNav.contacts',
 	'componentsUi.mainNav.explore',

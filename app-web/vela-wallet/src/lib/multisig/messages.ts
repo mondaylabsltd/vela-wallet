@@ -89,6 +89,10 @@ export interface MultisigMessages {
 		notSent: string;
 		siteAsks: string;
 		siteWaits: string;
+		/** How many approvals an `eth_sendTransaction` still waits for (`{{missing}}`). */
+		stillNeeded: string;
+		/** Its site was told it was proposed (the request's limit came first). */
+		siteTold: string;
 		data: string;
 		notFound: string;
 		opening: string;
@@ -302,6 +306,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notSent: '',
 		siteAsks: '',
 		siteWaits: '',
+		stillNeeded: '',
+		siteTold: '',
 		data: '',
 		notFound: '',
 		opening: '',

@@ -17,7 +17,7 @@ use vela_core::app::dapp_permissions::{
     is_insecure_public_origin, is_secure_context, is_signing_method, offers_wallet, origin_of,
     popup_origin_refusal, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
     DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
-    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    DpermRejectReason as Reason, DpermRespondPayload as Payload, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -152,10 +152,12 @@ fn the_popup_authors_nothing_without_an_origin_and_an_account() {
 // The wallet switched account — what one connected site hears (070 T063)
 // ---------------------------------------------------------------------------
 
-/// A grant whose account the wallet still holds follows the active account —
-/// and keeps the chain it was made on, which is an audit fact, not a preference.
+/// dapp-17 (EIP-2255): a grant whose account the wallet still holds STAYS on
+/// that account. Re-pinning it to whoever became active handed the site an
+/// account the person never connected to it; it now hears nothing while
+/// another account is signed in, and its own account again on the way back.
 #[test]
-fn an_account_switch_repins_a_connected_site_without_rewriting_its_chain() {
+fn an_account_switch_never_hands_a_site_the_new_account() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::PopupAccountSwitch {
         origin: ORIGIN.to_owned(),
@@ -165,20 +167,8 @@ fn an_account_switch_repins_a_connected_site_without_rewriting_its_chain() {
         now_ms: T0 + 2_000.0,
         space: false,
     });
-    assert_eq!(
-        ops,
-        vec![Op::WriteGrant {
-            grant: DpermGrant {
-                origin: ORIGIN.to_owned(),
-                address: A2.to_owned(),
-                chain_id: 8453,
-                granted_at_ms: T0 + 2_000.0,
-            },
-        }],
-        "re-pinned to the new address, on the chain the site connected on"
-    );
-    // The shell's ack changes nothing and asks for nothing.
-    assert!(sut.resolve(Res::Ack).is_empty());
+    assert!(ops.is_empty(), "never re-pinned to A2: {ops:?}");
+    assert!(sut.outstanding().is_empty());
 }
 
 /// Invariant ⑨'s other half: a grant whose own account was DELETED from the
@@ -265,27 +255,17 @@ fn a_dev_space_never_touches_a_grant_of_the_persons_own_accounts() {
     );
 }
 
-/// A grant made INSIDE the space is the space's, and follows its accounts
-/// like any other: re-pinned on a switch between them.
+/// A grant made INSIDE the space is the space's: on a switch between the
+/// space's accounts it stays on its own, as any other grant does (dapp-17).
 #[test]
-fn a_dev_space_grant_follows_the_spaces_own_accounts() {
+fn a_dev_space_grant_stays_on_its_own_account() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(space_switch(
         Some(grant(A2)),
         Some(vec![A2.to_owned(), A3.to_owned()]),
         A3,
     ));
-    assert_eq!(
-        ops,
-        vec![Op::WriteGrant {
-            grant: DpermGrant {
-                origin: ORIGIN.to_owned(),
-                address: A3.to_owned(),
-                chain_id: 8453,
-                granted_at_ms: T0 + 2_000.0,
-            },
-        }]
-    );
+    assert!(ops.is_empty(), "{ops:?}");
 }
 
 /// Leaving: the wallet is the person's again (`space: false`), and a grant
@@ -311,26 +291,15 @@ fn leaving_a_dev_space_drops_the_spaces_grants_and_keeps_the_persons() {
 }
 
 /// Invariant ②: a transient empty account list is NOT evidence that the
-/// granted account is gone. A switch on a cold read re-pins the site to the
-/// account the wallet says is active — it never removes the grant, which would
-/// log every open dApp out on app launch.
+/// granted account is gone. A switch on a cold read writes nothing — it never
+/// removes the grant (which would log every open dApp out on app launch), and
+/// never moves it to the active account either (dapp-17).
 #[test]
-fn an_account_switch_on_a_cold_read_never_removes_a_grant() {
+fn an_account_switch_on_a_cold_read_writes_nothing() {
     for addresses in [None, Some(Vec::new())] {
         let mut sut = Sut::new();
-        let ops = sut.dispatch(switch(Some(grant(A3)), addresses, A1, ORIGIN));
-        assert_eq!(
-            ops,
-            vec![Op::WriteGrant {
-                grant: DpermGrant {
-                    origin: ORIGIN.to_owned(),
-                    address: A1.to_owned(),
-                    chain_id: 8453,
-                    granted_at_ms: T0 + 2_000.0,
-                },
-            }],
-            "a cold read re-pins; it must never revoke (invariant ②)"
-        );
+        let ops = sut.dispatch(switch(Some(grant(A3)), addresses.clone(), A1, ORIGIN));
+        assert!(ops.is_empty(), "{addresses:?}: {ops:?}");
     }
 }
 
@@ -1198,10 +1167,10 @@ fn a_lower_case_grant_is_written_eip55() {
     );
 }
 
-/// An account switch re-pins the site in EIP-55, whatever case the wallet
-/// named the account in.
+/// An account switch writes no grant at all any more (dapp-17), so there is
+/// no spelling of the new account for a site to be handed.
 #[test]
-fn an_account_switch_answers_eip55() {
+fn an_account_switch_hands_no_spelling_of_the_new_account() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(switch(
         Some(grant(A1)),
@@ -1209,17 +1178,7 @@ fn an_account_switch_answers_eip55() {
         V_LOWER,
         ORIGIN,
     ));
-    assert_eq!(
-        ops,
-        vec![Op::WriteGrant {
-            grant: DpermGrant {
-                origin: ORIGIN.to_owned(),
-                address: V.to_owned(),
-                chain_id: 8453,
-                granted_at_ms: T0 + 2_000.0,
-            },
-        }]
-    );
+    assert!(ops.is_empty(), "{ops:?}");
 }
 
 /// `resolve_granted` is unchanged: it matches in any case and returns the

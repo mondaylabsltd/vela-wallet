@@ -1081,6 +1081,16 @@ pub fn network_space_chain_ids(space: &str, rows_json: &str) -> String {
     vela_core::app::network_space::space_chain_ids_json(space, rows_json)
 }
 
+/// The chain a site with no chain of its own starts on (dapp-17):
+/// `network_space::site_start_chain` — the space's chain ids in the list's
+/// order, and the chain the person last put a site on there (`undefined`:
+/// none). The extension worker's twin is pinned to this.
+#[wasm_bindgen(js_name = siteStartChain)]
+#[must_use]
+pub fn site_start_chain(space_chain_ids: Vec<u32>, last_used: Option<u32>) -> u32 {
+    vela_core::app::network_space::site_start_chain(&space_chain_ids, last_used)
+}
+
 /// Whether `chain_id` is a testnet (spec 105).
 #[wasm_bindgen(js_name = networkChainIsTestnet)]
 #[must_use]

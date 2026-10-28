@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Kein ERC-7730-Deskriptor für diesen Vertrag — die Werte oben sind eine direkte Dekodierung der verifizierten On-Chain-ABI. Bitte prüfen.",
       "bestEffortSummary": "Aufruf von {{fn}} — aus der öffentlichen Funktionssignatur gelesen, nicht aus einem verifizierten Deskriptor.",
       "simUnavailableWarning": "Vela konnte nicht prüfen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+      "simRecheck": "Erneut prüfen",
+      "simRechecking": "Wird erneut geprüft …",
       "drainSummary": "Die Website nennt das eine kostenlose Beanspruchung, doch die Simulation zeigt, wie Vermögenswerte deine Wallet verlassen.",
       "drainWarning": "Es fließen Vermögenswerte ab, die die Website nie erwähnt hat — das sieht stark nach einem Leerräumen aus. Lehne ab.",
       "selectorNotListed": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor, Selektor nicht verzeichnet ({{bytes}} Bytes)",

@@ -9,6 +9,14 @@
  * was proposed is the person's 4001; left after it was proposed says so, and
  * the proposal stays in the mailbox (and in Activity) for the members.
  *
+ * An `eth_sendTransaction` is answered with the transaction that executed
+ * it — never with the safeTxHash, which is no transaction hash. Approved
+ * enough by the proposer alone, it is executed there and then. Otherwise the
+ * site waits while the members approve, but never past the extension's
+ * request limit: before it, the site is told — a JSON-RPC error, not a
+ * rejection — that it was proposed and is waiting (`leftProposed`), and the
+ * proposal goes on in the wallet as any other.
+ *
  * A `wallet_sendCalls` (EIP-5792) is the same review of every call, and ONE
  * proposal: the calls in one MultiSendCallOnly transaction, approved once by
  * the members and executed whole or not at all. Its site is answered the
@@ -22,6 +30,7 @@ import type { DappProposal } from './ui.svelte';
 export interface DappError {
 	code: number;
 	message: string;
+	data?: unknown;
 }
 
 export interface DappAnswer {
@@ -44,18 +53,31 @@ export function multisigRefusal(method: string): DappError | null {
 	return { code: 4200, message: 'A multisig account signs no messages yet' };
 }
 
+/** The JSON-RPC server-error class (-32000): the request was taken, its outcome is elsewhere. */
+export const PROPOSED_CODE = -32000;
+
 /**
- * The answer when the person leaves a transaction that is proposed but not
- * executed: not a rejection (it was not rejected, and the members may still
- * execute it), and not a hash (none exists yet). The site is told what
- * happened, so nobody proposes it twice.
+ * How long before the request's limit (the extension's, counted from the
+ * claim before the passkey) a proposed transaction is answered "proposed":
+ * room for the answer to reach the page before the page gives up on it.
+ */
+export const ANSWER_MARGIN_MS = 20_000;
+
+/**
+ * The answer for a transaction that is proposed but not executed — the
+ * person left, or the request's limit is near: not a rejection (it was not
+ * rejected, and the members may still execute it, 4001 would make a site
+ * offer it again), not a disconnect (4900), and not a hash (none exists
+ * yet). The site is told what happened, and `data` carries the proposal, so
+ * nobody proposes it twice.
  */
 export function leftProposed(safeTxHash: string): DappError {
 	return {
-		code: -32603,
+		code: PROPOSED_CODE,
 		message:
 			`Proposed to the multisig's members (safeTxHash ${safeTxHash}), waiting for their ` +
-			'approvals. This site is not told when it is executed.'
+			'approvals. This site is not told when it is executed.',
+		data: { safeTxHash, status: 'proposed' }
 	};
 }
 
@@ -89,6 +111,18 @@ export interface HandOff {
 	/** `eth_sendTransaction`: follow the proposal until it is executed or voided. */
 	follow(safeTxHash: string): void;
 	/**
+	 * `eth_sendTransaction`, its limit near: the site is told it was proposed
+	 * (`leftProposed`); the sheet stays, saying so.
+	 */
+	tellProposed(safeTxHash: string): void;
+	/**
+	 * How long, from the claim before the passkey, the request can still be
+	 * answered — the extension's limit (`signRequestTtlMs`). `undefined`: none.
+	 */
+	limitMs?: number;
+	/** The clock (tests). */
+	now?: () => number;
+	/**
 	 * `wallet_sendCalls`: answer the site the batch's id now — the proposal at
 	 * `nonce`, proposed around block `fromBlock` (when it was read).
 	 */
@@ -109,8 +143,14 @@ export class DappGoneError extends Error {
  * Returns what the site is owed if the surface goes away now.
  */
 export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
+	const now = h.now ?? Date.now;
 	let proposed: string | null = null;
 	let proposing = false;
+	let limit: ReturnType<typeof setTimeout> | null = null;
+	const stopLimit = () => {
+		if (limit !== null) clearTimeout(limit);
+		limit = null;
+	};
 	const request: DappProposal = {
 		rid: h.rid,
 		address: h.address,
@@ -128,15 +168,35 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 					h.gone();
 					throw new DappGoneError();
 				}
+				// The claim restarts the request's clock: the limit counts from here.
+				const claimedAt = now();
 				const { safeTxHash, nonce, fromBlock } = await h.propose(h.address, h.chainId, h.calls);
 				proposed = safeTxHash;
 				h.proposed(h.rid, safeTxHash);
 				if (h.method === 'wallet_sendCalls') h.answerBatch(safeTxHash, nonce, fromBlock);
-				else h.follow(safeTxHash);
+				else {
+					h.follow(safeTxHash);
+					if (h.limitMs !== undefined) {
+						const left = claimedAt + h.limitMs - ANSWER_MARGIN_MS - now();
+						limit = setTimeout(
+							() => {
+								limit = null;
+								h.tellProposed(safeTxHash);
+							},
+							Math.max(0, left)
+						);
+					}
+				}
 				return safeTxHash;
 			} finally {
 				proposing = false;
 			}
+		},
+		executed(txHash) {
+			// The real transaction: what an `eth_sendTransaction` waits for.
+			if (!proposed || h.method === 'wallet_sendCalls') return;
+			stopLimit();
+			h.settle({ result: txHash });
 		},
 		decline() {
 			if (proposed) return request.close();
@@ -144,6 +204,7 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 			h.settle({ error: DECLINED });
 		},
 		close() {
+			stopLimit();
 			h.closeSheet(h.rid);
 			h.settle(closing());
 		}

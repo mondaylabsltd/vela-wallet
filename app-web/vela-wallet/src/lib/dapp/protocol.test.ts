@@ -10,10 +10,20 @@
 // worker's constants can be pinned to the core's own numbers (spec 082 §13).
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
-import { rpcCooldownMs, rpcReadTimeoutMs, signNotConfirmedDetail } from '$lib/core/kernels';
+import {
+	rpcCooldownMs,
+	rpcReadTimeoutMs,
+	signNotConfirmedDetail,
+	siteStartChain as coreSiteStartChain
+} from '$lib/core/kernels';
+import { LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY } from './keys';
 import {
 	ENDPOINTS_KEY,
 	ERR,
+	LAST_CHAIN_KEY,
+	siteStartChain,
+	startChainOf,
+	withLastChain,
 	MAX_REQUEST_BYTES,
 	READ_TIMEOUT_MS,
 	chainNameOf,
@@ -84,28 +94,38 @@ describe('what may reach a screen', () => {
 		expect(isWellFormedRequest({ ...ok, params: 'not-an-array' })).toBe(false);
 	});
 
-	it('refuses a typed-data request that is not exactly one document in its method\'s order (audit 2026-10-01)', () => {
+	it("refuses a typed-data request that is not exactly one document in its method's order (audit 2026-10-01)", () => {
 		const account = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
 		const doc = (primaryType: string) =>
 			JSON.stringify({ types: { EIP712Domain: [] }, primaryType, domain: {}, message: {} });
 		const req = (method: string, params: unknown[]) => ({ id: 'td', method, params });
 		// The four methods, well-formed.
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail')]))).toBe(true);
-		expect(isWellFormedRequest(req('eth_signTypedData_v3', [account, JSON.parse(doc('Mail'))]))).toBe(true);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v3', [account, JSON.parse(doc('Mail'))]))
+		).toBe(true);
 		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Mail'), account]))).toBe(true);
 		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Mail'), account]))).toBe(true);
 		// The audit's two shapes.
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), doc('Permit')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), doc('Permit')]))).toBe(
+			false
+		);
 		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Permit'), doc('Mail')]))).toBe(false);
-		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Permit'), doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Permit'), doc('Mail')]))).toBe(
+			false
+		);
 		// The wrong order, one param, three, and a name that only resembles one.
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), account]))).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData', [account, doc('Mail')]))).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail')]))).toBe(false);
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail'), doc('Mail')]))).toBe(false);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail'), doc('Mail')]))
+		).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData_v2', [account, doc('Mail')]))).toBe(false);
 		// A document without its EIP-712 fields.
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, '{"primaryType":"Mail"}']))).toBe(false);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v4', [account, '{"primaryType":"Mail"}']))
+		).toBe(false);
 	});
 
 	it('refuses a payload too large to be a request', () => {
@@ -226,7 +246,6 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		});
 	});
 
-
 	it('cools a failing endpoint exactly as the core’s pool does', () => {
 		for (let n = 1; n <= 5; n += 1) expect(cooldownMs(n), `n=${n}`).toBe(rpcCooldownMs(n));
 		expect(cooldownMs(0)).toBe(0);
@@ -298,5 +317,47 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		// A status is an answer, however long it took.
 		expect(readFailureKind(new Error('http'), 504, true)).toBe('http_504');
 		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, false)).toBe('network');
+	});
+});
+
+/**
+ * dapp-17: a new site started on 0x1 whatever the wallet's space — a testnet
+ * wallet put every new site on mainnet. It starts on the network last used in
+ * the space now, else the space's first; the worker's twin is the core's rule.
+ */
+describe('where a new site starts (dapp-17)', () => {
+	it('the twin answers what the core answers', () => {
+		const orders = [[1, 8453, 100], [11155111, 84532], [], [100]];
+		for (const order of orders) {
+			for (const last of [null, 1, 100, 84532, 999]) {
+				expect(siteStartChain(order, last), `${order} ${last}`).toBe(
+					coreSiteStartChain(order, last)
+				);
+			}
+		}
+	});
+
+	it('reads the catalog the wallet published, by its space', () => {
+		const testnet = { version: 1, chains: {}, space: 'testnet', order: [11155111, 84532] };
+		expect(startChainOf(testnet, undefined)).toBe(11155111);
+		expect(startChainOf(testnet, { testnet: 84532, mainnet: 100 })).toBe(84532);
+		// Last used in the OTHER space: not this one's.
+		expect(startChainOf(testnet, { mainnet: 100 })).toBe(11155111);
+		// A catalog from before dapp-17 says nothing: the caller keeps its default.
+		expect(startChainOf({ version: 1, chains: {} }, { testnet: 84532 })).toBe(0);
+		expect(startChainOf(null, null)).toBe(0);
+	});
+
+	it('records the chain a site switched to, in the catalog’s space', () => {
+		const catalog = { space: 'testnet' };
+		expect(withLastChain(catalog, undefined, 84532)).toEqual({ testnet: 84532 });
+		expect(withLastChain(catalog, { mainnet: 100 }, 84532)).toEqual({
+			mainnet: 100,
+			testnet: 84532
+		});
+		// Nothing new to write.
+		expect(withLastChain(catalog, { testnet: 84532 }, 84532)).toBeNull();
+		expect(withLastChain({}, {}, 84532)).toBeNull();
+		expect(LAST_CHAIN_KEY).toBe(APP_LAST_CHAIN_KEY);
 	});
 });

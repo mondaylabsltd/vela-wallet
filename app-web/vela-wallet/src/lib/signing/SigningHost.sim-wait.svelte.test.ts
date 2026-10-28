@@ -43,6 +43,16 @@ import type { SignView } from '$lib/core/generated/SignView';
 
 const ME = '0x1111111111111111111111111111111111111111';
 
+/** dapp-15: whether the chain answers a plain read again (the host's "is the node back?"). */
+const chain = vi.hoisted(() => ({ back: false }));
+vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+	poolRpcCall: async () => {
+		if (!chain.back) throw new Error('no node answered');
+		return { jsonrpc: '2.0', id: 1, result: '0x10' };
+	}
+}));
+
 vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
 	signRequest: {
 		get view() {
@@ -507,6 +517,55 @@ afterEach(() => {
 });
 // The harness's own window, back as the other suites expect it.
 afterAll(() => page.viewport(414, 896));
+
+/**
+ * dapp-15: "Vela couldn’t check" because no node answered stood for the rest
+ * of the sheet, though the node came back. It is asked again when the chain
+ * answers again, and on the person's "Check again" — the old line marked
+ * stale while the new check is out.
+ */
+describe('a check no node could answer is asked again (dapp-15)', () => {
+	afterEach(() => {
+		chain.back = false;
+	});
+
+	it('on "Check again", and by itself once the chain answers again', async () => {
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(UNREACHABLE);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
+
+		const again = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		expect(again, 'the line offers to check again').toBeTruthy();
+		again!.click();
+		await asked(2);
+		// The core is told of the new run, and the old line stays — stale.
+		await vi.waitFor(
+			() => expect(core.sent.filter((e) => e.type === 'sim_started')).toHaveLength(2),
+			WAIT
+		);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).not.toBeNull(),
+			WAIT
+		);
+		expect(verdictLine()).toBe(COULD_NOT_CHECK);
+		node.asked[1].answer(UNREACHABLE);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).toBeNull(),
+			WAIT
+		);
+
+		// The node is back: asked again by itself, and the verdict is the new one.
+		chain.back = true;
+		await asked(3);
+		node.asked[2].answer(NOTHING_MOVES);
+		await vi.waitFor(() => expect(verdictLine()).toBe(NO_CHANGE), WAIT);
+		await screen.unmount();
+	}, 40_000);
+});
 
 describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)', () => {
 	it('held with the core’s one line while the node has not answered; open, and the line gone, once the verdict is drawn', async () => {
