@@ -72,8 +72,8 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // longer lowers a blind call's risk; output that goes to an address that
     // is not this account, and a minimum of next to nothing, are dangers; the
     // app's `currentAllowance` is drawn as its word; no demo fixture ships.
-    // Not LAUNCH yet — only once `dist/` is deployed and
-    // `/b/6d7172b4…/sign` answers 200 + immutable with these bytes.
+    // LAUNCH from 2026-10-28: deployed, `/b/6d7172b4…/sign` answers 200 +
+    // immutable with exactly these bytes (checked by hashing the live body).
     "6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a",
     // f14e755a's page with what the 2026-10-28 exploratory pass found: native
     // coin sent along with calldata is a row of its own and a caution (every
@@ -230,7 +230,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8";
+pub const LAUNCH: &str = "6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
