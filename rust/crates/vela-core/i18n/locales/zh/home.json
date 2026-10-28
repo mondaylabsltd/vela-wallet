@@ -162,11 +162,15 @@
         "data": "数据",
         "changesMembers": "第 {{index}} 个调用会修改这个多签本身：{{change}}。只有在所有成员都知情时才批准。",
         "siteFollows": "{{host}} 已收到这笔交易的 ID，会一直跟踪到成员执行或拒绝它。交易仍留在活动中。",
-        "voided": "已作废",
-        "voidedNote": "已作废：另一笔交易用掉了序号 #{{nonce}}，这笔交易永远不会执行。",
+        "voided": "已被替代",
+        "voidedNote": "已被序号 #{{nonce}} 上的作废交易替代，这笔交易永远不会执行。",
+        "voidedByOther": "已被序号 #{{nonce}} 上的另一笔交易替代，这笔交易永远不会执行。",
         "notInMailbox": "这笔交易不在这个多签的信箱里。请让发链接的人核对一下。",
         "unknownNetwork": "这个链接对应的网络 Vela 里没有（链 {{chainId}}）。请先在设置中添加该网络，再重新打开链接。",
-        "badLink": "这个多签交易链接不完整或已损坏。请重新索要。"
+        "badLink": "这个多签交易链接不完整或已损坏。请重新索要。",
+        "previewNote": "本设备上没有这个多签账户的成员账户。打开此链接没有添加它，也没有切换账户。",
+        "watch": "添加到本设备",
+        "watching": "已在本设备上：它在你的账户列表中。当前显示的账户没有改变。"
       },
       "send": {
         "propose": "发起并批准",
@@ -258,7 +262,10 @@
         "pageAway": "钱包页面已关闭。请在钱包所在的地方重新打开：请求还在等待。",
         "connectDeclined": "钱包页面拒绝了连接。点击重试可以再请求一次。",
         "declinedHere": "你已拒绝，Vela 已收到通知；可以关闭此页面。",
-        "otherChain": "钱包仍停留在其他网络。请切换到 {{chain}} 后重试。"
+        "otherChain": "钱包仍停留在其他网络。请切换到 {{chain}} 后重试。",
+        "connectingAs": "正在以 {{account}} 连接",
+        "expectedMember": "Vela 请求的是这个多签的成员：{{accounts}}。",
+        "notExpectedMember": "{{account}} 不是 Vela 请求的成员，本页面不会连接它，也不会用它签名。请在钱包里切换到 {{accounts}}，切换后本页面会继续。"
       },
       "import": {
         "or": "或者从 Safe{Wallet} 导入",

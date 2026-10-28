@@ -16,6 +16,11 @@
 	 * reading, at the number it would take, with "Propose and approve" and
 	 * Decline — nothing is signed until the person has seen what the site
 	 * asks. Once proposed it is the transaction like any other.
+	 *
+	 * A link's transaction on a device with none of its members (`source`,
+	 * `watch`, ms-21) is read from its own source, the multisig neither
+	 * added nor shown: following it here, or signing with a member's wallet,
+	 * are offered — each only on the person's tap.
 	 */
 	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -58,6 +63,7 @@
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
 	import type { DappProposal } from '../core/ui.svelte';
+	import type { ProposalSource } from '../core/linked.svelte';
 	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -76,6 +82,13 @@
 		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
 		/** A dApp's transaction: reviewed here before it is proposed (`DappRequestHost`). */
 		draft?: DappProposal | null;
+		/** ms-21: where the transaction is read from when it is not the shown multisig's. */
+		source?: ProposalSource | null;
+		/**
+		 * ms-21: no member of it is on this device. `added`: it is kept here
+		 * (to follow); `onwatch` keeps it, on the person's tap.
+		 */
+		watch?: { added: boolean; onwatch: () => void } | null;
 	}
 
 	let {
@@ -89,8 +102,13 @@
 		closeLabel,
 		onclose,
 		onexecuted,
-		draft = null
+		draft = null,
+		source = null,
+		watch = null
 	}: Props = $props();
+
+	/** The shown multisig's transactions, or the link's own source (ms-21). */
+	const store = $derived<ProposalSource>(source ?? proposals);
 
 	/** A dApp's transaction not proposed yet: the review, before any passkey. */
 	const drafting = $derived(!!draft && !draft.safeTxHash);
@@ -114,12 +132,12 @@
 	const item = $derived(
 		drafting
 			? (drafted?.item ?? null)
-			: (proposals
+			: (store
 					.chain(chainId)
 					?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null)
 	);
 	const members = $derived(
-		drafting ? (drafted?.chain.members ?? null) : (proposals.chain(chainId)?.members ?? null)
+		drafting ? (drafted?.chain.members ?? null) : (store.chain(chainId)?.members ?? null)
 	);
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
@@ -264,7 +282,7 @@
 		phase = { kind: 'busy', what: 'approve' };
 		try {
 			await approve(account, item, actor);
-			await proposals.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds);
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
@@ -298,7 +316,7 @@
 				return;
 			}
 			const txHash = outcome.hash;
-			await proposals.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds);
 			if (!txHash) {
 				// Not on chain after the wait: say so, and let them try again —
 				// unless the chain shows it executed meanwhile.
@@ -336,7 +354,7 @@
 		if (!item) return;
 		try {
 			await approveExternally(account, chainId, item.tx, outside);
-			await proposals.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds);
 		} catch (error) {
 			if (!cancelled(error)) phase = { kind: 'failed', reason: reasonOf(error) };
 		}
@@ -347,7 +365,7 @@
 		phase = { kind: 'busy', what: 'reject' };
 		try {
 			await proposeCancel(account, item, rejecter);
-			await proposals.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds);
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
@@ -379,7 +397,12 @@
 	 * transaction at its number — read from the chain, never guessed. `null`
 	 * while it is being read or the chain cannot say.
 	 */
-	let finished = $state<{ txHash: string | null } | null>(null);
+	/*
+	 * ms-9: a voided one says by what, in one wording — the cancellation
+	 * proposed at its number when the chain shows that cancellation
+	 * executed, else another transaction at its number (never a guess).
+	 */
+	let finished = $state<{ txHash: string | null; byCancel?: boolean } | null>(null);
 	const doneKey = $derived(item?.status === 'done' ? item.safeTxHash : '');
 	$effect(() => {
 		const key = doneKey;
@@ -387,8 +410,15 @@
 		if (!key) return;
 		let live = true;
 		const address = untrack(() => account.address);
-		void findExecution(address, chainId, key).then((hash) => {
-			if (live && hash !== undefined) finished = { txHash: hash };
+		const cancel = untrack(() => item?.cancelledBy ?? null);
+		void findExecution(address, chainId, key).then(async (hash) => {
+			if (!live || hash === undefined) return;
+			if (hash !== null) {
+				finished = { txHash: hash };
+				return;
+			}
+			const byCancel = cancel ? !!(await findExecution(address, chainId, cancel)) : false;
+			if (live) finished = { txHash: null, byCancel };
 		});
 		return () => {
 			live = false;
@@ -431,10 +461,10 @@
 		{/if}
 	{:else if !item}
 		<!-- Read from the mailbox and still not there: said as that (ms-22). -->
-		<p class="quiet" aria-busy={!proposals.chain(chainId)?.mailbox}>
-			{proposals.loading
+		<p class="quiet" aria-busy={!store.chain(chainId)?.mailbox}>
+			{store.loading
 				? m.proposal.opening
-				: proposals.chain(chainId)?.mailbox
+				: store.chain(chainId)?.mailbox
 					? m.proposal.notInMailbox
 					: m.proposal.notFound}
 		</p>
@@ -576,8 +606,10 @@
 					{/if}
 				</p>
 			{:else if finished}
-				<p class="quiet">
-					{fillTemplate(m.proposal.voidedNote, { nonce: item.nonce.toString() })}
+				<p class="quiet" data-testid="proposal-voided">
+					{fillTemplate(finished.byCancel ? m.proposal.voidedNote : m.proposal.voidedByOther, {
+						nonce: item.nonce.toString()
+					})}
 				</p>
 			{:else}
 				<p class="quiet">{m.proposal.doneNote}</p>
@@ -585,12 +617,34 @@
 		{:else if item.status === 'queued'}
 			<p class="quiet">
 				{fillTemplate(m.proposal.queuedNote, {
-					nonce: (proposals.chain(chainId)?.members.nonce ?? 0n).toString()
+					nonce: (store.chain(chainId)?.members.nonce ?? 0n).toString()
 				})}
 			</p>
 		{/if}
 		{#if item.cancelledBy && item.status !== 'done'}
 			<p class="quiet">{m.proposal.cancelPending}</p>
+		{/if}
+
+		{#if watch && !drafting}
+			<!-- ms-21: no member here — said, and the two ways on, each a tap. -->
+			<section class="preview" data-testid="proposal-preview">
+				<p class="quiet">{m.proposal.previewNote}</p>
+				{#if watch.added}
+					<p class="fine" role="status">{m.proposal.watching}</p>
+				{/if}
+				<div class="preview-actions">
+					{#if !watch.added}
+						<Button variant="secondary" shape="rounded" onclick={watch.onwatch}
+							>{m.proposal.watch}</Button
+						>
+					{/if}
+					{#if outside.length > 0 && phase.kind === 'idle'}
+						<Button variant="secondary" shape="rounded" onclick={onExternal}
+							>{m.external.signWithWallet}</Button
+						>
+					{/if}
+				</div>
+			</section>
 		{/if}
 
 		{#if drafting}
@@ -684,7 +738,7 @@
 					>
 						{m.proposal.approve}
 					</Button>
-				{:else if localOwners(members?.owners ?? []).length === 0}
+				{:else if localOwners(members?.owners ?? []).length === 0 && !watch}
 					<p class="quiet">{m.proposal.notMember}</p>
 				{/if}
 			</div>
@@ -1097,6 +1151,23 @@
 	.reject {
 		margin-block-start: var(--space-xl);
 		text-align: center;
+	}
+
+	.preview {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+		margin-block-start: var(--space-xl);
+	}
+
+	.preview-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+	}
+
+	.preview-actions > :global(*) {
+		flex: 1;
 	}
 
 	.text-button {

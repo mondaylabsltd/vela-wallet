@@ -15,6 +15,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
 
 	interface Props {
 		sheet: AccountsSheetModel;
@@ -81,7 +82,9 @@
 					<span class="name" class:active={row.selected}>{row.name}</span>
 					<span class="address">{row.addressDisplay}</span>
 				</span>
-				<span class="amount">{row.amount}</span>
+				<span class="amount"
+					>{#if row.loading}<SkeletonRow kind="figure" />{:else}{row.amount}{/if}</span
+				>
 				{#if row.selected}
 					<span class="check"><Icon icon={UTILITY_ICONS.check} size="md" /></span>
 				{/if}

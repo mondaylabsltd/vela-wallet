@@ -34,7 +34,9 @@ const fake = vi.hoisted(() => ({
 	/** Owners the passkey index knows: Vela accounts elsewhere (ms-11). */
 	vela: [] as string[],
 	/** What the chain says executed a done proposal (ms-9, ms-10). */
-	executed: undefined as string | null | undefined
+	executed: undefined as string | null | undefined,
+	/** What the chain says executed another hash (the cancellation's, ms-9). */
+	executedBy: {} as Record<string, string | null | undefined>
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -66,7 +68,10 @@ vi.mock('../core/owners', () => ({
 vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6), isVela: (a: string) => fake.vela.includes(a) }
 }));
-vi.mock('../core/records', () => ({ findExecution: async () => fake.executed }));
+vi.mock('../core/records', () => ({
+	findExecution: async (_safe: string, _chain: number, hash: string) =>
+		hash in fake.executedBy ? fake.executedBy[hash] : fake.executed
+}));
 vi.mock('../core/display', () => ({
 	actionRecipient: (a: any) => a?.to ?? null,
 	actionTitle: async () => 'Contract call',
@@ -174,6 +179,7 @@ beforeEach(() => {
 	fake.refused = false;
 	fake.vela = [];
 	fake.executed = undefined;
+	fake.executedBy = {};
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -334,14 +340,36 @@ describe('a transaction whose number is used (ms-9, ms-10)', () => {
 		await screen.unmount();
 	});
 
-	it('voided by another transaction: said as cancelled', async () => {
+	it('replaced by its executed cancellation: one wording, nothing that says otherwise', async () => {
 		fake.chain.items = [done()];
 		fake.executed = null;
+		fake.executedBy = { [`0x${'cd'.repeat(32)}`]: `0x${'ee'.repeat(32)}` };
 		const screen = show();
 		await settle();
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('proposal.voided');
-		expect(text).toContain('proposal.voidedNote');
+		expect(document.querySelector('[data-testid="proposal-voided"]')?.textContent?.trim()).toBe(
+			'proposal.voidedNote'
+		);
+		expect(text).not.toContain('proposal.voidedByOther');
+		expect(text).not.toContain('proposal.executed');
+		expect(text).not.toContain('proposal.doneNote');
+		expect(text).not.toContain('proposal.cancelPending');
+		expect(text).not.toContain('proposal.waiting');
+		expect(text).not.toContain('proposal.noExpiry');
+		expect(text).not.toContain('status.progress');
+		await screen.unmount();
+	});
+
+	it('replaced by another transaction at its number: said as that, not as a cancellation', async () => {
+		fake.chain.items = [done()];
+		fake.executed = null;
+		fake.executedBy = { [`0x${'cd'.repeat(32)}`]: null };
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="proposal-voided"]')?.textContent?.trim()).toBe(
+			'proposal.voidedByOther'
+		);
 		await screen.unmount();
 	});
 
@@ -370,6 +398,76 @@ describe('an owner whose wallet is elsewhere (ms-11, ms-23)', () => {
 		screen = show();
 		await settle();
 		expect(buttons()).not.toContain('external.signWithWallet');
+		await screen.unmount();
+	});
+});
+
+describe('a link’s transaction on a device with no member (ms-21)', () => {
+	const THIRD = '0x00000000000000000000000000000000000000cc';
+	const strangers = { owners: [OTHER, THIRD], threshold: 2, nonce: 0n, deployed: true };
+	const linked = (refresh = vi.fn(async () => {})) => ({
+		loading: false,
+		chain: () => ({
+			chainId: 100,
+			members: strangers,
+			items: [item({ canApprove: [], proposer: OTHER })],
+			mailbox: true
+		}),
+		refresh
+	});
+
+	it('is read from its own source, says no member is here, and offers the two ways on', async () => {
+		// The shown multisig's list has nothing: the sheet reads the link's source.
+		fake.chain = null;
+		const onwatch = vi.fn();
+		const screen = show({
+			source: linked(),
+			watch: { added: false, onwatch },
+			account: { ...account, owners: strangers.owners }
+		});
+		await settle();
+		const preview = document.querySelector('[data-testid="proposal-preview"]');
+		expect(preview?.textContent).toContain('proposal.previewNote');
+		expect(document.body.textContent).not.toContain('proposal.notMember');
+		expect(document.body.textContent).not.toContain('proposal.watching');
+		expect(buttons()).toContain('proposal.watch');
+		expect(buttons()).toContain('external.signWithWallet');
+		// Nothing to approve or execute from here, and nothing was done.
+		expect(buttons()).not.toContain('proposal.approve');
+		press('proposal.watch');
+		expect(onwatch).toHaveBeenCalledTimes(1);
+		await screen.unmount();
+	});
+
+	it('kept here: said, and no second Watch', async () => {
+		fake.chain = null;
+		const screen = show({
+			source: linked(),
+			watch: { added: true, onwatch: () => {} },
+			account: { ...account, owners: strangers.owners }
+		});
+		await settle();
+		expect(document.body.textContent).toContain('proposal.watching');
+		expect(buttons()).not.toContain('proposal.watch');
+		await screen.unmount();
+	});
+
+	it('an outside approval re-reads the link’s source, not the shown multisig’s', async () => {
+		fake.chain = null;
+		const refresh = vi.fn(async () => {});
+		const screen = show({
+			source: linked(refresh),
+			watch: { added: false, onwatch: () => {} },
+			account: { ...account, owners: strangers.owners }
+		});
+		await settle();
+		const external = [...document.querySelectorAll('[data-testid="proposal-preview"] button')].find(
+			(b) => b.textContent?.trim() === 'external.signWithWallet'
+		) as HTMLButtonElement;
+		external.click();
+		await settle();
+		expect(fake.calls).toContain('external');
+		expect(refresh).toHaveBeenCalled();
 		await screen.unmount();
 	});
 });

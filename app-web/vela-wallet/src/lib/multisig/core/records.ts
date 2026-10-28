@@ -2,8 +2,11 @@
  * A multisig transfer executed from this device, in the activity: one record
  * per transfer, `from` the multisig, under the transaction that carried it —
  * the same store and shape a Vela account's own sends are written to, so the
- * multisig's activity reads like any account's.
+ * multisig's activity reads like any account's. An executed cancellation is
+ * a row of its own too (ms-9): it moves nothing, but it used a number and
+ * voided whatever else waited at it.
  */
+import { fillTemplate } from '$lib/i18n/fill';
 import { loadTransactions, saveTransactions } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import type { LocalTransaction } from '$lib/services/transactions-model';
@@ -11,6 +14,52 @@ import { tokenInfo } from './display';
 import { transfersOf } from './kernel';
 import { plainUnits } from './units';
 import type { ProposalItem } from './proposals.svelte';
+
+/**
+ * The title an executed cancellation's row keeps — the proposal's own words
+ * (`home.multisig.action.cancel`). The multisig host hands them over with
+ * the page's copy ({@link useCancelTitle}); this is only the fallback.
+ */
+let cancelTitle = 'Cancel transaction #{{nonce}}';
+
+/** The page's words for a cancellation's row (`{{nonce}}`). */
+export function useCancelTitle(template: string): void {
+	if (template) cancelTitle = template;
+}
+
+/** Whether executing `item` leaves a row in Activity: a transfer, or a cancellation. */
+function recorded(item: ProposalItem): boolean {
+	return item.review.action?.kind === 'cancel' || transfersOf(item.review.action).length > 0;
+}
+
+/**
+ * ms-9: an executed cancellation, as Activity keeps it — a call from the
+ * multisig to itself that moves nothing, titled as its proposal was.
+ */
+function cancellationRecord(
+	multisig: string,
+	item: ProposalItem,
+	txHash: string,
+	userOpHash: string,
+	at: number
+): LocalTransaction {
+	return {
+		id: `multisig:${item.safeTxHash}:0`,
+		userOpHash,
+		txHash,
+		from: multisig,
+		to: multisig,
+		value: '0',
+		symbol: '',
+		decimals: 18,
+		chainId: item.chainId,
+		timestamp: at,
+		status: 'confirmed',
+		type: 'dapp_tx',
+		intent: fillTemplate(cancelTitle, { nonce: item.nonce.toString() }),
+		dappSummary: { action: 'call', calls: 1, contract: multisig.toLowerCase() }
+	};
+}
 
 export async function recordExecution(
 	multisig: string,
@@ -20,6 +69,12 @@ export async function recordExecution(
 	/** Unix seconds of its block, when known; else now. */
 	at?: number
 ): Promise<void> {
+	if (item.review.action?.kind === 'cancel') {
+		await saveTransactions([
+			cancellationRecord(multisig, item, txHash, userOpHash, at ?? Math.floor(Date.now() / 1000))
+		]);
+		return;
+	}
 	const transfers = transfersOf(item.review.action);
 	const records: LocalTransaction[] = [];
 	for (const [i, t] of transfers.entries()) {
@@ -48,15 +103,16 @@ const EXECUTION_SUCCESS = '0x442e715f626346e8c54381002da614f62bee8d27386535b2521
 const LOOKBACK = 50_000n;
 
 /**
- * Transfers executed somewhere else (another member's device): found by their
- * `ExecutionSuccess` on chain and written to the activity, once. Quiet when
- * the chain cannot say.
+ * Transfers and cancellations executed somewhere else (another member's
+ * device): found by their `ExecutionSuccess` on chain and written to the
+ * activity, once. Quiet when the chain cannot say. A voided transaction has
+ * no `ExecutionSuccess` and writes nothing.
  */
 export async function recordRemoteExecutions(
 	multisig: string,
 	items: ProposalItem[]
 ): Promise<boolean> {
-	const done = items.filter((i) => i.status === 'done' && transfersOf(i.review.action).length > 0);
+	const done = items.filter((i) => i.status === 'done' && recorded(i));
 	if (done.length === 0) return false;
 	const known = new Set((await loadTransactions()).map((t) => t.id));
 	let wrote = false;

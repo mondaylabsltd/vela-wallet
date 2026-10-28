@@ -9,6 +9,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
@@ -22,10 +23,12 @@
 		cancelLabel: string;
 		/** Its total as the Vela rows draw theirs: the mask, the figure, or nothing yet. */
 		amount?: (address: string) => string;
+		/** ms-24: no figure yet, and it is being read — drawn as loading, never "$0.00". */
+		loading?: (address: string) => boolean;
 		onselect: (account: MultisigAccount) => void;
 	}
 
-	let { m, removeLabel, cancelLabel, amount, onselect }: Props = $props();
+	let { m, removeLabel, cancelLabel, amount, loading, onselect }: Props = $props();
 
 	let removing = $state<string | null>(null);
 	const active = $derived(multisig.active);
@@ -63,7 +66,9 @@
 						>{/if}</span
 				>
 			</span>
-			{#if amount}
+			{#if loading?.(account.address)}
+				<span class="amount"><SkeletonRow kind="figure" /></span>
+			{:else if amount}
 				<span class="amount">{amount(account.address)}</span>
 			{/if}
 			{#if selected}

@@ -41,12 +41,18 @@ type Connect = (
 	origin: string | undefined,
 	cancelled: AbortSignal
 ) => Promise<string[]>;
+type Approve = (request: { method: string; params?: unknown[] }) => Promise<boolean>;
 const prompts = new Map<FakeConnection, Connect>();
+const approvals = new Map<FakeConnection, Approve>();
 vi.mock('$lib/walletpair/wallet', () => ({
 	emptyStore: () => ({ approved: [], chains: {}, records: new Map(), forwarded: new Set() }),
 	ReferenceWallet: class {
-		constructor(connection: FakeConnection, options: { prompts: { connect: Connect } }) {
+		constructor(
+			connection: FakeConnection,
+			options: { prompts: { connect: Connect; approve: Approve } }
+		) {
 			prompts.set(connection, options.prompts.connect);
+			approvals.set(connection, options.prompts.approve);
 		}
 	}
 }));
@@ -82,6 +88,7 @@ beforeEach(() => {
 	connectedRecords.clear();
 	connections.clear();
 	prompts.clear();
+	approvals.clear();
 });
 
 describe("the connect page's sessions", () => {
@@ -135,5 +142,40 @@ describe("the connect page's sessions", () => {
 		bridge.prompt?.answer(false);
 		expect(await answer).toEqual([]);
 		expect(bridge.sessions).toHaveLength(2);
+	});
+});
+
+/**
+ * ms-14: a room opened from a link that names its members signs as one of
+ * them only — a request as anyone else is refused before the wallet is asked.
+ */
+describe('a session for the members its link named (ms-14)', () => {
+	const MEMBER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
+	const STRANGER = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';
+
+	it('refuses to sign or send as anyone but them', async () => {
+		const provider = { request: async () => [MEMBER] };
+		const bridge = new Bridge(provider as never, [MEMBER], 'eip155:100');
+		bridge.join('wss://relay#invite', [MEMBER.toUpperCase().replace('0X', '0x')]);
+		const approve = approvals.get(connections.get('joined')!)!;
+		expect(await approve({ method: 'eth_signTypedData_v4', params: [STRANGER, '{}'] })).toBe(false);
+		expect(bridge.activity[0]).toMatchObject({
+			method: 'eth_signTypedData_v4',
+			outcome: 'rejected'
+		});
+		expect(await approve({ method: 'eth_sendTransaction', params: [{ from: STRANGER }] })).toBe(
+			false
+		);
+		expect(await approve({ method: 'eth_signTypedData_v4', params: [MEMBER, '{}'] })).toBe(true);
+		// Asking the wallet to switch networks names no account.
+		expect(await approve({ method: 'wallet_switchEthereumChain', params: [{}] })).toBe(true);
+	});
+
+	it('an older link named no one: the wallet is asked as before', async () => {
+		const provider = { request: async () => [STRANGER] };
+		const bridge = new Bridge(provider as never, [STRANGER], 'eip155:100');
+		bridge.join('wss://relay#invite');
+		const approve = approvals.get(connections.get('joined')!)!;
+		expect(await approve({ method: 'eth_signTypedData_v4', params: [STRANGER, '{}'] })).toBe(true);
 	});
 });

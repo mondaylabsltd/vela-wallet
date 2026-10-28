@@ -162,11 +162,15 @@
         "data": "Data",
         "changesMembers": "Call #{{index}} changes this multisig itself: {{change}}. Approve only if every member expects it.",
         "siteFollows": "{{host}} was given this transaction’s id and follows it until the members execute or reject it. It stays in Activity.",
-        "voided": "Cancelled",
-        "voidedNote": "Cancelled: another transaction used number #{{nonce}}, so this one can never run.",
+        "voided": "Replaced",
+        "voidedNote": "Replaced by a cancellation at #{{nonce}}: this transaction can never run.",
+        "voidedByOther": "Replaced by another transaction at #{{nonce}}: this one can never run.",
         "notInMailbox": "This transaction isn’t in this multisig’s mailbox. Ask whoever sent the link to check it.",
         "unknownNetwork": "This link is for a network Vela doesn’t have (chain {{chainId}}). Add the network in Settings, then open the link again.",
-        "badLink": "This link to a multisig transaction is incomplete or damaged. Ask for it again."
+        "badLink": "This link to a multisig transaction is incomplete or damaged. Ask for it again.",
+        "previewNote": "No account on this device is a member of this multisig. Opening this link didn't add it or switch accounts.",
+        "watch": "Add to this device",
+        "watching": "On this device: it's in your accounts list. The account shown hasn't changed."
       },
       "send": {
         "propose": "Propose and approve",
@@ -258,7 +262,10 @@
         "pageAway": "The wallet page closed. Open it again where your wallet is: the request is still waiting.",
         "connectDeclined": "The connection was declined on the wallet page. Try again to ask once more.",
         "declinedHere": "You declined. Vela has been told; you can close this page.",
-        "otherChain": "The wallet stayed on another network. Switch it to {{chain}} and try again."
+        "otherChain": "The wallet stayed on another network. Switch it to {{chain}} and try again.",
+        "connectingAs": "Connecting as {{account}}",
+        "expectedMember": "Vela asked for a member of the multisig: {{accounts}}.",
+        "notExpectedMember": "{{account}} isn't a member Vela asked for, so this page won't connect it or sign with it. In your wallet, switch to {{accounts}}; this page carries on once you do."
       },
       "import": {
         "or": "Or import from Safe{Wallet}",
