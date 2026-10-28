@@ -23,7 +23,21 @@
 	     The artwork answers a different question ("is this the account I
 	     think it is?") and answers it through the resident viewer, wherever
 	     it is drawn; a header with no address yet stays a picture. -->
-	<Identicon svg={header.identiconSvg} size="header" address={header.addressFull} />
+	<span class="avatar">
+		<Identicon svg={header.identiconSvg} size="header" address={header.addressFull} />
+		{#if header.rule}
+			<!-- A multisig: a members badge on its artwork, the way to its
+			     settings; its rule is the badge's name ("2 of 3 members approve"). -->
+			<!-- eslint-disable svelte/no-navigation-without-resolve -- the page resolved it -->
+			<a
+				class="members"
+				href={header.rule.href}
+				title={header.rule.title}
+				aria-label={header.rule.title}><Icon icon={UTILITY_ICONS['users-round']} size="xs" /></a
+			>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
+		{/if}
+	</span>
 	<div class="text">
 		<!-- The name has the whole column: nothing beside it squeezes it. -->
 		<button type="button" class="name-row" aria-haspopup="dialog" {onclick}>
@@ -34,13 +48,6 @@
 		</button>
 		<span class="facts">
 			<button type="button" class="address" tabindex="-1" {onclick}>{header.addressDisplay}</button>
-			{#if header.rule}
-				<!-- A multisig: its rule, the way to its settings (resolved by the page). -->
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the page resolved it -->
-				<a class="chip rule" href={header.rule.href} title={header.rule.title}
-					><Icon icon={UTILITY_ICONS['users-round']} size="sm" />{header.rule.label}</a
-				>
-			{/if}
 			<!-- The space in front (spec 105), beside the account it shows: tapping it
 			     offers the other space. Live headers only — the gallery's is a picture. -->
 			{#if onclick && networkSpace.words}
@@ -128,6 +135,28 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 		cursor: pointer;
+	}
+
+	.avatar {
+		position: relative;
+		display: inline-flex;
+		flex: none;
+	}
+
+	/* A multisig's mark: a small disc on the artwork's lower edge. */
+	.members {
+		position: absolute;
+		inset-inline-end: calc(var(--space-xs) * -1);
+		inset-block-end: calc(var(--space-xs) * -1);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: var(--icon-lg);
+		height: var(--icon-lg);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-raised);
+		color: var(--color-fg-base);
 	}
 
 	.chip {

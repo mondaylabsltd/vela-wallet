@@ -243,7 +243,8 @@
         "importSome": "{{total}} içe aktar",
         "importing": "İçe aktarılıyor…",
         "imported": "İçe aktarıldı",
-        "already": "Zaten eklendi"
+        "already": "Zaten eklendi",
+        "notDeployed": "Hiçbir ağında dağıtılmamış ve dosyada kurulumu yok."
       },
       "settings": {
         "backupTitle": "Kurulumunu Ethereum'a kaydet",

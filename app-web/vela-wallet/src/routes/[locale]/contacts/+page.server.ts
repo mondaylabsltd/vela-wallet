@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import {
 	resolveContactsMessages,
+	resolveMultisigMessages,
 	resolveSettingsMessages,
 	resolveWalletMessages
 } from '$lib/i18n/engine.server';
@@ -44,6 +45,7 @@ export const load: PageServerLoad = ({ params }) => {
 	return {
 		// Page-unique key — `messages` would shadow the layout's Welcome copy.
 		contactsMessages: resolveContactsMessages(locale),
+		multisigMessages: resolveMultisigMessages(locale),
 		sidebar,
 		/** 全部 in the sidebar's network list, which the live rows rebuild. */
 		allNetworksLabel: walletMessages.networkFilter.allNetworks,

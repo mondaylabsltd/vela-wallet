@@ -243,7 +243,8 @@
         "importSome": "{{total}} importieren",
         "importing": "Wird importiert…",
         "imported": "Importiert",
-        "already": "Bereits hinzugefügt"
+        "already": "Bereits hinzugefügt",
+        "notDeployed": "Auf keinem seiner Netzwerke bereitgestellt, und die Datei enthält seine Einrichtung nicht."
       },
       "settings": {
         "backupTitle": "Einrichtung auf Ethereum sichern",

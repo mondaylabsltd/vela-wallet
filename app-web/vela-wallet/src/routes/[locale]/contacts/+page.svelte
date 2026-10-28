@@ -63,6 +63,9 @@
 	import { fill } from '$lib/wallet/messages';
 	import { track } from '$lib/analytics';
 	import type { PageProps } from './$types';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { shownIdentity } from '$lib/multisig/core/shown';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
 
 	let { data }: PageProps = $props();
 	const m = $derived(data.contactsMessages);
@@ -77,6 +80,9 @@
 
 	const sessionView = $derived(session.view);
 	const signedIn = $derived(sessionView.allowed_route === 'wallet');
+	// Whose contacts these are: the multisig shown, as on the wallet, else the session's account.
+	const shownAddress = $derived(multisig.active?.address ?? sessionView.address);
+	$effect(() => multisig.boot());
 	/** Past the breakpoint the book is three columns (DC1), as on /wallet and /settings. */
 	const wide = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 
@@ -110,12 +116,12 @@
 
 	$effect(() => {
 		if (!signedIn) return;
-		void balance.setAccount(sessionView.address);
-		void feed.setAccount(sessionView.address);
+		void balance.setAccount(shownAddress);
+		void feed.setAccount(shownAddress);
 		// The core's own account boundary: history-derived suggestions must
 		// never cross books (contacts.rs `AccountSwitched`). Told only when the
 		// account changes — the book does that bookkeeping.
-		void contactsBook.setAccount(sessionView.address);
+		void contactsBook.setAccount(shownAddress);
 	});
 
 	// --- Render state ------------------------------------------------------
@@ -250,14 +256,15 @@
 	 */
 	const sidebar = $derived.by(() => {
 		if (!signedIn) return data.sidebar;
-		const name = sessionView.accounts[sessionView.active_index]?.account.name ?? '';
+		const shown = shownIdentity(sessionView, data.multisigMessages, data.locale);
 		return {
 			...data.sidebar,
 			header: {
-				name,
-				addressDisplay: shortenAddress(sessionView.address),
-				addressFull: sessionView.address,
-				identiconSvg: identiconSvgForClient(sessionView.address)
+				name: shown.name,
+				addressDisplay: shortenAddress(shown.address),
+				addressFull: shown.address,
+				identiconSvg: shown.identiconSvg,
+				...(shown.rule ? { rule: shown.rule } : {})
 			}
 		};
 	});
@@ -796,6 +803,18 @@
 		oncreate={() => void goto(createHref)}
 		onsignin={() => void goto(welcome)}
 		onclose={() => (switching = false)}
+		multisigCopy={data.multisigMessages}
+	/>
+{/if}
+
+{#if signedIn}
+	<!-- The switcher's "Create multisig" / "Add multisig" open their sheets here too. -->
+	<MultisigHost
+		m={data.multisigMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={data.identiconViewer.close}
+		current={sessionView.address || null}
 	/>
 {/if}
 

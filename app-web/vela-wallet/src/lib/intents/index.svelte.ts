@@ -19,6 +19,7 @@ import { balance } from '$lib/wallet/core/balance.svelte';
 import { feed } from '$lib/wallet/core/feed.svelte';
 import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 import type { World } from './world';
+import { shownAddress } from '$lib/multisig/core/shown';
 
 export type { IntentOutcome } from './intents.svelte';
 
@@ -58,7 +59,8 @@ export const intents = new Intents({
 				JSON.stringify({
 					agent_enabled: seen.agent.enabled,
 					wallets: seen.agent.wallets,
-					wallet: seen.session?.address ?? ''
+					// The account on screen: a multisig shown is the agent's wallet too.
+					wallet: shownAddress(seen.session?.address ?? '')
 				})
 			)
 		) as IntentCheck,

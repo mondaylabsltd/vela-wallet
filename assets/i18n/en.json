@@ -560,7 +560,8 @@
     "importSome": "Import {{total}}",
     "importing": "Importing…",
     "imported": "Imported",
-    "already": "Already added"
+    "already": "Already added",
+    "notDeployed": "Not deployed on any of its networks, and the file doesn't hold its setup."
    },
    "settings": {
     "backupTitle": "Save its setup to Ethereum",

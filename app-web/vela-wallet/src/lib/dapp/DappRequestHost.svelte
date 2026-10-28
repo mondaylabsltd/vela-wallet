@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { multisig } from '$lib/multisig/core/store.svelte';
-	import { multisigAccountsForExt } from '$lib/multisig/core/ext';
+	import { multisigAccountsForExt, multisigAsAccount } from '$lib/multisig/core/ext';
 	import { proposals, proposeCall } from '$lib/multisig/core/proposals.svelte';
 	import { executionTxHash } from '$lib/multisig/core/records';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
@@ -661,8 +661,10 @@
 		const row = session.view.accounts.find(
 			(r) => r.account.address.toLowerCase() === address.toLowerCase()
 		);
+		// A multisig shown is the account the site sees: named as the wallet names it.
+		const shared = multisig.find(address);
 		return {
-			name: row?.account.name ?? '',
+			name: row?.account.name ?? (shared ? multisigAsAccount(shared).name : ''),
 			address,
 			short: shortenAddress(address),
 			identiconSvg: identiconSvgForClient(address)

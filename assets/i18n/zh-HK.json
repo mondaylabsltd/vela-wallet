@@ -560,7 +560,8 @@
     "importSome": "匯入 {{total}} 個",
     "importing": "正在匯入…",
     "imported": "已匯入",
-    "already": "已加入"
+    "already": "已加入",
+    "notDeployed": "它在任何網絡上都尚未部署，檔案中也沒有它的建立設定。"
    },
    "settings": {
     "backupTitle": "將多簽設定儲存到 Ethereum",

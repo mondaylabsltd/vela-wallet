@@ -561,7 +561,8 @@
     "importSome": "Importar {{total}}",
     "importing": "Importando…",
     "imported": "Importado",
-    "already": "Ya agregado"
+    "already": "Ya agregado",
+    "notDeployed": "No está desplegado en ninguna de sus redes y el archivo no incluye su configuración."
    },
    "settings": {
     "backupTitle": "Guardar su configuración en Ethereum",

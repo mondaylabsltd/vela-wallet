@@ -560,7 +560,8 @@
     "importSome": "Nhập {{total}}",
     "importing": "Đang nhập…",
     "imported": "Đã nhập",
-    "already": "Đã thêm"
+    "already": "Đã thêm",
+    "notDeployed": "Chưa được triển khai trên mạng nào, và tệp không có thiết lập của nó."
    },
    "settings": {
     "backupTitle": "Lưu thiết lập lên Ethereum",

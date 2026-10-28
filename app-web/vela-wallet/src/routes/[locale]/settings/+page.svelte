@@ -115,7 +115,7 @@
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { LiveSpace } from '$lib/settings/live';
 	import type { PageProps } from './$types';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import { shownAddress, shownIdentity } from '$lib/multisig/core/shown';
 	import { multisigName } from '$lib/multisig/core/display';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
@@ -136,28 +136,9 @@
 	// A multisig shown is the account these settings are for, as on the wallet.
 	const shownMultisig = $derived(signedIn ? multisig.active : null);
 	const identity = $derived<WalletIdentity | null>(
-		!signedIn
-			? null
-			: shownMultisig
-				? {
-						name: multisigName(shownMultisig, data.multisigMessages),
-						address: shownMultisig.address,
-						identiconSvg: identiconSvgForClient(shownMultisig.address),
-						rule: {
-							label: `${shownMultisig.threshold}/${shownMultisig.owners.length}`,
-							title: fillTemplate(data.multisigMessages.panel.title, {
-								m: shownMultisig.threshold,
-								n: shownMultisig.owners.length
-							}),
-							href: resolve('/[locale]/settings', { locale: data.locale })
-						}
-					}
-				: {
-						name: view.accounts[view.active_index]?.account.name ?? '',
-						address: view.address,
-						identiconSvg: identiconSvgForClient(view.address)
-					}
+		signedIn ? shownIdentity(view, data.multisigMessages, data.locale) : null
 	);
+
 
 	/**
 	 * The wide layout's app sidebar wears the same identity the phone header
@@ -373,7 +354,7 @@
 			.finish(async (linked) => {
 				// E8: the first connection offers the wallet in front; a list the
 				// person already chose is kept.
-				const active = session.view.address;
+				const active = shownAddress(session.view.address);
 				await intents.invoke('person', {
 					type: 'configure_agent',
 					enabled: true,
@@ -771,13 +752,21 @@
 				title: a.wallets,
 				hint: a.walletsHint,
 				none: agentSettings.wallets.length === 0 ? a.walletsNone : undefined,
-				rows: session.view.accounts.map((row) => ({
-					id: `agent-wallet-${row.account.address}`,
-					title: row.account.name,
-					subtitle: `${row.account.address.slice(0, 6)}…${row.account.address.slice(-4)}`,
-					on: agentSettings.wallets.some(
-						(w) => w.toLowerCase() === row.account.address.toLowerCase()
-					)
+				// Every account here, multisigs among them.
+				rows: [
+					...session.view.accounts.map((row) => ({
+						address: row.account.address,
+						name: row.account.name
+					})),
+					...multisig.accounts.map((a) => ({
+						address: a.address,
+						name: multisigName(a, data.multisigMessages)
+					}))
+				].map((row) => ({
+					id: `agent-wallet-${row.address}`,
+					title: row.name,
+					subtitle: `${row.address.slice(0, 6)}…${row.address.slice(-4)}`,
+					on: agentSettings.wallets.some((w) => w.toLowerCase() === row.address.toLowerCase())
 				}))
 			}
 		};
@@ -870,7 +859,9 @@
 		model = {
 			...model,
 			keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
-			venue: liveVenue,
+			// Where an account signs is a passkey account's choice; a multisig's
+			// members sign where each of them does.
+			venue: shownMultisig ? undefined : liveVenue,
 			// Spec 102: no Signing pages on the web — it opens none, so a list of
 			// pages it trusts would be a list of nothing it does.
 			signingPages: undefined

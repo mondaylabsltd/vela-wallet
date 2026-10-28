@@ -59,6 +59,7 @@ import { createSignRequestSession, type SignRequestSession } from './sign-sessio
 import { claimThrough, type ClaimPhase, type SignResponder, type SubmitClaim } from './sign-types';
 import { handoffKey, withdrawKey, createTrackForward, type TrackForward } from './track-forward';
 import { countPanelFailure } from '$lib/services/bug-report';
+import { multisig } from '$lib/multisig/core/store.svelte';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_SIGN_VIEW: SignView = {
@@ -250,6 +251,8 @@ class SignRequest {
 						if (target === null || (intended !== null && !sameAddress(target, intended))) {
 							return refuseSwitch(index, intended, target);
 						}
+						// A Vela account signs: it is the one shown, not a multisig.
+						multisig.activate(null);
 						session.switchAccount(index);
 						if (session.view.active_index !== index) {
 							return refuseSwitch(index, intended, target);

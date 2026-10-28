@@ -560,7 +560,8 @@
     "importSome": "Impor {{total}}",
     "importing": "Mengimpor…",
     "imported": "Diimpor",
-    "already": "Sudah ditambahkan"
+    "already": "Sudah ditambahkan",
+    "notDeployed": "Belum di-deploy di jaringan mana pun, dan file tidak memuat pengaturannya."
    },
    "settings": {
     "backupTitle": "Simpan pengaturannya ke Ethereum",

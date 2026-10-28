@@ -560,7 +560,8 @@
     "importSome": "{{total}} 件を読み込む",
     "importing": "読み込み中…",
     "imported": "読み込みました",
-    "already": "追加済み"
+    "already": "追加済み",
+    "notDeployed": "どのネットワークにもデプロイされておらず、ファイルにも作成時の設定がありません。"
    },
    "settings": {
     "backupTitle": "設定を Ethereum に保存",

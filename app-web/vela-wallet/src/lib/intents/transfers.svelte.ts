@@ -25,6 +25,7 @@ import { networkId } from '$lib/services/networks';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { txTrackerView } from '$lib/wallet/core/tracker-resident';
+import { shownAddress } from '$lib/multisig/core/shown';
 
 export type Draft = { chain_id: number; token: string | null; to: string; amount: string };
 export type BatchDraft = {
@@ -200,7 +201,8 @@ class Transfers {
 
 		// "Not held" is only true of balances that have been read: right after
 		// the page opens, they may not have been yet.
-		const account = session.view.address;
+		// The balance the wallet reads: the shown account's (a multisig, if one is).
+		const account = shownAddress(session.view.address);
 		await until(() => (balance.settledFor(account) ? true : null), STEP_MS.open);
 		const token = balance.view.tokens.find(
 			(held) =>

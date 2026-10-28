@@ -14,6 +14,7 @@
  * cannot hand over a wrong one.
  */
 import { hasCode } from './chain';
+import { creationGenesis, hasTransactionService } from './safe-service';
 import {
 	genesisAddress,
 	multisigGenesis,
@@ -248,16 +249,17 @@ async function waitForTask(id: string): Promise<void> {
 
 export type ImportOutcome =
 	| { ok: true; account: MultisigAccount }
-	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' };
+	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notDeployed' };
 
 /**
  * Import one Safe from a Safe{Wallet} export. Its genesis is, in order: the
  * one the genesis service holds; one derived here from Safe{Wallet}'s own
- * creation parameters (an undeployed Safe); or one the service resolves from
- * a chain it is deployed on, and records. Whichever it is, the core must
- * derive the Safe's address from it. The address book's name is kept as this
- * device's label. A Safe already here is kept, and given the label if it has
- * none.
+ * creation parameters (an undeployed Safe); or the creation Safe's
+ * transaction service has on record (a deployed one) — read from here, so
+ * importing never depends on the genesis service, which is then asked to
+ * record it (best effort). Whichever it is, the core must derive the Safe's
+ * address from it. The address book's name is kept as this device's label.
+ * A Safe already here is kept, and given the label if it has none.
  */
 export async function importExported(safe: ExportedSafe): Promise<ImportOutcome> {
 	const chainIds = safe.chains.map((c) => c.chainId);
@@ -269,15 +271,17 @@ export async function importExported(safe: ExportedSafe): Promise<ImportOutcome>
 	}
 	let genesis: Genesis | null = null;
 	let recorded = false;
-	let serviceDown = false;
+	let unreachable = 0;
+	let asked = 0;
 	try {
+		asked += 1;
 		const known = await fetchGenesis(safe.address);
 		if (known.found && known.genesis) {
 			genesis = known.genesis;
 			recorded = !known.pending;
 		}
 	} catch {
-		serviceDown = true;
+		unreachable += 1;
 	}
 	if (!genesis) {
 		for (const c of safe.chains) {
@@ -290,27 +294,34 @@ export async function importExported(safe: ExportedSafe): Promise<ImportOutcome>
 			}
 		}
 	}
-	if (!genesis && !serviceDown) {
-		for (const c of safe.chains.filter((c) => c.deployed)) {
+	let unsupported = false;
+	if (!genesis) {
+		for (const c of safe.chains.filter((c) => c.deployed && hasTransactionService(c.chainId))) {
 			try {
-				const imported = await importGenesis({ chainId: c.chainId, safe: safe.address });
-				if (imported.status === 'queued') await waitForTask(imported.taskId);
-				if (imported.status === 'error') serviceDown = true;
-				if (imported.status === 'error' || imported.status === 'refused') continue;
-				const known = await fetchGenesis(safe.address);
-				if (known.found && known.genesis) {
-					genesis = known.genesis;
-					recorded = !known.pending;
-					serviceDown = false;
+				asked += 1;
+				const found = await creationGenesis(c.chainId, safe.address);
+				if (found && 'genesis' in found) {
+					genesis = found.genesis;
 					break;
 				}
+				if (found) unsupported = true;
 			} catch {
-				// the next chain may be one the service reads
-				serviceDown = true;
+				unreachable += 1;
 			}
 		}
 	}
-	if (!genesis) return { ok: false, reason: serviceDown ? 'unavailable' : 'notFound' };
+	if (!genesis) {
+		if (unsupported) return { ok: false, reason: 'unsupported' };
+		if (asked > 0 && unreachable === asked) return { ok: false, reason: 'unavailable' };
+		// Listed as added, yet deployed on none of its networks this wallet can read.
+		const deployed = await Promise.all(
+			safe.chains.map((c) => hasCode(c.chainId, safe.address).catch(() => null))
+		);
+		if (deployed.some((d) => d === false) && !deployed.some((d) => d === true)) {
+			return { ok: false, reason: 'notDeployed' };
+		}
+		return { ok: false, reason: 'notFound' };
+	}
 	try {
 		if (!sameAddress(genesisAddress(genesis), safe.address))
 			return { ok: false, reason: 'notFound' };
@@ -320,5 +331,12 @@ export async function importExported(safe: ExportedSafe): Promise<ImportOutcome>
 	const account = multisig.add(safe.address, genesis, recorded, chainIds);
 	if (safe.name) multisig.setLabel(account.address, safe.name);
 	if (recorded) multisig.markShared(account.address);
+	else {
+		// The genesis service, if it is there, records it for other devices.
+		const deployedOn = safe.chains.find((c) => c.deployed)?.chainId;
+		if (deployedOn !== undefined) {
+			void importGenesis({ chainId: deployedOn, safe: safe.address }).catch(() => {});
+		}
+	}
 	return { ok: true, account: multisig.find(account.address) ?? account };
 }

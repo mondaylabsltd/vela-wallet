@@ -74,8 +74,7 @@
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { multisigName } from '$lib/multisig/core/display';
+	import { shownIdentity } from '$lib/multisig/core/shown';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
@@ -193,27 +192,7 @@
 	 * rendered from the address, never from the name.
 	 */
 	const identity = $derived<WalletIdentity | null>(
-		!signedIn
-			? null
-			: multisig.active
-				? {
-						name: multisigName(multisig.active, data.multisigMessages),
-						rule: {
-							label: `${multisig.active.threshold}/${multisig.active.owners.length}`,
-							title: fillTemplate(data.multisigMessages.panel.title, {
-								m: multisig.active.threshold,
-								n: multisig.active.owners.length
-							}),
-							href: resolve('/[locale]/settings', { locale: data.locale })
-						},
-						address: multisig.active.address,
-						identiconSvg: identiconSvgForClient(multisig.active.address)
-					}
-				: {
-						name: view.accounts[view.active_index]?.account.name ?? '',
-						address: view.address,
-						identiconSvg: identiconSvgForClient(view.address)
-					}
+		signedIn ? shownIdentity(view, data.multisigMessages, data.locale) : null
 	);
 	$effect(() => multisig.boot());
 

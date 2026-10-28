@@ -243,7 +243,8 @@
         "importSome": "导入 {{total}} 个",
         "importing": "正在导入…",
         "imported": "已导入",
-        "already": "已添加"
+        "already": "已添加",
+        "notDeployed": "它在任何网络上都还没部署，文件里也没有它的创建配置。"
       },
       "settings": {
         "backupTitle": "把多签配置保存到 Ethereum",

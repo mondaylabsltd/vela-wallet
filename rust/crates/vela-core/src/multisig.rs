@@ -506,6 +506,69 @@ pub fn vela_account_genesis(keys: &[WalletKey]) -> Result<(String, Genesis), Cor
     ))
 }
 
+/// The genesis inside a creating transaction's calldata: every
+/// `createProxyWithNonce` / `createProxyWithNonceL2` / `createProxyWithCallback`
+/// call found in it — called directly, through a batch, or in a 4337
+/// `handleOps` init code — read with each factory this wallet knows, and the
+/// one that derives `safe` kept (a callback folded into the salt nonce, as
+/// the factory does). `None` when nothing in it makes `safe`.
+pub fn genesis_from_calldata(input: &str, safe: &str) -> Result<Option<Genesis>, CoreError> {
+    let input = unhex(input)?;
+    let safe = addr(safe)?.to_checksum(None);
+    let nonce = selector("createProxyWithNonce(address,bytes,uint256)");
+    let nonce_l2 = selector("createProxyWithNonceL2(address,bytes,uint256)");
+    let callback = selector("createProxyWithCallback(address,bytes,uint256,address)");
+    let word = |at: usize| input.get(at..at + 32);
+    for i in 0..input.len().saturating_sub(4 + 96) {
+        let sel = &input[i..i + 4];
+        let with_callback = sel == callback;
+        if sel != nonce && sel != nonce_l2 && !with_callback {
+            continue;
+        }
+        let args = i + 4;
+        let (Some(w0), Some(w1), Some(w2)) = (word(args), word(args + 32), word(args + 64)) else {
+            continue;
+        };
+        if w0[..12].iter().any(|b| *b != 0) {
+            continue;
+        }
+        let singleton = Address::from_slice(&w0[12..]);
+        let Ok(offset) = usize::try_from(U256::from_be_slice(w1)) else {
+            continue;
+        };
+        let Some(len_word) = word(args + offset) else {
+            continue;
+        };
+        let Ok(len) = usize::try_from(U256::from_be_slice(len_word)) else {
+            continue;
+        };
+        let start = args + offset + 32;
+        let Some(initializer) = input.get(start..start.saturating_add(len)) else {
+            continue;
+        };
+        let mut salt = U256::from_be_slice(w2);
+        if with_callback {
+            let Some(w3) = word(args + 96) else { continue };
+            let mut packed = word_u256(salt).to_vec();
+            packed.extend_from_slice(&w3[12..]);
+            salt = U256::from_be_bytes(keccak256(packed).0);
+        }
+        for (factory, _) in KNOWN_FACTORIES {
+            let g = Genesis {
+                factory: addr(factory)?.to_checksum(None),
+                singleton: singleton.to_checksum(None),
+                salt_nonce: hex_quantity(salt),
+                initializer: hex(initializer),
+                name: None,
+            };
+            if genesis_address(&g).ok().as_deref() == Some(safe.as_str()) {
+                return Ok(Some(g));
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// The genesis registry (v2): the same address on every chain.
 pub const GENESIS_REGISTRY: &str = "0x70b35C0FC8885019ff938542CD4E431725874802";
 
@@ -1517,6 +1580,10 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             )?;
             out(serde_json::json!({"address": address, "genesis": genesis}))
         }
+        "genesisFromCalldata" => out(json(&genesis_from_calldata(
+            &arg::<String>(&args, "input")?,
+            &arg::<String>(&args, "safe")?,
+        )?)),
         "recordCall" => out(json(&record_call(&arg(&args, "genesis")?)?)),
         "deployCall" => out(json(&deploy_call(&arg(&args, "genesis")?)?)),
         "safeTxHash" => out(serde_json::json!(safe_tx_hash(
@@ -2192,5 +2259,23 @@ mod tests {
         assert!(plain.data.starts_with(&hex(&selector(
             "record(address,bytes,address,bytes,uint256)"
         ))));
+    }
+
+    /// A creation buried in other calldata (here: a 4337 init code — factory
+    /// address, then the call — inside an outer call) is found and read.
+    #[test]
+    fn a_genesis_is_read_out_of_creating_calldata() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let call = deploy_call(&ms.genesis).unwrap();
+        let mut outer = selector("handleOps((address)[],address)").to_vec();
+        outer.extend_from_slice(&[0u8; 37]);
+        outer.extend_from_slice(addr(&ms.genesis.factory).unwrap().as_slice());
+        outer.extend(unhex(&call.data).unwrap());
+        outer.extend_from_slice(&[0u8; 11]);
+        let found = genesis_from_calldata(&hex(&outer), &ms.address).unwrap();
+        assert_eq!(found, Some(ms.genesis.clone()));
+        // Another Safe's address finds nothing in it.
+        assert_eq!(genesis_from_calldata(&hex(&outer), B).unwrap(), None);
+        assert_eq!(genesis_from_calldata("0x1234", &ms.address).unwrap(), None);
     }
 }

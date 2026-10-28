@@ -63,9 +63,9 @@
 	let exported = $state<ExportedSafe[] | null>(null);
 	let picked = $state<string[]>([]);
 	let fileFailure = $state<string | null>(null);
-	let results = $state<Record<string, 'busy' | 'ok' | 'notFound' | 'unavailable' | 'unsupported'>>(
-		{}
-	);
+	let results = $state<
+		Record<string, 'busy' | 'ok' | 'notFound' | 'unavailable' | 'unsupported' | 'notDeployed'>
+	>({});
 	const importing = $derived(Object.values(results).some((r) => r === 'busy'));
 	const finished = $derived(
 		exported !== null &&
@@ -145,7 +145,9 @@
 							{:else if result === 'ok'}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.import.imported}
 							{:else if result}
-								<span class="error">{m.add[result]}</span>
+								<span class="error"
+									>{result === 'notDeployed' ? m.import.notDeployed : m.add[result]}</span
+								>
 							{/if}
 						</span>
 					</label>

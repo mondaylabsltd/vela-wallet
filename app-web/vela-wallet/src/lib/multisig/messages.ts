@@ -163,6 +163,7 @@ export interface MultisigMessages {
 		importing: string;
 		imported: string;
 		already: string;
+		notDeployed: string;
 	};
 	settings: {
 		backupTitle: string;
@@ -345,7 +346,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		importSome: '',
 		importing: '',
 		imported: '',
-		already: ''
+		already: '',
+		notDeployed: ''
 	},
 	settings: {
 		backupTitle: '',

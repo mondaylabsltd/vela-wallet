@@ -9,6 +9,7 @@
  * — local names win over the network — comes from the session store.
  */
 
+import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 import { loadCore } from '$lib/core/client';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
@@ -38,12 +39,14 @@ class Feed {
 		if (this.#booted) return this.#booted;
 		this.#booted = (async () => {
 			await loadCore();
-			ensureActivityFeed(() =>
-				session.view.accounts.map((row) => ({
+			// Every account here names itself on a row, multisigs among them.
+			ensureActivityFeed(() => [
+				...session.view.accounts.map((row) => ({
 					address: row.account.address,
 					name: row.account.name
-				}))
-			);
+				})),
+				...multisigAccountsForExt().accounts.map((a) => ({ address: a.address, name: a.name }))
+			]);
 			subscribeActivityFeed((view) => {
 				// A transfer the scan just found moved the balances too: the hero
 				// refetches past the token cache (issue 188). The core celebrates only

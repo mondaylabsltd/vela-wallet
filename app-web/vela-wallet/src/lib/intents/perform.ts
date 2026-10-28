@@ -41,6 +41,7 @@ import * as networks from './networks';
 import { addToken } from './tokens';
 import { transfers } from './transfers.svelte';
 import type { World } from './world';
+import { multisig } from '$lib/multisig/core/store.svelte';
 
 /**
  * What doing it came to: `null` (done — the change is for the caller to see),
@@ -60,6 +61,7 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 
 /** The locale the page is in now. */
 function currentLocale(): Locale {
+
 	return localeOfPath(location.pathname) ?? 'en';
 }
 
@@ -163,9 +165,19 @@ export async function perform(
 			return show(action.screen);
 		case 'switch_account':
 		case 'remove_wallet': {
+			// A multisig is an account too: shown, or taken off this device.
+			const shared = multisig.find(action.address);
+			if (shared) {
+				if (action.type === 'switch_account') multisig.activate(shared.address);
+				else multisig.remove(shared.address);
+				return null;
+			}
 			const index = indexOf(world, action.address);
 			if (index === null) return 'no wallet on this device has that address';
-			if (action.type === 'switch_account') session.switchAccount(index);
+			if (action.type === 'switch_account') {
+				multisig.activate(null);
+				session.switchAccount(index);
+			}
 			else session.removeAccount(index);
 			return null;
 		}

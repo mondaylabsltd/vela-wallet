@@ -219,3 +219,7 @@ export const GENESIS_REGISTRY = '0x70b35C0FC8885019ff938542CD4E431725874802';
 
 /** The registry call that records `genesis` (with its name) on any chain; anyone may send it. */
 export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genesis });
+
+/** The genesis inside a creating transaction's calldata that derives `safe`, if any. */
+export const genesisFromCalldata = (input: string, safe: string) =>
+	call<Genesis | null>('genesisFromCalldata', { input, safe });

@@ -243,7 +243,8 @@
         "importSome": "{{total}}개 가져오기",
         "importing": "가져오는 중…",
         "imported": "가져옴",
-        "already": "이미 추가됨"
+        "already": "이미 추가됨",
+        "notDeployed": "어느 네트워크에도 배포되지 않았고, 파일에도 생성 설정이 없습니다."
       },
       "settings": {
         "backupTitle": "설정을 Ethereum에 저장",

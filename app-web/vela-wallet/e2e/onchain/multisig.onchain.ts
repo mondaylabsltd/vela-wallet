@@ -111,7 +111,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 
 	const multisig = await page.evaluate(() => localStorage.getItem('vela.activeMultisig'));
 	expect(multisig).toMatch(/^0x[0-9a-fA-F]{40}$/);
-	await expect(page.getByRole('link', { name: '2/3' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2 of 3 members approve' }).first()).toBeVisible();
 	// The name is the multisig's own, from its genesis.
 	await expect(page.getByText('Team fund', { exact: true }).first()).toBeVisible();
 	await shot(page, '07-home');
@@ -171,7 +171,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await pageA.getByRole('button', { name: 'Next' }).click();
 		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 		await pageA.getByRole('button', { name: 'Done' }).click();
-		await expect(pageA.getByRole('link', { name: '2/2' }).first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
 		await shot(pageA, 'x2-home-a');
 	});
 
@@ -207,7 +207,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 
 	await test.step('device A sees it done', async () => {
 		await pageA.reload();
-		await expect(pageA.getByRole('link', { name: '2/2' }).first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
 		// Nothing left waiting: the executed transaction is gone from the panel.
 		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
 		// Executed on device B, found on chain here, and in this device's activity.
@@ -250,7 +250,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
 	await setBalance(multisig, 2n * 10n ** 18n);
 	await page.reload();
-	await expect(page.getByRole('link', { name: '2/2' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
 	await shot(page, 'd3-home');
 	await proposeSend(page, '0.5', 'd4-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
@@ -262,10 +262,24 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await shot(page, 'd6-activity');
 
 	// Its settings are where a Vela account's are: Settings → Account.
-	await page.getByRole('link', { name: '2/2' }).first().click();
+	await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
 	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
 	await expect(page.getByText('Save its setup to Ethereum')).toBeVisible();
 	await shot(page, 'd7-settings');
+
+	// Every page wears the same account: Contacts too, and its switcher.
+	await page.getByRole('button', { name: 'Contacts' }).first().click();
+	await expect(page.getByRole('heading', { name: 'Contacts' }).first()).toBeVisible();
+	await expect(page.getByText('Desk fund').first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+	await page
+		.getByRole('button', { name: /Desk fund/ })
+		.first()
+		.click();
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByRole('button', { name: /Desk fund/ })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Add account' })).toBeVisible();
+	await shot(page, 'd8-contacts-switcher');
 	expect(thrown).toEqual([]);
 	await ctx.close();
 });
@@ -294,7 +308,7 @@ test('a network the genesis service does not read: propose, approve and execute 
 	// Funds on "Base" only: the second fork, which the service has no RPC for.
 	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
 	await page.reload();
-	await expect(page.getByRole('link', { name: '2/2' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
 
 	await proposeSend(page, '0.5', 'u1-propose', { row: /^ETH Base/, symbol: 'ETH' });
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
