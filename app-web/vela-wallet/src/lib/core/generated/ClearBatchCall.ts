@@ -55,4 +55,9 @@ amount: string | null,
  * Graded once: a decoded call's own risk (danger when it burns a token),
  * a plain send normal, a call nobody could read caution.
  */
-risk: ClearRisk, };
+risk: ClearRisk, 
+/**
+ * This call's target has no code on the chain (cs-13): `to_name` is
+ * then `None` and the call reads blind.
+ */
+no_code: boolean, };

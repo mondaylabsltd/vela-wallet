@@ -1870,6 +1870,8 @@ pub fn clear_kickoff(
             params_json: params_json.to_owned(),
             chain_id,
             locale,
+            from: None,
+            probe_code: false,
         }),
         "eth_sendTransaction" => {
             let call = first_call(method, params_json);
@@ -1879,6 +1881,8 @@ pub fn clear_kickoff(
                 value: call.and_then(|c| c.2),
                 chain_id,
                 locale,
+                from: None,
+                probe_code: false,
             })
         }
         "eth_signTypedData_v4"
@@ -1888,6 +1892,7 @@ pub fn clear_kickoff(
             typed_data_json: typed_data_of(method, params_json),
             chain_id,
             locale,
+            from: None,
         }),
         "personal_sign" | "eth_sign" => Some(ClearEvent::MessagePresented {
             method: if method == "eth_sign" {
@@ -2506,6 +2511,7 @@ mod tests {
             best_effort: true,
             to_own_token: false,
             terms_off_chain: false,
+            reading: ClearReading::default(),
         });
         clear.record_intent = None;
         assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);

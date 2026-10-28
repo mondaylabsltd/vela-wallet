@@ -75,6 +75,8 @@ fn plain_tx(to: Option<&str>, data: Option<&str>, value: Option<&str>) -> Event 
         value: value.map(str::to_owned),
         chain_id: 100,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     }
 }
 
@@ -94,6 +96,8 @@ fn resolve_tx(sut: &mut Sut, to: &str, data: &str, value: &str) -> Vec<Op> {
         value: Some(value.to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(
         ops,
@@ -600,6 +604,8 @@ fn plain_send_amount_uses_the_locale_marks() {
             value: Some(value.to_owned()),
             chain_id: 100,
             locale,
+            from: None,
+            probe_code: false,
         });
         let plain = sut.view().plain_send.expect("the plain send card");
         assert_eq!(plain.amount, amount, "{number_format:?}");
@@ -633,6 +639,8 @@ fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
         value: field("value"),
         chain_id: 100,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty());
     let view = sut.view();
@@ -655,6 +663,8 @@ fn the_plain_send_is_reset_by_every_later_request() {
             value: Some("0x0".to_owned()),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         },
         // A plain transfer that can no longer be read: blind, no stale card.
         plain_tx(Some(VITALIK), None, Some("1000")),
@@ -662,6 +672,7 @@ fn the_plain_send_is_reset_by_every_later_request() {
             typed_data_json: r#"{"primaryType":"X","domain":{},"message":{}}"#.to_owned(),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
         },
         Event::MessagePresented {
             method: ClearSignMethod::PersonalSign,
@@ -761,6 +772,8 @@ fn create2_deploy_renders_calm_with_predicted_address() {
         value: None,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty(), "deploy detection is pure");
     let result = sut.view().result.expect("deploy result");
@@ -789,6 +802,8 @@ fn raw_create_renders_calm_without_prediction() {
         value: None,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty());
     let result = sut.view().result.expect("deploy result");
@@ -1260,6 +1275,8 @@ fn erc165_timeout_falls_back_and_late_answers_still_cache() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -1503,8 +1520,8 @@ fn a_symbol_arriving_after_the_decimals_is_still_on_the_sheet() {
     let amount = &result.fields[0];
     assert!(!amount.unverified);
     assert_eq!(
-        amount.value, "500 USDC.e",
-        "the chain answered what this token is called and the sheet says it"
+        amount.value, "500 USDC.e?",
+        "the chain answered what this token is called and the sheet says it — as its word (cs-1)"
     );
     sut.resolve(Res::TimedOut { token: warm_token });
 }
@@ -1529,6 +1546,8 @@ fn decimals_timeout_shows_safe_fallback_and_late_answer_caches() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -1642,14 +1661,17 @@ fn zero_resolved_fields_falls_through_to_blind() {
 #[test]
 fn partial_decode_floors_risk_at_caution() {
     let mut sut = Sut::new();
-    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
-    resolve_tx(&mut sut, USDC, &transfer, "0x0");
+    // Not a token-standard method: those Vela decodes itself (cs-3).
+    let sig = "lodge(address _to,uint256 _value)";
+    let selector = compute_selector(sig).expect("selector");
+    let call = format!("{selector}{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    resolve_tx(&mut sut, USDC, &call, "0x0");
     let descriptor = json!({
         "context": { "contract": {} },
-        "display": { "formats": { "transfer(address _to, uint256 _value)": {
+        "display": { "formats": { "lodge(address _to, uint256 _value)": {
             "intent": "Send",
             "fields": [
-                { "path": "_value", "label": "Amount", "format": "tokenAmount", "visible": "always" },
+                { "path": "_value", "label": "Amount", "format": "tokenAmount", "visible": "always", "params": { "tokenPath": "@.to" } },
                 { "path": "_to", "label": "To", "format": "addressName", "visible": "always" },
                 { "path": "nonexistent1", "label": "Field 3", "format": "raw", "visible": "always" },
                 { "path": "nonexistent2", "label": "Field 4", "format": "raw", "visible": "always" },
@@ -1825,7 +1847,10 @@ fn best_effort_decode_never_blind_signs_silently() {
     // no intent, and the row reads "Contract interaction".
     assert_eq!(view.record_intent, None);
     let result = view.result.expect("best-effort result");
-    assert_eq!(result.intent, "Mint tokens", "humanized function name");
+    // cs-7: the database's name is quoted, never the headline.
+    assert_eq!(result.intent, "Contract call");
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentContractCall));
+    assert_eq!(result.reading.selector_name.as_deref(), Some(sig));
     assert!(result.best_effort);
     assert_eq!(result.provenance, ClearProvenance::SelectorDb);
     assert!(!result.verified);
@@ -1915,6 +1940,7 @@ fn eip712_permit_resolves_from_the_built_in_erc2612_descriptor() {
         typed_data_json: permit_typed_data(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert_eq!(ops, vec![Op::Now]);
     let ops = sut.resolve(Res::Clock { now_ms: NOW });
@@ -2004,6 +2030,7 @@ fn eip712_contract_entry_is_keyed_by_typehash_and_named() {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     sut.resolve(Res::Clock { now_ms: NOW });
     let ops = sut.resolve(Res::DescriptorFetched {
@@ -2106,6 +2133,7 @@ fn a_permit2_allowance_is_described_by_the_app_itself() {
         typed_data_json: permit2_single_typed_data(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert_eq!(ops, vec![Op::Now]);
     let ops = sut.resolve(Res::Clock { now_ms: NOW });
@@ -2204,6 +2232,7 @@ fn resolve_dai_style_permit(sut: &mut Sut) {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     sut.resolve(Res::Clock { now_ms: NOW });
     let ops = sut.resolve(Res::DescriptorFetched {
@@ -2273,6 +2302,7 @@ fn eip712_without_verifying_contract_is_blind() {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert!(ops.is_empty());
     assert!(sut.view().resolved);
@@ -2286,6 +2316,7 @@ fn eip712_unparseable_json_is_blind() {
         typed_data_json: "{not json".to_owned(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert!(ops.is_empty());
     assert!(sut.view().resolved);
@@ -2312,6 +2343,8 @@ fn stale_resolution_result_is_dropped() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -2409,6 +2442,7 @@ fn start_typed(sut: &mut Sut, raw: &str) -> Vec<Op> {
         typed_data_json: raw.to_owned(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     })
 }
 
@@ -2689,6 +2723,8 @@ fn create2_deployment_resolves_calmly_on_the_clear_surface() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty(), "deployment detection needs no network");
     let view = sut.view();
@@ -2858,6 +2894,8 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(
         ops.is_empty(),
@@ -2952,6 +2990,8 @@ fn the_registry_backup_names_the_network_it_goes_to() {
             value: Some("0x0".to_owned()),
             chain_id,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         sut.view()
             .result
@@ -3019,6 +3059,7 @@ fn a_struct_in_a_best_effort_decode_is_summarised_not_object_object() {
             break;
         };
         match op {
+            Op::RpcGetCode { .. } => unreachable!("not asked here"),
             Op::HttpGet { path } => sut.resolve(Res::DescriptorFetched { path, json: None }),
             Op::SelectorDbLookup { .. } => {
                 sut.resolve(Res::SelectorCandidates {
@@ -3079,6 +3120,8 @@ fn resolve_batch(calls: serde_json::Value, chain_id: u32) -> Event {
         params_json: batch_params(calls, chain_id),
         chain_id,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     }
 }
 
@@ -3087,6 +3130,13 @@ fn resolve_batch(calls: serde_json::Value, chain_id: u32) -> Event {
 fn answer_knowing_nothing(op: &Op) -> Res {
     match op {
         Op::Now => Res::Clock { now_ms: NOW },
+        Op::RpcGetCode { chain_id, address } => Res::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id: *chain_id,
+            to: address.clone(),
+            result: None,
+            rpc_error: false,
+        },
         Op::HttpGet { path } => Res::DescriptorFetched {
             path: path.clone(),
             json: None,
@@ -3354,6 +3404,8 @@ fn a_one_call_batch_reads_exactly_as_the_lone_transaction() {
             value: value.map(str::to_owned),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         drain(&mut lone);
 

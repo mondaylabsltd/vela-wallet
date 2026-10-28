@@ -114,6 +114,13 @@ fn answer(op: &Op) -> Res {
             path: path.clone(),
             json: None,
         },
+        Op::RpcGetCode { chain_id, address } => Res::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id: *chain_id,
+            to: address.clone(),
+            result: Some("0x60806040".to_owned()),
+            rpc_error: false,
+        },
         Op::RpcEthCall {
             chain_id,
             to,
@@ -174,17 +181,22 @@ fn read(name: &str) -> ClearSigningView {
                 value: text("value"),
                 chain_id,
                 locale: locale(),
+                from: None,
+                probe_code: false,
             }
         }
         "wallet_sendCalls" => Event::ResolveBatch {
             params_json: params.to_string(),
             chain_id,
             locale: locale(),
+            from: None,
+            probe_code: false,
         },
         method if method.starts_with("eth_signTypedData") => Event::ResolveTypedData {
             typed_data_json: params[1].as_str().expect("typed data").to_owned(),
             chain_id,
             locale: locale(),
+            from: None,
         },
         other => panic!("no reader for {other}"),
     };
@@ -454,7 +466,7 @@ fn sky_convert_reads_as_a_swap_through_sparks_psm() {
         "Spender: Spark PSM",
         "2 · Swap",
         "You pay: 0.034929 USDC",
-        "You receive (min): 0.034929 USDS",
+        "You receive (min): 0.034929 USDS?",
         "Recipient: 0x88cca0...266894",
         "Interacting with: Spark PSM",
     ] {
@@ -497,6 +509,8 @@ fn tx(to: &str, data: &str, value: &str, chain_id: u32) -> ClearSigningView {
         value: Some(value.to_owned()),
         chain_id,
         locale: locale(),
+        from: None,
+        probe_code: false,
     });
     drain(&mut sut);
     sut.view()
@@ -558,6 +572,8 @@ fn best_effort_numbers_read_by_their_names() {
         value: Some("0x0".to_owned()),
         chain_id: 56,
         locale: locale(),
+        from: None,
+        probe_code: false,
     });
     for _ in 0..50 {
         let Some(op) = sut.outstanding().first().cloned() else {
@@ -642,6 +658,7 @@ fn a_permit2_batch_names_every_token() {
         typed_data_json: typed.to_string(),
         chain_id: 56,
         locale: locale(),
+        from: None,
     });
     drain(&mut sut);
     let lines = readable(&sut.view());

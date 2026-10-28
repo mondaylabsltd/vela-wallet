@@ -5,4 +5,4 @@ import type { ClearProbe } from "./ClearProbe";
  * What the shell performs on behalf of a resolution run. Judgment never
  * crosses this boundary — the shell fetches/calls/waits and reports.
  */
-export type ClearOperation = { "type": "http_get", path: string, } | { "type": "rpc_eth_call", chain_id: number, to: string, data: string, probe: ClearProbe, } | { "type": "selector_db_lookup", selector: string, } | { "type": "timer", ms: number, token: number, } | { "type": "now" };
+export type ClearOperation = { "type": "http_get", path: string, } | { "type": "rpc_eth_call", chain_id: number, to: string, data: string, probe: ClearProbe, } | { "type": "selector_db_lookup", selector: string, } | { "type": "timer", ms: number, token: number, } | { "type": "now" } | { "type": "rpc_get_code", chain_id: number, address: string, };

@@ -82,4 +82,15 @@ native_value: ClearNativeValue | null,
  * `None` on every surface but [`ClearSurface::ClearSign`] and
  * [`ClearSurface::Batch`], and when the reading named nothing.
  */
-record_reading: DappReading | null, };
+record_reading: DappReading | null, 
+/**
+ * The target has no code on this chain (cs-13): nothing named it and no
+ * descriptor read it, and the sheet warns "No contract at this address
+ * on <chain>". Only when the shell asked (`probe_code`).
+ */
+no_code: boolean, 
+/**
+ * Nobody could read this request: the confirm is the red "Sign anyway"
+ * (cs-8). True on the blind surfaces.
+ */
+sign_anyway: boolean, };

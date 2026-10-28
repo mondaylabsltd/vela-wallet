@@ -257,6 +257,9 @@ const ANY_CHAIN: &[u32] = &[];
 const COW_CHAINS: &[u32] = &[1, 10, 56, 100, 137, 8453, 42161, 43114];
 /// PancakeSwap's Permit2, per its developer docs (Permit2 → addresses).
 const PANCAKE_PERMIT2_CHAINS: &[u32] = &[1, 56, 8453, 42161];
+/// OP Stack chains (OP Mainnet, Base, Unichain, World Chain), where WETH is
+/// the `0x4200…0006` predeploy.
+const OP_STACK_CHAINS: &[u32] = &[10, 8453, 130, 480];
 
 /// A contract the wallet names by itself (`local-descriptors.ts
 /// KNOWN_CONTRACTS`, then spec 096). Chain-scoped since 096: an address is a
@@ -375,15 +378,18 @@ const KNOWN_CONTRACTS: &[KnownContract] = &[
         "OpenSea",
         true,
     ),
+    // WETH9 is Ethereum's: the same address elsewhere is somebody else's, or
+    // nobody's (cs-13).
     known(
-        ANY_CHAIN,
+        &[1],
         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
         "Wrapped Ether",
         "WETH",
         false,
     ),
+    // The OP Stack predeploy, on the OP Stack chains this wallet signs for.
     known(
-        ANY_CHAIN,
+        OP_STACK_CHAINS,
         "0x4200000000000000000000000000000000000006",
         "Wrapped Ether",
         "WETH",
@@ -543,6 +549,11 @@ pub enum ClearOperation {
     Timer { ms: u32, token: u32 },
     /// Read the clock (expiry judgment only — the core owns no time).
     Now,
+    /// `eth_getCode(address, 'latest')` via the RPC pool (cs-13). Answer
+    /// [`ClearShellResult::RpcAnswer`] with `probe: code`, `to: address`, the
+    /// raw code in `result` (`None` when unreachable). Asked only when the
+    /// request said `probe_code`.
+    RpcGetCode { chain_id: u32, address: String },
 }
 
 /// Which question an `RpcEthCall` asked. Echoed verbatim in the answer.
@@ -556,6 +567,8 @@ pub enum ClearProbe {
     /// `symbol()`. Additive on purpose: every shell answers `RpcEthCall` by
     /// echoing the probe back, so none of them needed a line to serve this.
     Symbol,
+    /// The answer to [`ClearOperation::RpcGetCode`].
+    Code,
 }
 
 /// What the shell observed. Raw on purpose: revert-vs-unreachable and
@@ -759,6 +772,79 @@ impl ClearProvenance {
     }
 }
 
+/// Who put one line on the sheet — what is CERTAIN and what is INTERPRETED
+/// (clear-signing audit, cs-14). [`ClearProvenance`] grades a whole reading
+/// for the older shells; this names the source of every line, so a sheet can
+/// say "read by Vela" beside one row and "a description says" beside the next.
+///
+/// A descriptor — built in or fetched — is an interpretation: it decides which
+/// parameter is "the amount" and what the call is called. It can be wrong, and
+/// a fetched one can be anybody's. Only [`Self::Vela`] is a reading of the
+/// bytes themselves.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearLineSource"))]
+pub enum ClearLineSource {
+    /// Decoded by Vela from the request's own bytes — an ERC-20/721/1155
+    /// method, an ERC-2612 permit, a Permit2 message, the coin it sends, the
+    /// target, the chain — or read from the chain.
+    #[default]
+    Vela,
+    /// A descriptor compiled into this build (or Vela's own list of known
+    /// contracts): Vela's interpretation, not a fact about the bytes.
+    BuiltIn,
+    /// A descriptor the descriptor service handed over, unauthenticated.
+    Fetched,
+    /// A function name from the public 4-byte database — anyone can register
+    /// one.
+    SelectorDb,
+    /// Matched by its shape alone (a generic ERC-4626 vault method on any
+    /// contract): nobody described THIS contract.
+    Shape,
+}
+
+/// How a reading stands, line by line (cs-1…cs-19): the facts a sheet needs
+/// to keep what is certain apart from what is interpreted. Graded once, when
+/// the reading concludes; builders leave it default.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearReading"))]
+pub struct ClearReading {
+    /// Who wrote the intent and the labels.
+    pub source: ClearLineSource,
+    /// The descriptor's own `metadata.owner`, for a descriptor reading.
+    pub descriptor_owner: Option<String>,
+    /// The path a fetched descriptor came from — the shell puts its own base
+    /// URL's host in front of it when it says where.
+    pub descriptor_path: Option<String>,
+    /// Who named the contract in [`ClearSignResult::contract_name`]; `None`
+    /// when nobody did.
+    pub contract_named_by: Option<ClearLineSource>,
+    /// Words a description put on this request that Vela's own decode
+    /// contradicts — "Claim" over an `approve`, "Network fee paid to" over
+    /// an address. Each is drawn as a danger line: "A description calls this
+    /// '…'". The certain reading is what the sheet shows.
+    pub contradictions: Vec<String>,
+    /// The function name the public 4-byte database gave this selector. The
+    /// intent then stays "Contract call": a name anyone can register is no
+    /// headline and no button.
+    pub selector_name: Option<String>,
+    /// An output or recipient of this call is an address that is not the
+    /// signing account (a swap paying a stranger).
+    pub goes_elsewhere: bool,
+    /// A minimum output of dust (one base unit or none): the call accepts
+    /// almost nothing back.
+    pub dust_minimum: bool,
+    /// The call grants an allowance (approve, increaseAllowance, permit):
+    /// its amount is a ceiling somebody else may spend, never an amount
+    /// that leaves now.
+    pub allowance: bool,
+    /// The allowance ADDS to whatever is already allowed (increaseAllowance).
+    pub allowance_adds: bool,
+    /// What a shape-only match looks like ("Deposit"): the sheet says "looks
+    /// like a vault deposit — shape only". `Some` only for [`ClearLineSource::Shape`].
+    pub shape_intent: Option<String>,
+}
+
 /// One resolved display field (`ClearSignField` in TS; optional booleans
 /// became plain flags). `value` keywords ("Unlimited") are descriptor-borne
 /// vocabulary the shell localizes exactly as it localizes `intent` — through
@@ -797,6 +883,23 @@ pub struct ClearSignField {
     /// field that is not an amount.
     #[serde(default)]
     pub bound: Option<ClearAmountBound>,
+    /// Who wrote this line (cs-14). The value of an address or an amount is
+    /// always the bytes'; the label, and which parameter it is, are the
+    /// source's. Graded when the reading concludes.
+    #[serde(default)]
+    pub source: ClearLineSource,
+    /// The address on this line is the signing account.
+    #[serde(default)]
+    pub this_account: bool,
+    /// The token's symbol is the token contract's own answer, not Vela's
+    /// registry: any contract can call itself "USDC" (cs-1). The value then
+    /// reads "250 USDC?", nothing is priced, and the token's address travels
+    /// in `token_address`.
+    #[serde(default)]
+    pub token_named_by_contract: bool,
+    /// The amount is dust — one base unit or none.
+    #[serde(default)]
+    pub dust: bool,
 }
 
 /// A word a descriptor puts on the sheet — an intent, a field label, the
@@ -849,6 +952,8 @@ pub enum ClearTerm {
     IntentWrap,
     IntentWrapEth,
     LabelAddress,
+    /// increaseAllowance's amount: what it adds to an existing allowance.
+    LabelAddsToAllowance,
     LabelAmount,
     LabelAmountToSpend,
     LabelApproved,
@@ -951,6 +1056,7 @@ impl ClearTerm {
         ("wrap", Self::IntentWrap),
         ("wrap eth", Self::IntentWrapEth),
         ("address", Self::LabelAddress),
+        ("adds to allowance", Self::LabelAddsToAllowance),
         ("amount", Self::LabelAmount),
         ("amount to spend", Self::LabelAmountToSpend),
         ("approved", Self::LabelApproved),
@@ -1094,6 +1200,11 @@ pub struct ClearSignResult {
     /// sheet fetches them.
     #[serde(default)]
     pub terms_off_chain: bool,
+    /// Where every part of this reading came from, and what the certain
+    /// decode says against it (cs-1…cs-19). Graded when the reading
+    /// concludes ([`finalize`]); builders write the default.
+    #[serde(default)]
+    pub reading: ClearReading,
 }
 
 /// Is any `recipient` field of this result the contract being called?
@@ -1315,6 +1426,10 @@ pub struct ClearBatchCall {
     /// Graded once: a decoded call's own risk (danger when it burns a token),
     /// a plain send normal, a call nobody could read caution.
     pub risk: ClearRisk,
+    /// This call's target has no code on the chain (cs-13): `to_name` is
+    /// then `None` and the call reads blind.
+    #[serde(default)]
+    pub no_code: bool,
 }
 
 /// An EIP-5792 batch, every call of it (089 S1). `Some` exactly when
@@ -1411,6 +1526,16 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// The signing account, so a line can say "this account" and a swap
+        /// paying a stranger can say so (cs-2). `None` from a shell that does
+        /// not say.
+        #[serde(default)]
+        from: Option<String>,
+        /// Ask the chain whether the target has code ([`ClearOperation::RpcGetCode`])
+        /// before any name or descriptor is applied to it (cs-13). Off for a
+        /// shell that does not answer that operation.
+        #[serde(default)]
+        probe_code: bool,
     },
     /// `wallet_sendCalls` (EIP-5792) needs resolution — EVERY call of it
     /// (089 S1). `params_json` is the request's params, verbatim and
@@ -1424,6 +1549,12 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// As [`Event::ResolveTransaction`]'s.
+        #[serde(default)]
+        from: Option<String>,
+        /// As [`Event::ResolveTransaction`]'s, for every call.
+        #[serde(default)]
+        probe_code: bool,
     },
     /// `eth_signTypedData*`; the raw JSON is untrusted (`JSON.parse` failures
     /// resolve blind, `SigningSheet.tsx:288-297`).
@@ -1432,6 +1563,9 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// As [`Event::ResolveTransaction`]'s.
+        #[serde(default)]
+        from: Option<String>,
     },
     /// `personal_sign` / `eth_sign` presented. Pure derivation.
     ///
@@ -1518,6 +1652,8 @@ struct DescriptorSource {
     /// to the contract on screen.
     specific: bool,
     provenance: ClearProvenance,
+    /// Who its lines are, on the sheet (cs-14).
+    line: ClearLineSource,
 }
 
 impl DescriptorSource {
@@ -1526,6 +1662,18 @@ impl DescriptorSource {
         Self {
             specific,
             provenance: ClearProvenance::BuiltIn,
+            line: ClearLineSource::BuiltIn,
+        }
+    }
+
+    /// A built-in reading of a STANDARD message — the ERC-2612 permit,
+    /// Permit2's own structs: Vela decodes those bytes itself, whatever
+    /// signs them, so its lines are certain.
+    const fn certain(specific: bool) -> Self {
+        Self {
+            specific,
+            provenance: ClearProvenance::BuiltIn,
+            line: ClearLineSource::Vela,
         }
     }
 
@@ -1534,6 +1682,7 @@ impl DescriptorSource {
         Self {
             specific: false,
             provenance: ClearProvenance::Standard,
+            line: ClearLineSource::Vela,
         }
     }
 
@@ -1547,9 +1696,18 @@ impl DescriptorSource {
         } else {
             ClearProvenance::Fetched
         };
+        // A file about a standard (the ERC-4626 shapes) matched by selector
+        // alone describes no contract: its reading is a shape (cs-15), and the
+        // sheet must not blame the service for a heuristic.
+        let line = match (provenance, specific) {
+            (ClearProvenance::PinnedMatch, _) => ClearLineSource::BuiltIn,
+            (_, true) => ClearLineSource::Fetched,
+            (_, false) => ClearLineSource::Shape,
+        };
         Self {
             specific,
             provenance,
+            line,
         }
     }
 }
@@ -1602,6 +1760,10 @@ enum TypedNext {
 #[allow(clippy::enum_variant_names)]
 enum Step {
     AwaitClock,
+    /// `eth_getCode` of the target (cs-13), bounded by the ERC-165 cap.
+    AwaitCode {
+        timer: u32,
+    },
     AwaitContractDescriptor,
     /// ERC-165 disambiguation of transferFrom/approve/setApprovalForAll.
     AwaitStandard {
@@ -1634,6 +1796,8 @@ struct Run {
     locale: ClearLocale,
     now_ms: f64,
     step: Step,
+    /// The target's code was asked for already (answered or timed out).
+    code_asked: bool,
 }
 
 /// What was last presented. The dispatch order (⑨) and the confirm semantics
@@ -1670,6 +1834,7 @@ struct CallOutcome {
     kind: ReqKind,
     result: Option<ClearSignResult>,
     plain_send: Option<ClearPlainSend>,
+    no_code: bool,
 }
 
 /// An EIP-5792 batch being read call by call (089 S1). The calls resolve in
@@ -1737,6 +1902,32 @@ pub struct Model {
     /// Discriminates timers: a stale 3s/4s timer from an earlier phase of
     /// the same run must not end the current wait.
     timer_seq: u32,
+    /// The signing account, lowercased, as the request said it.
+    from: Option<String>,
+    /// The request asked for the target's code to be checked.
+    probe_code: bool,
+    /// `${chain}:${addr}` → whether it has code. Definitive answers only.
+    code_cache: BTreeMap<String, bool>,
+    /// The current call's target has no code on its chain (cs-13): no name
+    /// and no descriptor was applied to it, and the sheet says so.
+    no_code: bool,
+    /// What descriptors claimed over the current call that the certain decode
+    /// then superseded (cs-3) — gathered as the ladder climbs, read when it
+    /// concludes.
+    claims: Claims,
+}
+
+/// A descriptor's words about a call Vela decodes itself.
+#[derive(Clone, Debug, Default)]
+struct Claims {
+    /// The descriptor's intent ("Claim" over an `approve`).
+    intent: Option<String>,
+    /// Its labels, by the parameter's position in the signature.
+    labels: Vec<(usize, String)>,
+    /// The contract name and owner it gave.
+    contract_name: Option<String>,
+    owner: Option<String>,
+    path: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1808,6 +1999,15 @@ pub struct ClearSigningView {
     /// [`ClearSurface::Batch`], and when the reading named nothing.
     #[serde(default)]
     pub record_reading: Option<super::dapp_activity::DappReading>,
+    /// The target has no code on this chain (cs-13): nothing named it and no
+    /// descriptor read it, and the sheet warns "No contract at this address
+    /// on <chain>". Only when the shell asked (`probe_code`).
+    #[serde(default)]
+    pub no_code: bool,
+    /// Nobody could read this request: the confirm is the red "Sign anyway"
+    /// (cs-8). True on the blind surfaces.
+    #[serde(default)]
+    pub sign_anyway: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1831,21 +2031,34 @@ impl App for ClearSigning {
                 value,
                 chain_id,
                 locale,
+                from,
+                probe_code,
             } => {
                 model.batch = None;
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = probe_code;
                 start_tx(model, to, data, value, chain_id, locale)
             }
             Event::ResolveBatch {
                 params_json,
                 chain_id,
                 locale,
-            } => start_batch(model, &params_json, chain_id, locale),
+                from,
+                probe_code,
+            } => {
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = probe_code;
+                start_batch(model, &params_json, chain_id, locale)
+            }
             Event::ResolveTypedData {
                 typed_data_json,
                 chain_id,
                 locale,
+                from,
             } => {
                 model.batch = None;
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = false;
                 start_typed(model, &typed_data_json, chain_id, locale)
             }
             Event::MessagePresented {
@@ -1863,6 +2076,10 @@ impl App for ClearSigning {
                 model.blind_typed = None;
                 model.tx_value = None;
                 model.value_shown = false;
+                model.no_code = false;
+                model.claims = Claims::default();
+    model.no_code = false;
+    model.claims = Claims::default();
                 model.kind = match method {
                     ClearSignMethod::PersonalSign => ReqKind::PersonalSign,
                     ClearSignMethod::EthSign => ReqKind::EthSign,
@@ -1890,6 +2107,10 @@ impl App for ClearSigning {
                 model.blind_typed = None;
                 model.tx_value = None;
                 model.value_shown = false;
+                model.no_code = false;
+                model.claims = Claims::default();
+    model.no_code = false;
+    model.claims = Claims::default();
                 model.kind = ReqKind::None;
                 render()
             }
@@ -1933,6 +2154,15 @@ impl App for ClearSigning {
             record_intent: record_intent_of(model, surface),
             native_value: native_value_of(model, surface),
             record_reading: record_reading_of(model, surface),
+            no_code: model.no_code
+                && matches!(
+                    surface,
+                    ClearSurface::BlindTransaction | ClearSurface::ClearSign
+                ),
+            sign_anyway: matches!(
+                surface,
+                ClearSurface::BlindTransaction | ClearSurface::BlindTypedData
+            ),
         }
     }
 }
@@ -2051,6 +2281,9 @@ fn project_result(mut r: ClearSignResult) -> ClearSignResult {
     // (parameter names, type words) and stays as decoded rather than
     // half-translated.
     r.intent_term = ClearTerm::of(&r.intent);
+    if r.reading.selector_name.is_some() {
+        r.intent_term = Some(ClearTerm::IntentContractCall);
+    }
     for field in &mut r.fields {
         field.label_term = (!field.detail)
             .then(|| ClearTerm::of(&field.label))
@@ -2104,10 +2337,17 @@ fn confirm_of(model: &Model) -> ClearConfirm {
     if let Some(result) = &model.result {
         return match result.sign_type {
             ClearSignType::Signature => ClearConfirm::Sign,
-            ClearSignType::Transaction => ClearConfirm::ConfirmIntent {
-                intent: result.intent.clone(),
-                intent_term: ClearTerm::of(&result.intent),
-            },
+            // cs-7: the button names only what Vela read from the bytes. A
+            // descriptor's or the selector database's word for the call is
+            // an interpretation — it sits on the sheet with its source, never
+            // on the control that signs.
+            ClearSignType::Transaction if result.reading.source == ClearLineSource::Vela => {
+                ClearConfirm::ConfirmIntent {
+                    intent: result.intent.clone(),
+                    intent_term: ClearTerm::of(&result.intent),
+                }
+            }
+            ClearSignType::Transaction => ClearConfirm::Confirm,
         };
     }
     match model.kind {
@@ -2210,6 +2450,7 @@ fn continue_batch(
             kind: model.kind,
             result: model.result.take(),
             plain_send: model.plain_send.take(),
+            no_code: std::mem::take(&mut model.no_code),
         });
         let next = batch.done.len();
         let Some(call) = batch.calls.get(next).cloned() else {
@@ -2283,7 +2524,7 @@ fn batch_call_view(
     // A contract the wallet knows on this chain, else a token the reading
     // named — USDC's own contract under "Interacting with" (097 N8), with
     // its short address when the registry did not name it.
-    let to_name = to.as_deref().and_then(|to| {
+    let to_name = to.as_deref().filter(|_| !outcome.no_code).and_then(|to| {
         known_contract(chain_id, to)
             .map(|known| known.name.to_owned())
             .or_else(|| token_name(model, chain_id, to).map(|(name, _)| name))
@@ -2302,6 +2543,7 @@ fn batch_call_view(
             .map(|wei| exact_native_amount(wei, locale)),
         value_wei,
         risk,
+        no_code: outcome.no_code,
     }
 }
 
@@ -2360,6 +2602,8 @@ fn start_tx(
     model.kind = ReqKind::TxCall;
     model.chain_id = chain_id;
     model.value_shown = false;
+    model.no_code = false;
+    model.claims = Claims::default();
     model.tx_value = plain_value_wei(value.as_deref())
         .filter(|wei| wei != "0")
         .map(|wei| ClearNativeValue {
@@ -2420,6 +2664,7 @@ fn start_tx(
         locale,
         now_ms: 0.0,
         step: Step::AwaitClock,
+        code_asked: false,
     });
     requests(model, vec![ClearOperation::Now])
 }
@@ -2440,6 +2685,8 @@ fn start_typed(
     model.chain_id = chain_id;
     model.tx_value = None;
     model.value_shown = false;
+    model.no_code = false;
+    model.claims = Claims::default();
 
     let Ok(typed) = serde_json::from_str::<Value>(typed_data_json) else {
         // Untrusted JSON that doesn't parse resolves blind, exactly as the
@@ -2468,6 +2715,7 @@ fn start_typed(
         locale,
         now_ms: 0.0,
         step: Step::AwaitClock,
+        code_asked: false,
     });
     requests(model, vec![ClearOperation::Now])
 }
@@ -2600,6 +2848,24 @@ fn absorb_cache_facts(model: &mut Model, result: &ClearShellResult) {
             }
         }
         ClearShellResult::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id,
+            to,
+            result,
+            rpc_error,
+        } => {
+            // Only a definitive answer is kept: hex code, or the empty "0x"
+            // (some nodes say "0x0"). An error or an unreachable node decides
+            // nothing — the names apply as they did before the check.
+            if let Some(code) = result.as_deref().filter(|_| !*rpc_error) {
+                let body = code.trim().strip_prefix("0x").unwrap_or("-");
+                if body.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    let has_code = !body.bytes().all(|b| b == b'0');
+                    model.code_cache.insert(std_key(*chain_id, to), has_code);
+                }
+            }
+        }
+        ClearShellResult::RpcAnswer {
             probe: ClearProbe::Decimals,
             chain_id,
             to,
@@ -2681,6 +2947,17 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
                 Req::Tx { .. } => tx_begin(model, run),
                 Req::Typed { .. } => typed_begin(model, run),
             }
+        }
+
+        (
+            Step::AwaitCode { .. },
+            ClearShellResult::RpcAnswer {
+                probe: ClearProbe::Code,
+                ..
+            },
+        ) => tx_begin(model, run),
+        (Step::AwaitCode { timer }, ClearShellResult::TimedOut { token }) if token == timer => {
+            tx_begin(model, run)
         }
 
         (Step::AwaitContractDescriptor, ClearShellResult::DescriptorFetched { .. }) => {
@@ -2853,7 +3130,7 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
 // eth_sendTransaction pipeline (resolveTransaction, clear-signing.ts:300-356)
 // ---------------------------------------------------------------------------
 
-fn tx_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
+fn tx_begin(model: &mut Model, mut run: Run) -> Command<ClearSigningEffect, Event> {
     // 0. Built-in descriptors for top protocols — richest, zero round-trips.
     let (to, data, chain_id) = match &run.req {
         Req::Tx {
@@ -2864,6 +3141,41 @@ fn tx_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
         } => (to.clone(), data.clone(), *chain_id),
         _ => return conclude(model, None),
     };
+    // cs-13: a name or a descriptor is about the code at an address, and the
+    // same 20 bytes on another chain can hold nothing at all (WETH's mainnet
+    // address on Gnosis read "Wrap ETH" and kept the coin). An address with
+    // no code is named by nobody and read by no descriptor: the call does
+    // nothing but send what it sends, and the sheet says so. Unknown (an RPC
+    // that did not answer in time) applies the names as before.
+    if model.probe_code {
+        match model.code_cache.get(&std_key(chain_id, &to)).copied() {
+            Some(false) => {
+                model.no_code = true;
+                return conclude(model, None);
+            }
+            None if !run.code_asked => {
+                run.code_asked = true;
+                model.timer_seq += 1;
+                let token = model.timer_seq;
+                run.step = Step::AwaitCode { timer: token };
+                model.run = Some(run);
+                return requests(
+                    model,
+                    vec![
+                        ClearOperation::RpcGetCode {
+                            chain_id,
+                            address: to,
+                        },
+                        ClearOperation::Timer {
+                            ms: ERC165_DETECT_TIMEOUT_MS,
+                            token,
+                        },
+                    ],
+                );
+            }
+            _ => {}
+        }
+    }
     // A CoW pre-signature is read whole from its own bytes (096 F5).
     if let Some(result) = build_cow_presign_result(&run) {
         return conclude(model, Some(result));
@@ -3293,6 +3605,19 @@ fn try_calldata(
     if abi::decode_calldata(&matched_sig, &data_bytes).is_err() {
         return tx_continue(model, run, next);
     }
+    // cs-3: a token-standard method is decoded by Vela, whatever a fetched
+    // descriptor says about it. The descriptor may only add words, and the
+    // words it would have put over the certain reading are kept as claims —
+    // an `approve(MAX)` it calls "Claim" is drawn as the approval, with a
+    // danger line quoting it.
+    let selector = selector_of(data);
+    if source.line == ClearLineSource::Fetched
+        && matches!(next, TxNext::AfterContract)
+        && TOKEN_STD_SELECTORS.contains(&selector.as_str())
+    {
+        model.claims = claims_of(&descriptor, &matched_sig, contract_descriptor_path(&run.req));
+        return tx_continue(model, run, TxNext::AfterContract);
+    }
 
     let ctx = calldata_context(&run.req, &matched_sig);
     let unknown = unknown_token_addrs(model, &run, &descriptor, &matched_sig, &ctx);
@@ -3471,7 +3796,7 @@ fn conclude(
     model: &mut Model,
     result: Option<ClearSignResult>,
 ) -> Command<ClearSigningEffect, Event> {
-    model.result = result;
+    model.result = result.map(|result| finalize(model, result));
     model.resolved = true;
     model.run = None;
     render()
@@ -3518,7 +3843,7 @@ fn finish_calldata(
         .cloned()
         .unwrap_or(Value::Null);
 
-    let fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
+    let mut fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
     let declared_visible = declared_visible_count(&field_defs);
     if fields.is_empty() {
         // If NOTHING decoded there is nothing trustworthy to show → blind
@@ -3527,7 +3852,7 @@ fn finish_calldata(
     }
     let partial = incomplete(&fields, declared_visible);
 
-    let intent = format
+    let mut intent = format
         .get("intent")
         .and_then(Value::as_str)
         .map(str::to_owned)
@@ -3538,33 +3863,75 @@ fn finish_calldata(
                 .unwrap_or(matched_sig)
                 .to_owned()
         });
+    let mut reading = ClearReading {
+        source: source.line,
+        ..ClearReading::default()
+    };
+    if source.line != ClearLineSource::Vela {
+        reading.contradictions = reserved_labels(&mut fields);
+    }
+    if source.line == ClearLineSource::Vela {
+        // setApprovalForAll(operator, false) takes the grant away.
+        if matched_sig.starts_with("setApprovalForAll(")
+            && resolve_path("approved", &ctx).is_some_and(|v| is_falsy(&v))
+        {
+            intent = "Revoke".to_owned();
+        }
+        reading.allowance_adds = matched_sig.starts_with("increaseAllowance(");
+        reading.contradictions =
+            contradicted_claims(&model.claims, &intent, matched_sig, &field_defs, &definitions);
+    }
+    if source.line == ClearLineSource::Shape {
+        reading.shape_intent = Some(intent.clone());
+    }
     let fields = infer_field_roles(fields, &intent);
     let risk = assess_risk(&intent, &fields, partial);
 
+    let mut contract_name = if source.specific {
+        metadata
+            .get("contractName")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                descriptor
+                    .get("context")
+                    .and_then(|c| c.get("$id"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+    } else {
+        None
+    };
+    let mut owner = if source.specific {
+        metadata
+            .get("owner")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    } else {
+        None
+    };
+    if contract_name.is_some() {
+        reading.contract_named_by = Some(source.line);
+    }
+    if source.line == ClearLineSource::Fetched {
+        reading.descriptor_path = Some(contract_descriptor_path(&run.req));
+    }
+    if matches!(source.line, ClearLineSource::Fetched | ClearLineSource::BuiltIn) {
+        reading.descriptor_owner = owner.clone();
+    }
+    // The name a superseded descriptor gave the contract stays — as ITS word.
+    if source.line == ClearLineSource::Vela && model.claims.contract_name.is_some() {
+        contract_name = model.claims.contract_name.clone();
+        owner = model.claims.owner.clone();
+        reading.contract_named_by = Some(ClearLineSource::Fetched);
+        reading.descriptor_owner = model.claims.owner.clone();
+        reading.descriptor_path = model.claims.path.clone();
+    }
+
     Some(ClearSignResult {
-        contract_name: if source.specific {
-            metadata
-                .get("contractName")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .or_else(|| {
-                    descriptor
-                        .get("context")
-                        .and_then(|c| c.get("$id"))
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                })
-        } else {
-            None
-        },
-        owner: if source.specific {
-            metadata
-                .get("owner")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        } else {
-            None
-        },
+        reading,
+        contract_name,
+        owner,
         risk,
         intent,
         fields,
@@ -3613,10 +3980,17 @@ fn finish_eip712(
         .cloned()
         .unwrap_or(Value::Null);
 
-    let fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
+    let mut fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
     let declared_visible = declared_visible_count(&field_defs);
     if fields.is_empty() {
         return None;
+    }
+    let mut reading = ClearReading {
+        source: source.line,
+        ..ClearReading::default()
+    };
+    if source.line != ClearLineSource::Vela {
+        reading.contradictions = reserved_labels(&mut fields);
     }
     let partial = incomplete(&fields, declared_visible);
 
@@ -3629,10 +4003,26 @@ fn finish_eip712(
         .and_then(Value::as_str)
         .map(str::to_owned)
         .unwrap_or_else(|| primary.to_owned());
+    if source.line == ClearLineSource::Shape {
+        reading.shape_intent = Some(intent.clone());
+    }
+    if source.specific {
+        reading.contract_named_by = Some(source.line);
+    }
+    if source.line == ClearLineSource::Fetched {
+        reading.descriptor_path = Some(contract_descriptor_path(&run.req));
+    }
+    if source.specific && matches!(source.line, ClearLineSource::Fetched | ClearLineSource::BuiltIn) {
+        reading.descriptor_owner = metadata
+            .get("owner")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+    }
     let fields = infer_field_roles(fields, &intent);
     let risk = assess_risk(&intent, &fields, partial);
 
     Some(ClearSignResult {
+        reading,
         contract_name: if source.specific {
             metadata
                 .get("contractName")
@@ -3709,6 +4099,271 @@ fn declared_visible_count(field_defs: &[Value]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// What is certain and what is claimed (clear-signing audit cs-1…cs-19)
+// ---------------------------------------------------------------------------
+
+/// The parameter names of a signature's top level, in order:
+/// `approve(address spender,uint256 amount)` → `["spender", "amount"]`. A
+/// parameter with no name yields its type word, which matches no path.
+fn sig_param_names(sig: &str) -> Vec<String> {
+    let (Some(open), Some(close)) = (sig.find('('), sig.rfind(')')) else {
+        return Vec::new();
+    };
+    if close <= open {
+        return Vec::new();
+    }
+    let mut names = Vec::new();
+    let mut depth = 0i32;
+    let mut current = String::new();
+    for c in sig[open + 1..close].chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                names.push(std::mem::take(&mut current));
+                continue;
+            }
+            _ => {}
+        }
+        current.push(c);
+    }
+    if !current.trim().is_empty() {
+        names.push(current);
+    }
+    names
+        .iter()
+        .map(|param| param.trim().rsplit(' ').next().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// The words a fetched descriptor would have put over a call Vela decodes
+/// itself: its intent, its visible labels by parameter position, the name it
+/// gives the contract.
+fn claims_of(descriptor: &Value, matched_sig: &str, path: String) -> Claims {
+    let format = descriptor
+        .get("display")
+        .and_then(|d| d.get("formats"))
+        .and_then(|f| f.get(matched_sig));
+    let definitions = descriptor
+        .get("display")
+        .and_then(|d| d.get("definitions"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let names = sig_param_names(matched_sig);
+    let labels = format
+        .and_then(|f| f.get("fields"))
+        .and_then(Value::as_array)
+        .map(|defs| {
+            defs.iter()
+                .filter_map(|fd| {
+                    let def = merged_def(fd, &definitions);
+                    if def.get("visible").and_then(Value::as_str) == Some("never") {
+                        return None;
+                    }
+                    let label = def.get("label").and_then(Value::as_str)?.trim().to_owned();
+                    let path = def.get("path").and_then(Value::as_str)?;
+                    let at = names.iter().position(|name| name == path)?;
+                    (!label.is_empty()).then_some((at, label))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let metadata = descriptor.get("metadata");
+    let text = |key: &str| {
+        metadata
+            .and_then(|m| m.get(key))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned)
+    };
+    Claims {
+        intent: format
+            .and_then(|f| f.get("intent"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned),
+        labels,
+        contract_name: text("contractName"),
+        owner: text("owner"),
+        path: Some(path),
+    }
+}
+
+/// The words a description may use for what Vela's own reading calls `ours`
+/// — an intent or a label of a token-standard method. `None` for a word of
+/// ours this list does not cover: then only the same word agrees.
+fn agreeing_words(ours: &str) -> Option<&'static [&'static str]> {
+    Some(match ours.trim().to_lowercase().as_str() {
+        "send" | "transfer" => &["send", "transfer", "pay", "move"],
+        "approve" => &["approv", "allow", "permit", "authori", "spend"],
+        "revoke" => &["revoke", "decrease", "reduce", "remove", "lower"],
+        "transfer nft" | "transfer nfts" => &["transfer", "send", "move"],
+        "approve nft" | "approve all nfts" => &["approv", "allow", "operator", "authori"],
+        "spender" => &[
+            "spender", "operator", "approv", "allowance", "delegate", "address", "contract",
+        ],
+        "operator" => &["operator", "spender", "approv", "delegate", "address"],
+        "to" => &[
+            "to",
+            "recipient",
+            "receiver",
+            "destination",
+            "beneficiary",
+            "address",
+            "payee",
+        ],
+        "from" => &["from", "sender", "owner", "source", "address"],
+        "amount" | "adds to allowance" => &[
+            "amount", "value", "quantity", "allowance", "cap", "limit", "token", "wad", "sum",
+            "unit", "spend", "max", "send", "transfer", "add", "increase", "decrease",
+        ],
+        "approved" => &["approv", "allow", "status", "enable", "grant"],
+        "token id" | "token ids" => &["token", "id", "nft", "item"],
+        "quantity" | "quantities" => &["quantit", "amount", "value", "count", "number"],
+        _ => return None,
+    })
+}
+
+fn agrees(ours: &str, claimed: &str) -> bool {
+    let claimed = claimed.trim().to_lowercase();
+    match agreeing_words(ours) {
+        Some(words) => contains_any(&claimed, words),
+        None => claimed == ours.trim().to_lowercase(),
+    }
+}
+
+/// What a superseded descriptor said against Vela's own reading of the same
+/// call (cs-3): its intent when it names another action, and each label it
+/// put on a parameter that Vela's reading calls something else ("Reward
+/// from" over a spender).
+fn contradicted_claims(
+    claims: &Claims,
+    intent: &str,
+    matched_sig: &str,
+    field_defs: &[Value],
+    definitions: &Value,
+) -> Vec<String> {
+    let mut said = Vec::new();
+    if let Some(claimed) = &claims.intent {
+        if !agrees(intent, claimed) {
+            said.push(claimed.clone());
+        }
+    }
+    let names = sig_param_names(matched_sig);
+    for (at, claimed) in &claims.labels {
+        let ours = field_defs.iter().find_map(|fd| {
+            let def = merged_def(fd, definitions);
+            let path = def.get("path").and_then(Value::as_str)?;
+            if names.iter().position(|name| name == path) != Some(*at) {
+                return None;
+            }
+            def.get("label").and_then(Value::as_str).map(str::to_owned)
+        });
+        if let Some(ours) = ours {
+            if !agrees(&ours, claimed) && !said.contains(claimed) {
+                said.push(claimed.clone());
+            }
+        }
+    }
+    said
+}
+
+/// Words no description may put on a line, because they name what Vela
+/// itself shows — its network fee, the signing account, Vela.
+const RESERVED_LABEL_WORDS: [&str; 9] = [
+    "network fee",
+    "gas fee",
+    "gas",
+    "fee paid",
+    "signing account",
+    "this account",
+    "your account",
+    "your wallet",
+    "vela",
+];
+
+/// A description's lines that borrow the wallet's own words (cs-3: a token
+/// address labelled "Network fee paid to"): each such label is replaced by
+/// the plain word for what the line is, and returned, to be quoted in a
+/// danger line.
+fn reserved_labels(fields: &mut [ClearSignField]) -> Vec<String> {
+    let mut said = Vec::new();
+    for field in fields.iter_mut() {
+        let label = field.label.to_lowercase();
+        if !contains_any(&label, &RESERVED_LABEL_WORDS) {
+            continue;
+        }
+        said.push(field.label.clone());
+        field.label = match field.format.as_str() {
+            "addressName" => "Address",
+            "tokenAmount" | "amount" => "Amount",
+            _ => "Value",
+        }
+        .to_owned();
+    }
+    said
+}
+
+/// The finished reading, graded once whatever built it (cs-1…cs-19): who
+/// wrote each line, which address is the signing account, whether anything
+/// goes to an address that is not, a dust minimum, an allowance. The words a
+/// description used against the certain decode raise the risk to danger.
+fn finalize(model: &Model, mut result: ClearSignResult) -> ClearSignResult {
+    let source = result.reading.source;
+    let from = model.from.as_deref().filter(|f| is_hex_address_shape(f));
+    for field in &mut result.fields {
+        // The coin a call sends and a Token row are the bytes' and the
+        // registry's, whoever chose to show them.
+        field.source = if field.format == "token" || field.format == "amount" {
+            ClearLineSource::Vela
+        } else {
+            source
+        };
+        field.this_account = from.is_some_and(|f| {
+            field
+                .address
+                .as_deref()
+                .is_some_and(|a| a.eq_ignore_ascii_case(f))
+        });
+    }
+    let term = ClearTerm::of(&result.intent);
+    // Sending to somebody else is what a Send IS.
+    let sends = source == ClearLineSource::Vela
+        && matches!(
+            term,
+            Some(
+                ClearTerm::IntentSend
+                    | ClearTerm::IntentTransfer
+                    | ClearTerm::IntentTransferNft
+                    | ClearTerm::IntentTransferNfts
+            )
+        );
+    result.reading.goes_elsewhere = from.is_some()
+        && !sends
+        && result.fields.iter().any(|f| {
+            f.role == ClearFieldRole::Recipient && f.address.is_some() && !f.this_account
+        });
+    result.reading.dust_minimum = result.fields.iter().any(|f| {
+        f.role == ClearFieldRole::ReceiveAmount && f.bound == Some(ClearAmountBound::Min) && f.dust
+    });
+    let intent = result.intent.to_lowercase();
+    result.reading.allowance = matches!(
+        term,
+        Some(ClearTerm::IntentApprove | ClearTerm::IntentAuthorizeSpending)
+    ) || (result.sign_type == ClearSignType::Signature
+        && contains_any(&intent, &["permit", "authori"]));
+    if result.reading.goes_elsewhere || !result.reading.contradictions.is_empty() {
+        result.risk = ClearRisk::Danger;
+    } else if result.reading.dust_minimum && risk_rank(result.risk) < risk_rank(ClearRisk::Caution)
+    {
+        result.risk = ClearRisk::Caution;
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
 // Best-effort decode (resolveBySelector, clear-signing.ts:450-545)
 // ---------------------------------------------------------------------------
 
@@ -3722,13 +4377,17 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
         let Ok(tree) = abi::decode_calldata(sig, &data_bytes) else {
             continue;
         };
-        let fn_name = sig.split('(').next().unwrap_or(sig);
         let known = known_contract(run.req.chain_id(), &to);
+        // cs-7: a name from the public database is whatever its registrant
+        // typed — "claimAirdrop_e9x" over a sweep. It is quoted as such; the
+        // headline and the button stay "Contract call".
+        let mut fields = multicall_legs(&tree);
+        fields.extend(build_best_effort_fields(&tree, &run.locale));
         return Some(ClearSignResult {
-            intent: humanize_fn_name(fn_name),
+            intent: CONTRACT_CALL_INTENT.to_owned(),
             contract_name: known.map(|c| c.name.to_owned()),
             owner: known.map(|c| c.owner.to_owned()),
-            fields: build_best_effort_fields(&tree, &run.locale),
+            fields,
             // Decoded but unverified — never reads as safe.
             risk: ClearRisk::Caution,
             contract_address: Some(to),
@@ -3741,9 +4400,93 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: ClearReading {
+                source: ClearLineSource::SelectorDb,
+                selector_name: Some(sig.clone()),
+                contract_named_by: known.map(|_| ClearLineSource::BuiltIn),
+                ..ClearReading::default()
+            },
         });
     }
     None
+}
+
+/// The headline of a call only the public selector database could name.
+const CONTRACT_CALL_INTENT: &str = "Contract call";
+
+/// The calls a `multicall(bytes[])` makes (cs-19), one line each, where the
+/// inner call's shape is one Vela reads itself — a token-standard method,
+/// named with its parameters in base units (the inner target is this same
+/// contract, whose token, if any, nobody has vouched for). Any other inner
+/// call is named by its selector and size.
+fn multicall_legs(tree: &abi::AbiValue) -> Vec<ClearSignField> {
+    let Some(calls) = tree.children.iter().find(|c| c.kind == "bytes[]") else {
+        return Vec::new();
+    };
+    calls
+        .children
+        .iter()
+        .enumerate()
+        .map(|(at, call)| {
+            let hex = match ctx_from_abi(call) {
+                Ctx::Str(s) => s,
+                _ => String::new(),
+            };
+            ClearSignField {
+                label: format!("Call {}", at + 1),
+                value: inner_call_line(&hex),
+                format: "raw".to_owned(),
+                token_address: None,
+                warning: false,
+                unverified: false,
+                role: ClearFieldRole::Generic,
+                detail: false,
+                expired: false,
+                address: None,
+                usd_value: None,
+                label_term: None,
+                value_term: None,
+                bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
+            }
+        })
+        .collect()
+}
+
+/// One inner call of a multicall, as its line reads.
+fn inner_call_line(hex: &str) -> String {
+    let bytes = primitives::from_hex(hex).unwrap_or_default();
+    const SHAPES: [&str; 6] = [
+        "transfer(address to,uint256 amount)",
+        "transferFrom(address from,address to,uint256 amount)",
+        "approve(address spender,uint256 amount)",
+        "increaseAllowance(address spender,uint256 amount)",
+        "decreaseAllowance(address spender,uint256 amount)",
+        "setApprovalForAll(address operator,bool approved)",
+    ];
+    for shape in SHAPES {
+        if !abi::match_selector(shape, &bytes).unwrap_or(false) {
+            continue;
+        }
+        let Ok(decoded) = abi::decode_calldata(shape, &bytes) else {
+            continue;
+        };
+        let name = shape.split('(').next().unwrap_or(shape);
+        let args: Vec<String> = decoded
+            .children
+            .iter()
+            .map(|arg| match ctx_from_abi(arg) {
+                Ctx::Str(v) | Ctx::Num(v) => format!("{} {v}", arg.name),
+                other => format!("{} {}", arg.name, js_string(&other)),
+            })
+            .collect();
+        return format!("{name} · {}", args.join(" · "));
+    }
+    let selector = hex.get(..10).unwrap_or(hex);
+    format!("{selector} · {} bytes", bytes.len())
 }
 
 /// "swapExactTokensForTokens" → "Swap exact tokens for tokens".
@@ -3804,6 +4547,10 @@ fn build_best_effort_fields(tree: &abi::AbiValue, locale: &ClearLocale) -> Vec<C
                 label_term: None,
                 value_term: None,
                 bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
             }
         })
         .collect()
@@ -3933,6 +4680,10 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         };
     let address = call.wallet_address.to_lowercase();
     // The network the record is copied TO — a built-in chain's own name. A
@@ -3981,6 +4732,7 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
         to_own_token: false,
         intent_term: None,
         terms_off_chain: false,
+        reading: ClearReading::default(),
     })
 }
 
@@ -4022,6 +4774,10 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
                 label_term: None,
                 value_term: None,
                 bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
             }]
         })
         .unwrap_or_default();
@@ -4046,6 +4802,7 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
         to_own_token: false,
         intent_term: None,
         terms_off_chain: false,
+        reading: ClearReading::default(),
     }
 }
 
@@ -4396,6 +5153,10 @@ struct Formatted {
     /// a "Token" row follows it with this (spec 096 F6): the symbol, or the
     /// token's short address when nobody could name it.
     coin: Option<NamedCoin>,
+    /// [`ClearSignField::token_named_by_contract`].
+    named_by_contract: bool,
+    /// [`ClearSignField::dust`].
+    dust: bool,
 }
 
 /// The coin a worded amount is in ([`Formatted::coin`]).
@@ -4405,6 +5166,8 @@ struct NamedCoin {
     /// (so the row can still be read and copied in full).
     address: Option<String>,
     token_address: Option<String>,
+    /// The label is the token contract's own symbol (cs-1).
+    by_contract: bool,
 }
 
 impl Formatted {
@@ -4419,6 +5182,8 @@ impl Formatted {
             address: None,
             usd_value: None,
             coin: None,
+            named_by_contract: false,
+            dust: false,
         }
     }
 }
@@ -4505,6 +5270,10 @@ fn resolve_fields(
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: formatted.named_by_contract,
+            dust: formatted.dust,
         });
         // "Unlimited" and "All" name no coin: the token they are in is said
         // on the very next row, on every approval and every withdraw-all.
@@ -4517,6 +5286,7 @@ fn resolve_fields(
 
 /// The "Token" row under a worded amount (096 F6).
 fn token_row(coin: NamedCoin) -> ClearSignField {
+    let by_contract = coin.by_contract;
     ClearSignField {
         label: "Token".to_owned(),
         value: coin.label,
@@ -4532,6 +5302,10 @@ fn token_row(coin: NamedCoin) -> ClearSignField {
         label_term: None,
         value_term: None,
         bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: by_contract,
+        dust: false,
     }
 }
 
@@ -4650,10 +5424,20 @@ fn format_token_amount(
 
     // The registry of this chain first, then what the chain itself answered.
     // Only when both are silent is the token known by its address alone.
-    let known_symbol = token_addr
+    let named = token_addr
         .as_deref()
-        .and_then(|addr| token_symbol(model, chain_id, addr))
-        .map(|(symbol, _)| symbol);
+        .and_then(|addr| token_symbol(model, chain_id, addr));
+    // cs-1: a symbol only the token's own contract gives is that contract's
+    // word about itself — any contract can answer "USDC". It reads "USDC?",
+    // and nothing prices it.
+    let named_by_contract = named.as_ref().is_some_and(|(_, registry)| !registry);
+    let known_symbol = named.map(|(symbol, registry)| {
+        if registry {
+            symbol
+        } else {
+            format!("{symbol}?")
+        }
+    });
     // The coin a worded amount ("Unlimited", "All") is in — said on its own
     // row, since the word names none (096 F6). Only the registry's symbol
     // stands alone there (097 N8).
@@ -4665,6 +5449,7 @@ fn format_token_amount(
                     .as_ref()
                     .is_none_or(|(_, registry)| !registry)
                     .then(|| addr.clone()),
+                by_contract: name.as_ref().is_some_and(|(_, registry)| !registry),
                 label: name.map_or_else(|| short_address(addr), |(label, _)| label),
                 token_address: Some(addr.clone()),
             })
@@ -4673,6 +5458,7 @@ fn format_token_amount(
             label: native_symbol(chain_id).to_owned(),
             address: None,
             token_address: None,
+            by_contract: false,
         }),
         // No token reference at all: there is nothing to name.
         None => None,
@@ -4755,7 +5541,10 @@ fn format_token_amount(
         None if native => native_symbol(chain_id).to_owned(),
         None => "tokens".to_owned(),
     };
-    let usd_value = if verified && STABLE_SYMBOLS.contains(&symbol.as_str()) {
+    // The $1 peg is the registry's word about a token it lists, never a
+    // symbol's: a stranger's "USDC" is worth whatever it is worth.
+    let usd_value = if verified && !named_by_contract && STABLE_SYMBOLS.contains(&symbol.as_str())
+    {
         usd_magnitude(&amount, decimals)
     } else {
         None
@@ -4771,6 +5560,8 @@ fn format_token_amount(
         address: None,
         usd_value,
         coin: None,
+        named_by_contract,
+        dust: amount == "0" || amount == "1",
     })
 }
 
@@ -4820,6 +5611,7 @@ fn format_native_amount(run: &Run, raw: Option<&Ctx>) -> Option<Formatted> {
                 label: native_symbol(run.req.chain_id()).to_owned(),
                 address: None,
                 token_address: None,
+                by_contract: false,
             }),
             ..Formatted::plain(ALL_WORD.to_owned(), "amount")
         });
@@ -5772,7 +6564,7 @@ fn token_name(model: &Model, chain_id: u32, addr: &str) -> Option<(String, bool)
         (symbol, true)
     } else {
         (
-            format!("{symbol} ({})", short_address(&addr.to_lowercase())),
+            format!("{symbol}? ({})", short_address(&addr.to_lowercase())),
             false,
         )
     })
@@ -6535,6 +7327,10 @@ fn build_cow_presign_result(run: &Run) -> Option<ClearSignResult> {
         label_term: None,
         value_term: None,
         bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: false,
+        dust: false,
     };
     let mut fields = vec![field("Order", Formatted::plain(truncate_hex(&uid), "raw"))];
     if let Some(date) = format_date_field(run, Some(&Ctx::Num(valid_to.to_string()))) {
@@ -6563,6 +7359,7 @@ fn build_cow_presign_result(run: &Run) -> Option<ClearSignResult> {
         best_effort: false,
         to_own_token: false,
         terms_off_chain: signed,
+        reading: ClearReading::default(),
     })
 }
 
@@ -6576,6 +7373,10 @@ fn local_descriptor(chain_id: u32, addr: &str, data: &str) -> Option<Value> {
     if let Some(descriptor) = chain_scoped_descriptor(chain_id, addr, data) {
         return Some(descriptor);
     }
+    // Every row below is a contract of `KNOWN_CONTRACTS`, and describes it
+    // only where that row says it lives (cs-13): WETH's descriptor read a
+    // call to WETH's mainnet address on Gnosis as "Wrap ETH".
+    known_contract(chain_id, addr)?;
     Some(match addr {
         "0x7a250d5630b4cf539739df2c5dacb4c659f2488d" => {
             v2_router_descriptor("Uniswap V2 Router", "Uniswap")
@@ -6760,7 +7561,7 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
         };
         descriptor["metadata"]["contractName"] = json!(permit2.name);
         descriptor["metadata"]["owner"] = json!(permit2.owner);
-        return Some((descriptor, DescriptorSource::built_in(true)));
+        return Some((descriptor, DescriptorSource::certain(true)));
     }
     // A 1inch order, verified by 1inch's own router (097 N6).
     let oneinch = verifying_contract(typed)
@@ -6779,7 +7580,7 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
     // so the sheet names no contract and borrows no owner from a descriptor —
     // the token's symbol beside the amount comes from the chain.
     (encode_type == ERC2612_PERMIT_ENCODE_TYPE)
-        .then(|| (permit_descriptor(), DescriptorSource::built_in(false)))
+        .then(|| (permit_descriptor(), DescriptorSource::certain(false)))
 }
 
 // ---------------------------------------------------------------------------
@@ -7026,7 +7827,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                     "increaseAllowance(address spender,uint256 addedValue)": {
                         "intent": "Approve",
                         "fields": [
-                            { "path": "addedValue", "label": "Amount", "format": "tokenAmount", "params": { "tokenPath": "@.to" } },
+                            { "path": "addedValue", "label": "Adds to allowance", "format": "tokenAmount", "params": { "tokenPath": "@.to" } },
                             { "path": "spender", "label": "Spender", "format": "addressName" },
                         ],
                     },
@@ -7079,7 +7880,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                         "intent": "Approve all NFTs",
                         "fields": [
                             { "path": "operator", "label": "Operator", "format": "addressName" },
-                            { "path": "approved", "label": "Approved", "format": "raw" },
+                            { "path": "approved", "label": "Approved", "format": "raw", "visible": "never" },
                         ],
                     },
                 },
@@ -7111,7 +7912,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                         "intent": "Approve all NFTs",
                         "fields": [
                             { "path": "operator", "label": "Operator", "format": "addressName" },
-                            { "path": "approved", "label": "Approved", "format": "raw" },
+                            { "path": "approved", "label": "Approved", "format": "raw", "visible": "never" },
                         ],
                     },
                 },
@@ -7226,6 +8027,12 @@ fn to_bigint(v: Option<&Ctx>) -> String {
             } else {
                 "0".to_owned()
             }
+        }
+        // `BigInt(n)` of a whole number is that number (a typed-data permit
+        // that writes its deadline as a JSON number, cs-18); anything else
+        // threw, and the caller's catch read 0.
+        Some(Ctx::JsNum(n)) if n.is_finite() && n.fract() == 0.0 && *n >= 0.0 => {
+            format!("{n:.0}")
         }
         Some(Ctx::JsNum(_)) | Some(Ctx::Arr(_)) | Some(Ctx::Map(_)) => "0".to_owned(),
     }
@@ -7557,6 +8364,10 @@ mod to_own_token_tests {
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         }
     }
 
@@ -7576,6 +8387,7 @@ mod to_own_token_tests {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: ClearReading::default(),
         }
     }
 
