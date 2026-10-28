@@ -6,8 +6,14 @@
  */
 import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initSync, intentAdvice, intentReview } from '../../../../../rust/pkg-web/vela_core.js';
+import {
+	initSync,
+	intentAdvice,
+	intentAdviceStanding,
+	intentReview
+} from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
+import type { FeeView } from '$lib/core/generated/FeeView';
 
 const ME = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const live = {
@@ -15,7 +21,7 @@ const live = {
 	wallets: [ME] as string[]
 };
 
-vi.mock('$lib/core/client', () => ({ intentAdvice, intentReview }));
+vi.mock('$lib/core/client', () => ({ intentAdvice, intentAdviceStanding, intentReview }));
 vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: ME } } }));
 vi.mock('$lib/multisig/core/store.svelte', () => ({ multisig: { active: null } }));
 vi.mock('$lib/services/endpoints', () => ({ getEthereumDataURL: () => 'https://data.example' }));
@@ -51,7 +57,7 @@ vi.mock('$lib/intents/index.svelte', () => ({
 }));
 
 const { advise, watch } = await import('./advisor.svelte');
-const { openReview, sheetBeside } = await import('./advice.svelte');
+const { adviceStanding, openReview, sheetBeside } = await import('./advice.svelte');
 
 beforeAll(() => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
@@ -114,6 +120,56 @@ describe('vela_advise', () => {
 		live.request = null;
 		const out = advise({ review_digest: '0x1', verdict: 'unsure', summary: 'Hm.' }) as Outcome;
 		expect(out.structuredContent).toMatchObject({ reason: { code: 'not_found' } });
+	});
+
+	it('is bound to the fee on the sheet, and reads as given for another fee once it moves', () => {
+		live.request = {
+			...request('t1', ''),
+			method: 'eth_sendTransaction',
+			kind: 'transaction',
+			params_json: JSON.stringify([{ from: ME, to: ME, value: '0x1' }])
+		};
+		const fee = (wei: string) =>
+			({
+				busy: false,
+				stale: false,
+				failed: null,
+				fee: { chain_id: 1, total_wei: wei, fee_asset: { type: 'native' } }
+			}) as unknown as FeeView;
+		sheetBeside.publish({
+			requestId: 't1',
+			sim: null,
+			simPending: true,
+			fee: fee('1000000000000000')
+		});
+		const digest = openReview()!.review_digest;
+		const out = advise({ review_digest: digest, verdict: 'looks_fine', summary: 'A self-send.' });
+		expect((out as Outcome).structuredContent).toMatchObject({
+			shown_as: 'current',
+			fee_when_given: { amount_raw: '1000000000000000', token: null }
+		});
+		const held = sheetBeside.advice!.advice;
+		// Re-priced within the band: still current; the digest did not move.
+		sheetBeside.publish({
+			requestId: 't1',
+			sim: null,
+			simPending: true,
+			fee: fee('1100000000000000')
+		});
+		expect(openReview()!.review_digest).toBe(digest);
+		expect(adviceStanding(held, openReview()).standing).toBe('current');
+		// Past it: the same request, another fee.
+		sheetBeside.publish({
+			requestId: 't1',
+			sim: null,
+			simPending: true,
+			fee: fee('3000000000000000')
+		});
+		expect(openReview()!.review_digest).toBe(digest);
+		expect(adviceStanding(held, openReview())).toMatchObject({
+			standing: 'fee_changed',
+			fee_when_given: { amount: '0.001' }
+		});
 	});
 
 	it('goes with its request', () => {

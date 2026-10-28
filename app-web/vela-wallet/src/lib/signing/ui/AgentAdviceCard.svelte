@@ -10,8 +10,9 @@
 	 *
 	 * Plain text only — the core already stripped what could hide or reorder
 	 * it, and nothing here renders markup or links: the sources are hosts.
-	 * Given for an earlier version of the request on screen, it is greyed and
-	 * says so.
+	 * Given for an earlier version of the request on screen, or at a fee that
+	 * has since moved past the core's band, it is greyed and says which; the
+	 * fee it was given for is said under it either way.
 	 */
 	interface Props {
 		card: AgentAdviceCardModel;
@@ -34,6 +35,9 @@
 	</header>
 	{#if card.stale}
 		<p class="stale" data-testid="agent-advice-stale">{card.staleLine}</p>
+	{/if}
+	{#if card.feeLine}
+		<p class="fee" data-testid="agent-advice-fee">{card.feeLine}</p>
 	{/if}
 	<div class="said">
 		<p class="summary">{card.summary}</p>
@@ -123,6 +127,7 @@
 
 	.sources,
 	.stale,
+	.fee,
 	.footer {
 		color: var(--color-fg-muted);
 	}

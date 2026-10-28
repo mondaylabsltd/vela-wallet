@@ -2230,6 +2230,9 @@ pub struct ReviewSendFacts {
     pub fee: Option<FeeFacts>,
     pub amount_warning: Option<Value>,
     pub recipient_is_token_contract: bool,
+    /// The send's own warning on its one recipient (send-13: the zero
+    /// address, the account's own), as the form and the confirm say it.
+    pub recipient_warning: Option<Value>,
     pub previous_pending: Option<PendingFacts>,
 }
 
@@ -2309,6 +2312,26 @@ struct RecipientOut<'a> {
     name: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name_source: Option<Option<&'a Value>>,
+    /// What the wallet warns of this recipient (agent-22): `zero_address`
+    /// (nobody holds its key: what is sent there is gone) or `own_address`
+    /// — the send's own warning, said to the person on the form and the
+    /// confirm. Warned, never refused.
+    warning: Option<Value>,
+}
+
+/// A split row's recipient warning, by the send's own rule
+/// (`send::recipient_warning`, which says it of the one recipient only).
+fn row_warning(address: &str, from: Option<&str>) -> Option<Value> {
+    let to = address.trim();
+    let hex = to.strip_prefix("0x").or_else(|| to.strip_prefix("0X"))?;
+    if hex.len() != 40 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    if hex.bytes().all(|b| b == b'0') {
+        return Some(Value::String("zero_address".into()));
+    }
+    from.is_some_and(|from| from.trim().eq_ignore_ascii_case(to))
+        .then(|| Value::String("own_address".into()))
 }
 
 #[derive(Serialize)]
@@ -2329,6 +2352,8 @@ struct ReviewTokenOut<'a> {
 struct ChecksOut<'a> {
     amount_warning: Option<&'a Value>,
     recipient_is_token_contract: bool,
+    /// The send's warning on its one recipient, as the confirm says it.
+    recipient_warning: Option<&'a Value>,
     waits_for_previous_transfer: Option<&'a str>,
 }
 
@@ -2369,6 +2394,7 @@ fn review_transfer<'a>(input: &'a ReviewInput, send: &'a ReviewSendFacts) -> Tra
                     .as_deref()
                     .map(|n| super::agent_review::untrusted(n, "contact")),
                 name_source: None,
+                warning: row_warning(&r.address, input.account.as_deref()),
             })
             .collect()
     } else {
@@ -2382,6 +2408,7 @@ fn review_transfer<'a>(input: &'a ReviewInput, send: &'a ReviewSendFacts) -> Tra
                     .as_deref()
                     .map(|n| super::agent_review::untrusted(n, "contact")),
                 name_source: Some(p.name_source.as_ref()),
+                warning: send.recipient_warning.clone(),
             })
             .collect()
     };
@@ -2410,6 +2437,7 @@ fn review_transfer<'a>(input: &'a ReviewInput, send: &'a ReviewSendFacts) -> Tra
         wallet_checks: ChecksOut {
             amount_warning: send.amount_warning.as_ref(),
             recipient_is_token_contract: send.recipient_is_token_contract,
+            recipient_warning: send.recipient_warning.as_ref(),
             waits_for_previous_transfer: send
                 .previous_pending
                 .as_ref()

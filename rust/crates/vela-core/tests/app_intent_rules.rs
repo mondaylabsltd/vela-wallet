@@ -586,6 +586,50 @@ fn a_review_reads_the_send_and_hands_a_dapps_words_over_as_data() {
     assert_eq!(nothing["pending"], "nothing is waiting to be signed");
 }
 
+/// agent-22: the send's own recipient warnings reach the agent's review —
+/// the zero address and the account's own, on one recipient or on a split's
+/// rows — warned, as the person's confirm warns them.
+#[test]
+fn a_review_says_the_wallets_recipient_warnings() {
+    const ZERO: &str = "0x0000000000000000000000000000000000000000";
+    let single: ReviewInput = serde_json::from_value(json!({
+        "send": {
+            "stage": "confirm", "confirm_amount": "1", "split_mode": false,
+            "selected_token": { "network": "gnosis", "chain_id": 100, "symbol": "xDAI", "decimals": 18 },
+            "payees": [{ "address": ZERO, "name": null, "name_source": null }],
+            "recipient_warning": "zero_address"
+        },
+        "drafted_by": "agent", "account": ALICE,
+    }))
+    .unwrap();
+    let r = review(&single);
+    assert_eq!(
+        r["transfer"]["wallet_checks"]["recipient_warning"],
+        "zero_address"
+    );
+    assert_eq!(r["transfer"]["recipients"][0]["warning"], "zero_address");
+
+    let split: ReviewInput = serde_json::from_value(json!({
+        "send": {
+            "stage": "confirm", "confirm_amount": "3", "split_mode": true,
+            "selected_token": { "network": "gnosis", "chain_id": 100, "symbol": "xDAI", "decimals": 18 },
+            "recipients": [
+                { "address": ZERO, "amount": "1" },
+                { "address": ALICE.to_uppercase().replace("0X", "0x"), "amount": "1" },
+                { "address": BOB, "amount": "1" }
+            ]
+        },
+        "drafted_by": "agent", "account": ALICE,
+    }))
+    .unwrap();
+    let r = review(&split);
+    let rows = r["transfer"]["recipients"].as_array().unwrap();
+    assert_eq!(rows[0]["warning"], "zero_address");
+    assert_eq!(rows[1]["warning"], "own_address");
+    assert!(rows[2]["warning"].is_null());
+    assert!(r["transfer"]["wallet_checks"]["recipient_warning"].is_null());
+}
+
 /// Spec 107 E8: the agent uses only the wallets the person allowed — and
 /// reads nothing of one it may not use.
 #[test]

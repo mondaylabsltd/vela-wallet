@@ -50,6 +50,7 @@ function card(over: Partial<AgentAdviceCardModel> = {}): AgentAdviceCardModel {
 		footer: 'An opinion from your AI agent. It can be wrong. It does not change what is signed.',
 		stale: false,
 		staleLine: 'Given for an earlier version of this request',
+		feeLine: 'Fee when given: 0.001 xDAI',
 		...over
 	};
 }
@@ -107,6 +108,31 @@ describe("the AI agent's opinion on the signing sheet", () => {
 		const said = advice.querySelector<HTMLElement>('.said')!;
 		expect(Number(getComputedStyle(said).opacity)).toBeLessThan(1);
 		await screen.unmount();
+	});
+
+	it('says the fee it was given for, and greys once the fee changed', async () => {
+		const current = await drawn(model({ advice: card() }));
+		const advice = current.sheet.querySelector<HTMLElement>('[data-testid="agent-advice"]')!;
+		expect(advice.querySelector('[data-testid="agent-advice-fee"]')!.textContent).toBe(
+			'Fee when given: 0.001 xDAI'
+		);
+		expect(advice.querySelector('[data-testid="agent-advice-stale"]')).toBeNull();
+		await current.screen.unmount();
+		const moved = await drawn(
+			model({
+				advice: card({ stale: true, staleLine: 'The fee changed since this opinion' })
+			})
+		);
+		const greyed = moved.sheet.querySelector<HTMLElement>('[data-testid="agent-advice"]')!;
+		expect(greyed.hasAttribute('data-stale')).toBe(true);
+		expect(greyed.querySelector('[data-testid="agent-advice-stale"]')!.textContent).toBe(
+			'The fee changed since this opinion'
+		);
+		expect(greyed.querySelector('[data-testid="agent-advice-fee"]')).not.toBeNull();
+		await moved.screen.unmount();
+		const none = await drawn(model({ advice: card({ feeLine: null }) }));
+		expect(none.sheet.querySelector('[data-testid="agent-advice-fee"]')).toBeNull();
+		await none.screen.unmount();
 	});
 
 	it('changes neither the confirm nor anything Vela says', async () => {

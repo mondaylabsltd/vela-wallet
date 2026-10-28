@@ -15,10 +15,11 @@ use support::DomainDriver;
 use vela_core::abi::compute_selector;
 use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
-    is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale,
-    ClearNumberFormat, ClearOperation as Op, ClearPlainSend, ClearProbe, ClearProvenance,
-    ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult, ClearSignType,
-    ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface, ClearTerm, Event,
+    is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole,
+    ClearLineSource, ClearLocale, ClearNumberFormat, ClearOperation as Op, ClearPlainSend,
+    ClearProbe, ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod,
+    ClearSignResult, ClearSignType, ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface,
+    ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -870,6 +871,36 @@ fn erc20_transfer_decodes_with_known_decimals_and_usd() {
     assert_eq!(to.value, "0xd8da6b...a96045");
     assert_eq!(to.role, ClearFieldRole::Recipient);
     assert_eq!(to.address.as_deref(), Some(VITALIK));
+}
+
+/// cs-21: a descriptor host that answers a miss with 200 — its HTML page, or
+/// an error object — has sent no descriptor: the call reads exactly as it
+/// does after a 404.
+#[test]
+fn a_page_or_an_error_answered_200_is_no_descriptor() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let read = |json: Option<&str>| {
+        let mut sut = Sut::new();
+        resolve_tx(&mut sut, USDC, &transfer, "0x0");
+        let ops = sut.resolve(Res::DescriptorFetched {
+            path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+            json: json.map(str::to_owned),
+        });
+        (ops, sut.view().result.expect("clear-sign result"))
+    };
+    let (miss_ops, miss) = read(None);
+    for body in [
+        "<!doctype html><html><head><title>Vela</title></head><body></body></html>",
+        r#"{"error":"not found"}"#,
+        r#"{"display":"not an object"}"#,
+    ] {
+        let (ops, result) = read(Some(body));
+        assert_eq!(ops, miss_ops, "{body}");
+        assert_eq!(result.intent, miss.intent, "{body}");
+        assert_eq!(result.reading.source, miss.reading.source, "{body}");
+        assert_eq!(result.fields.len(), miss.fields.len(), "{body}");
+    }
+    assert_eq!(miss.intent, "Send");
 }
 
 #[test]
@@ -2107,7 +2138,9 @@ fn a_fetched_contract_descriptor_is_not_verified() {
 }
 
 /// A token-standard shape is the app's own, but it describes the standard's
-/// method, not this contract: it names no contract and vouches for nothing.
+/// method, not this contract: it vouches for nothing. The contract is named
+/// only by Vela's own token registry — USDC on this chain — never by the
+/// shape.
 #[test]
 fn a_token_standard_shape_is_graded_as_the_standard_it_is() {
     let mut sut = Sut::new();
@@ -2121,7 +2154,11 @@ fn a_token_standard_shape_is_graded_as_the_standard_it_is() {
     let result = sut.view().result.expect("transfer result");
     assert_eq!(result.provenance, ClearProvenance::Standard);
     assert!(!result.verified);
-    assert!(result.contract_name.is_none());
+    assert_eq!(result.contract_name.as_deref(), Some("USDC"));
+    assert_eq!(
+        result.reading.contract_named_by,
+        Some(ClearLineSource::BuiltIn)
+    );
 }
 
 /// Permit2's messages hand out spending power off-chain, where there is no

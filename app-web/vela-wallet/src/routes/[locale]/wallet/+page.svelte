@@ -1768,7 +1768,9 @@
 	// A multisig's transactions waiting for approval come first in Activity,
 	// drawn as its pending rows; a tap opens the transaction.
 	$effect(() => {
-		if (multisig.active) waitingRows.follow(data.multisigMessages);
+		// A contract call is read as its sheet reads it (the signing words).
+		if (multisig.active)
+			waitingRows.follow(data.multisigMessages, data.signingMessages, multisig.active.address);
 	});
 	const waiting = $derived(multisig.active ? waitingRows.group(data.multisigMessages) : null);
 	/** A tap on Activity: a waiting multisig transaction opens as one; anything else, its detail. */

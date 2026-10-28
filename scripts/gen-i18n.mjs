@@ -916,8 +916,8 @@ for (let i = 1; i < PATHS.length; i++) {
 //   117 + 1 = 118 branches.
 // 2276 (all six of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 + 44 =
 //   2157 leaves; 116 + 1 + 2 = 119 branches.
-if (PATHS.length !== 2276) fail(`expected 2276 paths (2157 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2157) fail(`expected 2157 leaf paths, got ${leafSet.size}`);
+if (PATHS.length !== 2278) fail(`expected 2278 paths (2159 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2159) fail(`expected 2159 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

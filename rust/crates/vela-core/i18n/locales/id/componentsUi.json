@@ -298,7 +298,9 @@
         "unsure": "Tidak yakin",
         "sources": "Sumber",
         "footer": "Pendapat dari agen AI Anda. Bisa saja keliru. Tidak mengubah apa yang ditandatangani.",
-        "stale": "Diberikan untuk versi sebelumnya dari permintaan ini"
+        "stale": "Diberikan untuk versi sebelumnya dari permintaan ini",
+        "feeWhenGiven": "Biaya saat diberikan: {{fee}}",
+        "feeChanged": "Biaya berubah sejak pendapat ini"
       }
     },
     "signingApprove": {

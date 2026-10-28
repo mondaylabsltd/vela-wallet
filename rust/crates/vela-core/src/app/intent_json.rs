@@ -164,6 +164,16 @@ pub fn advice(input_json: &str) -> String {
     to_json(&super::agent_review::advice(&input))
 }
 
+/// How an opinion the sheet holds stands now — `current`,
+/// `earlier_version` or `fee_changed` — and the fee it was given for
+/// ([`super::agent_review::advice_standing`]).
+#[must_use]
+pub fn advice_standing(input_json: &str) -> String {
+    let input =
+        serde_json::from_str::<super::agent_review::StandingInput>(input_json).unwrap_or_default();
+    to_json(&super::agent_review::advice_standing(&input))
+}
+
 /// What an agent's request changes, for its approval, with what the wallet
 /// knows around it (`world_json`, as for [`examine`]): `null` where the
 /// action's name is enough.

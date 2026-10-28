@@ -7,6 +7,7 @@
  * arrive, the extension's request window included, and the bridge itself is
  * only loaded when the person has turned the agent on.
  */
+import { intentAdviceStanding } from '$lib/core/client';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { NetView } from '$lib/core/generated/NetView';
 import { reviewOf } from '$lib/intents/review';
@@ -16,7 +17,7 @@ import { getEthereumDataURL } from '$lib/services/endpoints';
 import { signingSheet } from '$lib/signing/core/sheet.svelte';
 import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 import type { SimEnded } from '$lib/signing/verdict';
-import type { AcceptedAdvice, OpenReview } from './advisor';
+import type { AcceptedAdvice, AdviceStanding, OpenReview } from './advisor';
 
 /** What the signing host knows of the request on its sheet, beside the machines' views. */
 export interface SigningFacts {
@@ -90,4 +91,26 @@ export function openReview(networks: NetView | null = null): OpenReview | null {
 	});
 	const digest = (review.signing as { review_digest?: unknown } | null)?.review_digest;
 	return typeof digest === 'string' ? { review_digest: digest, review } : null;
+}
+
+/** The fee an open review shows (its `signing.fee`), as the core reads it. */
+export function reviewFee(open: OpenReview | null): unknown {
+	return (open?.review as { signing?: { fee?: unknown } } | undefined)?.signing?.fee ?? null;
+}
+
+/**
+ * How the opinion held stands against the review on the sheet now — its
+ * digest, and the fee it was given for against the fee on screen — the
+ * core's call (`agent_review::advice_standing`).
+ */
+export function adviceStanding(advice: AcceptedAdvice, open: OpenReview | null): AdviceStanding {
+	return JSON.parse(
+		intentAdviceStanding(
+			JSON.stringify({
+				advice,
+				current_digest: open?.review_digest ?? null,
+				current_fee: reviewFee(open)
+			})
+		)
+	) as AdviceStanding;
 }

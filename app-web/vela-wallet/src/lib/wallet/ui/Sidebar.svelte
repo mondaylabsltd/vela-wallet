@@ -74,6 +74,12 @@
 		border-inline-end: var(--border-hairline) solid var(--color-border-base);
 	}
 
+	/* The AI agent's bar stands at the rail's foot while it is up (agent-19,
+	   `AgentLayer.svelte`): the rail ends above it, so it covers nothing. */
+	:global(html[data-agent-bar]) .sidebar {
+		padding-block-end: calc(var(--space-xl) * 2 + var(--size-control-md));
+	}
+
 	.top {
 		padding-block: var(--space-lg) var(--space-2xl);
 	}

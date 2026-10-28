@@ -1058,6 +1058,12 @@ export function inFlightOps(track_view_json: string): string;
 export function intentAdvice(input_json: string): string;
 
 /**
+ * How an opinion on the sheet stands now — its digest, and the fee it was
+ * given for against the fee on screen.
+ */
+export function intentAdviceStanding(input_json: string): string;
+
+/**
  * Why an agent may not read what `vela_review` (`operation` absent) or
  * `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
  */
@@ -1955,6 +1961,7 @@ export interface InitOutput {
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
     readonly intentAdvice: (a: number, b: number) => [number, number];
+    readonly intentAdviceStanding: (a: number, b: number) => [number, number];
     readonly intentAgentReads: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly intentApprovalDetail: (a: number, b: number) => [number, number];

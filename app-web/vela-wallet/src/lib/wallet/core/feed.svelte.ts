@@ -109,6 +109,17 @@ class Feed {
 		dispatchActivityFeed({ type: 'reconcile_completed', resolved_count: count });
 	}
 
+	/**
+	 * Settings' Device storage cleared the transaction history (agent-23): the
+	 * core reads its store again — the store is the source of truth even
+	 * about emptiness — so neither Activity nor the agent's
+	 * `recent_transactions` go on showing what was just removed.
+	 */
+	historyCleared(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'reconcile_completed', resolved_count: 1 });
+	}
+
 	/** Balance privacy changed — the core withholds the toast (invariant ④). */
 	privacyChanged(hidden: boolean): void {
 		if (!this.#booted) return;

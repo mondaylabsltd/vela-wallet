@@ -13,6 +13,8 @@ import type { ActivityGroupModel, ActivityRowModel } from '$lib/wallet/model';
 import type { MultisigMessages } from '../messages';
 import { actionTitle, formatUnits, tokenInfo } from './display';
 import { proposals, type ProposalItem } from './proposals.svelte';
+import { readCall } from './call-review.svelte';
+import type { SigningMessages } from '$lib/signing/messages';
 
 /** The id an Activity row carries for a waiting transaction. */
 export const PROPOSAL_ROW_PREFIX = 'multisig:';
@@ -35,35 +37,81 @@ interface Drawn {
 	title: string;
 	amount: string;
 	unit: string;
+	/** Who read a contract call its title names ("Read by Vela, from the transaction"). */
+	source?: string | null;
 }
 
 class WaitingRows {
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
 	#drawn = $state<Record<string, Drawn>>({});
 
-	#draw(m: MultisigMessages, item: ProposalItem): void {
+	#draw(
+		m: MultisigMessages,
+		item: ProposalItem,
+		multisigAddress: string | null,
+		signing: SigningMessages | null
+	): void {
 		const key = proposalRowId(item);
 		if (this.#drawn[key]) return;
 		this.#drawn = { ...this.#drawn, [key]: { title: '…', amount: '', unit: '' } };
 		const action = item.review.action;
+		// A contract call says what it is, as its proposal's sheet does — the
+		// core's reading of it, and who read it — never only "Contract call".
+		if (action?.kind === 'call' && signing !== null && multisigAddress !== null) {
+			void readCall(item.chainId, multisigAddress, action, signing)
+				.catch(() => null)
+				.then((read) => {
+					if (read === null) return;
+					const drawn = this.#drawn[key];
+					this.#drawn = {
+						...this.#drawn,
+						[key]: {
+							...(drawn ?? { amount: '', unit: '' }),
+							title: read.title,
+							source: read.source
+						}
+					};
+				});
+		}
 		void Promise.all([
 			actionTitle(m, item.chainId, action, item.nonce),
 			action?.kind === 'transfer'
 				? tokenInfo(item.chainId, action.token).catch(() => null)
-				: Promise.resolve(null)
+				: // A call's own coin, so a read title keeps what the call sends.
+					action?.kind === 'call' && BigInt(action.value) > 0n
+					? tokenInfo(item.chainId, null).catch(() => null)
+					: Promise.resolve(null)
 		]).then(([title, token]) => {
-			const amount =
-				action?.kind === 'transfer' && token ? formatUnits(action.amount, token.decimals) : '';
+			const amount = !token
+				? ''
+				: action?.kind === 'transfer'
+					? formatUnits(action.amount, token.decimals)
+					: action?.kind === 'call'
+						? formatUnits(action.value, token.decimals)
+						: '';
+			// A call's reading, landed first, keeps its words; the coin a call
+			// sends stands in the amount, not twice in its title.
+			const read = this.#drawn[key]?.source !== undefined ? this.#drawn[key] : null;
+			const own = action?.kind === 'call' && amount !== '' ? m.action.call : title;
 			this.#drawn = {
 				...this.#drawn,
-				[key]: { title, amount, unit: token?.symbol ?? '' }
+				[key]: read
+					? { ...read, amount, unit: token?.symbol ?? '' }
+					: { title: own, amount, unit: token?.symbol ?? '' }
 			};
 		});
 	}
 
-	/** Read the titles of what is waiting. Call from an effect. */
-	follow(m: MultisigMessages): void {
-		for (const item of proposals.open) this.#draw(m, item);
+	/**
+	 * Read the titles of what is waiting. Call from an effect. With the
+	 * signing sheet's words, a contract call is read as its sheet reads it.
+	 */
+	follow(
+		m: MultisigMessages,
+		signing: SigningMessages | null = null,
+		multisigAddress: string | null = null
+	): void {
+		for (const item of proposals.open) this.#draw(m, item, multisigAddress, signing);
 	}
 
 	/**
@@ -81,10 +129,17 @@ class WaitingRows {
 				id: proposalRowId(item),
 				kind: 'sent',
 				title: drawn?.title ?? '…',
-				subtitle: `${statusOf(m, item)} · ${fillTemplate(m.status.progress, {
-					approved: item.approved,
-					threshold: item.threshold
-				})} · ${chainName(item.chainId)}`,
+				subtitle: [
+					drawn?.source,
+					statusOf(m, item),
+					fillTemplate(m.status.progress, {
+						approved: item.approved,
+						threshold: item.threshold
+					}),
+					chainName(item.chainId)
+				]
+					.filter(Boolean)
+					.join(' · '),
 				amount: drawn?.amount
 					? drawn.amount.startsWith('<')
 						? drawn.amount

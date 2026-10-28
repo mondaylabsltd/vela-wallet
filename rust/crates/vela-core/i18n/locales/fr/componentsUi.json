@@ -298,7 +298,9 @@
         "unsure": "Incertain",
         "sources": "Sources",
         "footer": "Un avis de votre agent IA. Il peut se tromper. Il ne change pas ce qui est signé.",
-        "stale": "Donné pour une version précédente de cette demande"
+        "stale": "Donné pour une version précédente de cette demande",
+        "feeWhenGiven": "Frais au moment de l'avis : {{fee}}",
+        "feeChanged": "Les frais ont changé depuis cet avis"
       }
     },
     "signingApprove": {

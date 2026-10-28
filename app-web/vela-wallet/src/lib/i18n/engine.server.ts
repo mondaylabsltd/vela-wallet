@@ -1473,7 +1473,9 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			unsure: k('componentsUi.signing.agentAdvice.unsure'),
 			sources: k('componentsUi.signing.agentAdvice.sources'),
 			footer: k('componentsUi.signing.agentAdvice.footer'),
-			stale: k('componentsUi.signing.agentAdvice.stale')
+			stale: k('componentsUi.signing.agentAdvice.stale'),
+			feeWhenGiven: k('componentsUi.signing.agentAdvice.feeWhenGiven'),
+			feeChanged: k('componentsUi.signing.agentAdvice.feeChanged')
 		},
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.

@@ -214,6 +214,31 @@ class Transfers {
 		recipient: string | null,
 		fill: (port: SendDeskPort) => (view: SendView) => string | null
 	): Promise<IntentOperation | IntentReason> {
+		// agent-23: two drafts at once — the second is told of the first, not
+		// of a person filling in a send that is the agent's own draft.
+		if (this.#drafting)
+			return reason(
+				'busy',
+				'another transfer is being drafted right now: wait for its answer, then submit or cancel it before drafting the next'
+			);
+		this.#drafting = true;
+		try {
+			return await this.#drafted(by, chainId, contract, recipient, fill);
+		} finally {
+			this.#drafting = false;
+		}
+	}
+
+	/** A draft is being put on the form ([`#draft`]): one at a time. */
+	#drafting = false;
+
+	async #drafted(
+		by: IntentActor,
+		chainId: number,
+		contract: string | null,
+		recipient: string | null,
+		fill: (port: SendDeskPort) => (view: SendView) => string | null
+	): Promise<IntentOperation | IntentReason> {
 		const stopped = () => by === 'agent' && this.clock.halted();
 		const halted = reason(
 			'stopped',

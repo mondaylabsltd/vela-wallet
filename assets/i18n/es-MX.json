@@ -1825,7 +1825,9 @@
     "unsure": "No está seguro",
     "sources": "Fuentes",
     "footer": "Una opinión de tu agente de IA. Puede equivocarse. No cambia lo que se firma.",
-    "stale": "Dada para una versión anterior de esta solicitud"
+    "stale": "Dada para una versión anterior de esta solicitud",
+    "feeWhenGiven": "Comisión al darla: {{fee}}",
+    "feeChanged": "La comisión cambió desde esta opinión"
    }
   },
   "signingApprove": {

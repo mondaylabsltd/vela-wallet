@@ -298,7 +298,9 @@
         "unsure": "Incerto",
         "sources": "Fontes",
         "footer": "Uma opinião do seu agente de IA. Ela pode estar errada. Não muda o que é assinado.",
-        "stale": "Dada para uma versão anterior desta solicitação"
+        "stale": "Dada para uma versão anterior desta solicitação",
+        "feeWhenGiven": "Taxa quando dada: {{fee}}",
+        "feeChanged": "A taxa mudou desde esta opinião"
       }
     },
     "signingApprove": {

@@ -224,6 +224,20 @@ export class ClientMCP {
 		return this.#online.promise;
 	}
 
+	/**
+	 * Answers every call still in flight with `value` (a handler's answer),
+	 * now, and aborts its handler — for a wallet about to hang up on the
+	 * agent, so it hears why rather than a bare disconnect (agent-21).
+	 */
+	answerAll(value: unknown): void {
+		const result = toCallToolResult(value);
+		for (const [id, controller] of this.#calls) {
+			this.#send(JSON.stringify({ type: 'result', id, result }));
+			controller.abort(new Error('answered'));
+		}
+		this.#calls.clear();
+	}
+
 	/** Disconnects for good. Calls in flight are aborted. */
 	close(): void {
 		this.#stop({ code: 1000, reason: 'closed by the application' });

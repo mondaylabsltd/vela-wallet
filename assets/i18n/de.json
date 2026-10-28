@@ -1818,7 +1818,9 @@
     "unsure": "Unsicher",
     "sources": "Quellen",
     "footer": "Eine Einschätzung Ihres KI-Agenten. Sie kann falsch sein. Sie ändert nicht, was signiert wird.",
-    "stale": "Für eine frühere Version dieser Anfrage abgegeben"
+    "stale": "Für eine frühere Version dieser Anfrage abgegeben",
+    "feeWhenGiven": "Gebühr bei Abgabe: {{fee}}",
+    "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
    }
   },
   "signingApprove": {

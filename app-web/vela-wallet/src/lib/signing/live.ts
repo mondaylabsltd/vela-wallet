@@ -209,7 +209,8 @@ const UNGRADED_READING: ClearSignResult['reading'] = {
 	dust_minimum: false,
 	allowance: false,
 	allowance_adds: false,
-	shape_intent: null
+	shape_intent: null,
+	collection_name: null
 };
 
 function sourceName(source: ClearLineSource | undefined, inputs: SigningLiveInputs): string | null {
@@ -226,6 +227,14 @@ function sourceName(source: ClearLineSource | undefined, inputs: SigningLiveInpu
 		case 'shape':
 			return c.sourceShape;
 	}
+}
+
+/**
+ * Who read a call, said as the sheet's "Read by" row says it: Vela, from
+ * the transaction — or whose description, or a name database, or a shape.
+ */
+export function readBy(source: ClearLineSource, m: SigningMessages): string {
+	return sourceName(source, { m } as SigningLiveInputs) ?? m.certain.byVela;
 }
 
 /** "Label from …" — the faint marker on a row a description labelled (cs-14). */
@@ -313,6 +322,18 @@ function contractBlock(
 		text: fill(c.contractNamed, { address: short, name, source }),
 		tone: 'neutral'
 	};
+}
+
+/**
+ * An approve-all's collection: the name a list or a description gave its
+ * contract; else its own `name()` beside its short address — the
+ * contract's word, so never alone; else the short address.
+ */
+function collectionOf(result: ClearSignResult): string {
+	if (result.contract_name) return result.contract_name;
+	const short = result.contract_address ? shortenAddress(result.contract_address) : '';
+	const own = result.reading.collection_name;
+	return own ? `${own} (${short})` : short;
 }
 
 /** The symbol an amount or a Token row names: "250 USDC?" → "USDC?". */
@@ -825,9 +846,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 				? m.terms.intentContractCall
 				: result.intent_term === 'intentApproveAllNfts' && reading.source === 'vela'
 					? fill(c.approveAllYour, {
-							collection:
-								result.contract_name ??
-								(result.contract_address ? shortenAddress(result.contract_address) : '')
+							collection: collectionOf(result)
 						})
 					: result.intent;
 		blocks.push({ kind: 'intent', text: intent, tone: toneOf(result.risk) });

@@ -26,6 +26,7 @@ import { transfers } from '$lib/intents/transfers.svelte';
 import { reviewOf } from '$lib/intents/review';
 import { sendDesk } from '$lib/flows/send-desk.svelte';
 import { session } from '$lib/session/core/session.svelte';
+import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 import { accepted, ClientMCP, completed, rejected, type Risk, type Status } from './clientmcp';
 import { agentSettings } from './settings.svelte';
@@ -123,11 +124,35 @@ async function waitFor(
 	}
 }
 
+let bookFollowed = false;
+
+/**
+ * The address book, read for the agent wherever the wallet was opened
+ * (agent-6): only the wallet and Contacts pages read it, so an agent
+ * answering from Settings found every contact tool `not_ready`. Read for
+ * the signed-in account, as the wallet page does at sign-in — once a page
+ * has told the book its account, that page's word stands.
+ */
+function readAddressBook(): void {
+	const read = () => {
+		const address = session.view.address;
+		if (address) void contactsBook.ensure(address);
+	};
+	read();
+	if (bookFollowed) return;
+	bookFollowed = true;
+	// And once someone signs in, if nobody was yet.
+	$effect.root(() => {
+		$effect(read);
+	});
+}
+
 /** Expose the catalog: one tool per action the agent may ask for. */
 async function exposeTools(client: ClientMCP): Promise<void> {
 	await loadCore();
 	// The networks are read for the agent as for Settings: the ledger reads its stores.
 	void networkAdmin.boot();
+	readAddressBook();
 	const catalog = JSON.parse(intentCatalog()) as IntentCatalogEntry[];
 	client.expose('vela_state', {
 		title: 'The wallet now',
@@ -250,6 +275,10 @@ class AgentBridge {
 			: '';
 		if (dial === this.#dialled) return;
 		this.#dialled = dial;
+		// Switched off — Stop, or Settings — with calls still out (a
+		// vela_wait, a request on its sheet): each is answered `stopped`
+		// before the line goes, not left to a bare disconnect (agent-21).
+		if (dial === '') this.#client?.answerAll(rejected('stopped', 'the person stopped the agent'));
 		this.#hangUp();
 		this.closed = null;
 		if (dial === '') {

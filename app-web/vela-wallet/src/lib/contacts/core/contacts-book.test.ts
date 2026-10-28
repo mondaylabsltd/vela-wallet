@@ -57,6 +57,28 @@ describe('ContactsBook — one session for the app', () => {
 		});
 	});
 
+	it('is read by a reader that is no page, and never moved by it (agent-6)', async () => {
+		const unread = new ContactsBook();
+		await unread.ensure(A);
+		expect(seams.sessions).toHaveLength(1);
+		expect(seams.sessions[0].start).toHaveBeenCalledExactlyOnceWith({
+			type: 'account_switched',
+			my_address: A
+		});
+		// A page told it B: the agent's bridge asking for A changes nothing.
+		const told = new ContactsBook();
+		await told.setAccount(B);
+		await told.ensure(A);
+		expect(seams.sessions).toHaveLength(2);
+		expect(seams.sessions[1].start).toHaveBeenCalledExactlyOnceWith({
+			type: 'account_switched',
+			my_address: B
+		});
+		expect(seams.sessions[1].dispatch).toHaveBeenCalledExactlyOnceWith({
+			type: 'use_shared_store'
+		});
+	});
+
 	it('tells the core when — and only when — the account changes', async () => {
 		const book = new ContactsBook();
 		await book.setAccount(A);

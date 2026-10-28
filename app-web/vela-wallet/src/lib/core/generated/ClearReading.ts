@@ -62,4 +62,11 @@ allowance_adds: boolean,
  * What a shape-only match looks like ("Deposit"): the sheet says "looks
  * like a vault deposit — shape only". `Some` only for [`ClearLineSource::Shape`].
  */
-shape_intent: string | null, };
+shape_intent: string | null, 
+/**
+ * An approve-all's collection, as its own contract's `name()` answered
+ * it — the contract's word, never Vela's: a sheet says it beside the
+ * collection's short address. Plain text, capped; `None` when the
+ * contract did not answer one.
+ */
+collection_name: string | null, };

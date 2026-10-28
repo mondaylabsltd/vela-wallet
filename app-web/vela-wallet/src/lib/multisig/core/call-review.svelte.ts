@@ -31,7 +31,7 @@ import {
 import { toClearLocale } from '$lib/signing/core/clear-types';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from '$lib/signing/core/sheet.svelte';
 import { txKickoff } from '$lib/signing/core/tx-params';
-import { localizedTerms, requestBlocks } from '$lib/signing/live';
+import { localizedTerms, readBy, requestBlocks } from '$lib/signing/live';
 import type { SigningMessages } from '$lib/signing/messages';
 import type { Block } from '$lib/signing/model';
 
@@ -223,4 +223,40 @@ export function callReviewBlocks(
 export function callTitle(clear: ClearSigningView, m: SigningMessages): string | null {
 	if (clear.resolving || !clear.resolved || clear.record_intent === null) return null;
 	return localizedTerms(clear, m).result?.intent ?? clear.record_intent;
+}
+
+/**
+ * Who read the call its title names (`callTitle`), as a row says it beside
+ * it: "Read by Vela, from the transaction", "Read by a fetched description
+ * (host)" — `null` while there is no title.
+ */
+export function callSource(clear: ClearSigningView, m: SigningMessages): string | null {
+	const source = clear.result?.reading.source;
+	if (callTitle(clear, m) === null || source === undefined) return null;
+	return `${m.certain.labelSource} ${readBy(source, m)}`;
+}
+
+/**
+ * Read one call to its end — for a row that names it (Activity), not a
+ * sheet that follows it: a title and its source, or `null` when the call
+ * could not be read in `ms` (the row keeps "Contract call").
+ */
+export async function readCall(
+	chainId: number,
+	multisig: string,
+	call: InnerCall,
+	m: SigningMessages,
+	ms = 15_000
+): Promise<{ title: string; source: string | null } | null> {
+	const reading = new CallReading(chainId, multisig, call);
+	try {
+		await reading.start();
+		const deadline = Date.now() + ms;
+		while ((!reading.clear.resolved || reading.clear.resolving) && Date.now() < deadline)
+			await new Promise((done) => setTimeout(done, 100));
+		const title = callTitle(reading.clear, m);
+		return title === null ? null : { title, source: callSource(reading.clear, m) };
+	} finally {
+		reading.dispose();
+	}
 }

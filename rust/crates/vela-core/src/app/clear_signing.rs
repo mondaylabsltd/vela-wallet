@@ -132,6 +132,10 @@ const ERC20_DECIMALS_SELECTOR: &str = "0x313ce567";
 /// amount is rendered beside a contract address, and nobody can read what
 /// they are sending.
 const ERC20_SYMBOL_SELECTOR: &str = "0x95d89b41";
+/// `name()` — an NFT collection's own name, for an approve-all.
+const ERC721_NAME_SELECTOR: &str = "0x06fdde03";
+/// The longest collection name a sheet keeps, in characters.
+const COLLECTION_NAME_MAX: usize = 40;
 /// ERC-165 interface ids (local-descriptors.ts `INTERFACE_IDS`).
 const IFACE_ERC721: &str = "80ac58cd";
 const IFACE_ERC1155: &str = "d9b67a26";
@@ -569,6 +573,10 @@ pub enum ClearProbe {
     Symbol,
     /// The answer to [`ClearOperation::RpcGetCode`].
     Code,
+    /// `name()` of an NFT collection a `setApprovalForAll` grants, so the
+    /// sheet names the collection, not only its short address. Additive
+    /// like [`Self::Symbol`].
+    Name,
 }
 
 /// What the shell observed. Raw on purpose: revert-vs-unreachable and
@@ -843,6 +851,12 @@ pub struct ClearReading {
     /// What a shape-only match looks like ("Deposit"): the sheet says "looks
     /// like a vault deposit — shape only". `Some` only for [`ClearLineSource::Shape`].
     pub shape_intent: Option<String>,
+    /// An approve-all's collection, as its own contract's `name()` answered
+    /// it — the contract's word, never Vela's: a sheet says it beside the
+    /// collection's short address. Plain text, capped; `None` when the
+    /// contract did not answer one.
+    #[serde(default)]
+    pub collection_name: Option<String>,
 }
 
 /// One resolved display field (`ClearSignField` in TS; optional booleans
@@ -1820,6 +1834,12 @@ enum Step {
         index: usize,
     },
     AwaitSelectorSigs,
+    /// An approve-all's collection `name()`, bounded by the warm's timer.
+    AwaitCollectionName {
+        selector: String,
+        kind: TokenStandard,
+        timer: u32,
+    },
     /// On-chain `decimals()` and `symbol()` prefetch for unknown tokens.
     ///
     /// Two sets, because the two probes are two facts and either can be the
@@ -1940,6 +1960,10 @@ pub struct Model {
     /// render as `0x2a22…` beside its amount — on every shell, since they all
     /// run this machine.
     symbol_cache: BTreeMap<String, String>,
+    /// NFT collections' own `name()`, keyed like the decimals cache: `None`
+    /// when the contract answered and the answer was no name (a revert,
+    /// garbage) — asked once, not on every request.
+    name_cache: BTreeMap<String, Option<String>>,
     erc165_scratch: BTreeMap<String, Erc165Scratch>,
     /// Bumped per request; a result carrying an older attempt is dropped
     /// (after its cache facts are absorbed).
@@ -2910,13 +2934,28 @@ fn exact_native_amount(wei_dec: &str, locale: &ClearLocale) -> String {
 // Shell results
 // ---------------------------------------------------------------------------
 
+/// An ERC-7730 document — an object with its `display` — or a map of them
+/// (the typed-data descriptors, keyed by type hash).
+fn is_descriptor_document(value: &Value) -> bool {
+    let has_display = |v: &Value| v.get("display").is_some_and(Value::is_object);
+    has_display(value)
+        || value
+            .as_object()
+            .is_some_and(|map| map.values().any(has_display))
+}
+
 /// Cache-bearing facts land regardless of which run asked (see the callers).
 fn absorb_cache_facts(model: &mut Model, result: &ClearShellResult) {
     match result {
         ClearShellResult::DescriptorFetched { path, json } => {
+            // cs-21: a host that answers a miss with 200 — its HTML page, an
+            // error object — has sent no descriptor: only an ERC-7730
+            // document with its `display` is one (or, for typed data, a map
+            // of them by type hash). Anything else is the miss a 404 is.
             let parsed = json
                 .as_ref()
-                .and_then(|body| serde_json::from_str::<Value>(body).ok());
+                .and_then(|body| serde_json::from_str::<Value>(body).ok())
+                .filter(is_descriptor_document);
             model.descriptor_cache.insert(path.clone(), parsed);
         }
         ClearShellResult::RpcAnswer {
@@ -2952,6 +2991,25 @@ fn absorb_cache_facts(model: &mut Model, result: &ClearShellResult) {
             // guess about what somebody is sending.
             if let Some(symbol) = result.as_deref().and_then(decode_abi_string) {
                 model.symbol_cache.insert(std_key(*chain_id, to), symbol);
+            }
+        }
+        ClearShellResult::RpcAnswer {
+            probe: ClearProbe::Name,
+            chain_id,
+            to,
+            result,
+            rpc_error,
+        } => {
+            // An answer — a name, or a revert — is kept; an unreachable node
+            // decides nothing, and the next request asks again.
+            if result.is_some() || *rpc_error {
+                let name = result
+                    .as_deref()
+                    .filter(|_| !*rpc_error)
+                    .and_then(decode_abi_string)
+                    .map(|name| super::agent_review::plain_text(&name, COLLECTION_NAME_MAX))
+                    .filter(|name| !name.is_empty());
+                model.name_cache.insert(std_key(*chain_id, to), name);
             }
         }
         ClearShellResult::RpcAnswer {
@@ -3146,6 +3204,26 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
             let _ = addr;
             standard_decided(model, run, &selector, TokenStandard::Erc20)
         }
+
+        (
+            Step::AwaitCollectionName {
+                selector,
+                kind,
+                timer: _,
+            },
+            ClearShellResult::RpcAnswer {
+                probe: ClearProbe::Name,
+                ..
+            },
+        ) => read_standard(model, run, &selector, kind),
+        (
+            Step::AwaitCollectionName {
+                selector,
+                kind,
+                timer,
+            },
+            ClearShellResult::TimedOut { token },
+        ) if token == timer => read_standard(model, run, &selector, kind),
 
         (Step::AwaitErcFallback { index }, ClearShellResult::DescriptorFetched { .. }) => {
             erc_fallback_step(model, run, index)
@@ -3443,6 +3521,53 @@ fn resolve_token_standard(
 }
 
 fn standard_decided(
+    model: &mut Model,
+    mut run: Run,
+    selector: &str,
+    kind: TokenStandard,
+) -> Command<ClearSigningEffect, Event> {
+    // An approve-all names its collection: the contract's own `name()`,
+    // asked once per collection, before the sheet reads the call.
+    if selector == SEL_SET_APPROVAL_ALL {
+        if let Req::Tx {
+            to: Some(to),
+            chain_id,
+            ..
+        } = &run.req
+        {
+            let (to, chain_id) = (to.clone(), *chain_id);
+            if !model.name_cache.contains_key(&std_key(chain_id, &to)) {
+                model.timer_seq += 1;
+                let token = model.timer_seq;
+                run.step = Step::AwaitCollectionName {
+                    selector: selector.to_owned(),
+                    kind,
+                    timer: token,
+                };
+                model.run = Some(run);
+                return requests(
+                    model,
+                    vec![
+                        ClearOperation::RpcEthCall {
+                            chain_id,
+                            to,
+                            data: ERC721_NAME_SELECTOR.to_owned(),
+                            probe: ClearProbe::Name,
+                        },
+                        ClearOperation::Timer {
+                            ms: DECIMALS_WARM_TIMEOUT_MS,
+                            token,
+                        },
+                    ],
+                );
+            }
+        }
+    }
+    read_standard(model, run, selector, kind)
+}
+
+/// A token-standard call, read by its standard's interface descriptor.
+fn read_standard(
     model: &mut Model,
     run: Run,
     selector: &str,
@@ -4507,6 +4632,26 @@ fn finalize(model: &Model, mut result: ClearSignResult) -> ClearSignResult {
         Some(ClearTerm::IntentApprove | ClearTerm::IntentAuthorizeSpending)
     ) || (result.sign_type == ClearSignType::Signature
         && contains_any(&intent, &["permit", "authori"]));
+    let chain_id = Some(model.chain_id);
+    // An approve-all names its collection by the contract's own answer.
+    if term == Some(ClearTerm::IntentApproveAllNfts) {
+        result.reading.collection_name = chain_id
+            .zip(result.contract_address.as_deref())
+            .and_then(|(chain_id, to)| model.name_cache.get(&std_key(chain_id, to)).cloned())
+            .flatten();
+    }
+    // A token Vela's own registry lists on this chain names its contract on
+    // a single call too, as a batch's row does (097 N8): "USDC", not "no
+    // name known" over USDC's own `transfer`. Never where nothing lives.
+    if result.contract_name.is_none() && !model.no_code {
+        if let Some(token) = chain_id
+            .zip(result.contract_address.as_deref())
+            .and_then(|(chain_id, to)| registry_token(chain_id, to))
+        {
+            result.contract_name = Some(token.symbol.to_owned());
+            result.reading.contract_named_by = Some(ClearLineSource::BuiltIn);
+        }
+    }
     if result.reading.goes_elsewhere || !result.reading.contradictions.is_empty() {
         result.risk = ClearRisk::Danger;
     } else if result.reading.dust_minimum && risk_rank(result.risk) < risk_rank(ClearRisk::Caution)

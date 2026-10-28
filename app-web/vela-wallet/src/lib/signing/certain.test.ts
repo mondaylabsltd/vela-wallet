@@ -281,6 +281,26 @@ describe('certain facts on the face', () => {
 		expect(texts(model.blocks).some((t) => t.includes('Wrap'))).toBe(false);
 	});
 
+	it('an approve-all names its collection by its own name(), beside its address', () => {
+		const NFT = '0x7eca6b925e9849cbd1b7c07bd29b14de26c67d86';
+		const data = `0xa22cb465${word(REWARDS)}${num(1)}`;
+		const named = intentOf(
+			sheet(read(tx(NFT, data), { symbols: { [NFT]: 'Gnosis Punks' } }), NFT, data)
+		);
+		expect(named).toMatch(/^Approve all your Gnosis Punks \(0x7eca.*\) NFTs$/);
+		// A collection that answers no name is still said, by its address.
+		const nameless = intentOf(sheet(read(tx(NFT, data)), NFT, data));
+		expect(nameless).toMatch(/^Approve all your 0x7eca\S* NFTs$/);
+	});
+
+	it('the contract line names a token Vela lists, on a single call', () => {
+		const data = `0xa9059cbb${word(THIEF)}${num(1_000_000)}`;
+		const lines = texts(sheet(read(tx(USDC, data)), USDC, data).blocks);
+		const contract = lines.find((t) => t.startsWith('Contract · '));
+		expect(contract).toContain('· USDC, called so by');
+		expect(contract).toContain(m.certain.sourceList);
+	});
+
 	it('a public-database name stays a quote; the call is a Contract call (cs-7)', () => {
 		const selector = '0x3d4ebdfe';
 		const data = `${selector}${word(USDC)}${num(5)}`;

@@ -13,13 +13,15 @@ const clients: {
 	onStatus: StatusFn;
 	closed: boolean;
 	tools: Map<string, Handler>;
+	/** What the calls still out were answered, before the line went. */
+	answered: unknown[];
 }[] = [];
 
 vi.mock('./clientmcp', () => ({
 	ClientMCP: class {
 		entry: (typeof clients)[number];
 		constructor(options: { onStatus: StatusFn }) {
-			this.entry = { onStatus: options.onStatus, closed: false, tools: new Map() };
+			this.entry = { onStatus: options.onStatus, closed: false, tools: new Map(), answered: [] };
 			clients.push(this.entry);
 		}
 		expose(name: string, tool: { handler: Handler }) {
@@ -29,6 +31,10 @@ vi.mock('./clientmcp', () => ({
 		connect() {
 			this.entry.onStatus('connecting');
 			return Promise.resolve();
+		}
+		answerAll(value: unknown) {
+			if (this.entry.closed) throw new Error('answered after the line went');
+			this.entry.answered.push(value);
 		}
 		close() {
 			this.entry.closed = true;
@@ -60,7 +66,10 @@ vi.mock('$lib/intents/transfers.svelte', () => ({
 }));
 vi.mock('$lib/intents/review', () => ({ reviewOf: () => ({ note: 'n', transfer: null }) }));
 vi.mock('$lib/flows/send-desk.svelte', () => ({ sendDesk: { port: null } }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: '' } } }));
+const sessionView = { address: '' };
+vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: sessionView } }));
+const ensure = vi.fn(() => Promise.resolve());
+vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { ensure } }));
 vi.mock('$lib/signing/core/sign-resident.svelte', () => ({ signRequest: { view: {} } }));
 vi.mock('$lib/multisig/core/shown', () => ({ shownAddress: (a: string) => a }));
 vi.mock('$lib/settings/core/network-admin.svelte', () => ({
@@ -195,6 +204,38 @@ describe('another tab takes the agent (the bridge’s 4409)', () => {
 		clients[0].onStatus('closed', { code: 4401, reason: 'unauthorized' });
 		expect(agent.status).toBe('closed');
 		expect(agent.closed).toEqual({ code: 4401, reason: 'unauthorized' });
+	});
+});
+
+describe('the person switches the agent off (Stop)', () => {
+	it('answers every call still out `stopped` before hanging up (agent-21)', async () => {
+		const agent = await bridge();
+		clients[0].onStatus('online');
+		settings.ready = false;
+		try {
+			agent.sync();
+		} finally {
+			settings.ready = true;
+		}
+		expect(clients[0].answered).toEqual([
+			{ status: 'rejected', reason: { code: 'stopped', detail: 'the person stopped the agent' } }
+		]);
+		expect(clients[0].closed).toBe(true);
+		expect(agent.status).toBe('off');
+	});
+});
+
+describe('the address book, for an agent answering from any page (agent-6)', () => {
+	it('is read for the signed-in account once the tools are up', async () => {
+		ensure.mockClear();
+		sessionView.address = '0x' + 'ab'.repeat(20);
+		try {
+			await bridge();
+			await tick();
+			expect(ensure).toHaveBeenCalledWith('0x' + 'ab'.repeat(20));
+		} finally {
+			sessionView.address = '';
+		}
 	});
 });
 

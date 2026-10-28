@@ -15,6 +15,13 @@
 //! digest: the sheet draws it as current only while the review it was given
 //! for is the one on screen ([`advice`]).
 //!
+//! The digest leaves the fee out — a fee re-prices every few seconds, and
+//! that is not a new request. An opinion is bound to the fee too, but
+//! separately and with room to move ([`advice_standing`]): it records the
+//! fee on the sheet when it arrived, and stays current while the fee is in
+//! the same coin and within [`ADVICE_FEE_BAND_PERCENT`] of that figure (or
+//! a small fixed amount, for a tiny fee).
+//!
 //! Nothing here changes what is signed, a button, or a risk: the shells draw
 //! the opinion in its own card, under Vela's own lines.
 
@@ -35,7 +42,8 @@ use crate::primitives::{sha256, to_hex};
 const DIGEST_DOMAIN: &str = "vela.agent_review.v1";
 
 /// What a review digest covers — said beside it, so an agent knows a fee
-/// that moves does not make its opinion stale.
+/// that moves is not a new version of the request (its opinion's own fee
+/// check is [`advice_standing`]).
 pub const DIGEST_COVERS: &[&str] = &[
     "chain_id",
     "account",
@@ -59,6 +67,19 @@ pub const ADVICE_LIST_MAX: usize = 5;
 
 /// The verdicts an agent may give.
 pub const ADVICE_VERDICTS: &[&str] = &["looks_fine", "caution", "danger", "unsure"];
+
+/// How far, in percent of the fee an opinion was given for, the fee may
+/// move — up or down — before the opinion reads as given for another fee.
+pub const ADVICE_FEE_BAND_PERCENT: u128 = 25;
+/// The band's floor for a tiny fee, as a power of ten below one coin: a
+/// stablecoin fee may always move by 0.01 of it (the relay's own minimum
+/// for a stablecoin), a native one by 0.00001 of the coin (the wallet's
+/// own minimum native fee) — a fee of 0.00002 xDAI that becomes 0.00003 is
+/// no different request.
+const FEE_FLOOR_STABLE_PLACES: u32 = 2;
+const FEE_FLOOR_NATIVE_PLACES: u32 = 5;
+/// Significant digits of the fee figure an opinion's card shows.
+const FEE_SHOWN_DIGITS: usize = 4;
 
 /// What the signing sheet holds beside the request, as the shell's views
 /// (every member optional: a shell passes what it has, and a view that does
@@ -350,6 +371,8 @@ fn reading_of(result: &ClearSignResult, host: Option<&str>) -> Value {
             "named_by": wire(r.contract_named_by),
             "owner": result.owner.as_deref().map(|owner| untrusted(owner, "descriptor")),
         },
+        // An approve-all's collection, as its own contract's name() says it.
+        "collection_name": r.collection_name.as_deref().map(|name| untrusted(name, "token_contract")),
         "lines": result.fields.iter().map(|f| line(f, &origin)).collect::<Vec<_>>(),
         "contradictions": r.contradictions.iter().map(|c| untrusted(c, "descriptor")).collect::<Vec<_>>(),
         "goes_elsewhere": r.goes_elsewhere,
@@ -803,13 +826,17 @@ pub fn signing(
 // ---------------------------------------------------------------------------
 
 /// What `vela_advise` reads: the agent's arguments, the digest of the
-/// review on the sheet now (`None` when none is open), and the world the
-/// allow list is read from.
+/// review on the sheet now (`None` when none is open), the fee that review
+/// shows (its `fee`, as `vela_review` reads it), and the world the allow
+/// list is read from.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct AdviceInput {
     pub world: World,
     pub current_digest: Option<String>,
+    /// The review's `fee` on the sheet now: what the opinion is recorded
+    /// as given for. `None` for a message, or a fee not yet measured.
+    pub current_fee: Option<Value>,
     /// `None`: only whether the agent may read this wallet's reviews at all
     /// (`vela_watch_reviews`).
     pub args: Option<Value>,
@@ -819,10 +846,167 @@ fn refused(code: &str, detail: &str) -> Value {
     json!({ "ok": false, "code": code, "detail": detail })
 }
 
+/// A fee's figure, as a review's `fee` carries it: the coin (`None` for
+/// the network's own) and the amount in its base units.
+struct FeeFigure {
+    token: Option<String>,
+    raw: u128,
+    decimals: u32,
+}
+
+fn figure_of(fee: Option<&Value>) -> Option<FeeFigure> {
+    let fee = fee?;
+    let raw = fee.get("amount_raw").and_then(Value::as_str)?;
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(FeeFigure {
+        token: fee
+            .get("token")
+            .and_then(Value::as_str)
+            .map(str::to_ascii_lowercase),
+        // A figure past u128 is no fee anyone pays: it is never in band.
+        raw: raw.parse().unwrap_or(u128::MAX),
+        decimals: fee
+            .get("decimals")
+            .and_then(Value::as_u64)
+            .and_then(|d| u32::try_from(d).ok())
+            .unwrap_or(18),
+    })
+}
+
+/// The fee an opinion records: the review's figure, exact, with its coin.
+/// `null` when the sheet showed none (a message, or a fee still measured).
+fn advised_fee(fee: Option<&Value>) -> Value {
+    let Some(fee) = fee.filter(|_| figure_of(fee).is_some()) else {
+        return Value::Null;
+    };
+    json!({
+        "amount_raw": fee.get("amount_raw"),
+        "amount": fee.get("amount"),
+        "decimals": fee.get("decimals"),
+        "symbol": fee.get("symbol"),
+        "token": fee.get("token"),
+    })
+}
+
+/// `now` within the band of `given`: the same coin, and at most
+/// [`ADVICE_FEE_BAND_PERCENT`] away from it — or the coin's small fixed
+/// floor, when that is wider.
+fn fee_in_band(given: &FeeFigure, now: &FeeFigure) -> bool {
+    if given.token != now.token {
+        return false;
+    }
+    let places = if given.token.is_some() {
+        FEE_FLOOR_STABLE_PLACES
+    } else {
+        FEE_FLOOR_NATIVE_PLACES
+    };
+    let floor = 10u128
+        .checked_pow(given.decimals.saturating_sub(places))
+        .unwrap_or(u128::MAX);
+    let band = (given.raw / 100)
+        .saturating_mul(ADVICE_FEE_BAND_PERCENT)
+        .saturating_add(given.raw % 100 * ADVICE_FEE_BAND_PERCENT / 100)
+        .max(floor);
+    given.raw.abs_diff(now.raw) <= band
+}
+
+/// `raw / 10^decimals` to [`FEE_SHOWN_DIGITS`] significant digits (cut, not
+/// rounded), for the card's "Fee when given".
+fn shown_units(raw: &str, decimals: u32) -> Option<String> {
+    let exact = exact_units(raw, decimals)?;
+    let Some((whole, frac)) = exact.split_once('.') else {
+        return Some(exact);
+    };
+    let mut significant = if whole == "0" { 0 } else { whole.len() };
+    let mut kept = String::new();
+    for c in frac.chars() {
+        if significant >= FEE_SHOWN_DIGITS {
+            break;
+        }
+        if significant > 0 || c != '0' {
+            significant += 1;
+        }
+        kept.push(c);
+    }
+    let kept = kept.trim_end_matches('0');
+    Some(if kept.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{kept}")
+    })
+}
+
+/// How an opinion stands against the sheet now: `current` while its digest
+/// is the one on screen and the fee stayed in band; `earlier_version` once
+/// the request it was given for changed; `fee_changed` once the fee moved
+/// past the band or to another coin — or a figure landed where the opinion
+/// saw none. A sheet with no figure now (re-pricing, failed) leaves the
+/// opinion as it stood: there is nothing new to compare.
+#[must_use]
+pub fn standing_of(
+    advice: &Value,
+    current_digest: Option<&str>,
+    current_fee: Option<&Value>,
+) -> &'static str {
+    let digest = advice
+        .get("review_digest")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !current_digest.is_some_and(|current| current.eq_ignore_ascii_case(digest)) {
+        return "earlier_version";
+    }
+    let moved = match (figure_of(advice.get("fee")), figure_of(current_fee)) {
+        (_, None) => false,
+        (None, Some(_)) => true,
+        (Some(given), Some(now)) => !fee_in_band(&given, &now),
+    };
+    if moved {
+        "fee_changed"
+    } else {
+        "current"
+    }
+}
+
+/// What the sheet asks of an opinion it holds ([`advice_standing`]).
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct StandingInput {
+    /// The opinion as [`advice`] accepted it.
+    pub advice: Value,
+    pub current_digest: Option<String>,
+    /// The review's `fee` on the sheet now.
+    pub current_fee: Option<Value>,
+}
+
+/// The opinion's standing ([`standing_of`]) and the fee it was given for
+/// as its card says it (`{ amount, symbol }`; `null` when it saw none).
+#[must_use]
+pub fn advice_standing(input: &StandingInput) -> Value {
+    let fee = input.advice.get("fee");
+    let when_given = figure_of(fee).and_then(|figure| {
+        let fee = fee?;
+        Some(json!({
+            "amount": shown_units(fee.get("amount_raw").and_then(Value::as_str)?, figure.decimals),
+            "symbol": fee.get("symbol").and_then(Value::as_str),
+        }))
+    });
+    json!({
+        "standing": standing_of(
+            &input.advice,
+            input.current_digest.as_deref(),
+            input.current_fee.as_ref(),
+        ),
+        "fee_when_given": when_given,
+    })
+}
+
 /// `vela_advise`: the agent's opinion, accepted as plain, capped text bound
-/// to a review digest — or refused. `current` says whether it was given for
-/// the review on the sheet now; an opinion for an earlier version is kept
-/// and drawn greyed, never as current.
+/// to a review digest and to the fee on the sheet — or refused. `standing`
+/// (and `current`) say whether it was given for the review on the sheet
+/// now; an opinion for an earlier version is kept and drawn greyed, never
+/// as current.
 #[must_use]
 pub fn advice(input: &AdviceInput) -> Value {
     if input.world.front().is_none() || !input.world.agent_may_use_active() {
@@ -889,15 +1073,22 @@ pub fn advice(input: &AdviceInput) -> Value {
             "no signing review is open: read one with vela_review or vela_watch_reviews",
         );
     };
+    // Given for the review on screen, the fee it shows now is the one the
+    // opinion was given for; for an earlier version, that fee is unknown.
+    let given_now = current.eq_ignore_ascii_case(digest);
+    let advice = json!({
+        "review_digest": digest,
+        "verdict": verdict,
+        "summary": summary,
+        "points": points,
+        "source_hosts": hosts,
+        "fee": if given_now { advised_fee(input.current_fee.as_ref()) } else { Value::Null },
+    });
+    let standing = standing_of(&advice, Some(current), input.current_fee.as_ref());
     json!({
         "ok": true,
-        "current": current.eq_ignore_ascii_case(digest),
-        "advice": {
-            "review_digest": digest,
-            "verdict": verdict,
-            "summary": summary,
-            "points": points,
-            "source_hosts": hosts,
-        },
+        "current": standing == "current",
+        "standing": standing,
+        "advice": advice,
     })
 }

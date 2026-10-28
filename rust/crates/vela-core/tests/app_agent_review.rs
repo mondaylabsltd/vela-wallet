@@ -5,7 +5,8 @@
 
 use serde_json::{json, Value};
 use vela_core::app::agent_review::{
-    advice, exact_units, has_invisible_chars, host_of, plain_text, AdviceInput,
+    advice, advice_standing, exact_units, has_invisible_chars, host_of, plain_text, AdviceInput,
+    StandingInput,
 };
 use vela_core::app::intent_rules::{review, ReviewInput};
 
@@ -393,4 +394,150 @@ fn hosts_and_plain_text() {
     assert_eq!(host_of("https://"), None);
     assert_eq!(plain_text("  a \t b  ", 10), "a b");
     assert_eq!(plain_text("abcdef", 4), "abc…");
+}
+
+fn advise_with_fee(current: Option<&str>, fee: Value, args: Value) -> Value {
+    let input: AdviceInput = serde_json::from_value(json!({
+        "world": allowed_world(true), "current_digest": current, "current_fee": fee, "args": args,
+    }))
+    .unwrap();
+    advice(&input)
+}
+
+fn native_review_fee(raw: &str) -> Value {
+    json!({ "state": "quoted", "amount": exact_units(raw, 18), "amount_raw": raw,
+        "decimals": 18, "symbol": "xDAI", "token": null })
+}
+
+fn usdc_review_fee(raw: &str) -> Value {
+    json!({ "state": "quoted", "amount": exact_units(raw, 6), "amount_raw": raw,
+        "decimals": 6, "symbol": "USDC", "token": USDC })
+}
+
+fn standing(advice: &Value, digest: &str, fee: Value) -> Value {
+    let input: StandingInput = serde_json::from_value(json!({
+        "advice": advice, "current_digest": digest, "current_fee": fee,
+    }))
+    .unwrap();
+    advice_standing(&input)
+}
+
+#[test]
+fn an_opinion_records_the_fee_and_stays_current_within_its_band() {
+    let args = json!({ "review_digest": "0xabc", "verdict": "looks_fine", "summary": "ok" });
+    // 0.001 xDAI on the sheet when the opinion arrived.
+    let out = advise_with_fee(Some("0xabc"), native_review_fee("1000000000000000"), args);
+    assert_eq!(out["standing"], "current");
+    let given = &out["advice"];
+    assert_eq!(given["fee"]["amount_raw"], "1000000000000000");
+    assert_eq!(given["fee"]["symbol"], "xDAI");
+    assert!(given["fee"]["token"].is_null());
+
+    // Re-priced 20% up: the same request, the same fee to the person.
+    let near = standing(given, "0xabc", native_review_fee("1200000000000000"));
+    assert_eq!(near["standing"], "current");
+    assert_eq!(
+        near["fee_when_given"],
+        json!({ "amount": "0.001", "symbol": "xDAI" })
+    );
+    // 25% exactly is still in band; past it, either way, is not.
+    assert_eq!(
+        standing(given, "0xabc", native_review_fee("750000000000000"))["standing"],
+        "current"
+    );
+    assert_eq!(
+        standing(given, "0xabc", native_review_fee("1260000000000000"))["standing"],
+        "fee_changed"
+    );
+    assert_eq!(
+        standing(given, "0xabc", native_review_fee("700000000000000"))["standing"],
+        "fee_changed"
+    );
+    // Another request is an earlier version, whatever the fee.
+    assert_eq!(
+        standing(given, "0xdef", native_review_fee("1000000000000000"))["standing"],
+        "earlier_version"
+    );
+    // Re-pricing (no figure on screen) leaves it as it stood.
+    let measuring = json!({ "state": "estimating", "failure": null });
+    assert_eq!(standing(given, "0xabc", measuring)["standing"], "current");
+}
+
+#[test]
+fn a_fee_in_another_coin_or_a_first_figure_is_another_fee() {
+    let args = json!({ "review_digest": "0xabc", "verdict": "caution", "summary": "check" });
+    let usdc = advise_with_fee(Some("0xabc"), usdc_review_fee("12345678"), args.clone());
+    let given = &usdc["advice"];
+    assert_eq!(
+        standing(given, "0xabc", usdc_review_fee("12345678"))["fee_when_given"],
+        json!({ "amount": "12.34", "symbol": "USDC" })
+    );
+    // The person picked the network's coin instead.
+    assert_eq!(
+        standing(given, "0xabc", native_review_fee("12345678"))["standing"],
+        "fee_changed"
+    );
+    // Given while the fee was still measured: the first figure is news.
+    let early = advise_with_fee(
+        Some("0xabc"),
+        json!({ "state": "estimating", "failure": null }),
+        args.clone(),
+    );
+    assert_eq!(early["standing"], "current");
+    assert!(early["advice"]["fee"].is_null());
+    assert_eq!(
+        standing(&early["advice"], "0xabc", usdc_review_fee("10000"))["standing"],
+        "fee_changed"
+    );
+    // A message has no fee either side: the digest alone decides.
+    let message = advise_with_fee(Some("0xabc"), Value::Null, args);
+    let mine = standing(&message["advice"], "0xabc", Value::Null);
+    assert_eq!(mine["standing"], "current");
+    assert!(mine["fee_when_given"].is_null());
+}
+
+#[test]
+fn a_tiny_fee_moves_within_its_fixed_floor() {
+    let args = json!({ "review_digest": "0xabc", "verdict": "looks_fine", "summary": "ok" });
+    // 0.00002 xDAI → 0.00003 xDAI is +50%, but within 0.00001 of a coin.
+    let tiny = advise_with_fee(
+        Some("0xabc"),
+        native_review_fee("20000000000000"),
+        args.clone(),
+    );
+    assert_eq!(
+        standing(
+            &tiny["advice"],
+            "0xabc",
+            native_review_fee("30000000000000")
+        )["standing"],
+        "current"
+    );
+    assert_eq!(
+        standing(
+            &tiny["advice"],
+            "0xabc",
+            native_review_fee("40000000000000")
+        )["standing"],
+        "fee_changed"
+    );
+    // A stablecoin fee may always move by a cent.
+    let cent = advise_with_fee(Some("0xabc"), usdc_review_fee("10000"), args);
+    assert_eq!(
+        standing(&cent["advice"], "0xabc", usdc_review_fee("20000"))["standing"],
+        "current"
+    );
+    assert_eq!(
+        standing(&cent["advice"], "0xabc", usdc_review_fee("20001"))["standing"],
+        "fee_changed"
+    );
+}
+
+#[test]
+fn an_opinion_for_an_earlier_version_records_no_fee() {
+    let args = json!({ "review_digest": "0xabc", "verdict": "looks_fine", "summary": "ok" });
+    let out = advise_with_fee(Some("0xdef"), native_review_fee("1000"), args);
+    assert_eq!(out["standing"], "earlier_version");
+    assert_eq!(out["current"], false);
+    assert!(out["advice"]["fee"].is_null());
 }

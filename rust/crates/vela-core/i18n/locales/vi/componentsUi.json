@@ -298,7 +298,9 @@
         "unsure": "Không chắc",
         "sources": "Nguồn",
         "footer": "Ý kiến từ tác nhân AI của bạn. Nó có thể sai. Nó không thay đổi những gì được ký.",
-        "stale": "Đưa ra cho một phiên bản trước của yêu cầu này"
+        "stale": "Đưa ra cho một phiên bản trước của yêu cầu này",
+        "feeWhenGiven": "Phí khi đưa ra: {{fee}}",
+        "feeChanged": "Phí đã thay đổi kể từ ý kiến này"
       }
     },
     "signingApprove": {

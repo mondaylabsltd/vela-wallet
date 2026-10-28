@@ -14,7 +14,7 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from '$lib/signing/core/sheet.svelte';
 import { fill } from '$lib/wallet/messages';
-import { callParamsJson, callReviewBlocks, callTitle } from './call-review.svelte';
+import { callParamsJson, callReviewBlocks, callSource, callTitle } from './call-review.svelte';
 import { APPROVE_MAX, BLIND, SPENDER, TOKEN, read } from './call-review.testing';
 
 const m = resolveSigningMessages('en');
@@ -62,6 +62,8 @@ describe('a multisig contract call reads as the signing sheet reads it (cs-12)',
 		expect(texts(blocks).some((t) => t.toLowerCase().includes(SPENDER.toLowerCase()))).toBe(true);
 		// The proposal's line is the core's verb, not "Contract call".
 		expect(callTitle(reading.clear, m)).toBe(intent.kind === 'intent' ? intent.text : null);
+		// And its row says who read it: Vela, from the transaction's own bytes.
+		expect(callSource(reading.clear, m)).toBe(`${m.certain.labelSource} ${m.certain.byVela}`);
 	});
 
 	it('a call nobody can read: the blind warning in red, and the coin it moves', () => {
@@ -78,8 +80,9 @@ describe('a multisig contract call reads as the signing sheet reads it (cs-12)',
 			kind: 'amount',
 			line: { sign: '−', value: '1.5', symbol: 'xDAI', tone: 'neutral' }
 		});
-		// Nothing to title it with: it stays "Contract call".
+		// Nothing to title it with: it stays "Contract call", with no source.
 		expect(callTitle(reading.clear, m)).toBeNull();
+		expect(callSource(reading.clear, m)).toBeNull();
 	});
 
 	it('says it is reading until the core has read it', () => {

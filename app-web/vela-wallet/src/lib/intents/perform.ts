@@ -101,12 +101,20 @@ function routeOf(
  * the page's presenter (`screenDesk`) — unless the page itself is the screen.
  */
 export async function show(screen: IntentScreen): Promise<string | null> {
-	await goto(resolve(routeOf(screen), { locale: currentLocale() }));
+	// No browser of its own (spec 107 E7): a site the agent opens is in a tab
+	// of the person's browser, which is where it shows — the page they are
+	// on stays as it was, and nothing waits for an Explore never drawn
+	// (agent-12: open_site took 8 s and left Settings for the wallet).
+	if (screen.type === 'explore') return null;
+	const page = resolve(routeOf(screen), { locale: currentLocale() });
+	// Already there: no new history step under the page's own (a contact's
+	// screen is one, which going back to the list takes back).
+	if (location.pathname !== page) await goto(page);
 	const whole =
 		screen.type === 'home' ||
 		screen.type === 'contacts' ||
 		(screen.type === 'settings' && screen.page === null);
-	return whole ? null : screenDesk.present(screen);
+	return whole ? screenDesk.top(screen) : screenDesk.present(screen);
 }
 
 /**
@@ -250,6 +258,8 @@ export async function perform(
 			// The address book is resident: it reads the cleared stores again,
 			// or it would show — and re-save — what was just removed.
 			if (action.item === 'contacts') await contactsBook.reload();
+			// So is the feed: it reads its cleared store again (agent-23).
+			if (action.item === 'transactions') feed.historyCleared();
 			return null;
 		case 'clear_caches':
 			await clearAllCaches();

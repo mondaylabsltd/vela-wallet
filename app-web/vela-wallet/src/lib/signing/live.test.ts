@@ -177,7 +177,8 @@ const READING: ClearReading = {
 	dust_minimum: false,
 	allowance: false,
 	allowance_adds: false,
-	shape_intent: null
+	shape_intent: null,
+	collection_name: null
 };
 
 const DECODED: ClearSigningView = {

@@ -298,7 +298,9 @@
         "unsure": "Emin değil",
         "sources": "Kaynaklar",
         "footer": "Yapay zekâ ajanınızın görüşüdür. Yanlış olabilir. İmzalanan şeyi değiştirmez.",
-        "stale": "Bu isteğin önceki bir sürümü için verildi"
+        "stale": "Bu isteğin önceki bir sürümü için verildi",
+        "feeWhenGiven": "Verildiğindeki ücret: {{fee}}",
+        "feeChanged": "Bu görüşten sonra ücret değişti"
       }
     },
     "signingApprove": {

@@ -1860,7 +1860,9 @@
     "unsure": "Unsure",
     "sources": "Sources",
     "footer": "An opinion from your AI agent. It can be wrong. It does not change what is signed.",
-    "stale": "Given for an earlier version of this request"
+    "stale": "Given for an earlier version of this request",
+    "feeWhenGiven": "Fee when given: {{fee}}",
+    "feeChanged": "The fee changed since this opinion"
    }
   },
   "currency": {

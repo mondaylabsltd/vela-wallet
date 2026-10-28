@@ -97,12 +97,13 @@ describe('what the agent reads of a review (spec 103)', () => {
 		});
 		const transfer = review.transfer as { recipients: unknown; wallet_checks: unknown };
 		expect(transfer.recipients).toEqual([
-			{ address: BOB, amount: '0.01', name: null },
-			{ address: CAROL, amount: '0.02', name: null }
+			{ address: BOB, amount: '0.01', name: null, warning: null },
+			{ address: CAROL, amount: '0.02', name: null, warning: null }
 		]);
 		expect(transfer.wallet_checks).toEqual({
 			amount_warning: null,
 			recipient_is_token_contract: true,
+			recipient_warning: null,
 			waits_for_previous_transfer: '0xOP'
 		});
 	});

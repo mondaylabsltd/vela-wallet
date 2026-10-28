@@ -190,9 +190,15 @@
 
 	/**
 	 * One contact or group, for the intents (spec 103): what its row sends
-	 * when tapped, once the book is read — by the address the book stores.
+	 * when tapped, once the book is read — by the address the book stores;
+	 * or the list itself, as its back does.
 	 */
 	async function present(screen: IntentScreen): Promise<string | null> {
+		// The list itself: back to it, nothing left open over it (agent-13).
+		if (screen.type === 'contacts') {
+			if (ui.screen !== 'list') onUiEvent({ kind: 'back' });
+			return null;
+		}
 		const deadline = Date.now() + 5_000;
 		while (!contactsBook.view?.loaded && Date.now() < deadline)
 			await new Promise((done) => setTimeout(done, 50));
@@ -212,7 +218,7 @@
 		}
 		return 'this page does not draw that screen';
 	}
-	onMount(() => screenDesk.attach(['contact', 'group'], present));
+	onMount(() => screenDesk.attach(['contacts', 'contact', 'group'], present));
 
 	const extras = $derived({
 		feed: feed.view,

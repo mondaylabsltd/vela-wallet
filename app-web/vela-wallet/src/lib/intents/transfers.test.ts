@@ -489,6 +489,21 @@ describe('one transfer after another (spec 103)', () => {
 		d.detach();
 	});
 
+	it('two drafts at once: the second is told of the first, never of a person filling in a send (agent-23)', async () => {
+		const d = desk();
+		const [first, second] = await Promise.all([
+			transfers.prepare(draft()),
+			transfers.prepare(draft('2'))
+		]);
+		expect(first).toMatchObject({ state: 'awaiting_confirmation' });
+		expect(second).toMatchObject({ code: 'busy' });
+		expect((second as { detail: string }).detail).toContain('another transfer is being drafted');
+		expect((second as { detail: string }).detail).not.toContain('the person');
+		// One form, opened once: the loser put nothing on it.
+		expect(d.opened).toHaveLength(1);
+		d.detach();
+	});
+
 	it('a review still waiting is busy, and names the transfer to submit or cancel', async () => {
 		const d = desk();
 		const first = (await transfers.prepare(draft())) as { id: string };

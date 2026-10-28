@@ -91,6 +91,19 @@
 	});
 	const latest = $derived(intents.activity[0]);
 
+	/**
+	 * agent-19: on a wide screen the bar sits at the foot of the sidebar rail,
+	 * which keeps that room free while it is up (`html[data-agent-bar]`) —
+	 * centred at the top, it covered the pages' own header controls.
+	 */
+	const barShown = $derived(status === 'elsewhere' || status === 'online' || pending !== undefined);
+	$effect(() => {
+		if (!barShown) return;
+		const root = document.documentElement;
+		root.dataset.agentBar = '';
+		return () => delete root.dataset.agentBar;
+	});
+
 	function stop(): void {
 		intents.stop();
 		void intents.invoke('person', {
@@ -142,7 +155,9 @@
 <style>
 	/* A phone's header carries the account's name at its left: the bar keeps to
 	   the right corner, compact, so the name stays in sight and in reach. The
-	   wide layout has room for it centred, with what the agent did last. */
+	   wide layout puts it at the foot of the sidebar rail, which keeps that
+	   room for it (agent-19: centred at the top, it covered the pages' search
+	   fields and buttons), with what the agent did last. */
 	.bar {
 		position: fixed;
 		top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
@@ -227,14 +242,20 @@
 	}
 
 	@media (min-width: 1280px) {
+		/* The rail's own width (`Sidebar.svelte`), less its padding. */
 		.bar {
+			top: auto;
 			right: auto;
-			left: 50%;
-			transform: translateX(-50%);
+			left: var(--space-xl);
+			bottom: var(--space-xl);
+			box-sizing: border-box;
+			width: calc(var(--space-4xl) * 7 - var(--space-xl));
+			max-width: none;
 		}
 
 		.what {
 			display: inline;
+			flex: 1;
 		}
 	}
 

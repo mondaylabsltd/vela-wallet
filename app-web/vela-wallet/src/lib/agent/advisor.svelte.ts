@@ -15,24 +15,27 @@ import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 import { world } from '$lib/intents/index.svelte';
 import { worldJson } from '$lib/intents/world';
 import { completed, rejected, type ClientMCP } from './clientmcp';
-import { openReview, sheetBeside } from './advice.svelte';
+import { adviceStanding, openReview, reviewFee, sheetBeside } from './advice.svelte';
 import {
 	ADVICE_VERDICTS,
 	WATCH_MAX_MS,
 	watchReviews,
 	type AcceptedAdvice,
-	type AdviceAnswer
+	type AdviceAnswer,
+	type OpenReview
 } from './advisor';
 
 /** The views the allow list is read from (`World::agent_may_use_active`). */
 const GATE_NEEDS = ['session', 'agent_wallets', 'shown_multisig'] as const;
 
-function ask(currentDigest: string | null, args: Record<string, unknown> | null): AdviceAnswer {
+function ask(open: OpenReview | null, args: Record<string, unknown> | null): AdviceAnswer {
 	return JSON.parse(
 		intentAdvice(
 			JSON.stringify({
 				world: JSON.parse(worldJson(world(), GATE_NEEDS)),
-				current_digest: currentDigest,
+				current_digest: open?.review_digest ?? null,
+				// The fee on the sheet now: what the opinion is given for.
+				current_fee: reviewFee(open),
 				args
 			})
 		)
@@ -45,18 +48,24 @@ function networks() {
 
 /** Put the opinion on the sheet — or say why not. */
 export function advise(args: Record<string, unknown>) {
-	const open = openReview();
-	const answer = ask(open?.review_digest ?? null, args);
+	// With the networks, so the fee it records names its coin.
+	const open = openReview(networks());
+	const answer = ask(open, args);
 	if (!answer.ok) return rejected(answer.code, answer.detail);
 	const requestId = signRequest.view.request?.id;
 	if (!answer.advice || requestId === undefined) {
 		return rejected('not_found', 'no signing review is open');
 	}
-	sheetBeside.advise(requestId, answer.advice as AcceptedAdvice);
+	const advice = answer.advice as AcceptedAdvice;
+	sheetBeside.advise(requestId, advice);
+	const standing = adviceStanding(advice, open);
 	return completed({
-		shown_as: answer.current ? 'current' : 'earlier_version',
-		review_digest: answer.advice.review_digest,
-		...(answer.current ? {} : { current_digest: open?.review_digest ?? null })
+		shown_as: standing.standing,
+		review_digest: advice.review_digest,
+		fee_when_given: advice.fee ?? null,
+		...(standing.standing === 'earlier_version'
+			? { current_digest: open?.review_digest ?? null }
+			: {})
 	});
 }
 
@@ -94,7 +103,7 @@ export function exposeAdvisor(client: ClientMCP): void {
 	client.expose('vela_advise', {
 		title: 'Give your opinion on the signing request',
 		description:
-			"Show the person your opinion on the dApp signing request on screen, in its own card on the signing sheet, labelled as your opinion. It changes nothing that is signed, no button and none of the wallet's own warnings; the person never waits for it. Bound to `review_digest` (from vela_review or vela_watch_reviews): for a digest that is no longer the one on screen it is shown greyed, as given for an earlier version. Plain text only: summary at most 280 characters, at most 5 points of 160, at most 5 source URLs (only their hosts are shown).",
+			"Show the person your opinion on the dApp signing request on screen, in its own card on the signing sheet, labelled as your opinion. It changes nothing that is signed, no button and none of the wallet's own warnings; the person never waits for it. Bound to `review_digest` (from vela_review or vela_watch_reviews): for a digest that is no longer the one on screen it is shown greyed, as given for an earlier version. It is bound to the fee on the sheet when it arrives too (answered as `fee_when_given`): once the fee moves more than 25% from that figure, or to another coin, it is shown greyed as given for another fee — advise again to re-bind it. Plain text only: summary at most 280 characters, at most 5 points of 160, at most 5 source URLs (only their hosts are shown).",
 		risk: 'operate',
 		inputSchema: {
 			type: 'object',

@@ -39,6 +39,17 @@ class ScreenDesk {
 			await new Promise((done) => setTimeout(done, 50));
 		}
 	}
+
+	/**
+	 * A whole page's own screen (the contact list, home): the page is the
+	 * screen, so a page already mounted is told to go back to its top —
+	 * nothing it had open left over it (agent-13). A page not mounted yet
+	 * opens at its top anyway: nothing is waited for.
+	 */
+	async top(screen: IntentScreen): Promise<string | null> {
+		const presenter = this.#presenters.get(screen.type);
+		return presenter ? presenter(screen) : null;
+	}
 }
 
 export const screenDesk = new ScreenDesk();

@@ -68,6 +68,8 @@ struct Shell {
     empty: Vec<&'static str>,
     /// selector → signatures.
     selectors: Vec<(String, String)>,
+    /// (address, name) an NFT collection answers `name()` with.
+    names: Vec<(&'static str, &'static str)>,
 }
 
 impl Shell {
@@ -110,6 +112,11 @@ impl Shell {
                         Some(format!("0x{}", num(u128::from(*decimals))))
                     }
                     (ClearProbe::Symbol, Some((_, _, symbol))) => Some(abi_string(symbol)),
+                    (ClearProbe::Name, _) => self
+                        .names
+                        .iter()
+                        .find(|(a, _)| a.eq_ignore_ascii_case(to))
+                        .map(|(_, name)| abi_string(name)),
                     _ => None,
                 };
                 Res::RpcAnswer {
@@ -688,6 +695,51 @@ fn approve_all_has_no_raw_flag_and_false_revokes() {
     let revoke = format!("0xa22cb465{}{}", word(REWARDS), num(0));
     let r = result(&read(&shell, tx(100, NFT, &revoke, "0x0", false)));
     assert_eq!(r.intent, "Revoke");
+}
+
+/// An approve-all names its collection — its contract's own `name()`, the
+/// contract's word, plain and capped — not only a short address; and a
+/// collection that answers no name is still read, by its address.
+#[test]
+fn approve_all_names_its_collection_by_its_own_answer() {
+    let grant = format!("0xa22cb465{}{}", word(REWARDS), num(1));
+    let shell = Shell {
+        names: vec![(NFT, "Gnosis \u{202E}Punks\u{202C}  Club")],
+        ..Shell::default()
+    };
+    let r = result(&read(&shell, tx(100, NFT, &grant, "0x0", false)));
+    assert_eq!(r.intent, "Approve all NFTs");
+    assert_eq!(
+        r.reading.collection_name.as_deref(),
+        Some("Gnosis Punks Club")
+    );
+    assert!(
+        r.contract_name.is_none(),
+        "the collection's word is no contract name"
+    );
+
+    let nameless = result(&read(&Shell::default(), tx(100, NFT, &grant, "0x0", false)));
+    assert_eq!(nameless.intent, "Approve all NFTs");
+    assert!(nameless.reading.collection_name.is_none());
+}
+
+/// The contract line names a token Vela's registry lists on a single call,
+/// as a batch's row does — not "no name known" over USDC's own transfer.
+#[test]
+fn a_registry_token_names_its_contract_on_a_single_call() {
+    let send = format!("0xa9059cbb{}{}", word(THIEF), num(1_000_000));
+    let r = result(&read(
+        &Shell::default(),
+        tx(100, GNOSIS_USDC, &send, "0x0", false),
+    ));
+    assert_eq!(r.contract_name.as_deref(), Some("USDC"));
+    assert_eq!(r.reading.contract_named_by, Some(ClearLineSource::BuiltIn));
+    // A token nobody lists is nobody's to name.
+    let unknown = result(&read(
+        &Shell::default(),
+        tx(100, FAKE_USDC, &send, "0x0", false),
+    ));
+    assert!(unknown.contract_name.is_none());
 }
 
 /// w07: an ERC-2612 permit is Vela's own reading, an allowance, with its

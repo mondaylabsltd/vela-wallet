@@ -110,6 +110,14 @@ pub fn intent_advice(input_json: &str) -> String {
     intent_json::advice(input_json)
 }
 
+/// How an opinion on the sheet stands now — its digest, and the fee it was
+/// given for against the fee on screen.
+#[wasm_bindgen(js_name = intentAdviceStanding)]
+#[must_use]
+pub fn intent_advice_standing(input_json: &str) -> String {
+    intent_json::advice_standing(input_json)
+}
+
 /// What an agent's request changes, for its approval, with what the wallet
 /// knows around it (`world_json`, as for `intentExamine`).
 #[wasm_bindgen(js_name = intentApprovalDetailIn)]

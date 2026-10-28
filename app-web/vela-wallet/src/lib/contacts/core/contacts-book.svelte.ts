@@ -48,6 +48,17 @@ export class ContactsBook {
 		this.#session?.dispatch({ type: 'account_switched', my_address: address });
 	}
 
+	/**
+	 * Read the book for `address` unless a page already did — for a reader
+	 * that is no page (the AI agent's bridge, agent-6: a wallet opened on
+	 * Settings never read it, and every contact tool answered `not_ready`).
+	 * Never moves the account a page told it.
+	 */
+	ensure(address: string | null): Promise<void> {
+		if (this.#booting) return this.#booting;
+		return this.setAccount(address);
+	}
+
 	/** An event for the book. Dropped only before the session exists. */
 	dispatch(event: ContactEvent): void {
 		this.#session?.dispatch(event);
