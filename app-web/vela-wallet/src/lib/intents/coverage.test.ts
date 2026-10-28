@@ -227,6 +227,7 @@ const CALLED: Record<string, Place> = {
 	'balance.reread': { intent: 'refresh_balances' },
 	'balance.boot': { machine: 'boot' },
 	'balance.setAccount': { machine: 'the account' },
+	'balance.noteAccount': { machine: 'the account' },
 	'balance.settledFor': { machine: 'a read' },
 	'balance.openSwitcher': { view: 'the account switcher shown' },
 	'balance.closeSwitcher': { view: 'the account switcher shown' },

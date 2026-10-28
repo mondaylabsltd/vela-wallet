@@ -123,7 +123,9 @@
 
 	$effect(() => {
 		if (!signedIn) return;
-		void balance.setAccount(shownAddress);
+		// Noted, not read (perf-10): the book draws no balance, only the
+		// privacy mask; the header's switcher reads the networks when it opens.
+		void balance.noteAccount(shownAddress);
 		void feed.setAccount(shownAddress);
 		// The core's own account boundary: history-derived suggestions must
 		// never cross books (contacts.rs `AccountSwitched`). Told only when the

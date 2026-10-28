@@ -47,6 +47,7 @@
 	import {
 		CHECKING_ROW,
 		checkEthereumBackup,
+		lastBackupRow,
 		type EthereumBackupRow
 	} from '$lib/services/registry-backup';
 	import {
@@ -183,8 +184,10 @@
 				}
 	);
 
+	// Noted, not read (perf-10): this page draws a balance only in the account
+	// switcher, and the core reads the networks when it opens.
 	$effect(() => {
-		if (identity !== null) void balance.setAccount(identity.address);
+		if (identity !== null) void balance.noteAccount(identity.address);
 	});
 
 	/**
@@ -300,15 +303,33 @@
 	// it landed. What is kept is the ROW the core says to draw for where it
 	// stands (`registry_backup::BackupRow`): its words, its tone and what a tap
 	// does. `null` is "draw nothing" (no registry on Ethereum, no record).
+	//
+	// While the chain is asked, the block stands on the row it drew last time
+	// for this account (perf-8): "Checking…" with its paragraph, then nothing
+	// at all for a wallet with no record to copy, dropped everything under it
+	// by a block's height. Asked AGAIN on this visit — a retry, a copy that
+	// settled — it says "Checking…": the person is waiting on that answer.
 	let backupRow = $state<EthereumBackupRow | null>(CHECKING_ROW);
 	let backupAsked = $state(0);
+	// Which account, and which ask, the row was last drawn for. The effect also
+	// re-runs whenever the session's view moves: the same account and the same
+	// ask keep the row on screen while the chain is asked again.
+	let backupDrawn: { account: string; asked: number } | null = null;
 	$effect(() => {
 		const account = session.view.accounts[session.view.active_index]?.account;
-		void backupAsked;
+		const asked = backupAsked;
 		if (!account) return;
-		backupRow = CHECKING_ROW;
+		const foundingKey = foundingKeyOf(account);
+		const drawnFor = `${account.address}#${foundingKey}`;
+		const sameAccount = backupDrawn?.account === drawnFor;
+		const sameAsk = sameAccount && backupDrawn?.asked === asked;
+		backupDrawn = { account: drawnFor, asked };
 		let cancelled = false;
-		void checkEthereumBackup(account.address, foundingKeyOf(account)).then((check) => {
+		if (!sameAsk) {
+			const remembered = sameAccount ? undefined : lastBackupRow(account.address, foundingKey);
+			backupRow = remembered === undefined ? CHECKING_ROW : remembered;
+		}
+		void checkEthereumBackup(account.address, foundingKey).then((check) => {
 			if (!cancelled) backupRow = check.row;
 		});
 		return () => {

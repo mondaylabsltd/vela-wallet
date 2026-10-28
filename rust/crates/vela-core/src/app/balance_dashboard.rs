@@ -851,6 +851,18 @@ pub enum Event {
     AccountChanged {
         address: String,
     },
+    /// The active account, for a screen that draws no balance of its own yet
+    /// (perf-10: the settings page, the address book). Everything
+    /// [`Event::AccountChanged`] does but ask the chains: the account is set
+    /// and its cached total read, so the account switcher and the privacy
+    /// mask are right, and no network is read until something shows the
+    /// balance — [`Event::AccountChanged`] for the same account (the wallet
+    /// home), a [`Event::RefreshRequested`], or the switcher opening. A focus
+    /// or a switch of space while it waits reads nothing either. Nothing for
+    /// an account already set: its round, if any, stands.
+    AccountNoted {
+        address: String,
+    },
     /// A refresh trigger. The shell feeds these for the 10-minute aggregate
     /// poll and the 10-second activity poll (`force: false, pull: false`),
     /// the pull gesture (`force: true, pull: true` — invariant ⑨: a user pull
@@ -1033,6 +1045,9 @@ pub struct Model {
     privacy_touched: bool,
     /// Inverted so `Default` (false) means active, matching a fresh screen.
     backgrounded: bool,
+    /// [`Event::AccountNoted`]: the account is set and no chain has been
+    /// asked — the first fetch for it ends this.
+    read_deferred: bool,
     switcher_open: bool,
     switcher_roster: Vec<String>,
     /// `displayTotal` captured at the moment the switcher was tapped — the
@@ -1291,6 +1306,14 @@ impl App for BalanceDashboard {
     fn update(&self, event: Event, model: &mut Model) -> Command<BalanceEffect, Event> {
         match event {
             Event::AccountChanged { address } => account_changed(model, address),
+            Event::AccountNoted { address } => {
+                if model.address.as_deref() == Some(address.as_str()) {
+                    return Command::done();
+                }
+                let command = reset_for(model, address, false, false);
+                model.read_deferred = true;
+                command
+            }
             Event::RefreshRequested { force, pull } => {
                 if model.address.is_none() {
                     return Command::done();
@@ -1307,7 +1330,7 @@ impl App for BalanceDashboard {
             }
             Event::AppFocused => {
                 model.backgrounded = false;
-                if model.address.is_some() {
+                if model.address.is_some() && !model.read_deferred {
                     begin_fetch(model, false, false)
                 } else {
                     Command::done()
@@ -1366,7 +1389,17 @@ impl App for BalanceDashboard {
                 arm_recovery(model, &mut operations, unreadable);
                 requests(model, operations)
             }
-            Event::SwitcherOpened { addresses } => switcher_opened(model, addresses),
+            Event::SwitcherOpened { addresses } => {
+                // The switcher draws the active account's total: the read a
+                // noted account deferred starts now.
+                let deferred = model.read_deferred;
+                let opened = switcher_opened(model, addresses);
+                if deferred && model.address.is_some() {
+                    Command::all(vec![opened, begin_fetch(model, false, false)])
+                } else {
+                    opened
+                }
+            }
             Event::SwitcherClosed => {
                 model.switcher_open = false;
                 render()
@@ -1382,7 +1415,11 @@ impl App for BalanceDashboard {
                 // (the account-switch quirk keeps them; a space switch does not).
                 model.rate_limited_chain_ids.clear();
                 model.switcher_balances.clear();
-                reset_for(model, address, true)
+                // A noted account stays unread in the new space too.
+                let deferred = model.read_deferred;
+                let command = reset_for(model, address, true, !deferred);
+                model.read_deferred = deferred;
+                command
             }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
@@ -1536,16 +1573,27 @@ impl App for BalanceDashboard {
 
 fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect, Event> {
     if model.address.as_deref() == Some(address.as_str()) {
+        // Noted by a screen that drew no balance (perf-10): the read it
+        // deferred starts now, on what it already restored.
+        if model.read_deferred {
+            return begin_fetch(model, false, false);
+        }
         // Same dependency value — the reset effect would not re-run.
         return Command::done();
     }
-    reset_for(model, address, false)
+    reset_for(model, address, false, true)
 }
 
 /// The reset an account switch does — and a switch of space, for the same
 /// account (`force`: the space's networks are read past the shell's token
-/// cache, which held the other space's).
-fn reset_for(model: &mut Model, address: String, force: bool) -> Command<BalanceEffect, Event> {
+/// cache, which held the other space's). `fetch: false` is
+/// [`Event::AccountNoted`]'s: the cache is read, no chain is asked.
+fn reset_for(
+    model: &mut Model,
+    address: String,
+    force: bool,
+    fetch: bool,
+) -> Command<BalanceEffect, Event> {
     model.attempt += 1;
     model.address = Some(address.clone());
     // The reset block (`useHomeController.ts:399-416`) — note what it does
@@ -1576,7 +1624,8 @@ fn reset_for(model: &mut Model, address: String, force: bool) -> Command<Balance
     // The fetch issued below is out from this moment (#188): the figure only
     // rises from the cached total (seeded into `last_settled_total` when it
     // lands) and the notice waits, exactly as for every later refresh.
-    model.fetch_in_flight = true;
+    model.fetch_in_flight = fetch;
+    model.read_deferred = false;
     model.last_settled_total = None;
     model.stream_peak = 0.0;
     model.errored_without_data = false;
@@ -1584,22 +1633,20 @@ fn reset_for(model: &mut Model, address: String, force: bool) -> Command<Balance
     model.switcher_roster.clear();
     model.switcher_pinned_total = None;
     model.switcher_pending = 0;
-    requests(
-        model,
-        vec![
-            // Paint the hero instantly from the cached total (never a $0
-            // flash, `:412-414`) …
-            BalanceOperation::ReadBalanceCache {
-                address: address.clone(),
-            },
-            // … while the focus-effect reload fetches live data.
-            BalanceOperation::FetchTokens {
-                address,
-                force,
-                pull: false,
-            },
-        ],
-    )
+    // Paint the hero instantly from the cached total (never a $0
+    // flash, `:412-414`) …
+    let mut operations = vec![BalanceOperation::ReadBalanceCache {
+        address: address.clone(),
+    }];
+    // … while the focus-effect reload fetches live data.
+    if fetch {
+        operations.push(BalanceOperation::FetchTokens {
+            address,
+            force,
+            pull: false,
+        });
+    }
+    requests(model, operations)
 }
 
 /// [`Event::HoldingsRestored`]: the rows last shown for this account fill in
@@ -1651,6 +1698,7 @@ fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEff
         model.stream_peak = 0.0;
     }
     model.fetch_in_flight = true;
+    model.read_deferred = false;
     request(
         model,
         BalanceOperation::FetchTokens {

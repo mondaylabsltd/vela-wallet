@@ -116,6 +116,15 @@ export function sealStorage(): void {
 	sealed = true;
 }
 
+/**
+ * Whether an erase holds the seal — for the few small records kept in
+ * `localStorage` beside this store, which honour it too (perf-8's
+ * `vela.backupCheck`).
+ */
+export function storageSealed(): boolean {
+	return sealed;
+}
+
 /** The erase did not go through, and the wallet is still in use: writes again. */
 export function unsealStorage(): void {
 	sealed = false;

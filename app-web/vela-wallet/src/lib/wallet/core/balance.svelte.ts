@@ -124,6 +124,21 @@ class Balance {
 		if (changed) await this.#restoreRows();
 	}
 
+	/**
+	 * The signed-in address, for a screen that draws no balance of its own
+	 * (perf-10: settings, the address book). The core sets it and reads its
+	 * cached total — the switcher and the privacy mask are right — but asks no
+	 * network until something shows the balance: `setAccount` from the wallet
+	 * home, a refresh, or the switcher opening. Opened directly, those pages
+	 * read 24 networks for a figure nobody saw.
+	 */
+	async noteAccount(address: string): Promise<void> {
+		await this.boot();
+		const changed = balanceView().address !== address;
+		dispatchBalance({ type: 'account_noted', address });
+		if (changed) await this.#restoreRows();
+	}
+
 	refresh(force = false, pull = false): void {
 		if (!this.#booted) return;
 		dispatchBalance({ type: 'refresh_requested', force, pull });

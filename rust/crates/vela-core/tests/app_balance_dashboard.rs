@@ -3331,6 +3331,8 @@ fn a_recovery_read_waits_for_the_app_to_be_seen() {
 
 // ===========================================================================
 // The person's own node (owner decision 2026-10-28)
+// ====================================================================}
+
 // ===========================================================================
 
 /// A network read through the person's node alone ("Only use my node"), whose
@@ -3419,4 +3421,144 @@ fn holdings_none_of_which_can_be_priced_have_no_figure_not_a_zero() {
     let view = booted(ADDR_A, None, settled_read(vec![], vec![], vec![100])).view();
     assert!(!view.unpriced_only);
     assert_eq!(view.display_total_usd, Some(0.0));
+=======
+// perf-10: a screen that draws no balance notes the account, and reads nothing
+// ===========================================================================
+
+#[test]
+fn a_noted_account_reads_its_cache_and_asks_no_chain() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    assert_eq!(
+        ops,
+        vec![Op::ReadBalanceCache {
+            address: ADDR_A.to_owned()
+        }]
+    );
+    assert!(sut
+        .resolve(Res::CachedTotalLoaded {
+            address: ADDR_A.to_owned(),
+            usd: Some(42.0),
+        })
+        .is_empty());
+    assert_eq!(sut.view().address.as_deref(), Some(ADDR_A));
+    assert_eq!(sut.view().cached_total_usd, Some(42.0));
+    // Noted twice, or by a second screen: still nothing to read.
+    assert!(sut
+        .dispatch(Event::AccountNoted {
+            address: ADDR_A.to_owned()
+        })
+        .is_empty());
+    // A focus, or a switch of space, while nobody shows the balance: nothing.
+    assert!(sut.dispatch(Event::AppFocused).is_empty());
+    assert_eq!(
+        sut.dispatch(Event::SpaceChanged),
+        vec![Op::ReadBalanceCache {
+            address: ADDR_A.to_owned()
+        }]
+    );
+}
+
+#[test]
+fn the_wallet_home_reads_what_a_noted_account_deferred() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(42.0),
+    });
+    // The same account, from the screen that shows it: the read starts, and
+    // the cached figure the note read stands until it lands.
+    assert_eq!(
+        sut.dispatch(Event::AccountChanged {
+            address: ADDR_A.to_owned()
+        }),
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: false,
+            pull: false
+        }]
+    );
+    assert_eq!(sut.view().display_total_usd, Some(42.0));
+    // Read once: the next AccountChanged for it is the no-op it always was.
+    assert!(sut
+        .dispatch(Event::AccountChanged {
+            address: ADDR_A.to_owned()
+        })
+        .is_empty());
+}
+
+#[test]
+fn a_noted_account_is_read_once_its_balance_is_shown() {
+    // The switcher opening.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    let ops = sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
+    });
+    assert!(
+        ops.contains(&Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: false,
+            pull: false
+        }),
+        "{ops:?}"
+    );
+    assert!(ops.contains(&Op::ReadBalanceCacheMany {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()]
+    }));
+
+    // A refresh somebody asked for (a send that landed).
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    assert_eq!(
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false
+        }),
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: true,
+            pull: false
+        }]
+    );
+    // From then on a focus reads again, as it always did.
+    sut.resolve(settled(ADDR_A, vec![], vec![], vec![]));
+    assert!(sut.dispatch(Event::AppFocused).contains(&Op::FetchTokens {
+        address: ADDR_A.to_owned(),
+        force: false,
+        pull: false
+    }));
+}
+
+#[test]
+fn another_account_changed_after_a_note_is_the_full_reset() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    let ops = sut.dispatch(Event::AccountChanged {
+        address: ADDR_B.to_owned(),
+    });
+    assert_eq!(
+        ops,
+        vec![
+            Op::ReadBalanceCache {
+                address: ADDR_B.to_owned()
+            },
+            Op::FetchTokens {
+                address: ADDR_B.to_owned(),
+                force: false,
+                pull: false
+            },
+        ]
+    );
 }

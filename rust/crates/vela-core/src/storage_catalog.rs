@@ -104,7 +104,13 @@ pub const ITEMS: [StorageItem; 8] = [
     StorageItem {
         id: "scan",
         group: StorageGroup::Cache,
-        keys: &["vela.rpc.banned", "vela.recipientIdentity"],
+        // The last answer to "is this wallet's record on Ethereum?", per
+        // account: what the Keys block draws while it asks again (perf-8).
+        keys: &[
+            "vela.rpc.banned",
+            "vela.recipientIdentity",
+            "vela.backupCheck",
+        ],
         prefixes: &[
             "vela.tokenMeta.",
             "recipient_id:",
@@ -226,6 +232,8 @@ mod tests {
         assert_eq!(row("recipient_id:0xabc"), Some("scan"));
         assert_eq!(row("vela.receiveWatch.0xabc"), Some("scan"));
         assert_eq!(row("vela.trust"), Some("scan"));
+        assert_eq!(row("vela.backupCheck"), Some("scan"));
+        assert!(is_cache_key("vela.backupCheck"));
         assert_eq!(row("vela.perm.https://app.uniswap.org"), Some("dapps"));
         assert_eq!(row("vela.chain.https://app.uniswap.org"), Some("dapps"));
     }
