@@ -205,7 +205,34 @@ export class Bridge extends EventTarget {
 		} catch {
 			return [];
 		}
-		return this.signer.accounts.length ? offered : [];
+		if (!this.signer.accounts.length) return [];
+		this.#replaced(saved);
+		return offered;
+	}
+
+	/**
+	 * `current` was just approved: an older session of the same dApp that is
+	 * not connected now is one it gave up — a Vela that pairs again opens a
+	 * new room only when it no longer holds the old one — and is ended rather
+	 * than left as one more Disconnect row for a room nobody will open.
+	 */
+	#replaced(current: Saved): void {
+		const dapp = current.dapp;
+		if (!dapp) return;
+		for (const other of [...this.#saved]) {
+			if (other.id === current.id || !other.dapp) continue;
+			if (other.dapp.name !== dapp.name || other.dapp.origin !== dapp.origin) continue;
+			const live = this.#live.get(other.id);
+			if (live?.connection.state === 'connected') continue;
+			// Its peer is told if it comes back while this page is open; the
+			// page keeps no record of it.
+			try {
+				live?.connection.close();
+			} catch {
+				// already closing
+			}
+			this.#forget(other.id);
+		}
 	}
 
 	#accountsChanged(list: string[]): void {

@@ -7,7 +7,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import type { MultisigMessages } from '../messages';
-	import { addMultisig, retryUnrecorded } from '../core/accounts';
+	import { addMultisig, followUnrecorded } from '../core/accounts';
 	import { parseAddLink, parseProposalLink } from '../core/link';
 	import { proposals } from '../core/proposals.svelte';
 	import { recordExecution } from '../core/records';
@@ -38,11 +38,13 @@
 	onMount(() => {
 		multisig.boot();
 		proposals.onrecorded = () => onchanged?.();
-		void retryUnrecorded();
+		// A record that has not landed is asked about again while any page is up.
+		const stopRecords = followUnrecorded();
 		void answerLink();
 		const onhash = () => void answerLink();
 		window.addEventListener('hashchange', onhash);
 		return () => {
+			stopRecords();
 			window.removeEventListener('hashchange', onhash);
 			proposals.follow(null, []);
 		};
@@ -97,6 +99,10 @@
 
 	const sheet = $derived(multisigUi.sheet);
 	const active = $derived(multisig.active);
+	/** The multisig a dApp's request is for: the one it was granted, shown or not. */
+	const dappAccount = $derived(
+		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.address) ?? null) : null
+	);
 </script>
 
 {#if sheet?.kind === 'create'}
@@ -138,6 +144,27 @@
 			void recordExecution(active.address, item, txHash, userOpHash).finally(() => onchanged?.());
 		}}
 	/>
+{:else if sheet?.kind === 'dapp' && dappAccount}
+	<!-- A dApp's transaction: its review first, then the transaction it became.
+	     Every way out is the request's to answer. -->
+	{#key sheet.request.rid}
+		<ProposalSheet
+			{m}
+			account={dappAccount}
+			chainId={sheet.request.chainId}
+			safeTxHash={sheet.request.safeTxHash ?? ''}
+			draft={sheet.request}
+			{locale}
+			{wide}
+			{closeLabel}
+			onclose={() => sheet.request.close()}
+			onexecuted={({ item, txHash, userOpHash }) => {
+				void recordExecution(dappAccount.address, item, txHash, userOpHash).finally(() =>
+					onchanged?.()
+				);
+			}}
+		/>
+	{/key}
 {:else if sheet?.kind === 'invite' && active}
 	<InviteSheet
 		{m}

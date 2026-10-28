@@ -2213,15 +2213,22 @@ pub fn dapp_rpc_calls_status(
 }
 
 /// EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
-/// request's params, the site's granted addresses and the wallet's chains (all
-/// JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+/// request's params, the site's granted addresses, the wallet's chains and
+/// the multisig accounts among its addresses (all JSON). Answers
+/// `{"result":…}` or `{"error":{"code","message"}}`.
 #[wasm_bindgen(js_name = dappRpcCapabilities)]
-pub fn dapp_rpc_capabilities(params_json: &str, granted_json: &str, chains_json: &str) -> String {
+pub fn dapp_rpc_capabilities(
+    params_json: &str,
+    granted_json: &str,
+    chains_json: &str,
+    multisigs_json: &str,
+) -> String {
     let params: serde_json::Value =
         serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
     let granted: Vec<String> = serde_json::from_str(granted_json).unwrap_or_default();
     let chains: Vec<u32> = serde_json::from_str(chains_json).unwrap_or_default();
-    match vela_core::app::dapp_rpc::capabilities(&params, &granted, &chains) {
+    let multisigs: Vec<String> = serde_json::from_str(multisigs_json).unwrap_or_default();
+    match vela_core::app::dapp_rpc::capabilities(&params, &granted, &chains, &multisigs) {
         Ok(result) => serde_json::json!({ "result": result }).to_string(),
         Err((code, message)) => {
             serde_json::json!({ "error": { "code": code, "message": message } }).to_string()

@@ -15,6 +15,12 @@ export const REQUEST_PREFIX = 'vela.req.';
 /** The snapshot the worker reads to answer a granted origin instantly. */
 export const EXT_CACHE_KEY = 'vela.ext.cache';
 /**
+ * The multisig accounts among the snapshot's addresses (lowercase), written
+ * with it: the worker answers `wallet_getCapabilities` for a multisig with
+ * no atomic batch (it proposes none).
+ */
+export const MULTISIGS_KEY = 'vela.ext.multisigs';
+/**
  * The chain an origin switched itself to — `vela.chain.<origin>` → number.
  * Written by the worker on `wallet_switchEthereumChain`; read here so a
  * signature for that origin is asked for on the chain the site is on.

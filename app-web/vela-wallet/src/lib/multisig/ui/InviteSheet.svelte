@@ -9,8 +9,8 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { addLink } from '../core/link';
-	import type { MultisigAccount } from '../core/store.svelte';
+	import { addLink, shareOrigin } from '../core/link';
+	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -25,8 +25,16 @@
 	let { m, account, locale, wide, closeLabel, onclose }: Props = $props();
 
 	const link = $derived(
-		typeof location === 'undefined' ? '' : addLink(location.origin, locale, account.address)
+		typeof location === 'undefined'
+			? ''
+			: addLink(shareOrigin(location.origin), locale, account.address)
 	);
+	/**
+	 * Its record has not reached the genesis service yet: another member who
+	 * adds it by this address may not find it until it has. Read from the
+	 * store, so it changes the moment a retry lands.
+	 */
+	const unshared = $derived(!isShared(multisig.find(account.address) ?? account));
 	let copied = $state<'address' | 'link' | null>(null);
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
@@ -47,6 +55,9 @@
 		<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(account.address)}</span>
 		<p class="address">{account.address}</p>
 		<p class="hint">{m.create.createdBody}</p>
+		{#if unshared}
+			<p class="unshared" role="status">{m.panel.notShared}</p>
+		{/if}
 	</div>
 	<div class="actions">
 		<Button variant="secondary" shape="rounded" onclick={() => copy('address')}>
@@ -109,6 +120,17 @@
 		margin: var(--space-sm) 0 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.unshared {
+		margin: var(--space-md) 0 0;
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-warning-soft);
+		border: var(--border-hairline) solid var(--color-warning-border);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+		text-align: start;
 	}
 
 	.actions {

@@ -47,6 +47,7 @@
 import {
 	CHAIN_PREFIX,
 	CHAINS_KEY,
+	MULTISIGS_KEY,
 	DOC_PORT,
 	ENDPOINTS_KEY,
 	ERR,
@@ -1236,15 +1237,16 @@ async function forwardRead(method, params, origin) {
 
 /**
  * `wallet_getCapabilities`: atomic batches on every chain the wallet has, for
- * the account the site may see (`capabilitiesResult`, the core's
- * `dapp_rpc::capabilities`, twinned).
+ * the account the site may see — none for a multisig, which proposes no
+ * batch (`capabilitiesResult`, the core's `dapp_rpc::capabilities`, twinned).
  */
 async function capabilities(params, origin) {
-	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY]);
+	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY, MULTISIGS_KEY]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
 	const granted = grantedAccounts(all[PERM_PREFIX + origin] ?? null, all[EXT_CACHE_KEY] ?? null);
-	return capabilitiesResult(params, granted, catalogChainIds(catalog));
+	const multisigs = Array.isArray(all[MULTISIGS_KEY]) ? all[MULTISIGS_KEY] : [];
+	return capabilitiesResult(params, granted, catalogChainIds(catalog), multisigs);
 }
 
 /**

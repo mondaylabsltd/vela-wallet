@@ -18,7 +18,7 @@
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
 	import { proposals } from '../core/proposals.svelte';
-	import { multisig, type MultisigAccount } from '../core/store.svelte';
+	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 
 	interface Props {
@@ -91,6 +91,13 @@
 			</li>
 		{/each}
 	</ul>
+	{#if local.length === 0}
+		<p class="note">{m.panel.readOnly}</p>
+	{/if}
+	{#if !isShared(multisig.find(account.address) ?? account)}
+		<!-- Its record has not landed: another member cannot add it yet. -->
+		<p class="note" role="status">{m.panel.notShared}</p>
+	{/if}
 	<div class="row-actions">
 		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'invite' })}>
 			<span class="label"><Icon icon={UTILITY_ICONS['link-2']} size="sm" />{m.panel.invite}</span>

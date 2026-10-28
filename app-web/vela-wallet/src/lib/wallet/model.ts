@@ -128,6 +128,12 @@ export interface ActivityRowModel {
 
 export interface ActivityGroupModel {
 	label: string;
+	/**
+	 * A line under the label about the group itself — a multisig's waiting
+	 * transactions that could not be refreshed say so here, rather than the
+	 * home saying there is nothing.
+	 */
+	note?: string;
 	rows: ActivityRowModel[];
 }
 

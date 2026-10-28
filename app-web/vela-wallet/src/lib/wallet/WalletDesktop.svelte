@@ -147,6 +147,7 @@
 				{:else}
 					{#each model.activityGroups as group (group.label)}
 						<p class="day">{group.label}</p>
+						{#if group.note}<p class="note" role="status">{group.note}</p>{/if}
 						<ul>
 							{#each group.rows as row, i (i)}
 								<li>
@@ -291,5 +292,11 @@
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.note {
+		margin: 0 0 var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 </style>

@@ -7,9 +7,12 @@
 import type { Account } from '$lib/core/generated/Account';
 import { multisig, type MultisigAccount } from './store.svelte';
 
+/** A multisig's account id starts with this (the extension tells them apart by it). */
+export const MULTISIG_ACCOUNT_PREFIX = 'multisig:';
+
 export function multisigAsAccount(a: MultisigAccount): Account {
 	return {
-		id: `multisig:${a.address}`,
+		id: `${MULTISIG_ACCOUNT_PREFIX}${a.address}`,
 		name: a.genesis.name || a.label || `Multisig ${a.threshold}/${a.owners.length}`,
 		address: a.address,
 		public_key_hex: '',

@@ -10,6 +10,7 @@ export interface MultisigMessages {
 		add: string;
 		rowName: string;
 		readOnly: string;
+		notShared: string;
 		removeBody: string;
 		addAccount: string;
 		createAccountNote: string;
@@ -78,6 +79,11 @@ export interface MultisigMessages {
 		noExpiry: string;
 		cannotPay: string;
 		notLanded: string;
+		mailboxDown: string;
+		notSent: string;
+		siteAsks: string;
+		siteWaits: string;
+		data: string;
 		notFound: string;
 		opening: string;
 	};
@@ -109,6 +115,7 @@ export interface MultisigMessages {
 		needTwo: string;
 		needLocal: string;
 		duplicate: string;
+		notMember: string;
 		created: string;
 		createdBody: string;
 		done: string;
@@ -196,6 +203,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		add: '',
 		rowName: '',
 		readOnly: '',
+		notShared: '',
 		removeBody: '',
 		addAccount: '',
 		createAccountNote: '',
@@ -264,6 +272,11 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		noExpiry: '',
 		cannotPay: '',
 		notLanded: '',
+		mailboxDown: '',
+		notSent: '',
+		siteAsks: '',
+		siteWaits: '',
+		data: '',
 		notFound: '',
 		opening: ''
 	},
@@ -295,6 +308,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		needTwo: '',
 		needLocal: '',
 		duplicate: '',
+		notMember: '',
 		created: '',
 		createdBody: '',
 		done: '',

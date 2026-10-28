@@ -21,7 +21,8 @@
 	import { memberLabel, shortenAddress } from '../core/display';
 	import { sameAddress, validName } from '../core/kernel';
 	import { localOwners } from '../core/owners';
-	import { addLink } from '../core/link';
+	import { addLink, shareOrigin } from '../core/link';
+	import { memberProblem } from '../core/members';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -88,12 +89,13 @@
 
 	function addTyped() {
 		const value = typed.trim();
-		if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
-			typedError = m.send.invalidAddress;
-			return;
-		}
-		if (owners.some((o) => sameAddress(o, value))) {
-			typedError = m.create.duplicate;
+		const problem = memberProblem(value, owners);
+		if (problem) {
+			typedError = {
+				invalidAddress: m.send.invalidAddress,
+				notMember: m.create.notMember,
+				duplicate: m.create.duplicate
+			}[problem];
 			return;
 		}
 		owners = [...owners, value];
@@ -142,7 +144,7 @@
 		if (!created) return;
 		try {
 			// The link adds it in Vela with one tap; the address is in it.
-			await navigator.clipboard.writeText(addLink(location.origin, locale, created));
+			await navigator.clipboard.writeText(addLink(shareOrigin(location.origin), locale, created));
 			copied = true;
 			setTimeout(() => (copied = false), 1600);
 		} catch {

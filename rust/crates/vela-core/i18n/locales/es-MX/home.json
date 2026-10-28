@@ -82,6 +82,7 @@
         "add": "Agregar multifirma",
         "rowName": "Multifirma {{m}}/{{n}}",
         "readOnly": "Solo lectura aquí",
+        "notShared": "Aún no compartida",
         "removeBody": "¿Quitar esta multifirma de este dispositivo? Sus fondos no se ven afectados: puedes volver a agregarla en cualquier momento con su dirección.",
         "addAccount": "Agregar cuenta",
         "createAccountNote": "Una cuenta nueva, protegida por una passkey en este dispositivo.",
@@ -151,7 +152,12 @@
         "notFound": "Esta transacción todavía no está en el buzón.",
         "opening": "Abriendo la transacción…",
         "cannotPay": "{{name}} no tiene suficiente {{symbol}} para la comisión de red: se necesitan unos {{fee}} y hay {{balance}}. Agrega fondos o deja que otro miembro la ejecute.",
-        "notLanded": "No ha llegado a la red después de tres minutos. Si no aparece como ejecutada pronto, inténtalo de nuevo."
+        "notLanded": "No ha llegado a la red después de tres minutos. Si no aparece como ejecutada pronto, inténtalo de nuevo.",
+        "mailboxDown": "No se pudieron leer las transacciones pendientes de este multisig, así que no se propuso nada. Inténtalo de nuevo en un momento.",
+        "notSent": "La red no la aceptó, así que no se envió nada. Inténtalo de nuevo.",
+        "siteAsks": "{{host}} pide esta transacción.",
+        "siteWaits": "{{host}} espera hasta que los miembros la ejecuten o la rechacen. Si cierras esto, se le avisa al sitio que fue propuesta, y sigue en Actividad.",
+        "data": "Datos"
       },
       "send": {
         "propose": "Proponer y aprobar",
@@ -181,13 +187,14 @@
         "needTwo": "Agrega al menos dos miembros.",
         "needLocal": "Al menos un miembro debe ser una cuenta de este dispositivo.",
         "duplicate": "Este miembro ya está en la lista.",
+        "notMember": "Esta dirección no puede ser miembro.",
         "created": "Multifirma creada",
         "createdBody": "Comparte su dirección con los demás miembros para que la agreguen en Vela.",
         "done": "Listo",
         "name": "Nombre",
         "namePlaceholder": "p. ej. Fondo del equipo",
         "nameHint": "Todos los miembros ven este nombre. Se guarda con el multisig y no se puede cambiar después.",
-        "nameInvalid": "Usa un nombre más corto, sin caracteres de control ni espacios al inicio o al final."
+        "nameInvalid": "Usa un nombre más corto, sin caracteres de control ni invisibles, ni espacios al inicio o al final."
       },
       "add": {
         "title": "Agregar una multifirma",

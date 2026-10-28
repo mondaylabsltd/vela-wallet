@@ -81,6 +81,7 @@
         "add": "Çoklu imza ekle",
         "rowName": "Çoklu imza {{m}}/{{n}}",
         "readOnly": "Burada salt okunur",
+        "notShared": "Henüz paylaşılmadı",
         "removeBody": "Bu çoklu imza bu cihazdan kaldırılsın mı? Fonları etkilenmez — adresiyle istediğin zaman yeniden ekleyebilirsin.",
         "addAccount": "Hesap ekle",
         "createAccountNote": "Bu cihazdaki bir passkey ile korunan yeni bir hesap.",
@@ -150,7 +151,12 @@
         "notFound": "Bu işlem henüz posta kutusunda değil.",
         "opening": "İşlem açılıyor…",
         "cannotPay": "{{name}} ağ ücreti için yeterli {{symbol}} tutmuyor: yaklaşık {{fee}} gerekiyor, {{balance}} var. Bakiye ekleyin ya da başka bir üye yürütsün.",
-        "notLanded": "Üç dakika sonra hâlâ ağa ulaşmadı. Kısa süre içinde yürütüldü olarak görünmezse yeniden deneyin."
+        "notLanded": "Üç dakika sonra hâlâ ağa ulaşmadı. Kısa süre içinde yürütüldü olarak görünmezse yeniden deneyin.",
+        "mailboxDown": "Bu multisig'in bekleyen işlemleri okunamadı, bu yüzden hiçbir şey önerilmedi. Biraz sonra yeniden deneyin.",
+        "notSent": "Ağ bunu kabul etmedi, bu yüzden hiçbir şey gönderilmedi. Yeniden deneyin.",
+        "siteAsks": "{{host}} bu işlemi istiyor.",
+        "siteWaits": "{{host}}, üyeler işlemi yürütene ya da reddedene kadar bekler. Bunu kapatırsanız siteye önerildiği bildirilir ve işlem Etkinlik içinde kalır.",
+        "data": "Veri"
       },
       "send": {
         "propose": "Öner ve onayla",
@@ -180,13 +186,14 @@
         "needTwo": "En az iki üye ekle.",
         "needLocal": "En az bir üye bu cihazdaki bir hesap olmalı.",
         "duplicate": "Bu üye zaten listede.",
+        "notMember": "Bu adres üye olamaz.",
         "created": "Çoklu imza oluşturuldu",
         "createdBody": "Adresini diğer üyelerle paylaş ki Vela’da ekleyebilsinler.",
         "done": "Bitti",
         "name": "Ad",
         "namePlaceholder": "ör. Ekip fonu",
         "nameHint": "Tüm üyeler bu adı görür. Multisig ile birlikte kaydedilir ve sonradan değiştirilemez.",
-        "nameInvalid": "Daha kısa bir ad kullanın; kontrol karakteri ya da başta veya sonda boşluk olmasın."
+        "nameInvalid": "Daha kısa bir ad kullanın; kontrol ya da görünmez karakter, başta veya sonda boşluk olmasın."
       },
       "add": {
         "title": "Çoklu imza ekle",

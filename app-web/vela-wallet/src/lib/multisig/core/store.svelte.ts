@@ -44,6 +44,15 @@ export interface MultisigAccount {
 	addedMs: number;
 }
 
+/**
+ * Whether another device can find it by its address: the service hands its
+ * genesis out (`shared`), or the registry holds it (a row written before
+ * `shared` existed says only `recorded`).
+ */
+export function isShared(account: Pick<MultisigAccount, 'shared' | 'recorded'>): boolean {
+	return account.shared === true || account.recorded;
+}
+
 function read(): MultisigAccount[] {
 	try {
 		const raw = localStorage.getItem(MULTISIG_ACCOUNTS_KEY);

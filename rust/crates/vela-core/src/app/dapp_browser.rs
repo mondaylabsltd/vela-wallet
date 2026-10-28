@@ -1861,7 +1861,8 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
             queue_read(model, tab_id, &doc, read, out);
         }
         Route::Capabilities => {
-            match dapp_rpc::capabilities(&request.params, &grant_addresses, &model.chains) {
+            // The in-app browsers answer for Vela accounts: no multisig here.
+            match dapp_rpc::capabilities(&request.params, &grant_addresses, &model.chains, &[]) {
                 Ok(answer) => deliver_result(tab_id, &doc, &id, answer, out),
                 Err((code, words)) => {
                     deliver_error(tab_id, &doc, &id, code, words, wallet_why(code), out);

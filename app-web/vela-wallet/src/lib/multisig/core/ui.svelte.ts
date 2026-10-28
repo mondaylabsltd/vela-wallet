@@ -3,11 +3,38 @@
  * (`MultisigHost.svelte`) draws it, and the switcher, the home panel and the
  * wallet page's own doors open them.
  */
+import type { DappCall } from './proposals.svelte';
+
+/**
+ * A dApp's transaction from a multisig, owned by the request it came with
+ * (`DappRequestHost`): reviewed first, proposed only on the person's
+ * "Propose and approve", and answered by the request — whichever way the
+ * sheet is left.
+ */
+export interface DappProposal {
+	/** The request it answers. */
+	rid: string;
+	address: string;
+	chainId: number;
+	call: DappCall;
+	/** The site, as the browser names it (never the page's own claim). */
+	origin: string;
+	/** Set once it is in the mailbox. */
+	safeTxHash: string | null;
+	/** The person confirmed the review: propose it (one passkey prompt). Resolves its safeTxHash. */
+	propose(): Promise<string>;
+	/** Decline before it is proposed: the site is told the person rejected it. */
+	decline(): void;
+	/** The sheet was closed (any way out): the request answers as things stand. */
+	close(): void;
+}
+
 export type MultisigSheet =
 	| { kind: 'create' }
 	| { kind: 'add' }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
-	| { kind: 'invite' };
+	| { kind: 'invite' }
+	| { kind: 'dapp'; request: DappProposal };
 
 class MultisigUi {
 	sheet = $state<MultisigSheet | null>(null);
@@ -18,6 +45,18 @@ class MultisigUi {
 
 	close(): void {
 		this.sheet = null;
+	}
+
+	/** The dApp's transaction `rid` is in the mailbox now: its sheet shows it as one. */
+	proposed(rid: string, safeTxHash: string): void {
+		const sheet = this.sheet;
+		if (sheet?.kind !== 'dapp' || sheet.request.rid !== rid) return;
+		this.sheet = { kind: 'dapp', request: { ...sheet.request, safeTxHash } };
+	}
+
+	/** Close the dApp sheet of `rid`, if it is the one open. */
+	closeDapp(rid: string): void {
+		if (this.sheet?.kind === 'dapp' && this.sheet.request.rid === rid) this.sheet = null;
 	}
 }
 

@@ -144,6 +144,9 @@ export const multisigGenesis = (
 /** Whether a multisig can be created with this name (the registry's rule). */
 export const validName = (name: string) => call<boolean>('validName', { name });
 
+/** Whether `address` can be a member (not the zero address, not Safe's `0x…01` sentinel). */
+export const validOwner = (address: string) => call<boolean>('validOwner', { address });
+
 export const genesisAddress = (genesis: Genesis) => call<string>('genesisAddress', { genesis });
 
 export const genesisMembers = (genesis: Genesis) =>

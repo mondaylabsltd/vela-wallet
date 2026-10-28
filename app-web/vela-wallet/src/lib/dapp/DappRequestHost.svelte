@@ -4,6 +4,7 @@
 	import { proposals, proposeCall } from '$lib/multisig/core/proposals.svelte';
 	import { executionTxHash } from '$lib/multisig/core/records';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import { dappCallOf, openMultisigReview, multisigRefusal } from '$lib/multisig/core/dapp-request';
 
 	/** How often a multisig request asks whether its transaction was executed. */
 	const MULTISIG_POLL_MS = 5_000;
@@ -265,6 +266,10 @@
 			signRequest.dispatch({ type: 'transport_dropped', transport_id: signingTransport });
 			signingTransport = null;
 		}
+		// A multisig's review goes too; a proposal already made stays in the
+		// mailbox for the members.
+		multisigUi.closeDapp(rid);
+		multisigClosing = null;
 		owing = null;
 		request = null;
 		busy = false;
@@ -279,12 +284,18 @@
 		if (mode === 'window') void take();
 
 		// The surface is going away with an answer still owed. The code is NOT
-		// this screen's to pick — it is asked of the core, once, in `settleOnClose`.
+		// this screen's to pick — it is asked of the core, once, in `settleOnClose`
+		// — except a multisig's proposal, which is not rejected by the window
+		// closing: the site is told it was proposed.
 		const settle = () => {
 			if (!owing) return;
 			const rid = owing;
 			owing = null;
-			void settleOnClose(rid);
+			const multisigAnswer = multisigClosing?.();
+			multisigClosing = null;
+			if (multisigAnswer?.error && multisigAnswer.error.code !== 4001) {
+				void answerRequest(rid, { error: multisigAnswer.error }).catch(() => {});
+			} else void settleOnClose(rid);
 		};
 		window.addEventListener('pagehide', settle);
 		return () => {
@@ -368,11 +379,23 @@
 	}
 
 	/**
-	 * A request to a multisig: a transaction is proposed (approved here with
-	 * a member's passkey, or by a member's own wallet) and the request waits
-	 * — as long as the approvals take — to be answered with the transaction
-	 * that executed it. The proposal opens where the wallet is. A multisig
-	 * signs no messages yet: that needs every approving member's signature.
+	 * What the site is owed if this surface goes away mid-way through a
+	 * multisig's request — "proposed, waiting" once it is in the mailbox —
+	 * rather than the core's generic close (`settleOnClose`).
+	 */
+	let multisigClosing: (() => { error?: { code: number; message: string } }) | null = null;
+
+	/**
+	 * A request to a multisig (docs/multisig-vault-design.md §6): its review
+	 * opens first — what the site asks, read by the core, at the number it
+	 * would take — and nothing is signed until the person presses "Propose
+	 * and approve" (approved here with a member's passkey, or by a member's
+	 * own wallet). The request then waits — as long as the approvals take —
+	 * to be answered with the transaction that executed it. Every way out of
+	 * the sheet answers the site (`handOffToMultisig`): Decline or a close
+	 * before proposing is the person's 4001; a close after it says it was
+	 * proposed, and it stays in Activity. A multisig signs no messages yet
+	 * (that needs every approving member's signature), and proposes no batch.
 	 */
 	async function handOffToMultisig(incoming: ExtensionRequest, address: string): Promise<void> {
 		const rid = incoming.rid;
@@ -383,44 +406,47 @@
 			if (owing !== rid) return;
 			owing = null;
 			request = null;
+			multisigClosing = null;
+			multisigUi.closeDapp(rid);
 			await answerRequest(rid, answer as Parameters<typeof answerRequest>[1]);
 			leave();
 		};
-		if (incoming.method !== 'eth_sendTransaction') {
-			await settle({
-				error: { code: 4200, message: 'A multisig account signs no messages yet' }
-			});
+		const refusal = multisigRefusal(incoming.method);
+		if (refusal) {
+			await settle({ error: refusal });
 			return;
 		}
-		const params = (Array.isArray(incoming.params) ? incoming.params[0] : null) as {
-			to?: string;
-			value?: string;
-			data?: string;
-		} | null;
-		if (!params?.to || chainId <= 0) {
+		const call = dappCallOf(incoming.params);
+		if (!call || chainId <= 0) {
 			await settle({ error: { code: -32602, message: 'A transaction needs `to` and a chain' } });
 			return;
 		}
-		let safeTxHash: string;
-		try {
-			({ safeTxHash } = await proposeCall(address, chainId, {
-				to: params.to,
-				value: params.value ?? '0x0',
-				data: params.data ?? '0x'
-			}));
-		} catch (error) {
-			const dismissed =
-				error instanceof DOMException &&
-				(error.name === 'NotAllowedError' || error.name === 'AbortError');
-			await settle({
-				error: dismissed
-					? { code: 4001, message: 'User rejected the request' }
-					: { code: -32603, message: error instanceof Error ? error.message : String(error) }
-			});
-			return;
-		}
-		multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
-		// Pending until it is executed — here, or by another member anywhere.
+		const { closing } = openMultisigReview({
+			rid,
+			address,
+			chainId,
+			call,
+			origin: incoming.origin,
+			open: (sheet) => multisigUi.open({ kind: 'dapp', request: sheet }),
+			proposed: (id, hash) => multisigUi.proposed(id, hash),
+			closeSheet: (id) => multisigUi.closeDapp(id),
+			// RB5: a page that is gone gets nothing signed.
+			claim: () => claimFor(rid, 'approve'),
+			gone: () => withdraw(rid),
+			propose: proposeCall,
+			settle: (answer) => void settle(answer),
+			follow: (hash) => void followMultisig(rid, address, hash, settle)
+		});
+		multisigClosing = closing;
+	}
+
+	/** Pending until it is executed — here, or by another member anywhere — or voided. */
+	async function followMultisig(
+		rid: string,
+		address: string,
+		safeTxHash: string,
+		settle: (answer: { result?: unknown; error?: { code: number; message: string } }) => unknown
+	): Promise<void> {
 		while (owing === rid && !disposed) {
 			await new Promise((done) => setTimeout(done, MULTISIG_POLL_MS));
 			const account = multisig.find(address);

@@ -220,12 +220,60 @@ pub const MAX_NAME_BYTES: usize = 64;
 
 /// A name a multisig can be created with: displayable (the bar a Vela
 /// account's name is held to — no control characters, no U+FFFD), no space
-/// around it, and within the registry's 64 bytes.
+/// around it, and within the registry's 64 bytes. The name is permanent and
+/// every member reads it, so nothing in it may be invisible or reorder what
+/// is drawn: no bidirectional controls (U+202E draws "dnuf maeT" as "Team
+/// fund") and no zero-width characters — a zero-width joiner only between
+/// two pictographs, where it is part of an emoji (👨‍👩‍👧).
 pub fn valid_name(name: &str) -> bool {
+    let chars: Vec<char> = name.chars().collect();
+    let joins_emoji = |i: usize| {
+        i > 0
+            && pictograph_or_variation(chars[i - 1])
+            && chars.get(i + 1).is_some_and(|&next| pictograph(next))
+    };
     !name.is_empty()
         && name.trim() == name
         && name.len() <= MAX_NAME_BYTES
-        && !name.chars().any(|c| c.is_control() || c == '\u{FFFD}')
+        && chars.iter().enumerate().all(|(i, &c)| {
+            !(c.is_control() || c == '\u{FFFD}')
+                && (!hidden(c) || (c == '\u{200D}' && joins_emoji(i)))
+        })
+}
+
+/// A character that draws nothing or moves what is drawn around it: the
+/// bidirectional controls and marks, and the zero-width and invisible
+/// formatting characters.
+fn hidden(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{061C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+    )
+}
+
+/// What a zero-width joiner joins into one emoji.
+fn pictograph(c: char) -> bool {
+    matches!(c, '\u{2600}'..='\u{27BF}' | '\u{2B00}'..='\u{2BFF}' | '\u{1F000}'..='\u{1FAFF}')
+}
+
+/// A pictograph, or the emoji presentation selector that may follow one.
+fn pictograph_or_variation(c: char) -> bool {
+    pictograph(c) || c == '\u{FE0F}'
+}
+
+/// Whether `address` can be a member: an address, and neither the zero
+/// address nor the Safe's owner-list sentinel (`0x…01`), which `setup`
+/// refuses.
+pub fn valid_owner(address: &str) -> bool {
+    addr(address).is_ok_and(|a| a != Address::ZERO && a != SENTINEL)
 }
 
 /// `setup(owners, threshold, 0, "", handler, 0, 0, 0)`.
@@ -1566,6 +1614,9 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         "validName" => out(serde_json::json!(valid_name(&arg::<String>(
             &args, "name"
         )?))),
+        "validOwner" => out(serde_json::json!(valid_owner(&arg::<String>(
+            &args, "address"
+        )?))),
         "genesisAddress" => out(serde_json::json!(genesis_address(&arg(&args, "genesis")?)?)),
         "genesisMembers" => {
             let (owners, threshold) = genesis_members(&arg(&args, "genesis")?)?;
@@ -2036,6 +2087,54 @@ mod tests {
         assert!(make(&"x".repeat(64)).is_ok());
         assert!(make(&"多".repeat(22)).is_err(), "66 bytes");
         assert!(make(&"多".repeat(21)).is_ok());
+    }
+
+    /// The name is permanent and every member reads it: nothing in it may be
+    /// invisible or turn the text around.
+    #[test]
+    fn a_name_hides_nothing_and_turns_nothing_around() {
+        for hidden in [
+            "Team\u{202E}dnuf",
+            "\u{2066}Team\u{2069} fund",
+            "Team\u{200F}fund",
+            "Team\u{200B}fund",
+            "Te\u{200C}am",
+            "Team\u{2060}fund",
+            "\u{FEFF}Team",
+            "Team\u{00AD}fund",
+            "Team\u{200D}fund",
+            "\u{200D}\u{1F469}",
+            "\u{1F469}\u{200D}",
+        ] {
+            assert!(!valid_name(hidden), "{hidden:?}");
+            assert!(
+                multisig_genesis(&[A.into(), B.into()], 2, hidden, "0x7").is_err(),
+                "{hidden:?}"
+            );
+        }
+        // An emoji's joiner, between two pictographs, is part of the emoji.
+        assert!(valid_name(
+            "Family \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+        ));
+        assert!(valid_name("\u{2764}\u{FE0F}\u{200D}\u{1F525} fund"));
+        assert!(valid_name("Équipe — fonds"));
+        assert!(valid_name("فريق"));
+    }
+
+    #[test]
+    fn the_zero_address_and_the_sentinel_are_no_members() {
+        assert!(!valid_owner("0x0000000000000000000000000000000000000000"));
+        assert!(!valid_owner("0x0000000000000000000000000000000000000001"));
+        assert!(!valid_owner("0x12"));
+        assert!(valid_owner(A));
+        assert_eq!(
+            call_json(
+                "validOwner",
+                r#"{"address":"0x0000000000000000000000000000000000000001"}"#
+            )
+            .unwrap(),
+            "false"
+        );
     }
 
     // -- plain accounts (EOA owners) and other Safe versions --------------------

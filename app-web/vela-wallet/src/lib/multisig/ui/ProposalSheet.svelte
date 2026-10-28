@@ -8,8 +8,15 @@
 	 * verified here, and counts only if its owner is an owner on that chain
 	 * now. There is one primary action, the next thing that moves it forward:
 	 * approve, approve and execute, or execute — each one passkey prompt.
+	 *
+	 * A dApp's transaction (`draft`) is drawn here before it exists: the same
+	 * reading, at the number it would take, with "Propose and approve" and
+	 * Decline — nothing is signed until the person has seen what the site
+	 * asks. Once proposed it is the transaction like any other.
 	 */
+	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { hostLabel } from '$lib/dapp/host';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { nativeSymbol } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -27,19 +34,23 @@
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
-	import { ExecutorCannotPayError } from '../core/execute';
+	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
 	import { sameAddress } from '../core/kernel';
-	import { proposalLink } from '../core/link';
+	import { proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
 		approveExternally,
+		draftCall,
 		execute,
+		MailboxUnreadableError,
 		proposals,
 		proposeCancel,
+		type ChainState,
 		type ProposalItem
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
+	import type { DappProposal } from '../core/ui.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -53,17 +64,53 @@
 		onclose: () => void;
 		/** It was executed from this device: the transaction is on chain. */
 		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
+		/** A dApp's transaction: reviewed here before it is proposed (`DappRequestHost`). */
+		draft?: DappProposal | null;
 	}
 
-	let { m, account, chainId, safeTxHash, locale, wide, closeLabel, onclose, onexecuted }: Props =
-		$props();
+	let {
+		m,
+		account,
+		chainId,
+		safeTxHash,
+		locale,
+		wide,
+		closeLabel,
+		onclose,
+		onexecuted,
+		draft = null
+	}: Props = $props();
+
+	/** A dApp's transaction not proposed yet: the review, before any passkey. */
+	const drafting = $derived(!!draft && !draft.safeTxHash);
+	let drafted = $state<{ chain: ChainState; item: ProposalItem } | null>(null);
+	let draftFailure = $state<string | null>(null);
+
+	async function loadDraft() {
+		if (!draft) return;
+		draftFailure = null;
+		try {
+			drafted = await draftCall(draft.address, chainId, draft.call);
+		} catch (error) {
+			draftFailure = reasonOf(error);
+		}
+	}
+
+	onMount(() => {
+		if (draft && !draft.safeTxHash) void loadDraft();
+	});
 
 	const item = $derived(
-		proposals
-			.chain(chainId)
-			?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null
+		drafting
+			? (drafted?.item ?? null)
+			: (proposals
+					.chain(chainId)
+					?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null)
 	);
-	const members = $derived(proposals.chain(chainId)?.members ?? null);
+	const members = $derived(
+		drafting ? (drafted?.chain.members ?? null) : (proposals.chain(chainId)?.members ?? null)
+	);
+	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
 	let title = $state('');
 	let lines = $state<{ label: string; to: string }[]>([]);
@@ -97,19 +144,39 @@
 		!!item && !!actor && item.approvals.some((a) => a.counts && sameAddress(a.owner, actor.address))
 	);
 
+	/**
+	 * Who can withdraw it: any member on this device, whether or not it has
+	 * approved — the proposer above all. Rejecting proposes a cancellation at
+	 * its number, which that member approves at once.
+	 */
+	const rejecters = $derived(localOwners(members?.owners ?? []));
+	const rejecter = $derived<LocalOwner | null>(
+		rejecters.find((o) => sameAddress(o.address, actor?.address)) ?? rejecters[0] ?? null
+	);
+	/** "Approve and execute" also asks for the fee: a member who cannot pay it still approves. */
+	const canApproveOnly = $derived(
+		!!actor && approvers.some((o) => sameAddress(o.address, actor.address))
+	);
+
 	type Phase =
 		| { kind: 'idle' }
-		| { kind: 'busy'; what: 'approve' | 'execute' | 'reject' }
+		| { kind: 'busy'; what: 'approve' | 'execute' | 'reject' | 'propose' }
 		| { kind: 'sent'; txHash: string | null; by: string }
 		| { kind: 'failed'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
 	let rejecting = $state(false);
 	let copied = $state(false);
 
+	// The link another member opens: the wallet's public address, never this
+	// extension's own (`chrome-extension://…` opens nowhere else).
 	const link = $derived(
 		typeof location === 'undefined'
 			? ''
-			: proposalLink(location.origin, locale, { chainId, multisig: account.address, safeTxHash })
+			: proposalLink(shareOrigin(location.origin), locale, {
+					chainId,
+					multisig: account.address,
+					safeTxHash
+				})
 	);
 
 	function cancelled(error: unknown): boolean {
@@ -129,7 +196,20 @@
 				balance: `${formatUnits(error.have, 18)} ${symbol}`
 			});
 		}
+		if (error instanceof MailboxUnreadableError) return m.proposal.mailboxDown;
 		return error instanceof Error ? error.message : String(error);
+	}
+
+	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
+	async function onPropose() {
+		if (!draft || !item) return;
+		phase = { kind: 'busy', what: 'propose' };
+		try {
+			await draft.propose();
+			phase = { kind: 'idle' };
+		} catch (error) {
+			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+		}
 	}
 
 	async function onApprove() {
@@ -151,7 +231,26 @@
 			const by = actor.address;
 			const result = await execute(account, item, actor, members);
 			phase = { kind: 'sent', txHash: null, by };
-			const txHash = await result.waitForTxHash(180_000).catch(() => null);
+			// A reply that was no hash (a 500, a refusal after a lost reply): the
+			// relay is asked about it at once, and an op it refused or never took
+			// is said now — not after three minutes of "Executing…".
+			const watch = new AbortController();
+			const refused = result.maybeSent
+				? relayRefused(result.userOpHash, chainId, watch.signal)
+				: new Promise<boolean>(() => {});
+			const outcome = await Promise.race([
+				result
+					.waitForTxHash(180_000, watch.signal)
+					.then((hash) => ({ hash }))
+					.catch(() => ({ hash: null })),
+				refused.then((yes) => (yes ? ('refused' as const) : new Promise<never>(() => {})))
+			]);
+			watch.abort();
+			if (outcome === 'refused') {
+				phase = { kind: 'failed', reason: m.proposal.notSent };
+				return;
+			}
+			const txHash = outcome.hash;
 			await proposals.refresh(account, account.chainIds);
 			if (!txHash) {
 				// Not on chain after the wait: say so, and let them try again —
@@ -191,10 +290,10 @@
 	}
 
 	async function onReject() {
-		if (!item || !actor) return;
+		if (!item || !rejecter) return;
 		phase = { kind: 'busy', what: 'reject' };
 		try {
-			await proposeCancel(account, item, actor);
+			await proposeCancel(account, item, rejecter);
 			await proposals.refresh(account, account.chainIds);
 			rejecting = false;
 			phase = { kind: 'idle' };
@@ -224,11 +323,15 @@
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 	const busy = $derived(phase.kind === 'busy');
 	const recipient = $derived(item ? actionRecipient(item.review.action) : null);
-	/** An owner executing approves as `msg.sender`: once it has sent, it counts. Anyone else adds nothing. */
+	/**
+	 * An owner executing approves as `msg.sender`: once its execution is on
+	 * chain, it counts. Anyone else adds nothing — and nobody does while it is
+	 * only on its way (the relay may yet refuse it).
+	 */
 	const shownApproved = $derived.by(() => {
 		if (!item) return 0;
 		const p = phase;
-		if (p.kind !== 'sent') return item.approved;
+		if (p.kind !== 'sent' || !p.txHash) return item.approved;
 		const owner = (members?.owners ?? []).some((o) => sameAddress(o, p.by));
 		const approved = item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by));
 		return owner && !approved ? item.approved + 1 : item.approved;
@@ -236,11 +339,29 @@
 </script>
 
 <Sheet title={m.proposal.title} {closeLabel} {wide} {busy} {onclose}>
-	{#if !item}
+	{#if drafting && !item}
+		<!-- The dApp's transaction is being read: said, never a blank window. -->
+		{#if draftFailure}
+			<p class="warn" role="alert">{fillTemplate(m.proposal.failed, { reason: draftFailure })}</p>
+			<div class="two">
+				<Button variant="secondary" shape="rounded" onclick={() => draft?.decline()}
+					>{m.external.decline}</Button
+				>
+				<Button variant="secondary" shape="rounded" onclick={() => void loadDraft()}
+					>{m.external.retry}</Button
+				>
+			</div>
+		{:else}
+			<p class="quiet" aria-busy="true">{m.proposal.opening}</p>
+		{/if}
+	{:else if !item}
 		<p class="quiet" aria-busy="true">
 			{proposals.loading ? m.proposal.opening : m.proposal.notFound}
 		</p>
 	{:else}
+		{#if draft}
+			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
+		{/if}
 		<header class="what">
 			<p class="title">{title || '…'}</p>
 			{#if recipient}
@@ -275,6 +396,13 @@
 					<dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd>
 				</div>
 			</dl>
+			{#if item.review.action?.kind === 'call' && item.review.action.data !== '0x'}
+				<!-- What the call carries, as it will be signed: every member can read it. -->
+				<details class="data">
+					<summary>{m.proposal.data}</summary>
+					<code>{item.review.action.data}</code>
+				</details>
+			{/if}
 		</header>
 
 		{#if item.review.action === null}
@@ -303,7 +431,8 @@
 			<ul>
 				{#each members?.owners ?? [] as owner (owner)}
 					{@const row = item.approvals.find((a) => a.counts && sameAddress(a.owner, owner))}
-					{@const executedBy = phase.kind === 'sent' && sameAddress(phase.by, owner)}
+					{@const executedBy =
+						phase.kind === 'sent' && !!phase.txHash && sameAddress(phase.by, owner)}
 					{@const mine = localOwners([owner]).length > 0}
 					<li class:done={!!row || executedBy}>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
@@ -318,7 +447,7 @@
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.executed}
 							{:else if row}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.approved}
-							{:else if outside.some((o) => sameAddress(o, owner)) && phase.kind === 'idle'}
+							{:else if !drafting && outside.some( (o) => sameAddress(o, owner) ) && phase.kind === 'idle'}
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
@@ -344,9 +473,29 @@
 			<p class="quiet">{m.proposal.cancelPending}</p>
 		{/if}
 
-		{#if phase.kind === 'sent'}
-			<div class="sent" role="status">
-				<Icon icon={UTILITY_ICONS.check} size="md" />
+		{#if drafting}
+			<!-- The review of what the site asks: nothing is signed before this. -->
+			{#if phase.kind === 'failed'}
+				<p class="warn" role="alert">{fillTemplate(m.proposal.failed, { reason: phase.reason })}</p>
+			{/if}
+			<div class="two">
+				<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => draft?.decline()}
+					>{m.external.decline}</Button
+				>
+				{#if item.review.action !== null}
+					<Button
+						variant="primary"
+						shape="rounded"
+						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
+						disabled={busy}
+						onclick={onPropose}>{m.send.propose}</Button
+					>
+				{/if}
+			</div>
+		{:else if phase.kind === 'sent'}
+			<div class="sent" class:pending={!phase.txHash} role="status" aria-busy={!phase.txHash}>
+				<!-- The check is for what is on chain; on its way, it is only said. -->
+				{#if phase.txHash}<Icon icon={UTILITY_ICONS.check} size="md" />{/if}
 				<span>{phase.txHash ? m.proposal.executed : m.proposal.executing}</span>
 				{#if phase.txHash && explorerTxUrl(chainId, phase.txHash)}
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external block explorer -->
@@ -380,17 +529,30 @@
 
 			<div class="primary">
 				{#if executors.length > 0 && actor}
-					<Button
-						variant="primary"
-						shape="rounded"
-						loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
-						disabled={busy}
-						onclick={onExecute}
-					>
-						{actorApproved || item.approved >= item.threshold
-							? m.proposal.execute
-							: m.proposal.approveAndExecute}
-					</Button>
+					{@const approveFirst = !actorApproved && item.approved < item.threshold}
+					<div class:two={approveFirst && canApproveOnly}>
+						{#if approveFirst && canApproveOnly}
+							<!-- Executing pays the fee; approving alone does not. -->
+							<Button
+								variant="secondary"
+								shape="rounded"
+								loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
+								disabled={busy}
+								onclick={onApprove}
+							>
+								{m.proposal.approve}
+							</Button>
+						{/if}
+						<Button
+							variant="primary"
+							shape="rounded"
+							loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
+							disabled={busy}
+							onclick={onExecute}
+						>
+							{approveFirst ? m.proposal.approveAndExecute : m.proposal.execute}
+						</Button>
+					</div>
 					<p class="fine">{m.proposal.feeNote}</p>
 				{:else if approvers.length > 0 && actor}
 					<Button
@@ -408,8 +570,12 @@
 			</div>
 		{/if}
 
+		{#if draft && !drafting && item.status !== 'done'}
+			<p class="fine">{fillTemplate(m.proposal.siteWaits, { host: site })}</p>
+		{/if}
+
 		<!-- Only while approvals are missing: not once it is being executed. -->
-		{#if item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>
@@ -433,7 +599,8 @@
 			</section>
 		{/if}
 
-		{#if item.status !== 'done' && item.review.action?.kind !== 'cancel' && candidates.length > 0 && phase.kind !== 'sent'}
+		<!-- Any member here may withdraw it, the proposer included, approved or not. -->
+		{#if !drafting && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent'}
 			<div class="reject">
 				{#if rejecting}
 					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>
@@ -452,7 +619,7 @@
 			</div>
 		{/if}
 
-		<p class="fine subtle">{m.proposal.noExpiry}</p>
+		{#if !drafting}<p class="fine subtle">{m.proposal.noExpiry}</p>{/if}
 	{/if}
 </Sheet>
 
@@ -710,6 +877,56 @@
 		background: var(--color-success-soft);
 		color: var(--color-success-base);
 		font-weight: var(--weight-medium);
+	}
+
+	/* On its way, not on chain: no success colour for what may yet be refused. */
+	.sent.pending {
+		background: var(--color-bg-sunken);
+		color: var(--color-fg-base);
+	}
+
+	.two {
+		display: flex;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-xl);
+	}
+
+	.primary .two {
+		margin-block-start: 0;
+	}
+
+	.two > :global(*) {
+		flex: 1;
+	}
+
+	.site {
+		margin: 0 0 var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.data {
+		margin-block-start: var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.data summary {
+		cursor: pointer;
+	}
+
+	.data code {
+		display: block;
+		margin-block-start: var(--space-sm);
+		padding: var(--space-md);
+		max-height: calc(var(--space-3xl) * 4);
+		overflow: auto;
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+		overflow-wrap: anywhere;
 	}
 
 	.sent a {

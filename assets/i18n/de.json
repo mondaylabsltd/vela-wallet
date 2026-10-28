@@ -398,6 +398,7 @@
     "add": "Multisig hinzufügen",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Hier nur lesen",
+    "notShared": "Noch nicht geteilt",
     "removeBody": "Dieses Multisig von diesem Gerät entfernen? Das Guthaben bleibt unberührt – mit seiner Adresse kannst du es jederzeit wieder hinzufügen.",
     "addAccount": "Konto hinzufügen",
     "createAccountNote": "Ein neues Konto, gesichert durch einen Passkey auf diesem Gerät.",
@@ -467,7 +468,12 @@
     "notFound": "Diese Transaktion ist noch nicht im Postfach.",
     "opening": "Transaktion wird geöffnet…",
     "cannotPay": "{{name}} hat nicht genug {{symbol}} für die Netzwerkgebühr: etwa {{fee}} werden gebraucht, {{balance}} sind vorhanden. Lade etwas auf oder lass ein anderes Mitglied ausführen.",
-    "notLanded": "Nach drei Minuten ist sie noch nicht im Netzwerk angekommen. Wenn sie nicht bald als ausgeführt erscheint, versuche es erneut."
+    "notLanded": "Nach drei Minuten ist sie noch nicht im Netzwerk angekommen. Wenn sie nicht bald als ausgeführt erscheint, versuche es erneut.",
+    "mailboxDown": "Die wartenden Transaktionen dieses Multisigs ließen sich nicht lesen, deshalb wurde nichts vorgeschlagen. Versuche es gleich noch einmal.",
+    "notSent": "Das Netzwerk hat sie nicht angenommen, es wurde nichts gesendet. Versuche es erneut.",
+    "siteAsks": "{{host}} möchte diese Transaktion.",
+    "siteWaits": "{{host}} wartet, bis die Mitglieder sie ausführen oder ablehnen. Wenn du das hier schließt, erfährt die Seite, dass sie vorgeschlagen wurde; sie bleibt in den Aktivitäten.",
+    "data": "Daten"
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -497,13 +503,14 @@
     "needTwo": "Füge mindestens zwei Mitglieder hinzu.",
     "needLocal": "Mindestens ein Mitglied muss ein Konto auf diesem Gerät sein.",
     "duplicate": "Dieses Mitglied steht schon auf der Liste.",
+    "notMember": "Diese Adresse kann kein Mitglied sein.",
     "created": "Multisig erstellt",
     "createdBody": "Teile seine Adresse mit den anderen Mitgliedern, damit sie es in Vela hinzufügen können.",
     "done": "Fertig",
     "name": "Name",
     "namePlaceholder": "z. B. Teamkasse",
     "nameHint": "Alle Mitglieder sehen diesen Namen. Er wird mit dem Multisig gespeichert und kann später nicht geändert werden.",
-    "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen und ohne Leerzeichen am Anfang oder Ende."
+    "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen oder unsichtbare Zeichen und ohne Leerzeichen am Anfang oder Ende."
    },
    "add": {
     "title": "Multisig hinzufügen",

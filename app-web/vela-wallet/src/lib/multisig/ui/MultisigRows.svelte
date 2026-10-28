@@ -13,7 +13,8 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
 	import { multisigName } from '../core/display';
-	import { multisig, type MultisigAccount } from '../core/store.svelte';
+	import { localOwners } from '../core/owners';
+	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -54,7 +55,13 @@
 		>
 			<span class="text">
 				<span class="name" class:active={selected}>{multisigName(account, m)}</span>
-				<span class="address">{shortenAddress(account.address)}</span>
+				<span class="address"
+					>{shortenAddress(account.address)}{#if !isShared(account)}<span class="flag">
+							· {m.switcher.notShared}</span
+						>{:else if localOwners(account.owners).length === 0}<span class="flag">
+							· {m.switcher.readOnly}</span
+						>{/if}</span
+				>
 			</span>
 			{#if amount}
 				<span class="amount">{amount(account.address)}</span>
@@ -144,6 +151,12 @@
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	/* What this row's account cannot do yet, said where it is picked. */
+	.flag {
+		font-family: var(--font-ui);
+		color: var(--color-fg-muted);
 	}
 
 	.avatar {

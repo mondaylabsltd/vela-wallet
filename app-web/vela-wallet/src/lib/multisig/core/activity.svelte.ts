@@ -66,10 +66,15 @@ class WaitingRows {
 		for (const item of proposals.open) this.#draw(m, item);
 	}
 
-	/** The group to put first in Activity, or `null` when nothing is waiting. Reads only. */
+	/**
+	 * The group to put first in Activity, or `null` when nothing is waiting.
+	 * A mailbox that is down or slow is said here (`panel.stale`), over the
+	 * last transactions it gave — never "No activity yet" over ones it has
+	 * not answered for. Reads only.
+	 */
 	group(m: MultisigMessages): ActivityGroupModel | null {
 		const open = proposals.open;
-		if (open.length === 0) return null;
+		if (open.length === 0 && !proposals.stale) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
 			return {
@@ -80,7 +85,11 @@ class WaitingRows {
 					approved: item.approved,
 					threshold: item.threshold
 				})} · ${chainName(item.chainId)}`,
-				amount: drawn?.amount ? `-${drawn.amount}` : '',
+				amount: drawn?.amount
+					? drawn.amount.startsWith('<')
+						? drawn.amount
+						: `-${drawn.amount}`
+					: '',
 				unit: drawn?.unit ?? '',
 				positive: false,
 				masked: false,
@@ -88,7 +97,9 @@ class WaitingRows {
 				badgeLogoUrl: chainLogoURL(item.chainId)
 			};
 		});
-		return { label: m.panel.pending, rows };
+		return proposals.stale
+			? { label: m.panel.pending, note: m.panel.stale, rows }
+			: { label: m.panel.pending, rows };
 	}
 }
 

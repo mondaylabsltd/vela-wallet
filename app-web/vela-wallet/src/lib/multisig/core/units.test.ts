@@ -24,6 +24,15 @@ describe('amounts', () => {
 		expect(formatUnits(123_456_789n, 8)).toBe('1.234567');
 	});
 
+	it('shows a fee without trailing zeros, and a tiny amount as more than nothing', () => {
+		// 0.0210000123: six decimals are "021000" — shown as 0.021.
+		expect(formatUnits(21_000_012_300_000_000n, 18)).toBe('0.021');
+		expect(formatUnits(1_000_000_000_000_000_000n, 18)).toBe('1');
+		expect(formatUnits(1n, 18)).toBe('<0.000001');
+		expect(formatUnits(0n, 18)).toBe('0');
+		expect(formatUnits(1_000_000_000_000_000_001n, 18)).toBe('1');
+	});
+
 	it('writes records as plain decimals, every digit kept', () => {
 		expect(plainUnits('1234567000000', 6)).toBe('1234567');
 		expect(plainUnits('250000000000000000', 18)).toBe('0.25');

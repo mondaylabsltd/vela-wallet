@@ -164,6 +164,39 @@ export async function retryUnrecorded(): Promise<void> {
 	writeProofs(left);
 }
 
+/** How often a record that has not landed is asked about again while a page is open. */
+export const RECORD_RETRY_MS = 60_000;
+
+let retrying: Promise<void> | null = null;
+
+/**
+ * Keep asking about every multisig whose record has not landed — now, when
+ * the browser comes back online, when the page is shown again, and every
+ * {@link RECORD_RETRY_MS} — not only when one page mounts: a record whose
+ * first attempt met a service that was down would otherwise wait for a
+ * reload nobody knows to make. One retry at a time. Returns the stop.
+ */
+export function followUnrecorded(retry: () => Promise<void> = retryUnrecorded): () => void {
+	const run = () => {
+		if (retrying || !multisig.accounts.some((a) => !a.recorded)) return;
+		retrying = retry().finally(() => (retrying = null));
+	};
+	const shown = () => {
+		if (document.visibilityState === 'visible') run();
+	};
+	run();
+	const timer = setInterval(run, RECORD_RETRY_MS);
+	window.addEventListener('online', run);
+	window.addEventListener('focus', run);
+	document.addEventListener('visibilitychange', shown);
+	return () => {
+		clearInterval(timer);
+		window.removeEventListener('online', run);
+		window.removeEventListener('focus', run);
+		document.removeEventListener('visibilitychange', shown);
+	};
+}
+
 export type AddOutcome =
 	| { ok: true; account: MultisigAccount }
 	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' };

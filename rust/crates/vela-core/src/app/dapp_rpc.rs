@@ -606,12 +606,18 @@ pub fn refused_before_any_block(answer: &super::tx_tracker::TrackStatusAnswer) -
 /// goes out as ONE user operation. Nothing else is claimed (a
 /// `paymasterService` is refused at signing).
 ///
+/// A multisig (one of `multisigs`) is `atomic: unsupported`: its transaction
+/// is a proposal its members approve one by one, and it proposes no batch of
+/// a page's calls — `wallet_sendCalls` is refused for it, so promising one
+/// would be a promise the wallet breaks.
+///
 /// The address must be one the site was granted (EIP-5792: an error when the
 /// page is not connected to it) — `Err((4100, …))`; no address is `-32602`.
 pub fn capabilities(
     params: &Value,
     granted: &[String],
     chains: &[u32],
+    multisigs: &[String],
 ) -> Result<Value, (i64, &'static str)> {
     let list = params.as_array();
     let address = list
@@ -632,6 +638,11 @@ pub fn capabilities(
                 .filter_map(|id| chain_param(&json!([{ "chainId": id }])))
                 .collect()
         });
+    let status = if multisigs.iter().any(|m| m.eq_ignore_ascii_case(address)) {
+        "unsupported"
+    } else {
+        "supported"
+    };
     let mut answer = serde_json::Map::new();
     for chain in chains {
         if asked.as_ref().is_some_and(|asked| !asked.contains(chain)) {
@@ -639,7 +650,7 @@ pub fn capabilities(
         }
         answer.insert(
             hex_chain_id(*chain),
-            json!({ "atomic": { "status": "supported" } }),
+            json!({ "atomic": { "status": status } }),
         );
     }
     Ok(Value::Object(answer))
@@ -1633,7 +1644,7 @@ mod tests {
     #[test]
     fn capabilities_are_atomic_batches_on_every_chain_for_the_connected_account() {
         let granted = vec![ALICE.to_lowercase()];
-        let all = capabilities(&json!([ALICE]), &granted, &[1, 100]);
+        let all = capabilities(&json!([ALICE]), &granted, &[1, 100], &[]);
         assert_eq!(
             all,
             Ok(json!({
@@ -1642,10 +1653,35 @@ mod tests {
             }))
         );
         // Only the chains the page names, when it names some.
-        let some = capabilities(&json!([ALICE, ["0x64", "0x2105"]]), &granted, &[1, 100]);
+        let some = capabilities(
+            &json!([ALICE, ["0x64", "0x2105"]]),
+            &granted,
+            &[1, 100],
+            &[],
+        );
         assert_eq!(
             some,
             Ok(json!({ "0x64": { "atomic": { "status": "supported" } } }))
+        );
+    }
+
+    /// A multisig proposes no batch of a page's calls (`wallet_sendCalls` is
+    /// refused for it): it says so rather than promise one.
+    #[test]
+    fn a_multisig_promises_no_atomic_batch() {
+        let granted = vec![ALICE.to_owned()];
+        let multisigs = vec![ALICE.to_lowercase()];
+        assert_eq!(
+            capabilities(&json!([ALICE]), &granted, &[1, 100], &multisigs),
+            Ok(json!({
+                "0x1": { "atomic": { "status": "unsupported" } },
+                "0x64": { "atomic": { "status": "unsupported" } }
+            }))
+        );
+        let other = format!("0x{}", "b2".repeat(20));
+        assert_eq!(
+            capabilities(&json!([ALICE]), &granted, &[1], &[other]),
+            Ok(json!({ "0x1": { "atomic": { "status": "supported" } } }))
         );
     }
 
@@ -1653,15 +1689,15 @@ mod tests {
     fn capabilities_are_told_only_to_a_site_connected_to_that_address() {
         let other = format!("0x{}", "b2".repeat(20));
         assert_eq!(
-            capabilities(&json!([other]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            capabilities(&json!([other]), &[ALICE.to_owned()], &[1], &[]).map_err(|e| e.0),
             Err(4100)
         );
         assert_eq!(
-            capabilities(&json!([ALICE]), &[], &[1]).map_err(|e| e.0),
+            capabilities(&json!([ALICE]), &[], &[1], &[]).map_err(|e| e.0),
             Err(4100)
         );
         assert_eq!(
-            capabilities(&json!([]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
+            capabilities(&json!([]), &[ALICE.to_owned()], &[1], &[]).map_err(|e| e.0),
             Err(-32602)
         );
     }

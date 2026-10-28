@@ -872,8 +872,14 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2162 (a multisig's executor who cannot pay, an execution that has not
 //   landed, 2026-10-28): + 2 `home.multisig.proposal` words. 2044 + 2 =
 //   2046 leaves, 116 branches.
-if (PATHS.length !== 2162) fail(`expected 2162 paths (2046 leaf + 116 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2046) fail(`expected 2046 leaf paths, got ${leafSet.size}`);
+// 2169 (multisig honesty: a dApp's call reviewed before it is proposed, a
+//   mailbox that cannot be read, an execution the network refused, a record
+//   not shared yet, a member that cannot be one, 2026-10-28): + 7
+//   `home.multisig` words (`switcher.notShared`, `proposal.mailboxDown`,
+//   `proposal.notSent`, `proposal.siteAsks`, `proposal.siteWaits`,
+//   `proposal.data`, `create.notMember`). 2046 + 7 = 2053 leaves, 116 branches.
+if (PATHS.length !== 2169) fail(`expected 2169 paths (2053 leaf + 116 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2053) fail(`expected 2053 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

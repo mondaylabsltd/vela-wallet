@@ -7,6 +7,18 @@
  * Kept after `#`, so it never reaches a server; any chat app or a QR code can
  * carry it.
  */
+import { SITE_ORIGIN } from '$lib/site';
+
+/**
+ * The origin a link made here is for: this page's own when it is a web page
+ * anyone can open, else the wallet's public web address — the browser
+ * extension's `chrome-extension://…` opens nowhere but in that extension, so
+ * a link to another member (or to the connect page) names the web wallet.
+ */
+export function shareOrigin(origin: string): string {
+	return /^https?:\/\//.test(origin) ? origin : SITE_ORIGIN;
+}
+
 export interface ProposalLink {
 	chainId: number;
 	multisig: string;

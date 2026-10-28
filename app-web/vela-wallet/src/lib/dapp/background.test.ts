@@ -1767,6 +1767,24 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 			code: 4100
 		});
 	});
+
+	it('promises a multisig no atomic batch: it proposes none (dapp-4)', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		env.local.data['vela.ext.cache'] = { address: ALICE, accounts: [{ address: ALICE }] };
+		env.local.data['vela.ext.multisigs'] = [ALICE.toLowerCase()];
+		env.local.data['vela.perm.https://a.example'] = {
+			origin: 'https://a.example',
+			address: ALICE,
+			chainId: 100,
+			grantedAt: 1
+		};
+		await startWorker(env);
+		const granted = env.openPage(7, 'doc-a', 'https://a.example');
+		expect((await rpc(env, granted, 'wallet_getCapabilities', [ALICE, ['0x64']])).result).toEqual({
+			'0x64': { atomic: { status: 'unsupported' } }
+		});
+	});
 });
 
 describe('receipt reads for handed-out operation hashes (RF3)', () => {

@@ -113,7 +113,13 @@ export class ExternalWallet {
 			}
 		});
 		this.#client.addEventListener('state', () => this.#stateChanged());
-		this.#client.addEventListener('ended', () => this.#forget());
+		// The client ends whenever its transport closes — `leave()` included,
+		// which every signing ends with. Forgetting on that forgot every
+		// pairing the moment it had signed (the list stayed `[]`, and each
+		// signature asked for a new code). Only an END is forgotten.
+		this.#client.addEventListener('ended', () => {
+			if (this.#connection.reason !== 'left') this.#forget();
+		});
 	}
 
 	/**

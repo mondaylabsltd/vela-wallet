@@ -11,6 +11,7 @@
 import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
 import { findAccountByAddress } from '$lib/services/accounts';
 import { poolRpcCall } from '$lib/services/rpc-pool';
+import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import {
 	keySetOf,
 	sendBatchCalls,
@@ -125,6 +126,41 @@ function canPay(executor: string, chainId: number): BeforeSign {
 		const have = BigInt(raw);
 		if (have < amount + value) throw new ExecutorCannotPayError(amount + value, have);
 	};
+}
+
+/**
+ * How long a may-have-been-sent execution the relay keeps saying it never
+ * heard of is given before it counts as not taken: its POST had an answer
+ * that was not a hash (a 500, a refusal after a lost reply), and the relay's
+ * record of an op it took is written before that answer goes out.
+ */
+export const NOT_TAKEN_AFTER_MS = 6_000;
+
+/**
+ * The relay's word on an execution that may have been sent (`maybeSent`):
+ * resolves `true` once the relay says it refused it before any block, or
+ * keeps saying it never heard of it past {@link NOT_TAKEN_AFTER_MS} — nothing
+ * was sent, and the person may try again (the multisig's nonce lets at most
+ * one execution land, so a second try can never pay twice). Resolves `false`
+ * once the relay says it holds it, or when `signal` stops the watch.
+ */
+export async function relayRefused(
+	userOpHash: string,
+	chainId: number,
+	signal: AbortSignal,
+	status: typeof pollUserOpStatus = pollUserOpStatus,
+	pauseMs = 2_000
+): Promise<boolean> {
+	const start = Date.now();
+	while (!signal.aborted) {
+		const answer = await status(userOpHash, chainId);
+		if (signal.aborted) return false;
+		if (answer?.status === 'rejected' && !answer.txHash) return true;
+		if (answer && answer.status !== 'not_found') return false;
+		if (answer?.status === 'not_found' && Date.now() - start >= NOT_TAKEN_AFTER_MS) return true;
+		await new Promise((r) => setTimeout(r, pauseMs));
+	}
+	return false;
 }
 
 /** Send the execution. Resolves once the relay has the operation. */

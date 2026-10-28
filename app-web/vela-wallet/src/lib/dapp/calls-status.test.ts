@@ -183,27 +183,42 @@ describe('a batch’s status', () => {
 });
 
 describe('the capabilities', () => {
-	const cases: [string, unknown, string[]][] = [
-		['the connected account', [ALICE], [ALICE]],
-		['another case', [ALICE.toUpperCase().replace('0X', '0x')], [ALICE]],
-		['named chains', [ALICE, ['0x64', '0x2105', '100', 1, 'zz', 1.5, -1]], [ALICE]],
-		['an empty chain list', [ALICE, []], [ALICE]],
-		['another account', [BOB], [ALICE]],
-		['nobody connected', [ALICE], []],
-		['no address', [], [ALICE]],
-		['not an address', ['0x12'], [ALICE]]
+	const cases: [string, unknown, string[], string[]][] = [
+		['the connected account', [ALICE], [ALICE], []],
+		['another case', [ALICE.toUpperCase().replace('0X', '0x')], [ALICE], []],
+		['named chains', [ALICE, ['0x64', '0x2105', '100', 1, 'zz', 1.5, -1]], [ALICE], []],
+		['an empty chain list', [ALICE, []], [ALICE], []],
+		['another account', [BOB], [ALICE], []],
+		['nobody connected', [ALICE], [], []],
+		['no address', [], [ALICE], []],
+		['not an address', ['0x12'], [ALICE], []],
+		// A multisig proposes no batch (wallet_sendCalls is refused for it).
+		['a multisig', [ALICE], [ALICE], [ALICE]],
+		['a multisig, named chains', [ALICE, ['0x64']], [ALICE], [ALICE.toUpperCase()]],
+		['another multisig', [ALICE], [ALICE], [BOB]]
 	];
 	const chains = [1, 100, 8453];
-	for (const [name, params, granted] of cases) {
+	for (const [name, params, granted, multisigs] of cases) {
 		it(`agrees: ${name}`, () => {
 			const core = JSON.parse(
-				dappRpcCapabilities(JSON.stringify(params), JSON.stringify(granted), JSON.stringify(chains))
+				dappRpcCapabilities(
+					JSON.stringify(params),
+					JSON.stringify(granted),
+					JSON.stringify(chains),
+					JSON.stringify(multisigs)
+				)
 			);
-			const twin = capabilitiesResult(params, granted, chains);
+			const twin = capabilitiesResult(params, granted, chains, multisigs);
 			if (core.error) expect(twin.error?.code).toBe(core.error.code);
 			else expect(twin).toEqual(core);
 		});
 	}
+
+	it('promises a multisig no atomic batch', () => {
+		expect(capabilitiesResult([ALICE], [ALICE], [100], [ALICE]).result).toEqual({
+			'0x64': { atomic: { status: 'unsupported' } }
+		});
+	});
 });
 
 describe('the rest of the worker’s half', () => {

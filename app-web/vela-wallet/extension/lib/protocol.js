@@ -257,6 +257,12 @@ export const CHAINS_KEY = 'vela.ext.chains';
  * drive a window and cannot drive a side panel.
  */
 export const SURFACE_KEY = 'vela.ext.surface';
+/**
+ * The multisig accounts among the wallet's addresses — `vela.ext.multisigs`,
+ * lowercase. Published with the snapshot; read for `wallet_getCapabilities`,
+ * since a multisig proposes no batch of a page's calls.
+ */
+export const MULTISIGS_KEY = 'vela.ext.multisigs';
 
 // ---- EIP-1193 / EIP-1474 error codes ----------------------------------------
 export const ERR = {
@@ -557,8 +563,10 @@ function relayRefused(answer) {
  * `wallet_getCapabilities` `[address, chainIds?]`: `atomic: supported` on each
  * of the wallet's `chainIds` (those the page names, when it names some), for
  * an address the site was granted — else `{ error }` (4100; no address -32602).
+ * A multisig (one of `multisigs`) is `atomic: unsupported`: it proposes no
+ * batch of a page's calls (`dapp_rpc::capabilities`, twinned).
  */
-export function capabilitiesResult(params, granted, chainIds) {
+export function capabilitiesResult(params, granted, chainIds, multisigs = []) {
 	const list = Array.isArray(params) ? params : [];
 	const address = list[0];
 	if (!isAddressLike(address)) {
@@ -571,10 +579,14 @@ export function capabilitiesResult(params, granted, chainIds) {
 	const asked = Array.isArray(list[1])
 		? list[1].map((id) => strictChainId(id)).filter((id) => id > 0)
 		: null;
+	const multisig = (Array.isArray(multisigs) ? multisigs : []).some(
+		(m) => typeof m === 'string' && m.toLowerCase() === lower
+	);
+	const status = multisig ? 'unsupported' : 'supported';
 	const result = {};
 	for (const chain of chainIds) {
 		if (asked && !asked.includes(chain)) continue;
-		result[toHexChainId(chain)] = { atomic: { status: 'supported' } };
+		result[toHexChainId(chain)] = { atomic: { status } };
 	}
 	return { result };
 }

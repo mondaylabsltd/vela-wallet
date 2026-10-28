@@ -1,0 +1,139 @@
+/**
+ * A dApp's transaction from a multisig (dapp-1, dapp-2, dapp-4): its review
+ * comes first and nothing is signed before "Propose and approve"; every way
+ * out of the sheet answers the site, once and honestly; a batch is refused
+ * as a batch.
+ */
+import { describe, expect, it, vi } from 'vitest';
+import {
+	DECLINED,
+	DappGoneError,
+	dappCallOf,
+	leftProposed,
+	multisigRefusal,
+	openMultisigReview,
+	type DappAnswer,
+	type HandOff
+} from './dapp-request';
+import type { DappProposal } from './ui.svelte';
+
+const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+const HASH = `0x${'ab'.repeat(32)}`;
+const CALL = { to: '0x000000000000000000000000000000000000dEaD', value: '0x1', data: '0x' };
+
+function harness(overrides: Partial<HandOff> = {}) {
+	const answers: DappAnswer[] = [];
+	const events: string[] = [];
+	let sheet: DappProposal | null = null;
+	const propose = vi.fn(async () => {
+		events.push('passkey');
+		return { safeTxHash: HASH };
+	});
+	const h: HandOff = {
+		rid: 'r1',
+		address: SAFE,
+		chainId: 100,
+		call: CALL,
+		origin: 'https://app.example',
+		open: (request) => {
+			events.push('review');
+			sheet = request;
+		},
+		proposed: (_rid, hash) => events.push(`proposed ${hash.slice(0, 4)}`),
+		closeSheet: () => events.push('sheet closed'),
+		claim: async () => true,
+		gone: () => events.push('gone'),
+		propose,
+		settle: (answer) => answers.push(answer),
+		follow: () => events.push('following'),
+		...overrides
+	};
+	const { closing } = openMultisigReview(h);
+	return { answers, events, propose, closing, sheet: () => sheet! };
+}
+
+describe("a dApp's transaction from a multisig", () => {
+	it('opens its review and signs nothing until the person proposes it', async () => {
+		const { events, propose, sheet, answers } = harness();
+		expect(events).toEqual(['review']);
+		expect(propose).not.toHaveBeenCalled();
+		expect(sheet().safeTxHash).toBeNull();
+		expect(sheet().origin).toBe('https://app.example');
+		await sheet().propose();
+		expect(propose).toHaveBeenCalledWith(SAFE, 100, CALL);
+		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'following']);
+		// Proposed is not answered: the site waits for the execution.
+		expect(answers).toEqual([]);
+	});
+
+	it('Decline, or a close before proposing, is the person rejecting it (4001)', () => {
+		const declined = harness();
+		declined.sheet().decline();
+		expect(declined.answers).toEqual([{ error: DECLINED }]);
+		expect(declined.answers[0].error?.code).toBe(4001);
+		expect(declined.propose).not.toHaveBeenCalled();
+
+		const closed = harness();
+		closed.sheet().close();
+		expect(closed.answers).toEqual([{ error: DECLINED }]);
+		expect(closed.events).toContain('sheet closed');
+	});
+
+	it('a close after proposing says it was proposed — never a rejection, never a blank wait', async () => {
+		const { sheet, answers, closing } = harness();
+		await sheet().propose();
+		expect(closing()).toEqual({ error: leftProposed(HASH) });
+		sheet().close();
+		expect(answers).toHaveLength(1);
+		expect(answers[0].error?.code).not.toBe(4001);
+		expect(answers[0].error?.message).toContain(HASH);
+		expect(answers[0].error?.message).toMatch(/Proposed/);
+	});
+
+	it('a page that left before the passkey gets nothing signed', async () => {
+		const { sheet, propose, events } = harness({ claim: async () => false });
+		await expect(sheet().propose()).rejects.toBeInstanceOf(DappGoneError);
+		expect(propose).not.toHaveBeenCalled();
+		expect(events).toContain('gone');
+	});
+
+	it('a dismissed passkey leaves the review up, with nothing answered', async () => {
+		const dismissed = new DOMException('no', 'NotAllowedError');
+		const { sheet, answers } = harness({
+			propose: async () => {
+				throw dismissed;
+			}
+		});
+		await expect(sheet().propose()).rejects.toBe(dismissed);
+		expect(answers).toEqual([]);
+		expect(sheet().safeTxHash).toBeNull();
+	});
+});
+
+describe('what a multisig refuses at once', () => {
+	it('refuses a batch as a batch, and a message as a message', () => {
+		expect(multisigRefusal('eth_sendTransaction')).toBeNull();
+		const batch = multisigRefusal('wallet_sendCalls');
+		expect(batch?.code).toBe(4200);
+		expect(batch?.message).toMatch(/batch/);
+		expect(batch?.message).not.toMatch(/message/);
+		expect(multisigRefusal('personal_sign')?.message).toMatch(/signs no messages/);
+		expect(multisigRefusal('eth_signTypedData_v4')?.code).toBe(4200);
+	});
+
+	it("reads the call a site's eth_sendTransaction asks for", () => {
+		expect(dappCallOf([{ to: CALL.to, value: '0x5', data: '0xabcd' }])).toEqual({
+			to: CALL.to,
+			value: '0x5',
+			data: '0xabcd'
+		});
+		expect(dappCallOf([{ to: CALL.to, input: '0x12' }])).toEqual({
+			to: CALL.to,
+			value: '0x0',
+			data: '0x12'
+		});
+		expect(dappCallOf([{ value: '0x1' }])).toBeNull();
+		expect(dappCallOf([])).toBeNull();
+		expect(dappCallOf(null)).toBeNull();
+	});
+});

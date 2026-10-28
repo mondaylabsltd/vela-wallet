@@ -17,6 +17,7 @@
 	import type { MultisigMessages } from '../messages';
 	import { ExternalWallet, WalletDeclinedError } from '../external/session.svelte';
 	import { checked, typedDataOf, type ExternalRequest } from '../external/signing.svelte';
+	import { shareOrigin } from '../core/link';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -65,7 +66,12 @@
 	});
 
 	onMount(() => {
-		wallet = ExternalWallet.for(request.owners, `${location.origin}/${locale}/connect`);
+		// The connect page opens where the owner's wallet is: the wallet's web
+		// address, never this extension's own.
+		wallet = ExternalWallet.for(
+			request.owners,
+			`${shareOrigin(location.origin)}/${locale}/connect`
+		);
 		void run();
 		return () => {
 			controller.abort();

@@ -398,6 +398,7 @@
     "add": "Thêm đa chữ ký",
     "rowName": "Đa chữ ký {{m}}/{{n}}",
     "readOnly": "Chỉ xem trên thiết bị này",
+    "notShared": "Chưa được chia sẻ",
     "removeBody": "Gỡ tài khoản đa chữ ký này khỏi thiết bị? Tiền không bị ảnh hưởng — bạn có thể thêm lại bất cứ lúc nào bằng địa chỉ.",
     "addAccount": "Thêm tài khoản",
     "createAccountNote": "Tài khoản mới, được giữ bằng passkey trên thiết bị này.",
@@ -467,7 +468,12 @@
     "notFound": "Giao dịch này chưa có trong hộp thư.",
     "opening": "Đang mở giao dịch…",
     "cannotPay": "{{name}} không đủ {{symbol}} để trả phí mạng: cần khoảng {{fee}}, hiện có {{balance}}. Hãy nạp thêm hoặc để thành viên khác thực hiện.",
-    "notLanded": "Sau ba phút giao dịch vẫn chưa lên mạng. Nếu chưa sớm hiện là đã thực hiện, hãy thử lại."
+    "notLanded": "Sau ba phút giao dịch vẫn chưa lên mạng. Nếu chưa sớm hiện là đã thực hiện, hãy thử lại.",
+    "mailboxDown": "Không đọc được các giao dịch đang chờ của multisig này nên chưa có gì được đề xuất. Hãy thử lại sau giây lát.",
+    "notSent": "Mạng không nhận giao dịch nên chưa có gì được gửi. Hãy thử lại.",
+    "siteAsks": "{{host}} yêu cầu giao dịch này.",
+    "siteWaits": "{{host}} chờ đến khi các thành viên thực hiện hoặc từ chối giao dịch. Nếu bạn đóng mục này, trang web được báo là giao dịch đã được đề xuất, và giao dịch vẫn nằm trong Hoạt động.",
+    "data": "Dữ liệu"
    },
    "send": {
     "propose": "Đề xuất và duyệt",
@@ -497,13 +503,14 @@
     "needTwo": "Thêm ít nhất hai thành viên.",
     "needLocal": "Ít nhất một thành viên phải là tài khoản trên thiết bị này.",
     "duplicate": "Thành viên này đã có trong danh sách.",
+    "notMember": "Địa chỉ này không thể là thành viên.",
     "created": "Đã tạo đa chữ ký",
     "createdBody": "Chia sẻ địa chỉ với các thành viên khác để họ thêm vào Vela.",
     "done": "Xong",
     "name": "Tên",
     "namePlaceholder": "vd: Quỹ nhóm",
     "nameHint": "Mọi thành viên đều thấy tên này. Tên được lưu cùng multisig và không thể đổi sau này.",
-    "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển hay khoảng trắng ở đầu hoặc cuối."
+    "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển, ký tự ẩn hay khoảng trắng ở đầu hoặc cuối."
    },
    "add": {
     "title": "Thêm đa chữ ký",

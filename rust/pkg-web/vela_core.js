@@ -3640,16 +3640,18 @@ export function dappRpcCallsStatusId(params_json) {
 
 /**
  * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
- * request's params, the site's granted addresses and the wallet's chains (all
- * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ * request's params, the site's granted addresses, the wallet's chains and
+ * the multisig accounts among its addresses (all JSON). Answers
+ * `{"result":…}` or `{"error":{"code","message"}}`.
  * @param {string} params_json
  * @param {string} granted_json
  * @param {string} chains_json
+ * @param {string} multisigs_json
  * @returns {string}
  */
-export function dappRpcCapabilities(params_json, granted_json, chains_json) {
-    let deferred4_0;
-    let deferred4_1;
+export function dappRpcCapabilities(params_json, granted_json, chains_json, multisigs_json) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -3657,12 +3659,14 @@ export function dappRpcCapabilities(params_json, granted_json, chains_json) {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(chains_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.dappRpcCapabilities(ptr0, len0, ptr1, len1, ptr2, len2);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
+        const ptr3 = passStringToWasm0(multisigs_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcCapabilities(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 

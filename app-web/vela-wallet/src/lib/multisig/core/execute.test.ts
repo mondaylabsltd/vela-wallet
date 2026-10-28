@@ -43,7 +43,10 @@ vi.mock('./kernel', () => ({
 	sameAddress: (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 }));
 
-const { submitExecution, ExecutorCannotPayError } = await import('./execute');
+vi.mock('$lib/services/tx-reconciler', () => ({ pollUserOpStatus: async () => null }));
+
+const { submitExecution, ExecutorCannotPayError, relayRefused, NOT_TAKEN_AFTER_MS } =
+	await import('./execute');
 
 const input = () =>
 	({
@@ -88,5 +91,56 @@ describe('executing a multisig transaction', () => {
 		balance.value = 'unreadable';
 		await submitExecution(input());
 		expect(sent.count).toBe(2);
+	});
+});
+
+describe('an execution the relay may not have taken (ms-3)', () => {
+	type Status = { status: string; txHash?: string } | null;
+	const answers = (...list: Status[]) => {
+		let i = 0;
+		return (async () => list[Math.min(i++, list.length - 1)]) as unknown as Parameters<
+			typeof relayRefused
+		>[3];
+	};
+
+	it('is said at once when the relay refused it before any block', async () => {
+		const signal = new AbortController().signal;
+		expect(await relayRefused('0x01', 100, signal, answers({ status: 'rejected' }), 0)).toBe(true);
+	});
+
+	it('is said when the relay keeps never having heard of it', async () => {
+		vi.useFakeTimers();
+		try {
+			const status = answers({ status: 'not_found' });
+			const refused = relayRefused('0x01', 100, new AbortController().signal, status, 1_000);
+			await vi.advanceTimersByTimeAsync(NOT_TAKEN_AFTER_MS + 1_000);
+			expect(await refused).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('is followed on when the relay holds it, or names its bundle', async () => {
+		const signal = new AbortController().signal;
+		expect(await relayRefused('0x01', 100, signal, answers({ status: 'queued' }), 0)).toBe(false);
+		expect(
+			await relayRefused('0x01', 100, signal, answers({ status: 'rejected', txHash: '0x02' }), 0)
+		).toBe(false);
+		expect(
+			await relayRefused(
+				'0x01',
+				100,
+				signal,
+				answers({ status: 'not_found' }, { status: 'submitted' }),
+				0
+			)
+		).toBe(false);
+	});
+
+	it('stops when the receipt came first', async () => {
+		const watch = new AbortController();
+		const refused = relayRefused('0x01', 100, watch.signal, answers(null), 5);
+		watch.abort();
+		expect(await refused).toBe(false);
 	});
 });

@@ -82,6 +82,7 @@
         "add": "Adicionar multisig",
         "rowName": "Multisig {{m}}/{{n}}",
         "readOnly": "Somente leitura aqui",
+        "notShared": "Ainda não compartilhada",
         "removeBody": "Remover esta multisig deste dispositivo? Os fundos não são afetados — adicione-a de novo quando quiser com o endereço.",
         "addAccount": "Adicionar conta",
         "createAccountNote": "Uma conta nova, protegida por uma passkey neste dispositivo.",
@@ -151,7 +152,12 @@
         "notFound": "Esta transação ainda não está na caixa de mensagens.",
         "opening": "Abrindo a transação…",
         "cannotPay": "{{name}} não tem {{symbol}} suficiente para a taxa de rede: são necessários cerca de {{fee}} e há {{balance}}. Adicione saldo ou deixe outro membro executar.",
-        "notLanded": "Não chegou à rede depois de três minutos. Se não aparecer como executada em breve, tente de novo."
+        "notLanded": "Não chegou à rede depois de três minutos. Se não aparecer como executada em breve, tente de novo.",
+        "mailboxDown": "Não foi possível ler as transações pendentes deste multisig, então nada foi proposto. Tente de novo em instantes.",
+        "notSent": "A rede não a aceitou, então nada foi enviado. Tente de novo.",
+        "siteAsks": "{{host}} pede esta transação.",
+        "siteWaits": "{{host}} espera até que os membros a executem ou rejeitem. Se você fechar isto, o site fica sabendo que ela foi proposta, e ela continua em Atividade.",
+        "data": "Dados"
       },
       "send": {
         "propose": "Propor e aprovar",
@@ -181,13 +187,14 @@
         "needTwo": "Adicione pelo menos dois membros.",
         "needLocal": "Pelo menos um membro precisa ser uma conta deste dispositivo.",
         "duplicate": "Este membro já está na lista.",
+        "notMember": "Este endereço não pode ser membro.",
         "created": "Multisig criada",
         "createdBody": "Compartilhe o endereço com os outros membros para que eles a adicionem na Vela.",
         "done": "Concluir",
         "name": "Nome",
         "namePlaceholder": "ex.: Fundo da equipe",
         "nameHint": "Todos os membros veem este nome. Ele é salvo com o multisig e não pode ser alterado depois.",
-        "nameInvalid": "Use um nome mais curto, sem caracteres de controle nem espaços no início ou no fim."
+        "nameInvalid": "Use um nome mais curto, sem caracteres de controle ou invisíveis nem espaços no início ou no fim."
       },
       "add": {
         "title": "Adicionar uma multisig",

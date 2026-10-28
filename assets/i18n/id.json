@@ -398,6 +398,7 @@
     "add": "Tambah multisig",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Hanya baca di sini",
+    "notShared": "Belum dibagikan",
     "removeBody": "Hapus multisig ini dari perangkat ini? Dananya tidak terpengaruh — tambahkan lagi kapan saja dengan alamatnya.",
     "addAccount": "Tambah akun",
     "createAccountNote": "Akun baru, dijaga passkey di perangkat ini.",
@@ -467,7 +468,12 @@
     "notFound": "Transaksi ini belum ada di kotak surat.",
     "opening": "Membuka transaksi…",
     "cannotPay": "{{name}} tidak punya cukup {{symbol}} untuk biaya jaringan: dibutuhkan sekitar {{fee}}, tersedia {{balance}}. Tambahkan saldo, atau biarkan anggota lain yang mengeksekusi.",
-    "notLanded": "Belum masuk ke jaringan setelah tiga menit. Jika tidak segera tampil sebagai dieksekusi, coba lagi."
+    "notLanded": "Belum masuk ke jaringan setelah tiga menit. Jika tidak segera tampil sebagai dieksekusi, coba lagi.",
+    "mailboxDown": "Transaksi yang menunggu di multisig ini tidak bisa dibaca, jadi tidak ada yang diusulkan. Coba lagi sebentar lagi.",
+    "notSent": "Jaringan tidak menerimanya, jadi tidak ada yang dikirim. Coba lagi.",
+    "siteAsks": "{{host}} meminta transaksi ini.",
+    "siteWaits": "{{host}} menunggu sampai anggota mengeksekusi atau menolaknya. Jika Anda menutup ini, situs diberi tahu bahwa transaksi sudah diusulkan, dan transaksi tetap ada di Aktivitas.",
+    "data": "Data"
    },
    "send": {
     "propose": "Usulkan dan setujui",
@@ -497,13 +503,14 @@
     "needTwo": "Tambahkan setidaknya dua anggota.",
     "needLocal": "Setidaknya satu anggota harus akun di perangkat ini.",
     "duplicate": "Anggota ini sudah ada di daftar.",
+    "notMember": "Alamat ini tidak bisa menjadi anggota.",
     "created": "Multisig dibuat",
     "createdBody": "Bagikan alamatnya ke anggota lain agar mereka bisa menambahkannya di Vela.",
     "done": "Selesai",
     "name": "Nama",
     "namePlaceholder": "mis. Dana tim",
     "nameHint": "Semua anggota melihat nama ini. Nama disimpan bersama multisig dan tidak bisa diubah nanti.",
-    "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau spasi di awal maupun akhir."
+    "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau karakter tak terlihat, dan tanpa spasi di awal maupun akhir."
    },
    "add": {
     "title": "Tambah multisig",

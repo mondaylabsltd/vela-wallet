@@ -850,10 +850,11 @@ export function dappRpcCallsStatusId(params_json: string): string | undefined;
 
 /**
  * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
- * request's params, the site's granted addresses and the wallet's chains (all
- * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ * request's params, the site's granted addresses, the wallet's chains and
+ * the multisig accounts among its addresses (all JSON). Answers
+ * `{"result":…}` or `{"error":{"code","message"}}`.
  */
-export function dappRpcCapabilities(params_json: string, granted_json: string, chains_json: string): string;
+export function dappRpcCapabilities(params_json: string, granted_json: string, chains_json: string, multisigs_json: string): string;
 
 /**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
@@ -1846,7 +1847,7 @@ export interface InitOutput {
     readonly dappRequestDisplay: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
-    readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dappRpcSendCallsResult: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];

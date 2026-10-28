@@ -399,6 +399,7 @@
     "add": "Ajouter un multisig",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Lecture seule ici",
+    "notShared": "Pas encore partagé",
     "removeBody": "Retirer ce multisig de cet appareil ? Ses fonds ne sont pas touchés : vous pourrez le rajouter à tout moment avec son adresse.",
     "addAccount": "Ajouter un compte",
     "createAccountNote": "Un nouveau compte, protégé par une passkey sur cet appareil.",
@@ -468,7 +469,12 @@
     "notFound": "Cette transaction n’est pas encore dans la boîte.",
     "opening": "Ouverture de la transaction…",
     "cannotPay": "{{name}} n'a pas assez de {{symbol}} pour les frais de réseau : il faut environ {{fee}}, il y a {{balance}}. Ajoutez-en, ou laissez un autre membre l'exécuter.",
-    "notLanded": "Elle n'a pas atteint le réseau au bout de trois minutes. Si elle n'apparaît pas bientôt comme exécutée, réessayez."
+    "notLanded": "Elle n'a pas atteint le réseau au bout de trois minutes. Si elle n'apparaît pas bientôt comme exécutée, réessayez.",
+    "mailboxDown": "Impossible de lire les transactions en attente de ce multisig : rien n'a été proposé. Réessayez dans un instant.",
+    "notSent": "Le réseau ne l'a pas acceptée : rien n'a été envoyé. Réessayez.",
+    "siteAsks": "{{host}} demande cette transaction.",
+    "siteWaits": "{{host}} attend que les membres l'exécutent ou la rejettent. Si vous fermez ceci, le site apprend qu'elle a été proposée ; elle reste dans l'activité.",
+    "data": "Données"
    },
    "send": {
     "propose": "Proposer et approuver",
@@ -498,13 +504,14 @@
     "needTwo": "Ajoutez au moins deux membres.",
     "needLocal": "Au moins un membre doit être un compte de cet appareil.",
     "duplicate": "Ce membre est déjà dans la liste.",
+    "notMember": "Cette adresse ne peut pas être membre.",
     "created": "Multisig créé",
     "createdBody": "Partagez son adresse avec les autres membres pour qu’ils l’ajoutent dans Vela.",
     "done": "Terminé",
     "name": "Nom",
     "namePlaceholder": "p. ex. Caisse de l'équipe",
     "nameHint": "Tous les membres voient ce nom. Il est enregistré avec le multisig et ne pourra plus être modifié.",
-    "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni espace au début ou à la fin."
+    "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni invisibles, ni espace au début ou à la fin."
    },
    "add": {
     "title": "Ajouter un multisig",

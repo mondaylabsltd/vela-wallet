@@ -77,6 +77,11 @@ export interface ChainState {
 	chainId: number;
 	members: ChainMembers;
 	items: ProposalItem[];
+	/**
+	 * Whether the mailbox's list was read just now. `false`: `items` are the
+	 * last ones read, and no new proposal may take a nonce from them.
+	 */
+	mailbox: boolean;
 }
 
 function sortKey(a: ProposalItem, b: ProposalItem): number {
@@ -160,17 +165,59 @@ export function readProposal(
 	};
 }
 
+/**
+ * One chain of `account`, read now: its members from the chain, its proposals
+ * from the mailbox. `mailbox: false` when the mailbox could not be read — the
+ * items are then `previous`'s (the last list read), re-read against the
+ * members now, and nothing may be proposed from them (a nonce taken from a
+ * list that is not there would be one an open proposal already holds).
+ * Throws when the members cannot be read.
+ */
+export async function readChain(
+	account: MultisigAccount,
+	chainId: number,
+	previous: Proposal[] | null = null
+): Promise<ChainState & { proposals: Proposal[] }> {
+	const [members, answer] = await Promise.all([
+		readMembers(chainId, account.address, account.genesis),
+		// `false`: unread (a `null` is the mailbox knowing nothing of it).
+		fetchProposals(chainId, account.address).catch(() => false as const)
+	]);
+	const mailbox = answer !== false;
+	const list = answer === false ? (previous ?? []) : (answer?.proposals ?? []);
+	const items = list
+		.map((p) => readProposal(account, members, p))
+		.filter((i): i is ProposalItem => i !== null);
+	markCancellations(account.address, items);
+	return { chainId, members, items, mailbox, proposals: list };
+}
+
+/** The nonce a new proposal on `chain` takes: after every open one. */
+export function nextNonceOf(chain: ChainState): bigint {
+	let n = chain.members.nonce;
+	for (const i of chain.items) if (i.status !== 'done' && i.nonce >= n) n = i.nonce + 1n;
+	return n;
+}
+
+/** A refresh still out after this long: the person is told the list may be stale. */
+export const SLOW_REFRESH_MS = 8_000;
+
 class Proposals {
 	/** Per chain the multisig is used on. */
 	chains = $state<ChainState[]>([]);
 	loading = $state(false);
-	/** The last refresh failed (offline, the service down): the list may be stale. */
+	/**
+	 * The last refresh failed (offline, the service down) or is taking long:
+	 * the list may be stale, and whoever shows it says so.
+	 */
 	stale = $state(false);
 	/** New activity was written: whoever shows it refreshes. */
 	onrecorded: (() => void) | null = null;
 	#address: string | null = null;
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#inflight: Promise<void> | null = null;
+	/** The last list the mailbox gave, per chain: kept while it cannot be read. */
+	#lists = new Map<number, Proposal[]>();
 
 	get items(): ProposalItem[] {
 		return this.chains.flatMap((c) => c.items).sort(sortKey);
@@ -186,7 +233,11 @@ class Proposals {
 		const address = account?.address ?? null;
 		if (this.#timer) clearInterval(this.#timer);
 		this.#timer = null;
-		if (!sameAddress(this.#address, address)) this.chains = [];
+		if (!sameAddress(this.#address, address)) {
+			this.chains = [];
+			this.#lists.clear();
+			this.stale = false;
+		}
 		this.#address = address;
 		if (!account) return;
 		void this.refresh(account, chainIds);
@@ -200,32 +251,37 @@ class Proposals {
 	refresh(account: MultisigAccount, chainIds: number[]): Promise<void> {
 		if (this.#inflight) return this.#inflight;
 		this.loading = this.chains.length === 0;
+		const followed = () => sameAddress(this.#address, account.address);
+		// Slow is said as stale: "No activity yet" over transactions the
+		// mailbox has not answered for would be a claim nobody checked.
+		const slow = setTimeout(() => {
+			if (followed()) this.stale = true;
+		}, SLOW_REFRESH_MS);
 		const run = (async () => {
 			let failed = false;
 			const next: ChainState[] = [];
 			await Promise.all(
 				chainIds.map(async (chainId) => {
+					const known = followed() ? (this.#lists.get(chainId) ?? null) : null;
 					try {
-						const [members, answer] = await Promise.all([
-							readMembers(chainId, account.address, account.genesis),
-							fetchProposals(chainId, account.address).catch(() => {
-								failed = true;
-								return null;
-							})
-						]);
-						const items = (answer?.proposals ?? [])
-							.map((p) => readProposal(account, members, p))
-							.filter((i): i is ProposalItem => i !== null);
-						markCancellations(account.address, items);
-						next.push({ chainId, members, items });
+						const read = await readChain(account, chainId, known);
+						if (!read.mailbox) failed = true;
+						else if (followed()) this.#lists.set(chainId, read.proposals);
+						next.push({
+							chainId,
+							members: read.members,
+							items: read.items,
+							mailbox: read.mailbox
+						});
 					} catch {
 						failed = true;
 						const previous = this.chains.find((c) => c.chainId === chainId);
-						if (previous) next.push(previous);
+						if (previous) next.push({ ...previous, mailbox: false });
 					}
 				})
 			);
-			if (sameAddress(this.#address, account.address)) {
+			clearTimeout(slow);
+			if (followed()) {
 				this.chains = next.sort((a, b) => a.chainId - b.chainId);
 				this.stale = failed;
 				// Executed on another member's device: into this device's activity too.
@@ -246,10 +302,7 @@ class Proposals {
 	/** The nonce a new proposal on `chainId` takes: after every open one. */
 	nextNonce(chainId: number): bigint {
 		const c = this.chain(chainId);
-		if (!c) return 0n;
-		let n = c.members.nonce;
-		for (const i of c.items) if (i.status !== 'done' && i.nonce >= n) n = i.nonce + 1n;
-		return n;
+		return c ? nextNonceOf(c) : 0n;
 	}
 }
 
@@ -346,18 +399,18 @@ export async function proposeTransfers(
 	);
 }
 
-/**
- * A dApp's `eth_sendTransaction` from a multisig: the call, proposed on
- * `chainId` at the next free nonce and approved at once, as a transfer is.
- */
-export async function proposeCall(
-	address: string,
-	chainId: number,
-	call: { to: string; value: string; data: string }
-): Promise<{ safeTxHash: string }> {
+/** A dApp's call (`eth_sendTransaction`'s `to`, `value`, `data`). */
+export interface DappCall {
+	to: string;
+	value: string;
+	data: string;
+}
+
+/** `call` as a plain SafeTx at `nonce`: a call, no gas paid from the multisig. */
+function callTx(call: DappCall, nonce: bigint): SafeTx {
 	const zero = '0x0';
 	const none = '0x0000000000000000000000000000000000000000';
-	return proposeBuilt(address, chainId, (nonce) => ({
+	return {
 		to: call.to,
 		value: call.value || zero,
 		data: call.data || '0x',
@@ -368,7 +421,58 @@ export async function proposeCall(
 		gasToken: none,
 		refundReceiver: none,
 		nonce: `0x${nonce.toString(16)}`
-	}));
+	};
+}
+
+/**
+ * A dApp's call as it would be proposed now, before anything is signed: the
+ * transaction at the next free nonce, read by the core (`reviewTx`) as every
+ * member will read it, with no approval yet — the review the person confirms
+ * with "Propose and approve". Throws `MailboxUnreadableError` when the list
+ * of waiting transactions cannot be read (there is no number to give it).
+ */
+export async function draftCall(
+	address: string,
+	chainId: number,
+	call: DappCall
+): Promise<{ chain: ChainState; item: ProposalItem }> {
+	const account = multisig.find(address);
+	if (!account) throw new Error('not a multisig on this device');
+	const read = await readChain(account, chainId).catch(() => null);
+	if (!read?.mailbox) throw new MailboxUnreadableError();
+	const chain: ChainState = {
+		chainId,
+		members: read.members,
+		items: read.items,
+		mailbox: true
+	};
+	const tx = callTx(call, nextNonceOf(chain));
+	const now = Date.now();
+	const item = readProposal(account, chain.members, {
+		chainId,
+		safe: account.address,
+		safeTxHash: safeTxHash(chainId, account.address, tx),
+		safeTx: tx,
+		proposer: '',
+		approvals: [],
+		createdMs: now,
+		updatedMs: now
+	});
+	if (!item) throw new Error('the transaction does not hash as itself');
+	return { chain, item };
+}
+
+/**
+ * A dApp's `eth_sendTransaction` from a multisig: the call, proposed on
+ * `chainId` at the next free nonce and approved at once, as a transfer is —
+ * only after the person confirmed its review (`draftCall`).
+ */
+export async function proposeCall(
+	address: string,
+	chainId: number,
+	call: DappCall
+): Promise<{ safeTxHash: string }> {
+	return proposeBuilt(address, chainId, (nonce) => callTx(call, nonce));
 }
 
 /**
@@ -385,11 +489,15 @@ async function proposeBuilt(
 	if (!account) throw new Error('not a multisig on this device');
 	multisig.useChain(account.address, chainId);
 	const fresh = multisig.find(account.address) ?? account;
-	await proposals.refresh(fresh, fresh.chainIds);
+	// Read now, not from what is shown: the nonce comes from the mailbox's
+	// list as it stands, and a list that cannot be read gives none — the
+	// chain's own nonce would be one an open proposal may already hold.
+	const chain = await readChain(fresh, chainId).catch(() => null);
+	if (!chain?.mailbox) throw new MailboxUnreadableError();
 	// The owners on that chain now (a Safe's owners may have changed since its genesis).
-	const owners = proposals.chain(chainId)?.members.owners ?? account.owners;
+	const owners = chain.members.owners;
 	const owner = localOwners(owners)[0];
-	const tx = build(proposals.nextNonce(chainId));
+	const tx = build(nextNonceOf(chain));
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
 	const { safeTxHash } = owner
@@ -444,6 +552,18 @@ export async function proposeCancel(
 		cancelTx(account.address, `0x${item.nonce.toString(16)}`),
 		owner
 	);
+}
+
+/**
+ * The mailbox's list of waiting transactions (or the chain's members) could
+ * not be read, so nothing was proposed: there is no nonce to take that is
+ * known to be free.
+ */
+export class MailboxUnreadableError extends Error {
+	constructor() {
+		super("the multisig's waiting transactions could not be read");
+		this.name = 'MailboxUnreadableError';
+	}
 }
 
 /** The mailbox refused a submission (the core's reason, for the log). */
