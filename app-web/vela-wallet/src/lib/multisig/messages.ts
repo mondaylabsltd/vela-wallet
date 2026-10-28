@@ -73,18 +73,8 @@ export interface MultisigMessages {
 		opening: string;
 	};
 	send: {
-		title: string;
-		asset: string;
-		amount: string;
-		max: string;
-		balance: string;
-		recipient: string;
-		recipientPlaceholder: string;
 		propose: string;
-		hint: string;
-		noAssets: string;
 		invalidAddress: string;
-		invalidAmount: string;
 	};
 	create: {
 		title: string;
@@ -197,18 +187,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		opening: ''
 	},
 	send: {
-		title: '',
-		asset: '',
-		amount: '',
-		max: '',
-		balance: '',
-		recipient: '',
-		recipientPlaceholder: '',
 		propose: '',
-		hint: '',
-		noAssets: '',
-		invalidAddress: '',
-		invalidAmount: ''
+		invalidAddress: ''
 	},
 	create: {
 		title: '',

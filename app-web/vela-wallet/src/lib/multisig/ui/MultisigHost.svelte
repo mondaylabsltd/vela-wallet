@@ -6,7 +6,6 @@
 	 * multisig sheet is open. The page stays the session's; this only adds.
 	 */
 	import { onMount } from 'svelte';
-	import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 	import type { MultisigMessages } from '../messages';
 	import { addMultisig, retryUnrecorded } from '../core/accounts';
 	import { parseAddLink, parseProposalLink } from '../core/link';
@@ -18,7 +17,6 @@
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
-	import ProposeSendSheet from './ProposeSendSheet.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -27,13 +25,11 @@
 		closeLabel: string;
 		/** The Vela account the session shows (a member from the start of a creation). */
 		current: string | null;
-		/** The active multisig's holdings (the balance core follows the address shown). */
-		tokens: BalanceToken[];
 		/** Something moved on chain from here: balances and activity are stale. */
 		onchanged?: () => void;
 	}
 
-	let { m, locale, wide, closeLabel, current, tokens, onchanged }: Props = $props();
+	let { m, locale, wide, closeLabel, current, onchanged }: Props = $props();
 
 	let addPrefill = $state('');
 
@@ -125,18 +121,6 @@
 			addPrefill = '';
 			multisigUi.close();
 		}}
-	/>
-{:else if sheet?.kind === 'propose' && active}
-	<ProposeSendSheet
-		{m}
-		account={active}
-		{tokens}
-		assetId={sheet.assetId}
-		recipient={sheet.recipient}
-		{wide}
-		{closeLabel}
-		onclose={() => multisigUi.close()}
-		onproposed={(chainId, safeTxHash) => multisigUi.open({ kind: 'proposal', chainId, safeTxHash })}
 	/>
 {:else if sheet?.kind === 'proposal' && active}
 	<ProposalSheet

@@ -434,6 +434,31 @@ pub struct SendAccountRef {
     pub id: String,
     pub address: String,
     pub name: Option<String>,
+    /// A multisig account (docs/multisig-vault-design.md): its send is a
+    /// proposal its members approve. It has no passkey and pays no fee of its
+    /// own — the member who executes pays it — so there is nothing to quote,
+    /// no reserve held back from a Max, and the confirm proposes instead of
+    /// signing an operation. `None`: a Vela account, as always.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub multisig: Option<SendMultisigRef>,
+}
+
+/// A multisig's rule, as its send draws it ("2 of 3 approve").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendMultisigRef {
+    pub threshold: u32,
+    pub owners: u32,
+}
+
+/// What a multisig's confirm made: the proposal, in the mailbox, with the
+/// first approval. The shell hands over to the transaction's own sheet.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendProposed {
+    pub chain_id: u32,
+    pub safe_tx_hash: String,
 }
 
 /// Route params (`useLocalSearchParams`), pre-split by the shell.
@@ -1282,6 +1307,14 @@ pub enum SendOperation {
     },
     /// Leave the Send flow (`router.back()` from the first step / receipt).
     Close,
+    /// A multisig's confirm: propose these transfers, approved at once by one
+    /// of its members on this device (one passkey). What is proposed is the
+    /// review the person confirmed. Answered `Proposed` or `ProposeFailed`.
+    ProposeSafeTx {
+        chain_id: u32,
+        multisig: String,
+        transfers: Vec<crate::signed_review::ReviewedTransfer>,
+    },
 }
 
 /// What the shell observed.
@@ -1340,6 +1373,15 @@ pub enum SendShellResult {
     },
     SubmitFailed {
         failure: SendSubmitFailure,
+    },
+    /// The proposal is in the mailbox, approved by this device's member.
+    Proposed {
+        safe_tx_hash: String,
+    },
+    /// Nothing was proposed: the passkey was dismissed (`cancelled`), or the
+    /// mailbox or the chain could not be reached.
+    ProposeFailed {
+        cancelled: bool,
     },
     PasskeyCancelAcknowledged,
     RecordsPersisted,
@@ -1775,6 +1817,11 @@ pub const TREASURY_WATCH_MS: u32 = 10_000;
 enum Pipeline {
     #[default]
     Idle,
+    /// A multisig's confirm: the proposal is being signed and submitted.
+    Proposing {
+        id: u64,
+        gen: u64,
+    },
     /// `handleContinue`'s credential load (prefetch missed).
     ContinueCredential {
         id: u64,
@@ -1906,6 +1953,8 @@ struct FeeCardCoin {
 
 #[derive(Default)]
 pub struct Model {
+    /// A multisig's confirm made this proposal.
+    proposed: Option<SendProposed>,
     account: Option<SendAccountRef>,
     params: SendOpenParams,
     display: SendDisplayContext,
@@ -2433,6 +2482,13 @@ pub struct SendView {
     /// review.
     #[serde(default)]
     pub review_digest: Option<String>,
+    /// A multisig's send: how many of its members must approve. Its confirm
+    /// says so where a fee would be, and proposes rather than sends.
+    #[serde(default)]
+    pub multisig: Option<SendMultisigRef>,
+    /// The proposal this send made, once it is in the mailbox.
+    #[serde(default)]
+    pub proposed: Option<SendProposed>,
     /// The account's previous transaction on this network is still going
     /// through, so the confirm is held (part of `can_confirm`): this one
     /// would take the same nonce. Drawn as its `key` under the confirm — the
@@ -2962,6 +3018,8 @@ impl Send {
             same_asset_fee_issue: issue,
             can_continue,
             can_confirm,
+            multisig: proposing(model),
+            proposed: model.proposed.clone(),
             review_digest: (stage == SendStage::Confirm)
                 .then(|| review_digest(model))
                 .flatten(),
@@ -3158,6 +3216,12 @@ fn request_network(params: &SendOpenParams) -> Option<u32> {
         .prefilled_chain_id
         .as_deref()
         .and_then(parse_int_prefix)
+}
+
+/// The account in front is a multisig: its send proposes (see
+/// [`SendAccountRef::multisig`]).
+fn proposing(model: &Model) -> Option<SendMultisigRef> {
+    model.account.as_ref().and_then(|a| a.multisig)
 }
 
 fn open(
@@ -3430,6 +3494,10 @@ fn picker_without_a_token(model: &mut Model) -> Cmd {
 /// The picker is open: read ahead the fees of the chains the person holds
 /// value on, highest first, so the quote a pick starts finds its reads done.
 fn prewarm_fees(model: &mut Model) -> Cmd {
+    // A multisig pays no fee: nothing to read ahead.
+    if proposing(model).is_some() {
+        return Command::done();
+    }
     let Some(account) = model.account.as_ref().map(|a| a.address.clone()) else {
         return Command::done();
     };
@@ -3778,6 +3846,10 @@ fn confirm_multi_selection(model: &mut Model) -> Cmd {
 /// then a best-effort rough estimate so the detail list can show the native
 /// line net of its reserve before confirm.
 fn warm_estimate_start(model: &mut Model) -> Cmd {
+    // A multisig has no passkey to warm and no fee to quote.
+    if proposing(model).is_some() {
+        return render();
+    }
     let Some(account_id) = model.account.as_ref().map(|a| a.id.clone()) else {
         return render();
     };
@@ -4068,6 +4140,11 @@ fn max_follow_up(model: &mut Model, token: &SendToken) -> Cmd {
     if model.max_fill.is_none() {
         return Command::done();
     }
+    // A multisig's Max is its whole balance: the executor pays the fee.
+    if proposing(model).is_some() {
+        set_max(model, full_balance(token));
+        return render();
+    }
     // Only a quote for the fee coin chosen NOW (078 M-03): after a switch the
     // quote in hand priced the other coin, and its reserve is a figure about
     // an asset this send no longer pays in.
@@ -4182,6 +4259,9 @@ fn form_estimate_key(model: &Model) -> Option<String> {
 /// Arm — or re-arm — the debounce, when the form is complete, nothing heavier
 /// is in flight, and the quote in hand (if any) is not already about this.
 fn schedule_form_estimate(model: &mut Model) -> Cmd {
+    if proposing(model).is_some() {
+        return Command::done();
+    }
     let Some(key) = form_estimate_key(model) else {
         return Command::done();
     };
@@ -5352,6 +5432,13 @@ fn handle_continue(model: &mut Model) -> Cmd {
         );
     }
 
+    // A multisig: no pre-check — no fee to quote, no relay float to read.
+    // The review's own probes (who the payee is, what it does) run as ever.
+    if proposing(model).is_some() {
+        model.step = SendStep::Confirm;
+        return Command::all([confirm_probes(model), render()]);
+    }
+
     let (Some(_), Some(_)) = (model.selected_token.as_ref(), model.account.as_ref()) else {
         // No token/account context: jump straight to confirm (the TS `else`).
         model.step = SendStep::Confirm;
@@ -5604,6 +5691,10 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.refused = false;
     model.refusal = None;
 
+    if proposing(model).is_some() {
+        return propose_safe_tx(model, gen);
+    }
+
     match model.public_key_hex.clone() {
         Some(pk) => submit_treasury_recheck(model, gen, pk),
         None => {
@@ -5618,6 +5709,78 @@ fn slide_confirm(model: &mut Model) -> Cmd {
                 ),
                 render(),
             ])
+        }
+    }
+}
+
+/// A multisig's confirm: propose exactly the review the person confirmed.
+fn propose_safe_tx(model: &mut Model, gen: u64) -> Cmd {
+    let (Some(review), Some(account)) = (model.confirmed_review.clone(), model.account.clone())
+    else {
+        return submit_generic_error(model, gen);
+    };
+    let id = next(model);
+    model.pipeline = Pipeline::Proposing { id, gen };
+    // The approval is the one passkey prompt this confirm makes.
+    model.tx = SendTxStatus::Signing;
+    Command::all([
+        issue(
+            id,
+            SendOperation::ProposeSafeTx {
+                chain_id: review.chain_id,
+                multisig: account.address,
+                transfers: review.transfers,
+            },
+        ),
+        render(),
+    ])
+}
+
+fn accept_proposed(model: &mut Model, id: u64, outcome: Result<String, bool>) -> Cmd {
+    let Pipeline::Proposing { id: expect, gen } = model.pipeline else {
+        return Command::done();
+    };
+    if expect != id {
+        return Command::done();
+    }
+    model.pipeline = Pipeline::Idle;
+    model.lock.end(gen);
+    match outcome {
+        Ok(safe_tx_hash) => {
+            let chain_id = model
+                .confirmed_review
+                .as_ref()
+                .map(|r| r.chain_id)
+                .unwrap_or_default();
+            model.tx = SendTxStatus::Idle;
+            model.proposed = Some(SendProposed {
+                chain_id,
+                safe_tx_hash,
+            });
+            Command::all([
+                fire(
+                    model,
+                    SendOperation::Haptic {
+                        kind: SendHapticKind::Success,
+                    },
+                ),
+                render(),
+            ])
+        }
+        // Dismissed: the review, as the person left it.
+        Err(true) => {
+            model.tx = SendTxStatus::Idle;
+            render()
+        }
+        Err(false) => {
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::Generic);
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
         }
     }
 }
@@ -6177,6 +6340,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             network_added(model, outcome)
         }
         R::AccountCredential { public_key_hex } => accept_credential(model, id, public_key_hex),
+        R::Proposed { safe_tx_hash } => accept_proposed(model, id, Ok(safe_tx_hash)),
+        R::ProposeFailed { cancelled } => accept_proposed(model, id, Err(cancelled)),
         R::FeeEstimated { outcome } => accept_fee(model, id, outcome),
         R::TreasuryProbed { probe } => accept_treasury(model, id, probe),
         R::TimerElapsed { .. } => accept_timer(model, id),
@@ -6796,6 +6961,11 @@ fn relay_stopped(model: &Model) -> bool {
 /// — the stop's own notice, the fee row re-quoting, the receipt or the error
 /// panel — so a refusal is never silent.
 fn confirm_gate_open(model: &Model) -> bool {
+    // A multisig's confirm waits on no fee, relay or previous operation of
+    // its own: the proposal takes the next free nonce.
+    if proposing(model).is_some() {
+        return model.tx == SendTxStatus::Idle && !model.lock.busy() && model.tx_error.is_none();
+    }
     model.tx == SendTxStatus::Idle
         && !model.lock.busy()
         && model.tx_error.is_none()

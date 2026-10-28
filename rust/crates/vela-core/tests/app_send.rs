@@ -52,6 +52,7 @@ fn acct() -> SendAccountRef {
         id: "cred-1".to_owned(),
         address: ACCOUNT.to_owned(),
         name: Some("Ann".to_owned()),
+        multisig: None,
     }
 }
 
@@ -9053,4 +9054,272 @@ fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
     let view = sut.view();
     assert!(view.can_confirm);
     assert_eq!(view.fee.map(|fee| fee.total_wei), Some("1200".to_owned()));
+}
+
+// ---------------------------------------------------------------------------
+// A multisig's send (docs/multisig-vault-design.md): the same form, no fee
+// ---------------------------------------------------------------------------
+
+mod multisig {
+    use super::*;
+    use vela_core::app::send::{SendMultisigRef, SendProposed};
+    use vela_core::signed_review::ReviewedTransfer;
+
+    fn multisig_acct() -> SendAccountRef {
+        SendAccountRef {
+            id: String::new(),
+            address: ACCOUNT.to_owned(),
+            name: None,
+            multisig: Some(SendMultisigRef {
+                threshold: 2,
+                owners: 3,
+            }),
+        }
+    }
+
+    fn boot_multisig(tokens: Vec<SendToken>) -> Sut {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(Event::Open {
+            account: Some(multisig_acct()),
+            params: SendOpenParams::default(),
+            display: display(),
+        });
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ACCOUNT.to_owned()
+            }]
+        );
+        let ops = sut.resolve(loaded(tokens));
+        assert!(
+            ops.is_empty(),
+            "no fee is read ahead for a multisig: {ops:?}"
+        );
+        sut
+    }
+
+    fn fee_work(op: &Op) -> bool {
+        matches!(
+            op,
+            Op::EstimateFee { .. }
+                | Op::PrewarmFees { .. }
+                | Op::ProbeTreasury { .. }
+                | Op::LoadAccountCredential { .. }
+                | Op::SubmitUserOp { .. }
+        )
+    }
+
+    /// Pick, pay, Continue: the review, with nothing quoted on the way.
+    fn to_review(sut: &mut Sut, amount: &str) -> SendView {
+        let ops = sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        assert!(!ops.iter().any(fee_work), "a pick warms nothing: {ops:?}");
+        set_recipient(sut, RECIPIENT);
+        let ops = sut.dispatch(Event::SetAmount {
+            amount: amount.to_owned(),
+        });
+        assert!(
+            !ops.iter().any(fee_work),
+            "the form quotes nothing: {ops:?}"
+        );
+        let ops = sut.dispatch(Event::Continue);
+        assert!(
+            !ops.iter().any(fee_work),
+            "Continue checks no fee or float: {ops:?}"
+        );
+        // Answer the review's own probes (payee, risk, simulation).
+        for op in ops {
+            match op {
+                Op::ResolveIdentity { .. } => {
+                    sut.resolve(Res::IdentityResolved { identity: None });
+                }
+                Op::ResolveRisk { .. } | Op::SimulateCalls { .. } => {
+                    sut.drop_matching(|o| {
+                        matches!(o, Op::ResolveRisk { .. } | Op::SimulateCalls { .. })
+                    });
+                }
+                _ => {}
+            }
+        }
+        sut.view()
+    }
+
+    #[test]
+    fn the_review_is_reached_without_a_fee_and_says_who_must_approve() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        assert_eq!(view.stage, SendStage::Confirm);
+        assert_eq!(
+            view.multisig,
+            Some(SendMultisigRef {
+                threshold: 2,
+                owners: 3
+            })
+        );
+        assert!(view.can_confirm, "nothing to wait for: {view:?}");
+        assert!(view.review_digest.is_some());
+    }
+
+    #[test]
+    fn max_is_the_whole_balance() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        set_recipient(&mut sut, RECIPIENT);
+        let ops = sut.dispatch(Event::TapMax);
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        assert_eq!(sut.view().amount, "2");
+    }
+
+    #[test]
+    fn the_confirm_proposes_exactly_the_review() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        let ops = sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let proposal = ops
+            .iter()
+            .find(|op| matches!(op, Op::ProposeSafeTx { .. }))
+            .cloned();
+        assert_eq!(
+            proposal,
+            Some(Op::ProposeSafeTx {
+                chain_id: 1,
+                multisig: ACCOUNT.to_owned(),
+                transfers: vec![ReviewedTransfer {
+                    to: RECIPIENT.to_owned(),
+                    token: None,
+                    amount: "500000000000000000".to_owned(),
+                }],
+            }),
+            "{ops:?}"
+        );
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        assert_eq!(sut.view().tx_status, SendTxStatus::Signing);
+
+        let ops = sut.resolve(Res::Proposed {
+            safe_tx_hash: "0xabc".to_owned(),
+        });
+        assert!(
+            ops.iter().any(|op| matches!(
+                op,
+                Op::Haptic {
+                    kind: SendHapticKind::Success
+                }
+            )),
+            "{ops:?}"
+        );
+        let view = sut.view();
+        assert_eq!(
+            view.proposed,
+            Some(SendProposed {
+                chain_id: 1,
+                safe_tx_hash: "0xabc".to_owned()
+            })
+        );
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+    }
+
+    #[test]
+    fn a_split_is_one_proposal_paying_every_row() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        sut.dispatch(Event::EnterSplitMode);
+        let row = |id: &str, address: &str, amount: &str| SendRecipientDraft {
+            id: id.to_owned(),
+            address: address.to_owned(),
+            amount: amount.to_owned(),
+            name: None,
+        };
+        sut.dispatch(Event::RecipientsChanged {
+            recipients: vec![
+                row("rcpt_1", RECIPIENT, "0.25"),
+                row("rcpt_2", RECIPIENT_B, "0.5"),
+            ],
+        });
+        let ops = sut.dispatch(Event::Continue);
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        for op in ops {
+            if matches!(op, Op::ResolveRisk { .. } | Op::SimulateCalls { .. }) {
+                sut.drop_matching(|o| {
+                    matches!(o, Op::ResolveRisk { .. } | Op::SimulateCalls { .. })
+                });
+            }
+        }
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::Confirm);
+        let ops = sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let transfers = ops.iter().find_map(|op| match op {
+            Op::ProposeSafeTx { transfers, .. } => Some(transfers.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            transfers,
+            Some(vec![
+                ReviewedTransfer {
+                    to: RECIPIENT.to_owned(),
+                    token: None,
+                    amount: "250000000000000000".to_owned(),
+                },
+                ReviewedTransfer {
+                    to: RECIPIENT_B.to_owned(),
+                    token: None,
+                    amount: "500000000000000000".to_owned(),
+                },
+            ]),
+            "{ops:?}"
+        );
+    }
+
+    #[test]
+    fn a_dismissed_passkey_leaves_the_review_as_it_was() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.resolve(Res::ProposeFailed { cancelled: true });
+        assert!(ops.is_empty(), "{ops:?}");
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+        assert!(view.proposed.is_none());
+        assert!(view.can_confirm, "the person can confirm again");
+    }
+
+    #[test]
+    fn a_failed_proposal_is_an_error_not_a_send() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        sut.resolve(Res::ProposeFailed { cancelled: false });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error);
+        assert_eq!(view.tx_error, Some(SendTxErrorKey::Generic));
+        assert!(view.proposed.is_none());
+    }
+
+    #[test]
+    fn a_vela_account_still_quotes_its_fee() {
+        // The multisig mode is the account's, never the form's default.
+        let mut sut = boot(vec![eth("2")]);
+        let ops = sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        assert_eq!(
+            ops,
+            vec![Op::LoadAccountCredential {
+                account_id: "cred-1".to_owned()
+            }]
+        );
+        assert!(sut.view().multisig.is_none());
+    }
 }

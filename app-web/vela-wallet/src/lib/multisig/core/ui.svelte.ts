@@ -6,7 +6,6 @@
 export type MultisigSheet =
 	| { kind: 'create' }
 	| { kind: 'add' }
-	| { kind: 'propose'; assetId?: string; recipient?: string }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	| { kind: 'invite' };
 

@@ -462,18 +462,8 @@
     "opening": "Abrindo a transação…"
    },
    "send": {
-    "title": "Propor uma transferência",
-    "asset": "Ativo",
-    "amount": "Valor",
-    "max": "Máx.",
-    "balance": "Saldo {{amount}}",
-    "recipient": "Destinatário",
-    "recipientPlaceholder": "0x…",
     "propose": "Propor e aprovar",
-    "hint": "Você dá a primeira aprovação. O envio acontece quando {{threshold}} membros tiverem aprovado.",
-    "noAssets": "Esta multisig ainda não tem nada. Envie fundos para o endereço dela primeiro.",
-    "invalidAddress": "Digite um endereço válido.",
-    "invalidAmount": "Digite um valor até o saldo."
+    "invalidAddress": "Digite um endereço válido."
    },
    "create": {
     "title": "Nova multisig",

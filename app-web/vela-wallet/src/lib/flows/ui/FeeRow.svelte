@@ -63,14 +63,16 @@
 	     from the coin it marks. Beside the coin it is anchored to the row's
 	     end with it, whatever lands underneath. -->
 	<span class="coin">
-		<TokenIcon
-			ticker={fee.mark.ticker}
-			badgeColor={fee.mark.badgeColor}
-			logoUrls={fee.mark.logoUrls}
-			badgeLogoUrl={fee.mark.badgeLogoUrl}
-			badgeHidden={fee.mark.badgeHidden}
-			size="inline"
-		/>
+		{#if fee.plain !== true}
+			<TokenIcon
+				ticker={fee.mark.ticker}
+				badgeColor={fee.mark.badgeColor}
+				logoUrls={fee.mark.logoUrls}
+				badgeLogoUrl={fee.mark.badgeLogoUrl}
+				badgeHidden={fee.mark.badgeHidden}
+				size="inline"
+			/>
+		{/if}
 		<span class="value">{fee.value}</span>
 	</span>
 {/snippet}
@@ -142,12 +144,14 @@
 				{@render face()}
 			</button>
 		{/if}
-		<FeeRefreshButton label={fee.refreshLabel} refreshing={fee.refreshing === true} {onrefresh} />
+		{#if fee.plain !== true}
+			<FeeRefreshButton label={fee.refreshLabel} refreshing={fee.refreshing === true} {onrefresh} />
+		{/if}
 	</div>
 	<!-- `FeeView.stale`, which had no consumer in this shell at all (spec
 	     068): a standing line whose INK is toggled — see `FeeStaleNote`. A
 	     failed fee's reason (PR 2 note 1) stands in the same line. -->
-	<FeeStaleNote note={fee.staleNote} reason={fee.reason} />
+	<FeeStaleNote note={fee.staleNote} reason={fee.reason} plain={fee.plain === true} />
 </div>
 
 <style>

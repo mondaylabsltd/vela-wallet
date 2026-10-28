@@ -25,9 +25,11 @@
 		 * figure to be old.
 		 */
 		reason?: string;
+		/** A fact, not an old figure (a multisig's who-pays line): no clock. */
+		plain?: boolean;
 	}
 
-	let { note, reason }: Props = $props();
+	let { note, reason, plain = false }: Props = $props();
 	const text = $derived(reason ?? note);
 </script>
 
@@ -40,7 +42,7 @@
 >
 	{#if reason !== undefined}
 		<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
-	{:else if note}
+	{:else if note && !plain}
 		<Icon icon={UTILITY_ICONS.clock} size="sm" />
 	{/if}
 	<!-- A no-break space, not a plain one: a plain space collapses and the

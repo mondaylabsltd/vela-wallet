@@ -144,18 +144,8 @@
         "opening": "Đang mở giao dịch…"
       },
       "send": {
-        "title": "Đề xuất chuyển tiền",
-        "asset": "Tài sản",
-        "amount": "Số tiền",
-        "max": "Tối đa",
-        "balance": "Số dư {{amount}}",
-        "recipient": "Người nhận",
-        "recipientPlaceholder": "0x…",
         "propose": "Đề xuất và duyệt",
-        "hint": "Bạn duyệt đầu tiên. Tiền được gửi khi {{threshold}} thành viên đã duyệt.",
-        "noAssets": "Tài khoản đa chữ ký này chưa có gì. Hãy chuyển tiền vào địa chỉ của nó trước.",
-        "invalidAddress": "Nhập một địa chỉ hợp lệ.",
-        "invalidAmount": "Nhập số tiền không vượt quá số dư."
+        "invalidAddress": "Nhập một địa chỉ hợp lệ."
       },
       "create": {
         "title": "Đa chữ ký mới",

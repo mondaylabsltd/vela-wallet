@@ -17,6 +17,7 @@ import { submitExecution } from './execute';
 import {
 	cancelTx,
 	reviewTx,
+	transfersTx,
 	safeTxHash,
 	sameAddress,
 	verifyApproval,
@@ -271,6 +272,36 @@ export async function propose(
 	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
 	multisig.useChain(account.address, chainId);
 	return { safeTxHash: hash, proposal: answer.proposal };
+}
+
+/**
+ * The send's confirm for a multisig: these transfers, as the review the person
+ * confirmed, proposed on `chainId` at the next free nonce and approved at once
+ * by this device's first member (one passkey prompt). The core reads the
+ * transaction back before anything is signed.
+ */
+export async function proposeTransfers(
+	address: string,
+	chainId: number,
+	transfers: { to: string; token: string | null; amount: string }[]
+): Promise<{ safeTxHash: string }> {
+	const account = multisig.find(address);
+	if (!account) throw new Error('not a multisig on this device');
+	const owner = localOwners(account.owners)[0];
+	if (!owner) throw new Error('no member of this multisig on this device');
+	multisig.useChain(account.address, chainId);
+	const fresh = multisig.find(account.address) ?? account;
+	await proposals.refresh(fresh, fresh.chainIds);
+	const nonce = proposals.nextNonce(chainId);
+	const tx = transfersTx(
+		transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
+		`0x${nonce.toString(16)}`
+	);
+	const review = reviewTx(chainId, account.address, tx);
+	if (review.action === null) throw new Error(review.refusal ?? 'refused');
+	const { safeTxHash } = await propose(fresh, chainId, tx, owner);
+	await proposals.refresh(fresh, fresh.chainIds);
+	return { safeTxHash };
 }
 
 /** `owner` approves `item` (one passkey prompt). */

@@ -64,6 +64,22 @@ import type { AssetRowModel } from '$lib/wallet/model';
 
 export interface SendLiveInputs {
 	send: SendView;
+	/**
+	 * A multisig's words (its own corpus, `home.multisig`): where a Vela
+	 * account's send shows its fee, a multisig's shows who must approve —
+	 * the member who executes pays the fee — and its confirm proposes.
+	 * Read only when the core says the send is a multisig's (`send.multisig`).
+	 */
+	multisig?: {
+		/** "Approvals" */
+		label: string;
+		/** "{{m}} of {{n}} members approve" */
+		rule: string;
+		/** "The network fee is paid by the executing member's account." */
+		feeNote: string;
+		/** "Propose and approve" */
+		confirm: string;
+	};
 	fee: FeeView;
 	m: WalletFlowMessages;
 	currency: CurrencyView;
@@ -329,6 +345,21 @@ function sendFeeFailure(inputs: Pick<SendLiveInputs, 'send' | 'fee'>): FeeFailur
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
+	// A multisig pays no fee of its own: the row says who must approve.
+	if (send.multisig && inputs.multisig) {
+		return {
+			label: inputs.multisig.label,
+			mark: template.mark,
+			value: fill(inputs.multisig.rule, { m: send.multisig.threshold, n: send.multisig.owners }),
+			openLabel: template.openLabel,
+			refreshLabel: m['send.feeRefresh'],
+			refreshing: false,
+			// Calm, as the stale note is: a fact about who pays, not a fault.
+			staleNote: inputs.multisig.feeNote,
+			tap: 'none',
+			plain: true
+		};
+	}
 	// PR 2 note 1: the fee failed — said once by the core for this row and
 	// the line under the confirm, and kept through the re-ask it makes by
 	// itself. Nothing in hand is drawn over it: the send machine may still
@@ -1253,8 +1284,30 @@ function confirmHolds(
 	return { held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
 }
 
-/** SD3 — the confirm screen: what is about to be signed. */
+/**
+ * SD3 — the confirm screen. A multisig's is the same page with two words
+ * changed: who must approve stands where the fee would, and the confirm
+ * proposes (the member who executes pays the fee).
+ */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
+	const page = liveSendConfirmPage(model, inputs);
+	const { send, m } = inputs;
+	if (!send.multisig || !inputs.multisig) return page;
+	const feeLabels = new Set([m['send.estFeeLabel'], m['send.feeTokenEstimate']]);
+	const approvals: FactRowModel = {
+		label: inputs.multisig.label,
+		value: fill(inputs.multisig.rule, { m: send.multisig.threshold, n: send.multisig.owners }),
+		note: inputs.multisig.feeNote
+	};
+	return {
+		...page,
+		facts: page.facts.map((fact) => (feeLabels.has(fact.label) ? approvals : fact)),
+		cta: inputs.multisig.confirm
+	};
+}
+
+/** SD3 — the confirm screen: what is about to be signed. */
+function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
 	const holds = confirmHolds(send, m, inputs.fee);
 	// PR 2 note 1: a failed fee on the last screen says so in its own row —

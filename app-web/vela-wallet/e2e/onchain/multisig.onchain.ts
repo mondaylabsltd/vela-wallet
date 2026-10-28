@@ -5,10 +5,40 @@
  * deployment in the executor's one user operation — and see the funds arrive.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { en } from '../live-helpers';
 import { FIXTURES, balanceOf, enterParallel, setBalance, useHarness } from './harness';
 
 const SHOTS = 'e2e/onchain/.shots';
 const RECIPIENT = '0x000000000000000000000000000000000000bEEF';
+
+/**
+ * The send every account has — token, recipient, amount, Continue — whose
+ * confirm, for a multisig, proposes and approves instead of sending.
+ */
+async function proposeSend(page: Page, amount: string, name: string): Promise<void> {
+	await page
+		.getByRole('button', { name: en('componentsUi.dock.send') })
+		.first()
+		.click();
+	await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
+	// The picker's row, not the home's: on the desktop both are on screen, and
+	// the picker (the third column) is the last.
+	await page
+		.getByRole('button', { name: /^xDAI Gnosis/ })
+		.last()
+		.click({ timeout: 60_000 });
+	await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
+	await page.getByRole('textbox', { name: 'xDAI' }).fill(amount);
+	await expect(page.getByText('2 of', { exact: false }).first()).toBeVisible();
+	await shot(page, `${name}-form`);
+	const advance = page.getByRole('button', { name: en('send.continueBtn') });
+	await expect(advance).toBeEnabled({ timeout: 30_000 });
+	await advance.click();
+	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
+	await expect(page.getByText(`${amount} xDAI`, { exact: true }).first()).toBeVisible();
+	await shot(page, `${name}-confirm`);
+	await page.getByRole('button', { name: 'Propose and approve' }).click();
+}
 
 async function shot(page: Page, name: string): Promise<void> {
 	await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
@@ -72,13 +102,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 	await test.step('fund and propose', async () => {
 		await setBalance(multisig!, 5n * 10n ** 18n);
 		await page.reload();
-		await page.getByRole('button', { name: /Send/ }).first().click();
-		await expect(page.getByText('Propose a transfer')).toBeVisible();
-		await expect(page.getByText('xDAI').first()).toBeVisible({ timeout: 60_000 });
-		await page.getByPlaceholder('0', { exact: true }).fill('1.5');
-		await page.getByPlaceholder('0x…').fill(RECIPIENT);
-		await shot(page, '08-propose');
-		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		await proposeSend(page, '1.5', '08-propose');
 		await expect(page.getByText('1/2 approved').first()).toBeVisible();
 		await shot(page, '09-proposal');
 	});
@@ -138,11 +162,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 	let link = '';
 	await test.step('device A proposes and shares the link', async () => {
 		await pageA.reload();
-		await pageA.getByRole('button', { name: /Send/ }).first().click();
-		await expect(pageA.getByText('xDAI').first()).toBeVisible({ timeout: 60_000 });
-		await pageA.getByPlaceholder('0', { exact: true }).fill('0.25');
-		await pageA.getByPlaceholder('0x…').fill(RECIPIENT);
-		await pageA.getByRole('button', { name: 'Propose and approve' }).click();
+		await proposeSend(pageA, '0.25', 'x2-propose-a');
 		await expect(pageA.getByText('1/2 approved').first()).toBeVisible();
 		// Device A cannot finish it: the other member must approve.
 		await expect(pageA.getByRole('button', { name: 'Approve and execute' })).toHaveCount(0);
@@ -206,12 +226,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await page.reload();
 	await expect(page.getByText('2 of 2 members approve').first()).toBeVisible();
 	await shot(page, 'd3-home');
-	await page.getByRole('button', { name: /Send/ }).first().click();
-	await expect(page.getByText('xDAI').first()).toBeVisible({ timeout: 60_000 });
-	await page.getByPlaceholder('0', { exact: true }).fill('0.5');
-	await page.getByPlaceholder('0x…').fill(RECIPIENT);
-	await shot(page, 'd4-propose');
-	await page.getByRole('button', { name: 'Propose and approve' }).click();
+	await proposeSend(page, '0.5', 'd4-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
 	await shot(page, 'd5-proposal');
 	expect(thrown).toEqual([]);

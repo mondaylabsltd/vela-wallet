@@ -563,6 +563,7 @@ fn the_network_code_round_trips_through_the_scanner() {
             id: "cred-1".to_owned(),
             address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
             name: None,
+            multisig: None,
         }),
         params: SendOpenParams {
             prefilled_recipient: Some(recipient.to_owned()),

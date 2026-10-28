@@ -461,18 +461,8 @@
     "opening": "正在開啟交易…"
    },
    "send": {
-    "title": "發起轉帳",
-    "asset": "資產",
-    "amount": "金額",
-    "max": "全部",
-    "balance": "餘額 {{amount}}",
-    "recipient": "收款地址",
-    "recipientPlaceholder": "0x…",
     "propose": "發起並核准",
-    "hint": "你將給出第一個核准，{{threshold}} 位成員核准後即可送出。",
-    "noAssets": "這個多簽帳戶還沒有資產，請先向它的地址轉入。",
-    "invalidAddress": "請輸入有效的地址。",
-    "invalidAmount": "請輸入不超過餘額的金額。"
+    "invalidAddress": "請輸入有效的地址。"
    },
    "create": {
     "title": "新建多簽帳戶",

@@ -11,7 +11,7 @@ import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { FeeSpeedCore } from '$lib/core/client';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import { resolveMultisigMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
@@ -126,7 +126,9 @@ const EMPTY_SEND: SendView = {
 	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
-	sim_json: null
+	sim_json: null,
+	multisig: null,
+	proposed: null
 };
 
 const IDLE_FEE: FeeView = {
@@ -3082,5 +3084,45 @@ describe('no fiat figure before the display currency commits — Send', () => {
 		// Committed with no rate — the person's choice cannot be priced: said.
 		const unpriceable: CurrencyView = { code: 'CNY', rate: null, committed: true, pending: null };
 		expect(liveSendForm(formModel(), withCurrency(unpriceable, waiting)).alert).toBe(words);
+	});
+});
+
+describe('a multisig send', () => {
+	const words = resolveMultisigMessages('en');
+	const multisig = (send: Partial<SendView>): SendLiveInputs => ({
+		...inputs({ multisig: { threshold: 2, owners: 3 }, ...send }),
+		multisig: {
+			label: words.proposal.approvals,
+			rule: words.panel.title,
+			feeNote: words.proposal.feeNote,
+			confirm: words.send.propose
+		}
+	});
+
+	it('the form says who must approve where the fee would be, calmly', () => {
+		const fee = liveSendForm(formModel(), multisig({ selected_token: ETH, fee: QUOTE })).fee;
+		expect(fee.label).toBe('Approvals');
+		expect(fee.value).toBe('2 of 3 members approve');
+		expect(fee.staleNote).toBe(words.proposal.feeNote);
+		expect(fee.reason).toBeUndefined();
+		expect(fee.plain).toBe(true);
+		expect(fee.tap).toBe('none');
+	});
+
+	it('the confirm swaps the fee fact for the approvals and proposes', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			multisig({ selected_token: ETH, confirm_amount: '0.5', recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(confirm.cta).toBe('Propose and approve');
+		const approvals = confirm.facts.find((fact) => fact.label === 'Approvals');
+		expect(approvals?.value).toBe('2 of 3 members approve');
+		expect(confirm.facts.some((fact) => fact.label === m['send.estFeeLabel'])).toBe(false);
+	});
+
+	it('a Vela account send is untouched', () => {
+		const fee = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE })).fee;
+		expect(fee.plain).toBeUndefined();
+		expect(fee.value).toBe('0.0021 ETH');
 	});
 });

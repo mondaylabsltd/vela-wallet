@@ -144,18 +144,8 @@
         "opening": "Membuka transaksi…"
       },
       "send": {
-        "title": "Usulkan transfer",
-        "asset": "Aset",
-        "amount": "Jumlah",
-        "max": "Maks",
-        "balance": "Saldo {{amount}}",
-        "recipient": "Penerima",
-        "recipientPlaceholder": "0x…",
         "propose": "Usulkan dan setujui",
-        "hint": "Kamu memberi persetujuan pertama. Dikirim setelah {{threshold}} anggota menyetujui.",
-        "noAssets": "Multisig ini belum punya apa-apa. Kirim dana ke alamatnya terlebih dahulu.",
-        "invalidAddress": "Masukkan alamat yang valid.",
-        "invalidAmount": "Masukkan jumlah yang tidak melebihi saldo."
+        "invalidAddress": "Masukkan alamat yang valid."
       },
       "create": {
         "title": "Multisig baru",

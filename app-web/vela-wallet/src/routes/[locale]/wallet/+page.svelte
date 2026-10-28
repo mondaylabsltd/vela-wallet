@@ -743,12 +743,6 @@
 	let sendGeneration = 0;
 
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
-		// Every door into a send (a scan, the address book, a token's own
-		// button) leads a multisig to a proposal instead: it has no send of its own.
-		if (multisig.active) {
-			multisigUi.open({ kind: 'propose', recipient: prefill?.prefilled_recipient ?? undefined });
-			return;
-		}
 		if (sendSession || !identity) return;
 		sendGeneration = sendDesk.begin();
 		await loadCore();
@@ -782,11 +776,29 @@
 		});
 		startTxTracker();
 		const account = identity.address;
-		const credentialId = session.view.accounts[session.view.active_index]?.account.id ?? '';
+		// A multisig sends through the same flow; its confirm proposes, and the
+		// members approve it (docs/multisig-vault-design.md §5).
+		const sendingMultisig = multisig.active;
+		const credentialId = sendingMultisig
+			? ''
+			: (session.view.accounts[session.view.active_index]?.account.id ?? '');
 		sendSession = createSendSession({
 			onView: (view) => {
 				noteSendFailure(sendView, view);
+				const proposed = view.proposed && !sendView?.proposed ? view.proposed : null;
 				sendView = view;
+				// Proposed: the send is done here; the transaction's own sheet
+				// takes over (approve, execute, ask the others).
+				if (proposed) {
+					queueMicrotask(() => {
+						closeSend();
+						multisigUi.open({
+							kind: 'proposal',
+							chainId: proposed.chain_id,
+							safeTxHash: proposed.safe_tx_hash
+						});
+					});
+				}
 			},
 			onError: (error) => console.error('[send] core fault:', error),
 			ports: {
@@ -832,7 +844,19 @@
 		});
 		sendSession.start({
 			type: 'open',
-			account: { id: credentialId, address: account, name: identity?.name ?? null },
+			account: {
+				id: credentialId,
+				address: account,
+				name: identity?.name ?? null,
+				...(sendingMultisig
+					? {
+							multisig: {
+								threshold: sendingMultisig.threshold,
+								owners: sendingMultisig.owners.length
+							}
+						}
+					: {})
+			},
 			params: {
 				preselected_symbol: null,
 				preselected_network: null,
@@ -1303,10 +1327,22 @@
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
 					alert: sendAlert,
-					speed: {
-						view: speedControl.view,
-						feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
-					}
+					// A multisig has no speed to pick: its fee is the executor's.
+					...(sendView.multisig
+						? {
+								multisig: {
+									label: data.multisigMessages.proposal.approvals,
+									rule: data.multisigMessages.panel.title,
+									feeNote: data.multisigMessages.proposal.feeNote,
+									confirm: data.multisigMessages.send.propose
+								}
+							}
+						: {
+								speed: {
+									view: speedControl.view,
+									feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
+								}
+							})
 				}
 			: undefined
 	);
@@ -1979,11 +2015,6 @@
 		// except the token screen and the token's code, which ARE the asset.
 		if (entry !== 'token-detail' && entry !== 'receive-token') selectedAssetId = null;
 		if (detail?.assetId !== undefined) selectedAssetId = detail.assetId;
-		// A multisig's send is a proposal its members approve (docs/multisig-vault-design.md §5).
-		if (entry === 'send' && multisig.active) {
-			multisigUi.open({ kind: 'propose', assetId: detail?.assetId });
-			return;
-		}
 		if (entry === 'send') {
 			nav.enter(entry);
 			const token =
@@ -2551,7 +2582,6 @@
 		wide={wide.current}
 		closeLabel={data.walletMessages.identiconViewer.close}
 		current={view.address || null}
-		tokens={balance.view.tokens}
 		onchanged={() => {
 			refreshBalances();
 			feed.focusTick();

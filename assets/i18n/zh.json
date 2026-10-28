@@ -461,18 +461,8 @@
     "opening": "正在打开交易…"
    },
    "send": {
-    "title": "发起转账",
-    "asset": "资产",
-    "amount": "金额",
-    "max": "全部",
-    "balance": "余额 {{amount}}",
-    "recipient": "收款地址",
-    "recipientPlaceholder": "0x…",
     "propose": "发起并批准",
-    "hint": "你将给出第一个批准，{{threshold}} 位成员批准后即可发出。",
-    "noAssets": "这个多签账户还没有资产，请先向它的地址转入。",
-    "invalidAddress": "请输入有效的地址。",
-    "invalidAmount": "请输入不超过余额的金额。"
+    "invalidAddress": "请输入有效的地址。"
    },
    "create": {
     "title": "新建多签账户",

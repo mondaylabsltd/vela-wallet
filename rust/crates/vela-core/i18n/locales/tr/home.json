@@ -144,18 +144,8 @@
         "opening": "İşlem açılıyor…"
       },
       "send": {
-        "title": "Transfer öner",
-        "asset": "Varlık",
-        "amount": "Tutar",
-        "max": "Tümü",
-        "balance": "Bakiye {{amount}}",
-        "recipient": "Alıcı",
-        "recipientPlaceholder": "0x…",
         "propose": "Öner ve onayla",
-        "hint": "İlk onayı sen verirsin. {{threshold}} üye onayladığında gönderilir.",
-        "noAssets": "Bu çoklu imzada henüz bir şey yok. Önce adresine fon gönder.",
-        "invalidAddress": "Geçerli bir adres gir.",
-        "invalidAmount": "Bakiyeyi aşmayan bir tutar gir."
+        "invalidAddress": "Geçerli bir adres gir."
       },
       "create": {
         "title": "Yeni çoklu imza",

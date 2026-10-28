@@ -630,6 +630,12 @@ export interface FeeRowModel {
 	 * control at all — the dash, stated, with no chevron and no press.
 	 */
 	tap?: 'open' | 'retry' | 'none';
+	/**
+	 * The row states a fact, not a fee — a multisig's approvals, where the
+	 * executing member pays: no coin mark and no refresh, since there is no
+	 * coin and nothing to measure.
+	 */
+	plain?: boolean;
 }
 
 /** One row of the folded speed control (spec 068). */

@@ -462,18 +462,8 @@
     "opening": "Abriendo la transacción…"
    },
    "send": {
-    "title": "Proponer una transferencia",
-    "asset": "Activo",
-    "amount": "Monto",
-    "max": "Máx.",
-    "balance": "Saldo {{amount}}",
-    "recipient": "Destinatario",
-    "recipientPlaceholder": "0x…",
     "propose": "Proponer y aprobar",
-    "hint": "Tú das la primera aprobación. Se envía cuando {{threshold}} miembros hayan aprobado.",
-    "noAssets": "Esta multifirma aún no tiene fondos. Primero envía fondos a su dirección.",
-    "invalidAddress": "Ingresa una dirección válida.",
-    "invalidAmount": "Ingresa un monto que no supere el saldo."
+    "invalidAddress": "Ingresa una dirección válida."
    },
    "create": {
     "title": "Nueva multifirma",

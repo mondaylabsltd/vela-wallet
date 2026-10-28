@@ -144,18 +144,8 @@
         "opening": "取引を開いています…"
       },
       "send": {
-        "title": "送金を提案",
-        "asset": "資産",
-        "amount": "金額",
-        "max": "全額",
-        "balance": "残高 {{amount}}",
-        "recipient": "送金先",
-        "recipientPlaceholder": "0x…",
         "propose": "提案して承認",
-        "hint": "最初の承認はあなたです。{{threshold}} 人が承認すると送金されます。",
-        "noAssets": "このマルチシグにはまだ資産がありません。まずアドレスに入金してください。",
-        "invalidAddress": "有効なアドレスを入力してください。",
-        "invalidAmount": "残高以内の金額を入力してください。"
+        "invalidAddress": "有効なアドレスを入力してください。"
       },
       "create": {
         "title": "新しいマルチシグ",

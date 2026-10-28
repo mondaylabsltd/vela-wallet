@@ -39,6 +39,7 @@
  * converted into the result variant that operation answers with.
  */
 
+import { proposeTransfers } from '$lib/multisig/core/proposals.svelte';
 import {
 	fromHex,
 	userOpNotSentDetail,
@@ -572,6 +573,27 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				return { type: 'passkey_cancel_acknowledged' };
 			}
 
+			case 'propose_safe_tx': {
+				// A multisig's confirm (docs/multisig-vault-design.md): the
+				// reviewed transfers, proposed and approved by this device's
+				// member — one passkey, nothing sent until the members agree.
+				try {
+					const { safeTxHash } = await proposeTransfers(
+						operation.multisig,
+						operation.chain_id,
+						operation.transfers
+					);
+					return { type: 'proposed', safe_tx_hash: safeTxHash };
+				} catch (error) {
+					const name = error instanceof DOMException ? error.name : '';
+					console.warn('[send] proposal not made:', error);
+					return {
+						type: 'propose_failed',
+						cancelled: name === 'NotAllowedError' || name === 'AbortError'
+					};
+				}
+			}
+
 			case 'persist_tx_records': {
 				// ONE atomic write for every sibling: a per-record `Promise.all` races
 				// the read-modify-write and silently drops all but one (invariant ⑥).
@@ -807,6 +829,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				return { type: 'submit_failed', failure: classifySubmit(error) };
 			case 'cancel_passkey_sign':
 				return { type: 'passkey_cancel_acknowledged' };
+			case 'propose_safe_tx':
+				return { type: 'propose_failed', cancelled: false };
 			case 'persist_tx_records':
 				// Best effort, exactly like the TS `.catch(() => {})` — and the core
 				// must still be told, or `TrackSubmitted` never fires (invariant ⑥).

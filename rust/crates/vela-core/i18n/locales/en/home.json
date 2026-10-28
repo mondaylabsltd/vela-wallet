@@ -144,18 +144,8 @@
         "opening": "Opening the transaction…"
       },
       "send": {
-        "title": "Propose a transfer",
-        "asset": "Asset",
-        "amount": "Amount",
-        "max": "Max",
-        "balance": "Balance {{amount}}",
-        "recipient": "Recipient",
-        "recipientPlaceholder": "0x…",
         "propose": "Propose and approve",
-        "hint": "You give the first approval. It is sent once {{threshold}} members have approved.",
-        "noAssets": "This multisig holds nothing yet. Send some funds to its address first.",
-        "invalidAddress": "Enter a valid address.",
-        "invalidAmount": "Enter an amount up to the balance."
+        "invalidAddress": "Enter a valid address."
       },
       "create": {
         "title": "New multisig",

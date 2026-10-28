@@ -131,7 +131,9 @@ const BASE: SendView = {
 	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
-	sim_json: null
+	sim_json: null,
+	multisig: null,
+	proposed: null
 };
 
 function inputs(send: Partial<SendView>, sweepPicking = false): SendLiveInputs {

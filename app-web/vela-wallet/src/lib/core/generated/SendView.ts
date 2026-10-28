@@ -7,8 +7,10 @@ import type { SendFeeCoin } from "./SendFeeCoin";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
+import type { SendMultisigRef } from "./SendMultisigRef";
 import type { SendPayee } from "./SendPayee";
 import type { SendPreviousPending } from "./SendPreviousPending";
+import type { SendProposed } from "./SendProposed";
 import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
@@ -240,6 +242,15 @@ can_confirm: boolean,
  * review.
  */
 review_digest: string | null, 
+/**
+ * A multisig's send: how many of its members must approve. Its confirm
+ * says so where a fee would be, and proposes rather than sends.
+ */
+multisig: SendMultisigRef | null, 
+/**
+ * The proposal this send made, once it is in the mailbox.
+ */
+proposed: SendProposed | null, 
 /**
  * The account's previous transaction on this network is still going
  * through, so the confirm is held (part of `can_confirm`): this one

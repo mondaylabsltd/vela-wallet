@@ -461,18 +461,8 @@
     "opening": "Transaktion wird geöffnet…"
    },
    "send": {
-    "title": "Überweisung vorschlagen",
-    "asset": "Vermögenswert",
-    "amount": "Betrag",
-    "max": "Max",
-    "balance": "Guthaben {{amount}}",
-    "recipient": "Empfänger",
-    "recipientPlaceholder": "0x…",
     "propose": "Vorschlagen und genehmigen",
-    "hint": "Du gibst die erste Genehmigung. Gesendet wird, sobald {{threshold}} Mitglieder genehmigt haben.",
-    "noAssets": "Dieses Multisig hält noch nichts. Sende zuerst Guthaben an seine Adresse.",
-    "invalidAddress": "Gib eine gültige Adresse ein.",
-    "invalidAmount": "Gib einen Betrag bis zum Guthaben ein."
+    "invalidAddress": "Gib eine gültige Adresse ein."
    },
    "create": {
     "title": "Neues Multisig",

@@ -144,18 +144,8 @@
         "opening": "거래를 여는 중…"
       },
       "send": {
-        "title": "송금 제안",
-        "asset": "자산",
-        "amount": "금액",
-        "max": "최대",
-        "balance": "잔액 {{amount}}",
-        "recipient": "받는 사람",
-        "recipientPlaceholder": "0x…",
         "propose": "제안하고 승인",
-        "hint": "첫 번째 승인은 내가 합니다. {{threshold}}명이 승인하면 송금됩니다.",
-        "noAssets": "이 멀티시그에는 아직 자산이 없습니다. 먼저 주소로 자금을 보내세요.",
-        "invalidAddress": "올바른 주소를 입력하세요.",
-        "invalidAmount": "잔액 이하의 금액을 입력하세요."
+        "invalidAddress": "올바른 주소를 입력하세요."
       },
       "create": {
         "title": "새 멀티시그",
