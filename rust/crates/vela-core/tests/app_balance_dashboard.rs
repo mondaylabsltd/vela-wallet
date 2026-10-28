@@ -3331,8 +3331,6 @@ fn a_recovery_read_waits_for_the_app_to_be_seen() {
 
 // ===========================================================================
 // The person's own node (owner decision 2026-10-28)
-// ====================================================================}
-
 // ===========================================================================
 
 /// A network read through the person's node alone ("Only use my node"), whose
@@ -3421,7 +3419,8 @@ fn holdings_none_of_which_can_be_priced_have_no_figure_not_a_zero() {
     let view = booted(ADDR_A, None, settled_read(vec![], vec![], vec![100])).view();
     assert!(!view.unpriced_only);
     assert_eq!(view.display_total_usd, Some(0.0));
-=======
+}
+
 // perf-10: a screen that draws no balance notes the account, and reads nothing
 // ===========================================================================
 
