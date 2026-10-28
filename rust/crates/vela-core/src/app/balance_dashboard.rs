@@ -78,6 +78,16 @@
 //! what the wallet last read there — [`BalanceView::unreachable_networks`].
 //! While a network cannot be read nobody knows what it holds now, so none is
 //! left out for having looked empty.
+//!
+//! An unstable network (exploratory round, fix-balance): the rows a shell
+//! kept from the last visit open the list ([`Event::HoldingsRestored`]) and a
+//! chain that does not answer keeps its rows through the settle; while every
+//! chain's rows are on screen the figure is their sum, during a round too
+//! (`Model::rows_whole`); a chain whose holdings all vanish in one answer is
+//! doubted until a second read says the same (`Model::suspect_chain_ids`);
+//! while a network stays out the home reads itself again on
+//! [`RECOVER_DELAYS_MS`]; and a switch of space starts the account over
+//! ([`Event::SpaceChanged`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -124,6 +134,13 @@ pub const CHAIN_READ_DEADLINE_MS: u32 = 18_000;
 /// the next one starts (spec 092): a network that comes back leaves the list
 /// in front of the person, not at the next 10-minute poll.
 pub const UNREACHABLE_RECHECK_MS: u32 = 10_000;
+
+/// While a network cannot be read — the silent retries spent and a round
+/// still missing a chain, or a round that threw — how long after each read
+/// the next one starts: the home reads itself back once the network returns,
+/// not at the next 10-minute poll, and a long outage costs a read every few
+/// minutes rather than a storm. The last step repeats.
+pub const RECOVER_DELAYS_MS: [u32; 5] = [15_000, 30_000, 60_000, 120_000, 300_000];
 
 /// The home line when exactly one network cannot be reached (`{{name}}`).
 pub const UNREACHABLE_ONE: &str = "assets.unreachableOne";
@@ -867,6 +884,25 @@ pub enum Event {
         addresses: Vec<String>,
     },
     SwitcherClosed,
+    /// What this account held the last time the shell kept it — the rows the
+    /// home showed when it last settled, from the shell's own store. Said
+    /// once, after [`Event::AccountChanged`] or [`Event::SpaceChanged`], so the
+    /// Assets list opens on what was last known instead of a skeleton that
+    /// lasts as long as the slowest network, and the hero's figure is the sum
+    /// of the rows under it from the first frame. They are last-known rows,
+    /// not an answer: each chain's own read replaces them, and one that does
+    /// not answer keeps them, listed as unreachable. Ignored once a round
+    /// has settled, and for any chain that has already answered.
+    HoldingsRestored {
+        address: String,
+        tokens: Vec<BalanceToken>,
+    },
+    /// The networks in front changed (spec 105, the mainnet and testnet
+    /// spaces): what was read, failed, cached or counted belongs to the other
+    /// space. Resets like [`Event::AccountChanged`] for the same account —
+    /// the cache read again (the shell keeps one per space) and a forced
+    /// read — so the mainnet space never says it cannot reach a testnet.
+    SpaceChanged,
     /// Internal: an effect resolved. `attempt` is the account generation
     /// captured when the request was made; an older attempt belongs to a
     /// previous account and is dropped — this IS the `addressRef` check
@@ -928,7 +964,8 @@ pub struct Model {
     notice_allowed: bool,
     /// Outstanding pull-gesture fetches; the spinner shows while > 0.
     pending_pulls: u32,
-    /// A fetch (silent or pulled) is out. While it is, the FIGURE may only
+    /// A fetch (silent or pulled) is out. While it is — and some chain's
+    /// holdings are unknown (`rows_whole` false) — the FIGURE may only
     /// RISE (#188): it starts at `last_settled_total` (or at nothing, on a
     /// cold first load) and follows `stream_peak` upward as chains answer, so
     /// what is already known shows at once and the number never flickers
@@ -945,6 +982,25 @@ pub struct Model {
     /// The first fetch threw with nothing known — no tokens, no cache. The home
     /// says "unreachable", never $0.00 (spec 038 finding 15).
     errored_without_data: bool,
+    /// The rows are every chain's — each one either answered or is known from
+    /// an earlier read (restored, or carried while it does not answer). Then
+    /// the figure IS the rows' sum, during a round as after it: a hero
+    /// reading "$5.00" over a row of 4.4787 xDAI for the length of a round
+    /// was two answers to one question. Only while some chain's holdings are
+    /// unknown does the figure lean on the cached total instead.
+    rows_whole: bool,
+    /// Chains whose answer of "nothing here" is doubted (home-14): it held
+    /// something when last read, and one read saying it all went at once is
+    /// a node answering zeros as often as it is a wallet emptied. Its last
+    /// rows stand and the round counts as partial — no live zero, no cache
+    /// write — until the next read; the same answer twice is believed.
+    suspect_chain_ids: BTreeSet<u32>,
+    /// The re-read armed while a network cannot be read
+    /// ([`RECOVER_DELAYS_MS`]); a `RetryElapsed` for it reads again.
+    recover_timer: Option<u32>,
+    /// How far along [`RECOVER_DELAYS_MS`] the next re-read is; back to the
+    /// start once a round reads every chain.
+    recover_step: usize,
     hidden: bool,
     /// Hydrate OR toggle — whichever lands first wins
     /// (`use-balance-privacy.ts:19`).
@@ -1252,12 +1308,34 @@ impl App for BalanceDashboard {
             Event::UnreachableListClosed => {
                 model.list_open = false;
                 model.list_timer = None;
-                Command::done()
+                // Its re-reads stop; while a network is still out the slower
+                // recovery reads take over (a read in flight arms them when
+                // it settles).
+                if model.fetch_in_flight || model.address.is_none() {
+                    return Command::done();
+                }
+                let mut operations = Vec::new();
+                let unreadable = !model.failed_chain_ids.is_empty() || !model.last_round_answered;
+                arm_recovery(model, &mut operations, unreadable);
+                requests(model, operations)
             }
             Event::SwitcherOpened { addresses } => switcher_opened(model, addresses),
             Event::SwitcherClosed => {
                 model.switcher_open = false;
                 render()
+            }
+            Event::HoldingsRestored { address, tokens } => {
+                holdings_restored(model, &address, tokens)
+            }
+            Event::SpaceChanged => {
+                let Some(address) = model.address.clone() else {
+                    return Command::done();
+                };
+                // The other space's rate-limited chains are not this one's
+                // (the account-switch quirk keeps them; a space switch does not).
+                model.rate_limited_chain_ids.clear();
+                model.switcher_balances.clear();
+                reset_for(model, address, true)
             }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
@@ -1278,13 +1356,17 @@ impl App for BalanceDashboard {
         // holding it can PRICE ends it: what can be counted is shown at once
         // (#188). Until then there is no figure — a stream that has so far
         // listed only unpriced tokens would otherwise paint $0.00.
-        let unknown =
-            model.cached_total.is_none() && !model.bootstrapped && model.stream_peak <= 0.0;
+        // Rows restored from the last visit are known too: their sum is the
+        // figure (home-4), drawn from the first frame.
+        let unknown = model.cached_total.is_none()
+            && !model.bootstrapped
+            && model.stream_peak <= 0.0
+            && !(model.rows_whole && !model.tokens.is_empty());
         // Never mid-refresh: before prices arrive every token is unpriced,
         // and "some tokens couldn't be priced" flashing while chains are still
         // answering was #188's second half.
         let notice = if partial && model.notice_allowed && !model.fetch_in_flight {
-            Some(if model.failed_chain_ids.is_empty() {
+            Some(if !coverage_partial(model) {
                 BalanceNotice::Unpriced
             } else {
                 BalanceNotice::StillUpdating
@@ -1312,7 +1394,11 @@ impl App for BalanceDashboard {
             model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
         // The first read of this account is still out ("Checking…").
         let first_read_ended = !(model.address.is_some() && !model.bootstrapped);
-        let holdings_loading = model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0;
+        // Rows every chain answered for, or kept, are not "loading": with
+        // none, the wallet holds nothing that was read (home-3).
+        let holdings_loading = model.tokens.is_empty()
+            && model.cached_total.unwrap_or(0.0) > 0.0
+            && !(model.bootstrapped && model.rows_whole);
         BalanceView {
             address: model.address.clone(),
             // No figure while nothing is known: the skeleton, privacy — and a
@@ -1387,6 +1473,13 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
         // Same dependency value — the reset effect would not re-run.
         return Command::done();
     }
+    reset_for(model, address, false)
+}
+
+/// The reset an account switch does — and a switch of space, for the same
+/// account (`force`: the space's networks are read past the shell's token
+/// cache, which held the other space's).
+fn reset_for(model: &mut Model, address: String, force: bool) -> Command<BalanceEffect, Event> {
     model.attempt += 1;
     model.address = Some(address.clone());
     // The reset block (`useHomeController.ts:399-416`) — note what it does
@@ -1407,6 +1500,10 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.list_open = false;
     model.list_timer = None;
     model.pending_pulls = 0; // stale pull settles are dropped by attempt
+    model.rows_whole = false;
+    model.suspect_chain_ids.clear();
+    model.recover_timer = None;
+    model.recover_step = 0;
 
     // The fetch issued below is out from this moment (#188): the figure only
     // rises from the cached total (seeded into `last_settled_total` when it
@@ -1430,11 +1527,47 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
             // … while the focus-effect reload fetches live data.
             BalanceOperation::FetchTokens {
                 address,
-                force: false,
+                force,
                 pull: false,
             },
         ],
     )
+}
+
+/// [`Event::HoldingsRestored`]: the rows last shown for this account fill in
+/// every chain that has not answered yet — never one that has, and nothing
+/// once a round has settled (what it found is newer). They are remembered as
+/// that chain's last read, so a network that does not answer now is listed
+/// with what it last held, and a node that answers "nothing" for a holding is
+/// doubted against them (home-14).
+fn holdings_restored(
+    model: &mut Model,
+    address: &str,
+    tokens: Vec<BalanceToken>,
+) -> Command<BalanceEffect, Event> {
+    if model.address.as_deref() != Some(address) || model.bootstrapped {
+        return Command::done();
+    }
+    let streamed: BTreeSet<u32> = model.tokens.iter().map(|t| t.chain_id).collect();
+    let restored: Vec<BalanceToken> = tokens
+        .into_iter()
+        .filter(|t| token_balance_double(&t.balance) > 0.0 && !streamed.contains(&t.chain_id))
+        .map(with_display_symbol)
+        .collect();
+    if restored.is_empty() {
+        return Command::done();
+    }
+    for token in restored.iter().filter(|t| !t.spam) {
+        model
+            .last_read
+            .entry(token.chain_id)
+            .or_default()
+            .push(token.clone());
+    }
+    model.tokens.extend(restored);
+    sort_by_usd_desc(&mut model.tokens);
+    model.rows_whole = true;
+    render()
 }
 
 fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEffect, Event> {
@@ -1572,7 +1705,32 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 && read_chain_ids
                     .iter()
                     .all(|id| failed_chain_ids.contains(id));
-            remember_reads(model, &live, &failed_chain_ids, &read_chain_ids);
+            // A chain that did not answer keeps the rows it last showed (the
+            // streaming merge's rule, invariant ④, carried through the settle):
+            // a shell that carried them over already listed them; one that did
+            // not — a page opened on a network that is down, its rows restored
+            // from the last visit — would otherwise drop them here.
+            let listed: BTreeSet<u32> = live.iter().map(|t| t.chain_id).collect();
+            let kept: Vec<BalanceToken> = model
+                .tokens
+                .iter()
+                .filter(|t| failed_chain_ids.contains(&t.chain_id) && !listed.contains(&t.chain_id))
+                .cloned()
+                .collect();
+            live.extend(kept);
+            // home-14: a chain that answered "nothing" for what it held when
+            // last read is doubted once — its last rows stand — and believed
+            // when the next read says the same.
+            let doubted =
+                doubt_vanished_holdings(model, &mut live, &failed_chain_ids, &read_chain_ids);
+            sort_by_usd_desc(&mut live);
+            let unanswered: Vec<u32> = failed_chain_ids
+                .iter()
+                .copied()
+                .chain(doubted.iter().copied())
+                .collect();
+            remember_reads(model, &live, &unanswered, &read_chain_ids);
+            model.suspect_chain_ids = doubted;
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
@@ -1589,7 +1747,14 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 nothing_answered && model.tokens.is_empty() && model.cached_total.is_none();
 
             let unpriced = has_unpriced(&model.tokens);
-            let partial = !model.failed_chain_ids.is_empty() || unpriced;
+            let partial = coverage_partial(model) || unpriced;
+            // Every chain's rows are on screen — answered, or known from an
+            // earlier read and kept — so the figure is their sum.
+            model.rows_whole = model
+                .failed_chain_ids
+                .iter()
+                .chain(model.suspect_chain_ids.iter())
+                .all(|id| model.last_read.contains_key(id));
             let mut operations = Vec::new();
             if !coverage_partial(model) {
                 // Invariant ⑥: only a total EVERY chain answered may become
@@ -1650,6 +1815,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.bootstrapped = true;
             model.last_round_answered = true;
             arm_list_recheck(model, &mut operations);
+            arm_recovery(model, &mut operations, !model.failed_chain_ids.is_empty());
             requests(model, operations)
         }
 
@@ -1677,6 +1843,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
             let mut operations = Vec::new();
             arm_list_recheck(model, &mut operations);
+            arm_recovery(model, &mut operations, true);
             requests(model, operations)
         }
 
@@ -1702,6 +1869,15 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                     return begin_fetch(model, true, false);
                 }
                 return Command::done();
+            }
+            if model.recover_timer == Some(timer_id) {
+                model.recover_timer = None;
+                // A backgrounded app reads again when it is focused
+                // (`AppFocused`); a re-read nobody can see is a wasted one.
+                if model.backgrounded {
+                    return Command::done();
+                }
+                return begin_fetch(model, true, false);
             }
             if model.live_timer != Some(timer_id) {
                 return Command::done(); // a cancelled timer's late echo
@@ -1764,31 +1940,105 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
 // ---------------------------------------------------------------------------
 
 fn balance_partial(model: &Model) -> bool {
-    !model.failed_chain_ids.is_empty() || (!model.tokens.is_empty() && has_unpriced(&model.tokens))
+    coverage_partial(model) || (!model.tokens.is_empty() && has_unpriced(&model.tokens))
 }
 
-/// A chain did not answer this round — the one case where the live sum is a
-/// known undercount. (`balance_partial` also counts an unpriced holding; that
-/// drives the retries and the notice, not the floor.)
+/// A chain did not answer this round — or answered in a way not yet believed
+/// (home-14) — the case where the live sum may be an undercount.
+/// (`balance_partial` also counts an unpriced holding; that drives the
+/// retries and the notice, not the floor.)
 fn coverage_partial(model: &Model) -> bool {
-    !model.failed_chain_ids.is_empty()
+    !model.failed_chain_ids.is_empty() || !model.suspect_chain_ids.is_empty()
+}
+
+/// home-14: the chains that answered holding nothing where they held
+/// something when last read, and whose answer is not believed yet. Their last
+/// rows go back into `live`. A chain doubted by the previous round and saying
+/// the same again is believed — two reads in a row, the second forced past
+/// every cache, are the wallet's best word. A chain that answered with
+/// holdings is believed at once. Only a shell that says which chains it
+/// asked (`read_chain_ids`) can say a chain answered holding nothing.
+fn doubt_vanished_holdings(
+    model: &Model,
+    live: &mut Vec<BalanceToken>,
+    failed: &[u32],
+    read: &[u32],
+) -> BTreeSet<u32> {
+    let mut doubted = BTreeSet::new();
+    for chain in read.iter().filter(|id| !failed.contains(id)) {
+        let answered_nothing = !live.iter().any(|t| t.chain_id == *chain && !t.spam);
+        let held_before = model
+            .last_read
+            .get(chain)
+            .is_some_and(|held| !held.is_empty());
+        if !answered_nothing || !held_before || model.suspect_chain_ids.contains(chain) {
+            continue;
+        }
+        doubted.insert(*chain);
+        // What the screen showed for it — the last read, as rows.
+        let shown: Vec<BalanceToken> = model
+            .tokens
+            .iter()
+            .filter(|t| t.chain_id == *chain)
+            .cloned()
+            .collect();
+        live.extend(if shown.is_empty() {
+            model.last_read.get(chain).cloned().unwrap_or_default()
+        } else {
+            shown
+        });
+    }
+    doubted
+}
+
+/// While a network cannot be read (`unreadable`: a chain failed, or the round
+/// threw) and nothing sooner is armed — a silent retry, or the open list's
+/// re-read — the next read starts after the next step of
+/// [`RECOVER_DELAYS_MS`]. A round that read every chain starts the ladder over.
+fn arm_recovery(model: &mut Model, operations: &mut Vec<BalanceOperation>, unreadable: bool) {
+    model.recover_timer = None;
+    if !unreadable {
+        model.recover_step = 0;
+        return;
+    }
+    if model.live_timer.is_some() || model.list_timer.is_some() {
+        return;
+    }
+    let ms = RECOVER_DELAYS_MS
+        .get(model.recover_step)
+        .copied()
+        .unwrap_or(RECOVER_DELAYS_MS[RECOVER_DELAYS_MS.len() - 1]);
+    model.recover_step = (model.recover_step + 1).min(RECOVER_DELAYS_MS.len() - 1);
+    model.timer_seq = model.timer_seq.wrapping_add(1);
+    model.recover_timer = Some(model.timer_seq);
+    operations.push(BalanceOperation::StartRetryTimer {
+        ms,
+        timer_id: model.timer_seq,
+    });
 }
 
 /// The display rule (invariants ① and the cache fallback): no live data →
 /// cached; a chain missing → `max(live, cached)` — never the confident
 /// undercount; otherwise the live sum, unpriced holdings and all (#188).
 fn display_total(model: &Model) -> f64 {
-    // #188: while a fetch is out the figure only rises — from the last
-    // settle (when there is one) up through the stream's running peak. What
-    // the round really found replaces it once, at settle; that is the only
-    // moment the figure may go down.
+    let live = live_total(&model.tokens);
+    // home-4: the rows are every chain's — so the figure is their sum, during
+    // a round as after it. A chain that has not answered yet still shows its
+    // last rows, so the sum moves only where a chain did.
+    if model.rows_whole {
+        return live;
+    }
+    // #188: while a fetch is out and some chain's holdings are unknown, the
+    // figure only rises — from the last settle (when there is one) up
+    // through the stream's running peak. What the round really found
+    // replaces it once, at settle; that is the only moment the figure may go
+    // down.
     if model.fetch_in_flight && (model.last_settled_total.is_some() || model.stream_peak > 0.0) {
         return model
             .last_settled_total
             .unwrap_or(0.0)
             .max(model.stream_peak);
     }
-    let live = live_total(&model.tokens);
     let has_live = !model.tokens.is_empty();
     match model.cached_total {
         Some(cached) if !has_live => cached,

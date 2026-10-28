@@ -72,6 +72,16 @@
           "spam": false,
           "symbol": "USDC",
           "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        },
+        {
+          "balance": "0.5",
+          "chain_id": 56,
+          "decimals": 18,
+          "name": "BNB",
+          "price_usd": 314.0,
+          "spam": false,
+          "symbol": "BNB",
+          "token_address": null
         }
       ],
       "unpriced_tokens": [],
@@ -978,6 +988,13 @@
       "symbol": "USDC",
       "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       "worth": "••••"
+    },
+    {
+      "amount": "•••• BNB",
+      "chain_id": 56,
+      "symbol": "BNB",
+      "token_address": null,
+      "worth": "••••"
     }
   ],
   "mask": "••••",
@@ -1052,6 +1069,16 @@
           "spam": false,
           "symbol": "USDC",
           "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        },
+        {
+          "balance": "0.5",
+          "chain_id": 56,
+          "decimals": 18,
+          "name": "BNB",
+          "price_usd": 314.0,
+          "spam": false,
+          "symbol": "BNB",
+          "token_address": null
         }
       ],
       "unpriced_tokens": [],

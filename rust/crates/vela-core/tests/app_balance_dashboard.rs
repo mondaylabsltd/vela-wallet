@@ -18,7 +18,8 @@ use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, BalanceView,
     Event, LastKnown, NativePriceSource, NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, LAST_SEEN,
     LAST_SEEN_EMPTY, LAST_SEEN_UNPRICED, MAX_PARTIAL_RETRIES, NOT_READ_YET,
-    PARTIAL_RETRY_DELAYS_MS, UNREACHABLE_MANY, UNREACHABLE_ONE, UNREACHABLE_RECHECK_MS,
+    PARTIAL_RETRY_DELAYS_MS, RECOVER_DELAYS_MS, UNREACHABLE_MANY, UNREACHABLE_ONE,
+    UNREACHABLE_RECHECK_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -651,10 +652,12 @@ fn a_send_lowers_the_figure_even_with_an_unpriced_token_held() {
             token(1, "MYSTERY", "5", None),
         ],
     });
+    // home-4: every chain's rows are on screen, so the figure is their sum
+    // during the round too — never "$100" over a row that reads 60 ETH.
     assert_eq!(
         sut.view().display_total_usd,
-        Some(100.0),
-        "held while the fetch is out — down only at settle"
+        Some(60.0),
+        "the figure follows the rows it sums"
     );
     let ops = sut.resolve(settled(
         ADDR_A,
@@ -887,7 +890,15 @@ fn three_silent_retries_then_notice() {
     // no further timer is armed.
     let view = sut.view();
     assert_eq!(view.notice, Some(BalanceNotice::StillUpdating));
-    assert!(sut.outstanding().is_empty(), "no fourth retry");
+    // No fourth silent retry: the slower recovery read takes over (home-2).
+    assert!(
+        matches!(
+            sut.outstanding().as_slice(),
+            [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]
+        ),
+        "no fourth retry — the recovery read: {:?}",
+        sut.outstanding()
+    );
     // max(live, cached) still protects the number the whole time.
     assert_eq!(view.display_total_usd, Some(100.0));
 }
@@ -915,7 +926,10 @@ fn retry_delays_escalate_in_table_order() {
         ops = sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
     }
     assert_eq!(seen, PARTIAL_RETRY_DELAYS_MS.to_vec());
-    assert!(ops.is_empty(), "exhausted: no timer, notice instead");
+    assert!(
+        matches!(ops.as_slice(), [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]),
+        "exhausted: the notice, and only the slower recovery read — {ops:?}"
+    );
     assert_eq!(sut.view().notice, Some(BalanceNotice::StillUpdating));
     // The `?? 8000` fallback constant is pinned too.
     assert_eq!(FALLBACK_RETRY_DELAY_MS, 8_000);
@@ -934,6 +948,8 @@ fn clean_result_resets_the_retry_budget_and_notice() {
         sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
     }
     assert_eq!(sut.view().notice, Some(BalanceNotice::StillUpdating));
+    // The recovery read (home-2) is not what this test is about.
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     // A later poll settles COMPLETE: notice off, budget refilled …
     sut.dispatch(Event::RefreshRequested {
@@ -961,12 +977,9 @@ fn clean_result_resets_the_retry_budget_and_notice() {
         pull: false,
     });
     let ops = sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
-    assert_eq!(
-        ops,
-        vec![Op::StartRetryTimer {
-            ms: PARTIAL_RETRY_DELAYS_MS[0],
-            timer_id: MAX_PARTIAL_RETRIES + 1
-        }]
+    assert!(
+        matches!(ops.as_slice(), [Op::StartRetryTimer { ms, .. }] if *ms == PARTIAL_RETRY_DELAYS_MS[0]),
+        "{ops:?}"
     );
 }
 
@@ -1005,7 +1018,15 @@ fn fetch_error_closes_the_skeleton_but_keeps_last_known() {
     assert!(!view.balance_unknown);
     assert_eq!(view.display_total_usd, Some(100.0), "cache still paints");
     assert_eq!(view.notice, None);
-    assert!(sut.outstanding().is_empty(), "no retry timer for a throw");
+    // No silent partial retry for a throw — only the recovery read (home-2).
+    assert_eq!(
+        sut.outstanding(),
+        vec![Op::StartRetryTimer {
+            ms: RECOVER_DELAYS_MS[0],
+            timer_id: 1
+        }],
+        "the recovery re-read, nothing sooner"
+    );
 }
 
 // ===========================================================================
@@ -1576,12 +1597,16 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
         sut.resolve(Res::RetryElapsed { timer_id });
         sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
     }
+    // While the list is closed only the slower recovery read is armed (home-2).
     assert!(
-        !sut.outstanding()
-            .iter()
-            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
-        "nothing re-reads while the list is closed"
+        matches!(
+            sut.outstanding().as_slice(),
+            [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]
+        ),
+        "only the recovery read while the list is closed: {:?}",
+        sut.outstanding()
     );
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     sut.dispatch(Event::UnreachableListOpened);
     let ops = sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
@@ -1613,8 +1638,13 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
             _ => None,
         })
         .unwrap_or_else(|| panic!("armed again: {ops:?}"));
-    sut.dispatch(Event::UnreachableListClosed);
+    let closed = sut.dispatch(Event::UnreachableListClosed);
+    assert!(
+        matches!(closed.as_slice(), [Op::StartRetryTimer { ms, .. }] if RECOVER_DELAYS_MS.contains(ms)),
+        "the slower recovery reads take over (home-2): {closed:?}"
+    );
     assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     // Open again, and everything answers: an empty list stops reading.
     sut.dispatch(Event::UnreachableListOpened);
@@ -1645,12 +1675,15 @@ fn the_last_read_is_kept_while_quiet_and_replaced_by_a_newer_answer() {
         assert_eq!(unreachable_rows(&view), vec![(56, LAST_SEEN)]);
         assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(300.0));
     }
-    // It answers holding nothing (spent elsewhere), then goes quiet again.
-    sut.dispatch(Event::RefreshRequested {
-        force: true,
-        pull: false,
-    });
-    sut.resolve(settled_read(vec![], vec![], vec![56]));
+    // It answers holding nothing (spent elsewhere) — twice, because one such
+    // answer is doubted (home-14) — then goes quiet again.
+    for _ in 0..2 {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(settled_read(vec![], vec![], vec![56]));
+    }
     sut.dispatch(Event::RefreshRequested {
         force: true,
         pull: false,
@@ -2837,4 +2870,443 @@ fn the_breakdown_status_names_what_is_unavailable() {
     for key in [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE] {
         assert!(i18n.exists(key, &opts), "{key}");
     }
+}
+
+// ===========================================================================
+// An unstable network — the home stays honest and reads itself back
+// (exploratory round fix-balance: home-1, home-2, home-3, home-4, home-7,
+// home-14, ms-18)
+// ===========================================================================
+
+const GNOSIS: u32 = 100;
+const ARC_TESTNET: u32 = 5_042_002;
+const SEPOLIA: u32 = 11_155_111;
+
+/// home-14 / ms-18: one read saying a holding is all gone at once is doubted
+/// — the rows stand, the figure stands, nothing says "live" or "deposit your
+/// first asset", nothing is cached — and the forced re-read decides. The same
+/// answer twice is believed.
+#[test]
+fn a_holding_that_suddenly_reads_as_nothing_is_doubted_once() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+            vec![],
+            vec![GNOSIS],
+        ),
+    );
+    assert_eq!(sut.view().display_total_usd, Some(10.0));
+
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(10.0), "not $0.00 on one read");
+    assert_eq!(view.tokens.len(), 1, "the row stands");
+    assert_eq!(view.live_key, None, "never \"Live · listening\" over it");
+    assert_eq!(view.empty_key, None, "never \"Deposit your first asset\"");
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "it answered: not unreachable"
+    );
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::WriteBalanceCache { .. })),
+        "a doubted round is never the new last-known-good: {ops:?}"
+    );
+    assert!(
+        ops.iter().any(
+            |op| matches!(op, Op::StartRetryTimer { ms, .. } if *ms == PARTIAL_RETRY_DELAYS_MS[0])
+        ),
+        "read again soon: {ops:?}"
+    );
+
+    // The re-read says the same: believed.
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(0.0));
+    assert!(view.tokens.is_empty());
+    assert!(view.live_key.is_some(), "now it is a live zero");
+    assert!(ops.contains(&Op::WriteBalanceCache {
+        address: ADDR_A.to_owned(),
+        usd: 0.0
+    }));
+}
+
+/// A doubted chain that answers with its holdings on the re-read is simply
+/// read: the doubt goes, and nothing about it is said.
+#[test]
+fn a_doubted_holding_that_reads_back_is_believed_at_once() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+            vec![],
+            vec![GNOSIS],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "9", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(9.0));
+    assert!(!view.balance_partial);
+    assert!(ops.contains(&Op::WriteBalanceCache {
+        address: ADDR_A.to_owned(),
+        usd: 9.0
+    }));
+    // And a later "nothing" is doubted afresh.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    assert_eq!(sut.view().display_total_usd, Some(9.0));
+}
+
+/// home-3 / home-4: the rows the home last showed open the list at once, and
+/// the figure is their sum — then each chain's answer replaces its own rows,
+/// and the figure moves with them, never "$5.00" over a row of 4.4787.
+#[test]
+fn restored_rows_open_the_list_and_the_figure_is_their_sum() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(5.0),
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(GNOSIS, "xDAI", "5", Some(1.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1, "no skeleton: last-known rows");
+    assert_eq!(view.display_total_usd, Some(5.0));
+    assert!(view.checking_key.is_some(), "still says it is reading");
+
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(GNOSIS, "xDAI", "4.4787", Some(1.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens[0].balance, "4.4787");
+    assert_eq!(
+        view.display_total_usd,
+        Some(4.4787),
+        "the figure agrees with the row under it"
+    );
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "4.4787", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    assert_eq!(sut.view().display_total_usd, Some(4.4787));
+}
+
+/// A cold load with nothing restored keeps the old rule: the rows are only
+/// the chains that answered so far, so the figure leans on the cached total
+/// until the round settles.
+#[test]
+fn without_restored_rows_the_cold_figure_still_only_rises() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(5.0),
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+    });
+    assert_eq!(sut.view().display_total_usd, Some(5.0));
+}
+
+/// Restored rows never stand over a chain that has already answered, and a
+/// restore that arrives after a round settled — or for another account —
+/// changes nothing.
+#[test]
+fn restored_rows_never_replace_an_answer() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![
+            token(GNOSIS, "xDAI", "7", Some(1.0)),
+            token(1, "ETH", "1", Some(3.0)),
+        ],
+    });
+    let view = sut.view();
+    let gnosis: Vec<_> = view
+        .tokens
+        .iter()
+        .filter(|t| t.chain_id == GNOSIS)
+        .collect();
+    assert_eq!(gnosis.len(), 1);
+    assert_eq!(gnosis[0].balance, "2", "the answer stands");
+    assert!(
+        view.tokens.iter().any(|t| t.chain_id == 1),
+        "the rest fill in"
+    );
+    assert_eq!(view.display_total_usd, Some(5.0), "rows' sum");
+
+    // Settled: chain 1 answered with nothing twice (believed), Gnosis 2.
+    for _ in 0..2 {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(settled_read(
+            vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+            vec![],
+            vec![1, GNOSIS],
+        ));
+    }
+    let before = sut.view();
+    assert_eq!(before.display_total_usd, Some(2.0));
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_B.to_owned(),
+        tokens: vec![token(1, "ETH", "1", Some(3.0))],
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "1", Some(3.0))],
+    });
+    assert_eq!(sut.view(), before, "a late restore is ignored");
+}
+
+/// home-1: a page opened while the one network that holds the money is down.
+/// Its last-known rows stand (not "Deposit your first asset"), the line says
+/// which network cannot be reached (not "Updated now"), and nothing is live.
+#[test]
+fn a_network_down_at_load_keeps_its_restored_rows_and_is_named() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(0.25),
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(ARC_TESTNET, "USDC", "0.25", Some(1.0))],
+    });
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![ARC_TESTNET, SEPOLIA],
+    ));
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1, "the row is kept");
+    assert_eq!(view.display_total_usd, Some(0.25));
+    assert_eq!(view.empty_key, None, "never \"Deposit your first asset\"");
+    assert_eq!(view.live_key, None);
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+    assert_eq!(unreachable_rows(&view), vec![(ARC_TESTNET, LAST_SEEN)]);
+    assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(0.25));
+}
+
+/// A chain that did not answer keeps the rows it showed through the settle
+/// even when the shell did not carry them (a shell that only knows this
+/// round's answers).
+#[test]
+fn a_quiet_chain_keeps_its_rows_through_the_settle() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(GNOSIS, "xDAI", "10", Some(1.0)),
+                token(1, "ETH", "1", Some(5.0)),
+            ],
+            vec![],
+            vec![1, GNOSIS],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(5.0))],
+        vec![GNOSIS],
+        vec![1, GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 2, "Gnosis's row is kept");
+    assert_eq!(view.display_total_usd, Some(15.0), "and counted");
+    assert_eq!(unreachable_rows(&view), vec![(GNOSIS, LAST_SEEN)]);
+}
+
+/// home-7: a switch of space starts over for the same account — nothing the
+/// other space failed, held or cached is said here, and its late answers are
+/// dropped.
+#[test]
+fn a_switch_of_space_starts_over_for_the_same_account() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(SEPOLIA, "ETH", "1", Some(1.0))],
+            vec![ARC_TESTNET],
+            vec![ARC_TESTNET, SEPOLIA],
+        ),
+    );
+    assert!(!sut.view().unreachable_networks.is_empty());
+    sut.drop_matching(|_| true);
+    let ops = sut.dispatch(Event::SpaceChanged);
+    assert_eq!(
+        ops,
+        vec![
+            Op::ReadBalanceCache {
+                address: ADDR_A.to_owned()
+            },
+            Op::FetchTokens {
+                address: ADDR_A.to_owned(),
+                force: true,
+                pull: false
+            },
+        ]
+    );
+    let view = sut.view();
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "not the other space's outage"
+    );
+    assert_eq!(view.unreachable_key, None);
+    assert!(view.tokens.is_empty());
+    assert!(view.checking_key.is_some(), "this space is being read");
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(3.0),
+    });
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "3", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(3.0));
+    assert!(view.unreachable_networks.is_empty());
+}
+
+/// A space switch with no account yet does nothing.
+#[test]
+fn a_switch_of_space_before_any_account_is_a_no_op() {
+    let mut sut = Sut::new();
+    assert!(sut.dispatch(Event::SpaceChanged).is_empty());
+}
+
+/// home-2: while a network cannot be read the home reads itself again — the
+/// silent retries first, then [`RECOVER_DELAYS_MS`], one step further each
+/// time — and a round that reads every chain ends it. Never a storm: one
+/// timer at a time.
+#[test]
+fn an_outage_is_read_again_with_backoff_until_it_ends() {
+    let mut sut = booted(
+        ADDR_A,
+        Some(10.0),
+        settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]),
+    );
+    // The one timer outstanding: its delay and id.
+    let armed = |sut: &Sut| -> (u32, u32) {
+        match sut.outstanding().as_slice() {
+            [Op::StartRetryTimer { ms, timer_id }] => (*ms, *timer_id),
+            other => panic!("one timer armed, got {other:?}"),
+        }
+    };
+    for _ in 0..MAX_PARTIAL_RETRIES {
+        let (_, timer_id) = armed(&sut);
+        sut.resolve(Res::RetryElapsed { timer_id });
+        sut.resolve(settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]));
+    }
+    let last = RECOVER_DELAYS_MS[RECOVER_DELAYS_MS.len() - 1];
+    for (step, expected) in RECOVER_DELAYS_MS
+        .iter()
+        .copied()
+        .chain(std::iter::once(last))
+        .enumerate()
+    {
+        let (ms, timer_id) = armed(&sut);
+        assert_eq!(ms, expected, "step {step}");
+        let ops = sut.resolve(Res::RetryElapsed { timer_id });
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ADDR_A.to_owned(),
+                force: true,
+                pull: false
+            }],
+            "step {step}: a quiet forced read"
+        );
+        assert!(!sut.view().refreshing, "no spinner for it");
+        sut.resolve(settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]));
+    }
+    // The network is back: the round reads every chain, nothing more is armed.
+    let (_, timer_id) = armed(&sut);
+    sut.resolve(Res::RetryElapsed { timer_id });
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+        vec![],
+        vec![1, GNOSIS],
+    ));
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
+        "{:?}",
+        sut.outstanding()
+    );
+    let view = sut.view();
+    assert!(view.unreachable_networks.is_empty());
+    assert_eq!(view.notice, None);
+}
+
+/// A recovery read that comes due while the app is in the background reads
+/// nothing; focus reads again (`AppFocused`). A throw is read again too.
+#[test]
+fn a_recovery_read_waits_for_the_app_to_be_seen() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(10.0),
+    });
+    let ops = sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    let [Op::StartRetryTimer { ms, timer_id }] = ops.as_slice() else {
+        panic!("a throw is read again too: {ops:?}");
+    };
+    assert_eq!(*ms, RECOVER_DELAYS_MS[0]);
+    let timer_id = *timer_id;
+    sut.dispatch(Event::AppBackgrounded);
+    assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
+    let ops = sut.dispatch(Event::AppFocused);
+    assert!(ops.iter().any(|op| matches!(op, Op::FetchTokens { .. })));
 }

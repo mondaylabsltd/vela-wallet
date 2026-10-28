@@ -86,7 +86,13 @@ pub const ITEMS: [StorageItem; 8] = [
     StorageItem {
         id: "balances",
         group: StorageGroup::Cache,
-        keys: &["vela.balanceCache"],
+        // The total, the rows it was the sum of (fix-balance home-3), and
+        // the last Chainlink prices a capped read falls back to (perf-5).
+        keys: &[
+            "vela.balanceCache",
+            "vela.holdingsCache",
+            "vela.chainlinkPrices",
+        ],
         prefixes: &[],
     },
     StorageItem {
