@@ -103,7 +103,7 @@
         "ready": "실행 가능",
         "yourTurn": "내 승인 필요",
         "waiting": "다른 멤버 대기 중",
-        "queued": "대기열",
+        "queued": "순서 대기 중",
         "progress": "승인 {{approved}}/{{threshold}}"
       },
       "action": {
@@ -137,8 +137,8 @@
         "copyLink": "링크 복사",
         "copied": "복사됨",
         "share": "공유",
-        "reject": "거절",
-        "rejectHint": "거절하면 같은 번호로 취소 거래를 제안합니다. 취소에도 {{threshold}}명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다.",
+        "reject": "거부",
+        "rejectHint": "거부하면 같은 번호로 취소 거래를 제안합니다. 취소에도 {{threshold}}명의 승인이 필요하며, 먼저 실행된 쪽이 적용됩니다.",
         "cancelPending": "이 거래의 취소가 승인을 기다리고 있습니다.",
         "executing": "실행 중…",
         "executed": "실행됨",
@@ -209,7 +209,7 @@
         "notMultisig": "이 주소는 Vela가 읽을 수 있는 멀티시그가 아닙니다."
       },
       "external": {
-        "pageTitle": "Vela를 위해 서명",
+        "pageTitle": "Vela용 서명",
         "looking": "지갑을 찾는 중…",
         "noWallet": "지갑이 있는 브라우저에서 이 페이지를 여세요",
         "noWalletBody": "이 페이지에는 지갑 확장 프로그램(MetaMask, Rabby 등)이나 지갑 앱의 내장 브라우저가 필요합니다. 링크를 그곳에 복사하거나, 지갑 앱으로 Vela의 코드를 스캔하세요.",
@@ -219,7 +219,7 @@
         "askConnect": "Vela가 멀티시그 거래 승인에 이 지갑을 사용하려고 합니다.",
         "askNote": "방금 Vela에서 시작한 경우에만 계속하세요. 지갑이 묻지 않으면 아무것도 서명되지 않습니다.",
         "connect": "연결",
-        "decline": "거절",
+        "decline": "거부",
         "keepOpen": "연결되었습니다. 이 페이지를 열어 두세요. Vela의 요청이 지갑에 표시됩니다.",
         "waitingVela": "Vela를 기다리는 중…",
         "noSession": "멤버가 다른 지갑으로 서명할 때 Vela가 보여 주는 링크로 이 페이지를 여세요.",
@@ -237,7 +237,7 @@
         "wrongAccount": "지갑의 계정 {{account}}은(는) 이곳의 멤버가 아닙니다. 지갑에서 멤버의 계정으로 전환하세요.",
         "switching": "지갑을 {{chain}}(으)로 전환하는 중…",
         "confirming": "지갑에서 확인하세요.",
-        "declined": "지갑이 거절했습니다.",
+        "declined": "지갑이 거부했습니다.",
         "badSignature": "이 서명은 이 거래에 대한 멤버의 서명이 아닙니다.",
         "signedBy": "{{owner}} 서명",
         "unpair": "페어링 해제",

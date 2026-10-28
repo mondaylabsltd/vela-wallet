@@ -147,7 +147,7 @@
       "keyPlaceHeading": "Escolha onde guardá-la",
       "addMethodLabel": "Adicionar mais uma",
       "addSecondKeyBtn": "Adicione primeiro uma segunda chave",
-      "alertErrorTitle": "Erro",
+      "alertErrorTitle": "Passkey não criada",
       "alertNotSupportedBody": "A autenticação biométrica não está disponível neste dispositivo.",
       "alertNotSupportedTitle": "Não compatível",
       "confirmKeyBtn": "Confirmar",

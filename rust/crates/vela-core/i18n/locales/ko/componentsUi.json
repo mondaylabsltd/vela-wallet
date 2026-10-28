@@ -284,7 +284,7 @@
         "approveAllYour": "내 {{collection}} NFT 전체 승인",
         "signAnyway": "그래도 서명",
         "chipGrantAll": "모두 허용",
-        "chooseGrant": "먼저 ‘모두 허용’ 또는 ‘취소’를 선택하세요",
+        "chooseGrant": "먼저 ‘모두 허용’ 또는 ‘철회’를 선택하세요",
         "labelSource": "해석 출처",
         "byVela": "Vela (거래 자체에서)"
       },

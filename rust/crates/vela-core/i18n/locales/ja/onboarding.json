@@ -147,7 +147,7 @@
       "keyPlaceHeading": "保存先を選ぶ",
       "addMethodLabel": "もう 1 本追加",
       "addSecondKeyBtn": "先に 2 本目を追加",
-      "alertErrorTitle": "エラー",
+      "alertErrorTitle": "パスキーを作成できませんでした",
       "alertNotSupportedBody": "この端末では生体認証を利用できません。",
       "alertNotSupportedTitle": "非対応",
       "confirmKeyBtn": "確認",
@@ -224,7 +224,7 @@
       "successMessage_other": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
       "successTitle": "ウォレットを作成しました",
       "syncFailedHint": "このページを開いたままにしてください。接続が戻ると Vela が自動で再試行します（「再アップロード」でもすぐに試せます）。今ページを離れたり再読み込みしたりすると、このウォレットは破棄されます。",
-      "syncFailedMessage": "パスキーは作成されましたが、ウォレットを Vela のパスキー索引に登録できなかったため、この端末にはまだ保存されていません。",
+      "syncFailedMessage": "パスキーは作成されましたが、ウォレットを Vela のパスキーインデックスに登録できなかったため、この端末にはまだ保存されていません。",
       "syncFailedTitle": "まだ保存されていません",
       "taskDeriveAddress": "アカウントアドレスを導出",
       "taskVerifyKey": "パスキーの公開鍵を検証",
@@ -239,7 +239,7 @@
       "nameDuplicate": "この端末にはすでに「{{name}}」という名前のウォレットがあります。",
       "keyKeptTitle": "キーは保持されています（未確認）",
       "keyKeptBodyNetwork": "この端末がオフラインのため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。オンラインに戻ったら横の「確認」をタップしてください。",
-      "keyKeptBodyIndex": "Vela のパスキー索引が応答しなかったため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。少し待ってから横の「確認」をタップしてください。"
+      "keyKeptBodyIndex": "Vela のパスキーインデックスが応答しなかったため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。少し待ってから横の「確認」をタップしてください。"
     },
     "login": {
       "alertNotSupportedTitle": "非対応",

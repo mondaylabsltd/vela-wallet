@@ -1123,7 +1123,7 @@
    "keyPlaceHeading": "Choose where it lives",
    "addMethodLabel": "Add another",
    "addSecondKeyBtn": "Add a second key first",
-   "alertErrorTitle": "Error",
+   "alertErrorTitle": "Passkey not created",
    "alertNotSupportedBody": "Biometric authentication is not available on this device.",
    "alertNotSupportedTitle": "Not Supported",
    "confirmKeyBtn": "Confirm",

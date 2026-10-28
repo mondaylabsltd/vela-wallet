@@ -1123,7 +1123,7 @@
    "keyPlaceHeading": "Pilih tempat menyimpannya",
    "addMethodLabel": "Tambah satu lagi",
    "addSecondKeyBtn": "Tambah kunci kedua dulu",
-   "alertErrorTitle": "Kesalahan",
+   "alertErrorTitle": "Passkey tidak dibuat",
    "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
    "alertNotSupportedTitle": "Tidak Didukung",
    "confirmKeyBtn": "Konfirmasi",

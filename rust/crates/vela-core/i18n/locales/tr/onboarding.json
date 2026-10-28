@@ -147,7 +147,7 @@
       "keyPlaceHeading": "Nerede duracağını seçin",
       "addMethodLabel": "Bir tane daha ekleyin",
       "addSecondKeyBtn": "Önce ikinci anahtarı ekleyin",
-      "alertErrorTitle": "Hata",
+      "alertErrorTitle": "Passkey oluşturulamadı",
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
       "alertNotSupportedTitle": "Desteklenmiyor",
       "confirmKeyBtn": "Onayla",

@@ -147,7 +147,7 @@
       "keyPlaceHeading": "选择存放位置",
       "addMethodLabel": "再添加一把",
       "addSecondKeyBtn": "先添加第 2 把密钥",
-      "alertErrorTitle": "错误",
+      "alertErrorTitle": "未能创建通行密钥",
       "alertNotSupportedBody": "此设备不支持生物识别认证。",
       "alertNotSupportedTitle": "不支持",
       "confirmKeyBtn": "确认",

@@ -1123,7 +1123,7 @@
    "keyPlaceHeading": "Speicherort wählen",
    "addMethodLabel": "Noch einen hinzufügen",
    "addSecondKeyBtn": "Füge zuerst einen zweiten Schlüssel hinzu",
-   "alertErrorTitle": "Fehler",
+   "alertErrorTitle": "Passkey nicht erstellt",
    "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
    "alertNotSupportedTitle": "Nicht unterstützt",
    "confirmKeyBtn": "Bestätigen",

@@ -147,7 +147,7 @@
       "keyPlaceHeading": "Выберите, где его хранить",
       "addMethodLabel": "Добавить ещё один",
       "addSecondKeyBtn": "Сначала добавьте второй ключ",
-      "alertErrorTitle": "Ошибка",
+      "alertErrorTitle": "Passkey не создан",
       "alertNotSupportedBody": "Биометрическая аутентификация недоступна на этом устройстве.",
       "alertNotSupportedTitle": "Не поддерживается",
       "confirmKeyBtn": "Подтвердить",

@@ -147,7 +147,7 @@
       "keyPlaceHeading": "揀存放位置",
       "addMethodLabel": "再加多一條",
       "addSecondKeyBtn": "先加多一條密鑰",
-      "alertErrorTitle": "錯誤",
+      "alertErrorTitle": "未能建立通行密鑰",
       "alertNotSupportedBody": "此裝置不支援生物辨識認證。",
       "alertNotSupportedTitle": "不支援",
       "confirmKeyBtn": "確認",
