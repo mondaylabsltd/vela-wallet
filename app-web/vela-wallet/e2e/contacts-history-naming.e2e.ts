@@ -170,7 +170,7 @@ test.describe('desktop', () => {
 		await expect(
 			page.getByRole('heading', { name: en('contacts.saveToContacts') }).first()
 		).toBeVisible();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Carol from history');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Carol from history');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 
 		await expect(page.getByText('Carol from history', { exact: true }).first()).toBeVisible();
@@ -194,7 +194,7 @@ test.describe('desktop', () => {
 		await page.getByText(REGISTRY_NAME, { exact: true }).first().click();
 		// Recognised, but still not the person's word for them — so still offered.
 		await page.getByRole('button', { name: en('contacts.saveToContacts'), exact: true }).click();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Bob from the gym');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Bob from the gym');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 
 		await expect(page.getByText('Bob from the gym', { exact: true }).first()).toBeVisible();
@@ -212,7 +212,7 @@ test.describe('phone', () => {
 
 		await page.getByText(STRANGER_SHORT, { exact: true }).first().click();
 		await page.getByRole('button', { name: en('contacts.saveToContacts'), exact: true }).click();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Carol from history');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Carol from history');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 		await expect(page.getByText('Carol from history', { exact: true }).first()).toBeVisible();
 	});

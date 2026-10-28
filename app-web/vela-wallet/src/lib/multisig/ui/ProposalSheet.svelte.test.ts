@@ -13,6 +13,7 @@
  * is the sheet.
  */
 import { tick } from 'svelte';
+import type { SigningMessages } from '$lib/signing/messages';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
@@ -74,7 +75,10 @@ vi.mock('../core/kernel', () => ({
 		!!a && !!b && a.toLowerCase() === b.toLowerCase()
 }));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('$lib/services/networks', () => ({ nativeSymbol: () => 'xDAI' }));
+vi.mock('$lib/services/networks', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/networks')>()),
+	nativeSymbol: () => 'xDAI'
+}));
 
 const { default: ProposalSheet } = await import('./ProposalSheet.svelte');
 
@@ -115,9 +119,16 @@ function item(overrides: Record<string, unknown> = {}) {
 
 const account = { address: SAFE, genesis: {}, owners: [ME, OTHER], threshold: 2 } as any;
 
+/** The signing sheet's words, each its own name (a proposal's call reads as that sheet does). */
+const names = { get: (_: object, key: string | symbol) => String(key) };
+const signing = new Proxy({} as SigningMessages, {
+	get: (_, key) => (key === 'certain' ? new Proxy({}, names) : String(key))
+});
+
 function show(props: Record<string, unknown> = {}) {
 	return render(ProposalSheet, {
 		props: {
+			signing,
 			m: words(),
 			account,
 			chainId: 100,

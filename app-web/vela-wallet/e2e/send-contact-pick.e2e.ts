@@ -71,8 +71,8 @@ async function addContact(page: Page, name: string, address: string): Promise<vo
 		.first()
 		.click();
 	await page.getByRole('menuitem', { name: en('contacts.addTitle') }).click();
-	await page.getByLabel(en('contacts.nameLabel')).fill(name);
-	await page.getByLabel(en('contacts.addressLabel')).fill(address);
+	await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill(name);
+	await page.getByLabel(en('contacts.addressLabel'), { exact: true }).fill(address);
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await expect(page.getByText(name, { exact: true })).toBeVisible();
 }

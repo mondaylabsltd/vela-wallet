@@ -87,6 +87,8 @@ test('a chosen currency converts the total with a reachable rate source (SC-104)
 
 	// Back on the home: 4,500 × 25,000, in the chosen currency's glyph.
 	await page.goto('/en/wallet');
-	await expect(page.getByText('₫112,500,000', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('₫112,500,000', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await expect(page.getByText('$4,500', { exact: true })).toHaveCount(0);
 });

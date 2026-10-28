@@ -289,7 +289,7 @@ test('home, the token page and the account switcher: no figure until the currenc
 	);
 	expect(texts(token.before)).not.toMatch(FIAT_FIGURE);
 	expect(texts(token.before)).toContain('1.5 ETH');
-	expect(texts(token.after)).toContain('1 ETH = ₫75,000,000.00');
+	expect(texts(token.after)).toContain('1 ETH = ₫75,000,000');
 	expect(moved(token.before, token.after), 'the token page').toEqual([]);
 
 	// --- the account switcher: each account's total, and their sum ------------
@@ -297,7 +297,10 @@ test('home, the token page and the account switcher: no figure until the currenc
 		page,
 		rate,
 		async (p) => {
-			await p.getByText('E2E Wallet').first().click();
+			await p
+				.getByRole('button', { name: /E2E Wallet/ })
+				.first()
+				.click();
 			await expect(p.getByRole('dialog')).toBeVisible();
 		},
 		async (p) =>

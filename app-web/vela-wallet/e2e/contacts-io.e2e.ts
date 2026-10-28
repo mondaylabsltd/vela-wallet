@@ -43,8 +43,8 @@ async function plusMenu(page: Page, row: string): Promise<void> {
 
 async function addContact(page: Page, name: string, address: string): Promise<void> {
 	await plusMenu(page, en('contacts.addTitle'));
-	await page.getByLabel(en('contacts.nameLabel')).fill(name);
-	await page.getByLabel(en('contacts.addressLabel')).fill(address);
+	await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill(name);
+	await page.getByLabel(en('contacts.addressLabel'), { exact: true }).fill(address);
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
@@ -90,10 +90,10 @@ test('export → delete → import restores the book; re-import changes nothing;
 	await page.getByRole('option', { name: /Alice/ }).click();
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await expect(
-		page.getByText(en('contacts.membersCount').replace('{{count}}', '1'), { exact: true })
+		page.getByText(en('contacts.memberCount_one').replace('{{count}}', '1'), { exact: true })
 	).toBeVisible();
 	await page
-		.getByRole('button', { name: en('contacts.cancel') })
+		.getByRole('button', { name: en('onboarding.common.back'), exact: true })
 		.first()
 		.click();
 
@@ -128,10 +128,10 @@ test('export → delete → import restores the book; re-import changes nothing;
 		.getByRole('button', { name: en('contacts.edit') })
 		.first()
 		.click();
-	await page.getByLabel(en('contacts.nameLabel')).fill('Alice Local');
+	await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Alice Local');
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await page
-		.getByRole('button', { name: en('contacts.cancel') })
+		.getByRole('button', { name: en('onboarding.common.back'), exact: true })
 		.first()
 		.click();
 	await importFile(page, () => plusMenu(page, en('contacts.importFile')), 'backup.json', backup);
@@ -154,7 +154,7 @@ test('export → delete → import restores the book; re-import changes nothing;
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 	await page.getByText('Payroll', { exact: true }).click();
 	await expect(
-		page.getByText(en('contacts.membersCount').replace('{{count}}', '1'), { exact: true })
+		page.getByText(en('contacts.memberCount_one').replace('{{count}}', '1'), { exact: true })
 	).toBeVisible();
 });
 
@@ -242,7 +242,7 @@ test('a CSV imported into a group seats every valid row in it', async ({ page })
 	);
 	// Alice (existing, name kept) and Bob (new) are both members now.
 	await expect(
-		page.getByText(en('contacts.membersCount').replace('{{count}}', '2'), { exact: true })
+		page.getByText(en('contacts.memberCount_other').replace('{{count}}', '2'), { exact: true })
 	).toBeVisible();
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 	await expect(page.getByText('Bob', { exact: true })).toBeVisible();

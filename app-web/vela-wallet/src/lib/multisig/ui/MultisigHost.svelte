@@ -153,6 +153,7 @@
 	     Every way out is the request's to answer. -->
 	{#key sheet.request.rid}
 		<ProposalSheet
+			{signing}
 			{m}
 			account={dappAccount}
 			chainId={sheet.request.chainId}

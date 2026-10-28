@@ -71,6 +71,8 @@ async function playSite(
 				body: JSON.stringify(answer.body)
 			});
 		}
+		// The wallet's reachability probe (set-11): the site is up.
+		if (url.pathname === '/' && request.method() === 'HEAD') return route.fulfill({ status: 200 });
 		return route.abort('failed');
 	});
 	return { connect: () => connect, exchanged: () => exchanged };

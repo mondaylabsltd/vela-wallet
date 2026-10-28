@@ -26,7 +26,8 @@
 	 * there is one implementation of "the two ways in", not two.
 	 */
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import BrandMark from '$lib/ui/BrandMark.svelte';
@@ -37,7 +38,12 @@
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import { markIntroSeen, shouldShowIntro, welcomeBelongsInWallet } from '$lib/intro/gate';
+	import {
+		STAY_PARAM,
+		markIntroSeen,
+		shouldShowIntro,
+		welcomeBelongsInWallet
+	} from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '$lib/i18n/locales';
@@ -227,6 +233,21 @@
 			starting = false;
 		}
 	}
+
+	/**
+	 * `?stay` keeps a session that cannot read its wallets from being bounced
+	 * back and forth (ob-6); once read it has done its job, and the address
+	 * bar shows the plain Welcome address.
+	 */
+	afterNavigate(() => {
+		// The address as the browser holds it: the extension serves this page
+		// as `en.html`, and only the query changes.
+		const url = new URL(location.href);
+		if (!url.searchParams.has(STAY_PARAM)) return;
+		url.searchParams.delete(STAY_PARAM);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address, minus one query parameter
+		replaceState(url, page.state);
+	});
 
 	onMount(() => {
 		// ob-6: a signed-in person who opens `/`, `/en` or presses Back into
