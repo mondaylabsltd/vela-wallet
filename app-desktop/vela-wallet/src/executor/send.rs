@@ -527,6 +527,8 @@ pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
     SendRecipientRisk {
         is_contract: is_contract(chain_id, address),
         first_time: Some(first_time(address)),
+        // The local records are read here, never fetched: always read.
+        history_unread: false,
     }
 }
 

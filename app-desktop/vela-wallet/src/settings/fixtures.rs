@@ -558,6 +558,8 @@ pub fn refused_dapp_add(
         rpc_host: Some("rpc.example-l2.org".to_owned()),
         explorer_host: Some("explorer.example-l2.org".to_owned()),
         from_site: true,
+        rpc_from_site: false,
+        can_add_unverified: false,
         phase: NetDappAddPhase::NotCompatible,
         reported_chain_id: None,
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),

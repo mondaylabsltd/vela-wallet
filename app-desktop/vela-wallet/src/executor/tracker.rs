@@ -354,6 +354,18 @@ impl Machine for TxTracker {
                 Answer::Now(TrackShellResult::RecordsPatched)
             }
 
+            // The web's nonce probe after a reply lost at submit (round 3,
+            // send-5): not read here yet — "no answer" is the honest one, and
+            // the core then keeps the relay's own grace, as before.
+            TrackOperation::ReadNonce { user_op_hash, .. } => {
+                Answer::Now(TrackShellResult::NonceRead {
+                    user_op_hash: user_op_hash.clone(),
+                    now_ms: now_ms(),
+                    nonce: None,
+                    head_block: None,
+                })
+            }
+
             // The single auto-add entry point: the AUTHENTIC logs of the
             // receipt that confirmed this op, handed to `token_trust`.
             TrackOperation::NotifyConfirmed {

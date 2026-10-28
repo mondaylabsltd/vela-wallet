@@ -293,6 +293,7 @@ pub fn send_state_pin(
             .then_some(vela_core::app::send::SendHoldReason::FeeRejected),
         refusal_key: Some(refusal_key(reason).to_owned()),
         kind: None,
+        still_unknown: false,
         transfers: Vec::new(),
         coins: Vec::new(),
         amount: "120".to_owned(),
