@@ -2511,7 +2511,7 @@ mod tests {
             best_effort: true,
             to_own_token: false,
             terms_off_chain: false,
-            reading: ClearReading::default(),
+            reading: vela_core::app::clear_signing::ClearReading::default(),
         });
         clear.record_intent = None;
         assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);

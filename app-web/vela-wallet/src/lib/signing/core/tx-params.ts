@@ -61,10 +61,26 @@ export function txKickoff(
 	method: string,
 	paramsJson: string,
 	chainId: number,
-	locale: ClearLocale
+	locale: ClearLocale,
+	/**
+	 * The signing account — so a line can say "this account" and a swap
+	 * paying a stranger can say so (cs-2) — and whether the core may ask for
+	 * the target's code (`rpc_get_code`, cs-13), which `clear-executor`
+	 * answers.
+	 */
+	reader: { from?: string | null; probeCode?: boolean } = {}
 ): ClearSigningEvent {
+	const from = reader.from ?? null;
+	const probe_code = reader.probeCode ?? false;
 	if (method === 'wallet_sendCalls') {
-		return { type: 'resolve_batch', params_json: paramsJson, chain_id: chainId, locale };
+		return {
+			type: 'resolve_batch',
+			params_json: paramsJson,
+			chain_id: chainId,
+			locale,
+			from,
+			probe_code
+		};
 	}
 	const tx = txParams(paramsJson);
 	return {
@@ -73,6 +89,8 @@ export function txKickoff(
 		data: tx?.data ?? null,
 		value: tx?.value ?? null,
 		chain_id: chainId,
-		locale
+		locale,
+		from,
+		probe_code
 	};
 }

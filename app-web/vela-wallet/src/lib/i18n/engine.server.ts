@@ -35,6 +35,7 @@ import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
 import {
+	CERTAIN_KEYS,
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
 	SIM_WILL_FAIL_KEY,
@@ -1367,6 +1368,9 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		certain: Object.fromEntries(
+			CERTAIN_KEYS.map((key) => [key, k(`componentsUi.signing.certain.${key}`)])
+		) as SigningMessages['certain'],
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.

@@ -91,7 +91,8 @@ const ALL = {
 	typedDataIntent: true,
 	ethSignIntent: true,
 	batchIntent: true,
-	intentContractCall: true
+	intentContractCall: true,
+	labelAddsToAllowance: true
 } satisfies Record<ClearTerm, true>;
 
 export const CLEAR_TERMS = Object.keys(ALL) as ClearTerm[];

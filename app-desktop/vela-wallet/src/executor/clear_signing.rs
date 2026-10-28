@@ -91,6 +91,18 @@ impl Machine for ClearSigning {
             ClearOperation::Now => Answer::Now(ClearShellResult::Clock {
                 now_ms: crate::executor::now_ms(),
             }),
+
+            // Asked only of a shell that sets `probe_code`, which this one
+            // does not yet; an answer of "unknown" names as before.
+            ClearOperation::RpcGetCode { chain_id, address } => {
+                Answer::Now(ClearShellResult::RpcAnswer {
+                    probe: vela_core::app::clear_signing::ClearProbe::Code,
+                    chain_id: *chain_id,
+                    to: address.clone(),
+                    result: None,
+                    rpc_error: false,
+                })
+            }
         }
     }
 }

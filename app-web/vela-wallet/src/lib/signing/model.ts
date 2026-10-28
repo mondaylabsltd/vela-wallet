@@ -79,6 +79,12 @@ export interface KeyValueRow {
 	value: string;
 	valueTone?: Tone;
 	mono?: boolean;
+	/**
+	 * Who wrote this row's label, when it is not Vela's own reading of the
+	 * bytes ("Label from a fetched description (…)", cs-14): a faint marker
+	 * beside the label that says so when tapped.
+	 */
+	source?: string;
 }
 
 /**
@@ -182,7 +188,21 @@ export type Block =
 			/** Drawn under the chips: the field a custom cap is typed into. */
 			custom?: AllowanceInput;
 	  }
-	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
+	| {
+			kind: 'party';
+			label: string;
+			name: string;
+			address?: string;
+			badge?: PartyBadge;
+			/** As a row's `source` (cs-14). */
+			source?: string;
+	  }
+	/**
+	 * One small line saying where something came from (cs-14): the reading's
+	 * provenance under the intent, the contract on the card's face, a token
+	 * named only by its own contract. Muted; `caution`/`danger` tint it.
+	 */
+	| { kind: 'source'; text: string; tone: 'neutral' | 'caution' | 'danger' }
 	| { kind: 'rows'; rows: KeyValueRow[] }
 	| WarningBlock
 	| { kind: 'positive'; text: string }
@@ -399,6 +419,8 @@ export interface SigningModel {
 		 */
 		host: string;
 		letter: string;
+		/** The site named itself: "Name and icon from the site itself" (cs-14). */
+		claim?: string;
 		tint: string;
 		/**
 		 * The site's own icon, tried in order over the letter (founder ruling
@@ -455,6 +477,8 @@ export interface SigningModel {
 		enabled: boolean;
 		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
+		/** Nobody could read the request: the red "Sign anyway" (cs-8). */
+		danger?: boolean;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;

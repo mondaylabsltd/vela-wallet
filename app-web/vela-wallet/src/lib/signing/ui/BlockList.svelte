@@ -10,6 +10,7 @@
 	import NftHero from './NftHero.svelte';
 	import PartyRow from './PartyRow.svelte';
 	import PositiveNote from './PositiveNote.svelte';
+	import SourceLine from './SourceLine.svelte';
 	import SwapPair from './SwapPair.svelte';
 	import VerdictPlace from './VerdictPlace.svelte';
 	import WarningBanner from './WarningBanner.svelte';
@@ -55,7 +56,15 @@
 			oncustom={(text) => oncustom?.(text, block.leg)}
 		/>
 	{:else if block.kind === 'party'}
-		<PartyRow label={block.label} name={block.name} address={block.address} badge={block.badge} />
+		<PartyRow
+			label={block.label}
+			name={block.name}
+			address={block.address}
+			badge={block.badge}
+			source={block.source}
+		/>
+	{:else if block.kind === 'source'}
+		<SourceLine text={block.text} tone={block.tone} />
 	{:else if block.kind === 'rows'}
 		<KeyValueRows rows={block.rows} />
 	{:else if block.kind === 'warning'}

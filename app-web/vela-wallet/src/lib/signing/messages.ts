@@ -80,6 +80,42 @@ export interface HandoffMessages {
 	places: Record<string, string>;
 }
 
+export const CERTAIN_KEYS = [
+	'readByVela',
+	'readByVelaSignature',
+	'describedBuiltIn',
+	'describedBuiltInPlain',
+	'describedFetched',
+	'describedFetchedPlain',
+	'shapeOnly',
+	'selectorName',
+	'siteClaim',
+	'labelFrom',
+	'sourceBuiltIn',
+	'sourceFetched',
+	'sourceSelectorDb',
+	'sourceShape',
+	'sourceList',
+	'contractNamed',
+	'contractUnnamed',
+	'contractNoCode',
+	'contradiction',
+	'noCode',
+	'elsewhere',
+	'dustMinimum',
+	'tokenByContract',
+	'thisAccount',
+	'allowsUpTo',
+	'allowsMore',
+	'approveAllYour',
+	'signAnyway',
+	'chipGrantAll',
+	'chooseGrant',
+	'labelSource',
+	'byVela'
+] as const;
+export type CertainKey = (typeof CERTAIN_KEYS)[number];
+
 export interface SigningMessages {
 	panelTitle: string;
 	signingAccount: string;
@@ -329,6 +365,13 @@ export interface SigningMessages {
 	 * "Unlimited". A result's text is English; `localizedTerms` in `live.ts`
 	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
 	 */
+	/**
+	 * What is CERTAIN and what is INTERPRETED (clear-signing audit cs-1…cs-19,
+	 * `componentsUi.signing.certain`): the provenance line under the intent,
+	 * each row's source, the contract on the card's face, and the danger lines
+	 * the certain decode raises against a description.
+	 */
+	certain: Record<CertainKey, string>;
 	terms: Record<string, string>;
 	/**
 	 * Spec 077: the landing a submitted transaction shows, in the SEND

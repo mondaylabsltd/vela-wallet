@@ -24,6 +24,7 @@ import type { ClearBatchCall } from '$lib/core/generated/ClearBatchCall';
 import type { ClearBatchView } from '$lib/core/generated/ClearBatchView';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSignResult } from '$lib/core/generated/ClearSignResult';
+import type { ClearLineSource } from '$lib/core/generated/ClearLineSource';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -46,6 +47,8 @@ import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
+import { getEthereumDataURL } from '$lib/services/endpoints';
+import { txParams } from './core/tx-params';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
 import { resolvedFormatKeys } from '$lib/services/locale-format';
 import type { SigningMessages } from './messages';
@@ -105,6 +108,12 @@ export interface SigningLiveInputs {
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
+	/**
+	 * The descriptor service's host, as the provenance line names it
+	 * ("… via ERC-7730 · ethereum-data.getvela.app · unauthenticated").
+	 * Absent: read from the service settings.
+	 */
+	descriptorHost?: string;
 }
 
 /** The core's risk grade, in the drawn vocabulary. */
@@ -149,15 +158,181 @@ function letterOf(name: string): string {
 }
 
 /** A decoded field as the row it draws, keeping the core's flags verbatim. */
-function fieldRow(field: ClearSignField): KeyValueRow {
+function fieldRow(field: ClearSignField, inputs?: SigningLiveInputs): KeyValueRow {
+	const source = inputs ? labelSource(field.source, inputs) : undefined;
 	return {
 		label: field.label,
-		value: field.value,
+		value: field.this_account && inputs ? inputs.m.certain.thisAccount : field.value,
 		valueTone: field.warning ? 'danger' : field.unverified ? 'caution' : undefined,
 		// An address reads as monospace; a contract the core names
 		// ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
-		mono: (field.address !== null && field.value.startsWith('0x')) || field.token_address !== null
+		mono:
+			!(field.this_account && inputs) &&
+			((field.address !== null && field.value.startsWith('0x')) || field.token_address !== null),
+		...(source ? { source } : {})
 	};
+}
+
+/**
+ * The descriptor service's host, for the provenance line: the one the
+ * person's settings point at (which they can edit), never a name the
+ * descriptor gives itself.
+ */
+function descriptorHostOf(inputs: SigningLiveInputs): string {
+	if (inputs.descriptorHost !== undefined) return inputs.descriptorHost;
+	try {
+		return new URL(getEthereumDataURL()).host;
+	} catch {
+		return '';
+	}
+}
+
+/** Who a line's label is from, in the words a row's marker says it. */
+function sourceName(source: ClearLineSource, inputs: SigningLiveInputs): string | null {
+	const c = inputs.m.certain;
+	switch (source) {
+		case 'vela':
+			return null;
+		case 'built_in':
+			return c.sourceBuiltIn;
+		case 'fetched':
+			return fill(c.sourceFetched, { host: descriptorHostOf(inputs) });
+		case 'selector_db':
+			return c.sourceSelectorDb;
+		case 'shape':
+			return c.sourceShape;
+	}
+}
+
+/** "Label from …" — the faint marker on a row a description labelled (cs-14). */
+function labelSource(source: ClearLineSource, inputs: SigningLiveInputs): string | undefined {
+	const name = sourceName(source, inputs);
+	return name === null ? undefined : fill(inputs.m.certain.labelFrom, { source: name });
+}
+
+/**
+ * The one small line under the intent that says where the reading came from
+ * (cs-14): what Vela read from the bytes, or whose description it is — and a
+ * description is not a guarantee.
+ */
+function provenanceBlock(result: ClearSignResult, inputs: SigningLiveInputs): Block {
+	const c = inputs.m.certain;
+	const reading = result.reading;
+	const owner = reading.descriptor_owner;
+	switch (reading.source) {
+		case 'vela':
+			return {
+				kind: 'source',
+				text: result.sign_type === 'signature' ? c.readByVelaSignature : c.readByVela,
+				tone: 'neutral'
+			};
+		case 'built_in':
+			return {
+				kind: 'source',
+				text: owner ? fill(c.describedBuiltIn, { owner }) : c.describedBuiltInPlain,
+				tone: 'neutral'
+			};
+		case 'fetched': {
+			const host = descriptorHostOf(inputs);
+			return {
+				kind: 'source',
+				text: owner
+					? fill(c.describedFetched, { owner, host })
+					: fill(c.describedFetchedPlain, { host }),
+				tone: 'neutral'
+			};
+		}
+		case 'shape':
+			return {
+				kind: 'source',
+				text: fill(c.shapeOnly, { intent: result.intent }),
+				tone: 'neutral'
+			};
+		case 'selector_db':
+			// A name anyone can register is a caution in itself (cs-7).
+			return {
+				kind: 'warning',
+				tone: 'caution',
+				text: fill(c.selectorName, { name: reading.selector_name ?? '' })
+			};
+	}
+}
+
+/**
+ * The contract on the card's face (cs-8, cs-14): its address, and its name
+ * with who called it so — or that nobody named it, or that nothing lives
+ * there.
+ */
+function contractBlock(
+	address: string | null,
+	name: string | null,
+	namedBy: ClearLineSource | null,
+	noCode: boolean,
+	inputs: SigningLiveInputs
+): Block | null {
+	if (!address) return null;
+	const c = inputs.m.certain;
+	const short = shortenAddress(address);
+	if (noCode)
+		return { kind: 'source', text: fill(c.contractNoCode, { address: short }), tone: 'danger' };
+	if (!name)
+		return { kind: 'source', text: fill(c.contractUnnamed, { address: short }), tone: 'neutral' };
+	const source =
+		namedBy === 'fetched'
+			? fill(c.sourceFetched, { host: descriptorHostOf(inputs) })
+			: ((namedBy && namedBy !== 'built_in' ? sourceName(namedBy, inputs) : null) ?? c.sourceList);
+	return {
+		kind: 'source',
+		text: fill(c.contractNamed, { address: short, name, source }),
+		tone: 'neutral'
+	};
+}
+
+/** The symbol an amount or a Token row names: "250 USDC?" → "USDC?". */
+function symbolIn(value: string): string {
+	return value.split(' (')[0].trim().split(' ').pop() ?? value;
+}
+
+/**
+ * The lines the certain decode raises about a reading (cs-1…cs-4): what a
+ * description said against it, an output paid to a stranger, a dust minimum,
+ * and each token whose name is only its own contract's word. `prefix` marks
+ * a batch leg ("#3 ").
+ */
+function certainLines(result: ClearSignResult, inputs: SigningLiveInputs, prefix = ''): Block[] {
+	const c = inputs.m.certain;
+	const blocks: Block[] = [];
+	for (const words of result.reading.contradictions) {
+		blocks.push({
+			kind: 'warning',
+			tone: 'danger',
+			text: prefix + fill(c.contradiction, { words })
+		});
+	}
+	if (result.reading.goes_elsewhere) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: prefix + c.elsewhere });
+	}
+	if (result.reading.dust_minimum) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: prefix + c.dustMinimum });
+	}
+	const seen = new Set<string>();
+	for (const field of result.fields) {
+		if (!field.token_named_by_contract || !field.token_address || seen.has(field.token_address)) {
+			continue;
+		}
+		seen.add(field.token_address);
+		blocks.push({
+			kind: 'source',
+			tone: 'caution',
+			text:
+				prefix +
+				fill(c.tokenByContract, {
+					symbol: symbolIn(field.value),
+					address: shortenAddress(field.token_address)
+				})
+		});
+	}
+	return blocks;
 }
 
 /**
@@ -201,7 +376,11 @@ function amountLine(
  * ruling: Permit2 bundles revert when the wallet re-encodes the approve), so
  * the site's ask is what goes out unless the person picks a cap.
  */
-function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceChip[] {
+function allowanceChips(
+	editor: GuardEditorView,
+	m: SigningMessages,
+	boolean = false
+): AllowanceChip[] {
 	const state = (mode: string): AllowanceChip['state'] => {
 		if (editor.mode === mode) return 'selected';
 		// A request of 0 has no amount of its own to keep.
@@ -212,12 +391,23 @@ function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceC
 		if (mode === 'revoke' && !editor.revoke_offered) return 'disabled';
 		return 'idle';
 	};
+	// cs-17: a grant-all has no amount to cap — its choice is to allow all
+	// or to revoke, and the core waits for that deliberate tap.
+	if (boolean) {
+		return [
+			{ id: 'grant', label: m.certain.chipGrantAll, state: state('grant') },
+			{ id: 'revoke', label: m.chipRevoke, state: state('revoke') }
+		];
+	}
 	const chips: AllowanceChip[] = [
 		{ id: 'requested', label: m.chipRequested, state: state('requested') },
 		{ id: 'balance', label: m.chipBalance, state: state('balance') },
-		{ id: 'custom', label: m.chipCustom, state: state('custom') },
-		{ id: 'revoke', label: m.chipRevoke, state: state('revoke') }
+		{ id: 'custom', label: m.chipCustom, state: state('custom') }
 	];
+	// cs-16: increaseAllowance can only re-encode its increment, so "Revoke"
+	// would sign an increase of 0 — not offered, not drawn.
+	if (editor.revoke_offered)
+		chips.push({ id: 'revoke', label: m.chipRevoke, state: state('revoke') });
 	return chips;
 }
 
@@ -245,7 +435,9 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 	if (guard.surface !== 'approval_editor' || !guard.editor) return null;
 	return allowanceBlock(guard.editor, guard.meta, m, {
 		decimalsUnverified: guard.decimals_unverified,
-		increaseTotal: guard.increase_total
+		increaseTotal: guard.increase_total,
+		boolean: guard.detected?.is_boolean_grant === true,
+		adds: guard.detected?.kind === 'increase_allowance'
 	});
 }
 
@@ -282,9 +474,24 @@ function allowanceBlock(
 		decimalsUnverified?: boolean;
 		increaseTotal?: GuardView['increase_total'];
 		leg?: number;
+		/** A grant-all (setApprovalForAll): allow all or revoke, no amount. */
+		boolean?: boolean;
+		/** increaseAllowance: the amount ADDS to what is allowed (cs-16). */
+		adds?: boolean;
 	}
 ): Block {
 	const symbol = meta.loading ? '…' : meta.symbol;
+	if (extra.boolean) {
+		const picked = editor.choice?.type;
+		return {
+			kind: 'allowance',
+			leg: extra.leg,
+			label: m.labelOperator,
+			value: picked === 'grant' ? m.certain.chipGrantAll : picked === 'revoke' ? m.chipRevoke : '—',
+			valueTone: picked === 'grant' ? 'danger' : 'neutral',
+			chips: allowanceChips(editor, m, true)
+		};
+	}
 	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
 	// kept, reads as the danger it is (and `guardWarnings` adds the sentence).
 	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
@@ -292,7 +499,9 @@ function allowanceBlock(
 	return {
 		kind: 'allowance',
 		leg: extra.leg,
-		label: fill(m.labelSpendingCap, { symbol }),
+		label: extra.adds
+			? `${m.terms.labelAddsToAllowance ?? m.labelSpendingCap} · ${symbol}`
+			: fill(m.labelSpendingCap, { symbol }),
 		// In tokens, never base units: a 5 USDC cap drawn as "5000000" reads
 		// as five million. The send screens' exact figure, at the guard's
 		// decimals (which `decimals_unverified` flags when they are a guess).
@@ -303,10 +512,14 @@ function allowanceBlock(
 		valueTone: settled ? 'neutral' : 'danger',
 		chips: allowanceChips(editor, m),
 		note: extra.decimalsUnverified ? m.warnUnverifiedAmount : undefined,
+		// In tokens, like the cap above it: "50000000" read as fifty million.
 		resultingTotal:
 			total === null || total.total === null
 				? undefined
-				: { label: m.labelResultingTotal, value: total.total },
+				: {
+						label: m.labelResultingTotal,
+						value: `${exactAmount(fromBaseUnits(BigInt(total.total), meta.decimals))} ${symbol}`
+					},
 		// The field appears only on the chip that needs one, and it carries the
 		// CORE's text: a keystroke the machine rejected must not sit on screen
 		// as though it had been taken.
@@ -376,7 +589,12 @@ function selfCallBlockedText(
  * calls and what coin it moves. Never omitted: the core hands a row for every
  * call.
  */
-function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages): Block {
+function batchCallCard(
+	call: ClearBatchCall,
+	symbol: string,
+	m: SigningMessages,
+	inputs?: SigningLiveInputs
+): Block {
 	const step = (action: string) => fill(m.batchStep, { index: String(call.index), action });
 	const tone = toneOf(call.risk);
 	// What the call moves of the chain's own coin, and whom it calls: inside a
@@ -390,18 +608,34 @@ function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages)
 	const target: KeyValueRow[] =
 		call.to === null
 			? []
-			: call.to_name
-				? [{ label: m.labelInteracting, value: call.to_name }]
-				: [{ label: m.labelInteracting, value: call.to, mono: true }];
+			: call.no_code
+				? [
+						{
+							label: m.labelInteracting,
+							value: fill(m.certain.contractNoCode, { address: shortenAddress(call.to) }),
+							valueTone: 'danger'
+						}
+					]
+				: call.to_name
+					? [{ label: m.labelInteracting, value: call.to_name }]
+					: [{ label: m.labelInteracting, value: call.to, mono: true }];
 	if (call.surface === 'clear_sign' && call.result) {
+		// cs-14: every leg says whose reading it is.
+		const source = inputs ? sourceName(call.result.reading.source, inputs) : null;
+		const readBy: KeyValueRow[] = inputs
+			? [{ label: m.certain.labelSource, value: source ?? m.certain.byVela }]
+			: [];
 		return {
 			kind: 'card',
-			title: step(call.result.intent),
+			title: step(
+				call.result.reading.selector_name !== null ? m.terms.intentContractCall : call.result.intent
+			),
 			tone,
 			rows: [
-				...call.result.fields.filter((field) => !field.detail).map(fieldRow),
+				...call.result.fields.filter((field) => !field.detail).map((f) => fieldRow(f, inputs)),
 				...coin,
-				...target
+				...target,
+				...readBy
 			]
 		};
 	}
@@ -442,7 +676,7 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 			text: fill(m.summaryBatch, { count: String(batch.calls.length) }),
 			tone: 'accent'
 		},
-		...batch.calls.map((call) => batchCallCard(call, symbol, m))
+		...batch.calls.map((call) => batchCallCard(call, symbol, m, inputs))
 	];
 	if (batch.total_amount !== null && batch.total_value_wei !== '0') {
 		blocks.push({
@@ -453,13 +687,27 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	// The guard reads every call's raw calldata: a cap card per unbounded call.
 	blocks.push(...legBlocks(guard, m));
 	blocks.push(...guardWarnings(guard, m));
+	// cs-14: what the certain decode says against a leg's description, by leg.
+	for (const call of batch.calls) {
+		const prefix = `#${call.index} `;
+		if (call.no_code && sign.request) {
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: prefix + fill(m.certain.noCode, { chain: chainName(sign.request.chain_id) })
+			});
+		}
+		if (call.result) blocks.push(...certainLines(call.result, inputs, prefix));
+	}
 	const results = batch.calls.flatMap((call): ClearSignResult[] =>
 		call.result ? [call.result] : []
 	);
 	if (results.some((r) => r.to_own_token)) {
 		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 	}
-	if (results.some((r) => r.provenance === 'fetched')) {
+	// A fetched description is the service's word; a shape match is no one's
+	// (cs-15), so it is not blamed on the service.
+	if (results.some((r) => r.reading.source === 'fetched')) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 	}
 	if (results.some((r) => r.terms_off_chain)) {
@@ -470,8 +718,15 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	if (results.some((r) => r.partial)) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnPartial });
 	}
-	if (results.some((r) => r.best_effort)) {
-		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
+	for (const call of batch.calls) {
+		const name = call.result?.reading.selector_name;
+		if (name) {
+			blocks.push({
+				kind: 'warning',
+				tone: 'caution',
+				text: `#${call.index} ${fill(m.certain.selectorName, { name })}`
+			});
+		}
 	}
 	if (results.some((r) => r.fields.some((f) => f.unverified))) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
@@ -519,21 +774,52 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 	const result = clear.result;
 	if (result) {
-		blocks.push({ kind: 'intent', text: result.intent, tone: toneOf(result.risk) });
+		const reading = result.reading;
+		const c = m.certain;
+		// cs-7: a name from the public database is no headline.
+		const intent =
+			reading.selector_name !== null
+				? m.terms.intentContractCall
+				: result.intent_term === 'intentApproveAllNfts' && reading.source === 'vela'
+					? fill(c.approveAllYour, {
+							collection:
+								result.contract_name ??
+								(result.contract_address ? shortenAddress(result.contract_address) : '')
+						})
+					: result.intent;
+		blocks.push({ kind: 'intent', text: intent, tone: toneOf(result.risk) });
+		blocks.push(provenanceBlock(result, inputs));
 
 		const send = result.fields.find((f) => f.role === 'send_amount');
 		const receive = result.fields.find((f) => f.role === 'receive_amount');
+		const spender = result.fields.find((f) => f.role === 'spender');
 		const currency = inputs.currency;
-		if (send && receive) {
+		// An output paid to a stranger is not "+" this account's (cs-2).
+		const received = (field: ClearSignField): AmountLine => {
+			const line = amountLine(field, false, currency);
+			return reading.goes_elsewhere ? { ...line, sign: '', tone: 'neutral' } : line;
+		};
+		if (reading.allowance && send) {
+			// cs-18: an approval's amount is a ceiling somebody else may spend,
+			// never an amount leaving now.
+			blocks.push({
+				kind: 'sentence',
+				text: fill(reading.allowance_adds ? c.allowsMore : c.allowsUpTo, {
+					spender: spender ? (spender.this_account ? c.thisAccount : spender.value) : '—',
+					amount: send.value
+				}),
+				tone: send.warning ? 'danger' : 'neutral'
+			});
+		} else if (send && receive) {
 			blocks.push({
 				kind: 'swap',
 				pay: amountLine(send, true, currency),
-				receive: amountLine(receive, false, currency)
+				receive: received(receive)
 			});
 		} else if (send) {
 			blocks.push({ kind: 'amount', line: amountLine(send, true, currency) });
 		} else if (receive) {
-			blocks.push({ kind: 'amount', line: amountLine(receive, false, currency) });
+			blocks.push({ kind: 'amount', line: received(receive) });
 		}
 		// Spec 096 F4: the coin the call sends, when its reading does not say
 		// it — the hero when nothing else is, else the batch call's own row.
@@ -542,12 +828,14 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 		for (const field of result.fields) {
 			if (field.role !== 'recipient' && field.role !== 'spender') continue;
+			const source = labelSource(field.source, inputs);
 			blocks.push({
 				kind: 'party',
 				label: field.label,
-				name: field.value,
+				name: field.this_account ? c.thisAccount : field.value,
 				address: field.address ?? undefined,
-				badge: field.unverified ? { text: m.tagUnverified, tone: 'caution' } : undefined
+				badge: field.unverified ? { text: m.tagUnverified, tone: 'caution' } : undefined,
+				...(source ? { source } : {})
 			});
 		}
 
@@ -558,6 +846,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push(...guardWarnings(guard, m));
 
 		// Whatever the core flagged, said once, in its own words.
+		blocks.push(...certainLines(result, inputs));
 		if (result.to_own_token) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 		}
@@ -572,7 +861,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		 * job, the 4-byte database has `best_effort` below, and a deployment
 		 * claims nothing to warn about.
 		 */
-		if (result.provenance === 'fetched') {
+		if (reading.source === 'fetched') {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 		}
 		if (result.terms_off_chain) {
@@ -586,15 +875,20 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.fields.some((f) => f.unverified)) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
 		}
-		if (result.best_effort) {
-			// `summaryBestEffort` carries a `{{fn}}` slot the core hands nothing
-			// for, and it was drawn unfilled ("Calling {{fn}} — …"). The other
-			// three shells say the placeholder-free sentence; so does this one.
-			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
-		}
+		// A best-effort reading said where its name came from in its own line
+		// (`provenanceBlock`, cs-7).
 
 		const rest = result.fields.filter((f) => f.role === 'generic' && f !== send && f !== receive);
-		if (rest.length > 0) blocks.push({ kind: 'rows', rows: rest.map(fieldRow) });
+		if (rest.length > 0) blocks.push({ kind: 'rows', rows: rest.map((f) => fieldRow(f, inputs)) });
+		// cs-8/cs-14: the contract, on the face.
+		const contract = contractBlock(
+			result.sign_type === 'transaction' ? result.contract_address : result.contract_address,
+			result.contract_name,
+			reading.contract_named_by,
+			false,
+			inputs
+		);
+		if (contract) blocks.push(contract);
 		return blocks;
 	}
 
@@ -633,7 +927,26 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		// Nobody could read the call — what coin it sends is still known.
 		const coin = nativeValueBlock(inputs, true);
 		if (coin) blocks.push(coin);
+		if (clear.no_code && sign.request) {
+			// cs-13: nothing lives at the target on this chain.
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.certain.noCode, { chain: chainName(sign.request.chain_id) })
+			});
+		}
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
+		// cs-8: a call nobody could read still names its contract on the face.
+		if (clear.surface === 'blind_transaction' && sign.request) {
+			const target = contractBlock(
+				txParams(sign.request.params_json)?.to ?? null,
+				null,
+				null,
+				clear.no_code,
+				inputs
+			);
+			if (target) blocks.push(target);
+		}
 		// The approval guard reads the raw calldata, not the descriptor — an
 		// approve nobody described (Permit2's own `approve`, say) still gets
 		// its cap editor, and an undecodable bundle can still be known to
@@ -1463,7 +1776,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 					host: label.host_line ?? '',
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
-					iconUrls: siteIconUrls(request.origin)
+					iconUrls: siteIconUrls(request.origin),
+					// cs-14: a name the site gave itself is the site's claim.
+					...(label.host_line ? { claim: m.certain.siteClaim } : {})
 				},
 		network: {
 			name: chainName(request.chain_id),
@@ -1491,8 +1806,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			 * template fallback once put "{{action}}" on screen (spec 027 T340).
 			 * With no intent from the core, the generic word is the honest one.
 			 */
-			action:
-				clear.surface === 'plain_send' && clear.plain_send
+			action: clear.sign_anyway
+				? m.certain.signAnyway
+				: clear.surface === 'plain_send' && clear.plain_send
 					? clear.plain_send.no_value
 						? m.confirmPlain
 						: m.confirmSend
@@ -1500,7 +1816,17 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 						? clear.confirm.intent
 						: m.confirmPlain,
 			enabled,
-			...(note ? { note } : {})
+			// cs-8: nobody could read this request — the red "Sign anyway".
+			...(clear.sign_anyway ? { danger: true } : {}),
+			...(note
+				? {
+						// cs-17: a grant-all waits for "Allow all" or "Revoke", not an amount.
+						note:
+							confirmState?.key?.endsWith('.approvalChoice') && guard.detected?.is_boolean_grant
+								? m.certain.chooseGrant
+								: note
+					}
+				: {})
 		},
 		closeLabel: m.close,
 		...(status ? { status } : {}),

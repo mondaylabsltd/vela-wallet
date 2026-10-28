@@ -12,6 +12,7 @@ import type { ClearOperation } from '$lib/core/generated/ClearOperation';
 import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
 import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
 import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
+import type { ClearReading } from '$lib/core/generated/ClearReading';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -164,6 +165,21 @@ function field(over: Partial<ClearSignField> = {}): ClearSignField {
 	} as ClearSignField;
 }
 
+/** A reading nobody graded: Vela's own, nothing raised (the core's default). */
+const READING: ClearReading = {
+	source: 'vela',
+	descriptor_owner: null,
+	descriptor_path: null,
+	contract_named_by: null,
+	contradictions: [],
+	selector_name: null,
+	goes_elsewhere: false,
+	dust_minimum: false,
+	allowance: false,
+	allowance_adds: false,
+	shape_intent: null
+};
+
 const DECODED: ClearSigningView = {
 	...INITIAL_CLEAR_VIEW,
 	resolved: true,
@@ -185,7 +201,8 @@ const DECODED: ClearSigningView = {
 		partial: false,
 		best_effort: false,
 		to_own_token: false,
-		terms_off_chain: false
+		terms_off_chain: false,
+		reading: READING
 	}
 };
 
@@ -2273,7 +2290,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 0,
 					value_wei: '1',
 					amount: '0.000000000000000001',
-					risk: 'normal'
+					risk: 'normal',
+					no_code: false
 				},
 				{
 					index: 2,
@@ -2291,7 +2309,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 68,
 					value_wei: '0',
 					amount: '0',
-					risk: 'danger'
+					risk: 'danger',
+					no_code: false
 				},
 				{
 					index: 3,
@@ -2303,7 +2322,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 36,
 					value_wei: '10000000000000000',
 					amount: '0.01',
-					risk: 'caution'
+					risk: 'caution',
+					no_code: false
 				}
 			],
 			total_value_wei: '10000000000000001',
@@ -2601,7 +2621,8 @@ describe('the readable part says what the call does (096)', () => {
 						data_bytes: 164,
 						value_wei: '0',
 						amount: '0',
-						risk: 'caution'
+						risk: 'caution',
+						no_code: false
 					},
 					{
 						index: 2,
@@ -2613,7 +2634,8 @@ describe('the readable part says what the call does (096)', () => {
 						data_bytes: 4,
 						value_wei: '0',
 						amount: '0',
-						risk: 'caution'
+						risk: 'caution',
+						no_code: false
 					}
 				],
 				total_value_wei: '0',
@@ -2704,6 +2726,15 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 				return { type: 'selector_candidates', sigs: [] };
 			case 'timer':
 				return { type: 'timed_out', token: op.token };
+			case 'rpc_get_code':
+				return {
+					type: 'rpc_answer',
+					probe: 'code',
+					chain_id: op.chain_id,
+					to: op.address,
+					result: null,
+					rpc_error: false
+				};
 		}
 	}
 
@@ -2717,14 +2748,17 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 						type: 'resolve_typed_data',
 						typed_data_json: request.params[1] as string,
 						chain_id: 56,
-						locale
+						locale,
+						from: null
 					}
 				: request.method === 'wallet_sendCalls'
 					? {
 							type: 'resolve_batch',
 							params_json: JSON.stringify(request.params),
 							chain_id: 56,
-							locale
+							locale,
+							from: null,
+							probe_code: false
 						}
 					: (() => {
 							const tx = request.params[0] as Record<string, string | undefined>;
@@ -2734,7 +2768,9 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 								data: tx.data ?? null,
 								value: tx.value ?? null,
 								chain_id: 56,
-								locale
+								locale,
+								from: null,
+								probe_code: false
 							};
 						})();
 		const core = new ClearSigningCore();

@@ -582,6 +582,15 @@
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */
 	function guardChip(id: string, leg?: number): void {
+		// cs-17: a grant-all's deliberate tap — the core's consent to allow all.
+		if (id === 'grant') {
+			signingSheet.dispatchGuard(
+				leg === undefined
+					? { type: 'grant_deliberately_chosen' }
+					: { type: 'leg_grant_deliberately_chosen', index: leg }
+			);
+			return;
+		}
 		if (id === 'requested' || id === 'balance' || id === 'custom' || id === 'revoke') {
 			// A batch leg's card talks to its OWN leg: the core ignores the
 			// single approval's `preset_selected` on a batch.

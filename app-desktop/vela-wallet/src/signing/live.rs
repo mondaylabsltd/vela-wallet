@@ -2827,7 +2827,7 @@ mod tests {
             label_term: None,
             value_term: None,
             bound: None,
-            source: ClearLineSource::Vela,
+            source: vela_core::app::clear_signing::ClearLineSource::Vela,
             this_account: false,
             token_named_by_contract: false,
             dust: false,
@@ -2891,7 +2891,7 @@ mod tests {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
-            reading: ClearReading::default(),
+            reading: vela_core::app::clear_signing::ClearReading::default(),
         }
     }
 
@@ -3391,6 +3391,7 @@ mod tests {
                 Op::Now => Res::Clock {
                     now_ms: 1_790_957_000_000.0,
                 },
+                Op::RpcGetCode { .. } => unreachable!("this shell asks no code check"),
                 Op::HttpGet { path } => Res::DescriptorFetched {
                     path: path.clone(),
                     json: path
