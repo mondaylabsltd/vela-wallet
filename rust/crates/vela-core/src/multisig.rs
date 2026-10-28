@@ -178,6 +178,33 @@ pub struct PasskeyApproval {
     pub s: String,
 }
 
+/// An owner that is a plain account (an EOA in MetaMask, Rabby, …): its
+/// EIP-712 signature of the SafeTx (`eth_signTypedData_v4`), `r ‖ s ‖ v`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EcdsaApproval {
+    pub owner: String,
+    pub signature: String,
+}
+
+/// One owner's approval, either kind — the genesis service's `Approval`; the
+/// two are told apart by their fields.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Approval {
+    Passkey(Box<PasskeyApproval>),
+    Ecdsa(EcdsaApproval),
+}
+
+impl Approval {
+    pub fn owner(&self) -> &str {
+        match self {
+            Self::Passkey(a) => &a.owner,
+            Self::Ecdsa(a) => &a.owner,
+        }
+    }
+}
+
 /// One call of the executor's user operation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -235,19 +262,73 @@ fn encode_setup(owners: &[Address], threshold: u64, fallback_handler: Address) -
     out
 }
 
-fn proxy_init_code_hash() -> Result<B256, CoreError> {
-    let mut code = unhex(safe::PROXY_CREATION_CODE)?;
-    code.extend_from_slice(&word_addr(addr(safe::SAFE_SINGLETON)?));
+/// Safe's v1.3.0 proxy factories' `proxyCreationCode()` (canonical and
+/// eip155 share it); v1.4.1's is [`safe::PROXY_CREATION_CODE`].
+const PROXY_CREATION_CODE_130: &str = "608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea2646970667358221220d1429297349653a4918076d650332de1a1068c5f3e07c5c82360c277770b955264736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564";
+
+/// Safe's v1.5.0 proxy factory's `proxyCreationCode()`.
+const PROXY_CREATION_CODE_150: &str = "608060405234801561001057600080fd5b506040516101b63803806101b68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101946022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555050607b806101196000396000f3fe608060405260005463a619486e60003560e01c14156024578060601b606c5260206060f35b3660008037600080366000845af43d6000803e806040573d6000fd5b3d6000f3fea2646970667358221220e61834ebd2d8cd909d362bf67c47ef58fd665df38e6dd036ce65611101d072e964736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564";
+
+/// The proxy factories a genesis may name, and each one's proxy creation code.
+const KNOWN_FACTORIES: [(&str, &str); 4] = [
+    (
+        "0xa6B71E26C5e0845f74c812102Ca7114b6A896AB2",
+        PROXY_CREATION_CODE_130,
+    ), // 1.3.0
+    (
+        "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC",
+        PROXY_CREATION_CODE_130,
+    ), // 1.3.0 eip155
+    (safe::SAFE_PROXY_FACTORY, safe::PROXY_CREATION_CODE), // 1.4.1
+    (
+        "0x14F2982D601c9458F93bD70B218933A6f8165e7b",
+        PROXY_CREATION_CODE_150,
+    ), // 1.5.0
+];
+
+/// The Safe singletons (v1.3.0 – v1.5.0, L1 and L2) a genesis may name: the
+/// versions whose EIP-712 domain carries the chain id, which every hash here
+/// assumes.
+const KNOWN_SINGLETONS: [&str; 8] = [
+    "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552", // 1.3.0
+    "0x3E5c63644E683549055b9Be8653de26E0B4CD36E", // 1.3.0 L2
+    "0x69f4D1788e39c87893C980c06EdF4b7f686e2938", // 1.3.0 eip155
+    "0xfb1bffC9d739B8D520DaF37dF666da4C687191EA", // 1.3.0 L2 eip155
+    "0x41675C099F32341bf84BFc5382aF534df5C7461a", // 1.4.1
+    safe::SAFE_SINGLETON,                         // 1.4.1 L2
+    "0xFf51A5898e281Db6DfC7855790607438dF2ca44b", // 1.5.0
+    "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e", // 1.5.0 L2
+];
+
+fn proxy_init_code_hash_for(factory: Address, singleton: Address) -> Result<B256, CoreError> {
+    let code = KNOWN_FACTORIES
+        .iter()
+        .find(|(f, _)| f.parse::<Address>().ok() == Some(factory))
+        .map(|(_, c)| *c)
+        .ok_or_else(|| {
+            err(format!(
+                "{factory} is not a Safe proxy factory this wallet knows"
+            ))
+        })?;
+    if singleton == Address::ZERO
+        || !KNOWN_SINGLETONS
+            .iter()
+            .any(|s| s.parse::<Address>().ok() == Some(singleton))
+    {
+        return Err(err(format!(
+            "{singleton} is not a Safe singleton this wallet supports (v1.3.0 – v1.5.0)"
+        )));
+    }
+    let mut code = unhex(code)?;
+    code.extend_from_slice(&word_addr(singleton));
     Ok(keccak256(code))
 }
 
-/// The address a genesis deploys to through Safe's v1.4.1 factory.
+/// The address a genesis deploys to: Safe v1.3.0 – v1.5.0, through a proxy
+/// factory this wallet knows.
 pub fn genesis_address(g: &Genesis) -> Result<String, CoreError> {
-    if !g.factory.eq_ignore_ascii_case(safe::SAFE_PROXY_FACTORY)
-        || !g.singleton.eq_ignore_ascii_case(safe::SAFE_SINGLETON)
-    {
-        return Err(err("only Safe v1.4.1 (L2) geneses are supported"));
-    }
+    let factory = addr(&g.factory)?;
+    let init_code_hash = proxy_init_code_hash_for(factory, addr(&g.singleton)?)?;
     // A name is believed only if it made the salt nonce: one that came with
     // a genesis from anywhere (the service, a link) is checked here.
     match (&g.name, &g.name_seed) {
@@ -264,7 +345,7 @@ pub fn genesis_address(g: &Genesis) -> Result<String, CoreError> {
     let mut salt = keccak256(&init).to_vec();
     salt.extend_from_slice(&word_u256(quantity(&g.salt_nonce)?));
     let salt = keccak256(salt);
-    let a = addr(safe::SAFE_PROXY_FACTORY)?.create2(salt, proxy_init_code_hash()?);
+    let a = factory.create2(salt, init_code_hash);
     Ok(a.to_checksum(None))
 }
 
@@ -617,35 +698,137 @@ pub fn verify_approval(
         .map_err(|_| err("the approval signature does not verify"))
 }
 
+/// `ecrecover(hash, v, r, s)` over a 65-byte `r ‖ s ‖ v` (`v` 27/28, or 0/1).
+fn recover(hash: B256, signature: &[u8]) -> Result<Address, CoreError> {
+    use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+    if signature.len() != 65 {
+        return Err(err("not a 65-byte signature"));
+    }
+    let parity = match signature[64] {
+        0 | 27 => false,
+        1 | 28 => true,
+        v => return Err(err(format!("v {v} is not an EIP-712 signature's"))),
+    };
+    let sig = Signature::from_slice(&signature[..64]).map_err(|_| err("unreadable signature"))?;
+    let key =
+        VerifyingKey::recover_from_prehash(hash.as_slice(), &sig, RecoveryId::new(parity, false))
+            .map_err(|_| err("the signature recovers no key"))?;
+    let point = key.to_sec1_point(false);
+    Ok(Address::from_slice(
+        &keccak256(&point.as_bytes()[1..])[12..],
+    ))
+}
+
+/// Check a plain account's approval as the Safe will (`ecrecover` over the
+/// safeTxHash is the owner). Returns it with `v` as the Safe reads it (27/28).
+pub fn verify_ecdsa_approval(
+    safe_tx_hash: &str,
+    a: &EcdsaApproval,
+) -> Result<EcdsaApproval, CoreError> {
+    let mut sig = unhex(&a.signature)?;
+    let hash: B256 = safe_tx_hash.parse().map_err(|_| err("not a safeTxHash"))?;
+    if recover(hash, &sig)? != addr(&a.owner)? {
+        return Err(err(
+            "the signature is not this owner's for this transaction",
+        ));
+    }
+    if sig[64] < 27 {
+        sig[64] += 27;
+    }
+    Ok(EcdsaApproval {
+        owner: addr(&a.owner)?.to_checksum(None),
+        signature: hex(&sig),
+    })
+}
+
+/// The SafeTx as `eth_signTypedData_v4` takes it: Safe's EIP-712 domain
+/// (`chainId`, `verifyingContract` — Safe v1.3.0 and later) and its `SafeTx`
+/// type. Its hash is [`safe_tx_hash`]; a wallet shows the fields.
+pub fn safe_tx_typed_data(
+    chain_id: u64,
+    safe: &str,
+    tx: &SafeTx,
+) -> Result<serde_json::Value, CoreError> {
+    let t = parse_tx(tx)?;
+    Ok(serde_json::json!({
+        "types": {
+            "EIP712Domain": [
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"}
+            ],
+            "SafeTx": [
+                {"name": "to", "type": "address"},
+                {"name": "value", "type": "uint256"},
+                {"name": "data", "type": "bytes"},
+                {"name": "operation", "type": "uint8"},
+                {"name": "safeTxGas", "type": "uint256"},
+                {"name": "baseGas", "type": "uint256"},
+                {"name": "gasPrice", "type": "uint256"},
+                {"name": "gasToken", "type": "address"},
+                {"name": "refundReceiver", "type": "address"},
+                {"name": "nonce", "type": "uint256"}
+            ]
+        },
+        "primaryType": "SafeTx",
+        "domain": {"chainId": chain_id, "verifyingContract": addr(safe)?.to_checksum(None)},
+        "message": {
+            "to": t.to.to_checksum(None),
+            "value": t.value.to_string(),
+            "data": hex(&t.data),
+            "operation": t.operation,
+            "safeTxGas": t.safe_tx_gas.to_string(),
+            "baseGas": t.base_gas.to_string(),
+            "gasPrice": t.gas_price.to_string(),
+            "gasToken": t.gas_token.to_checksum(None),
+            "refundReceiver": t.refund_receiver.to_checksum(None),
+            "nonce": t.nonce.to_string()
+        }
+    }))
+}
+
 /// The signature bytes `execTransaction` takes: one entry per approval,
 /// ordered by owner address as Safe requires — a contract signature
 /// (`r = owner, s = offset, v = 0`, the owner's own EIP-1271 envelope in the
-/// tail) per passkey approval, and `r = executor, v = 1` for the executor,
-/// whose `msg.sender` approves on its own. An executor that also sent an
-/// approval counts once.
+/// tail) per passkey approval, a plain account's own 65 bytes (`v` 27/28)
+/// per EOA approval, and `r = executor, v = 1` for the executor, whose
+/// `msg.sender` approves on its own. An executor that also sent an approval
+/// counts once.
 pub fn assemble_signatures(
-    approvals: &[PasskeyApproval],
+    approvals: &[Approval],
     executor: Option<&str>,
 ) -> Result<String, CoreError> {
     enum Entry {
         Contract(Vec<u8>),
+        Ecdsa(Vec<u8>),
         Sender,
     }
     let executor = executor.map(addr).transpose()?;
     let mut entries: Vec<(Address, Entry)> = Vec::new();
-    for a in approvals {
-        let owner = addr(&a.owner)?;
+    for approval in approvals {
+        let owner = addr(approval.owner())?;
         if Some(owner) == executor || entries.iter().any(|(o, _)| *o == owner) {
             continue;
         }
-        let inner = user_op::build_eip1271_signature(
-            &unhex(&a.authenticator_data)?,
-            &a.client_data_fields,
-            &word_u256(quantity(&a.r)?),
-            &word_u256(quantity(&a.s)?),
-            &a.signer,
-        )?;
-        entries.push((owner, Entry::Contract(inner)));
+        let entry = match approval {
+            Approval::Passkey(a) => Entry::Contract(user_op::build_eip1271_signature(
+                &unhex(&a.authenticator_data)?,
+                &a.client_data_fields,
+                &word_u256(quantity(&a.r)?),
+                &word_u256(quantity(&a.s)?),
+                &a.signer,
+            )?),
+            Approval::Ecdsa(a) => {
+                let mut sig = unhex(&a.signature)?;
+                if sig.len() != 65 {
+                    return Err(err("a plain account's signature is 65 bytes"));
+                }
+                if sig[64] < 27 {
+                    sig[64] += 27;
+                }
+                Entry::Ecdsa(sig)
+            }
+        };
+        entries.push((owner, entry));
     }
     if let Some(e) = executor {
         entries.push((e, Entry::Sender));
@@ -662,6 +845,11 @@ pub fn assemble_signatures(
                 head.push(0);
                 tail.extend_from_slice(&word_usize(inner.len()));
                 tail.extend_from_slice(inner);
+            }
+            Entry::Ecdsa(sig) => {
+                // Not the owner word: the signature itself, r ‖ s ‖ v.
+                head.truncate(head.len() - 32);
+                head.extend_from_slice(sig);
             }
             Entry::Sender => {
                 head.extend_from_slice(&[0u8; 32]);
@@ -707,7 +895,7 @@ pub struct ExecutionPlan {
     /// Approving owners with no code on the chain yet: their checks need it.
     pub deploy_owners: Vec<Genesis>,
     pub tx: SafeTx,
-    pub approvals: Vec<PasskeyApproval>,
+    pub approvals: Vec<Approval>,
     /// The executor: an owner sending this as its own user operation.
     pub executor: String,
 }
@@ -731,6 +919,150 @@ pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
         data: exec_transaction_data(&plan.tx, &signatures)?,
     });
     Ok(calls)
+}
+
+// ---------------------------------------------------------------------------
+// Importing from Safe{Wallet}
+// ---------------------------------------------------------------------------
+
+/// One Safe in a Safe{Wallet} export, across the chains it is listed on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedSafe {
+    pub address: String,
+    /// The person's own name for it (the export's address book), if one is
+    /// displayable: a note on this device, never part of the Safe.
+    pub name: Option<String>,
+    pub chains: Vec<ExportedChain>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedChain {
+    pub chain_id: u64,
+    /// Listed among the deployed Safes (`addedSafes`); otherwise only its
+    /// creation parameters are (`undeployedSafes`).
+    pub deployed: bool,
+    pub owners: Vec<String>,
+    pub threshold: u64,
+    /// An undeployed Safe's creation parameters, as Safe{Wallet} keeps them
+    /// (the genesis service's `safeWalletProps`).
+    pub props: Option<serde_json::Value>,
+    pub version: Option<String>,
+}
+
+/// Read a Safe{Wallet} export (Settings → Data → Export, version 3): every
+/// Safe in it, merged across chains, by address. Nothing in it is trusted —
+/// owners and thresholds are what the export says, to choose by; what is
+/// imported is checked against the chain and the genesis service.
+pub fn parse_safe_export(json: &str) -> Result<Vec<ExportedSafe>, CoreError> {
+    let root: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| err(format!("not a Safe{{Wallet}} export: {e}")))?;
+    let data = root
+        .get("data")
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| err("not a Safe{Wallet} export: no data"))?;
+    let mut safes: std::collections::BTreeMap<Address, ExportedSafe> = Default::default();
+    let entry = |safes: &mut std::collections::BTreeMap<Address, ExportedSafe>, a: Address| {
+        safes.entry(a).or_insert_with(|| ExportedSafe {
+            address: a.to_checksum(None),
+            name: None,
+            chains: Vec::new(),
+        });
+    };
+    let chains_of = |key: &str| {
+        data.get(key)
+            .and_then(|v| v.as_object())
+            .into_iter()
+            .flatten()
+            .filter_map(|(chain, v)| Some((chain.parse::<u64>().ok()?, v.as_object()?)))
+    };
+    let owners_of = |list: Option<&serde_json::Value>| -> Vec<String> {
+        list.and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|o| {
+                o.get("value")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| o.as_str())
+            })
+            .filter_map(|o| o.parse::<Address>().ok())
+            .map(|o| o.to_checksum(None))
+            .collect()
+    };
+    for (chain_id, list) in chains_of("addedSafes") {
+        for (address, v) in list {
+            let Ok(a) = address.parse::<Address>() else {
+                continue;
+            };
+            entry(&mut safes, a);
+            let owners = owners_of(v.get("owners"));
+            let threshold = v.get("threshold").and_then(|t| t.as_u64()).unwrap_or(0);
+            if let Some(s) = safes.get_mut(&a) {
+                s.chains.push(ExportedChain {
+                    chain_id,
+                    deployed: true,
+                    owners,
+                    threshold,
+                    props: None,
+                    version: None,
+                });
+            }
+        }
+    }
+    for (chain_id, list) in chains_of("undeployedSafes") {
+        for (address, v) in list {
+            let Ok(a) = address.parse::<Address>() else {
+                continue;
+            };
+            let Some(props) = v.get("props") else {
+                continue;
+            };
+            entry(&mut safes, a);
+            let config = props.get("safeAccountConfig");
+            let owners = owners_of(config.and_then(|c| c.get("owners")));
+            let threshold = config
+                .and_then(|c| c.get("threshold"))
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0);
+            let version = props
+                .get("safeVersion")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
+            if let Some(s) = safes.get_mut(&a) {
+                if s.chains.iter().any(|c| c.chain_id == chain_id) {
+                    continue; // listed deployed there already
+                }
+                s.chains.push(ExportedChain {
+                    chain_id,
+                    deployed: false,
+                    owners,
+                    threshold,
+                    props: Some(props.clone()),
+                    version,
+                });
+            }
+        }
+    }
+    // The address book names a Safe per chain; the first displayable name wins.
+    for (_, book) in chains_of("addressBook") {
+        for (address, name) in book {
+            let (Ok(a), Some(name)) = (address.parse::<Address>(), name.as_str()) else {
+                continue;
+            };
+            let name = name.trim();
+            if let Some(s) = safes.get_mut(&a) {
+                if s.name.is_none() && valid_name(name) {
+                    s.name = Some(name.to_owned());
+                }
+            }
+        }
+    }
+    let mut out: Vec<ExportedSafe> = safes.into_values().collect();
+    for s in &mut out {
+        s.chains.sort_by_key(|c| c.chain_id);
+    }
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1087,6 +1419,24 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg(&args, "approval")?
         )
         .is_ok())),
+        "verifyEcdsaApproval" => out(json(&verify_ecdsa_approval(
+            &arg::<String>(&args, "safeTxHash")?,
+            &arg(&args, "approval")?,
+        )?)),
+        "safeTxTypedData" => out(safe_tx_typed_data(
+            arg(&args, "chainId")?,
+            &arg::<String>(&args, "safe")?,
+            &arg(&args, "tx")?,
+        )?),
+        "signatures" => out(serde_json::json!(assemble_signatures(
+            &arg::<Vec<Approval>>(&args, "approvals")?,
+            arg::<Option<String>>(&args, "executor")?.as_deref(),
+        )?)),
+        "execTransactionData" => out(serde_json::json!(exec_transaction_data(
+            &arg(&args, "tx")?,
+            &arg::<String>(&args, "signatures")?,
+        )?)),
+        "parseSafeExport" => out(json(&parse_safe_export(&arg::<String>(&args, "json")?)?)),
         "executionCalls" => out(json(&execution_calls(&arg(&args, "plan")?)?)),
         "review" => out(json(&review(
             arg(&args, "chainId")?,
@@ -1268,7 +1618,17 @@ mod tests {
             r: "0x1".into(),
             s: "0x2".into(),
         };
-        let sigs = unhex(&assemble_signatures(&[a(B), a(A)], Some(B)).unwrap()).unwrap();
+        let sigs = unhex(
+            &assemble_signatures(
+                &[
+                    Approval::Passkey(Box::new(a(B))),
+                    Approval::Passkey(Box::new(a(A))),
+                ],
+                Some(B),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         // A (contract signature) before B (the executor, v = 1).
         assert_eq!(&sigs[12..32], addr(A).unwrap().as_slice());
         assert_eq!(sigs[64], 0);
@@ -1395,7 +1755,7 @@ mod tests {
             deploy_multisig: Some(ms.genesis.clone()),
             deploy_owners: vec![],
             tx: tx.clone(),
-            approvals: vec![approval],
+            approvals: vec![Approval::Passkey(Box::new(approval))],
             executor: fx::account(0).unwrap().address,
         };
         let calls = execution_calls(&plan).unwrap();
@@ -1485,5 +1845,179 @@ mod tests {
         assert!(make(&"多".repeat(22)).is_err(), "66 bytes");
         assert!(make(&"多".repeat(21)).is_ok());
         assert!(multisig_genesis(&[A.into(), B.into()], 2, "Team", "0x12").is_err());
+    }
+
+    // -- plain accounts (EOA owners) and other Safe versions --------------------
+
+    fn eoa(seed: u8) -> (k256::ecdsa::SigningKey, String) {
+        let key = k256::ecdsa::SigningKey::from_slice(&[seed; 32]).unwrap();
+        let point = key.verifying_key().to_sec1_point(false);
+        let a = Address::from_slice(&keccak256(&point.as_bytes()[1..])[12..]);
+        (key, a.to_checksum(None))
+    }
+
+    fn eoa_sign(key: &k256::ecdsa::SigningKey, hash: &str) -> String {
+        let h: B256 = hash.parse().unwrap();
+        let (sig, id) = key.sign_prehash_recoverable(h.as_slice());
+        let mut out = sig.to_bytes().to_vec();
+        out.push(27 + id.to_byte());
+        hex(&out)
+    }
+
+    /// What a wallet signs for `eth_signTypedData_v4` is the safeTxHash: the
+    /// typed data, hashed by the core's own EIP-712 code (the dApp path).
+    #[test]
+    fn the_typed_data_a_wallet_signs_is_the_safe_tx_hash() {
+        let tx = transfers_tx(
+            &[Transfer {
+                token: None,
+                to: B.into(),
+                amount: "0x2386f26fc10000".into(),
+            }],
+            "0x3",
+        )
+        .unwrap();
+        let safe = "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83";
+        let typed = safe_tx_typed_data(100, safe, &tx).unwrap();
+        let params = serde_json::json!([A, typed.to_string()]).to_string();
+        let hash = crate::sign_message::original_hash("eth_signTypedData_v4", &params).unwrap();
+        assert_eq!(hex(&hash), safe_tx_hash(100, safe, &tx).unwrap());
+    }
+
+    #[test]
+    fn a_plain_accounts_approval_is_checked_as_the_safe_checks_it() {
+        let (key, owner) = eoa(7);
+        let (other, _) = eoa(8);
+        let hash = "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa";
+        let good = EcdsaApproval {
+            owner: owner.clone(),
+            signature: eoa_sign(&key, hash),
+        };
+        assert_eq!(verify_ecdsa_approval(hash, &good).unwrap(), good);
+        // A wallet's v of 0/1 comes back as 27/28.
+        let mut sig = unhex(&good.signature).unwrap();
+        sig[64] -= 27;
+        let low = EcdsaApproval {
+            owner: owner.clone(),
+            signature: hex(&sig),
+        };
+        assert_eq!(verify_ecdsa_approval(hash, &low).unwrap(), good);
+        // Someone else's key, another hash, a mangled signature.
+        let forged = EcdsaApproval {
+            owner: owner.clone(),
+            signature: eoa_sign(&other, hash),
+        };
+        assert!(verify_ecdsa_approval(hash, &forged).is_err());
+        let elsewhere = "0x00000000000000000000000000000000000000000000000000000000000000aa";
+        assert!(verify_ecdsa_approval(elsewhere, &good).is_err());
+        let short = EcdsaApproval {
+            owner,
+            signature: "0x1234".into(),
+        };
+        assert!(verify_ecdsa_approval(hash, &short).is_err());
+    }
+
+    /// EOA and passkey approvals and the executor, sorted by owner: an EOA's
+    /// entry is its own 65 bytes, a passkey owner's points into the tail.
+    #[test]
+    fn mixed_signatures_are_sorted_and_shaped_per_kind() {
+        let (key, owner) = eoa(7);
+        let hash = "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa";
+        let ecdsa = Approval::Ecdsa(EcdsaApproval {
+            owner: owner.clone(),
+            signature: eoa_sign(&key, hash),
+        });
+        let sigs = unhex(&assemble_signatures(std::slice::from_ref(&ecdsa), Some(B)).unwrap()).unwrap();
+        assert_eq!(sigs.len(), 130);
+        let mut entries = [(addr(&owner).unwrap(), 0usize), (addr(B).unwrap(), 1)];
+        entries.sort_by_key(|(o, _)| *o);
+        for (slot, (o, kind)) in entries.iter().enumerate() {
+            let e = &sigs[slot * 65..slot * 65 + 65];
+            if *kind == 0 {
+                assert_eq!(hex(e), eoa_sign(&key, hash), "the EOA's own signature");
+            } else {
+                assert_eq!(&e[12..32], o.as_slice());
+                assert_eq!(e[64], 1, "the executor approves as msg.sender");
+            }
+        }
+        // Without an executor (an external wallet sends it): just the approvals.
+        let alone = unhex(&assemble_signatures(&[ecdsa], None).unwrap()).unwrap();
+        assert_eq!(alone.len(), 65);
+    }
+
+    /// A real Safe v1.3.0 (Gnosis, `createProxyWithNonce`, from the genesis
+    /// registry's fixtures): its genesis derives its own address.
+    #[test]
+    fn a_safe_v130_genesis_derives_its_address() {
+        let g = Genesis {
+            factory: "0xa6B71E26C5e0845f74c812102Ca7114b6A896AB2".into(),
+            singleton: "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552".into(),
+            salt_nonce: "12596526766320250484971449312609726242167314162064473215341362975032004421818".into(),
+            initializer: "0xb63e800d0000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000f48f2b2d2a534e402487b3ee7c18c33aec0fe5e400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000004e42010578eec11fd35f985dc0b3bc22520fd8550000000000000000000000000000000000000000000000000000000000000000".into(),
+            name: None,
+            name_seed: None,
+        };
+        assert_eq!(
+            genesis_address(&g).unwrap().to_lowercase(),
+            "0xa42f6c68d9e0e13ac0910837356c0a0155413e8c"
+        );
+        let (owners, threshold) = genesis_members(&g).unwrap();
+        assert_eq!(threshold, 1);
+        assert_eq!(owners.len(), 1);
+        // A factory or singleton this wallet does not know is refused.
+        let mut odd = g.clone();
+        odd.singleton = "0x0000000000000000000000000000000000000001".into();
+        assert!(genesis_address(&odd).is_err());
+    }
+
+    /// A Safe{Wallet} export: deployed and undeployed Safes merged by address
+    /// across chains, the address book's name kept, junk skipped.
+    #[test]
+    fn a_safe_wallet_export_is_read_by_address() {
+        let json = r#"{"version":"3.0","data":{
+            "addedSafes":{
+                "1":{"0x1111111111111111111111111111111111111111":{"owners":[{"value":"0x2222222222222222222222222222222222222222"},{"value":"0x3333333333333333333333333333333333333333"}],"threshold":2}},
+                "100":{"0x1111111111111111111111111111111111111111":{"owners":[{"value":"0x2222222222222222222222222222222222222222"}],"threshold":1},
+                       "not an address":{"owners":[],"threshold":1}}},
+            "undeployedSafes":{
+                "8453":{"0x4444444444444444444444444444444444444444":{"props":{"factoryAddress":"0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67","masterCopy":"0x29fcB43b46531BcA003ddC8FCB67FFE91900C762","safeAccountConfig":{"threshold":1,"owners":["0x2222222222222222222222222222222222222222"],"fallbackHandler":"0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99"},"safeVersion":"1.4.1","saltNonce":"7"},"status":{"status":"AWAITING_EXECUTION","type":"PayLater"}}},
+                "1":{"0x1111111111111111111111111111111111111111":{"props":{"safeAccountConfig":{"threshold":9,"owners":[]}}}}},
+            "addressBook":{"1":{"0x1111111111111111111111111111111111111111":"Treasury","0x4444444444444444444444444444444444444444":"  "},
+                           "8453":{"0x4444444444444444444444444444444444444444":"Base vault"}},
+            "settings":{}
+        }}"#;
+        let safes = parse_safe_export(json).unwrap();
+        assert_eq!(safes.len(), 2);
+        let treasury = &safes[0];
+        assert_eq!(
+            treasury.address,
+            "0x1111111111111111111111111111111111111111"
+        );
+        assert_eq!(treasury.name.as_deref(), Some("Treasury"));
+        assert_eq!(
+            treasury
+                .chains
+                .iter()
+                .map(|c| c.chain_id)
+                .collect::<Vec<_>>(),
+            vec![1, 100]
+        );
+        assert!(
+            treasury.chains.iter().all(|c| c.deployed),
+            "deployed wins over an undeployed entry"
+        );
+        assert_eq!(treasury.chains[0].threshold, 2);
+        assert_eq!(treasury.chains[0].owners.len(), 2);
+        let vault = &safes[1];
+        assert_eq!(
+            vault.name.as_deref(),
+            Some("Base vault"),
+            "a blank name is skipped"
+        );
+        assert!(!vault.chains[0].deployed);
+        assert_eq!(vault.chains[0].version.as_deref(), Some("1.4.1"));
+        assert!(vault.chains[0].props.is_some());
+        assert!(parse_safe_export("{}").is_err());
+        assert!(parse_safe_export("not json").is_err());
     }
 }

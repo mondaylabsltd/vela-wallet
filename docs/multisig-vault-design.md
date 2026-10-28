@@ -103,17 +103,21 @@ MultisigAccount {
 | Agent（clientmcp） | 能代为发起提案，批准永远是本人在 Vela 签名页点的（spec 107 E3） |
 | 账户切换器 | 多签行显示地址缩写、identicon 和 "2/3" 标记；只读的再标出来 |
 
-### 3.3 不要名字
+### 3.3 名字（2026-10-28 改：名字写进 genesis）
 
-- **显示**：多签账户在所有地方都显示地址和 identicon。
-- **辨认靠成员**：详情和切换器里显示"2/3 · 张三、李四、王五"。成员名字取自 p256-index 里各成员给自己登记的名字，
-  这些名字每个人只能改自己的，所以可信。外部成员显示地址。
-- **想要备注的人**：把多签地址存进联系人。联系人本来就是本机的"地址 → 名字"，不需要新机制。
-- **为什么不在 registry 里加"地址 → 名字"索引**：
-  - **谁有权写**：如果谁都能写，就是抢注和钓鱼（"Vela 官方金库"）。如果只有 owner 能写，就要验多签授权，
-    还要处理改名和成员更替。这样 registry 就从"自证正确、不需要信任任何人"变成了需要治理的东西。
-  - **反而更危险**：一个由创建者自己起的名字，会让一个恶意多签看起来很可信。地址和成员列表都没法伪造，名字可以。
-  - **registry 保持中立**：它是通用的 Safe 记录，Vela 只是第一个使用者。名字是 Vela 的产品需求，不该放进去。
+原先的结论是"不要名字"，顾虑是谁有权写、会不会被抢注。改为**名字是 genesis 的一部分，参与地址推导**，这两个顾虑都消失了：
+
+- **怎么绑定**：`saltNonce = keccak256(abi.encode(keccak256("SafeGenesisRegistry.name"), keccak256(name), seed))`，
+  seed 是 32 字节随机数。registry v2 的 `recordNamed(factory, proxyCode, singleton, initializer, name, seed)`
+  自己算出 saltNonce 和地址，记录里存 `name` 和 `nameSeed`。
+- **为什么不能抢注或伪造**：换一个名字就是另一个地址。有人从内存池抄走 saltNonce 先用 `record` 记一条无名记录，
+  真正的 `recordNamed` 到达时仍会把名字补上（只有这个名字和 seed 能得出这个 saltNonce）。名字一经写入不能改。
+- **客户端也不信服务**：core 的 `genesis_address` 遇到带名字的 genesis，先核对名字和 seed 能否得出 saltNonce，
+  对不上就拒绝，所以按地址添加时显示的名字一定是创建者起的。
+- **规则**：非空、首尾无空格、无控制字符和 U+FFFD、不超过 64 字节（合约里的 `MAX_NAME_LENGTH`）。
+- **显示**：有名字显示名字，没有名字（在别处创建的 Safe）显示规则"多签 2/3"。导入的 Safe 可带上 Safe{Wallet}
+  地址簿里的名字，那是本机的备注，不上链（它们的 saltNonce 早已固定，名字没法再参与地址）。
+- **仍然成立的提醒**：名字由创建者自己起，不代表可信。成员列表和地址才是身份。
 
 ## 4. 创建与登录
 
@@ -516,3 +520,52 @@ MultisigAccount {
 - [ ] 扩展页 300 秒上限和远程连接的过期时间，对挂着的多签请求实际怎么处理，需要在各端实测。
 - [ ] Vela 侧生成 `ownerProof`：创建确认页的 passkey 签 4.1 的 challenge，并带上创建者账户自己的 genesis。
 - [ ] Vela 账户创建时是否顺带把自己的 genesis 写进 registry（第 8 节）。
+
+## 11. 导入 Safe{Wallet} 多签与外部 owner 签名（2026-10-28 设计）
+
+**目的**：让现有 Safe 用户有第二个多签应用和界面可选。他们的 owner 大多是 MetaMask、Rabby 等外部钱包（EOA），不是 Vela account。
+
+### 11.1 导入
+
+- **入口**：添加多签 →「从 Safe{Wallet} 导入」，选择 Safe 官网导出的 JSON（设置 → 数据 → 导出）。
+- **文件格式**（version 3.0）：
+  - `data.addedSafes[chainId][address] = {owners:[{value}], threshold}`：已部署的 Safe；
+  - `data.undeployedSafes[chainId][address].props`：未部署的 Safe 的完整创建参数
+    （`factoryAddress, masterCopy, safeAccountConfig, saltNonce, safeVersion`）；
+  - `data.addressBook[chainId][address] = name`：用户起的名字。
+- **解析在 core**：按地址合并各链，列出每个 Safe 的链、阈值、成员、版本线索、地址簿名字。文件只在本机解析，不上传。
+- **用户勾选**要导入的 Safe，然后逐个确认 genesis：
+  - genesis 服务已有记录 → 直接用；
+  - 没有 → `POST /api/import`：已部署的给 `chainId`（服务从交易服务或创建交易里还原），未部署的附 `safeWalletProps`。
+    服务按地址校验后用 owner proof 车道之外的「已部署」车道代付记录；
+  - 还原不出来（例如 v1.1.1 以前的 `createProxy`，地址不能跨链）→ 仍可导入，但只在已部署的链上可用，标明原因。
+- **导入后**：和 Vela 创建的多签一样出现在切换器，有资产、活动、发送、提案。名字取地址簿（本机）。
+- **支持的版本**：Safe v1.3.0、v1.4.1、v1.5.0（L1 和 L2）。更早的版本 EIP-712 域里没有 chainId，签名格式不同，先不支持，导入时说明。
+
+### 11.2 外部 owner 签名（PeerConnect + WalletPair）
+
+参考 sub3 的实现：Vela 是 WalletPair 的「dApp 端」，外部签名页是「钱包端」。
+
+- **通道**：PeerConnect 房间（Noise IKpsk1 端到端加密，中继看不到内容也不存内容）。中继默认 `wss://relay.peerconnect.dev`，可配置。
+- **签名页**：Vela 自己的 `/[locale]/connect`（同源、严格 CSP）。用户在装了钱包扩展的浏览器（或手机钱包的 dApp 浏览器）里打开链接或扫码，
+  页面用 EIP-6963 发现钱包（没有就用 `window.ethereum`），用户确认连接。
+- **签什么**：`eth_signTypedData_v4`，内容是 SafeTx 的 EIP-712 数据（域 `{chainId, verifyingContract: safe}`）。
+  签名页先切到 Safe 所在的链（`wallet_switchEthereumChain`），钱包里显示的是可读的 SafeTx。
+- **Vela 端核对**：回来的签名先在 core 里 ecrecover，必须等于该 owner 地址、且对应这笔 safeTxHash，才提交给邮箱。
+  外部钱包连上来的账户不是该 Safe 的 owner 时，直接说明，不发签名请求。
+- **邮箱**：approval 增加一种 `ecdsa {owner, signature}`。服务同样按链上规则验证（ecrecover 后必须是成员），和 passkey 批准合并在同一提案里。
+- **执行**：签名凑齐后，
+  - 本机有 Vela 账户 → 由它执行（UserOp 里调 `execTransaction`，手续费从它付），和现在一样；
+  - 本机没有 Vela 账户 → 通过同一个通道请外部钱包 `eth_sendTransaction` 执行，手续费由该外部账户付。
+- **签名的组装**：按 owner 地址升序；EOA 是 65 字节 `r‖s‖v`（v=27/28），Vela 成员是合约签名（v=0），可以混合。
+- **体验**：
+  - 提案详情里每个外部成员一行「用外部钱包签名」，点开显示二维码和链接，状态依次是等待打开、已连接（显示账户）、请在钱包里确认、已签名；
+  - 配对会保存在本机，下次同一个外部钱包签名不用再扫码；
+  - 任何一步都可以取消，取消会通知签名页（`walletpair_cancel`）；
+  - 账户不符、链不符、用户拒绝、断开，都有明确的提示和重试。
+- **安全**：
+  - 邀请链接是一次性凭证，配对后失效（PeerConnect 换到只有双方能算出的 pair ID）；
+  - 签名页只转发签名和发送交易，拒绝 `eth_sign`；
+  - Vela 不信签名页：签名、owner、safeTxHash 全部在 core 里重新校验；
+  - 签名页显示请求方是 Vela 和这笔交易的摘要，钱包里显示完整的 EIP-712 内容。
+- **测试**：本地中继 + fork 上用 EOA owner 部署的 Safe v1.3.0/v1.4.1，第二个浏览器上下文注入一个用测试私钥签名的 EIP-1193 提供者，端到端跑导入、签名、执行。

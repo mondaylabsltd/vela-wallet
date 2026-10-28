@@ -108,6 +108,7 @@ sha1 = { workspace = true }
 # scalar's randomness still comes from the shell, through the `Host` seam.
 p256 = { workspace = true, features = ["ecdh"] }
 ecdsa = { workspace = true }
+k256 = { workspace = true }
 ciborium = { workspace = true }
 # CTAP2 PIN/UV auth protocols One and Two — the only place this crate encrypts
 # anything. Everything else it does is hashing, parsing and assembly.
