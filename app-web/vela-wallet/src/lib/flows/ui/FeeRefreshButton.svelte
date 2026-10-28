@@ -104,7 +104,7 @@
 	.refresh:focus-visible .turn {
 		box-shadow:
 			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
+			0 0 0 var(--space-sm) var(--color-fg-base);
 	}
 
 	.turn.spinning {

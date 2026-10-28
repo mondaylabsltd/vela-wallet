@@ -177,7 +177,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -186,7 +186,7 @@
 	.subtitle {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -224,7 +224,7 @@
 	.wallet {
 		min-width: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 	}
 
@@ -235,7 +235,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-mono);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
 		line-height: var(--leading-normal);
 		text-align: left;
@@ -275,18 +275,18 @@
 		gap: var(--space-xs);
 		min-width: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	/* Where the key lives, under its name. Quieter than the name: the name is
 	   what the person chose, this is what the system reported. */
 	.provider {
 		color: var(--color-fg-subtle);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.badge {
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 	}
 

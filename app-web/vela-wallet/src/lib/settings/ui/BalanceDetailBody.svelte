@@ -160,7 +160,7 @@
 	}
 
 	.status.accent {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	button {

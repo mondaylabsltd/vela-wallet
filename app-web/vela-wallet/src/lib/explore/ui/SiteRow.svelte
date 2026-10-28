@@ -92,6 +92,6 @@
 	.meta {
 		flex-shrink: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-accent-base);
+		color: var(--color-fg-muted);
 	}
 </style>

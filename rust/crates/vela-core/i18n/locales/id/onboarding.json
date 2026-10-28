@@ -192,6 +192,8 @@
       "pinRejected": "PIN itu ditolak. Ketika percobaan habis, kunci mengunci dirinya sendiri dan hanya reset yang membukanya — dan reset menghapus semua passkey di dalamnya.",
       "pinTitle": "Masukkan PIN kunci keamanan Anda",
       "progressSubtitle": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+      "progressSubtitle_one": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+      "progressSubtitle_other": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
       "progressTitle": "Sedang membuat dompet",
       "providerGeneric": "Ponsel atau tablet",
       "providerPlatform": "Passkey bawaan",

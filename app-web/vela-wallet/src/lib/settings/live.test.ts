@@ -709,6 +709,9 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.title).toBe(m.accounts.title);
 		expect(sheet.primary).toBe(m.accounts.createNew);
 		expect(sheet.secondary).toBe(m.accounts.signInExisting);
+		// ob-5: the remove question's way out has words.
+		expect(sheet.removeCancel).toBe(m.accounts.cancel);
+		expect(sheet.removeCancel?.length).toBeGreaterThan(0);
 		expect(sheet.rows.map((r) => r.selected)).toEqual([false, true]);
 		// The viewer's seed rides on every row, verbatim — never the short form.
 		expect(sheet.rows.map((r) => r.addressFull)).toEqual(rows.map((r) => r.account.address));

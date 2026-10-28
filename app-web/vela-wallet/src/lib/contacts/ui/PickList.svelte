@@ -164,12 +164,12 @@
 		height: var(--icon-lg);
 		border: var(--border-hairline) solid var(--color-border-strong, var(--color-border-base));
 		border-radius: var(--radius-sm);
-		color: var(--color-onAccent);
+		color: var(--color-fg-inverse);
 	}
 
 	.box.on {
-		border-color: var(--color-accent-base);
-		background: var(--color-accent-base);
+		border-color: var(--color-fg-base);
+		background: var(--color-fg-base);
 	}
 
 	.empty {

@@ -108,7 +108,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		cursor: pointer;
 		transition: color var(--motion-duration-fast) ease;
@@ -119,7 +119,7 @@
 	}
 
 	.chevron {
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-none);
 	}
 

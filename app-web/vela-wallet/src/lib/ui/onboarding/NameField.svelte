@@ -17,6 +17,12 @@
 		/** Resolved strings. Omit `label` to render the field unlabelled; it
 		 *  still names itself to assistive technology via `placeholder`. */
 		label?: string;
+		/**
+		 * The id of a heading that names the field when no `label` is drawn
+		 * (vis-16): the placeholder is an example ("Everyday wallet"), and as
+		 * the name it told a screen reader the field was called that.
+		 */
+		labelledby?: string;
 		placeholder: string;
 		hint?: string;
 		/** Present → error styling + red inline line (A3). */
@@ -26,7 +32,7 @@
 		oninput?: (value: string) => void;
 	}
 
-	let { label, placeholder, hint, errorText, value = '', oninput }: Props = $props();
+	let { label, labelledby, placeholder, hint, errorText, value = '', oninput }: Props = $props();
 
 	const id = $props.id();
 
@@ -51,7 +57,8 @@
 		{placeholder}
 		autocomplete="off"
 		spellcheck="false"
-		aria-label={label ? undefined : placeholder}
+		aria-label={label || labelledby ? undefined : placeholder}
+		aria-labelledby={label ? undefined : labelledby}
 		aria-invalid={hasError}
 		aria-describedby={[hasError ? `${id}-error` : null, hint !== undefined ? `${id}-hint` : null]
 			.filter(Boolean)
@@ -80,7 +87,7 @@
 
 	.label {
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -95,7 +102,7 @@
 		border-radius: var(--radius-lg);
 		color: var(--color-fg-base);
 		font-family: var(--font-ui);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 	}
 
 	.input::placeholder {
@@ -109,13 +116,13 @@
 	.errorline {
 		margin: 0;
 		color: var(--color-error-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.hint {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 </style>

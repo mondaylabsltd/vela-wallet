@@ -1228,7 +1228,7 @@ function sendReceipt(
 		hash: {
 			label: m['componentsTx.receipt.txHash'],
 			value: TX_HASH_RECEIVED,
-			copyLabel: m['componentsUi.identiconViewer.copyAddress']
+			copyLabel: m['componentsTx.receipt.copyHash']
 		},
 		viewOnExplorer: m['history.viewOnExplorer'],
 		explorerUrl: EXPLORER_TX_URL,

@@ -9,6 +9,7 @@
       "time": "Time",
       "txHash": "Tx Hash",
       "userOpHash": "UserOp Hash",
+      "copyHash": "Copy transaction hash",
       "confirming": "Confirming…",
       "confirmingHint": "Sent! Confirming on-chain — the explorer link will appear shortly.",
       "confirmingProgress": "Estimated confirmation progress",

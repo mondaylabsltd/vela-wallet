@@ -19,7 +19,7 @@
 		<span class="note">{note}</span>
 	{/if}
 	{#if action !== undefined}
-		<button type="button" onclick={onaction}>
+		<button type="button" data-tap onclick={onaction}>
 			{action}
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>

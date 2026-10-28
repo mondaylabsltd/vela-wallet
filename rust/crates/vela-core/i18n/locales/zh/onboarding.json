@@ -192,6 +192,8 @@
       "pinRejected": "PIN 码不正确。次数用尽后密钥会自我锁定，只能通过重置解锁——而重置会清除密钥上的所有通行密钥。",
       "pinTitle": "输入安全密钥的 PIN 码",
       "progressSubtitle": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+      "progressSubtitle_one": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+      "progressSubtitle_other": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
       "progressTitle": "正在生成钱包",
       "providerGeneric": "手机或平板",
       "providerPlatform": "内置通行密钥",

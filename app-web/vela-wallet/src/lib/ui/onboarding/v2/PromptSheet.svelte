@@ -141,7 +141,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.01em;
@@ -150,7 +150,7 @@
 	.message {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 		white-space: pre-line;
 	}

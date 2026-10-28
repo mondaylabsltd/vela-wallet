@@ -14,7 +14,7 @@
     "notReadYet": "仲未讀到",
     "rpcFix": "修復",
     "emptyTitle": "存入你的首項資產",
-    "emptySubtext": "點按這裡查看你的地址並接收代幣",
+    "emptySubtext": "在這裡查看你的地址並接收代幣",
     "errorTitle": "錯誤",
     "switcherTotal": "合共 {{amount}}",
     "rpcFixTitle": "修復 RPC",
@@ -32,5 +32,6 @@
     "rpcFixRestored": "連線已經恢復——而家重新攞緊呢個網絡嘅餘額同記錄。",
     "addByAddress": "用地址加代幣",
     "notShowingTitle": "收咗代幣但係唔見？",
-    "notShowingBody": "確認咗嘅轉賬會自動入數。如果隻代幣仲未出現，可以用合約地址自己加，或者加返對應嘅網絡。"  }
+    "notShowingBody": "確認咗嘅轉賬會自動入數。如果隻代幣仲未出現，可以用合約地址自己加，或者加返對應嘅網絡。"
+  }
 }

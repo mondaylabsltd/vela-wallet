@@ -1839,7 +1839,16 @@
 	 */
 	onMount(() => {
 		const onpop = () => {
-			if (nav.open) nav.back();
+			if (!nav.open) return;
+			// vis-14: a send's confirm is a stage of the send core, not a level
+			// of this stack — Back there steps the core back to the form, as the
+			// ‹ does, and puts the entry it used back for the next Back.
+			if (sendView?.stage === 'confirm' && sendSession) {
+				sendSession.dispatch({ type: 'back' });
+				history.pushState({ velaFlow: nav.mobile.length }, '');
+				return;
+			}
+			nav.back();
 		};
 		addEventListener('popstate', onpop);
 		return () => removeEventListener('popstate', onpop);

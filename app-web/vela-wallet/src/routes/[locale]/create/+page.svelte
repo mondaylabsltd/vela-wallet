@@ -25,14 +25,16 @@
 
 	let { data }: PageProps = $props();
 
-	// A plural key (the done screen's line, issue 409) has no bare value: its
-	// form is picked by the core from `params.count`.
+	// A plural key (the done screen's line, issue 409) has its form picked by
+	// the core from `params.count`. Its forms come first: a key the other
+	// shells still read bare (the progress line, ob-10) keeps that value too,
+	// and the bare one must not win here ("from 1 keys").
 	const strings = (key: string, params?: Record<string, string | number>) =>
 		fillTemplate(
-			data.flow[key] ??
-				(typeof params?.count === 'number'
-					? pluralTemplate((k) => data.flow[k], data.locale, key, params.count)
-					: undefined) ??
+			(typeof params?.count === 'number'
+				? pluralTemplate((k) => data.flow[k], data.locale, key, params.count)
+				: undefined) ??
+				data.flow[key] ??
 				key,
 			params
 		);

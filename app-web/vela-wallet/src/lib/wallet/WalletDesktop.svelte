@@ -95,6 +95,8 @@
 	<Sidebar sidebar={model.sidebar} {onnav} {onaccounts} {onchainselect} />
 
 	<main>
+		<!-- vis-16: the page's heading — the account's name, drawn in the sidebar. -->
+		<h1 class="visually-hidden">{model.sidebar.header.name}</h1>
 		<div class="content">
 			{#if banner}
 				<div class="banner">{@render banner()}</div>

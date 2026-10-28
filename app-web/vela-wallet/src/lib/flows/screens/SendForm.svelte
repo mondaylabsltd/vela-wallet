@@ -145,6 +145,7 @@
 			denomToggle={model.amount.denomToggle}
 			{ondenom}
 			oninput={onamount}
+			onsubmit={ctaDisabled || ctaBusy ? undefined : oncontinue}
 		/>
 	{/if}
 

@@ -731,7 +731,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
-			removeBody: k('settings.account.removeBody')
+			removeBody: k('settings.account.removeBody'),
+			cancel: k('common.cancel')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),
@@ -1425,13 +1426,17 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 /** The multisig screens' copy: every leaf of `home.multisig`, by the shape's keys. */
 export function resolveMultisigMessages(locale: Locale): MultisigMessages {
 	activate(locale);
+	// A leaf shaped `{ locale, forms }` in the shape is a plural key: it ships
+	// as this locale's forms, picked at render by count (`pluralForm`).
 	const walk = (node: Record<string, unknown>, prefix: string): Record<string, unknown> =>
 		Object.fromEntries(
 			Object.entries(node).map(([key, value]) => [
 				key,
 				typeof value === 'string'
 					? t(locale, `${prefix}.${key}`)
-					: walk(value as Record<string, unknown>, `${prefix}.${key}`)
+					: 'forms' in (value as Record<string, unknown>)
+						? pluralCopy(locale, `${prefix}.${key}`)
+						: walk(value as Record<string, unknown>, `${prefix}.${key}`)
 			])
 		);
 	return walk(

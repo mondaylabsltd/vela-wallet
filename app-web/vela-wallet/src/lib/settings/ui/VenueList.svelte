@@ -204,7 +204,7 @@
 		display: flex;
 		flex-shrink: 0;
 		width: var(--icon-md);
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.group {

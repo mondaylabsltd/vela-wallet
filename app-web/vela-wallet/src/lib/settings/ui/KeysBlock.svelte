@@ -107,10 +107,10 @@
 							>
 							<span class="meta">
 								{#if model.asking}<span class="ghost" aria-hidden="true">&nbsp;</span
-									>{:else}{holder}{/if}{#if row.fingerprint !== ''}<span
-										class="sep"
-										aria-hidden="true">·</span
-									><span class="fingerprint">{row.fingerprint}</span>{/if}
+									>{:else}{holder}{/if}{#if row.fingerprint !== ''}<!-- Spaces, not margins, around
+									     the dot (vis-16): the row's name read "Built-in passkey197d…". -->
+									<span class="sep" aria-hidden="true">·</span>
+									<span class="fingerprint">{row.fingerprint}</span>{/if}
 							</span>
 						</span>
 						<span class="pills">
@@ -349,7 +349,7 @@
 	}
 
 	.sep {
-		margin-inline: var(--space-sm);
+		margin-inline: 0;
 	}
 
 	.fingerprint {
@@ -604,7 +604,7 @@
 	}
 
 	.backup:not(:disabled):hover .name {
-		color: var(--color-accent-base);
+		text-decoration: underline;
 	}
 
 	.skeleton .bar {

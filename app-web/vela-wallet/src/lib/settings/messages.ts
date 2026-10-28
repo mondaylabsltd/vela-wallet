@@ -413,6 +413,8 @@ export interface SettingsMessages {
 		/** Taking ONE wallet off this device (2026-09-23). */
 		remove: string;
 		removeBody: string;
+		/** That question's way out (ob-5: the button was drawn with no words). */
+		cancel: string;
 	};
 	signOut: {
 		button: string;

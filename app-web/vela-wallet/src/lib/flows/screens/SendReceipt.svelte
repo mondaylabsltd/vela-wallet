@@ -145,11 +145,18 @@
 </div>
 
 <style>
+	/* What is left of the screen under its back bar and title (vis-15): at
+	   100% the receipt stood a header taller than the screen, and Done sat
+	   below the fold on a 430×900 phone. */
 	.receipt {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
 		min-height: 100%;
+	}
+
+	.receipt.screen {
+		min-height: calc(100% - var(--flow-screen-head));
 	}
 
 	.parts {

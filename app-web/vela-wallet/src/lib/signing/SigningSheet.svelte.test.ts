@@ -283,7 +283,7 @@ describe('the confirm is a button (issue 461)', () => {
 		const confirm = confirmOf(view.sheet)!;
 		expect(confirm).not.toBeNull();
 		expect(confirm.textContent?.trim()).toBe('Send');
-		expect(confirm.classList.contains('primary')).toBe(true);
+		expect(confirm.classList.contains('value')).toBe(true);
 		expect(confirm.disabled).toBe(false);
 		// The rows' column: the signing account's row, above it in the body.
 		const column = view.sheet.querySelector('.footer') as HTMLElement;

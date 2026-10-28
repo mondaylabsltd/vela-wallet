@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * Acknowledgment checkbox row (spec 014, contract §5). Unchecked =
-	 * hairline square (border-strong); checked = accent fill + onAccent ✓.
+	 * hairline square (border-strong); checked = inverse-ink fill + inverse ✓ (the accent is only for moving value).
 	 * Row 3 passes inline links via `children` — links must stay
 	 * individually activatable without toggling the checkbox (the caller's
 	 * link handlers call preventDefault; spec-011 e2e lesson).
@@ -68,7 +68,7 @@
 		width: var(--icon-sm);
 		height: var(--icon-sm);
 		fill: none;
-		stroke: var(--color-onAccent);
+		stroke: var(--color-fg-inverse);
 		stroke-width: var(--icon-stroke-heavy);
 		stroke-linecap: round;
 		stroke-linejoin: round;
@@ -76,8 +76,8 @@
 	}
 
 	.native:checked ~ .box {
-		background: var(--color-accent-base);
-		border-color: var(--color-accent-base);
+		background: var(--color-fg-base);
+		border-color: var(--color-fg-base);
 	}
 
 	.native:checked ~ .box .mark {
@@ -87,12 +87,12 @@
 	.native:focus-visible ~ .box {
 		box-shadow:
 			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
+			0 0 0 var(--space-sm) var(--color-fg-base);
 	}
 
 	.text {
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 	}
 </style>

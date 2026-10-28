@@ -3,6 +3,8 @@
  * resolved at build time like every other page's (`engine.server.ts`).
  * Templates keep their `{{name}}` slots; `fillTemplate` fills them.
  */
+import type { PluralCopy } from '$lib/i18n/plural';
+
 export interface MultisigMessages {
 	switcher: {
 		section: string;
@@ -59,6 +61,8 @@ export interface MultisigMessages {
 		approveAndExecute: string;
 		execute: string;
 		as: string;
+		/** The safeTxHash's label (vis-11: it was the bare identifier). */
+		hash: string;
 		feeNote: string;
 		invite: string;
 		inviteHint: string;
@@ -104,7 +108,8 @@ export interface MultisigMessages {
 		thresholdValue: string;
 		thresholdAll: string;
 		thresholdOne: string;
-		thresholdSpare: string;
+		/** Plural (vis-11: "1 member(s)"): the count is known where it is drawn. */
+		thresholdSpare: PluralCopy;
 		address: string;
 		sameEverywhere: string;
 		network: string;
@@ -252,6 +257,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		approveAndExecute: '',
 		execute: '',
 		as: '',
+		hash: '',
 		feeNote: '',
 		invite: '',
 		inviteHint: '',
@@ -297,7 +303,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		thresholdValue: '',
 		thresholdAll: '',
 		thresholdOne: '',
-		thresholdSpare: '',
+		thresholdSpare: { locale: '', forms: {} },
 		address: '',
 		sameEverywhere: '',
 		network: '',

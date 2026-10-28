@@ -275,7 +275,7 @@
 	.fatal {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.fatal {

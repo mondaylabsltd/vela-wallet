@@ -40,6 +40,51 @@
 		else onClose();
 	}
 
+	/*
+	 * vis-2: the desktop card takes focus when it opens, keeps Tab inside, and
+	 * gives focus back on close; Escape closes it — and only it, not the
+	 * account switcher's dialog it may have been opened over.
+	 */
+	let scrim = $state<HTMLElement>();
+
+	$effect(() => {
+		const node = scrim;
+		if (!node) return;
+		const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		node.focus({ preventScroll: true });
+		return () => {
+			const active = document.activeElement;
+			const lost = active === null || active === document.body || node.contains(active);
+			if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
+		};
+	});
+
+	function onScrimKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			if (event.isComposing) return;
+			event.preventDefault();
+			event.stopPropagation();
+			close();
+			return;
+		}
+		if (event.key !== 'Tab' || !scrim) return;
+		const items = Array.from(
+			scrim.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]')
+		);
+		if (items.length === 0) return;
+		const first = items[0];
+		const last = items[items.length - 1];
+		const active = document.activeElement;
+		event.stopPropagation();
+		if (event.shiftKey && (active === first || active === scrim)) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && active === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
 	async function copyAddress() {
 		try {
 			await navigator.clipboard.writeText(address);
@@ -80,7 +125,9 @@
 			aria-modal="true"
 			aria-label={copy.title}
 			tabindex="-1"
-			onkeydown={(event) => event.key === 'Escape' && close()}
+			data-focus-inner
+			bind:this={scrim}
+			onkeydown={onScrimKeydown}
 		>
 			<div class="card">{@render body()}</div>
 		</div>
@@ -104,6 +151,10 @@
 		place-items: center;
 		padding: var(--space-3xl);
 		background: var(--color-fixed-backdrop);
+	}
+
+	.scrim:focus {
+		outline: none;
 	}
 
 	.card {
@@ -131,7 +182,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 	}
@@ -139,7 +190,7 @@
 	.caption {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 	}
 
@@ -153,7 +204,7 @@
 		background: var(--color-bg-sunken);
 		color: var(--color-fg-base);
 		font-family: var(--font-mono);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 		overflow-wrap: anywhere;
 	}

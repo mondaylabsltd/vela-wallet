@@ -99,7 +99,7 @@
 	}
 
 	.rail-row.drop-target {
-		outline: var(--border-emphasis) dashed var(--color-accent-base);
+		outline: var(--border-emphasis) dashed var(--color-fg-base);
 		outline-offset: calc(var(--space-xs) * -1);
 	}
 

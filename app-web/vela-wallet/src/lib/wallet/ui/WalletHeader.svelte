@@ -47,13 +47,18 @@
 			<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-down']} size="sm" /></span>
 		</button>
 		<span class="facts">
-			<button type="button" class="address" tabindex="-1" {onclick}>{header.addressDisplay}</button>
+			<!-- vis-16: reachable by keyboard, as the name above it is; it opens
+			     the same switcher. -->
+			<button type="button" class="address" data-tap aria-haspopup="dialog" {onclick}
+				>{header.addressDisplay}</button
+			>
 			<!-- The space in front (spec 105), beside the account it shows: tapping it
 			     offers the other space. Live headers only — the gallery's is a picture. -->
 			{#if onclick && networkSpace.words}
 				<button
 					type="button"
 					class="chip space"
+					data-tap
 					class:testnet={networkSpace.testnet}
 					data-testid="network-space"
 					onclick={() => networkSpace.openSwitcher()}
@@ -82,7 +87,11 @@
 		min-width: 0;
 	}
 
+	/* Above the grown targets of the line under it (`data-tap`, vis-12): a
+	   press on the name is always the name's. */
 	.name-row {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);

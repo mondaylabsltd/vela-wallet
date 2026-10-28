@@ -392,7 +392,7 @@
 					<dd>{item.nonce.toString()}</dd>
 				</div>
 				<div>
-					<dt>safeTxHash</dt>
+					<dt>{m.proposal.hash}</dt>
 					<dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd>
 				</div>
 			</dl>
@@ -484,7 +484,7 @@
 				>
 				{#if item.review.action !== null}
 					<Button
-						variant="primary"
+						variant="value"
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
 						disabled={busy}
@@ -544,7 +544,7 @@
 							</Button>
 						{/if}
 						<Button
-							variant="primary"
+							variant="value"
 							shape="rounded"
 							loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
 							disabled={busy}
@@ -556,7 +556,7 @@
 					<p class="fine">{m.proposal.feeNote}</p>
 				{:else if approvers.length > 0 && actor}
 					<Button
-						variant="primary"
+						variant="value"
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 						disabled={busy}
@@ -612,7 +612,7 @@
 						onclick={onReject}>{m.proposal.reject}</Button
 					>
 				{:else}
-					<button type="button" class="text-button" onclick={() => (rejecting = true)}
+					<button type="button" class="text-button" data-tap onclick={() => (rejecting = true)}
 						>{m.proposal.reject}</button
 					>
 				{/if}

@@ -192,6 +192,8 @@
       "pinRejected": "PIN が正しくありません。試行回数がなくなるとキーはロックされ、リセットでしか解除できません。リセットするとキー上のパスキーはすべて消去されます。",
       "pinTitle": "セキュリティキーの PIN を入力",
       "progressSubtitle": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
+      "progressSubtitle_one": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
+      "progressSubtitle_other": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
       "progressTitle": "ウォレットを作成中",
       "providerGeneric": "スマホまたはタブレット",
       "providerPlatform": "端末内蔵のパスキー",

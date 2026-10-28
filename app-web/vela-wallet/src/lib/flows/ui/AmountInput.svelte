@@ -40,6 +40,11 @@
 		 * work out from the line beneath whether that was dollars or coins.
 		 */
 		adornment?: { prefix?: string; suffix?: string };
+		/**
+		 * Enter in the field (vis-14): what the screen's main button does. Absent
+		 * while that button is shut — Enter then does nothing, as a press would.
+		 */
+		onsubmit?: () => void;
 	}
 
 	let {
@@ -50,7 +55,8 @@
 		ondenom,
 		oninput,
 		placeholder = '0',
-		adornment = {}
+		adornment = {},
+		onsubmit
 	}: Props = $props();
 
 	/**
@@ -134,6 +140,11 @@
 					{placeholder}
 					value={text}
 					oninput={typed}
+					onkeydown={(event) => {
+						if (event.key !== 'Enter' || event.isComposing) return;
+						event.preventDefault();
+						onsubmit?.();
+					}}
 					oncompositionend={(event) => take(event.currentTarget, false)}
 				/>
 			</span>

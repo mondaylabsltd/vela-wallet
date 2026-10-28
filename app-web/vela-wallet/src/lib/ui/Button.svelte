@@ -3,12 +3,17 @@
 
 	interface Props {
 		/**
+		 * `primary` is the strong NEUTRAL button — the screen's main action in
+		 * the inverse ink (Continue, Create, Next, Copy address, Connect…).
+		 * `value` is the one accent button: the action that moves value or
+		 * signs (Confirm & Send, Sign / Approve, Propose and approve, Execute).
+		 * Owner decision 2026-10 (vis-6): the accent is ONLY that, so a person
+		 * learns that the orange button is the one that spends.
 		 * `danger` is spec 023's addition: 退出登录 / 仍然退出 / 全部清除 are
-		 * filled buttons in the error colour, not accent ones. Accent is reserved
-		 * for the action that moves value (design review 2026-07), and signing out
-		 * or erasing a device moves none — it destroys.
+		 * filled buttons in the error colour, not accent ones — signing out or
+		 * erasing a device moves no value, it destroys.
 		 */
-		variant: 'primary' | 'secondary' | 'danger';
+		variant: 'primary' | 'value' | 'secondary' | 'danger';
 		/**
 		 * `pill` is the Welcome page's shape (spec 006); `rounded` is the v2
 		 * onboarding flow's, whose design draws rectangles at `--radius-lg`
@@ -17,7 +22,11 @@
 		 * sizing or disabled treatment happen twice.
 		 */
 		shape?: 'pill' | 'rounded';
-		/** Renders an <a> when set (and not disabled), else a <button>. */
+		/**
+		 * Renders an <a> when set (and not disabled), else a <button>. The
+		 * link still runs `onclick` before it navigates (ob-1: the intro's
+		 * Create Wallet marks the intro seen on its way out).
+		 */
 		href?: string;
 		/** With `href`: a page outside the app (an explorer) — a new tab, no opener. */
 		external?: boolean;
@@ -68,6 +77,7 @@
 		class="button {variant} {shape}"
 		data-testid={testid}
 		{href}
+		{onclick}
 		target={external ? '_blank' : undefined}
 		rel={external ? 'noreferrer noopener' : undefined}>{@render children()}</a
 	>
@@ -108,7 +118,7 @@
 		padding-block: var(--space-md);
 		border: none;
 		font-family: var(--font-ui);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		line-height: var(--leading-tight);
 		text-align: center;
@@ -197,6 +207,11 @@
 	}
 
 	.primary {
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
+	}
+
+	.value {
 		background: var(--color-accent-base);
 		color: var(--color-onAccent);
 	}

@@ -120,15 +120,19 @@
 		padding-block: var(--space-lg);
 	}
 
+	/* The label gives way down to its longest word and no further (vis-10:
+	   a German label broke inside a word); the value takes the rest. */
 	.label {
+		flex: 0 1 auto;
+		min-width: min-content;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
-		flex-shrink: 0;
 	}
 
 	.value-wrap {
 		display: inline-flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: var(--space-sm);
 		min-width: 0;
 	}
@@ -158,10 +162,19 @@
 		height: 100%;
 	}
 
+	/* vis-9 / vis-10: a value that does not fit WRAPS, it is never cut — a
+	   fee's fiat half and a shortened address's tail are the parts a person
+	   checks. Only a name over its address (`.first`, below) may be cut. */
 	.value {
+		min-width: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
 		color: var(--color-fg-base);
+		text-align: end;
+		overflow-wrap: anywhere;
+	}
+
+	.first .value {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -193,9 +206,11 @@
 	}
 
 	.detail {
+		max-width: 100%;
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
-		white-space: nowrap;
+		text-align: end;
+		overflow-wrap: anywhere;
 	}
 
 	/* Spec 093: an unlimited allowance reads in red; what came back, in green. */

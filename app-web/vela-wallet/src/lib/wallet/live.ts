@@ -1021,7 +1021,10 @@ export function liveActivityGroups(
 function activityMode(view: BalanceView, feed: FeedView | null | undefined): SectionModel['mode'] {
 	if (!feed) return 'loading';
 	if (feed.rows.length > 0) return 'rows';
-	return view.balance_unknown ? 'loading' : 'empty';
+	// vis-4: "No activity yet" is said once the wallet has finished its first
+	// look (`checking_key`, the core's "Checking…"), not over a cached total
+	// while the reads — a multisig's waiting proposals among them — are out.
+	return view.balance_unknown || (view.checking_key ?? null) !== null ? 'loading' : 'empty';
 }
 
 // ---------------------------------------------------------------------------

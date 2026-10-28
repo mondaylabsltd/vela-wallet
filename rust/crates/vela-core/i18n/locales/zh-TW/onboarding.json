@@ -192,6 +192,8 @@
       "pinRejected": "PIN 碼不正確。次數用盡後金鑰會自我鎖定，只能透過重置解鎖——而重置會清除金鑰上的所有通行金鑰。",
       "pinTitle": "輸入安全金鑰的 PIN 碼",
       "progressSubtitle": "用 {{count}} 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。",
+      "progressSubtitle_one": "用 {{count}} 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。",
+      "progressSubtitle_other": "用 {{count}} 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。",
       "progressTitle": "正在建立錢包",
       "providerGeneric": "手機或平板",
       "providerPlatform": "內建通行密鑰",

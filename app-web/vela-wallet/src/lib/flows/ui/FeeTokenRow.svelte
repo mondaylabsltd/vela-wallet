@@ -131,6 +131,6 @@
 		justify-content: center;
 		width: var(--icon-lg);
 		flex-shrink: 0;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 </style>

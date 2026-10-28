@@ -222,7 +222,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		cursor: pointer;
 	}

@@ -192,6 +192,8 @@
       "pinRejected": "PIN이 올바르지 않습니다. 시도 횟수를 모두 사용하면 키가 잠기며 초기화로만 해제할 수 있고, 초기화하면 키의 모든 패스키가 지워집니다.",
       "pinTitle": "보안 키의 PIN 입력",
       "progressSubtitle": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
+      "progressSubtitle_one": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
+      "progressSubtitle_other": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
       "progressTitle": "지갑을 만드는 중",
       "providerGeneric": "휴대폰 또는 태블릿",
       "providerPlatform": "기기 내장 패스키",

@@ -124,7 +124,7 @@
 			</div>
 		{/if}
 		<Button
-			variant="primary"
+			variant="value"
 			shape="rounded"
 			disabled={ctaDisabled && !ctaBusy}
 			loading={ctaBusy}

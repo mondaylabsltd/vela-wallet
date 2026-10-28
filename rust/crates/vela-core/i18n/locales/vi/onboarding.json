@@ -192,6 +192,8 @@
       "pinRejected": "Mã PIN không đúng. Khi hết lượt thử, khoá sẽ tự khoá lại và chỉ có thể mở bằng cách đặt lại — thao tác đó xoá sạch mọi passkey trên khoá.",
       "pinTitle": "Nhập mã PIN của khoá bảo mật",
       "progressSubtitle": "Suy ra địa chỉ từ {{count}} khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas.",
+      "progressSubtitle_one": "Suy ra địa chỉ từ {{count}} khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas.",
+      "progressSubtitle_other": "Suy ra địa chỉ từ {{count}} khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas.",
       "progressTitle": "Đang tạo ví",
       "providerGeneric": "Điện thoại hoặc máy tính bảng",
       "providerPlatform": "Passkey tích hợp",

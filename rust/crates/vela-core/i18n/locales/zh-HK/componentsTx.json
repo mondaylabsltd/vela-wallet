@@ -10,6 +10,9 @@
       "txHash": "交易雜湊",
       "confirming": "確認中…",
       "confirmingHint": "已發送！正在鏈上確認——區塊鏈瀏覽器連結稍後出現。",
+      "confirmingProgress": "預計確認進度",
+      "confirmingDelayed": "仍在確認",
+      "confirmingPoll": "每 {{seconds}} 秒檢查一次鏈上狀態",
       "scanHint": "掃描以在區塊鏈瀏覽器中查看",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,8 @@
       "statusSubmitted": "已提交",
       "statusFailed": "失敗",
       "failedHint": "此轉帳在鏈上被還原——你的資金並未發出，但可能仍已收取網絡費。",
-      "userOpHash": "UserOp 雜湊"
+      "userOpHash": "UserOp 雜湊",
+      "copyHash": "複製交易雜湊"
     },
     "detail": {
       "received": "已接收",

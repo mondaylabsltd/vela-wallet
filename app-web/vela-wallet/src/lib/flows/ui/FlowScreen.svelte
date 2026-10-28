@@ -24,12 +24,31 @@
 	}
 
 	let { header, onback, onaction, onpill, footer, children }: Props = $props();
+
+	let barHeight = $state(0);
+	let titleHeight = $state(0);
+
+	/*
+	 * vis-14: Escape is the ‹ — one step back (a send's confirm returns to its
+	 * form), as the desktop column's Escape is. Not while a sheet or dialog is
+	 * up over the screen: that Escape closes the sheet.
+	 */
+	function onkeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+		if (onback === undefined) return;
+		if (document.querySelector('[aria-modal="true"]') !== null) return;
+		onback();
+	}
 </script>
 
+<svelte:window {onkeydown} />
+
+<!-- `--flow-screen-head`: how tall the back bar and the title are, for a
+     screen that fills what is left under them (the receipt, vis-15). -->
 <div class="screen">
-	<div class="scroll">
-		<div class="bar">
-			<button type="button" class="back" aria-label={header.backLabel} onclick={onback}>
+	<div class="scroll" style:--flow-screen-head="{barHeight + titleHeight}px">
+		<div class="bar" bind:offsetHeight={barHeight}>
+			<button type="button" class="back" data-tap aria-label={header.backLabel} onclick={onback}>
 				<Icon icon={UTILITY_ICONS['chevron-left']} size="lg" />
 			</button>
 			{#if header.action !== undefined}
@@ -37,7 +56,7 @@
 			{/if}
 		</div>
 
-		<div class="title-row">
+		<div class="title-row" bind:offsetHeight={titleHeight}>
 			<h1>{header.title}</h1>
 			{#if header.pill !== undefined}
 				<button type="button" class="pill" onclick={onpill}>
@@ -112,11 +131,15 @@
 		border-radius: var(--radius-sm);
 	}
 
+	/* vis-8: the pill drops under a title that leaves it no room (a large
+	   text size, a long word) and keeps to the right edge — the two never
+	   sit on top of each other. */
 	.title-row {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: var(--space-lg);
+		gap: var(--space-md) var(--space-lg);
 		padding-block: var(--space-md) var(--space-xl);
 	}
 
@@ -128,6 +151,7 @@
 		line-height: var(--leading-tight);
 		color: var(--color-fg-base);
 		min-width: 0;
+		overflow-wrap: break-word;
 	}
 
 	.pill {
@@ -135,6 +159,7 @@
 		align-items: center;
 		gap: var(--space-sm);
 		flex-shrink: 0;
+		margin-inline-start: auto;
 		padding: var(--space-sm) var(--space-lg);
 		border: none;
 		border-radius: var(--radius-full);

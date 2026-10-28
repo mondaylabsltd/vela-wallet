@@ -142,13 +142,13 @@
 
 	.check {
 		display: flex;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
-	/* The chosen row is stated twice — accent text and a check — because the
+	/* The chosen row is stated twice — heavier text and a check — because the
 	   check alone disappears at the small type size the notes use. */
 	.selected .label {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);
 	}
 </style>

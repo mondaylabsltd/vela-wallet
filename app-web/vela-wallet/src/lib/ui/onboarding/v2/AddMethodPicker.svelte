@@ -120,7 +120,7 @@
 
 	.name {
 		color: var(--color-fg-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 	}
 
@@ -131,7 +131,7 @@
 	.caption {
 		overflow: hidden;
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}

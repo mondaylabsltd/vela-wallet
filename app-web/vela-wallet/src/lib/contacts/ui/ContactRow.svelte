@@ -159,8 +159,10 @@
 		cursor: pointer;
 	}
 
+	/* Send only opens the form — it moves nothing yet, so no accent. */
 	.swipe-action.send {
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
 	}
 
 	.swipe-action.delete {

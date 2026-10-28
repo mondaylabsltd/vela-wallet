@@ -52,7 +52,7 @@
 		<span class="pick">{@render face()}</span>
 	{/if}
 	{#if token.max !== undefined}
-		<button type="button" class="max" onclick={onmax}>{token.max}</button>
+		<button type="button" class="max" data-tap onclick={onmax}>{token.max}</button>
 	{/if}
 </div>
 

@@ -232,12 +232,12 @@
 		text-overflow: ellipsis;
 	}
 
+	/* vis-10: wraps rather than ends in "…" — the line is "To 0x0000…bEEF",
+	   and the tail of a shortened address is what a person compares. */
 	.subtitle {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
 	}
 
 	.figures {

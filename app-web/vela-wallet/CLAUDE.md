@@ -27,8 +27,13 @@
    files, bump the path-count pin in `../../scripts/gen-i18n.mjs`, run
    `npm --prefix scripts run gen:i18n` (repo root; it writes the Rust catalogs
    and `../../assets/i18n/`), then `lint:i18n` + `verify:i18n` must pass.
-4. Accent color (`--color-accent-base`) only on the primary value-moving
-   action. AA contrast is test-enforced (`contrast.test.ts`).
+4. Accent color (`--color-accent-*`) only on the primary action that moves
+   value or signs — `<Button variant="value">`: Confirm & Send, Sign /
+   Approve, Propose and approve, Execute. Every other main action is
+   `variant="primary"`, the neutral inverse ink (fg.base fill, fg.inverse
+   label). Selected states, checks, links, progress and focus rings use
+   neutral tokens, never the accent. AA contrast is test-enforced
+   (`contrast.test.ts`).
 
 ## Gates before claiming done
 

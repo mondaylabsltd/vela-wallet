@@ -75,7 +75,7 @@
 			</Button>
 		{:else}
 			<Button
-				variant="primary"
+				variant="value"
 				shape="rounded"
 				disabled={!handoff.open.enabled}
 				onclick={() => onopen?.()}

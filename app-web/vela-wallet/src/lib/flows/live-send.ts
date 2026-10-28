@@ -566,11 +566,17 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 	// `load_tokens_failed`, and the picker — the one screen on at that moment
 	// — says so instead of "no tokens with balance", which is a claim about
 	// money the wallet never saw.
+	//
+	// Nor is a list still being read (vis-4 / send-9): "no tokens with
+	// balance" before the first read has answered is a claim about money the
+	// wallet has not seen yet.
 	const empty =
 		send.tokens.length === 0
 			? inputs.alert?.type === 'load_tokens_failed'
 				? m['send.alertLoadTokensError']
-				: m['send.noTokensWithBalance']
+				: send.loading
+					? m['send.loadingTokens']
+					: m['send.noTokensWithBalance']
 			: m['send.noMatchingTokens'];
 	const recipient = pickRecipient(inputs);
 	if (!inputs.sweepPicking) {
@@ -1541,7 +1547,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				? {
 						label: m['componentsTx.receipt.userOpHash'],
 						value: send.user_op_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+						copyLabel: m['componentsTx.receipt.copyHash']
 					}
 				: undefined,
 			cta: m['send.txCloseBackground'],
@@ -1646,7 +1652,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				? {
 						label: m['componentsTx.receipt.txHash'],
 						value: send.tx_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+						copyLabel: m['componentsTx.receipt.copyHash']
 					}
 				: undefined,
 			// The chain is the TOKEN's, never whichever one the wallet is
@@ -1706,7 +1712,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 							? m['componentsTx.receipt.txHash']
 							: m['componentsTx.receipt.userOpHash'],
 						value: send.tx_hash ?? send.user_op_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+						copyLabel: m['componentsTx.receipt.copyHash']
 					}
 				: undefined,
 			cta: m['send.txCloseBackground'],

@@ -61,6 +61,8 @@
 		onSubmit,
 		onStartOver
 	}: Props = $props();
+
+	const uid = $props.id();
 </script>
 
 <!--
@@ -71,9 +73,10 @@
 -->
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 <section class="screen">
-	<h1 class="title">{strings('onboarding.create.nameTitle')}</h1>
+	<h1 class="title" id="{uid}-title">{strings('onboarding.create.nameTitle')}</h1>
 
 	<NameField
+		labelledby="{uid}-title"
 		placeholder={strings('onboarding.create.accountNamePlaceholder')}
 		errorText={nameTooLong ? strings('onboarding.create.nameTooLong') : undefined}
 		value={name}
@@ -133,7 +136,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -153,16 +156,18 @@
 	.status {
 		margin: 0;
 		color: var(--color-info-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
+	/* Links in the text's own ink, told apart by their underline: the
+	   accent is only for the action that moves value (vis-6). */
 	.gates :global(a) {
-		color: var(--color-accent-base);
-		text-decoration: none;
+		color: var(--color-fg-base);
+		text-decoration: underline;
 	}
 
 	.gates :global(a:hover) {
-		color: var(--color-fg-base);
+		color: var(--color-fg-muted);
 	}
 
 	.startover {
@@ -172,7 +177,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		text-decoration: underline;
 		cursor: pointer;
 	}

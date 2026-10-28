@@ -83,6 +83,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Up to 0 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -94,6 +108,20 @@
    },
    "expect": {
     "value": "0 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 0 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -220,6 +248,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Up to 1 member can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -231,6 +273,20 @@
    },
    "expect": {
     "value": "1 account · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 1 key. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -357,6 +413,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Up to 2 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -368,6 +438,20 @@
    },
    "expect": {
     "value": "2 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 2 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -494,6 +578,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Up to 3 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -505,6 +603,20 @@
    },
    "expect": {
     "value": "3 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 3 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -631,6 +743,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Up to 5 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -642,6 +768,20 @@
    },
    "expect": {
     "value": "5 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 5 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -768,6 +908,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Up to 11 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -779,6 +933,20 @@
    },
    "expect": {
     "value": "11 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 11 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -905,6 +1073,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Up to 21 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -916,6 +1098,20 @@
    },
    "expect": {
     "value": "21 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 21 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -1042,6 +1238,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Up to 101 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1053,6 +1263,20 @@
    },
    "expect": {
     "value": "101 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 101 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -1179,6 +1403,20 @@
    }
   },
   {
+   "name": "en/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Up to 1000000 members can lose access and the funds still move."
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1190,6 +1428,20 @@
    },
    "expect": {
     "value": "1000000 accounts · "
+   }
+  },
+  {
+   "name": "en/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Deriving the address from 1000000 keys. The contract deploys with your first transaction — no gas now."
    }
   },
   {
@@ -1329,6 +1581,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "最多 0 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1340,6 +1606,20 @@
    },
    "expect": {
     "value": "0 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "用 0 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -1466,6 +1746,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "最多 1 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1477,6 +1771,20 @@
    },
    "expect": {
     "value": "1 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "用 1 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -1603,6 +1911,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "最多 2 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1614,6 +1936,20 @@
    },
    "expect": {
     "value": "2 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "用 2 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -1740,6 +2076,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "最多 3 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1751,6 +2101,20 @@
    },
    "expect": {
     "value": "3 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "用 3 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -1877,6 +2241,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "最多 5 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1888,6 +2266,20 @@
    },
    "expect": {
     "value": "5 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "用 5 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -2014,6 +2406,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "最多 11 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2025,6 +2431,20 @@
    },
    "expect": {
     "value": "11 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "用 11 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -2151,6 +2571,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "最多 21 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2162,6 +2596,20 @@
    },
    "expect": {
     "value": "21 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "用 21 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -2288,6 +2736,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "最多 101 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2299,6 +2761,20 @@
    },
    "expect": {
     "value": "101 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "用 101 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -2425,6 +2901,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "最多 1000000 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2436,6 +2926,20 @@
    },
    "expect": {
     "value": "1000000 个账户 · "
+   }
+  },
+  {
+   "name": "zh/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "用 1000000 把密钥推导地址。合约在首笔交易时部署，不花 gas。"
    }
   },
   {
@@ -2575,6 +3079,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "最多 0 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2586,6 +3104,20 @@
    },
    "expect": {
     "value": "0 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "用 0 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -2712,6 +3244,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "最多 1 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2723,6 +3269,20 @@
    },
    "expect": {
     "value": "1 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "用 1 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -2849,6 +3409,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "最多 2 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2860,6 +3434,20 @@
    },
    "expect": {
     "value": "2 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "用 2 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -2986,6 +3574,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "最多 3 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2997,6 +3599,20 @@
    },
    "expect": {
     "value": "3 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "用 3 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3123,6 +3739,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "最多 5 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3134,6 +3764,20 @@
    },
    "expect": {
     "value": "5 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "用 5 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3260,6 +3904,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "最多 11 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3271,6 +3929,20 @@
    },
    "expect": {
     "value": "11 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "用 11 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3397,6 +4069,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "最多 21 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3408,6 +4094,20 @@
    },
    "expect": {
     "value": "21 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "用 21 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3534,6 +4234,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "最多 101 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3545,6 +4259,20 @@
    },
    "expect": {
     "value": "101 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "用 101 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3671,6 +4399,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "最多 1000000 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3682,6 +4424,20 @@
    },
    "expect": {
     "value": "1000000 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-TW/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "用 1000000 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。"
    }
   },
   {
@@ -3821,6 +4577,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "最多 0 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3832,6 +4602,20 @@
    },
    "expect": {
     "value": "0 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "用 0 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -3958,6 +4742,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "最多 1 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3969,6 +4767,20 @@
    },
    "expect": {
     "value": "1 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "用 1 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4095,6 +4907,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "最多 2 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4106,6 +4932,20 @@
    },
    "expect": {
     "value": "2 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "用 2 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4232,6 +5072,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "最多 3 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4243,6 +5097,20 @@
    },
    "expect": {
     "value": "3 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "用 3 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4369,6 +5237,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "最多 5 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4380,6 +5262,20 @@
    },
    "expect": {
     "value": "5 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "用 5 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4506,6 +5402,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "最多 11 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4517,6 +5427,20 @@
    },
    "expect": {
     "value": "11 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "用 11 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4643,6 +5567,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "最多 21 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4654,6 +5592,20 @@
    },
    "expect": {
     "value": "21 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "用 21 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4780,6 +5732,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "最多 101 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4791,6 +5757,20 @@
    },
    "expect": {
     "value": "101 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "用 101 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -4917,6 +5897,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "最多 1000000 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4928,6 +5922,20 @@
    },
    "expect": {
     "value": "1000000 個帳戶 · "
+   }
+  },
+  {
+   "name": "zh-HK/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "用 1000000 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。"
    }
   },
   {
@@ -5067,6 +6075,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "最大 0 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5078,6 +6100,20 @@
    },
    "expect": {
     "value": "0 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5204,6 +6240,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "最大 1 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5215,6 +6265,20 @@
    },
    "expect": {
     "value": "1 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5341,6 +6405,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "最大 2 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5352,6 +6430,20 @@
    },
    "expect": {
     "value": "2 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5478,6 +6570,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "最大 3 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5489,6 +6595,20 @@
    },
    "expect": {
     "value": "3 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5615,6 +6735,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "最大 5 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5626,6 +6760,20 @@
    },
    "expect": {
     "value": "5 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5752,6 +6900,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "最大 11 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5763,6 +6925,20 @@
    },
    "expect": {
     "value": "11 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -5889,6 +7065,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "最大 21 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5900,6 +7090,20 @@
    },
    "expect": {
     "value": "21 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -6026,6 +7230,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "最大 101 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6037,6 +7255,20 @@
    },
    "expect": {
     "value": "101 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -6163,6 +7395,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "最大 1000000 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6174,6 +7420,20 @@
    },
    "expect": {
     "value": "1000000 個のアカウント · "
+   }
+  },
+  {
+   "name": "ja/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。"
    }
   },
   {
@@ -6313,6 +7573,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "최대 0명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6324,6 +7598,20 @@
    },
    "expect": {
     "value": "계정 0개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -6450,6 +7738,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "최대 1명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6461,6 +7763,20 @@
    },
    "expect": {
     "value": "계정 1개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -6587,6 +7903,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "최대 2명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6598,6 +7928,20 @@
    },
    "expect": {
     "value": "계정 2개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -6724,6 +8068,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "최대 3명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6735,6 +8093,20 @@
    },
    "expect": {
     "value": "계정 3개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -6861,6 +8233,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "최대 5명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6872,6 +8258,20 @@
    },
    "expect": {
     "value": "계정 5개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -6998,6 +8398,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "최대 11명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7009,6 +8423,20 @@
    },
    "expect": {
     "value": "계정 11개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -7135,6 +8563,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "최대 21명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7146,6 +8588,20 @@
    },
    "expect": {
     "value": "계정 21개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -7272,6 +8728,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "최대 101명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7283,6 +8753,20 @@
    },
    "expect": {
     "value": "계정 101개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -7409,6 +8893,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "최대 1000000명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7420,6 +8918,20 @@
    },
    "expect": {
     "value": "계정 1000000개 · "
+   }
+  },
+  {
+   "name": "ko/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다."
    }
   },
   {
@@ -7559,6 +9071,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Tối đa 0 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7570,6 +9096,20 @@
    },
    "expect": {
     "value": "0 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 0 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -7696,6 +9236,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Tối đa 1 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7707,6 +9261,20 @@
    },
    "expect": {
     "value": "1 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 1 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -7833,6 +9401,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Tối đa 2 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7844,6 +9426,20 @@
    },
    "expect": {
     "value": "2 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 2 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -7970,6 +9566,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Tối đa 3 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7981,6 +9591,20 @@
    },
    "expect": {
     "value": "3 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 3 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8107,6 +9731,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Tối đa 5 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8118,6 +9756,20 @@
    },
    "expect": {
     "value": "5 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 5 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8244,6 +9896,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Tối đa 11 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8255,6 +9921,20 @@
    },
    "expect": {
     "value": "11 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 11 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8381,6 +10061,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Tối đa 21 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8392,6 +10086,20 @@
    },
    "expect": {
     "value": "21 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 21 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8518,6 +10226,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Tối đa 101 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8529,6 +10251,20 @@
    },
    "expect": {
     "value": "101 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 101 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8655,6 +10391,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Tối đa 1000000 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8666,6 +10416,20 @@
    },
    "expect": {
     "value": "1000000 tài khoản · "
+   }
+  },
+  {
+   "name": "vi/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Suy ra địa chỉ từ 1000000 khoá. Hợp đồng triển khai ở giao dịch đầu tiên — chưa tốn gas."
    }
   },
   {
@@ -8805,6 +10569,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Hingga 0 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8816,6 +10594,20 @@
    },
    "expect": {
     "value": "0 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 0 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -8942,6 +10734,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Hingga 1 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8953,6 +10759,20 @@
    },
    "expect": {
     "value": "1 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 1 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9079,6 +10899,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Hingga 2 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9090,6 +10924,20 @@
    },
    "expect": {
     "value": "2 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 2 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9216,6 +11064,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Hingga 3 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9227,6 +11089,20 @@
    },
    "expect": {
     "value": "3 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 3 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9353,6 +11229,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Hingga 5 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9364,6 +11254,20 @@
    },
    "expect": {
     "value": "5 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 5 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9490,6 +11394,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Hingga 11 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9501,6 +11419,20 @@
    },
    "expect": {
     "value": "11 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 11 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9627,6 +11559,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Hingga 21 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9638,6 +11584,20 @@
    },
    "expect": {
     "value": "21 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 21 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9764,6 +11724,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Hingga 101 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9775,6 +11749,20 @@
    },
    "expect": {
     "value": "101 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 101 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -9901,6 +11889,20 @@
    }
   },
   {
+   "name": "id/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Hingga 1000000 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9912,6 +11914,20 @@
    },
    "expect": {
     "value": "1000000 akun · "
+   }
+  },
+  {
+   "name": "id/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Menurunkan alamat dari 1000000 kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas."
    }
   },
   {
@@ -10051,6 +12067,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "En fazla 0 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10062,6 +12092,20 @@
    },
    "expect": {
     "value": "0 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Adres 0 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10188,6 +12232,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "En fazla 1 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10199,6 +12257,20 @@
    },
    "expect": {
     "value": "1 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Adres 1 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10325,6 +12397,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "En fazla 2 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10336,6 +12422,20 @@
    },
    "expect": {
     "value": "2 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Adres 2 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10462,6 +12562,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "En fazla 3 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10473,6 +12587,20 @@
    },
    "expect": {
     "value": "3 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Adres 3 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10599,6 +12727,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "En fazla 5 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10610,6 +12752,20 @@
    },
    "expect": {
     "value": "5 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Adres 5 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10736,6 +12892,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "En fazla 11 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10747,6 +12917,20 @@
    },
    "expect": {
     "value": "11 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Adres 11 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -10873,6 +13057,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "En fazla 21 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10884,6 +13082,20 @@
    },
    "expect": {
     "value": "21 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Adres 21 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -11010,6 +13222,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "En fazla 101 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11021,6 +13247,20 @@
    },
    "expect": {
     "value": "101 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Adres 101 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -11147,6 +13387,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "En fazla 1000000 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11158,6 +13412,20 @@
    },
    "expect": {
     "value": "1000000 hesap · "
+   }
+  },
+  {
+   "name": "tr/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Adres 1000000 anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok."
    }
   },
   {
@@ -11297,6 +13565,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Hasta 0 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11308,6 +13590,20 @@
    },
    "expect": {
     "value": "0 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 0 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -11434,6 +13730,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Hasta 1 miembro puede perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11445,6 +13755,20 @@
    },
    "expect": {
     "value": "1 cuenta · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 1 llave. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -11571,6 +13895,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Hasta 2 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11582,6 +13920,20 @@
    },
    "expect": {
     "value": "2 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 2 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -11708,6 +14060,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Hasta 3 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11719,6 +14085,20 @@
    },
    "expect": {
     "value": "3 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 3 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -11845,6 +14225,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Hasta 5 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11856,6 +14250,20 @@
    },
    "expect": {
     "value": "5 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 5 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -11982,6 +14390,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Hasta 11 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11993,6 +14415,20 @@
    },
    "expect": {
     "value": "11 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 11 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -12119,6 +14555,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Hasta 21 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12130,6 +14580,20 @@
    },
    "expect": {
     "value": "21 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 21 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -12256,6 +14720,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Hasta 101 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12267,6 +14745,20 @@
    },
    "expect": {
     "value": "101 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 101 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -12393,6 +14885,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Hasta 1000000 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12404,6 +14910,20 @@
    },
    "expect": {
     "value": "1000000 cuentas · "
+   }
+  },
+  {
+   "name": "es-MX/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Derivando la dirección de 1000000 llaves. El contrato se despliega con tu primera transacción, sin gas ahora."
    }
   },
   {
@@ -12543,6 +15063,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Até 0 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12554,6 +15088,20 @@
    },
    "expect": {
     "value": "0 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 0 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -12680,6 +15228,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Até 1 membro pode perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12691,6 +15253,20 @@
    },
    "expect": {
     "value": "1 conta · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 1 chave. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -12817,6 +15393,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Até 2 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12828,6 +15418,20 @@
    },
    "expect": {
     "value": "2 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 2 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -12954,6 +15558,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Até 3 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12965,6 +15583,20 @@
    },
    "expect": {
     "value": "3 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 3 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13091,6 +15723,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Até 5 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13102,6 +15748,20 @@
    },
    "expect": {
     "value": "5 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 5 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13228,6 +15888,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Até 11 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13239,6 +15913,20 @@
    },
    "expect": {
     "value": "11 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 11 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13365,6 +16053,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Até 21 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13376,6 +16078,20 @@
    },
    "expect": {
     "value": "21 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 21 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13502,6 +16218,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Até 101 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13513,6 +16243,20 @@
    },
    "expect": {
     "value": "101 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 101 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13639,6 +16383,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Até 1000000 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13650,6 +16408,20 @@
    },
    "expect": {
     "value": "1000000 contas · "
+   }
+  },
+  {
+   "name": "pt-BR/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Derivando o endereço de 1000000 chaves. O contrato é implantado na sua primeira transação — sem gas agora."
    }
   },
   {
@@ -13789,6 +16561,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 0 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13800,6 +16586,20 @@
    },
    "expect": {
     "value": "0 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 0 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -13926,6 +16726,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 1 membre peut perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13937,6 +16751,20 @@
    },
    "expect": {
     "value": "1 compte · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 1 clé. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14063,6 +16891,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 2 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14074,6 +16916,20 @@
    },
    "expect": {
     "value": "2 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 2 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14200,6 +17056,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 3 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14211,6 +17081,20 @@
    },
    "expect": {
     "value": "3 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 3 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14337,6 +17221,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 5 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14348,6 +17246,20 @@
    },
    "expect": {
     "value": "5 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 5 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14474,6 +17386,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 11 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14485,6 +17411,20 @@
    },
    "expect": {
     "value": "11 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 11 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14611,6 +17551,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 21 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14622,6 +17576,20 @@
    },
    "expect": {
     "value": "21 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 21 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14748,6 +17716,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 101 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14759,6 +17741,20 @@
    },
    "expect": {
     "value": "101 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 101 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -14885,6 +17881,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Jusqu’à 1000000 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14896,6 +17906,20 @@
    },
    "expect": {
     "value": "1000000 comptes · "
+   }
+  },
+  {
+   "name": "fr/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Dérivation de l'adresse à partir de 1000000 clés. Le contrat se déploie à votre première transaction — pas de gas maintenant."
    }
   },
   {
@@ -15035,6 +18059,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Bis zu 0 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15046,6 +18084,20 @@
    },
    "expect": {
     "value": "0 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 0 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15172,6 +18224,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Bis zu 1 Mitglied kann den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15183,6 +18249,20 @@
    },
    "expect": {
     "value": "1 Konto · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 1 Schlüssel abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15309,6 +18389,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Bis zu 2 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15320,6 +18414,20 @@
    },
    "expect": {
     "value": "2 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 2 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15446,6 +18554,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Bis zu 3 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15457,6 +18579,20 @@
    },
    "expect": {
     "value": "3 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 3 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15583,6 +18719,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Bis zu 5 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15594,6 +18744,20 @@
    },
    "expect": {
     "value": "5 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 5 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15720,6 +18884,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Bis zu 11 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15731,6 +18909,20 @@
    },
    "expect": {
     "value": "11 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 11 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15857,6 +19049,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Bis zu 21 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15868,6 +19074,20 @@
    },
    "expect": {
     "value": "21 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 21 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -15994,6 +19214,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Bis zu 101 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16005,6 +19239,20 @@
    },
    "expect": {
     "value": "101 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 101 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -16131,6 +19379,20 @@
    }
   },
   {
+   "name": "de/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Bis zu 1000000 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16142,6 +19404,20 @@
    },
    "expect": {
     "value": "1000000 Konten · "
+   }
+  },
+  {
+   "name": "de/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Adresse wird aus 1000000 Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas."
    }
   },
   {
@@ -16281,6 +19557,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 0 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16292,6 +19582,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 0 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 0 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -16418,6 +19722,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 1 участника, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16429,6 +19747,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 1 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 1 ключа. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -16555,6 +19887,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 2 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16566,6 +19912,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 2 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 2 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -16692,6 +20052,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 3 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16703,6 +20077,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 3 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 3 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -16829,6 +20217,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 5 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16840,6 +20242,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 5 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 5 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -16966,6 +20382,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 11 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16977,6 +20407,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 11 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 11 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -17103,6 +20547,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 21 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17114,6 +20572,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 21 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 21 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -17240,6 +20712,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 101 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17251,6 +20737,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 101 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 101 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -17377,6 +20877,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Доступ могут потерять до 1000000 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17388,6 +20902,20 @@
    },
    "expect": {
     "value": "Аккаунтов: 1000000 · "
+   }
+  },
+  {
+   "name": "ru/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Адрес выводится из 1000000 ключей. Контракт развернётся при первой транзакции — сейчас без gas."
    }
   },
   {
@@ -17527,6 +21055,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Fino a 0 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17538,6 +21080,20 @@
    },
    "expect": {
     "value": "0 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 0 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -17664,6 +21220,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Fino a 1 membro può perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17675,6 +21245,20 @@
    },
    "expect": {
     "value": "1 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 1 chiave. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -17801,6 +21385,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Fino a 2 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17812,6 +21410,20 @@
    },
    "expect": {
     "value": "2 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 2 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -17938,6 +21550,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Fino a 3 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17949,6 +21575,20 @@
    },
    "expect": {
     "value": "3 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 3 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -18075,6 +21715,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Fino a 5 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18086,6 +21740,20 @@
    },
    "expect": {
     "value": "5 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 5 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -18212,6 +21880,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Fino a 11 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18223,6 +21905,20 @@
    },
    "expect": {
     "value": "11 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 11 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -18349,6 +22045,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Fino a 21 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18360,6 +22070,20 @@
    },
    "expect": {
     "value": "21 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 21 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -18486,6 +22210,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Fino a 101 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18497,6 +22235,20 @@
    },
    "expect": {
     "value": "101 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 101 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {
@@ -18623,6 +22375,20 @@
    }
   },
   {
+   "name": "it/home.multisig.create.thresholdSpare/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.create.thresholdSpare",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Fino a 1000000 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18634,6 +22400,20 @@
    },
    "expect": {
     "value": "1000000 account · "
+   }
+  },
+  {
+   "name": "it/onboarding.create.progressSubtitle/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "onboarding.create.progressSubtitle",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Deriviamo l'indirizzo da 1000000 chiavi. Il contratto viene distribuito alla prima transazione — nessun gas ora."
    }
   },
   {

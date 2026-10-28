@@ -11,6 +11,7 @@
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { pluralForm } from '$lib/i18n/plural';
 	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import { spaceNetworksSync } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -115,7 +116,9 @@
 			? m.create.thresholdAll
 			: threshold === 1
 				? m.create.thresholdOne
-				: fillTemplate(m.create.thresholdSpare, { spare: owners.length - threshold })
+				: fillTemplate(pluralForm(m.create.thresholdSpare, owners.length - threshold), {
+						count: owners.length - threshold
+					})
 	);
 	const risky = $derived(threshold === owners.length || threshold === 1);
 
@@ -227,7 +230,13 @@
 								>{shortenAddress(o)}</span
 							></span
 						>
-						<button type="button" class="remove" aria-label={closeLabel} onclick={() => toggle(o)}>
+						<!-- vis-16: named for what it does, with whom (it read "Close"). -->
+						<button
+							type="button"
+							class="remove"
+							aria-label="{m.action.removeOwner} · {memberLabel(o)}"
+							onclick={() => toggle(o)}
+						>
 							<Icon icon={UTILITY_ICONS['x']} size="sm" />
 						</button>
 					</li>

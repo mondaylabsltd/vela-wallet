@@ -1231,7 +1231,8 @@ export function liveAccountsSheet(
 		primary: m.createNew,
 		secondary: m.signInExisting,
 		remove: m.remove,
-		removeBody: m.removeBody
+		removeBody: m.removeBody,
+		removeCancel: m.cancel
 	};
 }
 

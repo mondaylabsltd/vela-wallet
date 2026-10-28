@@ -90,22 +90,22 @@
 
 	.label {
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.value {
 		font-family: var(--font-mono);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.explorer {
-		color: var(--color-accent-base);
-		font-size: var(--text-base);
-		text-decoration: none;
+		color: var(--color-fg-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		text-decoration: underline;
 	}
 
 	.explorer:hover {
-		text-decoration: underline;
+		color: var(--color-fg-muted);
 	}
 
 	.foot {

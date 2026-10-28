@@ -192,6 +192,8 @@
       "pinRejected": "Diese PIN wurde nicht akzeptiert. Sind die Versuche aufgebraucht, sperrt sich der Schlüssel selbst und lässt sich nur durch ein Zurücksetzen entsperren — dabei werden alle Passkeys darauf gelöscht.",
       "pinTitle": "PIN des Sicherheitsschlüssels eingeben",
       "progressSubtitle": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+      "progressSubtitle_one": "Adresse wird aus {{count}} Schlüssel abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+      "progressSubtitle_other": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
       "progressTitle": "Wallet wird erstellt",
       "providerGeneric": "Handy oder Tablet",
       "providerPlatform": "Integrierter Passkey",

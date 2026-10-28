@@ -722,6 +722,19 @@ describe('empty activity, chosen by the core', () => {
 		empty_key: 'assets.emptyTitle'
 	};
 
+	it('says "no activity" only once the first look is over (vis-4)', () => {
+		const base = buildMobileState('h1', m, IDENT);
+		const checking = withLiveWallet(base, {
+			balance: { ...LOOKED, checking_key: 'componentsUi.funding.checking' },
+			currency: USD,
+			m,
+			feed: EMPTY_FEED
+		});
+		expect(checking.activitySection.mode).toBe('loading');
+		const looked = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: EMPTY_FEED });
+		expect(looked.activitySection.mode).toBe('empty');
+	});
+
 	it('all networks → "no activity"; filtered → "none on this network"', () => {
 		const base = buildMobileState('h1', m, IDENT);
 		const all = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: EMPTY_FEED });

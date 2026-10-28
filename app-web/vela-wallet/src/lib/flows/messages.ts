@@ -223,6 +223,8 @@ export const WALLET_FLOW_KEYS = [
 	// web surface: a picker that has nothing to offer showed a blank panel,
 	// which is where an account holding nothing now lands (issue 209).
 	'send.noTokensWithBalance',
+	// vis-4 / send-9: the picker's list while the first read is still out.
+	'send.loadingTokens',
 	'send.noMatchingTokens',
 	'history.filterAll',
 	'send.filterStable',
@@ -448,6 +450,8 @@ export const WALLET_FLOW_KEYS = [
 	// "not sent", on the Send receipt as on the signing sheet.
 	'componentsUi.signing.maybeSent',
 	'componentsTx.receipt.userOpHash',
+	// vis-16: a hash's copy button said "Copy address".
+	'componentsTx.receipt.copyHash',
 	'componentsTx.receipt.statusFailed'
 ] as const;
 

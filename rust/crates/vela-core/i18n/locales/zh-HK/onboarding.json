@@ -192,6 +192,8 @@
       "pinRejected": "PIN 碼唔啱。次數用完之後金鑰會自己鎖起，只可以重置解鎖——但重置會清走金鑰上所有通行金鑰。",
       "pinTitle": "輸入安全金鑰嘅 PIN 碼",
       "progressSubtitle": "用 {{count}} 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。",
+      "progressSubtitle_one": "用 {{count}} 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。",
+      "progressSubtitle_other": "用 {{count}} 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。",
       "progressTitle": "而家整緊個錢包",
       "providerGeneric": "手機或者平板",
       "providerPlatform": "內置通行密鑰",

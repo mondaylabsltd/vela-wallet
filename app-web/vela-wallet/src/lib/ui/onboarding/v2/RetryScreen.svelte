@@ -69,7 +69,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -78,14 +78,14 @@
 	.subtitle {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
 	.hint {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 

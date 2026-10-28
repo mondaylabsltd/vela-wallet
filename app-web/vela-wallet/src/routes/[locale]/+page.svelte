@@ -415,7 +415,7 @@
 
 	.wordmark {
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		letter-spacing: 0.11em;
 	}
@@ -456,7 +456,7 @@
 	.sub {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		text-wrap: balance;
 	}
@@ -481,14 +481,14 @@
 	.methodsTitle {
 		margin: 0 0 var(--space-lg);
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 	}
 
 	.endpointWarning {
 		margin: 0;
 		color: var(--color-warning-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 

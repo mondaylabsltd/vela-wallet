@@ -290,6 +290,7 @@
 				type="button"
 				class="refresh"
 				class:spinning
+				data-tap
 				data-testid="balance-refresh"
 				aria-label={spinning
 					? balance.refresh.updating

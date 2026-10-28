@@ -220,7 +220,7 @@ function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowMo
 		label,
 		value: shortenAddress(hash),
 		mono: true,
-		copy: m['componentsUi.identiconViewer.copyAddress'],
+		copy: m['componentsTx.receipt.copyHash'],
 		copyValue: hash
 	};
 }

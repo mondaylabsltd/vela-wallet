@@ -216,7 +216,7 @@
 	}
 
 	.name.active {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.address {
@@ -235,7 +235,7 @@
 
 	.check {
 		display: flex;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.actions {

@@ -264,7 +264,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -273,7 +273,7 @@
 	.subtitle {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -285,9 +285,9 @@
 		margin: 0;
 		padding: var(--space-xl);
 		border-radius: var(--radius-lg);
-		background: var(--color-accent-soft);
+		background: var(--color-bg-sunken);
 		color: var(--color-fg-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -296,7 +296,7 @@
 		height: var(--space-md);
 		margin-top: var(--space-lg);
 		border-radius: var(--radius-full);
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
 	}
 
 	.list {
@@ -323,14 +323,14 @@
 
 	.pagedomain {
 		color: var(--color-fg-base);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 	}
 
 	.pageurl {
 		color: var(--color-fg-muted);
 		font-family: var(--font-mono);
-		font-size: var(--text-xs);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		overflow-wrap: anywhere;
 	}
 
@@ -345,7 +345,7 @@
 	.label {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		line-height: var(--leading-normal);
 		letter-spacing: 0.06em;
@@ -355,7 +355,7 @@
 	.count {
 		color: var(--color-fg-muted);
 		font-family: var(--font-mono);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.rows {
@@ -388,7 +388,7 @@
 	.name {
 		overflow: hidden;
 		color: var(--color-fg-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -396,11 +396,11 @@
 
 	.meta {
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.badge {
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		letter-spacing: 0.03em;
 	}
@@ -422,9 +422,10 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
+		text-decoration: underline;
 		font-family: var(--font-ui);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		cursor: pointer;
 	}
@@ -484,14 +485,14 @@
 		background: none;
 		color: var(--color-fg-base);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		cursor: pointer;
 		transition: border-color var(--motion-duration-fast) ease;
 	}
 
 	.fold:hover:not(:disabled) {
-		border-color: var(--color-accent-base);
+		border-color: var(--color-fg-base);
 	}
 
 	.fold:disabled {
@@ -500,7 +501,7 @@
 	}
 
 	.plus {
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		line-height: var(--leading-none);
 		transition: transform var(--motion-duration-fast) ease;
 	}
@@ -524,7 +525,7 @@
 	.footnote {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 </style>

@@ -878,8 +878,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `home.multisig` words (`switcher.notShared`, `proposal.mailboxDown`,
 //   `proposal.notSent`, `proposal.siteAsks`, `proposal.siteWaits`,
 //   `proposal.data`, `create.notMember`). 2046 + 7 = 2053 leaves, 116 branches.
-if (PATHS.length !== 2169) fail(`expected 2169 paths (2053 leaf + 116 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2053) fail(`expected 2053 leaf paths, got ${leafSet.size}`);
+// 2171 (plurals and labels from the visual pass, 2026-10-28): +
+//   `onboarding.create.progressSubtitle_{one,few,many,other}` beside the
+//   bare key the native shells read ("from 1 keys"); `home.multisig.create.
+//   thresholdSpare` becomes its four forms ("member(s)"), − 1 + 4; + 1
+//   `home.multisig.proposal.hash`, the label safeTxHash went without; + 1
+//   `componentsTx.receipt.copyHash` (a hash's copy button said "Copy
+//   address"). 2046 + 4 + 3 + 1 + 1 = 2055 leaves, 116 branches.
+// 2178 (both of the above, 2026-10-28): 2046 + 7 + 9 = 2062 leaves, 116 branches.
+if (PATHS.length !== 2178) fail(`expected 2178 paths (2062 leaf + 116 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2062) fail(`expected 2062 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -62,7 +62,7 @@
 		-->
 		<div class="confirm">
 			<Button
-				variant="primary"
+				variant="value"
 				shape="rounded"
 				testid="signing-confirm"
 				disabled={!model.confirm.enabled}

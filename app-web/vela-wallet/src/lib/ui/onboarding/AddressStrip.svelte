@@ -80,7 +80,7 @@
 		white-space: nowrap;
 		text-overflow: ellipsis;
 		font-family: var(--font-mono);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-variant-numeric: tabular-nums;
 		color: var(--color-fg-base);
 		line-height: var(--size-control-md);

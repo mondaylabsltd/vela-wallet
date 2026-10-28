@@ -606,6 +606,15 @@ describe('one figure for one balance (spec 078)', () => {
 		).toBe(m['send.alertLoadTokensError']);
 	});
 
+	it('a list still being read says so — not "no tokens with balance" (vis-4)', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: true })).empty).toBe(
+			m['send.loadingTokens']
+		);
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: false })).empty).toBe(
+			m['send.noTokensWithBalance']
+		);
+	});
+
 	it('the picker lists the same figure', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] }));
 		expect(model.rows[0].balance).toBe('0.043968');

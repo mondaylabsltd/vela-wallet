@@ -192,6 +192,8 @@
       "pinRejected": "That PIN was not accepted. The key locks itself when the attempts run out, and only a reset clears it — which erases every passkey on it.",
       "pinTitle": "Enter your security key's PIN",
       "progressSubtitle": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
+      "progressSubtitle_one": "Deriving the address from {{count}} key. The contract deploys with your first transaction — no gas now.",
+      "progressSubtitle_other": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
       "progressTitle": "Creating your wallet",
       "providerGeneric": "Phone or tablet",
       "providerPlatform": "Built-in passkey",

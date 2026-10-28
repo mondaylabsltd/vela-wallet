@@ -24,6 +24,7 @@
 	 * `fill()` still speak to a real slider. Ticks, thumb and pointer share one
 	 * geometry: stops evenly spaced along `.rail`.
 	 */
+	import { TEXT_SCALE_LEVELS } from '$lib/services/preferences.svelte';
 	import type { TextScaleModel } from '../model';
 
 	interface Props {
@@ -41,6 +42,20 @@
 	let held = $state<number | null>(null);
 	/** The stop on screen: the held one during a press, the stored one otherwise. */
 	const value = $derived(held ?? model.index);
+	/**
+	 * What the stop MEANS, for a screen reader (vis-16): the size it sets, as
+	 * a percentage in the page's language ("135%"). The bare index read "2".
+	 */
+	const valueText = $derived.by(() => {
+		const factor = TEXT_SCALE_LEVELS[value]?.factor;
+		if (factor === undefined || model.steps !== TEXT_SCALE_LEVELS.length) return undefined;
+		const lang = typeof document === 'undefined' ? '' : document.documentElement.lang;
+		try {
+			return new Intl.NumberFormat(lang || undefined, { style: 'percent' }).format(factor);
+		} catch {
+			return undefined;
+		}
+	});
 	let hovered = $state(false);
 	let pressed = $state(false);
 	/** The stop a press would land on, while a mouse or pen is over the track. */
@@ -142,6 +157,7 @@
 			step="1"
 			{value}
 			aria-label={model.label}
+			aria-valuetext={valueText}
 			class:pointer-focus={pointerFocus}
 			onkeydown={() => (pointerFocus = false)}
 			onblur={() => (pointerFocus = false)}
@@ -284,7 +300,7 @@
 	.native:focus-visible:not(.pointer-focus) ~ .rail .thumb {
 		box-shadow:
 			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
+			0 0 0 var(--space-sm) var(--color-fg-base);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

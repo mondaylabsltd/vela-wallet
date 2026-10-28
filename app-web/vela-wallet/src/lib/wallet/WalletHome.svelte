@@ -71,6 +71,9 @@
 		     needed — a wallet called "kimik3 · something" showed as "kimik3 ·…"
 		     next to a chip nobody was reading (founder call, 2026-08-26). -->
 		<header class="top">
+			<!-- vis-16: the page's heading, for whoever moves by headings — the
+			     account's name, which the button below draws. -->
+			<h1 class="visually-hidden">{model.header.name}</h1>
 			<WalletHeader header={model.header} onclick={onaccounts} />
 		</header>
 

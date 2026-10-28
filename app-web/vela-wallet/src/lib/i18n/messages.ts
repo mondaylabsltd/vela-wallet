@@ -178,7 +178,13 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
  * `onboarding.create.successMessage` is the line under "Wallet created": one
  * key reads "Your key can sign in on its own", several "Any of your N keys…".
  */
-export const FLOW_PLURAL_KEYS = ['onboarding.create.successMessage'] as const;
+export const FLOW_PLURAL_KEYS = [
+	'onboarding.create.successMessage',
+	// ob-10: "from 1 keys". The bare key stays in FLOW_OUTCOME_SCREEN_KEYS
+	// too — the desktop, iOS and Android shells read it bare — but the web
+	// picks the form.
+	'onboarding.create.progressSubtitle'
+] as const;
 
 /** Every prompt the two machines can raise (spec 019). */
 const FLOW_PROMPT_KEYS = [

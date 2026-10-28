@@ -81,7 +81,7 @@
 
 	.wordmark {
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		letter-spacing: 0.11em;
 	}
@@ -107,7 +107,7 @@
 		height: var(--space-xs);
 		margin-block-start: var(--space-3xl);
 		border-radius: var(--radius-full);
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
 	}
 
 	.ordinal {
@@ -142,7 +142,7 @@
 		max-width: var(--layout-railDetailMeasure);
 		margin: var(--space-md) 0 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 	}
 </style>

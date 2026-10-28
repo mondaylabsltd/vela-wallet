@@ -17,7 +17,7 @@
 
 	const elements = $derived(INTRO_ART[art]);
 	const paint = (role: 'line' | 'accent') =>
-		role === 'accent' ? 'var(--color-accent-base)' : 'var(--color-fg-subtle)';
+		role === 'accent' ? 'var(--color-fg-base)' : 'var(--color-fg-subtle)';
 </script>
 
 <!-- Decoration. The slide's headline and body say what it means, so announcing

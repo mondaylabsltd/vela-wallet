@@ -192,6 +192,8 @@
       "pinRejected": "Bu PIN kabul edilmedi. Denemeler bittiğinde anahtar kendini kilitler ve yalnızca sıfırlama açar — sıfırlama ise üzerindeki tüm geçiş anahtarlarını siler.",
       "pinTitle": "Güvenlik anahtarınızın PIN'ini girin",
       "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+      "progressSubtitle_one": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+      "progressSubtitle_other": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
       "progressTitle": "Cüzdanınız oluşturuluyor",
       "providerGeneric": "Telefon veya tablet",
       "providerPlatform": "Yerleşik geçiş anahtarı",

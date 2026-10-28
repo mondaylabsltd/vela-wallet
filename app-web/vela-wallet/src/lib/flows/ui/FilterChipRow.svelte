@@ -21,6 +21,7 @@
 	{#each options as option (option.id)}
 		<button
 			type="button"
+			data-tap
 			aria-pressed={option.selected}
 			class:on={option.selected}
 			onclick={() => onselect?.(option.id)}
@@ -40,6 +41,11 @@
 		   the edge rather than at the text margin. */
 		margin-inline: calc(var(--layout-screenPaddingX) * -1);
 		padding-inline: var(--layout-screenPaddingX);
+		/* Room inside the scroller for each chip's full hit target (`data-tap`,
+		   vis-12) — a scroller clips what leaves it — given back outside, so
+		   the row sits where it did. */
+		margin-block: calc(var(--space-lg) * -1);
+		padding-block: var(--space-lg);
 	}
 
 	.chips::-webkit-scrollbar {
