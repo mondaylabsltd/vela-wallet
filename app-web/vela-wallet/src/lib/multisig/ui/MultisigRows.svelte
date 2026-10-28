@@ -1,9 +1,9 @@
 <script lang="ts">
 	/**
 	 * The multisigs on this device, as rows of the account switcher's own list
-	 * — a multisig is an account; the one thing its row adds is its rule
-	 * ("2/3"). `<li>`s, drawn inside `AccountsSheetBody`'s list and styled as
-	 * its rows are.
+	 * — a multisig is an account, and its row is drawn as a Vela account's:
+	 * name, address, total (its rule is its settings' to say). `<li>`s, drawn
+	 * inside `AccountsSheetBody`'s list and styled as its rows are.
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -11,7 +11,6 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
-	import { fillTemplate } from '$lib/i18n/fill';
 	import type { MultisigMessages } from '../messages';
 	import { multisigName } from '../core/display';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
@@ -20,10 +19,12 @@
 		m: MultisigMessages;
 		removeLabel: string;
 		cancelLabel: string;
+		/** Its total as the Vela rows draw theirs: the mask, the figure, or nothing yet. */
+		amount?: (address: string) => string;
 		onselect: (account: MultisigAccount) => void;
 	}
 
-	let { m, removeLabel, cancelLabel, onselect }: Props = $props();
+	let { m, removeLabel, cancelLabel, amount, onselect }: Props = $props();
 
 	let removing = $state<string | null>(null);
 	const active = $derived(multisig.active);
@@ -32,12 +33,19 @@
 {#each multisig.accounts as account (account.address)}
 	{@const selected = active?.address === account.address}
 	<li class="account">
-		<Identicon
-			svg={identiconSvgForClient(account.address)}
-			size="row"
-			label={account.address}
-			address={account.address}
-		/>
+		<!-- A multisig's mark, as the header draws it: a small disc on the
+		     artwork's lower edge. -->
+		<span class="avatar">
+			<Identicon
+				svg={identiconSvgForClient(account.address)}
+				size="row"
+				label={account.address}
+				address={account.address}
+			/>
+			<span class="members" aria-hidden="true"
+				><Icon icon={UTILITY_ICONS['users-round']} size="xs" /></span
+			>
+		</span>
 		<button
 			type="button"
 			class="row"
@@ -48,12 +56,9 @@
 				<span class="name" class:active={selected}>{multisigName(account, m)}</span>
 				<span class="address">{shortenAddress(account.address)}</span>
 			</span>
-			<span
-				class="rule"
-				title={fillTemplate(m.panel.title, { m: account.threshold, n: account.owners.length })}
-				><Icon icon={UTILITY_ICONS['users-round']} size="sm" />{account.threshold}/{account.owners
-					.length}</span
-			>
+			{#if amount}
+				<span class="amount">{amount(account.address)}</span>
+			{/if}
 			{#if selected}
 				<span class="check"><Icon icon={UTILITY_ICONS.check} size="md" /></span>
 			{/if}
@@ -141,17 +146,43 @@
 		color: var(--color-fg-subtle);
 	}
 
-	.rule {
+	.avatar {
+		position: relative;
 		display: inline-flex;
-		align-items: center;
-		gap: var(--space-xs);
 		flex: none;
-		padding: 0 var(--space-sm);
-		border: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	/* A multisig's mark: a small soft disc tucked on the artwork's lower
+	   edge, set off by a ring of the surface it sits on rather than an
+	   outline — it says "members" without covering the art. */
+	.members {
+		position: absolute;
+		inset-inline-end: calc(var(--space-sm) * -1);
+		inset-block-end: calc(var(--space-sm) * -1);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: var(--icon-sm);
+		height: var(--icon-sm);
 		border-radius: var(--radius-full);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		font-weight: var(--weight-semibold);
+		background: var(--color-bg-sunken);
+		box-shadow: 0 0 0 var(--border-emphasis) var(--color-bg-raised);
 		color: var(--color-fg-muted);
+	}
+
+	.members :global(svg) {
+		width: calc(var(--icon-xs) * 0.75);
+		height: calc(var(--icon-xs) * 0.75);
+		stroke-width: var(--icon-stroke-bold);
+	}
+
+	/* The total, drawn as a Vela row draws its own. */
+	.amount {
+		flex: none;
+		white-space: nowrap;
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.check {

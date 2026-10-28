@@ -60,6 +60,7 @@
 	import { fill } from '$lib/wallet/messages';
 	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
 	import {
+		accountAmount,
 		switcherBalances,
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -138,7 +139,6 @@
 	const identity = $derived<WalletIdentity | null>(
 		signedIn ? shownIdentity(view, data.multisigMessages, data.locale) : null
 	);
-
 
 	/**
 	 * The wide layout's app sidebar wears the same identity the phone header
@@ -597,7 +597,8 @@
 	const accountsInput = $derived.by(() => {
 		// The live total stands in for the active row only while it is a
 		// figure — not hidden, not a home that read nothing (`switcherBalances`).
-		const balances = switcherBalances(balance.view, view.address);
+		// The live total is the account shown — a multisig's, when one is.
+		const balances = switcherBalances(balance.view, shownAddress(view.address));
 		const hidden = balance.view.switcher.hidden;
 		return {
 			rows: view.accounts,
@@ -606,7 +607,8 @@
 			balances,
 			hidden,
 			currency: currency.view,
-			identicon: identiconSvgForClient
+			identicon: identiconSvgForClient,
+			others: multisig.accounts.map((a) => a.address)
 		};
 	});
 
@@ -619,7 +621,11 @@
 
 	/** The switcher is on screen: the balance core refreshes every row's total. */
 	function accountsOpen(open: boolean): void {
-		if (open) balance.openSwitcher(view.accounts.map((row) => row.account.address));
+		if (open)
+			balance.openSwitcher([
+				...view.accounts.map((row) => row.account.address),
+				...multisig.accounts.map((a) => a.address)
+			]);
 		else balance.closeSwitcher();
 	}
 
@@ -1215,6 +1221,7 @@
 		m={data.multisigMessages}
 		removeLabel={data.multisigMessages.settings.remove}
 		cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+		amount={(address) => accountAmount(accountsInput, address)}
 		onselect={(account) => multisig.activate(account.address)}
 	/>
 {/snippet}

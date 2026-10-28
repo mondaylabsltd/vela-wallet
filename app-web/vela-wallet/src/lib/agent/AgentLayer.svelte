@@ -11,6 +11,7 @@
 	 *   agent off (the person's own setting, through the same intent Settings
 	 *   uses); turning it back on is in Settings.
 	 */
+	import { untrack } from 'svelte';
 	import type { IntentAction } from '$lib/core/generated/IntentAction';
 	import { intentApprovalDetailIn } from '$lib/core/client';
 	import { worldJson } from '$lib/intents/world';
@@ -69,6 +70,17 @@
 
 	const pending = $derived(intents.approvals[0]);
 
+	/**
+	 * What the request changes, read once as it comes up. Reading the wallet
+	 * (`world()`) brings the transfers up to date — a write, which a template
+	 * may not make (Svelte refuses it, and the sheet would not draw at all).
+	 */
+	let what = $state<string | null>(null);
+	$effect(() => {
+		const request = pending;
+		what = request === undefined ? null : untrack(() => detail(request.action));
+	});
+
 	/** How long a request is up before its Allow takes a tap. */
 	const ARM_MS = 700;
 	/**
@@ -111,7 +123,6 @@
 {/if}
 
 {#if pending !== undefined}
-	{@const what = detail(pending.action)}
 	{#key pending.id}
 		<PromptSheet
 			copy={{
@@ -128,11 +139,13 @@
 {/if}
 
 <style>
+	/* A phone's header carries the account's name at its left: the bar keeps to
+	   the right corner, compact, so the name stays in sight and in reach. The
+	   wide layout has room for it centred, with what the agent did last. */
 	.bar {
 		position: fixed;
 		top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
-		left: 50%;
-		transform: translateX(-50%);
+		right: var(--space-lg);
 		z-index: 70;
 		display: flex;
 		align-items: center;
@@ -178,11 +191,24 @@
 	}
 
 	.what {
+		display: none;
 		color: var(--color-fg-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		min-width: 0;
+	}
+
+	@media (min-width: 1280px) {
+		.bar {
+			right: auto;
+			left: 50%;
+			transform: translateX(-50%);
+		}
+
+		.what {
+			display: inline;
+		}
 	}
 
 	.stop {

@@ -14,7 +14,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
  * as hashed assets served from our own origin — no copy under app-web/, and no
  * third-party CDN at runtime.
  */
-const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/launch', import.meta.url));
+const LAUNCH_ANIMATIONS = fileURLToPath(
+	new URL('../../docs/design/onboarding/launch', import.meta.url)
+);
 
 /**
  * Spec 027: the same application, built a second way.
@@ -110,7 +112,10 @@ export default defineConfig({
 		alias: { $animations: LAUNCH_ANIMATIONS }
 	},
 	server: {
-		fs: { allow: [LAUNCH_ANIMATIONS] }
+		fs: { allow: [LAUNCH_ANIMATIONS] },
+		// The tests' own output (traces, screenshots) is no source: a dev server
+		// watching it reloads the very page a live test is driving.
+		watch: { ignored: ['**/e2e/**/.results/**', '**/e2e/**/.shots/**', '**/test-results/**'] }
 	},
 	/**
 	 * The two QR decoders, pre-bundled (spec 028). Without this, vitest's browser

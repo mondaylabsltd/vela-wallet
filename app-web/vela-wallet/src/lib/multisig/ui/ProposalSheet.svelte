@@ -11,6 +11,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
+	import { nativeSymbol } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
@@ -26,6 +27,7 @@
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
+	import { ExecutorCannotPayError } from '../core/execute';
 	import { sameAddress } from '../core/kernel';
 	import { proposalLink } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
@@ -118,6 +120,15 @@
 	}
 
 	function reasonOf(error: unknown): string {
+		if (error instanceof ExecutorCannotPayError && actor) {
+			const symbol = nativeSymbol(chainId);
+			return fillTemplate(m.proposal.cannotPay, {
+				name: names.label(actor.address),
+				symbol,
+				fee: `${formatUnits(error.need, 18)} ${symbol}`,
+				balance: `${formatUnits(error.have, 18)} ${symbol}`
+			});
+		}
 		return error instanceof Error ? error.message : String(error);
 	}
 
@@ -141,9 +152,18 @@
 			const result = await execute(account, item, actor, members);
 			phase = { kind: 'sent', txHash: null, by };
 			const txHash = await result.waitForTxHash(180_000).catch(() => null);
-			phase = { kind: 'sent', txHash, by };
-			if (txHash) onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
 			await proposals.refresh(account, account.chainIds);
+			if (!txHash) {
+				// Not on chain after the wait: say so, and let them try again —
+				// unless the chain shows it executed meanwhile.
+				phase =
+					item?.status === 'done'
+						? { kind: 'sent', txHash: null, by }
+						: { kind: 'failed', reason: m.proposal.notLanded };
+				return;
+			}
+			phase = { kind: 'sent', txHash, by };
+			onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
 		} catch (error) {
 			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
 		}
@@ -388,7 +408,8 @@
 			</div>
 		{/if}
 
-		{#if item.status !== 'done' && item.approved < item.threshold}
+		<!-- Only while approvals are missing: not once it is being executed. -->
+		{#if item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>

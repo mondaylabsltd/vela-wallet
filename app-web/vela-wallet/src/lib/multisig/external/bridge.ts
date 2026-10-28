@@ -3,11 +3,12 @@
 // records are kept in localStorage, so a session survives the page reloading (WalletPair core §2.4, §6;
 // PeerConnect §3.4) and Vela can ask the same wallet again without a new code.
 
-import { connect, Room } from '$lib/vendor/peerconnect/index.js';
+import { Room } from '$lib/vendor/peerconnect/index.js';
 import type { Eip1193Provider } from './eip6963';
 import { chainOf } from '$lib/walletpair/networks/evm';
 import type { ConnectParams, Request, Response } from '$lib/walletpair/protocol';
 import { ReferenceWallet, emptyStore, type WalletStore } from '$lib/walletpair/wallet';
+import { connectRoom } from './relay';
 import { injectedSigner, currentChain, type InjectedSigner } from './injected';
 
 const STORAGE_KEY = 'vela.connect.sessions.v1';
@@ -73,7 +74,7 @@ export class Bridge extends EventTarget {
 	#saved: Saved[] = load();
 	#live = new Map<
 		string,
-		{ connection: ReturnType<typeof connect>; wallet: ReferenceWallet; store: WalletStore }
+		{ connection: ReturnType<typeof connectRoom>; wallet: ReferenceWallet; store: WalletStore }
 	>();
 
 	constructor(provider: Eip1193Provider, accounts: string[], chain: string) {
@@ -123,7 +124,7 @@ export class Bridge extends EventTarget {
 
 	#start(saved: Saved): void {
 		if (this.#live.has(saved.id)) return;
-		const connection = connect(Room.parse(saved.record));
+		const connection = connectRoom(Room.parse(saved.record));
 		const store = emptyStore();
 		store.approved = saved.store.approved;
 		store.chains = saved.store.chains;

@@ -143,20 +143,28 @@
 		flex: none;
 	}
 
-	/* A multisig's mark: a small disc on the artwork's lower edge. */
+	/* A multisig's mark: a small soft disc tucked on the artwork's lower
+	   edge, set off by a ring of the surface it sits on rather than an
+	   outline — it says "members" without covering the art. */
 	.members {
 		position: absolute;
-		inset-inline-end: calc(var(--space-xs) * -1);
-		inset-block-end: calc(var(--space-xs) * -1);
+		inset-inline-end: calc(var(--space-sm) * -1);
+		inset-block-end: calc(var(--space-sm) * -1);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: var(--icon-lg);
-		height: var(--icon-lg);
-		border: var(--border-hairline) solid var(--color-border-strong);
+		width: var(--icon-md);
+		height: var(--icon-md);
 		border-radius: var(--radius-full);
-		background: var(--color-bg-raised);
-		color: var(--color-fg-base);
+		background: var(--color-bg-sunken);
+		box-shadow: 0 0 0 var(--border-emphasis) var(--color-bg-base);
+		color: var(--color-fg-muted);
+	}
+
+	.members :global(svg) {
+		width: calc(var(--icon-xs) * 0.85);
+		height: calc(var(--icon-xs) * 0.85);
+		stroke-width: var(--icon-stroke-bold);
 	}
 
 	.chip {

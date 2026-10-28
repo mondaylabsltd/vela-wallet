@@ -98,6 +98,7 @@ impl Transfers {
                     user_op_hash: None,
                     tx_hash: None,
                     reason: None,
+                    safe_tx_hash: None,
                 },
                 session,
                 confirmed_after: None,

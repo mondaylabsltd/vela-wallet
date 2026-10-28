@@ -61,7 +61,6 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 
 /** The locale the page is in now. */
 function currentLocale(): Locale {
-
 	return localeOfPath(location.pathname) ?? 'en';
 }
 
@@ -177,8 +176,7 @@ export async function perform(
 			if (action.type === 'switch_account') {
 				multisig.activate(null);
 				session.switchAccount(index);
-			}
-			else session.removeAccount(index);
+			} else session.removeAccount(index);
 			return null;
 		}
 		case 'sign_out':

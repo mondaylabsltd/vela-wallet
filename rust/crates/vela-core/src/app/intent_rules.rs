@@ -59,6 +59,21 @@ pub struct AccountRowFacts {
     pub account: AccountFacts,
 }
 
+/// A multisig on this device (a shell that has them): a Safe the person's
+/// accounts, or outside wallets, own together.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct MultisigFacts {
+    pub address: String,
+    pub name: String,
+    /// How many members must approve.
+    pub threshold: u32,
+    pub owners: Vec<String>,
+    /// Its proposals still waiting for approvals or execution, when read
+    /// (a shell reads them for the multisig in front).
+    pub waiting: Option<u32>,
+}
+
 /// `SessionView`, as read here.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
@@ -421,6 +436,11 @@ pub struct World {
     /// The wallets the person lets the agent use (spec 107 E8): none by
     /// default.
     pub agent_wallets: Vec<String>,
+    /// The multisigs on this device; none in a shell without them.
+    pub multisigs: Vec<MultisigFacts>,
+    /// The multisig in front, when one is: the account the person sees,
+    /// though the session's own stays signed in beneath it.
+    pub shown_multisig: Option<String>,
 }
 
 impl World {
@@ -435,11 +455,28 @@ impl World {
     /// The wallet in front is one the agent may use — or nobody is in.
     #[must_use]
     pub fn agent_may_use_active(&self) -> bool {
-        self.session
-            .as_ref()
-            .map(|session| session.address.trim())
+        self.front().is_none_or(|address| self.agent_may_use(address))
+    }
+
+    /// The account in front: the multisig shown, else the session's own.
+    #[must_use]
+    pub fn front(&self) -> Option<&str> {
+        self.shown_multisig
+            .as_deref()
+            .map(str::trim)
             .filter(|address| !address.is_empty())
-            .is_none_or(|address| self.agent_may_use(address))
+            .or_else(|| {
+                self.session
+                    .as_ref()
+                    .map(|session| session.address.trim())
+                    .filter(|address| !address.is_empty())
+            })
+    }
+
+    /// A multisig on this device has `address`.
+    #[must_use]
+    pub fn has_multisig(&self, address: &str) -> bool {
+        self.multisigs.iter().any(|m| same(&m.address, address))
     }
 }
 
@@ -450,11 +487,8 @@ pub fn grants(world: &World) -> super::intents::Grants {
     super::intents::Grants {
         agent_enabled: world.agent_enabled,
         wallets: world.agent_wallets.clone(),
-        wallet: world
-            .session
-            .as_ref()
-            .map(|session| session.address.clone())
-            .unwrap_or_default(),
+        // The account in front: a multisig shown is the agent's wallet too.
+        wallet: world.front().unwrap_or_default().to_owned(),
     }
 }
 
@@ -953,14 +987,15 @@ pub fn examine(action: &Action, world: &World) -> Examined {
             let Some(session) = ready_session(world) else {
                 return not_ready("the session");
             };
-            if !has_account(session, address) {
+            if !has_account(session, address) && !world.has_multisig(address) {
                 return refused(
                     ReasonCode::NotFound,
                     "no wallet on this device has that address",
                 );
             }
             go_unless(
-                matches!(action, Action::SwitchAccount { .. }) && same(&session.address, address),
+                matches!(action, Action::SwitchAccount { .. })
+                    && world.front().is_some_and(|front| same(front, address)),
             )
         }
         Action::SignOut => match ready_session(world) {
@@ -1187,17 +1222,15 @@ pub fn verdict(action: &Action, world: &World, baseline: &mut Baseline) -> Verdi
         | Action::SubmitTransfer { .. }
         | Action::AddToken { .. }
         | Action::RefreshBalances => Verdict::Held,
-        Action::SwitchAccount { address } => held(
-            world
-                .session
-                .as_ref()
-                .is_some_and(|session| same(&session.address, address)),
-        ),
+        Action::SwitchAccount { address } => {
+            held(world.front().is_some_and(|front| same(front, address)))
+        }
         Action::RemoveWallet { address } => held(
             world
                 .session
                 .as_ref()
-                .is_some_and(|session| !has_account(session, address)),
+                .is_some_and(|session| !has_account(session, address))
+                && !world.has_multisig(address),
         ),
         Action::SignOut => {
             let Some(session) = &world.session else {
@@ -1273,9 +1306,10 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
             Screen::Explore => &["explore"],
             _ => &[],
         },
-        Action::SwitchAccount { .. } | Action::RemoveWallet { .. } | Action::SignOut => {
-            &["session"]
+        Action::SwitchAccount { .. } | Action::RemoveWallet { .. } => {
+            &["session", "multisigs", "shown_multisig"]
         }
+        Action::SignOut => &["session"],
         Action::SetPreference { .. } => &["preferences", "currency", "fee_tier"],
         Action::SaveContact { .. }
         | Action::DeleteContact { .. }
@@ -1355,6 +1389,16 @@ pub struct SendFacts {
     pub user_op_hash: Option<String>,
     pub tx_hash: Option<String>,
     pub receipt: Option<ReceiptFacts>,
+    /// A multisig's send: the proposal it made, once in the mailbox.
+    pub proposed: Option<ProposedFacts>,
+}
+
+/// `SendProposed`, as read here.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct ProposedFacts {
+    pub chain_id: u32,
+    pub safe_tx_hash: String,
 }
 
 /// One `TrackEntryView`, as read here.
@@ -1374,6 +1418,12 @@ fn from_send(progress: &mut Progress, view: &SendFacts, ceremony: Option<&Ceremo
     }
     if let Some(hash) = view.tx_hash.as_ref().filter(|h| !h.is_empty()) {
         op.tx_hash = Some(hash.clone());
+    }
+    // A multisig's: proposed, not sent. What follows is its members' — they
+    // approve, one executes — not this review's.
+    if let Some(proposed) = view.proposed.as_ref().filter(|p| !p.safe_tx_hash.is_empty()) {
+        proposed_to_members(op, &proposed.safe_tx_hash);
+        return;
     }
     if view.stage == "receipt" {
         if let Some(receipt) = &view.receipt {
@@ -1440,8 +1490,21 @@ fn from_send(progress: &mut Progress, view: &SendFacts, ceremony: Option<&Ceremo
     }
 }
 
+/// The transfer is a multisig proposal: out of this review, in the members' hands.
+fn proposed_to_members(op: &mut Operation, safe_tx_hash: &str) {
+    op.safe_tx_hash = Some(safe_tx_hash.to_owned());
+    op.state = OperationState::Submitted;
+    op.reason = Some(format!(
+        "proposed to the multisig ({safe_tx_hash}): its members approve it and one of them executes it; the multisig's waiting_proposals in vela_state counts it until then"
+    ));
+}
+
 fn from_chain(progress: &mut Progress, tracker: &[TrackFacts]) {
     let op = &mut progress.operation;
+    // A proposal stays with its members once its review has closed.
+    if op.safe_tx_hash.is_some() {
+        return;
+    }
     let Some(hash) = op.user_op_hash.clone() else {
         // Gone before it was signed: left without sending.
         op.state = OperationState::Cancelled;
@@ -1503,6 +1566,18 @@ struct AccountOut<'a> {
     active: bool,
     /// The person lets the agent use it (E8).
     agent_allowed: bool,
+    /// Only on a multisig: who approves, and what waits for them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    multisig: Option<MultisigOut<'a>>,
+}
+
+#[derive(Serialize)]
+struct MultisigOut<'a> {
+    threshold: u32,
+    members: &'a [String],
+    /// Proposals still waiting for approvals or execution; `null` when not
+    /// read (switch to it to read them).
+    waiting_proposals: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -1754,11 +1829,7 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
         Action::SwitchAccount { address } => {
             let to = wallet(address);
             Some(
-                match world
-                    .session
-                    .as_ref()
-                    .map(|session| session.address.as_str())
-                {
+                match world.front() {
                     Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
                     _ => to,
                 },
@@ -1825,14 +1896,27 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
         page,
         network_space: world.network_space,
         accounts: session.map_or_else(Vec::new, |s| {
+            let shown = world.shown_multisig.as_deref().filter(|a| !a.trim().is_empty());
             s.accounts
                 .iter()
                 .map(|row| AccountOut {
                     address: &row.account.address,
                     name: &row.account.name,
-                    active: row.index == s.active_index,
+                    active: shown.is_none() && row.index == s.active_index,
                     agent_allowed: world.agent_may_use(&row.account.address),
+                    multisig: None,
                 })
+                .chain(world.multisigs.iter().map(|m| AccountOut {
+                    address: &m.address,
+                    name: &m.name,
+                    active: shown.is_some_and(|a| same(a, &m.address)),
+                    agent_allowed: world.agent_may_use(&m.address),
+                    multisig: Some(MultisigOut {
+                        threshold: m.threshold,
+                        members: &m.owners,
+                        waiting_proposals: m.waiting,
+                    }),
+                }))
                 .collect()
         }),
         balances: world

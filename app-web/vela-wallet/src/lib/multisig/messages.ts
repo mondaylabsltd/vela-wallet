@@ -76,6 +76,8 @@ export interface MultisigMessages {
 		notMember: string;
 		failed: string;
 		noExpiry: string;
+		cannotPay: string;
+		notLanded: string;
 		notFound: string;
 		opening: string;
 	};
@@ -260,6 +262,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notMember: '',
 		failed: '',
 		noExpiry: '',
+		cannotPay: '',
+		notLanded: '',
 		notFound: '',
 		opening: ''
 	},

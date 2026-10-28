@@ -776,6 +776,8 @@
 				// takes over (approve, execute, ask the others).
 				if (proposed) {
 					queueMicrotask(() => {
+						// An agent following this transfer reads it as proposed before its review closes.
+						transfers.sync();
 						closeSend();
 						multisigUi.open({
 							kind: 'proposal',
@@ -1153,7 +1155,8 @@
 					},
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
-					confirmDisabled: !sendView.can_confirm,
+					// An agent's review is held a moment before the person's tap counts.
+					confirmDisabled: !sendView.can_confirm || transfers.settling,
 					confirmBusy:
 						sendView.sending ||
 						sendView.tx_status === 'preparing' ||

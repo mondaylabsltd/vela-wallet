@@ -465,7 +465,9 @@
     "failed": "Tamamlanamadı: {{reason}}",
     "noExpiry": "Onayların süresi dolmaz: işlem yürütülene ya da iptal edilene kadar geçerlidir.",
     "notFound": "Bu işlem henüz posta kutusunda değil.",
-    "opening": "İşlem açılıyor…"
+    "opening": "İşlem açılıyor…",
+    "cannotPay": "{{name}} ağ ücreti için yeterli {{symbol}} tutmuyor: yaklaşık {{fee}} gerekiyor, {{balance}} var. Bakiye ekleyin ya da başka bir üye yürütsün.",
+    "notLanded": "Üç dakika sonra hâlâ ağa ulaşmadı. Kısa süre içinde yürütüldü olarak görünmezse yeniden deneyin."
    },
    "send": {
     "propose": "Öner ve onayla",

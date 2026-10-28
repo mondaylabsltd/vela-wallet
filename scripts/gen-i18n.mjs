@@ -869,8 +869,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   words. 2041 + 2 = 2043 leaves, 116 branches.
 // 2160 (an imported Safe deployed nowhere, 2026-10-28): + 1
 //   `home.multisig.import` word. 2043 + 1 = 2044 leaves, 116 branches.
-if (PATHS.length !== 2160) fail(`expected 2160 paths (2044 leaf + 116 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2044) fail(`expected 2044 leaf paths, got ${leafSet.size}`);
+// 2162 (a multisig's executor who cannot pay, an execution that has not
+//   landed, 2026-10-28): + 2 `home.multisig.proposal` words. 2044 + 2 =
+//   2046 leaves, 116 branches.
+if (PATHS.length !== 2162) fail(`expected 2162 paths (2046 leaf + 116 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2046) fail(`expected 2046 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

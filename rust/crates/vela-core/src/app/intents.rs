@@ -1002,6 +1002,11 @@ pub struct Operation {
     pub tx_hash: Option<String>,
     /// Why it failed or was cancelled, in the owner's words.
     pub reason: Option<String>,
+    /// A multisig's transfer is proposed, not sent: the proposal's hash once
+    /// it is in the mailbox. Its members approve it, and one executes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub safe_tx_hash: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

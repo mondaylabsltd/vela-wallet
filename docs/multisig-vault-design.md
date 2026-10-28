@@ -32,7 +32,7 @@
 - 执行手续费由执行者账户按现有方式在交易内支付，执行前不单独展示金额（按 relay 当时报价签名）。
 - 支持 Safe v1.3.0 – v1.5.0 的已知 factory 和 singleton；更早的版本（EIP-712 域里没有 chainId）导入时提示"暂不支持这个版本"。
 - Vela passkey 成员在 v1.5.0 Safe 里的批准挑战不同（合约签名走 `isValidSignature(bytes32,bytes)`），暂未适配；EOA 成员不受影响。
-- 外部签名默认中继 `wss://relay.peerconnect.dev`（可用 `vela.peerconnectRelay` 改），上线前决定是否自建。
+- 外部签名默认中继 `wss://relay.peerconnect.dev`（可用 `vela.peerconnectRelay` 改）。公共中继要求每端带 token：由 getvela.app 的 `POST /api/peerconnect-token` 用 App Secret（Worker secret `PEERCONNECT_APP_SECRET`）按设备签发（一年有效，设备本地缓存）；该接口不可用时退回 PeerConnect 公开试用 token（两小时）。
 - 外部钱包自己发送 `execTransaction`（本机没有任何 Vela 账户时）还没接到界面上；Vela 总有登录账户，所以目前都由 Vela 账户执行。
 
 **上线前还需要**：
@@ -553,6 +553,7 @@ MultisigAccount {
 参考 sub3 的实现：Vela 是 WalletPair 的「dApp 端」，外部签名页是「钱包端」。
 
 - **通道**：PeerConnect 房间（Noise IKpsk1 端到端加密，中继看不到内容也不存内容）。中继默认 `wss://relay.peerconnect.dev`，可配置。
+- **中继 token**：公共中继只接受带 token 的连接，两端各带自己的（token 不在邀请里）。设备第一次需要时，用本地生成的随机设备 ID 向 `getvela.app/api/peerconnect-token` 申请；站点用 App Secret 调 PeerConnect 的 `POST /api/apps/<app_id>/tokens`（用户 ID 为 `web:<设备 ID>`），只回传 token、过期时间和中继地址。token 只能用来连中继（房间内容端到端加密），所以接口不要求登录；每个新设备 ID 占用 App 的用户名额（默认 10,000），接口按 IP 限速。中继以 4403 拒绝时，客户端丢弃缓存的 token 重新申请；站点不可用时退回公开试用 token。自建中继不需要 token。
 - **签名页**：Vela 自己的 `/[locale]/connect`（同源、严格 CSP）。用户在装了钱包扩展的浏览器（或手机钱包的 dApp 浏览器）里打开链接或扫码，
   页面用 EIP-6963 发现钱包（没有就用 `window.ethereum`），用户确认连接。
 - **签什么**：`eth_signTypedData_v4`，内容是 SafeTx 的 EIP-712 数据（域 `{chainId, verifyingContract: safe}`）。

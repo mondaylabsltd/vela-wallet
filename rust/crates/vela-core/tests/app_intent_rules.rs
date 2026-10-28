@@ -249,6 +249,31 @@ fn submitting_before_the_passkey_signs_is_still_awaiting_it() {
     assert_eq!(signed.operation.state, OperationState::Submitting);
 }
 
+/// A multisig's transfer is proposed, not sent: the agent reads it as out of
+/// the review and in its members' hands — never as left without sending.
+#[test]
+fn a_multisig_proposal_is_submitted_to_its_members_not_cancelled() {
+    let proposed = send(json!({ "stage": "confirm", "tx_status": "idle",
+        "proposed": { "chain_id": 5042002, "safe_tx_hash": "0xabc" } }));
+    let p = operation_progress(
+        progress("awaiting_passkey", None, Some(1)),
+        Some(&proposed),
+        None,
+        &[],
+    );
+    assert_eq!(p.operation.state, OperationState::Submitted);
+    assert_eq!(p.operation.safe_tx_hash.as_deref(), Some("0xabc"));
+    assert!(p.operation.reason.as_deref().unwrap().contains("waiting_proposals"));
+    // Its review closes: still with its members.
+    let closed = operation_progress(p, None, None, &[]);
+    assert_eq!(closed.operation.state, OperationState::Submitted);
+    let wire = serde_json::to_value(&closed.operation).unwrap();
+    assert_eq!(wire["safe_tx_hash"], "0xabc");
+    // A Vela account's operation carries no such field on the wire.
+    let plain = progress("awaiting_confirmation", None, None);
+    assert!(serde_json::to_value(&plain.operation).unwrap().get("safe_tx_hash").is_none());
+}
+
 #[test]
 fn a_dismissed_passkey_is_back_on_the_review_with_why() {
     let back = send(json!({ "stage": "confirm", "tx_status": "idle" }));
@@ -610,4 +635,66 @@ fn a_wallet_the_person_did_not_allow_is_neither_read_nor_used() {
         check(Actor::Person, &Action::RefreshBalances, &grants(&closed)).decision,
         Decision::Allow
     ));
+}
+
+/// A multisig is an account too: the agent reads it among the accounts, may
+/// switch to it, and is held to the person's list for it as for any wallet.
+#[test]
+fn a_multisig_is_read_and_switched_to_like_any_account() {
+    use vela_core::app::intent_rules::grants;
+    use vela_core::app::intents::{check, Actor, Decision};
+    const SAFE: &str = "0x2222222222222222222222222222222222222222";
+    let base = json!({
+        "session": { "has_wallet": true, "address": ALICE, "active_index": 0, "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ] },
+        "balance": { "hidden": false, "display_total_usd": 5.0, "tokens": [] },
+        "agent_enabled": true,
+        "agent_wallets": [ALICE],
+        "multisigs": [{ "address": SAFE, "name": "Team", "threshold": 2,
+            "owners": [ALICE, BOB], "waiting": 1 }, { "address": BOB, "name": "Other",
+            "threshold": 1, "owners": [ALICE] }]
+    });
+    let here = world(base.clone());
+    let state = agent_state(&here, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["accounts"][0]["active"], true);
+    assert!(state["accounts"][0].get("multisig").is_none());
+    assert_eq!(
+        state["accounts"][1],
+        json!({ "address": SAFE, "name": "Team", "active": false, "agent_allowed": false,
+            "multisig": { "threshold": 2, "members": [ALICE, BOB], "waiting_proposals": 1 } })
+    );
+    assert_eq!(state["accounts"][2]["multisig"]["waiting_proposals"], Value::Null);
+    let switch = action(json!({ "type": "switch_account", "address": SAFE }));
+    assert_eq!(examine(&switch, &here), Examined::Go);
+    assert_eq!(world_needs(&switch), ["session", "multisigs", "shown_multisig"]);
+    assert!(
+        matches!(check(Actor::Agent, &switch, &grants(&here)).decision, Decision::Deny { .. }),
+        "not on the person's list"
+    );
+    let unknown = action(json!({ "type": "switch_account", "address": format!("0x{}", "3".repeat(40)) }));
+    assert_eq!(code(&examine(&unknown, &here)), Some(ReasonCode::NotFound));
+
+    // Shown, and allowed: it is the wallet in front, read as such.
+    let mut shown = base;
+    shown["shown_multisig"] = json!(SAFE);
+    shown["agent_wallets"] = json!([ALICE, SAFE]);
+    let shown = world(shown);
+    let state = agent_state(&shown, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["accounts"][0]["active"], false);
+    assert_eq!(state["accounts"][1]["active"], true);
+    assert_eq!(state["wallet_allowed"], true);
+    assert_eq!(examine(&switch, &shown), Examined::Already);
+    let back = action(json!({ "type": "switch_account", "address": ALICE }));
+    assert_eq!(examine(&back, &shown), Examined::Go);
+    assert_eq!(grants(&shown).wallet, SAFE);
+    let mut b = baseline(&switch, &shown);
+    assert_eq!(verdict(&switch, &shown, &mut b), Verdict::Held);
+
+    // Shown but not allowed: nothing of it is read.
+    let mut closed = shown.clone();
+    closed.agent_wallets = vec![ALICE.to_owned()];
+    let state = agent_state(&closed, "wallet", &json!([]), &json!([]));
+    assert_eq!(state["wallet_allowed"], false);
+    assert!(state["balances"].is_null());
 }

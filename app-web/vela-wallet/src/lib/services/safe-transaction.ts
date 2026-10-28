@@ -191,7 +191,20 @@ export type SignFn = ((
 	/** Which credential produced the assertion — a multi-key wallet's signer
 	 *  identity. Absent ⇒ the wallet's first (shared-signer) key. */
 	credentialId?: string;
-}>) & { beforePost?: BeforePost };
+}>) & { beforePost?: BeforePost; beforeSign?: BeforeSign };
+
+/**
+ * Called on an in-band operation once its fee is fixed — the amount the fee
+ * leg will pay, in `token` (null: the chain's coin) — and before the passkey
+ * is asked. A caller that cannot know the fee in advance (a multisig's
+ * executor) refuses here what could never pay, rather than signing it.
+ */
+export type BeforeSign = (fee: {
+	token: string | null;
+	amount: bigint;
+	/** What the operation's own calls send in the chain's coin. */
+	value: bigint;
+}) => Promise<void>;
 
 /** `userOp` and the legs before its fee leg, as {@link OperationToSign} carries them. */
 function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): OperationToSign {
@@ -2247,6 +2260,11 @@ async function sendUserOpInBand(
 	}
 
 	userOp.callData = buildBatch(feeAmount, feeRecipient);
+	await signFn.beforeSign?.({
+		token: gasFeeToken,
+		amount: feeAmount,
+		value: innerCalls.reduce((sum, c) => sum + callValueWei(c.value), 0n)
+	});
 
 	// Sign the SafeOp (over the FINAL callData) and submit. No feeToken extension — that
 	// is Tempo-envelope-specific; the generic outer tx is a native raw tx. The core

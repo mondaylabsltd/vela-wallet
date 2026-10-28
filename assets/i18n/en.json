@@ -465,7 +465,9 @@
     "failed": "That didn't go through: {{reason}}",
     "noExpiry": "Approvals don't expire: they count until the transaction is executed or cancelled.",
     "notFound": "This transaction isn't in the mailbox yet.",
-    "opening": "Opening the transaction…"
+    "opening": "Opening the transaction…",
+    "cannotPay": "{{name}} doesn't hold enough {{symbol}} for the network fee: about {{fee}} is needed, {{balance}} is there. Add some, or let another member execute.",
+    "notLanded": "It hasn't reached the network after three minutes. If it doesn't show as executed soon, try again."
    },
    "send": {
     "propose": "Propose and approve",

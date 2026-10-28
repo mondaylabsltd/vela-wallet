@@ -14,25 +14,15 @@
  * reported), so the same wallet signs again without a new code: the page
  * resumes its rooms when it is opened again.
  */
-import { connect, Room } from '$lib/vendor/peerconnect/index.js';
+import { Room } from '$lib/vendor/peerconnect/index.js';
 import { CallError, WalletPairClient } from '$lib/walletpair/client';
 import { namespaceRules } from '$lib/walletpair/networks';
 import { chainIdOf } from '$lib/walletpair/networks/evm';
 import { ErrorCode, type Json } from '$lib/walletpair/protocol';
 import { sameAddress } from '../core/kernel';
+import { connectRoom, relayUrl } from './relay';
 
-/** The relay rooms go through; a profile may point at another (`vela.peerconnectRelay`). */
-export const DEFAULT_RELAY = 'wss://relay.peerconnect.dev';
-const RELAY_KEY = 'vela.peerconnectRelay';
 const SAVED_KEY = 'vela.multisig.externalWallets.v1';
-
-export function relayUrl(): string {
-	try {
-		return localStorage.getItem(RELAY_KEY) || DEFAULT_RELAY;
-	} catch {
-		return DEFAULT_RELAY;
-	}
-}
 
 interface Saved {
 	id: string;
@@ -94,7 +84,7 @@ export class ExternalWallet {
 	/** The page to open: with the invite while unpaired, plain once paired. */
 	link = $state('');
 
-	readonly #connection: ReturnType<typeof connect>;
+	readonly #connection: ReturnType<typeof connectRoom>;
 	readonly #client: WalletPairClient;
 	readonly #saved: Saved;
 	readonly #page: string;
@@ -103,7 +93,7 @@ export class ExternalWallet {
 		this.#saved = saved;
 		this.#page = page;
 		const room = Room.parse(saved.record);
-		this.#connection = connect(room);
+		this.#connection = connectRoom(room);
 		this.#client = new WalletPairClient(this.#connection, namespaceRules);
 		this.link = fresh && room.invite ? `${page}#${encodeURIComponent(room.invite)}` : page;
 		this.accounts = saved.accounts;

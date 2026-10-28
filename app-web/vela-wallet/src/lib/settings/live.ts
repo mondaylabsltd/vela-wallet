@@ -1149,6 +1149,18 @@ export interface LiveAccountsInput {
 	hidden: boolean;
 	currency: CurrencyView;
 	identicon: (address: string) => string;
+	/**
+	 * The multisigs on this device, by address: accounts too — counted and
+	 * summed with the rows, their own rows drawn by the multisig section.
+	 */
+	others?: readonly string[];
+}
+
+/** One account's total as its row draws it: the mask, the figure, or nothing yet. */
+export function accountAmount(input: LiveAccountsInput, address: string): string {
+	if (input.hidden) return MASK;
+	const usd = input.balances.get(address.toLowerCase());
+	return usd === undefined ? '' : moneyText(usd, input.currency);
 }
 
 /**
@@ -1177,7 +1189,6 @@ export function switcherBalances(
 
 function liveAccountRows(input: LiveAccountsInput) {
 	return input.rows.map((row, position) => {
-		const usd = input.balances.get(row.account.address.toLowerCase());
 		return {
 			name: row.account.name,
 			addressDisplay: shortenAddress(row.account.address),
@@ -1185,7 +1196,7 @@ function liveAccountRows(input: LiveAccountsInput) {
 			identiconSvg: input.identicon(row.account.address),
 			// Hidden: the mask, whatever is known. No cached total yet: an empty
 			// cell, never a mocked figure.
-			amount: input.hidden ? MASK : usd === undefined ? '' : moneyText(usd, input.currency),
+			amount: accountAmount(input, row.account.address),
 			selected: position === input.activeIndex
 		};
 	});
@@ -1193,9 +1204,10 @@ function liveAccountRows(input: LiveAccountsInput) {
 
 /** "3 accounts · $3,262.40 total" over what is actually known. */
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
+	const addresses = [...input.rows.map((row) => row.account.address), ...(input.others ?? [])];
 	let total = 0;
-	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
-	const count = input.rows.length;
+	for (const address of addresses) total += input.balances.get(address.toLowerCase()) ?? 0;
+	const count = addresses.length;
 	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)

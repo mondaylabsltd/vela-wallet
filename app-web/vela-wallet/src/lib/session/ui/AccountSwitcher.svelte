@@ -21,7 +21,8 @@
 	import AccountsSheetBody from '$lib/settings/ui/AccountsSheetBody.svelte';
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import { liveAccountsSheet, switcherBalances } from '$lib/settings/live';
+	import { accountAmount, liveAccountsSheet, switcherBalances } from '$lib/settings/live';
+	import { shownAddress } from '$lib/multisig/core/shown';
 	import type { SettingsMessages } from '$lib/settings/messages';
 	import { session } from '$lib/session/core/session.svelte';
 	import { intents } from '$lib/intents/index.svelte';
@@ -56,23 +57,22 @@
 	 * fills row by row while this is open, and the live total stands in for
 	 * the active account's.
 	 */
+	const input = $derived.by(() => ({
+		rows: view.accounts,
+		// A multisig shown: no Vela row is the active account.
+		activeIndex: multisig.active ? -1 : view.active_index,
+		// The live total is the account shown — a multisig's, when one is.
+		balances: switcherBalances(balance.view, shownAddress(view.address)),
+		hidden: balance.view.switcher.hidden,
+		currency: currency.view,
+		identicon: identiconSvgForClient,
+		others: multisig.accounts.map((a) => a.address)
+	}));
+
 	const sheet = $derived.by(() => {
 		// The live total stands in for the active row only while it is a
 		// figure — not hidden, not a home that read nothing (`switcherBalances`).
-		const balances = switcherBalances(balance.view, view.address);
-		const hidden = balance.view.switcher.hidden;
-		return liveAccountsSheet(
-			{
-				rows: view.accounts,
-				// A multisig shown: no Vela row is the active account.
-				activeIndex: multisig.active ? -1 : view.active_index,
-				balances,
-				hidden,
-				currency: currency.view,
-				identicon: identiconSvgForClient
-			},
-			copy.accounts
-		);
+		return liveAccountsSheet(input, copy.accounts);
 	});
 
 	// The switcher is on screen: the balance core refreshes every row's total
@@ -80,7 +80,10 @@
 	onMount(() => {
 		multisig.boot();
 		void currency.boot();
-		balance.openSwitcher(session.view.accounts.map((row) => row.account.address));
+		balance.openSwitcher([
+			...session.view.accounts.map((row) => row.account.address),
+			...multisig.accounts.map((a) => a.address)
+		]);
 		return () => balance.closeSwitcher();
 	});
 
@@ -196,6 +199,7 @@
 						m={multisigCopy}
 						removeLabel={sheet.remove ?? ''}
 						cancelLabel={sheet.removeCancel ?? ''}
+						amount={(address) => accountAmount(input, address)}
 						onselect={selectMultisig}
 					/>
 				{/if}

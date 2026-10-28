@@ -718,6 +718,37 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.summary).toContain('120');
 	});
 
+	// A multisig is an account: counted and summed with the Vela accounts,
+	// and the live total is the shown one's — never pinned on the Vela
+	// account beneath a multisig.
+	it('counts and sums the multisigs, and gives the live total to the account shown', async () => {
+		const { liveAccountsSheet, switcherBalances, accountAmount } = await import('./live');
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const view = {
+			display_total_usd: 1650.54,
+			switcher: {
+				hidden: false,
+				balances: [{ address: rows[0]!.account.address, usd: 0 }]
+			}
+		} as unknown as Parameters<typeof switcherBalances>[0];
+		const balances = switcherBalances(view, safe);
+		const input = {
+			rows,
+			activeIndex: -1,
+			balances,
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe]
+		};
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows[0]!.amount, 'the Vela account keeps its own total').not.toContain('1,650');
+		expect(accountAmount(input, safe)).toContain('1,650.54');
+		expect(sheet.summary).toContain('3');
+		expect(sheet.summary).toContain('1,650.54');
+		expect(accountAmount({ ...input, hidden: true }, safe)).not.toContain('1,650');
+	});
+
 	it('leaves an unpriced row blank rather than inventing a figure', async () => {
 		const { liveAccountsSheet } = await import('./live');
 		const sheet = liveAccountsSheet(

@@ -20,6 +20,9 @@ import { feed } from '$lib/wallet/core/feed.svelte';
 import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 import type { World } from './world';
 import { shownAddress } from '$lib/multisig/core/shown';
+import { multisigAsAccount } from '$lib/multisig/core/ext';
+import { proposals } from '$lib/multisig/core/proposals.svelte';
+import { multisig } from '$lib/multisig/core/store.svelte';
 
 export type { IntentOutcome } from './intents.svelte';
 
@@ -44,7 +47,15 @@ export function world(): World {
 		balance: balance.view,
 		feed: feed.view,
 		networks: networkAdmin.view.loaded ? networkAdmin.view : null,
-		networkSpace: networkSpace.current
+		networkSpace: networkSpace.current,
+		multisigs: multisig.accounts.map((a) => ({
+			address: a.address,
+			name: multisigAsAccount(a).name,
+			threshold: a.threshold,
+			owners: a.owners,
+			waiting: multisig.active?.address === a.address ? proposals.open.length : null
+		})),
+		shownMultisig: multisig.active?.address ?? null
 	};
 }
 

@@ -87,6 +87,8 @@ function world(): World {
 		},
 		agent: { enabled: true, wallets: [session().address] },
 		networkSpace: 'mainnet',
+		multisigs: [],
+		shownMultisig: null,
 		operations: [],
 		balance: null,
 		feed: null,

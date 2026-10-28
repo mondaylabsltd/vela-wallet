@@ -91,6 +91,13 @@ function named(value: { type: string } | null): string | null {
 class Transfers {
 	/** Every operation drafted or confirmed this visit, newest first. */
 	operations = $state<Tracked[]>([]);
+	/**
+	 * An agent's review has just opened (`REVIEW_SETTLE_MS`): its confirm is
+	 * drawn held, so a tap that comes too soon visibly does nothing rather
+	 * than being refused unseen.
+	 */
+	settling = $state(false);
+	#settle: ReturnType<typeof setTimeout> | undefined;
 	#next = 1;
 	#ceremony: { event: SignCeremonyEvent; seq: number } | null = null;
 	#ceremonies = 0;
@@ -265,7 +272,17 @@ class Transfers {
 		const drafted = this.#adopt(port, token.chain_id);
 		drafted.closed = closed;
 		drafted.draftedBy = by;
+		if (by === 'agent') this.#hold(drafted);
 		return this.#plain(drafted);
+	}
+
+	/** Hold the confirm until `operation`'s review has been on screen long enough. */
+	#hold(operation: Tracked): void {
+		clearTimeout(this.#settle);
+		const left = operation.reviewedAt + REVIEW_SETTLE_MS - this.clock.now();
+		if (left <= 0) return;
+		this.settling = true;
+		this.#settle = setTimeout(() => (this.settling = false), left);
 	}
 
 	/** Who drafted `id` onto its review. */
@@ -397,12 +414,13 @@ class Transfers {
 			} catch {
 				return;
 			}
-			Object.assign(operation, {
-				state: next.operation.state,
-				user_op_hash: next.operation.user_op_hash,
-				tx_hash: next.operation.tx_hash,
-				reason: next.operation.reason
-			});
+			// Only what moved: a read that changes nothing writes nothing (the
+			// world is read from templates too, where a write is refused).
+			const fields = ['state', 'user_op_hash', 'tx_hash', 'reason', 'safe_tx_hash'] as const;
+			for (const field of fields) {
+				if (operation[field] !== next.operation[field])
+					(operation as Record<string, unknown>)[field] = next.operation[field];
+			}
 		}
 	}
 
@@ -432,8 +450,17 @@ class Transfers {
 	}
 
 	#plain(operation: Tracked): IntentOperation {
-		const { id, state, chain_id, user_op_hash, tx_hash, reason } = operation;
-		return { id, state, chain_id, user_op_hash, tx_hash, reason };
+		const { id, state, chain_id, user_op_hash, tx_hash, reason, safe_tx_hash } = operation;
+		return {
+			id,
+			state,
+			chain_id,
+			user_op_hash,
+			tx_hash,
+			reason,
+			// A multisig's proposal; absent for a Vela account's transfer.
+			...(safe_tx_hash ? { safe_tx_hash } : {})
+		};
 	}
 
 	/** The wallet page's send, opening the page if it is not up. */
