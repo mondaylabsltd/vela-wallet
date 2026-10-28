@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2328 paths = 2209 leaf + 119 branch. Repeated per locale these key bytes
-//! would cost 954525 bytes; interned once they cost 65898.
+//! 2337 paths = 2218 leaf + 119 branch. Repeated per locale these key bytes
+//! would cost 957300 bytes; interned once they cost 66083.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2328] = [
+pub(crate) static PATHS: [&str; 2337] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -1876,6 +1876,7 @@ pub(crate) static PATHS: [&str; 2328] = [
     "send.pickContactSearch",
     "send.pickContactTitle",
     "send.preparing",
+    "send.queuedBehindTab",
     "send.recipientChecksum",
     "send.recipientCount_few",
     "send.recipientCount_many",
@@ -1891,6 +1892,8 @@ pub(crate) static PATHS: [&str; 2328] = [
     "send.recipientZeroAddress",
     "send.removeRecipient",
     "send.riskChecking",
+    "send.riskHistoryUnread",
+    "send.riskRetry",
     "send.riskUnfinished",
     "send.sameFeeTokenBody",
     "send.sameFeeTokenEdit",
@@ -1909,6 +1912,7 @@ pub(crate) static PATHS: [&str; 2328] = [
     "send.toLabel",
     "send.tokenCount",
     "send.txBackgroundHint",
+    "send.txCheckingElapsed",
     "send.txCloseBackground",
     "send.txConfirmedTitle",
     "send.txElapsed",
@@ -1924,12 +1928,17 @@ pub(crate) static PATHS: [&str; 2328] = [
     "send.txRelaySending",
     "send.txRemaining",
     "send.txRetryBtn",
+    "send.txReviewAgain",
+    "send.txSendAgain",
     "send.txSigning",
     "send.txSlowConfirm",
+    "send.txStillUnknownBody",
+    "send.txStillUnknownTitle",
     "send.txSubmitted",
     "send.txSubmittedTitle",
     "send.txSubmitting",
     "send.txTypicalTime",
+    "send.txViewAccountExplorer",
     "send.txWaitingConfirm",
     "send.velaUser",
     "send.walletDeployedLabel",
@@ -2343,7 +2352,7 @@ pub(crate) static PATHS: [&str; 2328] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 291] = [
+pub(crate) static IS_BRANCH: [u8; 293] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x10, 0x00,
     0x00, 0x00, 0x04, 0x18, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x20, 0x42, 0x08, 0x00,
     0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x50, 0x48, 0x84, 0x00, 0x00, 0x00, 0x80, 0x40, 0x08,
@@ -2359,14 +2368,14 @@ pub(crate) static IS_BRANCH: [u8; 291] = [
     0x00, 0x00, 0x04, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00, 0x84, 0x00, 0x00, 0x38, 0x49, 0x92, 0x10,
     0x00, 0x08, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x80, 0x09, 0x01, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x09, 0x10, 0x02, 0x24, 0x21, 0x02, 0x04, 0x02, 0x01, 0x02, 0x00, 0x01, 0x00, 0x00,
-    0x20, 0x80, 0x41, 0x00, 0x00, 0x00, 0x08, 0x04, 0x00, 0x08, 0x01, 0x10, 0x00, 0x08, 0x80, 0x40,
-    0x00, 0x41, 0x00,
+    0x00, 0x00, 0x00, 0x13, 0x02, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x12, 0x20, 0x04, 0x48, 0x42, 0x04, 0x08, 0x04, 0x02, 0x04, 0x00, 0x02, 0x00,
+    0x00, 0x40, 0x00, 0x83, 0x00, 0x00, 0x00, 0x10, 0x08, 0x00, 0x10, 0x02, 0x20, 0x00, 0x10, 0x00,
+    0x81, 0x00, 0x82, 0x00, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2328;
+pub(crate) const N_PATHS: usize = 2337;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

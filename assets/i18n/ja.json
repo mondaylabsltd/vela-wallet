@@ -808,7 +808,16 @@
   "batchBadChecksum": "チェックサムが一致しません",
   "riskChecking": "このアドレスを確認しています…",
   "riskUnfinished": "このアドレスの確認を完了できませんでした。意図したアドレスか確かめてください。",
-  "amountPasteRefused": "金額として読み取れません。12.5 のような数字を貼り付けてください。"
+  "amountPasteRefused": "金額として読み取れません。12.5 のような数字を貼り付けてください。",
+  "riskHistoryUnread": "このアドレスへの過去の送金を確認できませんでした。意図したアドレスか確かめてください。",
+  "riskRetry": "もう一度確認",
+  "queuedBehindTab": "別のタブがこのアカウントから送信中です。このタブはその次に送信します。",
+  "txReviewAgain": "内容を確認し直す",
+  "txSendAgain": "もう一度送信",
+  "txCheckingElapsed": "送信されたか確認しています… {{elapsed}} 秒",
+  "txStillUnknownTitle": "状況不明",
+  "txStillUnknownBody": "アカウントから送られたかどうかを Vela は確認できませんでした。バックグラウンドで確認を続けます。もう一度送る前に、エクスプローラーでアカウントを確認してください。",
+  "txViewAccountExplorer": "エクスプローラーでアカウントを確認"
  },
  "receive": {
   "title": "受け取る",

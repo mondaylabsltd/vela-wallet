@@ -808,7 +808,16 @@
   "batchBadChecksum": "Checksum tidak cocok",
   "riskChecking": "Memeriksa alamat ini…",
   "riskUnfinished": "Pemeriksaan alamat ini tidak selesai. Pastikan ini alamat yang Anda maksud.",
-  "amountPasteRefused": "Itu bukan jumlah. Tempel angka, misalnya 12,5."
+  "amountPasteRefused": "Itu bukan jumlah. Tempel angka, misalnya 12,5.",
+  "riskHistoryUnread": "Riwayat pengiriman Anda ke alamat ini tidak dapat diperiksa. Pastikan ini alamat yang Anda maksud.",
+  "riskRetry": "Periksa lagi",
+  "queuedBehindTab": "Tab lain sedang mengirim dari akun ini — tab ini menyusul berikutnya.",
+  "txReviewAgain": "Tinjau lagi",
+  "txSendAgain": "Kirim lagi",
+  "txCheckingElapsed": "Memeriksa apakah sudah terkirim… {{elapsed}} dtk",
+  "txStillUnknownTitle": "Status tidak diketahui",
+  "txStillUnknownBody": "Vela tidak dapat memastikan apakah ini sudah keluar dari akun Anda, dan terus memeriksa di latar belakang. Sebelum mengirim lagi, periksa akun Anda di explorer.",
+  "txViewAccountExplorer": "Periksa akun Anda di explorer"
  },
  "receive": {
   "title": "Terima",

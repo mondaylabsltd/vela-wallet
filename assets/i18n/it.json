@@ -813,7 +813,16 @@
   "batchBadChecksum": "Checksum non corrispondente",
   "riskChecking": "Controllo di questo indirizzo…",
   "riskUnfinished": "Non è stato possibile completare il controllo di questo indirizzo. Assicurati che sia quello giusto.",
-  "amountPasteRefused": "Questo non è un importo. Incolla un numero, ad esempio 12,5."
+  "amountPasteRefused": "Questo non è un importo. Incolla un numero, ad esempio 12,5.",
+  "riskHistoryUnread": "Non è stato possibile controllare i tuoi invii precedenti a questo indirizzo. Assicurati che sia quello giusto.",
+  "riskRetry": "Controlla di nuovo",
+  "queuedBehindTab": "Un’altra scheda sta inviando da questo account: questa è la prossima.",
+  "txReviewAgain": "Rivedi",
+  "txSendAgain": "Invia di nuovo",
+  "txCheckingElapsed": "Controllo dell’invio in corso… {{elapsed}} s",
+  "txStillUnknownTitle": "Stato sconosciuto",
+  "txStillUnknownBody": "Vela non è riuscita a confermare se questa operazione ha lasciato il tuo account e continua a controllare in background. Prima di inviarla di nuovo, controlla il tuo account sull’explorer.",
+  "txViewAccountExplorer": "Controlla il tuo account sull’explorer"
  },
  "receive": {
   "title": "Ricevi",

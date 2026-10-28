@@ -808,7 +808,16 @@
   "batchBadChecksum": "Checksum doesn't match",
   "riskChecking": "Checking this address…",
   "riskUnfinished": "Couldn't finish checking this address. Make sure it's the one you mean.",
-  "amountPasteRefused": "That isn't an amount. Paste a number, like 12.5."
+  "amountPasteRefused": "That isn't an amount. Paste a number, like 12.5.",
+  "riskHistoryUnread": "Couldn't check your past sends to this address. Make sure it's the one you mean.",
+  "riskRetry": "Check again",
+  "queuedBehindTab": "Another tab is sending from this account — this one goes next.",
+  "txReviewAgain": "Review again",
+  "txSendAgain": "Send again",
+  "txCheckingElapsed": "Checking whether it went out… {{elapsed}}s",
+  "txStillUnknownTitle": "Status unknown",
+  "txStillUnknownBody": "Vela couldn't confirm whether this left your account, and keeps checking in the background. Before you send it again, check your account on the explorer.",
+  "txViewAccountExplorer": "Check your account on the explorer"
  },
  "receive": {
   "title": "Receive",
