@@ -8,7 +8,7 @@ import type { VenueBlock } from "./VenueBlock";
  * owns every wording regex (`parseBundlerUnderfunded`,
  * `PasskeyErrorCode.CANCELLED`) — the core only sees typed variants.
  */
-export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "receipt_pending", user_op_hash: string, } | { "type": "reverted", user_op_hash: string, tx_hash: string, } | { "type": "not_confirmed", user_op_hash: string, } | { "type": "passkey_cancelled" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, 
+export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "receipt_pending", user_op_hash: string, } | { "type": "reverted", user_op_hash: string, tx_hash: string, } | { "type": "not_confirmed", user_op_hash: string, } | { "type": "passkey_cancelled" } | { "type": "passkey_timed_out" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, 
 /**
  * The relay refused the op (spec 082 RJ3): a submit-time `NotSent`
  * with a rejection that is not "relayer unavailable". The page is

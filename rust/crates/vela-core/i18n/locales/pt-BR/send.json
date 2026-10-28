@@ -178,6 +178,9 @@
     "warnTooManyDecimals": "{{symbol}} aceita no máximo {{decimals}} casas decimais — encurte o valor.",
     "warnAmountTooLarge": "Este valor é grande demais.",
     "warnAmountUnreadable": "Digite um único valor: um separador decimal, sem separador de milhar.",
-    "batchBadChecksum": "Checksum não confere"
+    "batchBadChecksum": "Checksum não confere",
+    "riskChecking": "Verificando este endereço…",
+    "riskUnfinished": "Não foi possível terminar de verificar este endereço. Confirme que é o endereço certo.",
+    "amountPasteRefused": "Isso não é um valor. Cole um número, como 12,5."
   }
 }

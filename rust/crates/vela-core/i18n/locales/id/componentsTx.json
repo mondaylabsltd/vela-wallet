@@ -29,7 +29,9 @@
       "statusFailed": "Gagal",
       "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan.",
       "userOpHash": "UserOp Hash",
-      "copyHash": "Salin hash transaksi"
+      "copyHash": "Salin hash transaksi",
+      "statusNotSent": "Tidak terkirim",
+      "notSentBody": "Tidak ada yang keluar dari akun Anda. Anda bisa mencoba lagi."
     },
     "detail": {
       "received": "Diterima",

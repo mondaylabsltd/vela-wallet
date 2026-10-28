@@ -452,6 +452,32 @@ export function exactAmount(amount: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * send-19: the balance as the send screens read it. The home lists every
+ * network it cannot reach (spec 092); while money is being sent only the
+ * networks that matter to it warn — the ones the person holds something on
+ * (the core's `last_known`), and the one the send moves on. "Can't reach
+ * Monad" over a Gnosis-only account sending on Gnosis is noise. The
+ * sentence keeps the core's choice for what is left: the one network named,
+ * several counted, or nothing.
+ */
+export function sendScopedOutage(view: BalanceView, sendChainId: number | null): BalanceView {
+	const kept = view.unreachable_networks.filter(
+		(network) => network.last_known === 'held' || network.chain_id === sendChainId
+	);
+	if (kept.length === view.unreachable_networks.length) return view;
+	const listKey = view.unreachable_key === 'assets.tokenListUnreachable';
+	const key =
+		kept.length === 0
+			? null
+			: kept.length === 1
+				? listKey
+					? view.unreachable_key
+					: 'assets.unreachableOne'
+				: 'assets.unreachableMany';
+	return { ...view, unreachable_networks: kept, unreachable_key: key };
+}
+
+/**
  * Spec 092: the line over the networks the wallet cannot reach — the home's
  * status line and the title of the list it opens. The core chooses the
  * sentence (`unreachable_key`: one network named, several counted); this only
@@ -885,7 +911,10 @@ export function liveActivityRow(
 				? 'received'
 				: 'sent';
 	const received = kind === 'received';
-	const figure = rowFigure(item, received, m);
+	// send-6: a send that failed moved nothing. Its title says so and its
+	// figure carries no "−" — never a row that reads as money that left.
+	const notSent = kind === 'sent' && item.status === 'failed';
+	const figure = rowFigure(item, received, m, notSent);
 	// Whether this row's figure is money is the core's (`FeedItem.figure_maskable`,
 	// `app::privacy`): an amount, a batch count or a capped allowance masks; an
 	// unlimited allowance or a figureless signature does not.
@@ -899,15 +928,22 @@ export function liveActivityRow(
 			? dappTitle(item.dapp, m)
 			: kind === 'received'
 				? m.activity.received
-				: kind === 'sent'
-					? m.activity.sent
-					: m.activity.dapp,
+				: notSent
+					? m.activity.notSent
+					: kind === 'sent'
+						? m.activity.sent
+						: m.activity.dapp,
 		// Where the title may be broken (item 1 of the 2026-10-11 walk).
 		...(titleParts === undefined ? {} : { titleParts }),
 		// The core's second line (spec 093), worded: status first when the
 		// tracker has not closed the row (RG2, 087 F04), then the site, the
-		// network, or whom a transfer went to — in the core's order.
-		subtitle: subtitleText(item.subtitle ?? [], m, now),
+		// network, or whom a transfer went to — in the core's order. A send
+		// titled "Not sent" does not say "Failed" again.
+		subtitle: subtitleText(
+			(item.subtitle ?? []).filter((line) => !(notSent && line.type === 'status')),
+			m,
+			now
+		),
 		amount: masked ? MASK : figure.amount,
 		unit: figure.unit,
 		positive: received,
@@ -932,12 +968,15 @@ export function liveActivityRow(
 function rowFigure(
 	item: FeedItem,
 	received: boolean,
-	m: RowMessages
+	m: RowMessages,
+	/** send-6: a failed send — the figure with no sign: nothing left. */
+	notSent = false
 ): { amount: string; unit: string; danger: boolean } {
 	if (item.value !== null) {
 		const about = item.dapp?.estimated ? '≈ ' : '';
+		const sign = notSent ? '' : received ? '+' : '−';
 		return {
-			amount: `${about}${received ? '+' : '−'}${sentAmountText(item.value)}`,
+			amount: `${about}${sign}${sentAmountText(item.value)}`,
 			unit: item.symbol,
 			danger: false
 		};
@@ -945,6 +984,15 @@ function rowFigure(
 	const allowance = item.dapp?.allowance ?? null;
 	if (allowance !== null) return allowanceFigure(allowance, m);
 	if (item.dapp != null) return { amount: '', unit: '', danger: false };
+	// A sweep names no one coin (send-20): its count reads "2 assets", never a
+	// bare "2".
+	if (item.batch?.kind === 'multi_select') {
+		return {
+			amount: fill(m.activity.assetsCount, { n: item.batch.count }),
+			unit: '',
+			danger: false
+		};
+	}
 	return {
 		amount: String(item.batch?.count ?? ''),
 		unit: item.symbol,

@@ -22,6 +22,7 @@ import {
 	moneyParts,
 	moneyText,
 	tokenAmountText,
+	sendScopedOutage,
 	trimBalance,
 	unitAdornment,
 	withLiveWallet,
@@ -478,6 +479,35 @@ describe('liveBalance', () => {
 				m
 			).status?.text
 		).toBe("Can't reach 2 networks right now");
+	});
+	it('send-19: on the send screens only the networks that matter to it warn', () => {
+		const held = (chainId: number): UnreachableNetwork => ({
+			...unreachableRow(chainId),
+			last_known: 'held'
+		});
+		const outage = {
+			...PRISTINE,
+			balance_unknown: false,
+			balance_partial: true,
+			failed_chain_ids: [143, 100, 8453],
+			unreachable_networks: [unreachableRow(143), held(100), unreachableRow(8453)],
+			unreachable_key: 'assets.unreachableMany'
+		};
+		// Sending on Base: the network held on (Gnosis) and Base itself; never
+		// Monad, which holds nothing and is not sent on.
+		const onBase = sendScopedOutage(outage, 8453);
+		expect(onBase.unreachable_networks.map((n) => n.chain_id)).toEqual([100, 8453]);
+		expect(onBase.unreachable_key).toBe('assets.unreachableMany');
+		// Sending on Gnosis: one network left, named.
+		const onGnosis = sendScopedOutage(outage, 100);
+		expect(onGnosis.unreachable_key).toBe('assets.unreachableOne');
+		expect(liveBalance({ ...onGnosis, display_total_usd: 0 }, USD, m).status?.text).toBe(
+			"Can't reach Gnosis right now"
+		);
+		// Nothing that matters is down: nothing is said.
+		const quiet = sendScopedOutage({ ...outage, unreachable_networks: [unreachableRow(143)] }, 100);
+		expect(quiet.unreachable_key).toBeNull();
+		expect(quiet.unreachable_networks).toEqual([]);
 	});
 	it('a rate-limited chain is not nagged about: failed but not a banner → still-updating', () => {
 		const model = liveBalance(

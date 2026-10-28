@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}}은(는) 소수점 이하 최대 {{decimals}}자리까지입니다. 금액을 줄여 주세요.",
   "warnAmountTooLarge": "금액이 너무 큽니다.",
   "warnAmountUnreadable": "금액은 소수점 하나만 쓰고 천 단위 구분 기호 없이 입력하세요.",
-  "batchBadChecksum": "체크섬 불일치"
+  "batchBadChecksum": "체크섬 불일치",
+  "riskChecking": "이 주소를 확인하는 중…",
+  "riskUnfinished": "이 주소 확인을 마치지 못했습니다. 의도한 주소가 맞는지 확인하세요.",
+  "amountPasteRefused": "금액이 아닙니다. 12.5 같은 숫자를 붙여 넣으세요."
  },
  "receive": {
   "title": "받기",
@@ -1502,7 +1505,9 @@
    "statusFailed": "실패",
    "failedHint": "전송이 온체인에서 되돌려졌습니다 — 자산은 전송되지 않았습니다. 네트워크 수수료는 부과되었을 수 있습니다.",
    "userOpHash": "UserOp 해시",
-   "copyHash": "거래 해시 복사"
+   "copyHash": "거래 해시 복사",
+   "statusNotSent": "전송되지 않음",
+   "notSentBody": "계정에서 빠져나간 것은 없습니다. 다시 시도할 수 있습니다."
   },
   "detail": {
    "received": "받음",
@@ -1830,7 +1835,9 @@
     "stale": "이 요청의 이전 버전에 대한 의견입니다",
     "feeWhenGiven": "의견 당시 수수료: {{fee}}",
     "feeChanged": "이 의견 이후 수수료가 바뀌었습니다"
-   }
+   },
+   "passkeyClosed": "패스키 확인 창이 닫혀 아무것도 서명되지 않았습니다. 이 기기에 이 계정의 패스키가 없다면 패스키가 있는 기기를 사용하세요.",
+   "passkeyTimedOut": "패스키 확인 시간이 초과되어 아무것도 서명되지 않았습니다. 준비되면 다시 시도하세요."
   },
   "signingApprove": {
    "resultingTotal": "새 총 승인 한도",
@@ -1925,7 +1932,12 @@
    "reasonChainDown": "{{chain}}에 연결할 수 없어 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중입니다.",
    "reasonInternal": "Vela 내부에 문제가 생겼습니다. 계속되면 앱을 다시 열어 주세요.",
    "rowShort": "필요 ~{{need}}, 보유 {{have}}",
-   "noCoinPays": "이 수수료를 낼 수 있는 토큰이 없습니다"
+   "noCoinPays": "이 수수료를 낼 수 있는 토큰이 없습니다",
+   "reasonQuoteStopped": "릴레이에서 가격을 받지 못했습니다.",
+   "reasonFeeTokenStopped": "릴레이가 지금은 이 코인의 가격을 매길 수 없습니다. 다른 코인으로 내거나 다시 시도하세요.",
+   "reasonSimulationStopped": "릴레이가 이 거래를 시험 실행하지 못했습니다.",
+   "reasonQuoteHighStopped": "릴레이의 가스 가격이 지금 네트워크 가격보다 훨씬 높습니다.",
+   "reasonChainDownStopped": "{{chain}}에 연결할 수 없어 수수료를 계산하지 못했습니다."
   },
   "dock": {
    "receive": "받기",

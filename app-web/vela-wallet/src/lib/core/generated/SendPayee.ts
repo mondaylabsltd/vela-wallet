@@ -17,4 +17,11 @@ address: string, name: string | null,
 /**
  * `Some` exactly when `name` is.
  */
-name_source: SendNameSource | null, };
+name_source: SendNameSource | null, 
+/**
+ * A split row's recipient has never been paid from this account (its
+ * check on the confirm said so, send-20): the row says it, as a single
+ * send's confirm does. `false` for a single send — whose tell is
+ * `SendView::recipient_risk` — and for one's own address.
+ */
+first_time: boolean, };

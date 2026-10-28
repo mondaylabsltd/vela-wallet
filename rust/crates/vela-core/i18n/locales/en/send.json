@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} has at most {{decimals}} decimal places — shorten the amount.",
     "warnAmountTooLarge": "This amount is too large.",
     "warnAmountUnreadable": "Enter one amount: one decimal mark, no thousands separators.",
-    "batchBadChecksum": "Checksum doesn't match"
+    "batchBadChecksum": "Checksum doesn't match",
+    "riskChecking": "Checking this address…",
+    "riskUnfinished": "Couldn't finish checking this address. Make sure it's the one you mean.",
+    "amountPasteRefused": "That isn't an amount. Paste a number, like 12.5."
   }
 }

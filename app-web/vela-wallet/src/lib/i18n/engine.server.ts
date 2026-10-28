@@ -228,6 +228,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('home.emptySubtitle'),
 			pending: k('componentsTx.detail.statusPending'),
 			failed: k('componentsTx.detail.statusFailed'),
+			notSent: k('componentsTx.receipt.statusNotSent'),
+			assetsCount: k('componentsTx.receipt.assetsCount'),
 			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
 			unknown: k('componentsUi.signing.intentUnknown'),
 			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
@@ -1456,6 +1458,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
 		feeReasons: Object.fromEntries(FEE_REASON_KEYS.map((key) => [key, k(key)])),
 		confirmBlock: Object.fromEntries(CONFIRM_BLOCK_KEYS.map((key) => [key, k(key)])),
+		passkeyNote: {
+			cancelled: k('componentsUi.signing.passkeyClosed'),
+			timed_out: k('componentsUi.signing.passkeyTimedOut')
+		},
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),

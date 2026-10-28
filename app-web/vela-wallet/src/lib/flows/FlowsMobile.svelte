@@ -111,6 +111,8 @@
 		confirmBusy?: boolean;
 		/** A failed submit's "Try again" — back to a confirm the core can open. */
 		retryAfterError?: () => void;
+		/** The never-sent receipt's "Try again" (send-5) — back to the confirm. */
+		sendAgain?: () => void;
 	}
 
 	/** The add-token sheet's handlers, when the `manage_tokens` core is live. */
@@ -341,7 +343,11 @@
 		</FlowScreen>
 	{:else}
 		<FlowScreen header={base.model.header} {onback}>
-			<SendReceipt model={base.model} oncta={() => (send ? send.done() : go('done'))} />
+			<SendReceipt
+				model={base.model}
+				oncta={() => (send ? send.done() : go('done'))}
+				onretry={send?.sendAgain ? () => send.sendAgain?.() : undefined}
+			/>
 		</FlowScreen>
 	{/if}
 

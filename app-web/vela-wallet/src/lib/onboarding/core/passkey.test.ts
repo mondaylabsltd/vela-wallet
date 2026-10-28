@@ -15,7 +15,7 @@
  * is what makes the extension branch testable at all.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { relyingPartyId } from './passkey';
+import { classifySign, relyingPartyId, SIGN_TIMEOUT_MS } from './passkey';
 
 /**
  * Put the module at a location. Both globals are stubbed with the SAME object
@@ -75,5 +75,35 @@ describe('the relying party', () => {
 
 	it('is getvela.app when there is no document at all (prerender)', () => {
 		expect(relyingPartyId()).toBe('getvela.app');
+	});
+});
+
+/**
+ * send-11: WebAuthn reports a prompt that ran out of time exactly as one that
+ * was closed. A refusal that comes at the signing deadline is the deadline's.
+ */
+describe('a signing prompt that ran out of time', () => {
+	const refusal = Object.assign(new Error('x'), { name: 'NotAllowedError' });
+
+	it('is a cancel that says it timed out, at the deadline', () => {
+		const out = classifySign(refusal, 0, SIGN_TIMEOUT_MS);
+		expect(out.kind).toBe('cancelled');
+		expect(out.timedOut).toBe(true);
+	});
+
+	it('is a plain cancel before it — closed, or no passkey on this device', () => {
+		const out = classifySign(refusal, 0, 3_000);
+		expect(out.kind).toBe('cancelled');
+		expect(out.timedOut).toBe(false);
+	});
+
+	it('leaves every other failure as it was', () => {
+		const other = classifySign(
+			Object.assign(new Error('x'), { name: 'NotSupportedError' }),
+			0,
+			SIGN_TIMEOUT_MS
+		);
+		expect(other.kind).toBe('not_supported');
+		expect(other.timedOut).toBe(false);
 	});
 });

@@ -541,9 +541,13 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// figure and no one coin either — the core sends neither — so its hero
 	// says how many coins left, as the sweep's own confirm did, and the
 	// breakdown below names each one. Never a lone "−" over the list.
+	// send-6: a send that failed moved nothing — "Not sent", and its figure
+	// with no "−".
+	const notSent = !received && !dappTx && status === 'failed';
+	const sign = notSent ? '' : received ? '+' : '−';
 	const figure =
 		item.value !== null
-			? `${received ? '+' : '−'}${sentAmountText(item.value)} ${item.symbol}`.trim()
+			? `${sign}${sentAmountText(item.value)} ${item.symbol}`.trim()
 			: !dappTx && batch !== null && parts.length > 0
 				? fill(m['componentsTx.receipt.assetsCount'], { n: parts.length })
 				: '';
@@ -554,11 +558,13 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// "Sent", as its receipt was — not "Sent " with nobody after it.
 		title: dappTx
 			? m['history.txLabelDappTx']
-			: item.symbol === '' && !received
-				? m['componentsTx.detail.sent']
-				: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
-						symbol: item.symbol
-					}),
+			: notSent
+				? m['componentsTx.receipt.statusNotSent']
+				: item.symbol === '' && !received
+					? m['componentsTx.detail.sent']
+					: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
+							symbol: item.symbol
+						}),
 		// The record's own lifecycle — never the confirmed chip by default
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.

@@ -97,6 +97,13 @@ export interface WalletMessages {
 		pending: string;
 		failed: string;
 		/**
+		 * send-6: a send that failed moved nothing — "Not sent" is its title,
+		 * and its figure carries no "−".
+		 */
+		notSent: string;
+		/** send-20: a sweep's row figure, "{{n}} assets" — a count with its unit. */
+		assetsCount: string;
+		/**
 		 * 087 F04: a pending record nothing will settle (`FeedTxStatus`
 		 * `unknown`) — "Unknown · <site>", never "Failed": it may have been sent.
 		 */

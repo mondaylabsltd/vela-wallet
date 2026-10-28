@@ -1861,7 +1861,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		inputs.messageUnread === true
 	);
 	const enabled = confirmState?.enabled === true;
-	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
+	// signer-11: an open confirm after a passkey prompt that signed nothing
+	// says so — the confirm is the way to try again.
+	const note =
+		!enabled && confirmState?.key
+			? m.confirmBlock[confirmState.key]
+			: enabled && sign.passkey_note
+				? m.passkeyNote[sign.passkey_note]
+				: undefined;
 
 	const shown = verdictShown(inputs);
 	const drawn = withSimVerdict(

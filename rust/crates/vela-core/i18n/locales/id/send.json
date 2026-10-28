@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} paling banyak {{decimals}} angka desimal — persingkat jumlahnya.",
     "warnAmountTooLarge": "Jumlah ini terlalu besar.",
     "warnAmountUnreadable": "Masukkan satu jumlah: satu tanda desimal, tanpa pemisah ribuan.",
-    "batchBadChecksum": "Checksum tidak cocok"
+    "batchBadChecksum": "Checksum tidak cocok",
+    "riskChecking": "Memeriksa alamat ini…",
+    "riskUnfinished": "Pemeriksaan alamat ini tidak selesai. Pastikan ini alamat yang Anda maksud.",
+    "amountPasteRefused": "Itu bukan jumlah. Tempel angka, misalnya 12,5."
   }
 }

@@ -178,6 +178,9 @@
     "warnTooManyDecimals": "{{symbol}} admite como máximo {{decimals}} decimales: acorta el monto.",
     "warnAmountTooLarge": "Este monto es demasiado grande.",
     "warnAmountUnreadable": "Escribe un solo monto: un separador decimal y sin separadores de miles.",
-    "batchBadChecksum": "La suma de verificación no coincide"
+    "batchBadChecksum": "La suma de verificación no coincide",
+    "riskChecking": "Revisando esta dirección…",
+    "riskUnfinished": "No se pudo terminar de revisar esta dirección. Asegúrate de que sea la correcta.",
+    "amountPasteRefused": "Eso no es un monto. Pega un número, como 12.5."
   }
 }

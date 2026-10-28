@@ -119,6 +119,9 @@ const EMPTY_SEND: SendView = {
 	sending: false,
 	tx_status: 'idle',
 	tx_error: null,
+	passkey_note: null,
+	risk_checking: false,
+	risk_unfinished: false,
 	tx_hash: null,
 	user_op_hash: null,
 	receipt: null,
@@ -250,7 +253,12 @@ describe('the token picker', () => {
 				tokens: [USDT],
 				recipient: payee,
 				payees: [
-					{ address: payee, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }
+					{
+						address: payee,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
 				]
 			})
 		);
@@ -327,7 +335,14 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient: address,
-				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
+				payees: [
+					{
+						address,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
+				]
 			})
 		);
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
@@ -698,6 +713,7 @@ describe('one figure for one balance (spec 078)', () => {
 					status: 'confirmed',
 					hold_reason: null,
 					refusal_key: null,
+					can_send_again: false,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -749,7 +765,14 @@ describe('the confirm screen', () => {
 			inputs({
 				recipient: address,
 				recipient_identity: { name: 'alice.eth', source: 'ENS' },
-				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
+				payees: [
+					{
+						address,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
+				]
 			})
 		);
 		expect(model.facts.find((f) => f.label === m['send.toLabel'])).toMatchObject({
@@ -1345,8 +1368,8 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
 				],
 				payees: [
-					{ address: alice, name: 'Alice', name_source: { type: 'own' } },
-					{ address: '0x' + 'cd'.repeat(20), name: null, name_source: null }
+					{ address: alice, name: 'Alice', name_source: { type: 'own' }, first_time: false },
+					{ address: '0x' + 'cd'.repeat(20), name: null, name_source: null, first_time: false }
 				]
 			})
 		);
@@ -1389,6 +1412,7 @@ describe('the receipt', () => {
 		status,
 		hold_reason: null,
 		refusal_key: null,
+		can_send_again: false,
 		kind: null,
 		transfers: [],
 		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
@@ -1536,15 +1560,37 @@ describe('the receipt', () => {
 		expect(model.stage).not.toBe('failed');
 	});
 
-	it('provably not sent is failed, with "your funds are safe" (RA4)', () => {
+	it('provably not sent says "Not sent", plainly, with Try again (RA4, send-5)', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xlocal',
+				receipt: { ...receipt('not_sent'), can_send_again: true }
+			})
+		);
+		expect(model.stage).toBe('failed');
+		expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
+		expect(model.captions).toEqual([m['componentsTx.receipt.notSentBody']]);
+		expect(model.retry).toBe(m['send.txRetryBtn']);
+		expect(model.cta).toBe(m['componentsTx.receipt.done']);
+	});
+
+	it('Try again is offered only where the core offers it (send-5)', () => {
 		const model = liveSendReceipt(
 			receiptModel(),
 			inputs({ tx_status: 'confirmed', user_op_hash: '0xlocal', receipt: receipt('not_sent') })
 		);
-		expect(model.stage).toBe('failed');
-		expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
-		expect(model.captions).toEqual([m['send.txErrorGeneric']]);
-		expect(model.cta).toBe(m['componentsTx.receipt.done']);
+		expect(model.retry).toBeUndefined();
+		// A revert landed: "Failed", why, and no Try again — never "couldn't be
+		// submitted" over an operation that was (send-15).
+		const reverted = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', user_op_hash: '0xop', receipt: receipt('failed') })
+		);
+		expect(reverted.title).toBe(m['componentsTx.receipt.statusFailed']);
+		expect(reverted.captions).toEqual([m['componentsTx.receipt.failedHint']]);
+		expect(reverted.retry).toBeUndefined();
 	});
 
 	it('a refused submit is the failed stage, worded by the core’s key', () => {
@@ -2860,6 +2906,7 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 					status: 'failed',
 					hold_reason: null,
 					refusal_key,
+					can_send_again: true,
 					kind: null,
 					transfers: [],
 					coins: [],
@@ -2886,14 +2933,17 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 		]) {
 			const model = refused(key);
 			expect(model.stage).toBe('failed');
-			expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
+			// Refused before any block: nothing was sent (send-5).
+			expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
+			expect(model.retry).toBe(m['send.txRetryBtn']);
 			// Nothing was sent: never "please try again" over a refusal.
 			expect(model.captions.join(' ')).not.toContain(m['send.txErrorGeneric']);
 		}
 	});
 
-	it('a failure that was no refusal keeps its own words', () => {
-		expect(refused(null).title).toBe(m['send.txErrorGeneric']);
+	it('a failure that was no refusal is a revert, said as one (send-15)', () => {
+		expect(refused(null).title).toBe(m['componentsTx.receipt.statusFailed']);
+		expect(refused(null).captions).toEqual([m['componentsTx.receipt.failedHint']]);
 	});
 });
 
@@ -3363,6 +3413,7 @@ describe('an amount sent reads the same everywhere, never rounded up', () => {
 					status: 'confirmed',
 					hold_reason: null,
 					refusal_key: null,
+					can_send_again: false,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -3378,5 +3429,99 @@ describe('an amount sent reads the same everywhere, never rounded up', () => {
 		expect(receipt.title).toContain('1.2345');
 		expect(receipt.title).not.toContain('1.2346');
 		expect(sentAmountText(SENT)).toBe('1.2345');
+	});
+});
+
+describe('the send flow’s round-2 findings', () => {
+	const BOB = '0x' + 'b0'.repeat(20);
+	const confirm = (send: Partial<SendView>) =>
+		liveSendConfirm(confirmModel(), inputs({ stage: 'confirm', selected_token: ETH, ...send }));
+
+	it('send-15: a nonce another transaction spent is "Not sent", calmly, with Try again', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'nonce_used' });
+		expect(model.error).toEqual({
+			title: m['componentsTx.receipt.statusNotSent'],
+			text: m['componentsUi.signing.wentFirst'],
+			retry: m['send.txRetryBtn'],
+			calm: true
+		});
+	});
+
+	it('send-11: a passkey prompt that signed nothing says so — closed, or out of time', () => {
+		expect(confirm({ passkey_note: 'cancelled' }).error).toEqual({
+			text: m['componentsUi.signing.passkeyClosed'],
+			calm: true
+		});
+		expect(confirm({ passkey_note: 'timed_out' }).error?.text).toBe(
+			m['componentsUi.signing.passkeyTimedOut']
+		);
+		expect(confirm({}).error).toBeUndefined();
+	});
+
+	it('send-18: the shut confirm says it is checking; a check that could not finish says so', () => {
+		expect(confirm({ risk_checking: true }).held).toBe(m['send.riskChecking']);
+		expect(confirm({}).held).toBeUndefined();
+		expect(confirm({ risk_unfinished: true }).recipientTag).toBe(m['send.riskUnfinished']);
+		// A first transfer, known, is said as that.
+		expect(confirm({ recipient_risk: { is_contract: false, first_time: true } }).recipientTag).toBe(
+			m['componentsUi.signing.firstTimeTag']
+		);
+	});
+
+	it('send-20: a split tells each first-time recipient on its own row', () => {
+		const model = confirm({
+			split_mode: true,
+			recipients: [
+				{ id: 'a', address: BOB, amount: '0.1', name: null },
+				{ id: 'b', address: identity.address, amount: '0.2', name: null }
+			],
+			payees: [
+				{ address: BOB, name: null, name_source: null, first_time: true },
+				{ address: identity.address, name: null, name_source: null, first_time: false }
+			]
+		});
+		expect(model.breakdown?.map((row) => row.note)).toEqual([
+			m['componentsUi.signing.firstTimeTag'],
+			undefined
+		]);
+	});
+
+	it('send-20: only a whole address has a face on the form', () => {
+		const partial = liveSendForm(formModel(), inputs({ recipient: '0x123', selected_token: ETH }));
+		expect(partial.recipient?.identiconSvg).toBe('');
+		const whole = liveSendForm(formModel(), inputs({ recipient: BOB, selected_token: ETH }));
+		expect(whole.recipient?.identiconSvg).toBe(identicon(BOB));
+	});
+
+	it('send-20: the form carries the words for a paste that is no amount', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: ETH }));
+		expect(form.amount?.pasteRefused).toBe(m['send.amountPasteRefused']);
+	});
+
+	it('vis-24: the receipt names a known recipient with the address', () => {
+		const receipt = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				selected_token: ETH,
+				recipient: BOB,
+				tx_status: 'confirmed',
+				tx_hash: '0xtx',
+				payees: [{ address: BOB, name: 'Bob', name_source: { type: 'own' }, first_time: false }],
+				receipt: {
+					status: 'confirmed',
+					hold_reason: null,
+					refusal_key: null,
+					can_send_again: false,
+					kind: null,
+					transfers: [],
+					coins: [],
+					amount: '1',
+					usd_value: 0,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+		expect(receipt.captions[0]).toContain(`Bob (${shortenAddress(BOB)})`);
 	});
 });

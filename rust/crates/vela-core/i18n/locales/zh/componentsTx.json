@@ -29,7 +29,9 @@
       "statusConfirmed": "已确认",
       "statusSubmitted": "已提交",
       "statusFailed": "失败",
-      "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。"
+      "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。",
+      "statusNotSent": "未发送",
+      "notSentBody": "你的账户没有任何资金转出，可以再试一次。"
     },
     "detail": {
       "received": "已接收",

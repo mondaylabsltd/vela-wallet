@@ -38,6 +38,30 @@ describe('a camera that will not open says which kind of no it is', () => {
 		expect(await statusAfterRejecting('AbortError')).toBe('unavailable');
 	});
 
+	it('an unnamed refusal on a device that lists no camera is "no camera" (send-20)', async () => {
+		// Headless Chromium said "another app may be using it" with no camera
+		// at all: the device list is asked, and only a list read with no
+		// camera in it turns the sentence.
+		const run = async (devices: Array<{ kind: string }> | null) => {
+			const scanner = new Scanner();
+			const error = Object.assign(new Error('x'), { name: 'NotReadableError' });
+			vi.stubGlobal('navigator', {
+				mediaDevices: {
+					getUserMedia: () => Promise.reject(error),
+					enumerateDevices: () =>
+						devices === null ? Promise.reject(new Error('no')) : Promise.resolve(devices)
+				}
+			});
+			vi.stubGlobal('window', { isSecureContext: true });
+			await scanner.start({} as HTMLVideoElement);
+			vi.unstubAllGlobals();
+			return scanner.status;
+		};
+		expect(await run([{ kind: 'audioinput' }])).toBe('absent');
+		expect(await run([{ kind: 'videoinput' }])).toBe('unavailable');
+		expect(await run(null)).toBe('unavailable');
+	});
+
 	it('separates "no camera API" from "not on HTTPS", which look the same', async () => {
 		// `getUserMedia` is simply undefined off a secure origin, so the symptom
 		// is identical and the fix is not: one needs a device, the other a URL.

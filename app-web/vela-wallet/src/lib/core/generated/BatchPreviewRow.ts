@@ -7,8 +7,9 @@ import type { AmountIssue } from "./AmountIssue";
  */
 export type BatchPreviewRow = { line: number, name: string | null, address: string, valid: boolean, 
 /**
- * Duplicate of an earlier VALID row (case-insensitive) — the first
- * occurrence keeps the payment, this one is skipped.
+ * Duplicate of an earlier row that pays (case-insensitive: a valid
+ * address with a figure that reads) — the first payment keeps it, this
+ * one is skipped. A row with a bad figure claims nothing (send-17).
  */
 dup: boolean, 
 /**

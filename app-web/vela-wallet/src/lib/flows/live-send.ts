@@ -658,7 +658,7 @@ function singlePayee(send: SendView): SendPayee | undefined {
 }
 
 function unnamed(address: string): SendPayee {
-	return { address, name: null, name_source: null };
+	return { address, name: null, name_source: null, first_time: false };
 }
 
 /**
@@ -798,13 +798,15 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the control unconditionally and wired it to nothing — the one event
 		// (`toggle_fiat_input`) and all three view fields went unread, so the
 		// tap was swallowed whether or not the swap was possible.
-		denomToggle: send.denom_toggle_shown ? { enabled: send.denom_toggle_enabled } : undefined
+		denomToggle: send.denom_toggle_shown ? { enabled: send.denom_toggle_enabled } : undefined,
+		pasteRefused: m['send.amountPasteRefused']
 	};
 	const recipientBlock = {
 		label: m['send.recipientLabel'],
 		lines: recipientLines(send),
 		address: send.recipient || undefined,
-		identiconSvg: send.recipient ? identicon(send.recipient) : '',
+		// send-20: only a whole address has a face — "0x123" is nobody yet.
+		identiconSvg: isHexAddress(send.recipient.trim()) ? identicon(send.recipient.trim()) : '',
 		pickLabel: m['send.recipientPickAria'],
 		scanLabel: m['send.scanAria'],
 		// The trust line the core resolved: that the address is a token's own
@@ -1333,10 +1335,31 @@ function confirmHolds(
 							: m['send.txErrorGeneric']
 					}
 				};
+			case 'nonce_used':
+				// send-15: another transaction of this account (another tab's)
+				// spent the nonce first. Nothing was sent: "Not sent", calmly,
+				// and Try again signs anew.
+				return {
+					error: {
+						title: m['componentsTx.receipt.statusNotSent'],
+						text: m['componentsUi.signing.wentFirst'],
+						retry: m['send.txRetryBtn'],
+						calm: true
+					}
+				};
 			case 'generic':
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
 		}
 	}
+	// send-11: the passkey prompt signed nothing — said calmly over the
+	// confirm, which is the way to try again.
+	const passkey =
+		send.passkey_note === 'timed_out'
+			? m['componentsUi.signing.passkeyTimedOut']
+			: send.passkey_note === 'cancelled'
+				? m['componentsUi.signing.passkeyClosed']
+				: undefined;
+	const note = passkey === undefined ? {} : { error: { text: passkey, calm: true } };
 	const held = send.previous_pending;
 	if (held === null || held === undefined) {
 		// PR 2 note 1: else the fee's failure, in the line the signing sheet
@@ -1348,12 +1371,14 @@ function confirmHolds(
 		const footer = failureForChain(fee.failure, formChainOf(send))?.footer_key;
 		const words =
 			footer === undefined ? undefined : (m as Readonly<Record<string, string>>)[footer];
-		return words === undefined ? {} : { held: words };
+		if (words !== undefined) return { ...note, held: words };
+		// send-18: the confirm waits a bounded while for the recipient's check.
+		return send.risk_checking ? { ...note, held: m['send.riskChecking'] } : note;
 	}
 	// The core names the line (`SendPreviousPending.key`); a key this build
 	// does not carry falls back to the same sentence rather than a dotted key.
 	const words = (m as Readonly<Record<string, string>>)[held.key];
-	return { held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
+	return { ...note, held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
 }
 
 /**
@@ -1407,12 +1432,16 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 	// The core's own verdict, resolved on this page only (`confirm_probes`) —
 	// the form's note never sees it. One recipient only: a split's rows have
 	// no per-row verdict.
+	// send-18: a check that could not finish says so — the confirm opened
+	// without its answer.
 	const recipientTag = send.recipient_is_token_contract
 		? m['send.recipientTokenContract']
 		: (recipientCaution(send, m) ??
 			(!send.split_mode && send.recipient_risk?.first_time === true
 				? m['componentsUi.signing.firstTimeTag']
-				: undefined));
+				: send.risk_unfinished
+					? m['send.riskUnfinished']
+					: undefined));
 
 	// A sweep moves several coins; one mark would name the wrong one.
 	const heroMark =
@@ -1515,6 +1544,15 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			// The core's name for row `index` (spec 097 F) — never instead of
 			// the address it pays.
 			const lines = payeeLines(send.payees[index], draft.address, m);
+			// The form's repeat warning, said again on the page that signs
+			// (issue 203): two lines paying one payee are hardest to spot
+			// exactly where the avatars are identical and the sum looks right —
+			// and the first-transfer tell, per row, as a single send's confirm
+			// says it (send-20).
+			const notes = [
+				duplicateNote(send, draft.id, m),
+				send.payees[index]?.first_time === true ? m['componentsUi.signing.firstTimeTag'] : undefined
+			].filter((line): line is string => line !== undefined);
 			return {
 				identiconSvg: draft.address ? identicon(draft.address) : undefined,
 				address: draft.address || undefined,
@@ -1522,10 +1560,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 				detail: lines?.detail,
 				mono: lines === undefined,
 				value: `${sentAmountText(draft.amount)} ${symbol}`.trim(),
-				// The form's repeat warning, said again on the page that signs
-				// (issue 203): two lines paying one payee are hardest to spot
-				// exactly where the avatars are identical and the sum looks right.
-				note: duplicateNote(send, draft.id, m)
+				note: notes.length > 0 ? notes.join(' · ') : undefined
 			};
 		});
 		const countLine = fill(
@@ -1541,6 +1576,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
+			recipientTag: send.risk_unfinished ? m['send.riskUnfinished'] : undefined,
 			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
@@ -1595,7 +1631,12 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				? fill(m['send.sendTitle'], { symbol: token.symbol })
 				: model.header.title
 	};
-	const to = send.recipient_identity?.name ?? shortenAddress(send.recipient);
+	// Who was paid, as the confirm said it (vis-24): the core's name with its
+	// tag and the short address beside it, or the address alone.
+	const payee = singlePayee(send);
+	const named = payeeName(payee, m);
+	const short = shortenAddress(payee?.address ?? send.recipient);
+	const to = named === undefined ? short : `${named} (${short})`;
 	// Every coin the operation sent, as the core summed them (spec 097 F, S3).
 	const coins = send.receipt?.coins ?? [];
 	const status = send.receipt?.status;
@@ -1628,16 +1669,22 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 		};
 	}
 
-	// RA4/RA10: provably not sent (the relay never admitted it) — failed, and
-	// "your funds are safe" is now true.
+	// The receipt's Try again (send-5): offered by the core only over a
+	// payment proven never sent — back to the confirm, as the person left it.
+	const retry = send.receipt?.can_send_again === true ? m['send.txRetryBtn'] : undefined;
+
+	// RA4/RA10: provably not sent (the relay never admitted it) — said
+	// plainly as "Not sent" (send-5), never "Failed": nothing left the
+	// account, and Try again is the way on.
 	if (status === 'not_sent') {
 		return {
 			...model,
 			header,
 			stage: 'failed',
-			title: m['componentsTx.receipt.statusFailed'],
-			captions: [m['send.txErrorGeneric']],
+			title: m['componentsTx.receipt.statusNotSent'],
+			captions: [m['componentsTx.receipt.notSentBody']],
 			hash: undefined,
+			retry,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false
 		};
@@ -1675,15 +1722,39 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			...model,
 			header,
 			stage: 'failed',
-			title: m['componentsTx.receipt.statusFailed'],
+			// Refused before any block: nothing was sent (send-5).
+			title: m['componentsTx.receipt.statusNotSent'],
 			captions: [words ?? m['componentsUi.signing.refused']],
 			hash: undefined,
+			retry,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false
 		};
 	}
 
-	if (status === 'failed' || send.tx_status === 'error') {
+	// A definitive failure that is no refusal landed and reverted (send-15):
+	// "Failed", and why — never "couldn't be submitted" over an operation
+	// that was.
+	if (status === 'failed') {
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [m['componentsTx.receipt.failedHint']],
+			hash: send.tx_hash
+				? {
+						label: m['componentsTx.receipt.txHash'],
+						value: send.tx_hash,
+						copyLabel: m['componentsTx.receipt.copyHash']
+					}
+				: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
+	if (send.tx_status === 'error') {
 		return {
 			...model,
 			header,

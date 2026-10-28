@@ -301,7 +301,9 @@
         "stale": "這是針對此請求較早版本提供的看法",
         "feeWhenGiven": "提供時的手續費：{{fee}}",
         "feeChanged": "此看法提供後手續費已變更"
-      }
+      },
+      "passkeyClosed": "通行密鑰視窗已關閉，所以甚麼都未簽署。如果這部裝置冇呢個賬戶的通行密鑰，請用有密鑰的裝置。",
+      "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。"
     },
     "currency": {
       "title": "顯示貨幣",
@@ -357,7 +359,12 @@
       "reasonChainDown": "暫時連唔到 {{chain}}，計唔到費用，正在自動重試。",
       "reasonInternal": "Vela 內部出咗問題。如果一直係咁，請重新開啟 App。",
       "rowShort": "需要 ~{{need}}，而家有 {{have}}",
-      "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
+      "noCoinPays": "所有代幣都唔夠畀呢筆網絡費",
+      "reasonQuoteStopped": "未能從中繼取得報價。",
+      "reasonFeeTokenStopped": "中繼暫時未能為這個幣報價。可以改用其他幣支付，或者再試一次。",
+      "reasonSimulationStopped": "中繼未能試行這筆交易。",
+      "reasonQuoteHighStopped": "中繼的 gas 價格目前遠高於網絡本身。",
+      "reasonChainDownStopped": "暫時連唔到 {{chain}}，計唔到費用。"
     },
     "dock": {
       "receive": "收款",

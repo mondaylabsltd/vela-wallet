@@ -34,7 +34,14 @@ export const FEE_REASON_KEYS = [
 	// {{chain}} to price this"), and a fault inside Vela. The browser's
 	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
 	'componentsUi.gas.reasonChainDown',
-	'componentsUi.gas.reasonInternal'
+	'componentsUi.gas.reasonInternal',
+	// signer-12: the same causes once the machine has stopped saying it
+	// retries (`fee_policy::stopped_reason_key`).
+	'componentsUi.gas.reasonQuoteStopped',
+	'componentsUi.gas.reasonFeeTokenStopped',
+	'componentsUi.gas.reasonSimulationStopped',
+	'componentsUi.gas.reasonQuoteHighStopped',
+	'componentsUi.gas.reasonChainDownStopped'
 ] as const;
 
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
@@ -285,6 +292,18 @@ export const WALLET_FLOW_KEYS = [
 	// for a spent nonce, else the plain refusal (listed with the dApp rows).
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
+	// send-5 / send-6: what was proven never sent is "Not sent" — the
+	// receipt's title over its sentence, with Try again — never "Failed".
+	'componentsTx.receipt.statusNotSent',
+	'componentsTx.receipt.notSentBody',
+	// send-11: a passkey prompt that signed nothing, said calmly.
+	'componentsUi.signing.passkeyClosed',
+	'componentsUi.signing.passkeyTimedOut',
+	// send-18: the confirm waits for the recipient's check, a bounded while.
+	'send.riskChecking',
+	'send.riskUnfinished',
+	// send-20: a paste that is not an amount.
+	'send.amountPasteRefused',
 	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).
 	...VENUE_BLOCK_KEYS,
 	'send.scanAria',

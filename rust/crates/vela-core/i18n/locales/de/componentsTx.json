@@ -29,7 +29,9 @@
       "statusFailed": "Fehlgeschlagen",
       "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein.",
       "userOpHash": "UserOp-Hash",
-      "copyHash": "Transaktions-Hash kopieren"
+      "copyHash": "Transaktions-Hash kopieren",
+      "statusNotSent": "Nicht gesendet",
+      "notSentBody": "Von deinem Konto ist nichts abgegangen. Du kannst es noch einmal versuchen."
     },
     "detail": {
       "received": "Empfangen",

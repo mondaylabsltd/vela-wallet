@@ -29,7 +29,9 @@
       "statusFailed": "Başarısız",
       "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
       "userOpHash": "UserOp Hash'i",
-      "copyHash": "İşlem hash'ini kopyala"
+      "copyHash": "İşlem hash'ini kopyala",
+      "statusNotSent": "Gönderilmedi",
+      "notSentBody": "Hesabınızdan hiçbir şey çıkmadı. Yeniden deneyebilirsiniz."
     },
     "detail": {
       "received": "Alındı",

@@ -610,8 +610,9 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 			return { type: 'failed', message: userOpNotSentDetail(), refused: false, signer: null };
 		}
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
-			// Never an error, never a response, never a durable 'rejected' (⑧).
-			return { type: 'passkey_cancelled' };
+			// Never an error, never a response, never a durable 'rejected' (⑧) —
+			// but the sheet says whether the prompt ran out of time (signer-11).
+			return error.timedOut ? { type: 'passkey_timed_out' } : { type: 'passkey_cancelled' };
 		}
 		// Spec 102 (P2b-W1): this account cannot sign on the web. Nothing was
 		// signed or sent; the core answers the page -32603 and puts the reason

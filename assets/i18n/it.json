@@ -794,7 +794,10 @@
   "warnTooManyDecimals": "{{symbol}} ammette al massimo {{decimals}} cifre decimali: accorcia l'importo.",
   "warnAmountTooLarge": "Questo importo è troppo grande.",
   "warnAmountUnreadable": "Inserisci un solo importo: un separatore decimale, senza separatori delle migliaia.",
-  "batchBadChecksum": "Checksum non corrispondente"
+  "batchBadChecksum": "Checksum non corrispondente",
+  "riskChecking": "Controllo di questo indirizzo…",
+  "riskUnfinished": "Non è stato possibile completare il controllo di questo indirizzo. Assicurati che sia quello giusto.",
+  "amountPasteRefused": "Questo non è un importo. Incolla un numero, ad esempio 12,5."
  },
  "receive": {
   "title": "Ricevi",
@@ -1509,7 +1512,9 @@
    "statusFailed": "Non riuscita",
    "failedHint": "Il trasferimento è fallito on-chain — i tuoi fondi non sono stati inviati. Potrebbe comunque esserti stata addebitata una commissione di rete.",
    "userOpHash": "Hash UserOp",
-   "copyHash": "Copia hash della transazione"
+   "copyHash": "Copia hash della transazione",
+   "statusNotSent": "Non inviata",
+   "notSentBody": "Dal tuo conto non è uscito nulla. Puoi riprovare."
   },
   "detail": {
    "received": "Ricevuto",
@@ -1837,7 +1842,9 @@
     "stale": "Dato per una versione precedente di questa richiesta",
     "feeWhenGiven": "Commissione quando è stato dato: {{fee}}",
     "feeChanged": "La commissione è cambiata da questo parere"
-   }
+   },
+   "passkeyClosed": "La richiesta della passkey è stata chiusa, quindi non è stato firmato nulla. Se questo dispositivo non ha una passkey per questo conto, usa il dispositivo che ce l'ha.",
+   "passkeyTimedOut": "La richiesta della passkey è scaduta, quindi non è stato firmato nulla. Riprova quando sei pronto."
   },
   "signingApprove": {
    "resultingTotal": "Nuovo limite totale",
@@ -1932,7 +1939,12 @@
    "reasonChainDown": "Impossibile raggiungere {{chain}} per calcolare la commissione. Nuovo tentativo automatico.",
    "reasonInternal": "Qualcosa è andato storto in Vela. Se continua, riapri l’app.",
    "rowShort": "Servono ~{{need}}, hai {{have}}",
-   "noCoinPays": "Nessun token basta per questa commissione"
+   "noCoinPays": "Nessun token basta per questa commissione",
+   "reasonQuoteStopped": "Non è stato possibile ottenere un prezzo dal relay.",
+   "reasonFeeTokenStopped": "Il relay non riesce a quotare questa moneta per ora. Paga con un'altra moneta oppure riprova.",
+   "reasonSimulationStopped": "Il relay non è riuscito a simulare questa transazione.",
+   "reasonQuoteHighStopped": "Il prezzo del gas del relay è ora molto più alto di quello della rete.",
+   "reasonChainDownStopped": "Impossibile raggiungere {{chain}} per calcolare la commissione."
   },
   "dock": {
    "receive": "Ricevi",

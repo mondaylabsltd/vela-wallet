@@ -108,6 +108,7 @@ function requestOf(chainId: number, multisig: string, paramsJson: string): SignV
 		failure_retryable: false,
 		failure_refusal_key: null,
 		failure_not_sent: false,
+		passkey_note: null,
 		sim_checking: false,
 		sim_waited_out_key: null,
 		notice: null,

@@ -147,6 +147,16 @@ export interface SendExecutorSelf {
 	dispatch(event: SendEvent): void;
 }
 
+/**
+ * The relay refused the op because its nonce was spent (send-15): AA25 —
+ * which the core's `relay_error_message` words "Transaction nonce mismatch"
+ * — or the relay's own words for it. Wording-tolerant, as
+ * `parseBundlerUnderfunded` is.
+ */
+export function isNonceSpent(message: string): boolean {
+	return /nonce mismatch|invalid account nonce|\bAA25\b/i.test(message);
+}
+
 let trackerSink: ((handoff: SendTrackerHandoff) => void) | null = null;
 
 export function setSendTrackerSink(sink: ((handoff: SendTrackerHandoff) => void) | null): void {
@@ -686,6 +696,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'resolve_identity': {
+				// The person's own names first (vis-24): one of their accounts, or
+				// a contact they saved — local, no network, and told as theirs
+				// (`self`), never a service's.
+				const known = ports.knownName?.(operation.address) ?? null;
+				if (known !== null && known.trim() !== '') {
+					return { type: 'identity_resolved', identity: { name: known, source: 'self' } };
+				}
 				const identity = await resolveRecipientIdentity(operation.address);
 				return {
 					type: 'identity_resolved',
@@ -762,7 +779,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	): Extract<SendShellResult, { type: 'submit_failed' }>['failure'] {
 		const err = error as { code?: unknown; message?: string } | null | undefined;
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
-			return { type: 'passkey_cancelled' };
+			// The confirm says which (send-11): closed, or out of time.
+			return error.timedOut ? { type: 'passkey_timed_out' } : { type: 'passkey_cancelled' };
 		}
 		// Spec 102 (P2b-W1): this account cannot sign on the web — nothing was
 		// signed or sent. The core says why on the confirm screen, in the
@@ -783,6 +801,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			// again waits for it like any held confirm (correctness batch item 3).
 			if (typeof error.rejection === 'object' && error.rejection !== null) {
 				if ('nonce_held' in error.rejection) return { type: 'previous_pending' };
+				// The nonce this op signed was spent already — another
+				// transaction of the account (another tab's) landed first
+				// (send-15): nothing was sent, said as that, never "couldn't be
+				// submitted". The relay's AA25, in the core's sentence for it.
+				if ('other' in error.rejection && isNonceSpent(error.rejection.other)) {
+					return { type: 'nonce_used' };
+				}
 			}
 			console.warn('[send] submit not sent:', message);
 			return { type: 'other', message: message || null };

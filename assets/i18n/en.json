@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}} has at most {{decimals}} decimal places — shorten the amount.",
   "warnAmountTooLarge": "This amount is too large.",
   "warnAmountUnreadable": "Enter one amount: one decimal mark, no thousands separators.",
-  "batchBadChecksum": "Checksum doesn't match"
+  "batchBadChecksum": "Checksum doesn't match",
+  "riskChecking": "Checking this address…",
+  "riskUnfinished": "Couldn't finish checking this address. Make sure it's the one you mean.",
+  "amountPasteRefused": "That isn't an amount. Paste a number, like 12.5."
  },
  "receive": {
   "title": "Receive",
@@ -1502,7 +1505,9 @@
    "statusConfirmed": "Confirmed",
    "statusSubmitted": "Submitted",
    "statusFailed": "Failed",
-   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged."
+   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged.",
+   "statusNotSent": "Not sent",
+   "notSentBody": "Nothing left your account. You can try again."
   },
   "detail": {
    "received": "Received",
@@ -1872,7 +1877,9 @@
     "stale": "Given for an earlier version of this request",
     "feeWhenGiven": "Fee when given: {{fee}}",
     "feeChanged": "The fee changed since this opinion"
-   }
+   },
+   "passkeyClosed": "The passkey prompt was closed, so nothing was signed. If this device has no passkey for this account, use the device that has it.",
+   "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready."
   },
   "currency": {
    "title": "Display currency",
@@ -1928,7 +1935,12 @@
    "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
    "reasonInternal": "Something went wrong inside Vela. If it keeps happening, reopen the app.",
    "rowShort": "Need ~{{need}}, have {{have}}",
-   "noCoinPays": "No token can pay this fee"
+   "noCoinPays": "No token can pay this fee",
+   "reasonQuoteStopped": "Couldn't get a price from the relay.",
+   "reasonFeeTokenStopped": "The relay can't price this coin right now. Pay in another coin, or try again.",
+   "reasonSimulationStopped": "The relay couldn't test-run this transaction.",
+   "reasonQuoteHighStopped": "The relay's gas price is far above the network's right now.",
+   "reasonChainDownStopped": "Can't reach {{chain}} to price this."
   },
   "dock": {
    "receive": "Receive",

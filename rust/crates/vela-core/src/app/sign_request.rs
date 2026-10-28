@@ -754,6 +754,10 @@ pub enum SignSubmitOutcome {
     /// User dismissed the passkey sheet — never an error, never a response
     /// (`dapp-connection.tsx:808-812`).
     PasskeyCancelled,
+    /// The passkey prompt ran out of time (the shell's deadline on the
+    /// ceremony): handled as [`Self::PasskeyCancelled`], and the sheet says
+    /// which ([`SignView::passkey_note`], signer-11).
+    PasskeyTimedOut,
     /// Bundler gas account underfunded. `funding` is the composed facts
     /// (live account info with the parsed error as fallback,
     /// `dapp-connection.tsx:826-846`); `None` when no deposit address could
@@ -1622,6 +1626,9 @@ pub struct Model {
     abort: Option<AbortHandle>,
     /// Counts the simulation waits started ([`SimWait::Checking`]'s `round`).
     sim_round: u32,
+    /// The last passkey prompt for the request on the sheet signed nothing
+    /// (signer-11): that request's id, and why. Cleared by its next approve.
+    passkey_note: Option<(String, super::send::SendPasskeyNote)>,
 }
 
 impl Model {
@@ -1942,6 +1949,12 @@ pub struct SignView {
     /// predates it reads `false`.
     #[serde(default)]
     pub failure_not_sent: bool,
+    /// The last passkey prompt for the request on the sheet signed nothing
+    /// (signer-11): closed or refused — what a browser also says when this
+    /// device holds no passkey for the account — or out of time. A calm
+    /// line by the confirm, gone with the next approve. `#[serde(default)]`.
+    #[serde(default)]
+    pub passkey_note: Option<super::send::SendPasskeyNote>,
     /// The wallet's own simulation of this request is out and its verdict is
     /// not on the sheet yet (PR 3, [`Event::SimStarted`]): the confirm waits —
     /// [`super::sign_confirm::confirm_state`] holds it with
@@ -2258,6 +2271,10 @@ impl App for SignRequest {
                 .map(str::to_owned),
             failure_not_sent: model.sign_error.is_some()
                 && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
+            passkey_note: model.passkey_note.as_ref().and_then(|(id, note)| {
+                (model.pending.as_ref().map(|p| &p.id) == Some(id) && model.inflight.is_none())
+                    .then_some(*note)
+            }),
             sim_checking: model.sim_checking(),
             sim_waited_out_key: model
                 .pending
@@ -2951,6 +2968,7 @@ fn approve_with(
         opts.quoted_fee.as_ref().map(|fee| fee.amount.as_str()),
     );
 
+    model.passkey_note = None;
     model.inflight = Some(Inflight {
         id: pending.id.clone(),
         transport_id: pending.transport_id.clone(),
@@ -3952,6 +3970,14 @@ fn on_submit_outcome(
     // PancakeSwap said "Proceed in your wallet" over a swap that had landed.
     let is_tx = fl.method == "eth_sendTransaction";
     let is_batch = method_kind(&fl.method) == SignMethodKind::Batch;
+    // A prompt that timed out is a cancel in every rule below; only the
+    // sheet's line tells them apart (signer-11).
+    let timed_out = matches!(outcome, SignSubmitOutcome::PasskeyTimedOut);
+    let outcome = if timed_out {
+        SignSubmitOutcome::PasskeyCancelled
+    } else {
+        outcome
+    };
     let outcome = match (&fl.op_hash, fl.record_id.is_some(), outcome) {
         (
             Some(op_hash),
@@ -3995,7 +4021,7 @@ fn on_submit_outcome(
         (_, _, outcome) => outcome,
     };
     match outcome {
-        SignSubmitOutcome::PasskeyCancelled => {
+        SignSubmitOutcome::PasskeyCancelled | SignSubmitOutcome::PasskeyTimedOut => {
             model.inflight = None;
             // 083: "keep the modal open for a retry" means nothing once the
             // request is off the sheet — closed while the signature was still
@@ -4024,7 +4050,19 @@ fn on_submit_outcome(
                 return ops_and_render(model, vec![op]);
             }
             // Otherwise keep the modal open, send nothing — never an error,
-            // never a durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧).
+            // never a durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧) —
+            // and never silent (signer-11): a calm line says nothing was
+            // signed, and why when the prompt ran out of time.
+            if on_sheet {
+                model.passkey_note = Some((
+                    fl.id.clone(),
+                    if timed_out {
+                        super::send::SendPasskeyNote::TimedOut
+                    } else {
+                        super::send::SendPasskeyNote::Cancelled
+                    },
+                ));
+            }
             render()
         }
         SignSubmitOutcome::AskerGone => {

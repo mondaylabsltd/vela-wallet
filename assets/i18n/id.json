@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}} paling banyak {{decimals}} angka desimal — persingkat jumlahnya.",
   "warnAmountTooLarge": "Jumlah ini terlalu besar.",
   "warnAmountUnreadable": "Masukkan satu jumlah: satu tanda desimal, tanpa pemisah ribuan.",
-  "batchBadChecksum": "Checksum tidak cocok"
+  "batchBadChecksum": "Checksum tidak cocok",
+  "riskChecking": "Memeriksa alamat ini…",
+  "riskUnfinished": "Pemeriksaan alamat ini tidak selesai. Pastikan ini alamat yang Anda maksud.",
+  "amountPasteRefused": "Itu bukan jumlah. Tempel angka, misalnya 12,5."
  },
  "receive": {
   "title": "Terima",
@@ -1502,7 +1505,9 @@
    "statusFailed": "Gagal",
    "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan.",
    "userOpHash": "UserOp Hash",
-   "copyHash": "Salin hash transaksi"
+   "copyHash": "Salin hash transaksi",
+   "statusNotSent": "Tidak terkirim",
+   "notSentBody": "Tidak ada yang keluar dari akun Anda. Anda bisa mencoba lagi."
   },
   "detail": {
    "received": "Diterima",
@@ -1830,7 +1835,9 @@
     "stale": "Diberikan untuk versi sebelumnya dari permintaan ini",
     "feeWhenGiven": "Biaya saat diberikan: {{fee}}",
     "feeChanged": "Biaya berubah sejak pendapat ini"
-   }
+   },
+   "passkeyClosed": "Permintaan passkey ditutup, jadi tidak ada yang ditandatangani. Jika perangkat ini tidak punya passkey untuk akun ini, gunakan perangkat yang punya.",
+   "passkeyTimedOut": "Waktu permintaan passkey habis, jadi tidak ada yang ditandatangani. Coba lagi saat Anda siap."
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",
@@ -1925,7 +1932,12 @@
    "reasonChainDown": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya. Mencoba lagi otomatis.",
    "reasonInternal": "Terjadi kesalahan di dalam Vela. Jika terus terjadi, buka ulang aplikasinya.",
    "rowShort": "Perlu ~{{need}}, ada {{have}}",
-   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
+   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini",
+   "reasonQuoteStopped": "Tidak bisa mendapatkan harga dari relay.",
+   "reasonFeeTokenStopped": "Relay belum bisa memberi harga untuk koin ini. Bayar dengan koin lain, atau coba lagi.",
+   "reasonSimulationStopped": "Relay tidak bisa menjalankan uji transaksi ini.",
+   "reasonQuoteHighStopped": "Harga gas relay sedang jauh di atas harga jaringan.",
+   "reasonChainDownStopped": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya."
   },
   "dock": {
    "receive": "Terima",

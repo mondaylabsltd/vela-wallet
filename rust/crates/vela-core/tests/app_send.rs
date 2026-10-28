@@ -27,11 +27,12 @@ use vela_core::app::send::{
     Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
     SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
-    SendOperation as Op, SendPayee, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
-    SendRecipientDraft, SendRecipientRisk, SendRowFieldState, SendScan, SendShellResult as Res,
-    SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
-    SendTreasuryCoin, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord,
-    SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
+    SendOperation as Op, SendPasskeyNote, SendPayee, SendReceiptKind, SendReceiptOutcome,
+    SendReceiptStatus, SendRecipientDraft, SendRecipientRisk, SendRowFieldState, SendScan,
+    SendShellResult as Res, SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta,
+    SendTreasuryAsset, SendTreasuryCoin, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey,
+    SendTxRecord, SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, RISK_WAIT_MS,
+    TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -489,6 +490,17 @@ fn continue_to_confirm(sut: &mut Sut, fee: FeeEstimateView) {
         match op {
             Op::ResolveRisk { .. } => {
                 assert!(sut.resolve(Res::RiskResolved { risk: None }).is_empty());
+            }
+            // The confirm's bounded wait for that check (send-18): answered
+            // already, so the timer changes nothing.
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                let ops = sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
+                assert!(ops.is_empty(), "{ops:?}");
             }
             Op::SimulateCalls { .. } => {
                 assert!(sut.resolve(Res::SimResolved { sim_json: None }).is_empty());
@@ -3534,10 +3546,27 @@ fn split_preview_estimate_and_signed_batch_use_the_same_calls() {
     assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
     let probes = sut.resolve(covered());
     sut.drop_oldest(); // timer
+                       // A split asks about each of its addresses (send-20).
+    assert_eq!(
+        probes
+            .iter()
+            .filter(|op| matches!(op, Op::ResolveRisk { .. }))
+            .count(),
+        2,
+        "{probes:?}"
+    );
     for op in probes {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { calls, .. } => {
                 assert_eq!(calls, estimate_batch, "sim previews the same legs");
@@ -3709,6 +3738,14 @@ fn multi_select_reserves_the_fee_asset_identically_in_preview_and_signature() {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { .. } => {
                 sut.resolve(Res::SimResolved { sim_json: None });
@@ -4242,12 +4279,67 @@ fn answer_confirm_probes(sut: &mut Sut) {
             risk: Some(first_time()),
         },
     );
+    elapse_the_risk_wait(sut);
     sut.resolve_matching(
         |op| matches!(op, Op::SimulateCalls { .. }),
         Res::SimResolved {
             sim_json: Some(SIM_JSON.to_owned()),
         },
     );
+}
+
+/// The confirm's bounded wait for the recipient's check (send-18), if one
+/// is out: let it elapse.
+fn elapse_the_risk_wait(sut: &mut Sut) {
+    let waiting = |op: &Op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            }
+        )
+    };
+    if sut.outstanding().iter().any(waiting) {
+        sut.resolve_matching(
+            waiting,
+            Res::TimerElapsed {
+                tag: SendTimerTag::RiskWait,
+            },
+        );
+    }
+}
+
+/// Every recipient check out answered (a split asks one per address).
+fn answer_every_risk_check(sut: &mut Sut) {
+    while sut
+        .outstanding()
+        .iter()
+        .any(|op| matches!(op, Op::ResolveRisk { .. }))
+    {
+        answer_the_risk_check(sut);
+    }
+    elapse_the_risk_wait(sut);
+}
+
+/// The recipient's check answered: someone paid before, not a contract.
+fn answer_the_risk_check(sut: &mut Sut) {
+    if sut
+        .outstanding()
+        .iter()
+        .any(|op| matches!(op, Op::ResolveRisk { .. }))
+    {
+        sut.resolve_matching(
+            |op| matches!(op, Op::ResolveRisk { .. }),
+            Res::RiskResolved {
+                risk: Some(SendRecipientRisk {
+                    is_contract: Some(false),
+                    first_time: Some(false),
+                }),
+            },
+        );
+    }
+    elapse_the_risk_wait(sut);
 }
 
 fn first_time() -> SendRecipientRisk {
@@ -4308,7 +4400,7 @@ fn a_requote_on_confirm_asks_a_transfer_nothing_again() {
     drop_the_precheck_timer(&mut sut);
     let probes = sut.resolve(covered());
     assert_eq!(sut.view().stage, SendStage::Confirm);
-    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    assert_eq!(probes.len(), 3, "risk, its wait and simulation: {probes:?}");
     answer_confirm_probes(&mut sut);
 
     // Three blocks: a dearer figure, another, and the same one again.
@@ -4366,7 +4458,7 @@ fn a_requote_on_a_sweep_s_confirm_simulates_the_moved_calls_again() {
     drop_the_precheck_timer(&mut sut);
     let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
     assert_eq!(sut.view().stage, SendStage::Confirm);
-    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    assert_eq!(probes.len(), 3, "risk, its wait and simulation: {probes:?}");
     answer_confirm_probes(&mut sut);
 
     // The next block: 0.5 → 0.6 ETH held back, so the ETH line is 1.4.
@@ -5050,6 +5142,182 @@ fn passkey_cancel_is_never_an_error_state() {
     assert_eq!(view.tx_status, SendTxStatus::Idle);
     assert_eq!(view.tx_error, None);
     assert!(!view.sending);
+    // …and never silent (send-11): a calm line says nothing was signed, and
+    // the confirm is there to tap again.
+    assert_eq!(view.passkey_note, Some(SendPasskeyNote::Cancelled));
+    assert!(view.can_confirm);
+    // The next confirm takes the line down.
+    slide_to_submit(&mut sut);
+    assert_eq!(sut.view().passkey_note, None);
+}
+
+/// send-11: a prompt that ran out of time says so; leaving the confirm takes
+/// the line down.
+#[test]
+fn a_passkey_prompt_that_timed_out_says_so() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::PasskeyTimedOut,
+    });
+    assert!(ops.is_empty(), "no haptic, no alert: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(view.passkey_note, Some(SendPasskeyNote::TimedOut));
+    sut.dispatch(Event::Back);
+    assert_eq!(sut.view().passkey_note, None);
+}
+
+/// send-15: the nonce this send signed was spent by another transaction of
+/// the account (another tab's): nothing was sent — said calmly, by its own
+/// key, and "Try again" opens the confirm to sign anew.
+#[test]
+fn a_spent_nonce_is_not_sent_and_try_again_signs_anew() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::NonceUsed,
+    });
+    assert!(ops.is_empty(), "no error buzz: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::NonceUsed));
+    assert!(!view.can_confirm);
+    sut.dispatch(Event::RetryAfterError);
+    assert!(sut.view().can_confirm);
+}
+
+/// send-18: the confirm stays shut while the recipient's check is out — a
+/// first-transfer warning is read before a tap can land — for a bounded
+/// while; past it the confirm opens and says the check could not finish, and
+/// a late answer still lands.
+#[test]
+fn the_confirm_waits_a_bounded_while_for_the_recipient_check() {
+    let reach_confirm = || {
+        let mut sut = boot(vec![eth("2")]);
+        select_eth(&mut sut);
+        set_recipient(&mut sut, RECIPIENT);
+        sut.dispatch(Event::SetAmount {
+            amount: "1".to_owned(),
+        });
+        sut.dispatch(Event::Continue);
+        drain_form_quote(&mut sut);
+        sut.resolve(fee_ok(native_fee(1, 1_000)));
+        drop_the_precheck_timer(&mut sut);
+        let probes = sut.resolve(covered());
+        assert!(
+            probes.contains(&Op::StartTimer {
+                ms: RISK_WAIT_MS,
+                tag: SendTimerTag::RiskWait
+            }),
+            "{probes:?}"
+        );
+        sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+        sut
+    };
+
+    // Answered inside the wait: shut until then, then open with the tag.
+    let mut sut = reach_confirm();
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.risk_checking);
+    assert!(!view.can_confirm, "the warning is not known yet");
+    assert!(sut
+        .dispatch(Event::SlideConfirm { review: None })
+        .is_empty());
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_checking && !view.risk_unfinished);
+    assert!(view.can_confirm);
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), Some(true));
+
+    // Late: the wait elapses, the confirm opens and says so; the late
+    // answer still lands and the line goes.
+    let mut sut = reach_confirm();
+    sut.resolve_matching(
+        |op| {
+            matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::RiskWait,
+                    ..
+                }
+            )
+        },
+        Res::TimerElapsed {
+            tag: SendTimerTag::RiskWait,
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_checking);
+    assert!(view.risk_unfinished);
+    assert!(view.can_confirm);
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    assert!(!sut.view().risk_unfinished);
+}
+
+/// send-20: a split's confirm asks about each address it pays, once, and
+/// tells a first transfer per row; the confirm waits for all of them.
+#[test]
+fn a_split_tells_each_first_time_recipient() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    let row = |id: &str, address: &str, amount: &str| SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: None,
+    };
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            row("rcpt_1", RECIPIENT, "0.25"),
+            row("rcpt_2", RECIPIENT_B, "0.5"),
+        ],
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 1_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let asked: Vec<String> = probes
+        .iter()
+        .filter_map(|op| match op {
+            Op::ResolveRisk { address, .. } => Some(address.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, vec![RECIPIENT.to_owned(), RECIPIENT_B.to_owned()]);
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    let answer = |first: bool| Res::RiskResolved {
+        risk: Some(SendRecipientRisk {
+            is_contract: Some(false),
+            first_time: Some(first),
+        }),
+    };
+    sut.resolve_matching(|op| matches!(op, Op::ResolveRisk { .. }), answer(false));
+    assert!(!sut.view().can_confirm, "one check is still out");
+    sut.resolve_matching(|op| matches!(op, Op::ResolveRisk { .. }), answer(true));
+    let view = sut.view();
+    assert!(!view.risk_checking && !view.risk_unfinished);
+    let firsts: Vec<bool> = view.payees.iter().map(|p| p.first_time).collect();
+    assert_eq!(firsts, vec![false, true]);
 }
 
 #[test]
@@ -6694,6 +6962,57 @@ fn the_tracker_ends_a_maybe_sent_send() {
         SendTxStatus::Confirmed,
         "never an error screen"
     );
+    assert!(
+        receipt.can_send_again,
+        "proven never sent: Try again (send-5)"
+    );
+}
+
+/// send-5: a receipt proven never sent offers "Try again", which goes back
+/// to the confirm with every value as it was — never while the op is still
+/// in doubt, and never after a revert, which landed.
+#[test]
+fn a_never_sent_receipt_goes_back_to_the_confirm() {
+    use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
+    let open = || {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(submitted_maybe(HASH));
+        sut
+    };
+    let update = |sut: &mut Sut, status, outcome| {
+        let entry = track_entry(status, outcome, None);
+        if let Some(outcome) = receipt_outcome_of(&entry) {
+            sut.dispatch(Event::ReceiptUpdate {
+                user_op_hash: HASH.to_owned(),
+                outcome,
+            });
+        }
+    };
+
+    // In doubt: no way back, and the event changes nothing.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::Pending, TrackOutcome::MaybeSent);
+    assert!(!sut.view().receipt.expect("receipt").can_send_again);
+    assert!(sut.dispatch(Event::SendAgain).is_empty());
+    assert_eq!(sut.view().stage, SendStage::Receipt);
+
+    // A revert landed and spent gas: Done only.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::Dropped, TrackOutcome::Final);
+    assert!(!sut.view().receipt.expect("receipt").can_send_again);
+
+    // Proven never sent: back to the confirm, as the person left it.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::NotSent, TrackOutcome::Final);
+    sut.dispatch(Event::SendAgain);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(view.amount, "1");
+    assert!(view.receipt.is_none() || !view.receipt.expect("receipt").can_send_again);
+    assert_eq!(view.user_op_hash, None);
 }
 
 /// Review of T026 (RA10): a fee hold is the relay's own word that it holds
@@ -7431,6 +7750,7 @@ fn payee(address: &str, name: Option<&str>, source: Option<SendNameSource>) -> S
         address: address.to_owned(),
         name: name.map(str::to_owned),
         name_source: source,
+        first_time: false,
     }
 }
 
@@ -7579,6 +7899,14 @@ fn sweep_to_confirm(to: &str, answer: Res) -> Sut {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { .. } => {
                 sut.resolve(Res::SimResolved { sim_json: None });
@@ -8521,6 +8849,7 @@ fn continue_with_the_funding_stop_up_is_its_retry_and_leaves_nothing_stale() {
         fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
     );
     sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_the_risk_check(&mut sut);
     let view = sut.view();
     assert_eq!(view.stage, SendStage::Confirm, "funded: on to confirm");
     assert!(
@@ -8545,6 +8874,7 @@ fn continue_with_the_cant_reach_stop_up_is_its_retry_and_leaves_nothing_stale() 
         fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
     );
     sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_the_risk_check(&mut sut);
     let view = sut.view();
     assert_eq!(view.stage, SendStage::Confirm);
     assert!(view.relay_unreachable.is_none(), "no stale stop on confirm");
@@ -9170,14 +9500,16 @@ mod multisig {
                 Op::ResolveIdentity { .. } => {
                     sut.resolve(Res::IdentityResolved { identity: None });
                 }
-                Op::ResolveRisk { .. } | Op::SimulateCalls { .. } => {
-                    sut.drop_matching(|o| {
-                        matches!(o, Op::ResolveRisk { .. } | Op::SimulateCalls { .. })
-                    });
+                Op::SimulateCalls { .. } => {
+                    sut.drop_matching(|o| matches!(o, Op::SimulateCalls { .. }));
                 }
                 _ => {}
             }
         }
+        // The confirm waits for the recipient's check (send-18).
+        assert!(sut.view().risk_checking, "the check holds the confirm");
+        assert!(!sut.view().can_confirm);
+        super::answer_the_risk_check(sut);
         sut.view()
     }
 
@@ -9280,13 +9612,10 @@ mod multisig {
         });
         let ops = sut.dispatch(Event::Continue);
         assert!(!ops.iter().any(fee_work), "{ops:?}");
-        for op in ops {
-            if matches!(op, Op::ResolveRisk { .. } | Op::SimulateCalls { .. }) {
-                sut.drop_matching(|o| {
-                    matches!(o, Op::ResolveRisk { .. } | Op::SimulateCalls { .. })
-                });
-            }
+        if ops.iter().any(|op| matches!(op, Op::SimulateCalls { .. })) {
+            sut.drop_matching(|o| matches!(o, Op::SimulateCalls { .. }));
         }
+        super::answer_every_risk_check(&mut sut);
         let view = sut.view();
         assert_eq!(view.stage, SendStage::Confirm);
         let ops = sut.dispatch(Event::SlideConfirm {

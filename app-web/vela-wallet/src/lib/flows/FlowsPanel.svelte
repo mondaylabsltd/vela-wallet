@@ -107,6 +107,8 @@
 		confirmBusy?: boolean;
 		/** A failed submit's "Try again" — back to a confirm the core can open. */
 		retryAfterError?: () => void;
+		/** The never-sent receipt's "Try again" (send-5) — back to the confirm. */
+		sendAgain?: () => void;
 	}
 
 	interface BatchActions {
@@ -272,6 +274,7 @@
 			model={body.model}
 			layout="column"
 			oncta={() => (send ? send.done() : go('done'))}
+			onretry={send?.sendAgain ? () => send.sendAgain?.() : undefined}
 		/>
 	{/if}
 </ThirdPanel>

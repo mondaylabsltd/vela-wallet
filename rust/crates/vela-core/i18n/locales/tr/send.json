@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} en fazla {{decimals}} ondalık basamak alır — tutarı kısaltın.",
     "warnAmountTooLarge": "Bu tutar çok büyük.",
     "warnAmountUnreadable": "Tek bir tutar girin: bir ondalık ayırıcı, binlik ayırıcı olmadan.",
-    "batchBadChecksum": "Sağlama toplamı eşleşmiyor"
+    "batchBadChecksum": "Sağlama toplamı eşleşmiyor",
+    "riskChecking": "Bu adres kontrol ediliyor…",
+    "riskUnfinished": "Bu adresin kontrolü tamamlanamadı. Doğru adres olduğundan emin olun.",
+    "amountPasteRefused": "Bu bir tutar değil. 12,5 gibi bir sayı yapıştırın."
   }
 }

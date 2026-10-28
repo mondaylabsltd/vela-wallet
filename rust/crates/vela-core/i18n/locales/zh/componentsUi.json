@@ -301,7 +301,9 @@
         "stale": "这是针对此请求较早版本给出的看法",
         "feeWhenGiven": "给出时的手续费：{{fee}}",
         "feeChanged": "此看法给出后手续费已变化"
-      }
+      },
+      "passkeyClosed": "通行密钥窗口已关闭，所以没有签署任何内容。如果这台设备上没有这个账户的通行密钥，请换用有密钥的设备。",
+      "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。"
     },
     "currency": {
       "title": "显示货币",
@@ -357,7 +359,12 @@
       "reasonChainDown": "暂时连不上 {{chain}}，无法计算费用，正在自动重试。",
       "reasonInternal": "Vela 内部出了问题。如果一直这样，请重新打开应用。",
       "rowShort": "需要 ~{{need}}，现有 {{have}}",
-      "noCoinPays": "所有代币都不够付这笔网络费"
+      "noCoinPays": "所有代币都不够付这笔网络费",
+      "reasonQuoteStopped": "没能从中继拿到报价。",
+      "reasonFeeTokenStopped": "中继暂时无法给这个币报价。可以换一个币支付，或者再试一次。",
+      "reasonSimulationStopped": "中继没能试运行这笔交易。",
+      "reasonQuoteHighStopped": "中继的 gas 价格眼下远高于网络本身。",
+      "reasonChainDownStopped": "暂时连不上 {{chain}}，无法计算费用。"
     },
     "dock": {
       "receive": "收款",

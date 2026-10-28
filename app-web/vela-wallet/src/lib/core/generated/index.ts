@@ -357,6 +357,7 @@ export * from './SendMultisigRef';
 export * from './SendNameSource';
 export * from './SendOpenParams';
 export * from './SendOperation';
+export * from './SendPasskeyNote';
 export * from './SendPayee';
 export * from './SendPreviousPending';
 export * from './SendProposed';

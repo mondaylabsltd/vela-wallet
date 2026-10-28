@@ -29,7 +29,9 @@
       "statusFailed": "Fallido",
       "failedHint": "La transferencia se revirtió on-chain — tus fondos no se enviaron. Es posible que aún se haya cobrado una comisión de red.",
       "userOpHash": "Hash de UserOp",
-      "copyHash": "Copiar hash de la transacción"
+      "copyHash": "Copiar hash de la transacción",
+      "statusNotSent": "No se envió",
+      "notSentBody": "No salió nada de tu cuenta. Puedes intentarlo de nuevo."
     },
     "detail": {
       "received": "Recibido",

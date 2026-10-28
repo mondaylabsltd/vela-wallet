@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}}은(는) 소수점 이하 최대 {{decimals}}자리까지입니다. 금액을 줄여 주세요.",
     "warnAmountTooLarge": "금액이 너무 큽니다.",
     "warnAmountUnreadable": "금액은 소수점 하나만 쓰고 천 단위 구분 기호 없이 입력하세요.",
-    "batchBadChecksum": "체크섬 불일치"
+    "batchBadChecksum": "체크섬 불일치",
+    "riskChecking": "이 주소를 확인하는 중…",
+    "riskUnfinished": "이 주소 확인을 마치지 못했습니다. 의도한 주소가 맞는지 확인하세요.",
+    "amountPasteRefused": "금액이 아닙니다. 12.5 같은 숫자를 붙여 넣으세요."
   }
 }

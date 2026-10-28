@@ -301,7 +301,9 @@
         "stale": "Für eine frühere Version dieser Anfrage abgegeben",
         "feeWhenGiven": "Gebühr bei Abgabe: {{fee}}",
         "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
-      }
+      },
+      "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, es wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nimm das Gerät, auf dem er liegt.",
+      "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist."
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",
@@ -396,7 +398,12 @@
       "reasonChainDown": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden. Wird automatisch erneut versucht.",
       "reasonInternal": "In Vela ist etwas schiefgelaufen. Falls es so bleibt, öffne die App neu.",
       "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
-      "noCoinPays": "Kein Token reicht für diese Gebühr"
+      "noCoinPays": "Kein Token reicht für diese Gebühr",
+      "reasonQuoteStopped": "Vom Relay kam kein Preis.",
+      "reasonFeeTokenStopped": "Das Relay kann diesen Coin gerade nicht bepreisen. Zahle mit einem anderen Coin oder versuche es erneut.",
+      "reasonSimulationStopped": "Das Relay konnte diese Transaktion nicht testweise ausführen.",
+      "reasonQuoteHighStopped": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks.",
+      "reasonChainDownStopped": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden."
     },
     "dock": {
       "receive": "Empfangen",

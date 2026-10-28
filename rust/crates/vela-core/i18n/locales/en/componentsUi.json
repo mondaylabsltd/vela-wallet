@@ -343,7 +343,9 @@
         "stale": "Given for an earlier version of this request",
         "feeWhenGiven": "Fee when given: {{fee}}",
         "feeChanged": "The fee changed since this opinion"
-      }
+      },
+      "passkeyClosed": "The passkey prompt was closed, so nothing was signed. If this device has no passkey for this account, use the device that has it.",
+      "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready."
     },
     "currency": {
       "title": "Display currency",
@@ -399,7 +401,12 @@
       "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
       "reasonInternal": "Something went wrong inside Vela. If it keeps happening, reopen the app.",
       "rowShort": "Need ~{{need}}, have {{have}}",
-      "noCoinPays": "No token can pay this fee"
+      "noCoinPays": "No token can pay this fee",
+      "reasonQuoteStopped": "Couldn't get a price from the relay.",
+      "reasonFeeTokenStopped": "The relay can't price this coin right now. Pay in another coin, or try again.",
+      "reasonSimulationStopped": "The relay couldn't test-run this transaction.",
+      "reasonQuoteHighStopped": "The relay's gas price is far above the network's right now.",
+      "reasonChainDownStopped": "Can't reach {{chain}} to price this."
     },
     "dock": {
       "receive": "Receive",

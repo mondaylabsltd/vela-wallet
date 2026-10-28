@@ -139,7 +139,9 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
-		expect(row.amount).toBe('3');
+		// A sweep names no one coin: its count carries its unit (send-20).
+		expect(row.amount).toBe(m.activity.assetsCount.replace('{{n}}', '3'));
+		expect(row.amount).not.toBe('3');
 	});
 
 	/** Spec 082 RG1–RG4: what the row is and where it stands are the core's. */
@@ -198,9 +200,29 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
-		expect(failed.subtitle).toBe(
-			`${m.activity.failed} · ${m.activity.toName.replace('{{name}}', 'Bob')}`
+		// A send that failed moved nothing (send-6): titled "Not sent", the
+		// status not said twice, and its figure with no "−" as if it had left.
+		expect(failed.title).toBe(m.activity.notSent);
+		expect(failed.subtitle).toBe(m.activity.toName.replace('{{name}}', 'Bob'));
+		expect(failed.amount).toBe('1.5');
+		expect(failed.amount).not.toContain('−');
+		// A dApp's failed row keeps its "Failed · <site>".
+		const dappFailed = liveActivityRow(
+			item({
+				id: 'h',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'failed',
+				site: '127.0.0.1:8137',
+				subtitle: [
+					{ type: 'status', status: 'failed' },
+					{ type: 'site', site: '127.0.0.1:8137' }
+				]
+			}),
+			m,
+			false
 		);
+		expect(dappFailed.subtitle).toBe(`${m.activity.failed} · 127.0.0.1:8137`);
 	});
 
 	// 087 F04: the core says `unknown` for a pending record nothing will

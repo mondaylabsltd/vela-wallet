@@ -243,6 +243,27 @@ describe('the unit on the figure', () => {
 		expect(oninput).not.toHaveBeenCalled();
 	});
 
+	it('says so when a paste is no amount, and takes the line down on the next figure (send-20)', async () => {
+		const { input, screen } = typedInto({
+			value: '',
+			oninput: vi.fn(),
+			pasteRefused: 'That isn’t an amount.'
+		});
+		const line = () => screen.container.querySelector('[data-testid="amount-paste-refused"]');
+		await type(input, '2');
+		expect(line()).toBeNull();
+		await type(input, '4.5.6', 'insertFromPaste');
+		await tick();
+		expect(line()?.textContent).toBe('That isn’t an amount.');
+		await type(input, '3');
+		await tick();
+		expect(line()).toBeNull();
+		// Letters with no digit in them are no amount either.
+		await type(input, 'abc', 'insertFromPaste');
+		await tick();
+		expect(line()).not.toBeNull();
+	});
+
 	it('leaves the caret where the person was when a character is dropped', async () => {
 		// A decimal-point preset: a "," left of the point is grouping, and goes.
 		// (Under a decimal-comma preset it is a second decimal mark, which is

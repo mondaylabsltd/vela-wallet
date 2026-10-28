@@ -76,6 +76,8 @@ const DISPATCHED: Record<string, Place> = {
 	'sendSession.add_network_tapped': { view: 'goes to add a network (add_network)' },
 	'sendSession.retry_after_bootstrap': { view: 'the review’s own retry' },
 	'sendSession.retry_after_error': { view: 'the review’s own retry' },
+	// send-5: back to the review from a receipt proven never sent.
+	'sendSession.send_again': { view: 'the review’s own retry' },
 	'sendSession.retry_relay_unreachable': { view: 'the review’s own retry' },
 	'sendSession.dismiss_relay_unreachable': { view: 'a notice dismissed' },
 	'sendSession.dismiss_treasury_sheet': { view: 'a notice dismissed' },

@@ -885,6 +885,16 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		expect(detail.status?.tone).toBe('error');
 	});
 
+	it('send-6: a send that failed is "Not sent", its figure with no "−"', () => {
+		const detail = liveTxDetail(item('n', { direction: 'out', status: 'failed' }), ctx);
+		expect(detail.title).toBe(fm['componentsTx.receipt.statusNotSent']);
+		expect(detail.amount).toBe('1.25 ETH');
+		expect(detail.positive).toBe(false);
+		// A send that went is still "Sent", with its "−".
+		const sent = liveTxDetail(item('s', { direction: 'out' }), ctx);
+		expect(sent.amount).toBe('−1.25 ETH');
+	});
+
 	it('a record nothing will settle reads Unknown, draws no hash and keeps a quiet delete (087 F04/F05)', () => {
 		const detail = liveTxDetail(
 			item('dapp-1790500000796-tx', {

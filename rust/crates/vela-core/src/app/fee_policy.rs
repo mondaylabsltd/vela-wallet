@@ -917,6 +917,15 @@ pub const QUOTE_DEADLINE_MS: u32 = 15_000;
 /// [`FeeOperation::StartDeadline`]; a tap gets [`QUOTE_DEADLINE_MS`].
 pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;
 
+/// Re-asks on [`requote_delay_ms`]'s schedule before the words stop saying
+/// "retrying" (signer-12): ~30 s of a relay that cannot quote. Past it the
+/// row and the footer say plainly that the fee could not be worked out, with
+/// the tap to retry — and the machine still asks again, every
+/// [`SLOW_REQUOTE_MS`], so a relay that comes back is still seen.
+pub const AUTO_REQUOTE_LIMIT: u32 = 4;
+/// The background re-ask's wait once [`AUTO_REQUOTE_LIMIT`] is spent.
+pub const SLOW_REQUOTE_MS: u32 = 30_000;
+
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
 /// recovering network or relay can clear, or `None` for one no retry fixes
 /// (spec 079 FR-008). The device pass had the fee row read "点击重试" with the
@@ -1001,6 +1010,24 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed | FeeFailure::WouldFail => {
             None
         }
+    }
+}
+
+/// The fee row's reason once the machine has stopped saying it retries
+/// (signer-12, [`FeeFailureView::given_up`]): the same cause, with no
+/// "Retrying automatically." after it. `None` where [`failure_reason_key`]
+/// has none, or keeps its own words (a rate limit, a fault inside Vela).
+#[must_use]
+pub fn stopped_reason_key(failure: FeeFailure) -> Option<&'static str> {
+    match failure {
+        FeeFailure::QuoteUnavailable => Some("componentsUi.gas.reasonQuoteStopped"),
+        FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeTokenStopped"),
+        FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulationStopped"),
+        FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHighStopped"),
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        } => Some("componentsUi.gas.reasonChainDownStopped"),
+        other => failure_reason_key(other),
     }
 }
 
@@ -2591,6 +2618,25 @@ impl FeeFailureView {
         Self::of_run(failure, retrying, false, None, None)
     }
 
+    /// [`Self::of_run`] once the machine's re-asks past
+    /// [`AUTO_REQUOTE_LIMIT`] have all failed (signer-12): nothing says
+    /// "retrying automatically" any more — the reason is said as it stands
+    /// ([`stopped_reason_key`]), the footer is [`FEE_FAILED_KEY`] and the row
+    /// says "Tap to retry", unless a re-ask is out right now.
+    #[must_use]
+    pub fn given_up(mut self) -> Self {
+        if self.failure == FeeFailure::WouldFail || !self.auto_retry {
+            return self;
+        }
+        self.auto_retry = false;
+        self.reason_key = stopped_reason_key(self.failure).map(str::to_owned);
+        if !self.retrying {
+            self.figure_key = Some(ESTIMATE_FAILED_KEY.to_owned());
+            self.footer_key = FEE_FAILED_KEY.to_owned();
+        }
+        self
+    }
+
     /// The failure of a run on `chain_id` priced in `fee_token`;
     /// `another_coin` — a coin the run has not tried, with something to pay
     /// from, is on offer (what [`FeeFailureTap::ChooseCoin`] needs).
@@ -2835,13 +2881,19 @@ impl App for FeePolicy {
         // question it answered (chain and coin), and said only for the
         // chain the machine is asked about now, as the estimate is.
         let tag = |kind: FeeFailure, retrying: bool| {
-            FeeFailureView::of_run(
+            let view = FeeFailureView::of_run(
                 kind,
                 retrying,
                 another_coin_on_offer(model, &options),
                 model.ctx.as_ref().map(|ctx| ctx.chain_id),
                 model.fee_token.clone(),
-            )
+            );
+            // Never "retrying" for ever (signer-12).
+            if model.retries >= AUTO_REQUOTE_LIMIT {
+                view.given_up()
+            } else {
+                view
+            }
         };
         let failure = match (failed, model.retrying_after) {
             (Some(kind), _) => Some(tag(kind, false)),
@@ -3069,8 +3121,15 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
                 // it is only accepted when it agrees with OUR measurement.
                 // The quote is unavailable — the fee row says so beside its
                 // refresh, a requote reads again, and a refresh that fails
-                // keeps the last good quote on screen.
-                return fail(model, FeeFailure::QuoteUnavailable);
+                // keeps the last good quote on screen. It is the CHAIN's
+                // measurement that is missing (send-14): the row names the
+                // chain, never "the relay".
+                return fail(
+                    model,
+                    FeeFailure::ChainRead {
+                        rate_limited: false,
+                    },
+                );
             };
             model.pending.gas = Some(gas);
             try_advance(model)
@@ -4579,6 +4638,13 @@ fn after_failure(model: &Model) -> Option<Command<FeeEffect, Event>> {
     };
     model.ctx.as_ref()?;
     let ms = requote_delay_ms(failure, model.retries.saturating_add(1))?;
+    // Past the limit the words have said it plainly; the re-asks go on,
+    // slower (signer-12).
+    let ms = if model.retries >= AUTO_REQUOTE_LIMIT {
+        SLOW_REQUOTE_MS
+    } else {
+        ms
+    };
     Some(requests(model, vec![FeeOperation::StartTtl { ms }]))
 }
 

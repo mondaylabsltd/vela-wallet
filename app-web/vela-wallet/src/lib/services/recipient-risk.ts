@@ -83,8 +83,32 @@ export async function resolveRecipientRisk(
 		return { isContract: null, firstInteraction: false };
 	}
 	const [isContract, prior] = await Promise.all([
-		isContractAddress(chainId, address),
+		within(CODE_WAIT_MS, isContractAddress(chainId, address)),
 		hasPriorInteraction(address)
 	]);
 	return { isContract, firstInteraction: !prior };
+}
+
+/**
+ * How long the contract read may hold the answer (send-18). The first-time
+ * check is local and quick; a slow chain must not keep it from the confirm,
+ * which waits for this answer a bounded while. Past it: unknown, as an
+ * unreachable chain is — the read goes on and fills the cache.
+ */
+export const CODE_WAIT_MS = 3_000;
+
+function within<T>(ms: number, read: Promise<T | null>): Promise<T | null> {
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => resolve(null), ms);
+		void read.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			() => {
+				clearTimeout(timer);
+				resolve(null);
+			}
+		);
+	});
 }

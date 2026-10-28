@@ -95,7 +95,7 @@
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
-	import { FlowNav, type FlowEntry } from '$lib/flows/nav.svelte';
+	import { FlowNav, sendBackStep, type FlowEntry } from '$lib/flows/nav.svelte';
 	import type { FlowStateId } from '$lib/flows/model';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
@@ -171,7 +171,7 @@
 
 	import { WEB_DESTINATIONS, webNavItems } from '$lib/wallet/destinations';
 	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
-	import { balanceTokenId, liveChainRows, narrowedFeed } from '$lib/wallet/live';
+	import { balanceTokenId, liveChainRows, narrowedFeed, sendScopedOutage } from '$lib/wallet/live';
 	import {
 		feedItemAt,
 		findFeedItem,
@@ -831,6 +831,18 @@
 				// it used to be a console line nobody reading the form could see.
 				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
+				// vis-24: the person's own name for a recipient — one of their
+				// accounts, else a contact they named — before any lookup.
+				knownName: (address) => {
+					const low = address.toLowerCase();
+					const own = session.view.accounts.find(
+						(row) => row.account.address.toLowerCase() === low
+					);
+					if (own) return own.account.name;
+					const contact = contactsView?.contacts.find((c) => c.address.toLowerCase() === low);
+					// Only a name the person gave: a resolved one is a service's word.
+					return contact?.name ?? null;
+				},
 				// ONE source for holdings (spec 078): the asset list's, already in
 				// memory. `null` until it has settled a round for this account —
 				// the executor then walks the chains as it always has.
@@ -1194,7 +1206,13 @@
 					// The failed submit's Try again: the core goes back to a confirm
 					// it can open — or holds it, with its one line, while the
 					// previous transaction is still in flight.
-					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' })
+					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' }),
+					// The receipt's Try again over a payment proven never sent
+					// (send-5): back to the confirm, for a new quote and signature.
+					sendAgain: () => {
+						sendSession?.dispatch({ type: 'send_again' });
+						feeQuote.requote();
+					}
 				}
 	);
 
@@ -1228,6 +1246,17 @@
 	$effect(() => {
 		void sendAlertScope;
 		sendAlert = null;
+	});
+	// send-14: "Could not prepare transaction" is about a fee that could not
+	// be had. Once a NEW fee lands — a late estimate, the fee card recovering,
+	// another token — it is no longer true, and comes down. Keyed on the fee
+	// itself: the failure leaves the old one as it was, so it never clears
+	// the line it just raised.
+	const sendFeeKey = $derived(sendView?.fee ? JSON.stringify(sendView.fee) : '');
+	$effect(() => {
+		if (sendFeeKey !== '' && untrack(() => sendAlert?.type === 'estimate_failed')) {
+			sendAlert = null;
+		}
 	});
 
 	/**
@@ -1789,7 +1818,11 @@
 
 	/** Fixture base → identity overlay → live balance/holdings (research D10). */
 	const liveInputs = $derived({
-		balance: balance.view,
+		// send-19: while a send is open, only the networks that matter to it
+		// warn — where the person holds something, and the one it moves on.
+		balance: sendView
+			? sendScopedOutage(balance.view, sendView.selected_token?.chain_id ?? null)
+			: balance.view,
 		currency: currency.view,
 		m: data.walletMessages,
 		feed: feed.view,
@@ -1918,15 +1951,21 @@
 	onMount(() => {
 		const onpop = () => {
 			if (!nav.open) return;
-			// vis-14: a send's confirm is a stage of the send core, not a level
-			// of this stack — Back there steps the core back to the form, as the
-			// ‹ does, and puts the entry it used back for the next Back.
-			if (sendView?.stage === 'confirm' && sendSession) {
-				sendSession.dispatch({ type: 'back' });
-				markHistory({ velaFlow: nav.mobile.length });
+			// vis-14, send-10: a send's confirm is a stage of the send core, not
+			// a level of this stack — Back there steps the core back to the form,
+			// as the ‹ does, and a sheet or overlay on top closes first; each
+			// puts the entry it used back for the next Back.
+			const step = sendSession
+				? sendBackStep(sendView, { feeSheet: feeSheetOpen, batch: batchView !== null })
+				: 'leave';
+			if (step === 'leave') {
+				nav.back();
 				return;
 			}
-			nav.back();
+			if (step === 'close_fee_sheet') feeSheetOpen = false;
+			else if (step === 'close_batch_import') closeBatch();
+			else sendSession?.dispatch({ type: step === 'core_back' ? 'back' : step });
+			markHistory({ velaFlow: nav.mobile.length });
 		};
 		addEventListener('popstate', onpop);
 		return () => removeEventListener('popstate', onpop);

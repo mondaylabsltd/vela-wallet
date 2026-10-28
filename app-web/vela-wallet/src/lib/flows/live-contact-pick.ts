@@ -51,7 +51,12 @@ export function liveContactPick(
 		contacts: view.contacts.map((contact) => ({
 			name: displayName(contact),
 			group: view.groups.find((g) => g.members.some((mb) => mb.address === contact.address))?.name,
-			addressDisplay: shortenAddress(contact.address),
+			// An unnamed contact is titled by its short address already: the
+			// line under it would only say it again (send-20).
+			addressDisplay:
+				displayName(contact) === shortenAddress(contact.address)
+					? ''
+					: shortenAddress(contact.address),
 			addressFull: contact.address,
 			identiconSvg: identicon(contact.address)
 		}))

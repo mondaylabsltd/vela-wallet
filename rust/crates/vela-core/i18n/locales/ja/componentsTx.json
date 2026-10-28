@@ -29,7 +29,9 @@
       "statusFailed": "失敗",
       "failedHint": "送金はオンチェーンで失敗し、取り消されました。ご資産は送られていません。ネットワーク手数料のみ差し引かれている場合があります。",
       "userOpHash": "UserOp ハッシュ",
-      "copyHash": "取引ハッシュをコピー"
+      "copyHash": "取引ハッシュをコピー",
+      "statusNotSent": "送信されていません",
+      "notSentBody": "アカウントからは何も出ていません。もう一度お試しいただけます。"
     },
     "detail": {
       "received": "受け取り",

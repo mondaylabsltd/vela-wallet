@@ -45,6 +45,11 @@
 		 * while that button is shut — Enter then does nothing, as a press would.
 		 */
 		onsubmit?: () => void;
+		/**
+		 * send-20: the line said when a paste is no amount at all — the field
+		 * keeps what it had. Absent: a refused paste is only undone.
+		 */
+		pasteRefused?: string;
 	}
 
 	let {
@@ -56,8 +61,12 @@
 		oninput,
 		placeholder = '0',
 		adornment = {},
-		onsubmit
+		onsubmit,
+		pasteRefused
 	}: Props = $props();
+
+	/** The last paste was no amount; the next edit that reads takes it down. */
+	let refused = $state(false);
 
 	/**
 	 * What the field holds RIGHT NOW. It follows the `value` prop — Max, the ⇄
@@ -97,8 +106,19 @@
 	 * says why a decimal comma cannot be left to the machine.
 	 */
 	function take(el: HTMLInputElement, paste: boolean) {
+		const raw = el.value;
+		const before = text;
 		const clean = takeAmount(el, text, paste);
+		// A paste the core could not read as one figure is undone — and said
+		// (send-20): so is one it emptied, letters with no digit in them.
+		const emptied = clean === '' || clean === before;
+		refused = paste && (clean === null || (emptied && raw.trim() !== '' && raw !== before));
 		if (clean === null) return;
+		if (refused && clean !== before) {
+			// Never emptied by a paste that was no amount: the figure stays.
+			el.value = before;
+			return;
+		}
 		text = clean;
 		oninput?.(clean);
 	}
@@ -174,9 +194,21 @@
 	{:else if fiat}
 		<p class="fiat">{fiat}</p>
 	{/if}
+	{#if refused && pasteRefused !== undefined}
+		<p class="refused" role="status" data-testid="amount-paste-refused">{pasteRefused}</p>
+	{/if}
 </div>
 
 <style>
+	/* A paste that was no amount: said under the figure it left alone. */
+	.refused {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-warning-base);
+	}
+
 	.amount {
 		display: flex;
 		flex-direction: column;

@@ -29,7 +29,9 @@
       "statusFailed": "Thất bại",
       "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng.",
       "userOpHash": "Hash UserOp",
-      "copyHash": "Sao chép hash giao dịch"
+      "copyHash": "Sao chép hash giao dịch",
+      "statusNotSent": "Chưa gửi được",
+      "notSentBody": "Chưa có gì rời khỏi tài khoản của bạn. Bạn có thể thử lại."
     },
     "detail": {
       "received": "Đã nhận",

@@ -125,6 +125,13 @@ pub const FIRST_STATUS_POLL_MS: f64 = 3_000.0;
 /// record expired (spec 099 R6): ended "not sent" this long after the first
 /// such answer, with the chain read to its head and no event for it.
 pub const FORGOTTEN_NOT_SENT_MS: f64 = 10.0 * 60.0 * 1000.0;
+/// How long an op the relay holds is followed by the relay's word alone
+/// before the chain is read for its own event too, once the relay's receipt
+/// reads fail (send-7) — past most chains' usual landing, short of the wait
+/// window.
+pub const CHAIN_WATCH_AFTER_MS: f64 = 20_000.0;
+/// Receipt reads the relay left unanswered before the chain is read too.
+pub const CHAIN_WATCH_RELAY_FAILURES: u32 = 2;
 /// Reconcile sweep throttle — `MIN_INTERVAL_MS` (`tx-reconciler.ts:32`). Home
 /// focus + interval call it a lot; also the receipt cadence once the wait
 /// window has closed.
@@ -1110,6 +1117,24 @@ impl Entry {
     /// have had, or one it has forgotten.
     fn scanning(&self) -> bool {
         self.in_doubt() || self.forgotten()
+    }
+
+    /// …or one the relay holds whose receipt the relay cannot be asked for
+    /// (send-7): past [`CHAIN_WATCH_AFTER_MS`], with
+    /// [`CHAIN_WATCH_RELAY_FAILURES`] receipt reads gone unanswered, the
+    /// relay is not the only witness — a landed transfer must not read
+    /// "the relay is sending it" while the chain already has it. Not while
+    /// the relay named its bundle tx: that tx's receipt is read from the
+    /// chain already (RJ4).
+    fn watching_chain(&self, now_ms: f64) -> bool {
+        self.scanning()
+            || (!self.status.is_terminal()
+                && !self.abandoned
+                && self.relay_tx_hash.is_none()
+                && self.rpc_failures >= CHAIN_WATCH_RELAY_FAILURES
+                && self
+                    .submitted_at_ms
+                    .is_some_and(|at| now_ms - at >= CHAIN_WATCH_AFTER_MS))
     }
 
     /// How long the relay has had to write the op down, for its `not_found`
@@ -2142,7 +2167,7 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         } else {
             receipt_interval
         };
-        if entry.scanning()
+        if entry.watching_chain(now_ms)
             && entry.find.in_flight.is_none()
             && entry
                 .find
@@ -2521,7 +2546,7 @@ fn continue_scan(
     entry: &mut Entry,
     now_ms: f64,
 ) -> Command<TrackEffect, Event> {
-    if !entry.scanning() || entry.find.next_window().is_none() {
+    if !entry.watching_chain(now_ms) || entry.find.next_window().is_none() {
         return render();
     }
     entry.find.last_ms = Some(now_ms);

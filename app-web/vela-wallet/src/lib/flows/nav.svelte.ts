@@ -234,3 +234,31 @@ export class FlowNav {
 		markHistory({ velaFlow: this.mobile.length });
 	}
 }
+
+/**
+ * What the browser's (or Android's) Back does inside a send (send-10, vis-14):
+ * one step, as the on-screen ‹ does — the sheet or overlay on top closes
+ * first, the confirm steps back to the form with every value kept — and only
+ * otherwise does the flow stack unwind (`leave`). The send's stages are the
+ * core's, not levels of the stack: each step here puts back the history
+ * entry it used, for the next Back.
+ */
+export type SendBackStep =
+	| 'close_fee_sheet'
+	| 'close_scanner'
+	| 'close_contact_picker'
+	| 'close_batch_import'
+	| 'core_back'
+	| 'leave';
+
+export function sendBackStep(
+	send: { stage: string; show_scanner: boolean; show_contact_picker: boolean } | null,
+	open: { feeSheet: boolean; batch: boolean }
+): SendBackStep {
+	if (send === null) return 'leave';
+	if (open.feeSheet) return 'close_fee_sheet';
+	if (send.show_scanner) return 'close_scanner';
+	if (send.show_contact_picker) return 'close_contact_picker';
+	if (open.batch) return 'close_batch_import';
+	return send.stage === 'confirm' ? 'core_back' : 'leave';
+}

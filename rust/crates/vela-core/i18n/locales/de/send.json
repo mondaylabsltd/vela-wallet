@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} hat höchstens {{decimals}} Nachkommastellen – kürze den Betrag.",
     "warnAmountTooLarge": "Dieser Betrag ist zu groß.",
     "warnAmountUnreadable": "Gib einen Betrag ein: ein Dezimalzeichen, keine Tausendertrennzeichen.",
-    "batchBadChecksum": "Prüfsumme passt nicht"
+    "batchBadChecksum": "Prüfsumme passt nicht",
+    "riskChecking": "Diese Adresse wird geprüft …",
+    "riskUnfinished": "Die Prüfung dieser Adresse wurde nicht fertig. Stelle sicher, dass es die richtige ist.",
+    "amountPasteRefused": "Das ist kein Betrag. Füge eine Zahl ein, etwa 12,5."
   }
 }

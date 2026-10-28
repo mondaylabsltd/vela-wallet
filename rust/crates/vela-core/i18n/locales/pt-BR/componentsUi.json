@@ -301,7 +301,9 @@
         "stale": "Dada para uma versão anterior desta solicitação",
         "feeWhenGiven": "Taxa quando dada: {{fee}}",
         "feeChanged": "A taxa mudou desde esta opinião"
-      }
+      },
+      "passkeyClosed": "A solicitação da passkey foi fechada, então nada foi assinado. Se este dispositivo não tem uma passkey desta conta, use o dispositivo que tem.",
+      "passkeyTimedOut": "A solicitação da passkey expirou, então nada foi assinado. Tente de novo quando estiver pronto."
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",
@@ -396,7 +398,12 @@
       "reasonChainDown": "Não foi possível conectar à {{chain}} para calcular a taxa. Tentando de novo automaticamente.",
       "reasonInternal": "Algo deu errado dentro do Vela. Se continuar, reabra o app.",
       "rowShort": "Precisa de ~{{need}}, tem {{have}}",
-      "noCoinPays": "Nenhum token cobre esta taxa"
+      "noCoinPays": "Nenhum token cobre esta taxa",
+      "reasonQuoteStopped": "Não foi possível obter um preço do relay.",
+      "reasonFeeTokenStopped": "O relay não consegue cotar esta moeda agora. Pague com outra moeda ou tente de novo.",
+      "reasonSimulationStopped": "O relay não conseguiu simular esta transação.",
+      "reasonQuoteHighStopped": "O preço do gas do relay está bem acima do preço da rede agora.",
+      "reasonChainDownStopped": "Não foi possível conectar à {{chain}} para calcular a taxa."
     },
     "dock": {
       "receive": "Receber",

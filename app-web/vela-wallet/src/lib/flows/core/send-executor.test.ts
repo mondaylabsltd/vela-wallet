@@ -466,6 +466,50 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		});
 	});
 
+	/**
+	 * send-15: the nonce this op signed was spent — another transaction of the
+	 * account (another tab's) landed first, and the relay answers AA25. Nothing
+	 * was sent: told as that, never "couldn't be submitted".
+	 */
+	it('a spent nonce fails as nonce_used', async () => {
+		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		for (const words of [
+			'Transaction nonce mismatch. Please try again.',
+			'AA25 invalid account nonce'
+		]) {
+			vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+				new UserOpNotSentError({ other: words }, words)
+			);
+			await expect(executor.execute(submit)).resolves.toEqual({
+				type: 'submit_failed',
+				failure: { type: 'nonce_used' }
+			});
+		}
+	});
+
+	/** send-11: a prompt that ran out of time is told apart from one closed. */
+	it('a passkey prompt that timed out fails as passkey_timed_out; a closed one as cancelled', async () => {
+		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		const prompt = (timedOut: boolean) =>
+			Object.assign(new PasskeyError('cancelled', 'x'), { kind: 'cancelled', timedOut });
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(prompt(true));
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'passkey_timed_out' }
+		});
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(prompt(false));
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'passkey_cancelled' }
+		});
+	});
+
 	it('no clearance in time → zero POSTs, and the send fails as not sent', async () => {
 		vi.useFakeTimers();
 		try {
@@ -632,5 +676,38 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			})
 		).toEqual({ type: 'track_handed_off' });
 		expect(seams.withdrawTracked).toHaveBeenCalledWith(OP, [`${OP}-0`]);
+	});
+});
+
+describe('a known recipient is named as the person knows them (vis-24)', () => {
+	const resolve = (address: string) => ({
+		id: 1,
+		operation: { type: 'resolve_identity' as const, address }
+	});
+
+	it('their own name first — an account or a contact — told as theirs, with no lookup', async () => {
+		const { resolveRecipientIdentity } = await import('$lib/services/recipient-identity');
+		vi.mocked(resolveRecipientIdentity).mockReset();
+		const executor = createSendExecutor(
+			ports({ knownName: (address) => (address === ACCOUNT ? 'Savings' : null) })
+		);
+		await expect(executor.execute(resolve(ACCOUNT))).resolves.toEqual({
+			type: 'identity_resolved',
+			identity: { name: 'Savings', source: 'self' }
+		});
+		expect(resolveRecipientIdentity).not.toHaveBeenCalled();
+	});
+
+	it('anyone else is looked up as before', async () => {
+		const { resolveRecipientIdentity } = await import('$lib/services/recipient-identity');
+		vi.mocked(resolveRecipientIdentity).mockResolvedValueOnce({
+			name: 'bob.eth',
+			source: 'ENS'
+		} as never);
+		const executor = createSendExecutor(ports({ knownName: () => null }));
+		await expect(executor.execute(resolve('0x' + 'bb'.repeat(20)))).resolves.toEqual({
+			type: 'identity_resolved',
+			identity: { name: 'bob.eth', source: 'ENS' }
+		});
 	});
 });

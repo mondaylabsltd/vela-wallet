@@ -301,7 +301,9 @@
         "stale": "Đưa ra cho một phiên bản trước của yêu cầu này",
         "feeWhenGiven": "Phí khi đưa ra: {{fee}}",
         "feeChanged": "Phí đã thay đổi kể từ ý kiến này"
-      }
+      },
+      "passkeyClosed": "Lời nhắc passkey đã bị đóng nên chưa có gì được ký. Nếu thiết bị này không có passkey của tài khoản, hãy dùng thiết bị có passkey đó.",
+      "passkeyTimedOut": "Lời nhắc passkey đã hết thời gian nên chưa có gì được ký. Hãy thử lại khi bạn sẵn sàng."
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",
@@ -396,7 +398,12 @@
       "reasonChainDown": "Không kết nối được {{chain}} để tính phí. Đang tự động thử lại.",
       "reasonInternal": "Vela gặp lỗi bên trong. Nếu vẫn tiếp diễn, hãy mở lại ứng dụng.",
       "rowShort": "Cần ~{{need}}, có {{have}}",
-      "noCoinPays": "Không token nào đủ trả phí này"
+      "noCoinPays": "Không token nào đủ trả phí này",
+      "reasonQuoteStopped": "Không lấy được báo giá từ relay.",
+      "reasonFeeTokenStopped": "Relay hiện chưa định giá được coin này. Hãy trả bằng coin khác, hoặc thử lại.",
+      "reasonSimulationStopped": "Relay không chạy thử được giao dịch này.",
+      "reasonQuoteHighStopped": "Giá gas của relay đang cao hơn nhiều so với giá của mạng.",
+      "reasonChainDownStopped": "Không kết nối được {{chain}} để tính phí."
     },
     "dock": {
       "receive": "Nhận",

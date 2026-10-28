@@ -2487,7 +2487,13 @@ fn a_failed_tick_catches_up_visibly_and_a_failed_catch_up_takes_the_figure_away(
 
     sut.resolve(gas_unread());
     let failed = sut.view();
-    assert_eq!(failed.failed, Some(FeeFailure::QuoteUnavailable));
+    assert_eq!(
+        failed.failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        }),
+        "the chain's read, never the relay (send-14)"
+    );
     assert_eq!(
         failed.fee, None,
         "a figure older than a block is not left to sign"
@@ -2832,7 +2838,13 @@ fn a_failed_gas_price_read_refuses_the_quote_rather_than_guessing() {
         sut.resolve(bundler_ok());
         sut.resolve(quotes_ok());
         let view = sut.view();
-        assert_eq!(view.failed, Some(FeeFailure::QuoteUnavailable));
+        assert_eq!(
+            view.failed,
+            Some(FeeFailure::ChainRead {
+                rate_limited: false
+            }),
+            "the chain's read, never the relay (send-14)"
+        );
         assert!(view.fee.is_none());
         assert!(!view.confirm_fee_ready);
     }
@@ -6665,6 +6677,63 @@ fn a_failure_that_can_pass_is_retried_by_the_machine_itself() {
         assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: wait }]);
     }
     // It comes back: the fee lands, and the schedule starts over next time.
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, fresh_gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    assert_eq!(view.failure, None);
+}
+
+/// signer-12: "Retrying…" is never for ever. Past `AUTO_REQUOTE_LIMIT`
+/// failed re-asks the row and the footer say plainly that the fee could not
+/// be worked out — the cause without "retrying automatically", the tap to
+/// retry — and the machine still asks again, slowly, so a relay that comes
+/// back is seen.
+#[test]
+fn a_fee_that_keeps_failing_stops_saying_it_retries() {
+    use vela_core::app::fee_policy::{
+        AUTO_REQUOTE_LIMIT, ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY, SLOW_REQUOTE_MS,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    };
+    sut.resolve(unreachable());
+    for _ in 0..AUTO_REQUOTE_LIMIT - 1 {
+        let failure = sut.view().failure.expect("said");
+        assert!(failure.auto_retry);
+        assert_eq!(failure.footer_key, FEE_RETRYING_KEY);
+        sut.resolve(Res::TtlElapsed);
+        sut.resolve(unreachable());
+    }
+    // The last of the quick re-asks fails too.
+    sut.resolve(Res::TtlElapsed);
+    assert_eq!(
+        sut.resolve(unreachable()),
+        vec![Op::StartTtl {
+            ms: SLOW_REQUOTE_MS
+        }]
+    );
+    let failure = sut.view().failure.expect("said");
+    assert!(!failure.auto_retry);
+    assert_eq!(failure.footer_key, FEE_FAILED_KEY);
+    assert_eq!(failure.figure_key.as_deref(), Some(ESTIMATE_FAILED_KEY));
+    assert_eq!(
+        failure.reason_key.as_deref(),
+        Some("componentsUi.gas.reasonChainDownStopped"),
+        "the cause, without retrying automatically"
+    );
+    // Still asked again, slowly — and the fee lands when it can.
     assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
     let ops = sut.resolve(Res::Deployment {
         read: DeploymentRead::Read { deployed: true },

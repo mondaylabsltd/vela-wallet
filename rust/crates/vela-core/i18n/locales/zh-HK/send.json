@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} 最多支援 {{decimals}} 位小數，請縮短金額。",
     "warnAmountTooLarge": "金額太大。",
     "warnAmountUnreadable": "請輸入一個金額：只用一個小數點，唔好加千位分隔符。",
-    "batchBadChecksum": "校驗和唔對"
+    "batchBadChecksum": "校驗和唔對",
+    "riskChecking": "正在檢查這個地址…",
+    "riskUnfinished": "未能完成檢查這個地址，請確認是你想轉賬的地址。",
+    "amountPasteRefused": "呢個唔係金額，請貼上數字，例如 12.5。"
   }
 }

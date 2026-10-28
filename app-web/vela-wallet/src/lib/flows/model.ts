@@ -796,6 +796,11 @@ export interface SendFormModel {
 		 * affordance appears only where something can act on it.
 		 */
 		denomToggle?: { enabled: boolean };
+		/**
+		 * send-20: said when a paste is no amount at all (letters, "1.5e-7",
+		 * two decimal marks) — the field keeps what it had, and says why.
+		 */
+		pasteRefused?: string;
 	};
 	/** single and sweep: one recipient field. */
 	recipient?: {
@@ -879,6 +884,7 @@ export interface ContactPickModel {
 	contacts: {
 		name: string;
 		group?: string;
+		/** Empty when the title is the short address already (send-20). */
 		addressDisplay: string;
 		/** The seed of the artwork — what the identicon viewer shows beside it. */
 		addressFull: string;
@@ -1178,6 +1184,12 @@ export interface SendReceiptModel {
 	/** Spec 038 #D2 — a split: "N recipients", then every one of them. */
 	breakdownTitle?: string;
 	breakdown?: BreakdownRowModel[];
+	/**
+	 * "Try again" over a payment proven never sent (send-5,
+	 * `SendReceiptView.can_send_again`): back to the confirm, every value as
+	 * it was. Absent everywhere else — never over one that may have left.
+	 */
+	retry?: string;
 	/** The single bottom button: "Close · keep running" or "Done". */
 	cta: string;
 	ctaAccent: boolean;

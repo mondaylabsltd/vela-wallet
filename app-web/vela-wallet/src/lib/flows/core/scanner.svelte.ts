@@ -118,7 +118,11 @@ class Scanner {
 				audio: false
 			});
 		} catch (error) {
-			this.status = classify(error);
+			const status = classify(error);
+			// "Another app may be using it" was said on a machine with no
+			// camera at all (send-20): a browser's refusal does not always name
+			// it. Asked plainly, a device list with no camera is "no camera".
+			this.status = status === 'unavailable' && (await noCamera()) ? 'absent' : status;
 			return;
 		}
 		if (this.#stopped) {
@@ -218,6 +222,21 @@ class Scanner {
 			this.#raf = requestAnimationFrame(() => void tick());
 		};
 		this.#raf = requestAnimationFrame(() => void tick());
+	}
+}
+
+/**
+ * The device lists no camera at all. `false` when it cannot say (no
+ * `enumerateDevices`, or it throws): only a list that was read and holds no
+ * camera is "no camera".
+ */
+export async function noCamera(): Promise<boolean> {
+	try {
+		const devices = await navigator.mediaDevices?.enumerateDevices?.();
+		if (!devices) return false;
+		return !devices.some((device) => device.kind === 'videoinput');
+	} catch {
+		return false;
 	}
 }
 

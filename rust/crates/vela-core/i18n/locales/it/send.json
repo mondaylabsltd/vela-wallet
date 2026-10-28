@@ -178,6 +178,9 @@
     "warnTooManyDecimals": "{{symbol}} ammette al massimo {{decimals}} cifre decimali: accorcia l'importo.",
     "warnAmountTooLarge": "Questo importo è troppo grande.",
     "warnAmountUnreadable": "Inserisci un solo importo: un separatore decimale, senza separatori delle migliaia.",
-    "batchBadChecksum": "Checksum non corrispondente"
+    "batchBadChecksum": "Checksum non corrispondente",
+    "riskChecking": "Controllo di questo indirizzo…",
+    "riskUnfinished": "Non è stato possibile completare il controllo di questo indirizzo. Assicurati che sia quello giusto.",
+    "amountPasteRefused": "Questo non è un importo. Incolla un numero, ad esempio 12,5."
   }
 }

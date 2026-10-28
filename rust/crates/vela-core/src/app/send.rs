@@ -90,6 +90,10 @@ pub const BATCH_MAX_RECIPIENTS: usize = 60;
 /// (`useSendController.ts:768-770`). A timeout NEVER advances to confirm with
 /// a fabricated preview (invariant ②).
 pub const ESTIMATE_TIMEOUT_MS: u32 = 15_000;
+/// How long the confirm stays shut for the recipient's check — a first
+/// transfer, a contract (send-18): the warning is read before a tap can land.
+/// Past it the confirm opens, and says the check could not finish.
+pub const RISK_WAIT_MS: u32 = 4_000;
 
 /// How long a complete form sits still before it asks for a quote (spec 028
 /// Phase 9, T490). Long enough that a person typing an amount is not quoted on
@@ -804,6 +808,12 @@ pub struct SendPayee {
     pub name: Option<String>,
     /// `Some` exactly when `name` is.
     pub name_source: Option<SendNameSource>,
+    /// A split row's recipient has never been paid from this account (its
+    /// check on the confirm said so, send-20): the row says it, as a single
+    /// send's confirm does. `false` for a single send — whose tell is
+    /// `SendView::recipient_risk` — and for one's own address.
+    #[serde(default)]
+    pub first_time: bool,
 }
 
 /// Recipient risk signals for the confirm step, best-effort.
@@ -984,6 +994,27 @@ pub enum SendSubmitFailure {
     /// nonce (`RelayRejection::NonceHeld` — the relay's `nonce_in_flight`, or
     /// an older relay's `[existingHash:…]`). Nothing was sent.
     PreviousPending,
+    /// The passkey prompt ran out of time (the shell's own deadline on the
+    /// ceremony): nothing was signed. Told as that on the confirm
+    /// ([`SendPasskeyNote::TimedOut`]), never an error state.
+    PasskeyTimedOut,
+    /// The relay refused it because the nonce it signed was already spent —
+    /// another transaction of this account landed first (a bare AA25, e.g.
+    /// from another tab, send-15). Nothing was sent; "Try again" signs anew.
+    NonceUsed,
+}
+
+/// Why the last passkey prompt on the confirm signed nothing (send-11): said
+/// under the confirm, calmly — the prompt was the person's to close.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendPasskeyNote {
+    /// Closed or refused — which is also what a browser says when this
+    /// device holds no passkey for the account, so the words cover both.
+    Cancelled,
+    /// The prompt ran out of time.
+    TimedOut,
 }
 
 /// Post-submit receipt convergence, fed by the shell from `tx_tracker`
@@ -1074,6 +1105,9 @@ pub enum SendTimerTag {
     /// The treasury sheet is open: ask the relay again (spec 098 §4), so the
     /// send carries on by itself once somebody has funded it.
     TreasuryWatch,
+    /// The confirm's bounded wait for the recipient's check ([`RISK_WAIT_MS`],
+    /// send-18).
+    RiskWait,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1687,6 +1721,13 @@ pub enum Event {
         user_op_hash: String,
         outcome: SendReceiptOutcome,
     },
+    /// The receipt's "Try again" (send-5) over a payment proven never sent —
+    /// the tracker's `NotSent`, or the relay's refusal before any block
+    /// ([`SendReceiptView::can_send_again`]): back to the confirm, every
+    /// value as it was, for a new quote and a new signature. Nothing the relay
+    /// may have taken is ever sent again: the gate is the tracker's proof,
+    /// never a timeout.
+    SendAgain,
     /// Receipt "Done".
     Done,
     /// Internal: an effect resolved. `attempt` is the per-request id captured
@@ -1745,6 +1786,10 @@ pub enum SendTxErrorKey {
     PreviousPending,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
+    /// Another transaction of this account went first and spent the nonce
+    /// ([`SendSubmitFailure::NonceUsed`]): "Not sent", calmly, over
+    /// `componentsUi.signing.wentFirst` — and "Try again" signs anew.
+    NonceUsed,
     /// Spec 102: the account cannot sign here — the line is
     /// [`SendView::tx_venue_block`]'s reason (`VenueBlock::key()`, with its
     /// domains), not a generic failure.
@@ -1935,6 +1980,14 @@ struct PersistCtx {
     write_ahead: bool,
 }
 
+/// One split row's recipient check on the confirm (send-20).
+#[derive(Clone, Debug, PartialEq)]
+struct SplitRisk {
+    address: String,
+    flight: Option<u64>,
+    first_time: Option<bool>,
+}
+
 /// The records written ahead of one submit's POST (spec 082 RJ1).
 #[derive(Clone, Debug, PartialEq)]
 struct WriteAhead {
@@ -2058,6 +2111,18 @@ pub struct Model {
     cancelled: bool,
     tx: SendTxStatus,
     tx_error: Option<SendTxErrorKey>,
+    /// The last passkey prompt signed nothing (send-11); cleared by the next
+    /// confirm or by leaving the confirm.
+    passkey_note: Option<SendPasskeyNote>,
+    /// The confirm's wait for the recipient's check (send-18): the timer's
+    /// id while it runs.
+    risk_wait: Option<u64>,
+    /// The check did not finish in that wait, or could not be made.
+    risk_unfinished: bool,
+    /// A split's per-row check (send-20): each distinct address on the
+    /// confirm, lowercased, with its check's flight while out and its
+    /// answer — `Some(true)` a first transfer — once in.
+    split_risks: Vec<SplitRisk>,
     /// The reason behind a [`SendTxErrorKey::VenueBlocked`]; read only while
     /// `tx_error` says so.
     venue_block: Option<crate::signing_venue::VenueBlock>,
@@ -2301,6 +2366,12 @@ pub struct SendReceiptView {
     /// place of `hold_reason`'s words. `None` unless refused.
     #[serde(default)]
     pub refusal_key: Option<String>,
+    /// Nothing was sent — the relay never had it, or refused it before any
+    /// block — so the receipt offers "Try again" ([`Event::SendAgain`],
+    /// send-5). Never for a revert, which landed, nor for an op still in
+    /// doubt.
+    #[serde(default)]
+    pub can_send_again: bool,
     pub kind: Option<SendReceiptKind>,
     pub transfers: Vec<SendReceiptTransfer>,
     /// Every coin the operation sent, in the order signed (spec 097 F, S3).
@@ -2555,6 +2626,18 @@ pub struct SendView {
     pub sending: bool,
     pub tx_status: SendTxStatus,
     pub tx_error: Option<SendTxErrorKey>,
+    /// Why the last passkey prompt signed nothing (send-11) — a calm line
+    /// under the confirm. `None` otherwise.
+    #[serde(default)]
+    pub passkey_note: Option<SendPasskeyNote>,
+    /// The recipient's check (a first transfer, a contract) is still out:
+    /// the confirm is shut for at most [`RISK_WAIT_MS`] (send-18).
+    #[serde(default)]
+    pub risk_checking: bool,
+    /// The check did not finish in that wait, or could not be made: the
+    /// confirm opened, and says so.
+    #[serde(default)]
+    pub risk_unfinished: bool,
     /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
     /// account cannot sign here — drawn as `VenueBlock::key()` with its
     /// domains. `None` otherwise.
@@ -2854,6 +2937,7 @@ impl Send {
                 user_op_hash,
                 outcome,
             } => receipt_update(model, &user_op_hash, outcome),
+            Event::SendAgain => send_again(model),
             Event::Done => fire(model, SendOperation::Close),
             Event::ShellCompleted { attempt, result } => accept(model, attempt, result),
         }
@@ -3102,6 +3186,9 @@ impl Send {
             sending: model.lock.busy(),
             tx_status: model.tx,
             tx_error: model.tx_error,
+            passkey_note: model.passkey_note,
+            risk_checking: risk_pending(model),
+            risk_unfinished: model.risk_unfinished,
             tx_venue_block: model
                 .venue_block
                 .clone()
@@ -3150,10 +3237,21 @@ fn payees(model: &Model) -> Vec<SendPayee> {
                     .as_deref()
                     .map(str::trim)
                     .filter(|name| !name.is_empty());
+                let address = row.address.trim();
+                let low = address.to_lowercase();
+                let own = model
+                    .account
+                    .as_ref()
+                    .is_some_and(|account| account.address.trim().eq_ignore_ascii_case(address));
                 SendPayee {
-                    address: row.address.trim().to_owned(),
+                    address: address.to_owned(),
                     name: name.map(str::to_owned),
                     name_source: name.map(|_| SendNameSource::Own),
+                    first_time: !own
+                        && model
+                            .split_risks
+                            .iter()
+                            .any(|risk| risk.address == low && risk.first_time == Some(true)),
                 }
             })
             .collect();
@@ -3178,6 +3276,7 @@ fn payees(model: &Model) -> Vec<SendPayee> {
         address: address.to_owned(),
         name,
         name_source,
+        first_time: false,
     }]
 }
 
@@ -4893,6 +4992,9 @@ fn confirm_probes(model: &mut Model) -> Cmd {
     model.sim_input = None;
     model.recipient_risk = None;
     model.flights.risk = None;
+    model.risk_wait = None;
+    model.risk_unfinished = false;
+    model.split_risks.clear();
     if model.step != SendStep::Confirm {
         return Command::done();
     }
@@ -4905,7 +5007,44 @@ fn confirm_probes(model: &mut Model) -> Cmd {
 
     let mut cmds: Vec<Cmd> = Vec::new();
 
-    if is_valid_address(&model.recipient) {
+    // A split asks about each of its addresses (send-20); its single
+    // recipient field is not who it pays.
+    if model.split_mode {
+        let mut seen: Vec<String> = Vec::new();
+        for row in &model.recipients {
+            let address = row.address.trim();
+            let low = address.to_lowercase();
+            if is_valid_address(address) && !seen.contains(&low) {
+                seen.push(low);
+            }
+        }
+        for address in seen {
+            let id = next(model);
+            model.split_risks.push(SplitRisk {
+                address: address.clone(),
+                flight: Some(id),
+                first_time: None,
+            });
+            cmds.push(issue(
+                id,
+                SendOperation::ResolveRisk {
+                    chain_id: token.chain_id,
+                    address,
+                },
+            ));
+        }
+        if !model.split_risks.is_empty() {
+            let timer = next(model);
+            model.risk_wait = Some(timer);
+            cmds.push(issue(
+                timer,
+                SendOperation::StartTimer {
+                    ms: RISK_WAIT_MS,
+                    tag: SendTimerTag::RiskWait,
+                },
+            ));
+        }
+    } else if is_valid_address(&model.recipient) {
         let id = next(model);
         model.flights.risk = Some(id);
         cmds.push(issue(
@@ -4913,6 +5052,16 @@ fn confirm_probes(model: &mut Model) -> Cmd {
             SendOperation::ResolveRisk {
                 chain_id: token.chain_id,
                 address: model.recipient.clone(),
+            },
+        ));
+        // The confirm waits for it, a bounded while (send-18).
+        let timer = next(model);
+        model.risk_wait = Some(timer);
+        cmds.push(issue(
+            timer,
+            SendOperation::StartTimer {
+                ms: RISK_WAIT_MS,
+                tag: SendTimerTag::RiskWait,
             },
         ));
     }
@@ -5731,6 +5880,7 @@ fn edit_amount(model: &mut Model) -> Cmd {
 /// estimate so downstream reserve math never reads 0
 /// (`useSendController.ts:467-473`).
 fn leave_confirm(model: &mut Model) {
+    model.passkey_note = None;
     model.gas_fee_token = None;
     // The reset is back to "nobody chose" — the fee machine's pick — rather
     // than to the native coin, which is what "no choice" used to mean.
@@ -5800,6 +5950,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     // What this confirm is for, frozen: the submit signs it or nothing.
     model.confirmed_review = submit_plan(model).as_ref().and_then(signed_review);
     model.cancelled = false;
+    model.passkey_note = None;
     model.tx = SendTxStatus::Preparing;
     model.tx_hash = None;
     model.user_op_hash = None;
@@ -6378,6 +6529,44 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
     Command::all([follow_max(model), render()])
 }
 
+/// Whether the receipt may offer "Try again" (send-5): the payment is
+/// proven never sent — the relay never had it (`NotSent`), or refused it
+/// before any block. A revert landed and spent gas; a may-have-been-sent op
+/// is still in doubt: neither is offered.
+fn can_send_again(model: &Model) -> bool {
+    model.tx == SendTxStatus::Confirmed
+        && model.receipt_failed
+        && (model.receipt_not_sent || model.refused)
+        && model.pipeline == Pipeline::Idle
+}
+
+/// The receipt's "Try again": back to the confirm with what the person
+/// entered, for a fresh quote and a new signature (send-5).
+fn send_again(model: &mut Model) -> Cmd {
+    if !can_send_again(model) {
+        return Command::done();
+    }
+    model.tx = SendTxStatus::Idle;
+    model.tx_error = None;
+    model.tx_hash = None;
+    model.user_op_hash = None;
+    model.receipt_failed = false;
+    model.receipt_not_sent = false;
+    model.receipt_maybe_sent = false;
+    model.submitted_at_ms = None;
+    model.receipt_signed = None;
+    model.receipt_lines = None;
+    model.receipt_kind = None;
+    model.fee_held = false;
+    model.relay_funding = false;
+    model.fee_rejected = false;
+    model.refused = false;
+    model.refusal = None;
+    model.confirmed_review = None;
+    model.step = SendStep::Confirm;
+    render()
+}
+
 fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOutcome) -> Cmd {
     if model.user_op_hash.as_deref() != Some(user_op_hash) {
         return Command::done(); // a stale hash — some earlier submission
@@ -6566,10 +6755,28 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             render()
         }
         R::RiskResolved { risk } => {
+            if let Some(row) = model
+                .split_risks
+                .iter_mut()
+                .find(|row| row.flight == Some(id))
+            {
+                row.flight = None;
+                row.first_time = risk.as_ref().and_then(|risk| risk.first_time);
+                if !model.split_risks.iter().any(|row| row.flight.is_some()) {
+                    model.risk_wait = None;
+                    model.risk_unfinished =
+                        model.split_risks.iter().any(|row| row.first_time.is_none());
+                }
+                return render();
+            }
             if model.flights.risk != Some(id) {
                 return Command::done();
             }
             model.flights.risk = None;
+            model.risk_wait = None;
+            // An aborted or failed check answers nothing: the confirm says
+            // the check could not finish rather than nothing at all.
+            model.risk_unfinished = risk.as_ref().is_none_or(|r| r.first_time.is_none());
             model.recipient_risk = risk;
             render()
         }
@@ -6783,6 +6990,13 @@ fn precheck_fail(model: &mut Model, kind: SendEstimateFailure) -> Cmd {
 }
 
 fn accept_timer(model: &mut Model, id: u64) -> Cmd {
+    if model.risk_wait == Some(id) {
+        // The check is late: the confirm opens, and says it could not finish.
+        // A late answer still lands (the flight stays).
+        model.risk_wait = None;
+        model.risk_unfinished = true;
+        return render();
+    }
     if model
         .treasury_watch
         .as_ref()
@@ -7092,17 +7306,28 @@ fn confirm_gate_open(model: &Model) -> bool {
     // A multisig's confirm waits on no fee, relay or previous operation of
     // its own: the proposal takes the next free nonce.
     if proposing(model).is_some() {
-        return model.tx == SendTxStatus::Idle && !model.lock.busy() && model.tx_error.is_none();
+        return model.tx == SendTxStatus::Idle
+            && !model.lock.busy()
+            && model.tx_error.is_none()
+            && !risk_pending(model);
     }
     model.tx == SendTxStatus::Idle
         && !model.lock.busy()
         && model.tx_error.is_none()
+        && !risk_pending(model)
         && !model.estimating_gas
         && !model.fee_busy
         && !model.fee_failed
         && fee_in_hand(model)
         && !relay_stopped(model)
         && previous_in_flight(model).is_none()
+}
+
+/// The recipient's check is out and its bounded wait is running (send-18):
+/// the confirm stays shut so a first-transfer warning is read before a tap.
+fn risk_pending(model: &Model) -> bool {
+    (model.flights.risk.is_some() || model.split_risks.iter().any(|row| row.flight.is_some()))
+        && model.risk_wait.is_some()
 }
 
 /// A quote for the form's own chain is in hand — the one the submit signs
@@ -7544,8 +7769,24 @@ fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) 
 fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd {
     match failure {
         SendSubmitFailure::PasskeyCancelled => {
-            // Never an error state, never an alert.
+            // Never an error state, never an alert — but never silent either
+            // (send-11): a calm line says nothing was signed.
             model.tx = SendTxStatus::Idle;
+            model.passkey_note = Some(SendPasskeyNote::Cancelled);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::PasskeyTimedOut => {
+            model.tx = SendTxStatus::Idle;
+            model.passkey_note = Some(SendPasskeyNote::TimedOut);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::NonceUsed => {
+            // Nothing was sent: another transaction of this account landed
+            // first. Calm, like a held nonce; "Try again" signs anew.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::NonceUsed);
             model.lock.end(gen);
             render()
         }
@@ -7747,6 +7988,7 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         refusal_key: model
             .refused
             .then(|| super::tx_tracker::refusal_key(model.refusal).to_owned()),
+        can_send_again: can_send_again(model),
         hold_reason: if model.fee_rejected {
             Some(SendHoldReason::FeeRejected)
         } else if model.fee_held {

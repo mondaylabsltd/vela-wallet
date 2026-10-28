@@ -28,11 +28,36 @@ export const MAX_USER_NAME_BYTES = 64 - 37;
 
 export class PasskeyError extends Error {
 	readonly kind: FailureKind;
-	constructor(kind: FailureKind, message: string) {
+	/**
+	 * A `cancelled` signing prompt that ran out of time ([`SIGN_TIMEOUT_MS`])
+	 * rather than being closed (send-11): the same refusal to every rule,
+	 * said differently on the screen.
+	 */
+	readonly timedOut: boolean;
+	constructor(kind: FailureKind, message: string, timedOut = false) {
 		super(message);
 		this.name = 'PasskeyError';
 		this.kind = kind;
+		this.timedOut = timedOut;
 	}
+}
+
+/**
+ * The signing prompt's own deadline (send-11). WebAuthn reports a prompt
+ * that ran out of time exactly as one that was closed (`NotAllowedError`);
+ * a refusal that comes at the deadline is told as a timeout.
+ */
+export const SIGN_TIMEOUT_MS = 120_000;
+/** How close to the deadline a refusal still counts as the deadline's. */
+const SIGN_TIMEOUT_SLACK_MS = 2_000;
+
+/** A signing ceremony's refusal, with the deadline read (send-11). */
+export function classifySign(error: unknown, startedAt: number, now = Date.now()): PasskeyError {
+	const out = classify(error);
+	if (out.kind === 'cancelled' && now - startedAt >= SIGN_TIMEOUT_MS - SIGN_TIMEOUT_SLACK_MS) {
+		return new PasskeyError('cancelled', 'The passkey prompt timed out', true);
+	}
+	return out;
 }
 
 export type Registration = {
@@ -433,12 +458,14 @@ async function signWithAnyOnce(
 	pendingSign?.abort();
 	const controller = new AbortController();
 	pendingSign = controller;
+	const startedAt = Date.now();
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				timeout: SIGN_TIMEOUT_MS,
 				...(credentials.length > 0
 					? {
 							allowCredentials: credentials.map((c) => {
@@ -460,7 +487,7 @@ async function signWithAnyOnce(
 		if (!credential) throw new PasskeyError('other', 'No credential returned');
 		return parseAssertion(credential);
 	} catch (error) {
-		throw classify(error);
+		throw classifySign(error, startedAt);
 	} finally {
 		if (pendingSign === controller) pendingSign = null;
 	}
@@ -504,12 +531,14 @@ async function signOnce(
 		.map((value) => value.trim())
 		.filter(Boolean) as AuthenticatorTransport[];
 
+	const startedAt = Date.now();
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				timeout: SIGN_TIMEOUT_MS,
 				...hintsFor(method),
 				allowCredentials: [
 					{
@@ -524,7 +553,7 @@ async function signOnce(
 		if (!credential) throw new PasskeyError('other', 'No credential returned');
 		return parseAssertion(credential);
 	} catch (error) {
-		throw classify(error);
+		throw classifySign(error, startedAt);
 	} finally {
 		if (pendingSign === controller) pendingSign = null;
 	}

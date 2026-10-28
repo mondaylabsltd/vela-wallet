@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} chỉ có tối đa {{decimals}} chữ số thập phân — hãy rút gọn số tiền.",
     "warnAmountTooLarge": "Số tiền này quá lớn.",
     "warnAmountUnreadable": "Nhập một số tiền: một dấu thập phân, không có dấu phân cách hàng nghìn.",
-    "batchBadChecksum": "Mã kiểm tra không khớp"
+    "batchBadChecksum": "Mã kiểm tra không khớp",
+    "riskChecking": "Đang kiểm tra địa chỉ này…",
+    "riskUnfinished": "Không kiểm tra xong địa chỉ này. Hãy chắc chắn đây là địa chỉ bạn muốn.",
+    "amountPasteRefused": "Đó không phải là số tiền. Hãy dán một con số, ví dụ 12,5."
   }
 }

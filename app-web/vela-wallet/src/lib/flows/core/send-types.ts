@@ -80,6 +80,13 @@ export interface SendShellPorts {
 	/** `router.back()` out of the Send flow. */
 	close(): void;
 	/**
+	 * The person's own name for `address` — one of their accounts, or a
+	 * contact they saved — or `null` (vis-24). Asked before any lookup, so the
+	 * confirm and the receipt name a known recipient as the person knows it.
+	 * Absent: no local names (a harness).
+	 */
+	knownName?(address: string): string | null;
+	/**
 	 * Price an operation, and answer with the settled quote.
 	 *
 	 * `EstimateFee` used to be one call to `estimateTransactionFee` here, while

@@ -60,6 +60,10 @@ describe('liveContactPick', () => {
 			[expect.stringMatching(/^0xc1c1/i), undefined]
 		]);
 		expect(live.contacts[0].identiconSvg).toContain(ALICE.address);
+		// send-20: a named row says its address under the name; an unnamed
+		// one is titled by it already, and does not say it twice.
+		expect(live.contacts[0].addressDisplay).toMatch(/^0xa1a1/i);
+		expect(live.contacts[1].addressDisplay).toBe('');
 	});
 
 	it('counts a group’s members in the locale’s plural (set-16)', () => {

@@ -301,7 +301,9 @@
         "stale": "Donné pour une version précédente de cette demande",
         "feeWhenGiven": "Frais au moment de l'avis : {{fee}}",
         "feeChanged": "Les frais ont changé depuis cet avis"
-      }
+      },
+      "passkeyClosed": "La demande de passkey a été fermée : rien n'a été signé. Si cet appareil n'a pas de passkey pour ce compte, utilisez celui qui l'a.",
+      "passkeyTimedOut": "La demande de passkey a expiré : rien n'a été signé. Réessayez quand vous êtes prêt."
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",
@@ -396,7 +398,12 @@
       "reasonChainDown": "Impossible de joindre {{chain}} pour calculer les frais. Nouvelle tentative automatique.",
       "reasonInternal": "Un problème est survenu dans Vela. Si cela continue, rouvrez l'app.",
       "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
-      "noCoinPays": "Aucun jeton ne couvre ces frais"
+      "noCoinPays": "Aucun jeton ne couvre ces frais",
+      "reasonQuoteStopped": "Impossible d'obtenir un prix du relais.",
+      "reasonFeeTokenStopped": "Le relais ne peut pas coter cette monnaie pour le moment. Payez avec une autre monnaie, ou réessayez.",
+      "reasonSimulationStopped": "Le relais n'a pas pu simuler cette transaction.",
+      "reasonQuoteHighStopped": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau.",
+      "reasonChainDownStopped": "Impossible de joindre {{chain}} pour calculer les frais."
     },
     "dock": {
       "receive": "Recevoir",

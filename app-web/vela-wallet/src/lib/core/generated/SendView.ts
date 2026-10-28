@@ -9,6 +9,7 @@ import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
 import type { SendMultisigRef } from "./SendMultisigRef";
+import type { SendPasskeyNote } from "./SendPasskeyNote";
 import type { SendPayee } from "./SendPayee";
 import type { SendPreviousPending } from "./SendPreviousPending";
 import type { SendProposed } from "./SendProposed";
@@ -282,6 +283,21 @@ proposed: SendProposed | null,
  * ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). `None` otherwise.
  */
 previous_pending: SendPreviousPending | null, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, 
+/**
+ * Why the last passkey prompt signed nothing (send-11) — a calm line
+ * under the confirm. `None` otherwise.
+ */
+passkey_note: SendPasskeyNote | null, 
+/**
+ * The recipient's check (a first transfer, a contract) is still out:
+ * the confirm is shut for at most [`RISK_WAIT_MS`] (send-18).
+ */
+risk_checking: boolean, 
+/**
+ * The check did not finish in that wait, or could not be made: the
+ * confirm opened, and says so.
+ */
+risk_unfinished: boolean, 
 /**
  * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
  * account cannot sign here — drawn as `VenueBlock::key()` with its

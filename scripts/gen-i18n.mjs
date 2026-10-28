@@ -924,8 +924,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   settingsModals.account.totalPartial, componentsUi.scanner.{permissionDenied,
 //   retry}, addToken.chooseNetwork. 2157 + 15 = 2172 leaves, 119 branches.
 // 2293 (round 2: agent + rpc, 2026-10-28): 2174 leaves, 119 branches.
-if (PATHS.length !== 2293) fail(`expected 2293 paths (2174 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2174) fail(`expected 2174 leaf paths, got ${leafSet.size}`);
+// 2288 (the send flow's round-2 findings, 2026-10-28): +
+//   `componentsTx.receipt.{statusNotSent, notSentBody}` (send-5/6: what was
+//   proven never sent is "Not sent", with Try again),
+//   `componentsUi.signing.{passkeyClosed, passkeyTimedOut}` (send-11 /
+//   signer-11), `send.{riskChecking, riskUnfinished}` (send-18),
+//   `send.amountPasteRefused` (send-20) and
+//   `componentsUi.gas.reason{Quote,FeeToken,Simulation,QuoteHigh,ChainDown}Stopped`
+//   (signer-12: the fee's cause once it stops saying "retrying"). 2157 + 12 =
+//   2169 leaves, 119 branches.
+// 2305 (round 2: agent + rpc + send, 2026-10-28): 2186 leaves, 119 branches.
+if (PATHS.length !== 2305) fail(`expected 2305 paths (2186 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2186) fail(`expected 2186 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

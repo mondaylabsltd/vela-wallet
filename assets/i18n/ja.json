@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}} の小数点以下は最大 {{decimals}} 桁です。金額を短くしてください。",
   "warnAmountTooLarge": "金額が大きすぎます。",
   "warnAmountUnreadable": "金額は小数点を 1 つだけ使い、桁区切りを付けずに入力してください。",
-  "batchBadChecksum": "チェックサムが一致しません"
+  "batchBadChecksum": "チェックサムが一致しません",
+  "riskChecking": "このアドレスを確認しています…",
+  "riskUnfinished": "このアドレスの確認を完了できませんでした。意図したアドレスか確かめてください。",
+  "amountPasteRefused": "金額として読み取れません。12.5 のような数字を貼り付けてください。"
  },
  "receive": {
   "title": "受け取る",
@@ -1502,7 +1505,9 @@
    "statusFailed": "失敗",
    "failedHint": "送金はオンチェーンで失敗し、取り消されました。ご資産は送られていません。ネットワーク手数料のみ差し引かれている場合があります。",
    "userOpHash": "UserOp ハッシュ",
-   "copyHash": "取引ハッシュをコピー"
+   "copyHash": "取引ハッシュをコピー",
+   "statusNotSent": "送信されていません",
+   "notSentBody": "アカウントからは何も出ていません。もう一度お試しいただけます。"
   },
   "detail": {
    "received": "受け取り",
@@ -1830,7 +1835,9 @@
     "stale": "このリクエストの以前の内容に対する意見です",
     "feeWhenGiven": "意見時の手数料：{{fee}}",
     "feeChanged": "この意見の後に手数料が変わりました"
-   }
+   },
+   "passkeyClosed": "パスキーの確認が閉じられたため、何も署名されていません。この端末にこのアカウントのパスキーがない場合は、パスキーのある端末を使ってください。",
+   "passkeyTimedOut": "パスキーの確認が時間切れになったため、何も署名されていません。準備ができたらもう一度お試しください。"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",
@@ -1925,7 +1932,12 @@
    "reasonChainDown": "{{chain}} に接続できず手数料を計算できません。自動で再試行しています。",
    "reasonInternal": "Vela の内部でエラーが起きました。続く場合はアプリを開き直してください。",
    "rowShort": "必要 ~{{need}}・残高 {{have}}",
-   "noCoinPays": "手数料を払えるトークンがありません"
+   "noCoinPays": "手数料を払えるトークンがありません",
+   "reasonQuoteStopped": "リレーから見積もりを取得できませんでした。",
+   "reasonFeeTokenStopped": "リレーはいまこのコインの見積もりを出せません。別のコインで払うか、もう一度お試しください。",
+   "reasonSimulationStopped": "リレーはこの取引を試験実行できませんでした。",
+   "reasonQuoteHighStopped": "リレーのガス価格がいまネットワークの価格を大きく上回っています。",
+   "reasonChainDownStopped": "{{chain}} に接続できず手数料を計算できません。"
   },
   "dock": {
    "receive": "受け取る",

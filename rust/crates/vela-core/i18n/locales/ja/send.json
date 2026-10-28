@@ -175,6 +175,9 @@
     "warnTooManyDecimals": "{{symbol}} の小数点以下は最大 {{decimals}} 桁です。金額を短くしてください。",
     "warnAmountTooLarge": "金額が大きすぎます。",
     "warnAmountUnreadable": "金額は小数点を 1 つだけ使い、桁区切りを付けずに入力してください。",
-    "batchBadChecksum": "チェックサムが一致しません"
+    "batchBadChecksum": "チェックサムが一致しません",
+    "riskChecking": "このアドレスを確認しています…",
+    "riskUnfinished": "このアドレスの確認を完了できませんでした。意図したアドレスか確かめてください。",
+    "amountPasteRefused": "金額として読み取れません。12.5 のような数字を貼り付けてください。"
   }
 }

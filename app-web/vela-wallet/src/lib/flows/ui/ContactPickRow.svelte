@@ -33,7 +33,7 @@
 				<span class="name">{contact.name}</span>
 				{#if contact.group !== undefined}<span class="tag">{contact.group}</span>{/if}
 			</span>
-			<span class="address">{contact.addressDisplay}</span>
+			{#if contact.addressDisplay !== ''}<span class="address">{contact.addressDisplay}</span>{/if}
 		</span>
 		<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 	</button>

@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}} hat höchstens {{decimals}} Nachkommastellen – kürze den Betrag.",
   "warnAmountTooLarge": "Dieser Betrag ist zu groß.",
   "warnAmountUnreadable": "Gib einen Betrag ein: ein Dezimalzeichen, keine Tausendertrennzeichen.",
-  "batchBadChecksum": "Prüfsumme passt nicht"
+  "batchBadChecksum": "Prüfsumme passt nicht",
+  "riskChecking": "Diese Adresse wird geprüft …",
+  "riskUnfinished": "Die Prüfung dieser Adresse wurde nicht fertig. Stelle sicher, dass es die richtige ist.",
+  "amountPasteRefused": "Das ist kein Betrag. Füge eine Zahl ein, etwa 12,5."
  },
  "receive": {
   "title": "Empfangen",
@@ -1502,7 +1505,9 @@
    "statusFailed": "Fehlgeschlagen",
    "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein.",
    "userOpHash": "UserOp-Hash",
-   "copyHash": "Transaktions-Hash kopieren"
+   "copyHash": "Transaktions-Hash kopieren",
+   "statusNotSent": "Nicht gesendet",
+   "notSentBody": "Von deinem Konto ist nichts abgegangen. Du kannst es noch einmal versuchen."
   },
   "detail": {
    "received": "Empfangen",
@@ -1830,7 +1835,9 @@
     "stale": "Für eine frühere Version dieser Anfrage abgegeben",
     "feeWhenGiven": "Gebühr bei Abgabe: {{fee}}",
     "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
-   }
+   },
+   "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, es wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nimm das Gerät, auf dem er liegt.",
+   "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist."
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",
@@ -1925,7 +1932,12 @@
    "reasonChainDown": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden. Wird automatisch erneut versucht.",
    "reasonInternal": "In Vela ist etwas schiefgelaufen. Falls es so bleibt, öffne die App neu.",
    "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
-   "noCoinPays": "Kein Token reicht für diese Gebühr"
+   "noCoinPays": "Kein Token reicht für diese Gebühr",
+   "reasonQuoteStopped": "Vom Relay kam kein Preis.",
+   "reasonFeeTokenStopped": "Das Relay kann diesen Coin gerade nicht bepreisen. Zahle mit einem anderen Coin oder versuche es erneut.",
+   "reasonSimulationStopped": "Das Relay konnte diese Transaktion nicht testweise ausführen.",
+   "reasonQuoteHighStopped": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks.",
+   "reasonChainDownStopped": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden."
   },
   "dock": {
    "receive": "Empfangen",

@@ -794,7 +794,10 @@
   "warnTooManyDecimals": "{{symbol}} accepte au plus {{decimals}} décimales — raccourcissez le montant.",
   "warnAmountTooLarge": "Ce montant est trop élevé.",
   "warnAmountUnreadable": "Saisissez un seul montant : un séparateur décimal, sans séparateur de milliers.",
-  "batchBadChecksum": "Somme de contrôle incorrecte"
+  "batchBadChecksum": "Somme de contrôle incorrecte",
+  "riskChecking": "Vérification de cette adresse…",
+  "riskUnfinished": "La vérification de cette adresse n'a pas pu aboutir. Assurez-vous que c'est la bonne.",
+  "amountPasteRefused": "Ce n'est pas un montant. Collez un nombre, par exemple 12,5."
  },
  "receive": {
   "title": "Recevoir",
@@ -1509,7 +1512,9 @@
    "statusFailed": "Échoué",
    "failedHint": "Le transfert a échoué on-chain — vos fonds n'ont pas été envoyés. Des frais de réseau ont pu néanmoins être prélevés.",
    "userOpHash": "Hash UserOp",
-   "copyHash": "Copier le hash de la transaction"
+   "copyHash": "Copier le hash de la transaction",
+   "statusNotSent": "Non envoyée",
+   "notSentBody": "Rien n'a quitté votre compte. Vous pouvez réessayer."
   },
   "detail": {
    "received": "Reçu",
@@ -1837,7 +1842,9 @@
     "stale": "Donné pour une version précédente de cette demande",
     "feeWhenGiven": "Frais au moment de l'avis : {{fee}}",
     "feeChanged": "Les frais ont changé depuis cet avis"
-   }
+   },
+   "passkeyClosed": "La demande de passkey a été fermée : rien n'a été signé. Si cet appareil n'a pas de passkey pour ce compte, utilisez celui qui l'a.",
+   "passkeyTimedOut": "La demande de passkey a expiré : rien n'a été signé. Réessayez quand vous êtes prêt."
   },
   "signingApprove": {
    "resultingTotal": "Nouvelle autorisation totale",
@@ -1932,7 +1939,12 @@
    "reasonChainDown": "Impossible de joindre {{chain}} pour calculer les frais. Nouvelle tentative automatique.",
    "reasonInternal": "Un problème est survenu dans Vela. Si cela continue, rouvrez l'app.",
    "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
-   "noCoinPays": "Aucun jeton ne couvre ces frais"
+   "noCoinPays": "Aucun jeton ne couvre ces frais",
+   "reasonQuoteStopped": "Impossible d'obtenir un prix du relais.",
+   "reasonFeeTokenStopped": "Le relais ne peut pas coter cette monnaie pour le moment. Payez avec une autre monnaie, ou réessayez.",
+   "reasonSimulationStopped": "Le relais n'a pas pu simuler cette transaction.",
+   "reasonQuoteHighStopped": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau.",
+   "reasonChainDownStopped": "Impossible de joindre {{chain}} pour calculer les frais."
   },
   "dock": {
    "receive": "Recevoir",

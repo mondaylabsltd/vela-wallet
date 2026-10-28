@@ -34,9 +34,11 @@
 		 */
 		layout?: 'screen' | 'column';
 		oncta?: () => void;
+		/** The never-sent receipt's Try again (send-5, `send_again`). */
+		onretry?: () => void;
 	}
 
-	let { model, layout = 'screen', oncta }: Props = $props();
+	let { model, layout = 'screen', oncta, onretry }: Props = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -131,6 +133,13 @@
 			-->
 			<Button variant="secondary" href={model.explorerUrl} external>
 				{model.viewOnExplorer}
+			</Button>
+		{/if}
+
+		<!-- Nothing left the account: the way on, above the way out. -->
+		{#if model.retry !== undefined && onretry !== undefined}
+			<Button variant="primary" shape="rounded" testid="send-receipt-retry" onclick={onretry}>
+				{model.retry}
 			</Button>
 		{/if}
 

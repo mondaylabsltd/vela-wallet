@@ -29,7 +29,9 @@
       "statusFailed": "Falhou",
       "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada.",
       "userOpHash": "Hash da UserOp",
-      "copyHash": "Copiar hash da transação"
+      "copyHash": "Copiar hash da transação",
+      "statusNotSent": "Não enviada",
+      "notSentBody": "Nada saiu da sua conta. Você pode tentar de novo."
     },
     "detail": {
       "received": "Recebido",

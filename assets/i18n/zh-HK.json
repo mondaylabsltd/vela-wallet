@@ -789,7 +789,10 @@
   "warnTooManyDecimals": "{{symbol}} 最多支援 {{decimals}} 位小數，請縮短金額。",
   "warnAmountTooLarge": "金額太大。",
   "warnAmountUnreadable": "請輸入一個金額：只用一個小數點，唔好加千位分隔符。",
-  "batchBadChecksum": "校驗和唔對"
+  "batchBadChecksum": "校驗和唔對",
+  "riskChecking": "正在檢查這個地址…",
+  "riskUnfinished": "未能完成檢查這個地址，請確認是你想轉賬的地址。",
+  "amountPasteRefused": "呢個唔係金額，請貼上數字，例如 12.5。"
  },
  "receive": {
   "title": "收款",
@@ -1502,7 +1505,9 @@
    "statusFailed": "失敗",
    "failedHint": "此轉帳在鏈上被還原——你的資金並未發出，但可能仍已收取網絡費。",
    "userOpHash": "UserOp 雜湊",
-   "copyHash": "複製交易雜湊"
+   "copyHash": "複製交易雜湊",
+   "statusNotSent": "未發出",
+   "notSentBody": "你的賬戶冇任何資金轉出，可以再試一次。"
   },
   "detail": {
    "received": "已接收",
@@ -1830,7 +1835,9 @@
     "stale": "這是針對此請求較早版本提供的看法",
     "feeWhenGiven": "提供時的手續費：{{fee}}",
     "feeChanged": "此看法提供後手續費已變更"
-   }
+   },
+   "passkeyClosed": "通行密鑰視窗已關閉，所以甚麼都未簽署。如果這部裝置冇呢個賬戶的通行密鑰，請用有密鑰的裝置。",
+   "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。"
   },
   "currency": {
    "title": "顯示貨幣",
@@ -1886,7 +1893,12 @@
    "reasonChainDown": "暫時連唔到 {{chain}}，計唔到費用，正在自動重試。",
    "reasonInternal": "Vela 內部出咗問題。如果一直係咁，請重新開啟 App。",
    "rowShort": "需要 ~{{need}}，而家有 {{have}}",
-   "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
+   "noCoinPays": "所有代幣都唔夠畀呢筆網絡費",
+   "reasonQuoteStopped": "未能從中繼取得報價。",
+   "reasonFeeTokenStopped": "中繼暫時未能為這個幣報價。可以改用其他幣支付，或者再試一次。",
+   "reasonSimulationStopped": "中繼未能試行這筆交易。",
+   "reasonQuoteHighStopped": "中繼的 gas 價格目前遠高於網絡本身。",
+   "reasonChainDownStopped": "暫時連唔到 {{chain}}，計唔到費用。"
   },
   "dock": {
    "receive": "收款",

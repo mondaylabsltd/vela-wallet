@@ -15,10 +15,10 @@ use vela_core::app::tx_tracker::{
     parse_user_op_status, receipt_interval_ms, Event, TrackFailure, TrackLifecycle,
     TrackOperation as Op, TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus,
     TrackSettlement, TrackShellResult as Res, TrackStatus, TrackStatusAnswer, TxTracker,
-    ABANDON_AGE_MS, FEE_HOLD_STAGE, FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS,
-    FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
-    RELAY_FUNDING_STAGE, SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS,
-    USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
+    ABANDON_AGE_MS, CHAIN_WATCH_AFTER_MS, FEE_HOLD_STAGE, FIND_OP_LOOKBACK_BLOCKS,
+    FIND_OP_LOOKBACK_COVERS_MS, FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS,
+    RECONCILE_MIN_INTERVAL_MS, RELAY_FUNDING_STAGE, SLOWEST_RECEIPT_INTERVAL_MS,
+    SLOW_RECEIPT_INTERVAL_MS, USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::USER_OPERATION_EVENT_TOPIC;
@@ -743,13 +743,17 @@ fn all_unreachable_window_is_reported_as_unknown_not_pending() {
     );
     assert_eq!(entry_status(&sut), TrackStatus::Unreachable);
     assert!(sut.view().entries[0].polling);
-    // And crucially: no failed patch anywhere (①).
-    assert!(sut
-        .resolve(Res::ReceiptUnreachable {
-            user_op_hash: HASH.to_owned(),
-            now_ms: T0 + WAIT_WINDOW_MS + 500.0,
-        })
-        .is_empty());
+    // And crucially: no failed patch anywhere (①). The relay's receipt reads
+    // failing again, the chain is read for the op's own event too (send-7) —
+    // a read, never a verdict.
+    let watching = sut.resolve(Res::ReceiptUnreachable {
+        user_op_hash: HASH.to_owned(),
+        now_ms: T0 + WAIT_WINDOW_MS + 500.0,
+    });
+    assert!(
+        !watching.is_empty() && watching.iter().all(is_find),
+        "{watching:?}"
+    );
     assert!(sut
         .resolve(status(
             TrackLifecycle::NotFound,
@@ -757,7 +761,63 @@ fn all_unreachable_window_is_reported_as_unknown_not_pending() {
         ))
         .is_empty());
     assert_eq!(entry_status(&sut), TrackStatus::Unreachable);
-    assert_eq!(sut.outstanding(), vec![]);
+    assert_eq!(sut.outstanding(), watching);
+}
+
+/// send-7: the relay holds the op but its receipt reads fail — the chain is
+/// read for the op's own event, and the event landing confirms it while the
+/// relay is still silent.
+#[test]
+fn a_silent_relay_s_landed_op_is_seen_on_chain() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::Submitted {
+        sender: None,
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: Some(SUBMIT_BLOCK),
+        admitted: false,
+    });
+    assert_eq!(ops, vec![Op::Now, poll_receipt()]);
+    assert!(sut.resolve(Res::Clock { now_ms: T0 }).is_empty());
+    // A healthy relay is the only witness: no chain read in the first beats.
+    let ops = tick(&mut sut, T0 + 3_100.0);
+    assert!(!ops.iter().any(is_find), "{ops:?}");
+    let mut at = T0 + 3_200.0;
+    // Its receipt reads fail from here on.
+    for _ in 0..12 {
+        if sut.outstanding().iter().any(is_receipt) {
+            let _ = sut.resolve_matching(
+                is_receipt,
+                Res::ReceiptUnreachable {
+                    user_op_hash: HASH.to_owned(),
+                    now_ms: at,
+                },
+            );
+        }
+        if sut.outstanding().iter().any(is_status) {
+            let _ = sut.resolve_matching(is_status, status(TrackLifecycle::Queued, at));
+        }
+        at += 3_100.0;
+        let ops = tick(&mut sut, at);
+        if ops.iter().any(is_find) {
+            break;
+        }
+    }
+    assert!(
+        at - T0 >= CHAIN_WATCH_AFTER_MS,
+        "not before {CHAIN_WATCH_AFTER_MS} ms"
+    );
+    assert!(at - T0 < WAIT_WINDOW_MS);
+    while sut.outstanding().iter().any(is_find) {
+        let logs = event_logs(true);
+        sut.resolve_matching(
+            is_find,
+            op_event(at + 100.0, Some(&logs), None, Some(SUBMIT_BLOCK + 3)),
+        );
+    }
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed, "seen on chain");
 }
 
 // ---------------------------------------------------------------------------

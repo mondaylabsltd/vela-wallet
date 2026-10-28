@@ -2080,6 +2080,31 @@ fn a_cancelled_prompt_on_the_sheet_answers_nothing() {
     let view = sut.view();
     assert_eq!(view.surface, SignSurface::Sheet);
     assert!(view.confirm_gate_open, "open for a retry");
+    // …and never silent (signer-11): the sheet says nothing was signed.
+    assert_eq!(
+        view.passkey_note,
+        Some(vela_core::app::send::SendPasskeyNote::Cancelled)
+    );
+}
+
+/// signer-11: a prompt that ran out of time is a cancel in every rule — no
+/// answer, open for a retry — and the sheet says it timed out; the next
+/// approve takes the line down.
+#[test]
+fn a_timed_out_prompt_on_the_sheet_says_so() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083t");
+    all.extend(sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::PasskeyTimedOut,
+        now_ms: NOW + 1_000.0,
+    }));
+    assert!(responses(&all).is_empty(), "{all:?}");
+    let view = sut.view();
+    assert!(view.confirm_gate_open, "open for a retry");
+    assert_eq!(
+        view.passkey_note,
+        Some(vela_core::app::send::SendPasskeyNote::TimedOut)
+    );
 }
 
 /// 083 (review): only a request whose page is still there is refused. A page

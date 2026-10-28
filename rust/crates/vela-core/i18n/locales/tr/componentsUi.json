@@ -301,7 +301,9 @@
         "stale": "Bu isteğin önceki bir sürümü için verildi",
         "feeWhenGiven": "Verildiğindeki ücret: {{fee}}",
         "feeChanged": "Bu görüşten sonra ücret değişti"
-      }
+      },
+      "passkeyClosed": "Geçiş anahtarı istemi kapatıldı, hiçbir şey imzalanmadı. Bu cihazda bu hesabın geçiş anahtarı yoksa, anahtarın olduğu cihazı kullanın.",
+      "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin."
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",
@@ -396,7 +398,12 @@
       "reasonChainDown": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor. Otomatik olarak yeniden deneniyor.",
       "reasonInternal": "Vela'nın içinde bir sorun oluştu. Sürerse uygulamayı yeniden açın.",
       "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
-      "noCoinPays": "Bu ücreti karşılayan token yok"
+      "noCoinPays": "Bu ücreti karşılayan token yok",
+      "reasonQuoteStopped": "Relay'den fiyat alınamadı.",
+      "reasonFeeTokenStopped": "Relay şu anda bu coin için fiyat veremiyor. Başka bir coin ile ödeyin ya da yeniden deneyin.",
+      "reasonSimulationStopped": "Relay bu işlemi deneme olarak çalıştıramadı.",
+      "reasonQuoteHighStopped": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde.",
+      "reasonChainDownStopped": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor."
     },
     "dock": {
       "receive": "Al",
