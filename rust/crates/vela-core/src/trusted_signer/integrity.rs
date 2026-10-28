@@ -61,6 +61,16 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 6d7172b4's page with a chain it does not know said as such (round 3,
+    // 2026-10-28): the coin symbol of a chain missing from the page's own
+    // table is the app's `nativeSymbol`, marked "coin named by the app" /
+    // 「币名由 App 提供」 beside the amount, the fee and the network, never a
+    // guessed "ETH" ("?" when the app names none); the network row shows the
+    // chain id, the one thing about such a chain that is signed; the app's
+    // chain name and symbol have hidden characters drawn as code points. Not
+    // LAUNCH yet — only once `dist/` is deployed and `/b/593d37fe…/sign`
+    // answers 200 + immutable with these bytes.
+    "593d37fe6d902cc4e75c3efcd6757f840e51e2f3210a32d628ced1ac54489f8c",
     // c64ee864's page with the clear-signing audit's provenance (2026-10-28,
     // the web wallet's design): a line under every intent says where its
     // reading came from — read by this page, a descriptor's description (not

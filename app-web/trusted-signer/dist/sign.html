@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-5loCmfKuiPqZmqKQDRFVRQvIh6DUHmBrMomNy1VmIHE='; style-src 'sha256-nyGEGWA2d2ivXuO5mEBvbsLPj40gslMrLQFTXPOuIjY='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zG6hD7cWjTOCsub238RRAX03F2bdGFB1QmN2A7Yj0Tw='; style-src 'sha256-knEomczs+zj9InkRGE1jgt2WelpcdjHQib29cABjL/0='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -646,6 +646,10 @@ body {
 /* The network, and — where the page does not know the chain — whose word
    its name is. */
 .network-claimed::before { content: '· '; }
+
+/* A coin symbol the app named, for a chain this page does not know. */
+.network-coin .coin-claimed::before,
+.fee-coin .coin-claimed::before { content: '· '; }
 
 /* --- legs, balance (the app's detail card) ------------------------------- */
 
@@ -1472,6 +1476,11 @@ window.VelaCS.i18n.register('en', {
   // app's, for a chain this page's own table does not know.
   'tag.feeByApp': 'per the app',
   'tag.nameByApp': 'named by the app',
+  // For such a chain the coin's SYMBOL is the app's word too — beside the
+  // amount, the fee and the network — and the row shows the chain id, the
+  // one thing about the chain that is signed.
+  'tag.coinByApp': 'coin named by the app',
+  'value.chainId': 'chain ID {id}',
   // --- key ceremonies (spec 075): the page as a passkey route --------------
   'intent.create': 'Add a passkey',
   'intent.signIn': 'Sign in',
@@ -1805,6 +1814,8 @@ window.VelaCS.i18n.register('zh', {
   // 签名摘要里，只有本页自己的表里没有的链，它的「名字」是 App 给的。
   'tag.feeByApp': 'App 标注',
   'tag.nameByApp': 'App 提供',
+  'tag.coinByApp': '币名由 App 提供',
+  'value.chainId': '链 ID {id}',
   // --- 钥匙仪式（spec 075）：可信签名器作为一条 passkey 通道 --------------
   'intent.create': '添加通行密钥',
   'intent.signIn': '登录',
@@ -2123,6 +2134,8 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.simClaimed': '模擬結果由請求方提供——不是這一頁執行的',
   'tag.feeByApp': 'App 標註',
   'tag.nameByApp': 'App 提供',
+  'tag.coinByApp': '幣名由 App 提供',
+  'value.chainId': '鏈 ID {id}',
 
   'intent.create': '新增通行密鑰',
   'intent.signIn': '登入',
@@ -2430,6 +2443,8 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.simClaimed': '模擬結果由請求方提供——並非由這一頁執行',
   'tag.feeByApp': 'App 標註',
   'tag.nameByApp': 'App 提供',
+  'tag.coinByApp': '幣名由 App 提供',
+  'value.chainId': '鏈 ID {id}',
 
   'intent.create': '加通行密鑰',
   'intent.signIn': '登入',
@@ -2737,6 +2752,8 @@ window.VelaCS.i18n.register('ja', {
   'ui.simClaimed': '要求元が提供したシミュレーションです — このページが実行したものではありません',
   'tag.feeByApp': 'アプリ指定',
   'tag.nameByApp': '名前はアプリ提供',
+  'tag.coinByApp': '通貨名はアプリ提供',
+  'value.chainId': 'チェーン ID {id}',
   'intent.create': 'パスキーを追加',
   'intent.signIn': 'サインイン',
   'intent.proofVerify': 'キーを確認',
@@ -3042,6 +3059,8 @@ window.VelaCS.i18n.register('ko', {
   'ui.simClaimed': '요청한 곳이 제공한 시뮬레이션입니다 — 이 페이지가 실행한 것이 아닙니다',
   'tag.feeByApp': '앱이 지정',
   'tag.nameByApp': '앱이 알려 준 이름',
+  'tag.coinByApp': '앱이 알려 준 코인 이름',
+  'value.chainId': '체인 ID {id}',
   'intent.create': '패스키 추가',
   'intent.signIn': '로그인',
   'intent.proofVerify': '키 확인',
@@ -3347,6 +3366,8 @@ window.VelaCS.i18n.register('vi', {
   'ui.simClaimed': 'kết quả mô phỏng do bên yêu cầu cung cấp — không phải do trang này chạy',
   'tag.feeByApp': 'theo ứng dụng',
   'tag.nameByApp': 'tên theo ứng dụng',
+  'tag.coinByApp': 'tên coin theo ứng dụng',
+  'value.chainId': 'ID chuỗi {id}',
   'intent.create': 'Thêm passkey',
   'intent.signIn': 'Đăng nhập',
   'intent.proofVerify': 'Xác nhận khóa của bạn',
@@ -3652,6 +3673,8 @@ window.VelaCS.i18n.register('id', {
   'ui.simClaimed': 'simulasi diberikan oleh pihak peminta — tidak dijalankan oleh halaman ini',
   'tag.feeByApp': 'menurut aplikasi',
   'tag.nameByApp': 'nama dari aplikasi',
+  'tag.coinByApp': 'nama koin dari aplikasi',
+  'value.chainId': 'ID jaringan {id}',
   'intent.create': 'Tambah passkey',
   'intent.signIn': 'Masuk',
   'intent.proofVerify': 'Konfirmasi kunci Anda',
@@ -3957,6 +3980,8 @@ window.VelaCS.i18n.register('tr', {
   'ui.simClaimed': 'simülasyonu isteyen taraf sağladı — bu sayfa çalıştırmadı',
   'tag.feeByApp': 'uygulamaya göre',
   'tag.nameByApp': 'adı uygulamadan',
+  'tag.coinByApp': 'coin adı uygulamadan',
+  'value.chainId': 'zincir kimliği {id}',
   'intent.create': 'Passkey ekle',
   'intent.signIn': 'Oturum aç',
   'intent.proofVerify': 'Anahtarınızı onaylayın',
@@ -4262,6 +4287,8 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.simClaimed': 'simulación proporcionada por el solicitante — esta página no la ejecutó',
   'tag.feeByApp': 'según la app',
   'tag.nameByApp': 'nombre según la app',
+  'tag.coinByApp': 'nombre de la moneda según la app',
+  'value.chainId': 'ID de cadena {id}',
   'intent.create': 'Añadir passkey',
   'intent.signIn': 'Iniciar sesión',
   'intent.proofVerify': 'Confirmar tu llave',
@@ -4567,6 +4594,8 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.simClaimed': 'simulação fornecida pelo solicitante — não foi executada por esta página',
   'tag.feeByApp': 'segundo o app',
   'tag.nameByApp': 'nome dado pelo app',
+  'tag.coinByApp': 'nome da moeda dado pelo app',
+  'value.chainId': 'ID da rede {id}',
   'intent.create': 'Adicionar passkey',
   'intent.signIn': 'Entrar',
   'intent.proofVerify': 'Confirmar sua chave',
@@ -4872,6 +4901,8 @@ window.VelaCS.i18n.register('fr', {
   'ui.simClaimed': 'simulation fournie par le demandeur — pas exécutée par cette page',
   'tag.feeByApp': 'selon l’app',
   'tag.nameByApp': 'nom donné par l’app',
+  'tag.coinByApp': 'nom de la monnaie donné par l’app',
+  'value.chainId': 'ID de chaîne {id}',
 
   'intent.create': 'Ajouter une passkey',
   'intent.signIn': 'Connexion',
@@ -5179,6 +5210,8 @@ window.VelaCS.i18n.register('de', {
   'ui.simClaimed': 'Simulation vom Anfragenden geliefert — nicht von dieser Seite ausgeführt',
   'tag.feeByApp': 'laut App',
   'tag.nameByApp': 'Name laut App',
+  'tag.coinByApp': 'Coin-Name laut App',
+  'value.chainId': 'Chain-ID {id}',
 
   'intent.create': 'Passkey hinzufügen',
   'intent.signIn': 'Anmelden',
@@ -5486,6 +5519,8 @@ window.VelaCS.i18n.register('ru', {
   'ui.simClaimed': 'симуляция предоставлена отправителем запроса — эта страница её не запускала',
   'tag.feeByApp': 'по данным приложения',
   'tag.nameByApp': 'название от приложения',
+  'tag.coinByApp': 'название монеты от приложения',
+  'value.chainId': 'ID сети {id}',
 
   'intent.create': 'Добавить passkey',
   'intent.signIn': 'Вход',
@@ -5793,6 +5828,8 @@ window.VelaCS.i18n.register('it', {
   'ui.simClaimed': 'simulazione fornita dal richiedente — non eseguita da questa pagina',
   'tag.feeByApp': 'secondo l’app',
   'tag.nameByApp': 'nome dato dall’app',
+  'tag.coinByApp': 'nome della moneta dato dall’app',
+  'value.chainId': 'ID chain {id}',
   'intent.create': 'Aggiungi passkey',
   'intent.signIn': 'Accedi',
   'intent.proofVerify': 'Conferma la tua chiave',
@@ -6816,12 +6853,15 @@ window.VelaCS = window.VelaCS || {};
    * The chain's own coin, from this page's catalogue for the chain id that is
    * signed for — not the requester's `nativeSymbol`, which used to name the
    * fee on every chain ("0.0009 USDC" on Ethereum), with "ETH" when it said
-   * nothing. The hero's rule (resolve.js `nativeAmount`), so the card never
-   * names one coin two ways: only a chain the page does not know falls back
-   * to the app's word, and the network row then says the chain is the app's.
+   * nothing. The hero's rule (resolve.js `coinOf`, handed over as
+   * `context.coin`), so the card never names one coin two ways: only a chain
+   * the page does not know takes the app's word, and the fee then says the
+   * symbol is the app's (`claimed`); nobody naming it is "?".
    */
-  function nativeSymbolOf(context) {
-    return (ns.registry && ns.registry.nativeSymbol(context.chainId)) || context.nativeSymbol || 'ETH';
+  function coinOf(context) {
+    if (context.coin && typeof context.coin.symbol === 'string') return context.coin;
+    var known = ns.registry && ns.registry.nativeSymbol(context.chainId);
+    return { symbol: known || '?', claimed: false };
   }
 
   /** The 4337 gas ceiling. Zero on Vela, so it is only reported when it is not. */
@@ -6831,10 +6871,12 @@ window.VelaCS = window.VelaCS || {};
       BigInt(operation.preVerificationGas || 0);
     var maxWei = gas * BigInt(operation.maxFeePerGas || 0);
     if (maxWei === 0n) return null;
-    var symbol = nativeSymbolOf(context);
+    var coin = coinOf(context);
+    var symbol = coin.symbol;
     var fiat = fiatOf(context, symbol, maxWei, 18);
     return {
       symbol: symbol,
+      symbolClaimed: !!coin.claimed,
       gas: group(gas.toString()),
       max: formatUnits(maxWei, 18),
       fiat: fiat && fiat.text,
@@ -6856,11 +6898,13 @@ window.VelaCS = window.VelaCS || {};
 
     // Native coin: a bare value transfer with no calldata.
     if ((!leg.data || leg.data === '0x') && value > 0n) {
-      var symbol = nativeSymbolOf(context);
+      var coin = coinOf(context);
+      var symbol = coin.symbol;
       var nativeFiat = fiatOf(context, symbol, value, 18);
       return {
         index: index,
         symbol: symbol,
+        symbolClaimed: !!coin.claimed,
         amount: formatUnits(value, 18),
         to: leg.to,
         token: null,
@@ -7518,14 +7562,34 @@ window.VelaCS = window.VelaCS || {};
    * wallet's plain send card states it (vela-core `exact_native_amount`, 082
    * RC5). Without it the figure stops at six decimals.
    */
+  /**
+   * The chain's own coin, from the chain id we sign for (it is in the
+   * digest). Only for a chain this page does not know is the symbol the
+   * requester's `nativeSymbol` — and then it is the app's word, marked as
+   * such wherever it is drawn (`claimed`), exactly as the chain's name is.
+   * It is not a fact the page can check: "ETH" on a chain whose coin is
+   * worth nothing reads as a price it does not have. Nobody naming it is
+   * "?", the page's mark for a coin it cannot name, never a guessed "ETH".
+   * `resolve` puts the result on its own copy of the context (`ctx.coin`),
+   * so the hero, the rows and the fee (lib/fee.js) all say the same.
+   */
+  function coinOf(ctx) {
+    var known = reg.nativeSymbol(ctx.chainId);
+    if (known) return { symbol: known, claimed: false, hidden: false };
+    var given = typeof ctx.nativeSymbol === 'string' ? ctx.nativeSymbol.trim().slice(0, 12) : '';
+    if (!given) return { symbol: '?', claimed: false, hidden: false };
+    var shown = reveal(given);
+    return { symbol: shown.text, claimed: true, hidden: shown.hidden };
+  }
+
   function nativeAmount(value, ctx, exact) {
-    // The chain's own coin, from the chain id we sign for — the requester's
-    // word only for a chain this page does not know (as with its name).
-    var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
+    var coin = ctx.coin || coinOf(ctx);
+    var symbol = coin.symbol;
     return {
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
+      symbolClaimed: coin.claimed,
       text: formatUnits(value, 18, exact ? 18 : undefined),
       fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
@@ -7597,7 +7661,12 @@ window.VelaCS = window.VelaCS || {};
     var shown = vouched ? reveal(given) : null;
     var claimed = given && !vouched ? reveal(given.trim().slice(0, 64)) : null;
     var accountName = reveal((ctx.signer && typeof ctx.signer.name === 'string' && ctx.signer.name) || null);
-    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden) {
+    var chainKnown = !!reg.chainName(ctx.chainId);
+    var chainGiven = !chainKnown && typeof ctx.chainName === 'string' && ctx.chainName.trim()
+      ? reveal(ctx.chainName.trim().slice(0, 40)) : null;
+    var coin = ctx.coin || coinOf(ctx);
+    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden ||
+      (chainGiven && chainGiven.hidden) || coin.hidden) {
       warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
     }
     var name = shown ? shown.text : null;
@@ -7630,10 +7699,14 @@ window.VelaCS = window.VelaCS || {};
       },
       // Named from the chain id we are actually signing for (it is in the
       // digest's domain). The app's own label is only used for a chain this
-      // page does not know, and is marked as the app's. A chain neither knows
-      // is named by its id — the page's own words, so not marked.
-      chain: reg.chainName(ctx.chainId) || ctx.chainName || ('chain ' + (ctx.chainId || '?')),
-      chainClaimed: !reg.chainName(ctx.chainId) && !!ctx.chainName,
+      // page does not know, and is marked as the app's. A chain this page
+      // does not know always shows its id (`chainId`) — the one thing about
+      // it that is signed — and, when the app named its coin, that the
+      // symbol is the app's word too (`coin.claimed`).
+      chain: chainKnown ? reg.chainName(ctx.chainId) : chainGiven ? chainGiven.text : null,
+      chainClaimed: !!chainGiven,
+      chainId: chainKnown ? null : String(ctx.chainId || '?'),
+      coin: coin,
       chainLogos: ns.logos.chain(ctx, ctx.chainId),
       // The account whose key signs. For a transaction this is also inside
       // the digest (SafeOp.safe), so it is not merely a claim.
@@ -7818,7 +7891,10 @@ window.VelaCS = window.VelaCS || {};
     // A coin it carries is `nativeOut`'s row; none is said as 0, not left out.
     if (raw && value !== null && value === 0n) {
       var none = nativeAmount(0n, ctx, true);
-      facts.push({ label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw' });
+      facts.push({
+        label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw',
+        tagKey: none.symbolClaimed ? 'tag.coinByApp' : undefined,
+      });
     }
     if (raw) {
       facts.push({
@@ -8013,7 +8089,10 @@ window.VelaCS = window.VelaCS || {};
         });
       } else if (field.format === 'nativeAmount') {
         var na = nativeAmount(raw, ctx);
-        rows.push({ label: field.label, value: na.text + ' ' + na.symbol, format: 'raw' });
+        rows.push({
+          label: field.label, value: na.text + ' ' + na.symbol, format: 'raw',
+          tagKey: na.symbolClaimed ? 'tag.coinByApp' : undefined,
+        });
       }
     });
 
@@ -9229,6 +9308,7 @@ window.VelaCS = window.VelaCS || {};
     // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
     ctx = Object.assign({}, ctx || {});
     ctx.selfAccount = selfAccountOf(requested, ctx);
+    ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
@@ -9535,6 +9615,9 @@ window.VelaCS = window.VelaCS || {};
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
+    // The coin of a chain this page does not know is the app's word, said
+    // right under the figure it names (resolve.js `coinOf`).
+    if (hero.amount.symbolClaimed) box.appendChild(el('div', 'amount-fiat coin-claimed', t('tag.coinByApp')));
     if (hero.amount.fiat) box.appendChild(fiatLine('amount-fiat', hero.amount.fiat));
     return box;
   }
@@ -9587,6 +9670,7 @@ window.VelaCS = window.VelaCS || {};
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
+      if (field.amount.symbolClaimed) value.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
       if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
@@ -9769,6 +9853,9 @@ window.VelaCS = window.VelaCS || {};
       }
     }
     if (view.fee.gas) note.appendChild(el('div', null, t('ui.feeGas', { gas: view.fee.gas.gas })));
+    var feeCoin = view.fee.leg ? view.fee.leg.symbolClaimed && view.fee.leg.symbol
+      : view.fee.gas && view.fee.gas.symbolClaimed && view.fee.gas.symbol;
+    if (feeCoin) note.appendChild(coinClaim('fee-coin', feeCoin));
     var rate = (view.fee.leg && view.fee.leg.rate) || (view.fee.gas && view.fee.gas.rate);
     var rateSymbol = view.fee.leg ? view.fee.leg.symbol : view.fee.gas && view.fee.gas.symbol;
     note.appendChild(el('div', null, rate
@@ -9908,16 +9995,33 @@ window.VelaCS = window.VelaCS || {};
    * 网络 · Base. A chain this page does not know is named by the app — the
    * chain id is in the digest, the name is not — and the row says so
    * (「App 提供」 / "named by the app"), quietly, in the row's own muted type.
+   * Under it, the one thing about such a chain that is signed: its id; and,
+   * when the app named its coin, that the symbol is the app's word too.
    */
   function networkRow(view) {
-    if (!view.chain) return null;
+    if (!view.chain && !view.chainId) return null;
     var row = el('div', 'row network-row');
     row.appendChild(el('span', 'row-label', t('field.network')));
     var value = el('span', 'row-value');
-    value.appendChild(el('span', 'network-name', view.chain));
-    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    if (view.chain) {
+      value.appendChild(el('span', 'network-name', view.chain));
+      if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    }
+    if (view.chainId) {
+      var sub = el('div', view.chain ? 'row-sub network-id' : 'network-name network-id',
+        t('value.chainId', { id: view.chainId }));
+      value.appendChild(sub);
+      if (view.coin && view.coin.claimed) value.appendChild(coinClaim('row-sub network-coin', view.coin.symbol));
+    }
     row.appendChild(value);
     return row;
+  }
+
+  /** "FOO · coin named by the app" — a symbol this page took on the app's word. */
+  function coinClaim(className, symbol) {
+    var line = el('div', className, symbol + ' ');
+    line.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
+    return line;
   }
 
   // Refusals and dangers first, right under the title — a card that will not
