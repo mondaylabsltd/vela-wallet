@@ -61,6 +61,20 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // c64ee864's page with the clear-signing audit's provenance (2026-10-28,
+    // the web wallet's design): a line under every intent says where its
+    // reading came from — read by this page, a descriptor's description (not
+    // a guarantee), a 4-byte name, a shape only, or the requester's word. A
+    // protocol's descriptor is bound to the contracts and chains it was
+    // written for, so 1inch's `swap` shape on another contract is a contract
+    // call with a "Sign" button; the known-contracts table is per chain; the
+    // app's `vaultAsset` is never a token amount; the app's simulation no
+    // longer lowers a blind call's risk; output that goes to an address that
+    // is not this account, and a minimum of next to nothing, are dangers; the
+    // app's `currentAllowance` is drawn as its word; no demo fixture ships.
+    // Not LAUNCH yet — only once `dist/` is deployed and
+    // `/b/6d7172b4…/sign` answers 200 + immutable with these bytes.
+    "6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a",
     // f14e755a's page with what the 2026-10-28 exploratory pass found: native
     // coin sent along with calldata is a row of its own and a caution (every
     // leg of a batch too); an undecoded leg lists its contract, selector,

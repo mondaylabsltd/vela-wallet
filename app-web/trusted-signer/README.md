@@ -45,13 +45,17 @@ bun samples/answer-test.mjs     # 31 项：答复只交给钱包 —— 钓鱼�
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
 node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
 node samples/claims-test.mjs    # 51 项：谁的说法 —— 「本账户」、网络费的币种、法币与币种、看不见的字符、读不了的钥匙 id
+node samples/provenance-test.mjs # 96 项：意图的读法从哪来 —— 同一函数形状打在陌生合约上、换一条链、App 说的金库资产、App 的模拟、去向不是本账户、App 说的现有额度；五种来源行十五种语言
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则
 node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
 ```
 
-每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。
+每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。**意图下面一行写明它的读法从哪来**
+（2026-10-28，与网页钱包同一设计）：✓ 本页从交易读出 / △ 某份描述的说法（描述不是保证）/
+△ 函数名来自公共数据库 / △ 看起来像某种调用 —— 只看形状 / ○ 请求方的说法。协议的描述符
+只绑在它写给的合约（与链）上；同样形状的函数打在别的合约上就是「合约调用」，按钮是「签名」。
 
 ### 在自己机器上点一遍
 
@@ -117,10 +121,10 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 
 | 级 | 依据 | 口吻 |
 | --- | --- | --- |
-| 1 | 已验证 ERC-7730 描述符 | 说人话的意图 |
-| 2 | 源码已验证，ABI 全解码 | 只报事实，不解释含义 |
-| 3 | 仅 4byte 数据库命中函数名 | 名字无人担保 + caution |
-| 4 | 解不开，靠模拟 | 以模拟结果为主体 |
+| 1 | 代币标准（ERC-20 / 721），或写给**这个合约、这条链**的描述符 | 说人话的意图 + 来源行 |
+| 2 | 源码已验证，ABI 全解码（只有画廊的样例：`demo/fixtures.js`） | 只报事实，不解释含义 |
+| 3 | 协议函数的形状打在别的合约上；或仅 4byte 数据库命中函数名 | 「合约调用」/ 名字无人担保 + caution |
+| 4 | 解不开，只有请求方的模拟 | 模拟画成请求方的说法；风险**不降**（仍是 danger） |
 | 5 | 模拟发现未声明的流出 | danger + 建议拒绝 |
 | 6 | 解码与模拟双失败 | 最强警告「无法预知」 |
 
@@ -135,7 +139,7 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 | `lib/abi.js` | ABI 解码（静态类型、动态 bytes/string、数组、元组） |
 | `lib/encode.js` | ABI 编码 —— 样例的 calldata 由签名现算，不手抄十六进制 |
 | `lib/catalog.js` | 内置网络与代币，由 `samples/gen-catalog.mjs` 从 vela-core 的表生成（按链） |
-| `lib/registry.js` | 代币 / 合约 / 通讯录 / ERC-7730 描述符 |
+| `lib/registry.js` | 代币 / 合约（按链）/ ERC-7730 描述符（协议的绑在合约与链上）—— 只有真实的；画廊的虚构样例在 `demo/fixtures.js`，发布页不加载 |
 | `lib/resolve.js` | 意图 → 视图模型：降级阶梯与所有安全闸门都在这里 |
 | `lib/render.js` | 视图模型 → DOM，不做任何判断 |
 | `samples/intents.json` | 33 个场景的意图（外部数据，页面不内嵌） |

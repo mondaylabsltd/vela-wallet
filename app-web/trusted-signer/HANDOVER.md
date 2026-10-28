@@ -84,6 +84,8 @@ node samples/origin-line-test.mjs   # 30/30 站点名就是主机时页头只写
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）
 bun samples/plain-send-test.mjs     # 183/183 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
 node samples/claims-test.mjs        # 51/51 谁的说法（2026-10-28）：「本账户」只给 userOp.sender / 消息所属账户；网络费币种按本页目录；法币标「按请求方给的汇率」、币种只认 ISO 代码；方向控制符与零宽字符显示成码位并提示；读不了的钥匙 id 拒签而不是一直转圈
+node samples/provenance-test.mjs    # 96/96 读法从哪来（2026-10-28，clear-signing 审计）：意图下的来源行（✓ 本页读出 / △ 描述、4byte、只看形状 / ○ 请求方的说法），十五种语言；协议描述符只绑在它写给的合约与链上 —— 1inch 的 swap 形状打在攻击者合约上、Uniswap V2 路由地址在 Gnosis 上都是「合约调用」+「签名」；`context.vaultAsset` 不成金额；请求方的模拟不降盲签的风险；去向不是本账户、最少换回几乎为零各一条 danger；`currentAllowance` 标「App 的说法」；发布页不含画廊的虚构样例（`demo/fixtures.js`）
+bun samples/provenance-test.mjs     # 96/96 同一套件在 JavaScriptCore 上
 ```
 
 > 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数；082 的两个新套件与其余各套件 09-29 重跑，数不变）。浏览器套件要用 `bun` 跑：

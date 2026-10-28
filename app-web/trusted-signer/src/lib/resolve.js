@@ -112,6 +112,25 @@ window.VelaCS = window.VelaCS || {};
     return { key: key, params: params };
   }
 
+  // --- provenance ------------------------------------------------------------
+  //
+  // One line under the intent says where its reading came from, in the words
+  // the web wallet uses (owner, 2026-10-28), so a person can always tell what
+  // is CERTAIN from what is INTERPRETED from what is CLAIMED:
+  //
+  //   read      ✓ read by this page from the bytes that get signed
+  //   described △ a descriptor's reading — a description, not a guarantee
+  //               that the contract does what it says
+  //   fourbyte  △ only a function name, from a public database
+  //   shape     △ the call has the shape of something it may not be
+  //   claimed   ○ the only reading is the app's own word (its simulation)
+  //
+  // `whatKey` names the resemblance; `contract` the descriptor's contract.
+
+  function provenance(view, kind, extra) {
+    view.provenance = Object.assign({ kind: kind }, extra || {});
+  }
+
   // --- identity --------------------------------------------------------------
 
   /**
@@ -130,7 +149,9 @@ window.VelaCS = window.VelaCS || {};
   function identify(address, ctx, roleHints) {
     var lower = (address || '').toLowerCase();
     var hints = roleHints || {};
-    var known = reg.contract(lower);
+    // On the chain the signature is for: a name from another network's table
+    // is a different contract, or none (cs-13).
+    var known = reg.contract(lower, ctx.chainId);
     var tag = null;
     var self = ctx.selfAccount;
 
@@ -325,6 +346,9 @@ window.VelaCS = window.VelaCS || {};
       level: 1,
       signer: ctx.signer || { name: '—', letter: '?' },
       fee: null,
+      // Where the intent's reading came from (`provenance`); none for a
+      // request nothing could be read from, and for a key ceremony.
+      provenance: null,
     };
   }
 
@@ -334,6 +358,9 @@ window.VelaCS = window.VelaCS || {};
       params: (extra && extra.params) || [],
       addresses: (extra && extra.addresses) || [],
       sim: extra && extra.sim,
+      // A simulation summary from the context is the requester's, and the
+      // details say so beside it; `ui.simNoOther` is this page's own words.
+      simClaimed: !!(extra && extra.simClaimed && extra.sim),
       raw: calldata && calldata !== '0x' ? { bytes: abi.byteLength(calldata), hex: calldata } : null,
       values: values,
     };
@@ -402,6 +429,7 @@ window.VelaCS = window.VelaCS || {};
         subParams: { bytes: abi.byteLength(data) },
       };
       view.sentence = text('sentence.deploy');
+      provenance(view, 'read');
       view.warnings.push({ tone: 'caution', key: 'warn.deploy' });
       view.tech = techFor(text('value.contractCreation'), null, data, {});
       nativeOut(view, value, ctx);
@@ -418,6 +446,7 @@ window.VelaCS = window.VelaCS || {};
       var amount = nativeAmount(value, ctx, true);
       var moves = value > 0n;
       view.intentKey = 'intent.send';
+      provenance(view, 'read');
       // Nothing leaves at 0, so the hero is not an outgoing amount.
       view.hero = { kind: 'amount', amount: amount, direction: moves ? 'out' : 'none' };
       view.fields.push({ label: 'field.recipient', identity: meta, format: 'addressName', role: 'recipient' });
@@ -496,15 +525,19 @@ window.VelaCS = window.VelaCS || {};
   function resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value) {
     var to = call.to || '';
     var descriptor = selector ? reg.descriptorFor(selector) : null;
+    // What the descriptor knows about THIS contract on THIS chain — null when
+    // it was written for another one (cs-4). A token standard's is `{}`.
+    var binding = descriptor ? reg.binding(descriptor, to, ctx.chainId) : null;
 
-    // Level 1 — a verified descriptor gives us meaning.
-    if (descriptor && !descriptor.abiOnly) {
+    // Level 1 — a token standard, or a descriptor written for this contract,
+    // gives us meaning.
+    if (descriptor && !descriptor.abiOnly && binding) {
       var values = abi.decode(descriptor.signature, data);
-      if (values) return applyDescriptor(descriptor, values, call, ctx, view, meta, value, isLeg);
+      if (values) return applyDescriptor(descriptor, values, call, ctx, view, meta, value, isLeg, binding);
     }
 
     // Level 2 — source verified, ABI decodes, nobody wrote down what it means.
-    if (descriptor && descriptor.abiOnly) {
+    if (descriptor && descriptor.abiOnly && binding) {
       var abiValues = abi.decode(descriptor.signature, data);
       var parsed = abi.parseSignature(descriptor.signature);
       view.intentKey = 'intent.contractCall';
@@ -519,10 +552,17 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor(descriptor.signature, abiValues, data, {
         params: (abiValues || []).map(function (v, i) { return { name: parsed.types[i], value: renderRaw(v) }; }),
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
-        sim: ctx.simulation && ctx.simulation.summary,
+        sim: claimedSim(ctx, view), simClaimed: true,
       });
       if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
+    }
+
+    // Level 3 — a protocol's function, on a contract its descriptor was not
+    // written for: the shape of a swap is not a swap.
+    if (descriptor && descriptor.shape && !descriptor.abiOnly) {
+      var shaped = abi.decode(descriptor.signature, data);
+      if (shaped) return applyShape(descriptor, shaped, call, ctx, view, meta, data, selector, value, isLeg);
     }
 
     // Level 3 — only a 4-byte name.
@@ -539,10 +579,11 @@ window.VelaCS = window.VelaCS || {};
         return { labelRaw: p4.types[i], value: renderRaw(v), format: 'raw' };
       });
       view.warnings.push({ tone: 'caution', key: 'warn.fourbyte' });
+      provenance(view, 'fourbyte');
       view.tech = techFor(known4, v4, data, {
         params: (v4 || []).map(function (v, i) { return { name: p4.types[i], value: renderRaw(v) }; }),
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
-        sim: ctx.simulation && ctx.simulation.summary,
+        sim: claimedSim(ctx, view), simClaimed: true,
       });
       if (isLeg) legFacts(view, meta, p4.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
@@ -563,27 +604,31 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.blindUndeclared');
       view.warnings.push({ tone: 'danger', key: 'warn.blindUndeclared' });
     } else if (sim) {
+      // The simulation is the app's, run where this page cannot see, so it
+      // cannot make a call nobody can read any less blind (cs-6): the risk
+      // stays where "nothing decodes" puts it. Its rows are drawn as its word.
       view.level = 4;
-      view.risk = 'caution';
+      view.risk = 'danger';
       view.sentence = text('sentence.blindSim');
-      view.warnings.push({ tone: 'caution', key: 'warn.blindSim' });
+      view.warnings.push({ tone: 'danger', key: 'warn.blindSim' });
     } else {
       view.level = 6;
       view.risk = 'danger';
       view.sentence = text('sentence.blindNothing');
       view.warnings.push({ tone: 'danger', key: 'warn.blindNothing' });
     }
-    if (sim && sim.rows) view.balance = { rows: sim.rows, note: sim.note, claimed: true };
+    if (sim) provenance(view, 'claimed');
+    if (sim && sim.rows) view.balance = claimedBalance(sim, view);
     view.tech = techFor(
       selector ? text('value.unknownFunction', { selector: selector }) : text('value.emptyCalldata'),
       null, data,
-      { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: sim && sim.summary },
+      { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: claimedSim(ctx, view), simClaimed: true },
     );
     if (isLeg) legFacts(view, meta, selector || '0x', data, value, ctx, true);
     return view;
   }
 
-  function resolveToken(field, values, call, ctx) {
+  function resolveToken(field, values, call, binding) {
     if (field.tokenPath) {
       var path = field.tokenPath;
       if (path[path.length - 1] === 'last') {
@@ -592,15 +637,29 @@ window.VelaCS = window.VelaCS || {};
       }
       return abi.at(values, path);
     }
-    if (field.token === 'vaultAsset') return ctx.vaultAsset || call.to;
+    // The vault's asset is the descriptor's word for the vault it was written
+    // for. Nothing else names it: `context.vaultAsset` is the app's (cs-4),
+    // and without a binding the amount is raw units of an unknown token.
+    if (field.token === 'vaultAsset') return (binding && binding.asset) || null;
     return call.to;
   }
 
-  function applyDescriptor(descriptor, values, call, ctx, view, meta, callValue, isLeg) {
+  function applyDescriptor(descriptor, values, call, ctx, view, meta, callValue, isLeg, binding) {
     view.intentKey = 'intent.' + descriptor.kind;
     view.kind = descriptor.kind;
     view.level = 1;
     view.contract = meta;
+    // A token standard is read from the bytes of a token this page knows on
+    // this chain; on any other contract the standard's shape is all there
+    // is. A protocol's descriptor is a description of the contract it was
+    // written for — not a promise that contract keeps it.
+    if (descriptor.standard) {
+      if (reg.token(call.to, ctx.chainId)) provenance(view, 'read');
+      else provenance(view, 'shape', { whatKey: descriptor.standard === 'erc721' ? 'shape.erc721' : 'shape.erc20' });
+    } else {
+      var known = reg.contract(call.to, ctx.chainId);
+      provenance(view, 'described', { contract: (known && known.name) || label(meta) });
+    }
 
     if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
 
@@ -611,7 +670,7 @@ window.VelaCS = window.VelaCS || {};
     descriptor.fields.forEach(function (field) {
       var raw = abi.at(values, field.path);
       if (field.format === 'tokenAmount') {
-        var amount = tokenAmount(raw, resolveToken(field, values, call, ctx), ctx);
+        var amount = tokenAmount(raw, resolveToken(field, values, call, binding), ctx);
         if (field.role === 'allowance' || field.role === 'allowance-delta') {
           approval = { amount: amount, mode: descriptor.approval };
           if (!hero) hero = { kind: 'amount', amount: amount, direction: 'allowance' };
@@ -669,8 +728,9 @@ window.VelaCS = window.VelaCS || {};
       if (promoted) promoted.consumedByHero = true;
     }
 
-    if (approval) applyApprovalGuard(approval, view, ctx);
+    if (approval) applyApprovalGuard(approval, view, ctx, rows);
     applyRecipientGuards(call, view, rows);
+    outputGuards(descriptor, values, call, ctx, view, binding);
 
     if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view);
 
@@ -678,12 +738,117 @@ window.VelaCS = window.VelaCS || {};
     view.tech = techFor(descriptor.signature, values, call.data, {
       params: values.map(function (v, i) { return { name: parsed2.types[i], value: renderRaw(v) }; }),
       addresses: addressesIn(rows, call, meta),
-      sim: ctx.simulation && ctx.simulation.summary,
+      sim: claimedSim(ctx, view), simClaimed: true,
     });
-    if (ctx.simulation && ctx.simulation.rows && !isLeg) {
-      view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
-    }
+    if (ctx.simulation && ctx.simulation.rows && !isLeg) view.balance = claimedBalance(ctx.simulation, view);
     return view;
+  }
+
+  /**
+   * A protocol's function on a contract its descriptor was not written for
+   * (cs-4): `swap(…)` with 1inch's shape on an attacker's contract, ERC-4626's
+   * `deposit` on something that is no vault. The same bytes are read the
+   * same way — by type, every one of them — but nothing says what the
+   * contract does with them: the intent is a contract call, the button the
+   * certain action ("Sign"), and the resemblance a line of its own ("Looks
+   * like a 1inch swap — shape only, not checked"). No token amount is
+   * guessed for it, least of all from the app's `context.vaultAsset`.
+   */
+  function applyShape(descriptor, values, call, ctx, view, meta, data, selector, value, isLeg) {
+    var parsed = abi.parseSignature(descriptor.signature);
+    view.intentKey = 'intent.contractCall';
+    view.level = 3;
+    view.risk = 'caution';
+    view.contract = meta;
+    provenance(view, 'shape', { whatKey: descriptor.shape });
+    // A batch's legs are still read from its bytes — they are what the call
+    // hands on — under the same "contract call" and the same line.
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    view.hero = { kind: 'code', title: parsed.name + '(…)', sub: label(meta) };
+    view.sentence = text('sentence.shapeOnly');
+    view.fields = values.map(function (v, i) {
+      // A tuple's full type is a line too long for a label; the details
+      // keep it.
+      var type = parsed.types[i];
+      return { labelRaw: type.charAt(0) === '(' ? 'tuple' : type, value: renderRaw(v), format: 'raw' };
+    });
+    // Even as a resemblance, an address its bytes put where the output goes
+    // is checked against the account, and a minimum of nothing is said.
+    outputGuards(descriptor, values, call, ctx, view, null);
+    view.tech = techFor(descriptor.signature, values, data, {
+      params: values.map(function (v, i) { return { name: parsed.types[i], value: renderRaw(v) }; }),
+      addresses: [{ roleKey: 'ui.contract', name: label(meta), address: call.to }],
+      sim: claimedSim(ctx, view), simClaimed: true,
+    });
+    if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
+    return view;
+  }
+
+  /**
+   * Where a call's output goes, and how little it may be (cs-2), from the
+   * descriptor's own fields:
+   *
+   *  · a `returns` address (a swap's recipient, a vault's shares-to) that is
+   *    not the account signing — "You receive…" in green had stood over a
+   *    swap whose output went to a stranger;
+   *  · a minimum received that is next to nothing (`isDust`), which lets any
+   *    price move or trade-ahead take almost all of it.
+   *
+   * "This account" is the signature's own (`ctx.selfAccount`): with no
+   * account in the digest, nothing can be said either way.
+   */
+  function outputGuards(descriptor, values, call, ctx, view, binding) {
+    var self = ctx.selfAccount ? String(ctx.selfAccount).toLowerCase() : null;
+    descriptor.fields.forEach(function (field) {
+      var raw = abi.at(values, field.path);
+      if (field.returns && self && typeof raw === 'string' && raw.toLowerCase() !== self) {
+        view.returnsElsewhere = raw;
+        if (!view.warnings.some(function (w) { return w.key === 'warn.notThisAccount'; })) {
+          view.warnings.push({ tone: 'danger', key: 'warn.notThisAccount', params: { to: shortAddress(raw) } });
+        }
+        raise(view, 'danger');
+      }
+      if (field.role === 'receive-amount' && typeof raw === 'bigint') {
+        var amount = tokenAmount(raw, resolveToken(field, values, call, binding), ctx);
+        if (isDust(amount)) {
+          view.warnings.push({
+            tone: 'danger',
+            key: 'warn.dustMinimum',
+            params: { amount: formatUnits(amount.value, amount.token.decimals, amount.token.decimals) + ' ' + amount.symbol },
+          });
+          raise(view, 'danger');
+        }
+      }
+    });
+  }
+
+  /**
+   * A minimum that protects nothing: at most a millionth of one whole token
+   * (1 wei of an 18-decimal coin, 1 unit of USDC), or 0 or 1 of a token whose
+   * decimals this page cannot check.
+   */
+  function isDust(amount) {
+    if (amount.unlimited) return false;
+    if (amount.unverifiedDecimals) return amount.value <= 1n;
+    return amount.value * 1000000n <= 10n ** BigInt(amount.token.decimals);
+  }
+
+  /** The requester's simulation summary, made visible — its words, not ours. */
+  function claimedSim(ctx, view) {
+    var summary = ctx.simulation && ctx.simulation.summary;
+    return typeof summary === 'string' && summary ? visible(summary, view) : undefined;
+  }
+
+  /** The requester's simulated balance change, drawn as its claim. */
+  function claimedBalance(sim, view) {
+    var rows = Array.isArray(sim.rows) ? sim.rows : [];
+    return {
+      rows: rows.map(function (row) {
+        return { symbol: visible(String(row && row.symbol), view), delta: visible(String(row && row.delta), view) };
+      }),
+      note: typeof sim.note === 'string' ? visible(sim.note, view) : null,
+      claimed: true,
+    };
   }
 
   function addressesIn(rows, call, meta) {
@@ -711,6 +876,16 @@ window.VelaCS = window.VelaCS || {};
   // wallet's own sheet is where a cap is chosen, before the request gets here.
   // An approve-ALL stays refused — the wallet only grants one on a deliberate
   // tap, and this page has no such tap.
+  /**
+   * The allowance the app says the spender has now, or null. It is the
+   * app's word (cs-16): the page reads no chain, so a figure built on it is
+   * drawn as the app's, and without one the page says it cannot see it.
+   */
+  function claimedAllowance(ctx) {
+    if (ctx.currentAllowance === undefined || ctx.currentAllowance === null) return null;
+    return abi.quantity(ctx.currentAllowance);
+  }
+
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
@@ -736,18 +911,25 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
     } else if (approval.mode === 'increase') {
-      var current = ctx.currentAllowance || 0n;
-      var after = current + amount.value;
-      view.fields.push({
-        label: 'field.allowanceAfter',
-        value: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
-        format: 'raw',
-        emphasis: true,
-      });
-      view.sentence = text('sentence.increase', {
-        current: formatUnits(current, amount.token.decimals) + ' ' + amount.symbol,
-        after: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
-      });
+      var current = claimedAllowance(ctx);
+      var delta = amountPhrase(amount);
+      if (current === null) {
+        view.sentence = text('sentence.increaseUnknown', { delta: delta });
+      } else {
+        var after = current + amount.value;
+        view.fields.push({
+          label: 'field.allowanceAfter',
+          value: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
+          format: 'raw',
+          emphasis: true,
+          tagKey: 'tag.byApp',
+        });
+        view.sentence = text('sentence.increase', {
+          delta: delta,
+          current: formatUnits(current, amount.token.decimals) + ' ' + amount.symbol,
+          after: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
+        });
+      }
       raise(view, 'caution');
     } else {
       view.badge = 'tag.capped';
@@ -763,7 +945,9 @@ window.VelaCS = window.VelaCS || {};
         view.sentence = text('sentence.burn');
         view.warnings.push({ tone: 'danger', key: 'warn.burn' });
         view.refuse = true;
-      } else if (row.identity.kind === 'own') {
+      } else if (row.identity.kind === 'own' && view.risk === 'normal') {
+        // Only ever from "normal": a caution already said (unknown decimals,
+        // coin sent along) is not taken back by where the tokens go.
         view.risk = 'safe';
       }
     });
@@ -798,7 +982,11 @@ window.VelaCS = window.VelaCS || {};
     }
     if (kind === 'swap') {
       var receive = rows.find(function (r) { return r.role === 'receive-amount'; });
-      return text('sentence.swap', { amount: amount, receive: receive ? amountPhrase(receive.amount) : '—' });
+      var receiveText = receive ? amountPhrase(receive.amount) : '—';
+      // Not "you receive" when what comes back goes to someone else (cs-2).
+      return view.returnsElsewhere
+        ? text('sentence.swapElsewhere', { amount: amount, receive: receiveText, to: shortAddress(view.returnsElsewhere) })
+        : text('sentence.swap', { amount: amount, receive: receiveText });
     }
     if (kind === 'vaultDeposit') return text('sentence.vaultDeposit', { amount: amount, vault: label(meta) });
     if (kind === 'vaultWithdraw') return text('sentence.vaultWithdraw', { amount: amount, vault: label(meta) });
@@ -925,6 +1113,7 @@ window.VelaCS = window.VelaCS || {};
       var mismatch = siwe.domain.toLowerCase() !== origin.toLowerCase();
       var siweDomain = visible(siwe.domain, view);
       view.intentKey = 'intent.login';
+      provenance(view, 'readMessage');
       view.hero = { kind: 'siwe', domain: siweDomain, statement: visible(siwe.statement, view), mismatch: mismatch };
       view.fields = [
         { label: 'field.claimedDomain', value: siweDomain, format: 'raw', warning: mismatch },
@@ -944,6 +1133,7 @@ window.VelaCS = window.VelaCS || {};
     }
 
     view.intentKey = 'intent.message';
+    provenance(view, 'readMessage');
     view.hero = { kind: 'message', text: visible(body, view) };
     view.sentence = text('sentence.message');
     view.tech = techFor('personal_sign (UTF-8)', null, payload, {});
@@ -1009,6 +1199,10 @@ window.VelaCS = window.VelaCS || {};
       var deadline = Number(message.deadline);
       var expired = deadline * 1000 < (ctx.now || Date.now());
       view.intentKey = 'intent.permit';
+      // A token's own permit when the token is one this page knows here;
+      // otherwise any contract can verify a struct of that shape.
+      if (reg.token(domain.verifyingContract, ctx.chainId)) provenance(view, 'readMessage');
+      else provenance(view, 'shape', { whatKey: 'shape.permit' });
       view.hero = { kind: 'amount', amount: amount, direction: 'allowance' };
       view.fields = [
         { label: 'field.spender', identity: spender, format: 'addressName', role: 'spender' },
@@ -1044,6 +1238,10 @@ window.VelaCS = window.VelaCS || {};
       var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);
       var pSpender = identify(message.spender, ctx);
       view.intentKey = 'intent.permit2';
+      // Permit2's struct is Permit2's only when Permit2 verifies it.
+      var isPermit2 = reg.contract(domain.verifyingContract, ctx.chainId);
+      if (isPermit2 && isPermit2.name === 'Permit2') provenance(view, 'readMessage');
+      else provenance(view, 'shape', { whatKey: 'shape.permit2' });
       view.hero = { kind: 'amount', amount: pAmount, direction: 'allowance' };
       view.fields = [
         { label: 'field.spender', identity: pSpender, format: 'addressName', role: 'spender' },
@@ -1066,12 +1264,15 @@ window.VelaCS = window.VelaCS || {};
           { name: 'spender', value: message.spender },
           { name: 'expiration', value: String(details.expiration || message.deadline) },
         ],
-        addresses: [{ roleKey: 'ui.verifyingContract', name: 'Permit2', address: domain.verifyingContract }],
+        // Named from the table, like every other address: a struct verified
+        // by some other contract was labelled "Permit2" here.
+        addresses: [{ roleKey: 'ui.verifyingContract', name: label(view.contract), address: domain.verifyingContract }],
       });
       return view;
     }
 
     view.intentKey = 'intent.typed';
+    provenance(view, 'readMessage');
     view.level = 2;
     view.risk = 'caution';
     view.hero = { kind: 'code', title: visible(primary, view), sub: visible(domain.name || null, view) };
@@ -1749,7 +1950,8 @@ window.VelaCS = window.VelaCS || {};
       // offer the button for exactly the tampered operation it exists to stop.
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
       liftLegWarnings(view);
-      if (ctx.simulation) view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
+      if (ctx.simulation && ctx.simulation.rows) view.balance = claimedBalance(ctx.simulation, view);
+      provenance(view, 'read');
       view.tech = techFor('wallet_sendCalls (EIP-5792)', null, null, {});
     } else if (intent.method === 'personal_sign') {
       resolvePersonalSign(intent, ctx, view);

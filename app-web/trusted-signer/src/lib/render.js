@@ -38,6 +38,8 @@ window.VelaCS = window.VelaCS || {};
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    triangle: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+    circle: '<circle cx="12" cy="12" r="9"/>',
   };
 
   function icon(name, className) {
@@ -246,6 +248,9 @@ window.VelaCS = window.VelaCS || {};
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
         field.valueKey ? t(field.valueKey) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
+      // Whose figure it is, when it is not this page's (an allowance the app
+      // says the spender has now).
+      if (field.tagKey) value.appendChild(el('span', 'tag', t(field.tagKey)));
     }
     row.appendChild(value);
     return row;
@@ -259,6 +264,8 @@ window.VelaCS = window.VelaCS || {};
       head.appendChild(el('span', 'tag tag-bad', t('tag.danger')));
     }
     card.appendChild(head);
+    var source = provenanceLine(leg.view);
+    if (source) card.appendChild(source);
     leg.view.fields
       .filter(function (f) { return !f.detail && !f.consumedByHero; })
       .forEach(function (field) { card.appendChild(fieldRow(field)); });
@@ -334,6 +341,7 @@ window.VelaCS = window.VelaCS || {};
     if (tech.sim) {
       body.appendChild(el('div', 'tech-label', t('ui.simulation')));
       body.appendChild(el('div', 'tech-sim', typeof tech.sim === 'string' ? tech.sim : t(tech.sim)));
+      if (tech.simClaimed) body.appendChild(el('div', 'tech-note', t('ui.simClaimed')));
     }
 
     if (view.digest) {
@@ -518,7 +526,38 @@ window.VelaCS = window.VelaCS || {};
     var label = el('h1', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
     head.appendChild(label);
+    var source = provenanceLine(view);
+    if (source) head.appendChild(source);
     return head;
+  }
+
+  // The mark and the words for each source (resolve.js `provenance`): the
+  // same three marks as the web wallet — ✓ certain, △ interpreted, ○ claimed.
+  var PROVENANCE = {
+    read: { icon: 'check', key: 'prov.read' },
+    readMessage: { icon: 'check', key: 'prov.readMessage' },
+    described: { icon: 'triangle', key: 'prov.described' },
+    fourbyte: { icon: 'triangle', key: 'prov.fourbyte' },
+    shape: { icon: 'triangle', key: 'prov.shape' },
+    claimed: { icon: 'circle', key: 'prov.claimed' },
+  };
+
+  /**
+   * One quiet line under the intent: where its reading came from. A
+   * description is said as one ("Described by … — a description, not a
+   * guarantee"), a resemblance as one ("Looks like … — shape only").
+   */
+  function provenanceLine(view) {
+    var p = view.provenance;
+    var kind = p && PROVENANCE[p.kind];
+    if (!kind) return null;
+    var line = el('p', 'provenance provenance-' + p.kind);
+    line.appendChild(icon(kind.icon, 'provenance-mark'));
+    line.appendChild(el('span', 'provenance-text', t(kind.key, {
+      what: p.whatKey ? t(p.whatKey) : '',
+      source: p.contract ? t('prov.sourcePage', { contract: p.contract }) : '',
+    })));
+    return line;
   }
 
   /**

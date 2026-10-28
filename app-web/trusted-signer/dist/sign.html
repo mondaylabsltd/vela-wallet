@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UKhgNYww3KAk7tbF6prKMVl40aLVKZ2wpi27cfyXVuk='; style-src 'sha256-+/lDGH+/xWr4mTGgQql+2lonVaOXCwuXvNxpp5ocJBQ='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-5loCmfKuiPqZmqKQDRFVRQvIh6DUHmBrMomNy1VmIHE='; style-src 'sha256-nyGEGWA2d2ivXuO5mEBvbsLPj40gslMrLQFTXPOuIjY='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -364,6 +364,31 @@ body {
   line-height: var(--leading-normal);
   color: var(--color-fg-muted);
 }
+
+/* Where the intent's reading came from, under it (the web wallet's line):
+   ✓ read by this page, △ a description or a resemblance, ○ the app's word.
+   Muted words; only the mark carries the tone. */
+.provenance {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-fg-muted);
+}
+.provenance-mark {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: 1px;
+}
+.provenance-read .provenance-mark,
+.provenance-readMessage .provenance-mark { color: var(--color-success-base); }
+.provenance-described .provenance-mark,
+.provenance-fourbyte .provenance-mark,
+.provenance-shape .provenance-mark { color: var(--color-warning-base); }
+.provenance-claimed .provenance-mark { color: var(--color-fg-subtle); }
+.leg .provenance { margin-bottom: var(--space-sm); }
 
 /* Everything the request says, in the app's block rhythm (SigningBody). */
 .blocks {
@@ -1226,7 +1251,7 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
-   * t('sentence.transfer', { amount: '1,000 USDC', to: 'Alice Chen' })
+   * t('sentence.transfer', { amount: '1,000 USDC', to: '0xaF5e…b3e1' })
    *
    * A missing key returns the key itself rather than an empty string: a hole in
    * a signing prompt must be loud, never invisible.
@@ -1334,7 +1359,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.sendSelf': 'You move {amount} to another account of your own — nothing leaves you.',
   'sentence.approve': 'You let {spender} spend up to {amount} of yours.',
   'sentence.approveUnlimited': 'You let {spender} spend all of your {symbol} — no ceiling.',
-  'sentence.increase': 'This ADDS, it does not set: {current} now, {after} once signed.',
+  'sentence.increase': 'This ADDS {delta}, it does not set it: the app says {current} now, so {after} once signed.',
   'sentence.revoke': 'You take back the {token} approval — they can no longer touch it.',
   'sentence.swap': 'You pay {amount} and receive at least {receive}.',
   'sentence.vaultDeposit': 'You deposit {amount} into {vault}.',
@@ -1347,7 +1372,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.burn': 'The recipient is the token contract itself. Coins sent there reach nobody — they are stuck for good.',
   'sentence.abiOnly': 'This contract is source-verified and every parameter decodes, but nobody wrote down what they mean. Below are facts, not explanations.',
   'sentence.fourbyte': 'Only the function name {name} was recovered, from a public 4-byte database. Parameters are read by type; nobody vouches for the meaning.',
-  'sentence.blindSim': 'This call cannot be decoded. Below is what simulating it produced — asset flow is computed on-chain and cannot be faked by the site.',
+  'sentence.blindSim': 'This call cannot be decoded. Below is what the requester says simulating it produced — this page did not run it, so it is the requester’s word, not a check.',
   'sentence.blindUndeclared': 'This call cannot be decoded. Simulation shows it moves the assets below — the site never said so.',
   'sentence.blindNothing': 'It cannot be decoded and it cannot be simulated. Nobody currently knows what signing this would do.',
   'sentence.message': 'You sign this text. It never reaches the chain and moves no assets — but the site can use it to prove this account is yours.',
@@ -1371,7 +1396,7 @@ window.VelaCS.i18n.register('en', {
   'warn.siweMismatch': 'Domain mismatch — a classic phishing move. The signature would sign you into a different site.',
   'warn.ethSign': 'Unverifiable request — legitimate apps almost never use eth_sign. Refuse unless you are certain.',
   'warn.hexData': 'Unreadable bytes — legitimate sites almost never ask for this.',
-  'warn.blindSim': 'This function is not understood. Only the simulation can be relied on.',
+  'warn.blindSim': 'Unknowable — this page can’t read this call, and the simulation is the requester’s, not a check. Refuse unless you fully trust the requester.',
   'warn.blindUndeclared': 'Simulation exposed an outflow the site never declared — refusing is the safe move.',
   'warn.blindNothing': 'Unknowable — refuse unless you fully trust the requester.',
   'warn.nested': 'Nested call: you sign the outer layer, the inner one spends. Check every leg below.',
@@ -1556,6 +1581,31 @@ window.VelaCS.i18n.register('en', {
   'tag.siteCallsItself': 'calls itself “{name}”',
   'ui.requestDamaged': 'This signing request arrived damaged and can’t be read, so nothing was signed. Go back to Vela and start it again.',
   'refuse.badKeyId': 'This request names its key in a form that can’t be read, so the browser can’t be asked for it. Not signing.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Read by this page from the transaction',
+  'prov.readMessage': 'Read by this page from what you sign',
+  'prov.described': 'Described by {source} — a description, not a guarantee',
+  'prov.sourcePage': 'this page’s built-in notes on {contract}',
+  'prov.fourbyte': 'Function name from a public database (anyone can register one)',
+  'prov.shape': 'Looks like {what} — shape only, not checked',
+  'prov.claimed': 'Said by the requester — its simulation, not checked by this page',
+  'shape.erc20': 'a token call (ERC-20)',
+  'shape.erc721': 'an NFT call (ERC-721)',
+  'shape.permit': 'a token permit',
+  'shape.permit2': 'a Permit2 approval',
+  'shape.vaultDeposit': 'a vault deposit (ERC-4626)',
+  'shape.vaultWithdraw': 'a vault withdrawal (ERC-4626)',
+  'shape.oneInchSwap': 'a 1inch swap',
+  'shape.uniswapV2Swap': 'a Uniswap swap',
+  'shape.safeBatch': 'a Safe batch',
+  'shape.safeExec': 'a Safe transaction',
+  'sentence.shapeOnly': 'This page has no description for this contract. Every parameter below is read from the bytes by its type; what the contract does with them is up to the contract.',
+  'sentence.swapElsewhere': 'You pay {amount}; at least {receive} goes to {to}, not to this account.',
+  'sentence.increaseUnknown': 'This ADDS {delta} to whatever is already allowed — it does not set it. This page can’t see the current allowance.',
+  'warn.notThisAccount': 'Goes to an address that is not this account ({to}) — what this gives back would not reach you.',
+  'warn.dustMinimum': 'The least this accepts in return is {amount} — next to nothing. If the price moves or someone trades ahead of you, almost nothing may come back.',
+  'tag.byApp': 'per the app',
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -1642,7 +1692,7 @@ window.VelaCS.i18n.register('zh', {
   'sentence.sendSelf': '你把 {amount} 转到你自己的另一个账户 —— 资产没有离开你。',
   'sentence.approve': '你允许 {spender} 最多动用你 {amount}。',
   'sentence.approveUnlimited': '你允许 {spender} 动用你全部 {symbol} —— 没有上限。',
-  'sentence.increase': '这是「增加」不是「设置」：现在是 {current}，签完变成 {after}。',
+  'sentence.increase': '这是「增加」{delta}，不是「设置」：App 说现在是 {current}，签完就是 {after}。',
   'sentence.revoke': '你要收回 {token} 的授权 —— 对方之后再也动不了你的这笔代币。',
   'sentence.swap': '你用 {amount} 兑换，至少收到 {receive}。',
   'sentence.vaultDeposit': '你把 {amount} 存进 {vault}。',
@@ -1655,7 +1705,7 @@ window.VelaCS.i18n.register('zh', {
   'sentence.burn': '接收方填的是这枚代币自己的合约地址。转进去的币不会到任何人手上 —— 它们会永久卡在那里。',
   'sentence.abiOnly': '这个合约的源码已验证，参数可以全部解开，但没有人为它写过含义说明。下面是事实，不是解释。',
   'sentence.fourbyte': '只从 4 字节数据库认出了函数名 {name}。参数按类型解读，含义无人担保。',
-  'sentence.blindSim': '这笔调用无法解码。以下是模拟执行的结果 —— 资产流向是链上算出来的，站点伪造不了。',
+  'sentence.blindSim': '这笔调用无法解码。下面是请求方说的模拟结果 —— 本页没有跑过，这是它的说法，不是核实。',
   'sentence.blindUndeclared': '这笔调用无法解码。模拟显示它会转走下面这些资产 —— 站点没有声明这一点。',
   'sentence.blindNothing': '既解不开这笔调用，也模拟不出结果。签下去会发生什么，现在没有任何人知道。',
   'sentence.message': '你为这段文字签名。它不上链、不动资产 —— 但站点可以拿它证明这个账户是你。',
@@ -1680,7 +1730,7 @@ window.VelaCS.i18n.register('zh', {
   'warn.siweMismatch': '域名不匹配 — 典型钓鱼手法。签名会被拿去登录另一个站点。',
   'warn.ethSign': '无法核实的请求 — 正规应用几乎从不使用 eth_sign。除非你十分确定，否则请拒绝。',
   'warn.hexData': '看不懂的字节 — 正规站点几乎不会这样要求签名。',
-  'warn.blindSim': '看不懂这个函数。只有模拟结果可以依赖。',
+  'warn.blindSim': '无从得知 —— 本页读不懂这笔调用，模拟是请求方给的，不是核实。除非完全信任请求方，否则拒绝。',
   'warn.blindUndeclared': '模拟揭穿了未声明的流出 — 建议拒绝签名。',
   'warn.blindNothing': '无法预知 — 除非你完全信任对方，否则请拒绝。',
   'warn.nested': '嵌套调用：你签的是外层，真正花钱的是内层。逐笔核对下面每一条。',
@@ -1859,6 +1909,31 @@ window.VelaCS.i18n.register('zh', {
   'tag.siteCallsItself': '自称「{name}」',
   'ui.requestDamaged': '这个签名请求到达时已经损坏，无法读取，所以什么都没有签。请回到 Vela 重新发起。',
   'refuse.badKeyId': '这个请求给出的钥匙标识无法读取，没法让浏览器去找这把钥匙。不签。',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': '本页从交易本身读出',
+  'prov.readMessage': '本页从你要签的内容读出',
+  'prov.described': '由{source}描述 —— 只是描述，不是保证',
+  'prov.sourcePage': '本页自带的「{contract}」说明',
+  'prov.fourbyte': '函数名来自公共数据库（谁都能登记）',
+  'prov.shape': '看起来像{what} —— 只看形状，未经核实',
+  'prov.claimed': '请求方的说法 —— 它的模拟，本页没有核实',
+  'shape.erc20': '代币调用（ERC-20）',
+  'shape.erc721': 'NFT 调用（ERC-721）',
+  'shape.permit': '代币 permit 授权',
+  'shape.permit2': 'Permit2 授权',
+  'shape.vaultDeposit': '金库存入（ERC-4626）',
+  'shape.vaultWithdraw': '金库取出（ERC-4626）',
+  'shape.oneInchSwap': '1inch 兑换',
+  'shape.uniswapV2Swap': 'Uniswap 兑换',
+  'shape.safeBatch': 'Safe 批量调用',
+  'shape.safeExec': 'Safe 交易',
+  'sentence.shapeOnly': '本页没有这个合约的说明。下面每个参数都按类型从字节里读出；合约拿它们做什么，由合约自己决定。',
+  'sentence.swapElsewhere': '你付出 {amount}；至少 {receive} 会转到 {to}，不是本账户。',
+  'sentence.increaseUnknown': '这是在已有额度上「增加」{delta}，不是「设置」。本页看不到当前额度。',
+  'warn.notThisAccount': '去向不是本账户（{to}）—— 换回来的东西不会到你手里。',
+  'warn.dustMinimum': '它最少只要求换回 {amount} —— 几乎等于零。价格一变或有人抢先交易，你可能几乎什么都拿不回来。',
+  'tag.byApp': 'App 的说法',
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -1940,7 +2015,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.sendSelf': '你把 {amount} 轉到你自己的另一個帳戶——資產沒有離開你。',
   'sentence.approve': '你允許 {spender} 最多動用你的 {amount}。',
   'sentence.approveUnlimited': '你允許 {spender} 動用你全部的 {symbol}——沒有上限。',
-  'sentence.increase': '這是「增加」，不是「設定」：目前是 {current}，簽署後變成 {after}。',
+  'sentence.increase': '這是「增加」{delta}，不是「設定」：App 說目前是 {current}，簽署後就是 {after}。',
   'sentence.revoke': '你收回 {token} 的授權——對方之後再也動不了它。',
   'sentence.swap': '你用 {amount} 兌換，至少收到 {receive}。',
   'sentence.vaultDeposit': '你把 {amount} 存入 {vault}。',
@@ -1953,7 +2028,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'sentence.burn': '接收方填的是這個代幣自己的合約地址。轉進去的幣不會到任何人手上——會永遠卡在那裡。',
   'sentence.abiOnly': '這個合約的原始碼已驗證，所有參數都能解碼，但沒有人寫下它們的含義。下面列的是事實，不是解釋。',
   'sentence.fourbyte': '只從公開的 4-byte 資料庫找到函式名稱 {name}。參數依類型解讀，含義沒有人擔保。',
-  'sentence.blindSim': '這筆呼叫無法解碼。以下是模擬執行的結果——資產流向是在鏈上算出來的，網站無法偽造。',
+  'sentence.blindSim': '這筆呼叫無法解碼。以下是請求方說的模擬結果——本頁沒有執行過，這是它的說法，不是核實。',
   'sentence.blindUndeclared': '這筆呼叫無法解碼。模擬顯示它會轉走下面這些資產——網站從沒說過這一點。',
   'sentence.blindNothing': '既無法解碼，也無法模擬。簽署後會發生什麼，目前沒有人知道。',
   'sentence.message': '你簽署這段文字。它不會上鏈，也不會動用任何資產——但網站可以用它證明這個帳戶是你的。',
@@ -1977,7 +2052,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'warn.siweMismatch': '網域不符——典型的釣魚手法。這個簽章會讓你登入另一個網站。',
   'warn.ethSign': '無法驗證的請求——正當的應用程式幾乎不會使用 eth_sign。除非你十分確定，否則請拒絕。',
   'warn.hexData': '看不懂的位元組——正當的網站幾乎不會要求簽署這種內容。',
-  'warn.blindSim': '無法理解這個函式。只有模擬結果可以依靠。',
+  'warn.blindSim': '無從得知——本頁讀不懂這筆呼叫，模擬是請求方提供的，不是核實。除非完全信任請求方，否則請拒絕。',
   'warn.blindUndeclared': '模擬揭露了網站從未說明的資產流出——拒絕才是安全的做法。',
   'warn.blindNothing': '無從得知——除非你完全信任請求方，否則請拒絕。',
   'warn.nested': '巢狀呼叫：你簽署的是外層，實際花錢的是內層。請逐一核對下面每一項。',
@@ -2141,6 +2216,31 @@ window.VelaCS.i18n.register('zh-TW', {
   'tag.siteCallsItself': '自稱「{name}」',
   'ui.requestDamaged': '這個簽署請求到達時已經損壞，無法讀取，所以什麼都沒有簽。請回到 Vela 重新發起。',
   'refuse.badKeyId': '這個請求給出的金鑰識別碼無法讀取，無法請瀏覽器找這把金鑰。不簽。',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': '本頁從交易本身讀出',
+  'prov.readMessage': '本頁從你要簽署的內容讀出',
+  'prov.described': '由{source}描述——只是描述，不是保證',
+  'prov.sourcePage': '本頁內建的「{contract}」說明',
+  'prov.fourbyte': '函式名稱來自公開資料庫（任何人都能登記）',
+  'prov.shape': '看起來像{what}——只看形狀，未經核實',
+  'prov.claimed': '請求方的說法——它的模擬，本頁沒有核實',
+  'shape.erc20': '代幣呼叫（ERC-20）',
+  'shape.erc721': 'NFT 呼叫（ERC-721）',
+  'shape.permit': '代幣 permit 授權',
+  'shape.permit2': 'Permit2 授權',
+  'shape.vaultDeposit': '金庫存入（ERC-4626）',
+  'shape.vaultWithdraw': '金庫提領（ERC-4626）',
+  'shape.oneInchSwap': '1inch 兌換',
+  'shape.uniswapV2Swap': 'Uniswap 兌換',
+  'shape.safeBatch': 'Safe 批次呼叫',
+  'shape.safeExec': 'Safe 交易',
+  'sentence.shapeOnly': '本頁沒有這個合約的說明。下面每個參數都依類型從位元組讀出；合約要拿它們做什麼，由合約自己決定。',
+  'sentence.swapElsewhere': '你付出 {amount}；至少 {receive} 會轉到 {to}，不是本帳戶。',
+  'sentence.increaseUnknown': '這是在既有額度上「增加」{delta}，不是「設定」。本頁看不到目前的額度。',
+  'warn.notThisAccount': '去向不是本帳戶（{to}）——換回來的東西不會到你手上。',
+  'warn.dustMinimum': '它最少只要求換回 {amount}——幾乎等於零。價格一變或有人搶先交易，你可能幾乎什麼都拿不回來。',
+  'tag.byApp': 'App 的說法',
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2222,7 +2322,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'sentence.sendSelf': '你將 {amount} 轉到你自己的另一個帳戶——資產沒有離開你。',
   'sentence.approve': '你允許 {spender} 最多動用你的 {amount}。',
   'sentence.approveUnlimited': '你允許 {spender} 動用你全部 {symbol}——沒有上限。',
-  'sentence.increase': '這是「增加」，不是「設定」：目前是 {current}，簽署後變成 {after}。',
+  'sentence.increase': '這是「增加」{delta}，不是「設定」：App 說目前是 {current}，簽署後便是 {after}。',
   'sentence.revoke': '你收回 {token} 的授權——對方以後再也無法動用它。',
   'sentence.swap': '你以 {amount} 兌換，最少收到 {receive}。',
   'sentence.vaultDeposit': '你將 {amount} 存入 {vault}。',
@@ -2235,7 +2335,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'sentence.burn': '接收方填的是這種代幣自己的合約地址。轉進去的幣不會到達任何人手上——會永遠卡在那裏。',
   'sentence.abiOnly': '這個合約的原始碼已驗證，所有參數都能解碼，但沒有人寫下它們的含義。以下是事實，不是解釋。',
   'sentence.fourbyte': '只從公開的 4-byte 資料庫找到函數名稱 {name}。參數按類型解讀，含義無人擔保。',
-  'sentence.blindSim': '這筆呼叫無法解碼。以下是模擬執行的結果——資產流向是在鏈上計算出來的，網站無法偽造。',
+  'sentence.blindSim': '這筆呼叫無法解碼。以下是請求方所說的模擬結果——本頁沒有執行過，這是它的說法，並非核實。',
   'sentence.blindUndeclared': '這筆呼叫無法解碼。模擬顯示它會轉走以下資產——網站從未提及這一點。',
   'sentence.blindNothing': '既無法解碼，也無法模擬。簽署後會發生甚麼，目前沒有人知道。',
   'sentence.message': '你為這段文字簽名。它不會上鏈，也不會動用任何資產——但網站可以用它證明這個帳戶屬於你。',
@@ -2259,7 +2359,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'warn.siweMismatch': '網域不符——典型的釣魚手法。這個簽名會令你登入另一個網站。',
   'warn.ethSign': '無法核實的請求——正當的應用幾乎從不使用 eth_sign。除非你十分肯定，否則請拒絕。',
   'warn.hexData': '無法閱讀的位元組——正當的網站幾乎不會要求簽署這類內容。',
-  'warn.blindSim': '無法理解這個函數。只有模擬結果可以依靠。',
+  'warn.blindSim': '無從得知——本頁讀不懂這筆呼叫，模擬由請求方提供，並非核實。除非完全信任請求方，否則請拒絕。',
   'warn.blindUndeclared': '模擬揭示了網站從未聲明的資產流出——拒絕才是安全的做法。',
   'warn.blindNothing': '無從得知——除非你完全信任請求方，否則請拒絕。',
   'warn.nested': '嵌套呼叫：你簽署的是外層，真正動用資金的是內層。請逐項核對下面每一部分。',
@@ -2423,6 +2523,31 @@ window.VelaCS.i18n.register('zh-HK', {
   'tag.siteCallsItself': '自稱「{name}」',
   'ui.requestDamaged': '這個簽署請求到達時已經損壞，無法讀取，所以甚麼都沒有簽。請返回 Vela 重新開始。',
   'refuse.badKeyId': '這個請求給出的鎖匙識別碼無法讀取，無法請瀏覽器找這條鎖匙。不簽。',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': '本頁從交易本身讀出',
+  'prov.readMessage': '本頁從你要簽署的內容讀出',
+  'prov.described': '由{source}描述——只是描述，並非保證',
+  'prov.sourcePage': '本頁內置的「{contract}」說明',
+  'prov.fourbyte': '函數名稱來自公開資料庫（任何人都可以登記）',
+  'prov.shape': '看來像{what}——只看形狀，未經核實',
+  'prov.claimed': '請求方的說法——它的模擬，本頁沒有核實',
+  'shape.erc20': '代幣調用（ERC-20）',
+  'shape.erc721': 'NFT 調用（ERC-721）',
+  'shape.permit': '代幣 permit 授權',
+  'shape.permit2': 'Permit2 授權',
+  'shape.vaultDeposit': '金庫存入（ERC-4626）',
+  'shape.vaultWithdraw': '金庫提取（ERC-4626）',
+  'shape.oneInchSwap': '1inch 兌換',
+  'shape.uniswapV2Swap': 'Uniswap 兌換',
+  'shape.safeBatch': 'Safe 批量調用',
+  'shape.safeExec': 'Safe 交易',
+  'sentence.shapeOnly': '本頁沒有這個合約的說明。以下每個參數都按類型從位元組讀出；合約拿它們做甚麼，由合約自己決定。',
+  'sentence.swapElsewhere': '你付出 {amount}；最少 {receive} 會轉到 {to}，並非本帳戶。',
+  'sentence.increaseUnknown': '這是在現有額度上「增加」{delta}，不是「設定」。本頁看不到目前的額度。',
+  'warn.notThisAccount': '去向並非本帳戶（{to}）——換回來的東西不會到你手上。',
+  'warn.dustMinimum': '它最少只要求換回 {amount}——幾乎等於零。價格一變或有人搶先交易，你可能差不多甚麼都拿不回來。',
+  'tag.byApp': 'App 的說法',
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -2504,7 +2629,7 @@ window.VelaCS.i18n.register('ja', {
   'sentence.sendSelf': '{amount} を自分の別のアカウントに移します — あなたの手元から出ていくものはありません。',
   'sentence.approve': '{spender} があなたの資産を最大 {amount} まで使えるように許可します。',
   'sentence.approveUnlimited': '{spender} があなたの {symbol} をすべて使えるように許可します — 上限はありません。',
-  'sentence.increase': 'これは上限を「設定」するのではなく「上乗せ」します：現在は {current}、署名すると {after} になります。',
+  'sentence.increase': 'これは {delta} を「上乗せ」するもので、「設定」ではありません：アプリによると現在は {current}、署名すると {after} になります。',
   'sentence.revoke': '{token} の承認を取り消します — 相手はもうこのトークンに手を出せなくなります。',
   'sentence.swap': '{amount} を支払い、少なくとも {receive} を受け取ります。',
   'sentence.vaultDeposit': '{amount} を {vault} に預け入れます。',
@@ -2517,7 +2642,7 @@ window.VelaCS.i18n.register('ja', {
   'sentence.burn': '宛先はトークンのコントラクトそのものです。そこへ送ったコインは誰にも届かず、永久に動かせなくなります。',
   'sentence.abiOnly': 'このコントラクトはソース検証済みで、すべてのパラメータをデコードできますが、その意味を書き記した人はいません。以下は事実であり、説明ではありません。',
   'sentence.fourbyte': '公開の 4-byte データベースから、関数名 {name} だけが判明しました。パラメータは型から読み取ったもので、その意味は誰も保証していません。',
-  'sentence.blindSim': 'この呼び出しはデコードできません。以下はシミュレーションの結果です — 資産の動きはオンチェーンで計算されたもので、サイトが偽ることはできません。',
+  'sentence.blindSim': 'この呼び出しはデコードできません。以下は要求元が言うシミュレーション結果です — このページが実行したものではないので、確認ではなく要求元の言い分です。',
   'sentence.blindUndeclared': 'この呼び出しはデコードできません。シミュレーションでは以下の資産が動きます — サイトはそのことを一切伝えていません。',
   'sentence.blindNothing': 'デコードもシミュレーションもできません。これに署名すると何が起こるのか、今は誰にもわかりません。',
   'sentence.message': 'このテキストに署名します。チェーンには載らず、資産も動きません — ただし、サイトはこれを使って、このアカウントがあなたのものだと証明できます。',
@@ -2541,7 +2666,7 @@ window.VelaCS.i18n.register('ja', {
   'warn.siweMismatch': 'ドメインが一致しません — 典型的なフィッシングの手口です。この署名で、別のサイトにサインインさせられてしまいます。',
   'warn.ethSign': '検証できないリクエストです — 正規のアプリが eth_sign を使うことはほとんどありません。確信がない限り拒否してください。',
   'warn.hexData': '読めないバイト列です — 正規のサイトがこれを求めることはほとんどありません。',
-  'warn.blindSim': 'この関数が何をするのかはわかっていません。頼りにできるのはシミュレーションだけです。',
+  'warn.blindSim': '何が起きるかわかりません — このページはこの呼び出しを読めず、シミュレーションは要求元のもので確認ではありません。要求元を完全に信頼できない限り拒否してください。',
   'warn.blindUndeclared': 'シミュレーションで、サイトが申告していない資産の流出が見つかりました — 拒否するのが安全です。',
   'warn.blindNothing': '何が起こるか知る方法がありません — 要求元を完全に信頼できる場合以外は拒否してください。',
   'warn.nested': '入れ子の呼び出し：あなたが署名するのは外側の層で、実際にお金を使うのは内側の層です。以下の各ステップをすべて確認してください。',
@@ -2703,6 +2828,31 @@ window.VelaCS.i18n.register('ja', {
   'tag.siteCallsItself': '「{name}」と名乗っています',
   'ui.requestDamaged': 'この署名リクエストは壊れた状態で届いたため読み取れず、何も署名していません。Vela に戻って、もう一度始めてください。',
   'refuse.badKeyId': 'このリクエストが示すキーの ID を読み取れないため、ブラウザーにそのキーを求められません。署名しません。',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'このページが取引そのものから読み取りました',
+  'prov.readMessage': 'このページが署名する内容から読み取りました',
+  'prov.described': '{source}による説明 — 説明であって保証ではありません',
+  'prov.sourcePage': 'このページ内蔵の「{contract}」メモ',
+  'prov.fourbyte': '関数名は公開データベースから（誰でも登録できます）',
+  'prov.shape': '{what}のように見えます — 形だけで、確認していません',
+  'prov.claimed': '要求元の言い分です — そのシミュレーションで、このページは確認していません',
+  'shape.erc20': 'トークンの呼び出し（ERC-20）',
+  'shape.erc721': 'NFT の呼び出し（ERC-721）',
+  'shape.permit': 'トークンの permit',
+  'shape.permit2': 'Permit2 の承認',
+  'shape.vaultDeposit': 'ボールトへの預け入れ（ERC-4626）',
+  'shape.vaultWithdraw': 'ボールトからの引き出し（ERC-4626）',
+  'shape.oneInchSwap': '1inch のスワップ',
+  'shape.uniswapV2Swap': 'Uniswap のスワップ',
+  'shape.safeBatch': 'Safe の一括呼び出し',
+  'shape.safeExec': 'Safe のトランザクション',
+  'sentence.shapeOnly': 'このページにはこのコントラクトの説明がありません。以下の各パラメーターは型に従ってバイト列から読み取ったものです。それをどう使うかはコントラクト次第です。',
+  'sentence.swapElsewhere': '{amount} を支払い、少なくとも {receive} が {to} に送られます — このアカウントではありません。',
+  'sentence.increaseUnknown': 'これは既存の上限に {delta} を「上乗せ」するもので、「設定」ではありません。このページには現在の上限が見えません。',
+  'warn.notThisAccount': 'このアカウントではないアドレス（{to}）に送られます — 受け取るはずのものはあなたに届きません。',
+  'warn.dustMinimum': '受け取る最低額は {amount} — ほぼゼロです。価格が動いたり先回りの取引をされたりすると、ほとんど何も戻ってこない可能性があります。',
+  'tag.byApp': 'アプリによる',
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -2784,7 +2934,7 @@ window.VelaCS.i18n.register('ko', {
   'sentence.sendSelf': '{amount}을(를) 내 다른 계정으로 옮깁니다 — 내게서 빠져나가는 것은 없습니다.',
   'sentence.approve': '{spender}이(가) 내 자산을 최대 {amount}까지 사용하도록 허용합니다.',
   'sentence.approveUnlimited': '{spender}이(가) 내 {symbol} 전부를 사용하도록 허용합니다 — 한도가 없습니다.',
-  'sentence.increase': '이것은 한도를 ‘설정’하는 것이 아니라 ‘추가’합니다. 현재 {current}, 서명하면 {after}(으)로 바뀝니다.',
+  'sentence.increase': '이것은 {delta}을(를) ‘추가’하는 것이지 ‘설정’하는 것이 아닙니다. 앱에 따르면 현재 {current}, 서명하면 {after}이(가) 됩니다.',
   'sentence.revoke': '{token} 승인을 철회합니다 — 상대는 더 이상 이 토큰에 손댈 수 없습니다.',
   'sentence.swap': '{amount}을(를) 지불하고 최소 {receive}을(를) 받습니다.',
   'sentence.vaultDeposit': '{vault}에 {amount}을(를) 예치합니다.',
@@ -2797,7 +2947,7 @@ window.VelaCS.i18n.register('ko', {
   'sentence.burn': '받는 곳이 토큰 컨트랙트 자체입니다. 그곳으로 보낸 코인은 아무에게도 가지 않고 영원히 묶입니다.',
   'sentence.abiOnly': '이 컨트랙트는 소스가 검증되었고 모든 매개변수가 디코딩되지만, 그 의미를 적어 둔 사람은 없습니다. 아래는 설명이 아니라 사실입니다.',
   'sentence.fourbyte': '공개 4-byte 데이터베이스에서 함수 이름 {name}만 알아냈습니다. 매개변수는 타입에 따라 읽은 것이며, 그 의미는 누구도 보증하지 않습니다.',
-  'sentence.blindSim': '이 호출은 디코딩할 수 없습니다. 아래는 시뮬레이션 결과입니다 — 자산 흐름은 온체인에서 계산되므로 사이트가 위조할 수 없습니다.',
+  'sentence.blindSim': '이 호출은 디코딩할 수 없습니다. 아래는 요청한 곳이 말하는 시뮬레이션 결과입니다 — 이 페이지가 실행한 것이 아니므로 확인이 아니라 그쪽의 주장입니다.',
   'sentence.blindUndeclared': '이 호출은 디코딩할 수 없습니다. 시뮬레이션 결과 아래 자산이 움직입니다 — 사이트는 이를 전혀 알리지 않았습니다.',
   'sentence.blindNothing': '디코딩도 시뮬레이션도 할 수 없습니다. 여기에 서명하면 무슨 일이 일어날지 지금은 아무도 모릅니다.',
   'sentence.message': '이 텍스트에 서명합니다. 체인에 기록되지 않고 자산도 움직이지 않습니다 — 하지만 사이트는 이것으로 이 계정이 내 것임을 증명할 수 있습니다.',
@@ -2821,7 +2971,7 @@ window.VelaCS.i18n.register('ko', {
   'warn.siweMismatch': '도메인 불일치 — 전형적인 피싱 수법입니다. 이 서명으로 다른 사이트에 로그인하게 됩니다.',
   'warn.ethSign': '확인할 수 없는 요청입니다 — 정상적인 앱은 eth_sign을 거의 사용하지 않습니다. 확신이 없다면 거부하세요.',
   'warn.hexData': '읽을 수 없는 바이트입니다 — 정상적인 사이트는 이런 것을 거의 요청하지 않습니다.',
-  'warn.blindSim': '이 함수가 무엇을 하는지 알 수 없습니다. 믿을 수 있는 것은 시뮬레이션뿐입니다.',
+  'warn.blindSim': '알 수 없음 — 이 페이지는 이 호출을 읽을 수 없고, 시뮬레이션은 요청한 곳이 준 것이라 확인이 아닙니다. 요청한 곳을 완전히 신뢰하지 않는다면 거부하세요.',
   'warn.blindUndeclared': '시뮬레이션에서 사이트가 밝히지 않은 자산 유출이 드러났습니다 — 거부하는 것이 안전합니다.',
   'warn.blindNothing': '알 방법이 없습니다 — 요청한 곳을 완전히 신뢰하지 않는다면 거부하세요.',
   'warn.nested': '중첩 호출: 서명하는 것은 바깥 계층이고, 실제로 돈을 쓰는 것은 안쪽 계층입니다. 아래 각 단계를 모두 확인하세요.',
@@ -2983,6 +3133,31 @@ window.VelaCS.i18n.register('ko', {
   'tag.siteCallsItself': '스스로 "{name}"(이)라고 밝힘',
   'ui.requestDamaged': '이 서명 요청은 손상된 채로 도착해 읽을 수 없으므로 아무것도 서명하지 않았습니다. Vela로 돌아가 다시 시작하세요.',
   'refuse.badKeyId': '이 요청이 알려 준 키 ID를 읽을 수 없어 브라우저에 해당 키를 요청할 수 없습니다. 서명하지 않습니다.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': '이 페이지가 거래 자체에서 읽었습니다',
+  'prov.readMessage': '이 페이지가 서명할 내용에서 읽었습니다',
+  'prov.described': '{source}에 따른 설명 — 설명일 뿐 보증이 아닙니다',
+  'prov.sourcePage': '이 페이지에 내장된 {contract} 메모',
+  'prov.fourbyte': '함수 이름은 공개 데이터베이스에서 가져왔습니다(누구나 등록 가능)',
+  'prov.shape': '{what}처럼 보입니다 — 형태만 같고 확인되지 않았습니다',
+  'prov.claimed': '요청한 곳의 주장 — 그쪽 시뮬레이션이며 이 페이지는 확인하지 않았습니다',
+  'shape.erc20': '토큰 호출(ERC-20)',
+  'shape.erc721': 'NFT 호출(ERC-721)',
+  'shape.permit': '토큰 permit',
+  'shape.permit2': 'Permit2 승인',
+  'shape.vaultDeposit': '볼트 예치(ERC-4626)',
+  'shape.vaultWithdraw': '볼트 출금(ERC-4626)',
+  'shape.oneInchSwap': '1inch 스왑',
+  'shape.uniswapV2Swap': 'Uniswap 스왑',
+  'shape.safeBatch': 'Safe 일괄 호출',
+  'shape.safeExec': 'Safe 트랜잭션',
+  'sentence.shapeOnly': '이 페이지에는 이 컨트랙트에 대한 설명이 없습니다. 아래의 각 파라미터는 타입에 따라 바이트에서 읽은 것이며, 컨트랙트가 이를 어떻게 쓰는지는 컨트랙트에 달려 있습니다.',
+  'sentence.swapElsewhere': '{amount}을(를) 지불하고, 최소 {receive}이(가) 이 계정이 아닌 {to}(으)로 갑니다.',
+  'sentence.increaseUnknown': '이것은 기존 한도에 {delta}을(를) ‘추가’하는 것이지 ‘설정’하는 것이 아닙니다. 이 페이지에서는 현재 한도를 볼 수 없습니다.',
+  'warn.notThisAccount': '이 계정이 아닌 주소({to})로 갑니다 — 돌려받을 것이 내게 오지 않습니다.',
+  'warn.dustMinimum': '돌려받는 최소 금액이 {amount}로 사실상 0입니다. 가격이 움직이거나 누군가 앞서 거래하면 거의 아무것도 돌려받지 못할 수 있습니다.',
+  'tag.byApp': '앱 기준',
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -3064,7 +3239,7 @@ window.VelaCS.i18n.register('vi', {
   'sentence.sendSelf': 'Bạn chuyển {amount} sang một tài khoản khác của chính bạn — không có gì rời khỏi tay bạn.',
   'sentence.approve': 'Bạn cho phép {spender} chi tối đa {amount} của bạn.',
   'sentence.approveUnlimited': 'Bạn cho phép {spender} chi toàn bộ {symbol} của bạn — không có giới hạn.',
-  'sentence.increase': 'Thao tác này CỘNG THÊM, không phải đặt lại: hiện là {current}, ký xong sẽ thành {after}.',
+  'sentence.increase': 'Thao tác này CỘNG THÊM {delta}, không phải đặt lại: theo ứng dụng, hiện là {current}, ký xong sẽ thành {after}.',
   'sentence.revoke': 'Bạn thu hồi quyền chi {token} đã cấp — bên kia không còn động vào được nữa.',
   'sentence.swap': 'Bạn trả {amount} và nhận ít nhất {receive}.',
   'sentence.vaultDeposit': 'Bạn gửi {amount} vào {vault}.',
@@ -3077,7 +3252,7 @@ window.VelaCS.i18n.register('vi', {
   'sentence.burn': 'Người nhận chính là hợp đồng của token này. Coin gửi tới đó không đến tay ai cả — chúng bị kẹt vĩnh viễn.',
   'sentence.abiOnly': 'Hợp đồng này đã được xác minh mã nguồn và mọi tham số đều giải mã được, nhưng chưa ai ghi lại ý nghĩa của chúng. Bên dưới là dữ kiện, không phải lời giải thích.',
   'sentence.fourbyte': 'Chỉ khôi phục được tên hàm {name}, lấy từ một cơ sở dữ liệu 4-byte công khai. Tham số được đọc theo kiểu dữ liệu; không ai bảo đảm ý nghĩa của chúng.',
-  'sentence.blindSim': 'Không giải mã được lệnh gọi này. Bên dưới là kết quả mô phỏng — dòng tài sản được tính on-chain và trang web không thể làm giả.',
+  'sentence.blindSim': 'Không giải mã được lệnh gọi này. Bên dưới là kết quả mô phỏng theo lời bên yêu cầu — trang này không chạy nó, nên đó là lời của họ, không phải kiểm chứng.',
   'sentence.blindUndeclared': 'Không giải mã được lệnh gọi này. Mô phỏng cho thấy nó chuyển đi các tài sản bên dưới — trang web chưa hề nói điều đó.',
   'sentence.blindNothing': 'Không giải mã được, cũng không mô phỏng được. Hiện chưa ai biết ký yêu cầu này sẽ dẫn đến điều gì.',
   'sentence.message': 'Bạn ký đoạn văn bản này. Nó không bao giờ lên chuỗi và không chuyển tài sản nào — nhưng trang web có thể dùng nó để chứng minh tài khoản này là của bạn.',
@@ -3101,7 +3276,7 @@ window.VelaCS.i18n.register('vi', {
   'warn.siweMismatch': 'Tên miền không khớp — một chiêu lừa đảo kinh điển. Chữ ký này sẽ đăng nhập bạn vào một trang web khác.',
   'warn.ethSign': 'Yêu cầu không thể xác minh — hầu hết các ứng dụng hợp pháp không bao giờ dùng eth_sign. Hãy từ chối trừ khi bạn chắc chắn.',
   'warn.hexData': 'Byte không đọc được — các trang web hợp pháp hầu như không bao giờ yêu cầu điều này.',
-  'warn.blindSim': 'Không hiểu được hàm này. Chỉ có thể dựa vào kết quả mô phỏng.',
+  'warn.blindSim': 'Không thể biết — trang này không đọc được lệnh gọi này, còn kết quả mô phỏng là của bên yêu cầu, không phải kiểm chứng. Hãy từ chối trừ khi bạn hoàn toàn tin bên yêu cầu.',
   'warn.blindUndeclared': 'Mô phỏng phát hiện tài sản bị chuyển ra mà trang web không hề khai báo — từ chối là lựa chọn an toàn.',
   'warn.blindNothing': 'Không thể biết trước — hãy từ chối trừ khi bạn hoàn toàn tin tưởng bên yêu cầu.',
   'warn.nested': 'Lệnh gọi lồng nhau: bạn ký lớp ngoài, lớp trong mới là lớp tiêu tiền. Hãy kiểm tra từng phần bên dưới.',
@@ -3263,6 +3438,31 @@ window.VelaCS.i18n.register('vi', {
   'tag.siteCallsItself': 'tự xưng là “{name}”',
   'ui.requestDamaged': 'Yêu cầu ký này đến nơi đã bị hỏng và không đọc được, nên không có gì được ký. Hãy quay lại Vela và bắt đầu lại.',
   'refuse.badKeyId': 'Yêu cầu này ghi mã khóa ở dạng không đọc được, nên không thể nhờ trình duyệt tìm khóa đó. Không ký.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Trang này đọc trực tiếp từ giao dịch',
+  'prov.readMessage': 'Trang này đọc trực tiếp từ nội dung bạn ký',
+  'prov.described': 'Được mô tả bởi {source} — chỉ là mô tả, không phải bảo đảm',
+  'prov.sourcePage': 'ghi chú có sẵn của trang này về {contract}',
+  'prov.fourbyte': 'Tên hàm lấy từ cơ sở dữ liệu công khai (ai cũng đăng ký được)',
+  'prov.shape': 'Trông giống {what} — chỉ giống về hình dạng, chưa được kiểm tra',
+  'prov.claimed': 'Lời của bên yêu cầu — kết quả mô phỏng của họ, trang này không kiểm tra',
+  'shape.erc20': 'một lệnh gọi token (ERC-20)',
+  'shape.erc721': 'một lệnh gọi NFT (ERC-721)',
+  'shape.permit': 'một permit token',
+  'shape.permit2': 'một phê duyệt Permit2',
+  'shape.vaultDeposit': 'một lần gửi vào vault (ERC-4626)',
+  'shape.vaultWithdraw': 'một lần rút khỏi vault (ERC-4626)',
+  'shape.oneInchSwap': 'một giao dịch hoán đổi 1inch',
+  'shape.uniswapV2Swap': 'một giao dịch hoán đổi Uniswap',
+  'shape.safeBatch': 'một lô lệnh gọi Safe',
+  'shape.safeExec': 'một giao dịch Safe',
+  'sentence.shapeOnly': 'Trang này không có mô tả cho hợp đồng này. Mỗi tham số bên dưới được đọc từ dữ liệu theo kiểu của nó; hợp đồng làm gì với chúng là tùy hợp đồng.',
+  'sentence.swapElsewhere': 'Bạn trả {amount}; ít nhất {receive} sẽ đến {to}, không phải tài khoản này.',
+  'sentence.increaseUnknown': 'Thao tác này CỘNG THÊM {delta} vào hạn mức hiện có, không phải đặt lại. Trang này không thấy được hạn mức hiện tại.',
+  'warn.notThisAccount': 'Đi đến một địa chỉ không phải tài khoản này ({to}) — thứ nhận về sẽ không đến tay bạn.',
+  'warn.dustMinimum': 'Mức tối thiểu nhận về chỉ là {amount} — gần như bằng không. Nếu giá biến động hoặc có người giao dịch chặn trước, bạn có thể gần như không nhận lại được gì.',
+  'tag.byApp': 'theo ứng dụng',
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -3344,7 +3544,7 @@ window.VelaCS.i18n.register('id', {
   'sentence.sendSelf': 'Anda memindahkan {amount} ke akun lain milik Anda sendiri — tidak ada yang keluar dari tangan Anda.',
   'sentence.approve': 'Anda mengizinkan {spender} membelanjakan hingga {amount} milik Anda.',
   'sentence.approveUnlimited': 'Anda mengizinkan {spender} membelanjakan seluruh {symbol} Anda — tanpa batas.',
-  'sentence.increase': 'Ini MENAMBAH, bukan menetapkan: sekarang {current}, setelah ditandatangani menjadi {after}.',
+  'sentence.increase': 'Ini MENAMBAH {delta}, bukan menetapkan: menurut aplikasi sekarang {current}, setelah ditandatangani menjadi {after}.',
   'sentence.revoke': 'Anda menarik kembali persetujuan {token} — pihak itu tidak bisa lagi menyentuhnya.',
   'sentence.swap': 'Anda membayar {amount} dan menerima setidaknya {receive}.',
   'sentence.vaultDeposit': 'Anda menyetor {amount} ke {vault}.',
@@ -3357,7 +3557,7 @@ window.VelaCS.i18n.register('id', {
   'sentence.burn': 'Penerimanya adalah kontrak token itu sendiri. Koin yang dikirim ke sana tidak sampai ke siapa pun — terjebak selamanya.',
   'sentence.abiOnly': 'Kode sumber kontrak ini terverifikasi dan semua parameternya terbaca, tetapi tidak ada yang menuliskan artinya. Di bawah ini fakta, bukan penjelasan.',
   'sentence.fourbyte': 'Hanya nama fungsi {name} yang ditemukan, dari basis data 4-byte publik. Parameter dibaca menurut tipenya; tidak ada yang menjamin maknanya.',
-  'sentence.blindSim': 'Panggilan ini tidak dapat didekode. Di bawah ini hasil simulasinya — aliran aset dihitung on-chain dan tidak bisa dipalsukan oleh situs.',
+  'sentence.blindSim': 'Panggilan ini tidak dapat didekode. Di bawah ini hasil simulasi menurut pihak peminta — halaman ini tidak menjalankannya, jadi itu kata mereka, bukan pemeriksaan.',
   'sentence.blindUndeclared': 'Panggilan ini tidak dapat didekode. Simulasi menunjukkan panggilan ini memindahkan aset di bawah — situs tidak pernah menyebutkannya.',
   'sentence.blindNothing': 'Tidak dapat didekode dan tidak dapat disimulasikan. Saat ini tidak ada yang tahu apa akibatnya jika ini ditandatangani.',
   'sentence.message': 'Anda menandatangani teks ini. Teks ini tidak pernah masuk ke chain dan tidak memindahkan aset — tetapi situs bisa memakainya untuk membuktikan akun ini milik Anda.',
@@ -3381,7 +3581,7 @@ window.VelaCS.i18n.register('id', {
   'warn.siweMismatch': 'Domain tidak cocok — trik phishing klasik. Tanda tangan ini akan memasukkan Anda ke situs lain.',
   'warn.ethSign': 'Permintaan tidak dapat diverifikasi — hampir semua aplikasi tepercaya tidak pernah memakai eth_sign. Tolak kecuali Anda benar-benar yakin.',
   'warn.hexData': 'Byte yang tak terbaca — situs tepercaya hampir tidak pernah meminta ini.',
-  'warn.blindSim': 'Fungsi ini tidak dipahami. Hanya hasil simulasi yang bisa diandalkan.',
+  'warn.blindSim': 'Tidak bisa diketahui — halaman ini tidak bisa membaca panggilan ini, dan simulasinya dari pihak peminta, bukan pemeriksaan. Tolak kecuali Anda sepenuhnya memercayai peminta.',
   'warn.blindUndeclared': 'Simulasi mengungkap aset keluar yang tidak pernah disebutkan situs — menolak adalah langkah yang aman.',
   'warn.blindNothing': 'Tidak bisa diketahui — tolak kecuali Anda sepenuhnya memercayai pihak peminta.',
   'warn.nested': 'Panggilan bersarang: Anda menandatangani lapisan luar, lapisan dalam yang membelanjakan. Periksa setiap bagian di bawah.',
@@ -3543,6 +3743,31 @@ window.VelaCS.i18n.register('id', {
   'tag.siteCallsItself': 'menyebut dirinya “{name}”',
   'ui.requestDamaged': 'Permintaan tanda tangan ini tiba dalam keadaan rusak dan tidak bisa dibaca, jadi tidak ada yang ditandatangani. Kembali ke Vela dan mulai lagi.',
   'refuse.badKeyId': 'Permintaan ini menyebut kuncinya dalam bentuk yang tidak bisa dibaca, jadi browser tidak bisa dimintai kunci itu. Tidak ditandatangani.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Dibaca halaman ini langsung dari transaksi',
+  'prov.readMessage': 'Dibaca halaman ini langsung dari yang Anda tandatangani',
+  'prov.described': 'Dijelaskan oleh {source} — hanya penjelasan, bukan jaminan',
+  'prov.sourcePage': 'catatan bawaan halaman ini tentang {contract}',
+  'prov.fourbyte': 'Nama fungsi dari basis data publik (siapa pun bisa mendaftarkannya)',
+  'prov.shape': 'Tampak seperti {what} — hanya bentuknya, belum diperiksa',
+  'prov.claimed': 'Kata pihak peminta — simulasinya, tidak diperiksa halaman ini',
+  'shape.erc20': 'panggilan token (ERC-20)',
+  'shape.erc721': 'panggilan NFT (ERC-721)',
+  'shape.permit': 'permit token',
+  'shape.permit2': 'persetujuan Permit2',
+  'shape.vaultDeposit': 'setoran vault (ERC-4626)',
+  'shape.vaultWithdraw': 'penarikan vault (ERC-4626)',
+  'shape.oneInchSwap': 'swap 1inch',
+  'shape.uniswapV2Swap': 'swap Uniswap',
+  'shape.safeBatch': 'batch Safe',
+  'shape.safeExec': 'transaksi Safe',
+  'sentence.shapeOnly': 'Halaman ini tidak punya penjelasan untuk kontrak ini. Setiap parameter di bawah dibaca dari byte sesuai tipenya; apa yang dilakukan kontrak dengannya terserah kontrak itu.',
+  'sentence.swapElsewhere': 'Anda membayar {amount}; setidaknya {receive} dikirim ke {to}, bukan ke akun ini.',
+  'sentence.increaseUnknown': 'Ini MENAMBAH {delta} ke izin yang sudah ada, bukan menetapkan. Halaman ini tidak bisa melihat izin saat ini.',
+  'warn.notThisAccount': 'Dikirim ke alamat yang bukan akun ini ({to}) — yang dikembalikan tidak akan sampai ke Anda.',
+  'warn.dustMinimum': 'Jumlah minimum yang diterima hanya {amount} — nyaris nol. Jika harga bergerak atau ada yang bertransaksi lebih dulu, Anda bisa hampir tidak menerima apa-apa.',
+  'tag.byApp': 'menurut aplikasi',
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -3624,7 +3849,7 @@ window.VelaCS.i18n.register('tr', {
   'sentence.sendSelf': '{amount} tutarını size ait başka bir hesaba taşıyorsunuz — sizden hiçbir şey çıkmıyor.',
   'sentence.approve': '{spender} tarafının sizin adınıza en fazla {amount} harcamasına izin veriyorsunuz.',
   'sentence.approveUnlimited': '{spender} tarafının tüm {symbol} varlığınızı harcamasına izin veriyorsunuz — üst sınır yok.',
-  'sentence.increase': 'Bu, izni yeniden belirlemez, ÜZERİNE EKLER: şu an {current}, imzaladıktan sonra {after}.',
+  'sentence.increase': 'Bu, {delta} EKLER, yeniden belirlemez: uygulamaya göre şu an {current}, imzaladıktan sonra {after}.',
   'sentence.revoke': '{token} onayını geri alıyorsunuz — karşı taraf artık ona dokunamaz.',
   'sentence.swap': '{amount} ödüyor, karşılığında en az {receive} alıyorsunuz.',
   'sentence.vaultDeposit': '{amount} tutarını {vault} kasasına yatırıyorsunuz.',
@@ -3637,7 +3862,7 @@ window.VelaCS.i18n.register('tr', {
   'sentence.burn': 'Alıcı, token\'ın kendi sözleşmesi. Oraya gönderilen coin\'ler kimseye ulaşmaz — sonsuza dek orada kalır.',
   'sentence.abiOnly': 'Bu sözleşmenin kaynak kodu doğrulanmış ve tüm parametreleri çözülüyor, ama ne anlama geldiklerini kimse yazmamış. Aşağıdakiler açıklama değil, yalnızca olgulardır.',
   'sentence.fourbyte': 'Yalnızca fonksiyon adı {name} bulunabildi; o da herkese açık bir 4-byte veritabanından. Parametreler türlerine göre okunuyor; anlamlarına kimse kefil değil.',
-  'sentence.blindSim': 'Bu çağrı çözülemiyor. Aşağıda simülasyonun sonucu var — varlık akışı zincir üzerinde hesaplanır ve site bunu taklit edemez.',
+  'sentence.blindSim': 'Bu çağrı çözülemiyor. Aşağıda isteyen tarafın söylediği simülasyon sonucu var — bu sayfa çalıştırmadı, yani bu bir doğrulama değil, onun sözü.',
   'sentence.blindUndeclared': 'Bu çağrı çözülemiyor. Simülasyon, aşağıdaki varlıkları taşıdığını gösteriyor — site bunu hiç söylemedi.',
   'sentence.blindNothing': 'Ne çözülebiliyor ne de simüle edilebiliyor. Bunu imzalamanın ne yapacağını şu an kimse bilmiyor.',
   'sentence.message': 'Bu metni imzalıyorsunuz. Zincire hiç gitmez ve hiçbir varlığı taşımaz — ama site bunu, bu hesabın size ait olduğunu kanıtlamak için kullanabilir.',
@@ -3661,7 +3886,7 @@ window.VelaCS.i18n.register('tr', {
   'warn.siweMismatch': 'Alan adı eşleşmiyor — klasik bir kimlik avı hilesi. Bu imza sizi başka bir sitede oturum açtırır.',
   'warn.ethSign': 'Doğrulanamayan istek — meşru uygulamaların çoğu eth_sign kullanmaz. Emin değilseniz reddedin.',
   'warn.hexData': 'Okunamayan baytlar — meşru siteler bunu neredeyse hiç istemez.',
-  'warn.blindSim': 'Bu fonksiyon anlaşılamıyor. Yalnızca simülasyona güvenilebilir.',
+  'warn.blindSim': 'Bilinemez — bu sayfa bu çağrıyı okuyamıyor ve simülasyon isteyen tarafın, bir doğrulama değil. İsteyene tamamen güvenmiyorsanız reddedin.',
   'warn.blindUndeclared': 'Simülasyon, sitenin hiç bildirmediği bir varlık çıkışını ortaya çıkardı — güvenli olan reddetmektir.',
   'warn.blindNothing': 'Ne olacağı bilinemez — isteyen tarafa tamamen güvenmiyorsanız reddedin.',
   'warn.nested': 'İç içe çağrı: dış katmanı siz imzalarsınız, harcamayı içteki yapar. Aşağıdaki her adımı kontrol edin.',
@@ -3823,6 +4048,31 @@ window.VelaCS.i18n.register('tr', {
   'tag.siteCallsItself': 'kendini “{name}” olarak tanıtıyor',
   'ui.requestDamaged': 'Bu imza isteği bozuk ulaştı ve okunamıyor, bu yüzden hiçbir şey imzalanmadı. Vela\'ya dönüp yeniden başlatın.',
   'refuse.badKeyId': 'Bu istek anahtarını okunamayan bir biçimde belirtiyor, bu yüzden tarayıcıdan o anahtar istenemiyor. İmzalanmıyor.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Bu sayfa doğrudan işlemden okudu',
+  'prov.readMessage': 'Bu sayfa doğrudan imzaladığınız içerikten okudu',
+  'prov.described': '{source} tarafından açıklandı — bir açıklama, garanti değil',
+  'prov.sourcePage': 'bu sayfanın {contract} için yerleşik notları',
+  'prov.fourbyte': 'Fonksiyon adı herkese açık bir veritabanından (herkes ad kaydedebilir)',
+  'prov.shape': '{what} gibi görünüyor — yalnızca biçim, doğrulanmadı',
+  'prov.claimed': 'İsteyen tarafın sözü — onun simülasyonu, bu sayfa doğrulamadı',
+  'shape.erc20': 'bir token çağrısı (ERC-20)',
+  'shape.erc721': 'bir NFT çağrısı (ERC-721)',
+  'shape.permit': 'bir token permit’i',
+  'shape.permit2': 'bir Permit2 onayı',
+  'shape.vaultDeposit': 'bir kasa yatırımı (ERC-4626)',
+  'shape.vaultWithdraw': 'bir kasa çekimi (ERC-4626)',
+  'shape.oneInchSwap': 'bir 1inch takası',
+  'shape.uniswapV2Swap': 'bir Uniswap takası',
+  'shape.safeBatch': 'bir Safe toplu çağrısı',
+  'shape.safeExec': 'bir Safe işlemi',
+  'sentence.shapeOnly': 'Bu sayfada bu sözleşme için bir açıklama yok. Aşağıdaki her parametre türüne göre baytlardan okundu; sözleşmenin bunlarla ne yapacağı sözleşmeye kalmış.',
+  'sentence.swapElsewhere': '{amount} ödüyorsunuz; en az {receive} bu hesaba değil, {to} adresine gidiyor.',
+  'sentence.increaseUnknown': 'Bu, mevcut izne {delta} EKLER, yeniden belirlemez. Bu sayfa mevcut izni göremiyor.',
+  'warn.notThisAccount': 'Bu hesap olmayan bir adrese gidiyor ({to}) — karşılığında gelen size ulaşmaz.',
+  'warn.dustMinimum': 'Karşılığında kabul edilen en düşük miktar {amount} — neredeyse sıfır. Fiyat oynarsa ya da biri önünüze geçerse neredeyse hiçbir şey geri gelmeyebilir.',
+  'tag.byApp': 'uygulamaya göre',
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -3904,7 +4154,7 @@ window.VelaCS.i18n.register('es-MX', {
   'sentence.sendSelf': 'Mueves {amount} a otra cuenta que también es tuya — nada sale de tus manos.',
   'sentence.approve': 'Permites que {spender} gaste hasta {amount} de tu billetera.',
   'sentence.approveUnlimited': 'Permites que {spender} gaste todos tus {symbol} — sin límite.',
-  'sentence.increase': 'Esto SUMA, no reemplaza: ahora es {current}; al firmar será {after}.',
+  'sentence.increase': 'Esto SUMA {delta}, no reemplaza: según la app ahora es {current}; al firmar será {after}.',
   'sentence.revoke': 'Retiras la aprobación de {token} — ya no podrán tocarlo.',
   'sentence.swap': 'Pagas {amount} y recibes al menos {receive}.',
   'sentence.vaultDeposit': 'Depositas {amount} en {vault}.',
@@ -3917,7 +4167,7 @@ window.VelaCS.i18n.register('es-MX', {
   'sentence.burn': 'El destinatario es el propio contrato del token. Las monedas que se envían ahí no le llegan a nadie — se quedan atrapadas para siempre.',
   'sentence.abiOnly': 'El código fuente de este contrato está verificado y todos sus parámetros se decodifican, pero nadie dejó escrito qué significan. Abajo hay hechos, no explicaciones.',
   'sentence.fourbyte': 'Solo se recuperó el nombre de la función, {name}, de una base de datos pública de 4-byte. Los parámetros se leen por su tipo; nadie garantiza su significado.',
-  'sentence.blindSim': 'Esta llamada no se puede decodificar. Abajo está lo que dio la simulación — el flujo de activos se calcula on-chain y el sitio no puede falsificarlo.',
+  'sentence.blindSim': 'Esta llamada no se puede decodificar. Abajo está lo que el solicitante dice que dio la simulación — esta página no la ejecutó, así que es su palabra, no una verificación.',
   'sentence.blindUndeclared': 'Esta llamada no se puede decodificar. La simulación muestra que mueve los activos de abajo — el sitio nunca lo dijo.',
   'sentence.blindNothing': 'No se puede decodificar ni simular. Ahora mismo nadie sabe qué pasaría si la firmas.',
   'sentence.message': 'Firmas este texto. Nunca llega a la cadena y no mueve activos — pero el sitio puede usarlo para demostrar que esta cuenta es tuya.',
@@ -3941,7 +4191,7 @@ window.VelaCS.i18n.register('es-MX', {
   'warn.siweMismatch': 'El dominio no coincide — una táctica clásica de phishing. La firma te iniciaría sesión en otro sitio.',
   'warn.ethSign': 'Solicitud no verificable; casi ninguna app legítima usa eth_sign. Recházala salvo que estés seguro.',
   'warn.hexData': 'Bytes ilegibles — los sitios legítimos casi nunca piden esto.',
-  'warn.blindSim': 'No se entiende esta función. Solo puedes confiar en la simulación.',
+  'warn.blindSim': 'Imposible de saber — esta página no puede leer esta llamada y la simulación es del solicitante, no una verificación. Recházala a menos que confíes plenamente en el solicitante.',
   'warn.blindUndeclared': 'La simulación reveló una salida de activos que el sitio nunca declaró — lo seguro es rechazar.',
   'warn.blindNothing': 'Imposible saberlo — recházala salvo que confíes por completo en quien la pide.',
   'warn.nested': 'Llamada anidada: tú firmas la capa externa y la interna es la que gasta. Revisa cada paso de abajo.',
@@ -4103,6 +4353,31 @@ window.VelaCS.i18n.register('es-MX', {
   'tag.siteCallsItself': 'dice llamarse “{name}”',
   'ui.requestDamaged': 'Esta solicitud de firma llegó dañada y no se puede leer, así que no se firmó nada. Vuelve a Vela e iníciala otra vez.',
   'refuse.badKeyId': 'Esta solicitud indica su llave en una forma que no se puede leer, así que no se le puede pedir al navegador. No se firma.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Leído por esta página de la transacción misma',
+  'prov.readMessage': 'Leído por esta página de lo que firmas',
+  'prov.described': 'Descrito por {source} — una descripción, no una garantía',
+  'prov.sourcePage': 'las notas propias de esta página sobre {contract}',
+  'prov.fourbyte': 'Nombre de función de una base de datos pública (cualquiera puede registrar uno)',
+  'prov.shape': 'Parece {what} — solo por la forma, sin verificar',
+  'prov.claimed': 'Lo dice el solicitante — su simulación, esta página no la verificó',
+  'shape.erc20': 'una llamada de token (ERC-20)',
+  'shape.erc721': 'una llamada de NFT (ERC-721)',
+  'shape.permit': 'un permit de token',
+  'shape.permit2': 'una aprobación de Permit2',
+  'shape.vaultDeposit': 'un depósito en bóveda (ERC-4626)',
+  'shape.vaultWithdraw': 'un retiro de bóveda (ERC-4626)',
+  'shape.oneInchSwap': 'un intercambio de 1inch',
+  'shape.uniswapV2Swap': 'un intercambio de Uniswap',
+  'shape.safeBatch': 'un lote de Safe',
+  'shape.safeExec': 'una transacción de Safe',
+  'sentence.shapeOnly': 'Esta página no tiene una descripción de este contrato. Cada parámetro de abajo se lee de los bytes según su tipo; lo que el contrato haga con ellos depende del contrato.',
+  'sentence.swapElsewhere': 'Pagas {amount}; al menos {receive} va a {to}, no a esta cuenta.',
+  'sentence.increaseUnknown': 'Esto SUMA {delta} a lo que ya esté permitido, no lo reemplaza. Esta página no puede ver la autorización actual.',
+  'warn.notThisAccount': 'Va a una dirección que no es esta cuenta ({to}) — lo que esto devuelve no te llegaría a ti.',
+  'warn.dustMinimum': 'Lo mínimo que acepta a cambio es {amount} — prácticamente nada. Si el precio se mueve o alguien opera antes que tú, podría no volver casi nada.',
+  'tag.byApp': 'según la app',
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -4184,7 +4459,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.sendSelf': 'Você move {amount} para outra conta que também é sua — nada sai das suas mãos.',
   'sentence.approve': 'Você permite que {spender} gaste até {amount} da sua carteira.',
   'sentence.approveUnlimited': 'Você permite que {spender} gaste todo o seu {symbol} — sem limite.',
-  'sentence.increase': 'Isto SOMA, não substitui: agora é {current}; depois de assinar, será {after}.',
+  'sentence.increase': 'Isto SOMA {delta}, não substitui: segundo o app, agora é {current}; depois de assinar, será {after}.',
   'sentence.revoke': 'Você retira a aprovação de {token} — eles não poderão mais mexer nisso.',
   'sentence.swap': 'Você paga {amount} e recebe pelo menos {receive}.',
   'sentence.vaultDeposit': 'Você deposita {amount} em {vault}.',
@@ -4197,7 +4472,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'sentence.burn': 'O destinatário é o próprio contrato do token. Moedas enviadas para lá não chegam a ninguém — ficam presas para sempre.',
   'sentence.abiOnly': 'O código-fonte deste contrato é verificado e todos os parâmetros são decodificados, mas ninguém escreveu o que eles significam. Abaixo estão fatos, não explicações.',
   'sentence.fourbyte': 'Só o nome da função, {name}, foi recuperado, de um banco de dados público de 4-byte. Os parâmetros são lidos pelo tipo; ninguém garante o significado.',
-  'sentence.blindSim': 'Esta chamada não pode ser decodificada. Abaixo está o resultado da simulação — o fluxo de ativos é calculado on-chain e o site não consegue falsificá-lo.',
+  'sentence.blindSim': 'Esta chamada não pode ser decodificada. Abaixo está o que o solicitante diz que a simulação deu — esta página não a executou, então é a palavra dele, não uma verificação.',
   'sentence.blindUndeclared': 'Esta chamada não pode ser decodificada. A simulação mostra que ela move os ativos abaixo — o site nunca disse isso.',
   'sentence.blindNothing': 'Não dá para decodificar nem simular. Ninguém sabe, agora, o que aconteceria se você assinasse.',
   'sentence.message': 'Você assina este texto. Ele nunca vai on-chain e não move ativos — mas o site pode usá-lo para provar que esta conta é sua.',
@@ -4221,7 +4496,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'warn.siweMismatch': 'Domínio não confere — um golpe clássico de phishing. A assinatura faria você entrar em outro site.',
   'warn.ethSign': 'Solicitação não verificável — apps legítimos quase nunca usam eth_sign. Rejeite, a menos que tenha certeza.',
   'warn.hexData': 'Bytes ilegíveis — sites legítimos quase nunca pedem isso.',
-  'warn.blindSim': 'Esta função não é compreendida. Só a simulação é confiável.',
+  'warn.blindSim': 'Impossível saber — esta página não consegue ler esta chamada, e a simulação é do solicitante, não uma verificação. Recuse, a menos que confie totalmente no solicitante.',
   'warn.blindUndeclared': 'A simulação revelou uma saída de ativos que o site nunca declarou — recusar é o caminho seguro.',
   'warn.blindNothing': 'Impossível saber — recuse, a menos que confie totalmente em quem fez o pedido.',
   'warn.nested': 'Chamada aninhada: você assina a camada externa, e é a interna que gasta. Confira cada etapa abaixo.',
@@ -4383,6 +4658,31 @@ window.VelaCS.i18n.register('pt-BR', {
   'tag.siteCallsItself': 'diz se chamar “{name}”',
   'ui.requestDamaged': 'Esta solicitação de assinatura chegou corrompida e não pode ser lida, então nada foi assinado. Volte à Vela e comece de novo.',
   'refuse.badKeyId': 'Esta solicitação indica a chave numa forma que não pode ser lida, então o navegador não pode procurá-la. Não será assinado.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Lido por esta página da própria transação',
+  'prov.readMessage': 'Lido por esta página do que você assina',
+  'prov.described': 'Descrito por {source} — uma descrição, não uma garantia',
+  'prov.sourcePage': 'as notas próprias desta página sobre {contract}',
+  'prov.fourbyte': 'Nome da função de um banco de dados público (qualquer pessoa pode registrar um)',
+  'prov.shape': 'Parece {what} — só pelo formato, não verificado',
+  'prov.claimed': 'Dito pelo solicitante — a simulação dele, não verificada por esta página',
+  'shape.erc20': 'uma chamada de token (ERC-20)',
+  'shape.erc721': 'uma chamada de NFT (ERC-721)',
+  'shape.permit': 'um permit de token',
+  'shape.permit2': 'uma aprovação do Permit2',
+  'shape.vaultDeposit': 'um depósito em cofre (ERC-4626)',
+  'shape.vaultWithdraw': 'um saque de cofre (ERC-4626)',
+  'shape.oneInchSwap': 'uma troca na 1inch',
+  'shape.uniswapV2Swap': 'uma troca na Uniswap',
+  'shape.safeBatch': 'um lote do Safe',
+  'shape.safeExec': 'uma transação do Safe',
+  'sentence.shapeOnly': 'Esta página não tem uma descrição deste contrato. Cada parâmetro abaixo é lido dos bytes pelo seu tipo; o que o contrato faz com eles depende do contrato.',
+  'sentence.swapElsewhere': 'Você paga {amount}; pelo menos {receive} vai para {to}, não para esta conta.',
+  'sentence.increaseUnknown': 'Isto SOMA {delta} ao que já estiver permitido, não substitui. Esta página não consegue ver a permissão atual.',
+  'warn.notThisAccount': 'Vai para um endereço que não é esta conta ({to}) — o que isto devolve não chegaria a você.',
+  'warn.dustMinimum': 'O mínimo que aceita em troca é {amount} — praticamente nada. Se o preço mudar ou alguém negociar na sua frente, pode não voltar quase nada.',
+  'tag.byApp': 'segundo o app',
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -4464,7 +4764,7 @@ window.VelaCS.i18n.register('fr', {
   'sentence.sendSelf': 'Vous déplacez {amount} vers un autre de vos propres comptes — rien ne quitte votre possession.',
   'sentence.approve': 'Vous autorisez {spender} à dépenser jusqu’à {amount} de vos fonds.',
   'sentence.approveUnlimited': 'Vous autorisez {spender} à dépenser tous vos {symbol} — sans aucun plafond.',
-  'sentence.increase': 'Ceci AJOUTE au montant, il ne le fixe pas : {current} maintenant, {after} une fois signé.',
+  'sentence.increase': 'Ceci AJOUTE {delta}, il ne le fixe pas : selon l’app, {current} maintenant, donc {after} une fois signé.',
   'sentence.revoke': 'Vous retirez l’autorisation sur {token} — l’adresse autorisée ne pourra plus y toucher.',
   'sentence.swap': 'Vous payez {amount} et recevez au moins {receive}.',
   'sentence.vaultDeposit': 'Vous déposez {amount} dans {vault}.',
@@ -4477,7 +4777,7 @@ window.VelaCS.i18n.register('fr', {
   'sentence.burn': 'Le destinataire est le contrat du token lui-même. Les fonds envoyés là n’arrivent à personne — ils sont bloqués pour toujours.',
   'sentence.abiOnly': 'Le code source de ce contrat est vérifié et chaque paramètre se décode, mais personne n’a écrit ce qu’ils signifient. Ci-dessous : des faits, pas des explications.',
   'sentence.fourbyte': 'Seul le nom de fonction {name} a été retrouvé, dans une base 4-byte publique. Les paramètres sont lus d’après leur type ; personne ne garantit leur sens.',
-  'sentence.blindSim': 'Cet appel ne peut pas être décodé. Voici ce qu’a donné sa simulation — les mouvements d’actifs sont calculés on-chain et le site ne peut pas les falsifier.',
+  'sentence.blindSim': 'Cet appel ne peut pas être décodé. Voici ce que le demandeur dit que la simulation a donné — cette page ne l’a pas exécutée : c’est sa parole, pas une vérification.',
   'sentence.blindUndeclared': 'Cet appel ne peut pas être décodé. La simulation montre qu’il déplace les actifs ci-dessous — le site ne l’a jamais indiqué.',
   'sentence.blindNothing': 'Il ne peut être ni décodé ni simulé. Personne ne sait actuellement ce que produirait cette signature.',
   'sentence.message': 'Vous signez ce texte. Il n’atteint jamais la chaîne et ne déplace aucun actif — mais le site peut s’en servir pour prouver que ce compte est le vôtre.',
@@ -4501,7 +4801,7 @@ window.VelaCS.i18n.register('fr', {
   'warn.siweMismatch': 'Domaine différent — une technique classique d’hameçonnage. Cette signature vous connecterait à un autre site.',
   'warn.ethSign': 'Demande invérifiable — les applications légitimes n’utilisent presque jamais eth_sign. Refusez, sauf si vous êtes certain.',
   'warn.hexData': 'Octets illisibles — les sites légitimes ne demandent presque jamais cela.',
-  'warn.blindSim': 'Cette fonction n’est pas comprise. Seule la simulation est fiable.',
+  'warn.blindSim': 'Impossible à savoir — cette page ne peut pas lire cet appel, et la simulation vient du demandeur, ce n’est pas une vérification. Refusez sauf si vous faites entièrement confiance au demandeur.',
   'warn.blindUndeclared': 'La simulation a révélé une sortie de fonds que le site n’a jamais annoncée — refuser est le choix sûr.',
   'warn.blindNothing': 'Impossible de savoir — refusez, sauf si vous faites entièrement confiance au demandeur.',
   'warn.nested': 'Appel imbriqué : vous signez la couche externe, la couche interne dépense. Vérifiez chaque étape ci-dessous.',
@@ -4665,6 +4965,31 @@ window.VelaCS.i18n.register('fr', {
   'tag.siteCallsItself': 'se présente comme « {name} »',
   'ui.requestDamaged': 'Cette demande de signature est arrivée endommagée et ne peut pas être lue : rien n’a été signé. Retournez dans Vela et relancez-la.',
   'refuse.badKeyId': 'Cette demande désigne sa clé sous une forme illisible, le navigateur ne peut donc pas la demander. Pas de signature.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Lu par cette page dans la transaction elle-même',
+  'prov.readMessage': 'Lu par cette page dans ce que vous signez',
+  'prov.described': 'Décrit par {source} — une description, pas une garantie',
+  'prov.sourcePage': 'les notes intégrées de cette page sur {contract}',
+  'prov.fourbyte': 'Nom de fonction tiré d’une base publique (n’importe qui peut en enregistrer un)',
+  'prov.shape': 'Ressemble à {what} — par la forme seulement, non vérifié',
+  'prov.claimed': 'Selon le demandeur — sa simulation, non vérifiée par cette page',
+  'shape.erc20': 'un appel de jeton (ERC-20)',
+  'shape.erc721': 'un appel de NFT (ERC-721)',
+  'shape.permit': 'un permit de jeton',
+  'shape.permit2': 'une autorisation Permit2',
+  'shape.vaultDeposit': 'un dépôt dans un coffre (ERC-4626)',
+  'shape.vaultWithdraw': 'un retrait d’un coffre (ERC-4626)',
+  'shape.oneInchSwap': 'un échange 1inch',
+  'shape.uniswapV2Swap': 'un échange Uniswap',
+  'shape.safeBatch': 'un lot Safe',
+  'shape.safeExec': 'une transaction Safe',
+  'sentence.shapeOnly': 'Cette page n’a pas de description de ce contrat. Chaque paramètre ci-dessous est lu dans les octets selon son type ; ce que le contrat en fait ne dépend que de lui.',
+  'sentence.swapElsewhere': 'Vous payez {amount} ; au moins {receive} part vers {to}, pas vers ce compte.',
+  'sentence.increaseUnknown': 'Ceci AJOUTE {delta} à ce qui est déjà autorisé, il ne le fixe pas. Cette page ne voit pas l’autorisation actuelle.',
+  'warn.notThisAccount': 'Part vers une adresse qui n’est pas ce compte ({to}) — ce que cela rend ne vous parviendrait pas.',
+  'warn.dustMinimum': 'Le minimum accepté en retour est de {amount} — presque rien. Si le prix bouge ou si quelqu’un passe devant vous, presque rien pourrait revenir.',
+  'tag.byApp': 'selon l’app',
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -4746,7 +5071,7 @@ window.VelaCS.i18n.register('de', {
   'sentence.sendSelf': 'Du verschiebst {amount} auf ein anderes deiner eigenen Konten — nichts verlässt deinen Besitz.',
   'sentence.approve': 'Du erlaubst {spender}, bis zu {amount} von deinem Guthaben auszugeben.',
   'sentence.approveUnlimited': 'Du erlaubst {spender}, dein gesamtes {symbol} auszugeben — ohne Obergrenze.',
-  'sentence.increase': 'Das ERHÖHT, es setzt nicht neu: jetzt {current}, nach der Signatur {after}.',
+  'sentence.increase': 'Das ERHÖHT um {delta}, es setzt nicht neu: laut App jetzt {current}, nach der Signatur also {after}.',
   'sentence.revoke': 'Du nimmst die Freigabe für {token} zurück — der Bevollmächtigte kann nicht mehr darauf zugreifen.',
   'sentence.swap': 'Du zahlst {amount} und erhältst mindestens {receive}.',
   'sentence.vaultDeposit': 'Du zahlst {amount} in {vault} ein.',
@@ -4759,7 +5084,7 @@ window.VelaCS.i18n.register('de', {
   'sentence.burn': 'Der Empfänger ist der Contract des Tokens selbst. Dorthin gesendete Coins erreichen niemanden — sie stecken für immer fest.',
   'sentence.abiOnly': 'Der Quellcode dieses Contracts ist verifiziert und jeder Parameter lässt sich dekodieren, aber niemand hat aufgeschrieben, was sie bedeuten. Unten stehen Fakten, keine Erklärungen.',
   'sentence.fourbyte': 'Nur der Funktionsname {name} wurde gefunden, in einer öffentlichen 4-Byte-Datenbank. Die Parameter werden nach Typ gelesen; für ihre Bedeutung bürgt niemand.',
-  'sentence.blindSim': 'Dieser Aufruf lässt sich nicht dekodieren. Unten steht, was seine Simulation ergeben hat — der Fluss der Assets wird on-chain berechnet und kann von der Seite nicht gefälscht werden.',
+  'sentence.blindSim': 'Dieser Aufruf lässt sich nicht dekodieren. Unten steht, was laut Anfragendem seine Simulation ergeben hat — diese Seite hat sie nicht ausgeführt, also ist es sein Wort, keine Prüfung.',
   'sentence.blindUndeclared': 'Dieser Aufruf lässt sich nicht dekodieren. Die Simulation zeigt, dass er die unten stehenden Assets bewegt — die Seite hat das nie angegeben.',
   'sentence.blindNothing': 'Er lässt sich weder dekodieren noch simulieren. Derzeit weiß niemand, was diese Signatur bewirken würde.',
   'sentence.message': 'Du signierst diesen Text. Er gelangt nie auf die Chain und bewegt keine Assets — aber die Seite kann damit beweisen, dass dieses Konto dir gehört.',
@@ -4783,7 +5108,7 @@ window.VelaCS.i18n.register('de', {
   'warn.siweMismatch': 'Domain stimmt nicht überein — ein klassischer Phishing-Trick. Mit dieser Signatur würdest du dich bei einer anderen Seite anmelden.',
   'warn.ethSign': 'Nicht überprüfbare Anfrage — seriöse Apps verwenden eth_sign fast nie. Lehne ab, wenn du dir nicht sicher bist.',
   'warn.hexData': 'Unlesbare Bytes — seriöse Seiten verlangen das fast nie.',
-  'warn.blindSim': 'Diese Funktion ist nicht verstanden. Verlassen kannst du dich nur auf die Simulation.',
+  'warn.blindSim': 'Nicht erkennbar — diese Seite kann diesen Aufruf nicht lesen, und die Simulation stammt vom Anfragenden, sie ist keine Prüfung. Lehne ab, außer du vertraust dem Anfragenden voll.',
   'warn.blindUndeclared': 'Die Simulation hat einen Abfluss aufgedeckt, den die Seite nie angegeben hat — Ablehnen ist der sichere Weg.',
   'warn.blindNothing': 'Nicht vorhersehbar — lehne ab, wenn du dem Anfragenden nicht voll vertraust.',
   'warn.nested': 'Verschachtelter Aufruf: Du signierst die äußere Ebene, die innere gibt aus. Prüfe jeden Schritt unten.',
@@ -4947,6 +5272,31 @@ window.VelaCS.i18n.register('de', {
   'tag.siteCallsItself': 'nennt sich selbst „{name}“',
   'ui.requestDamaged': 'Diese Signaturanfrage ist beschädigt angekommen und lässt sich nicht lesen, daher wurde nichts signiert. Geh zurück zu Vela und starte sie neu.',
   'refuse.badKeyId': 'Diese Anfrage nennt ihren Schlüssel in einer Form, die sich nicht lesen lässt, daher kann der Browser nicht danach gefragt werden. Wird nicht signiert.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Von dieser Seite aus der Transaktion selbst gelesen',
+  'prov.readMessage': 'Von dieser Seite aus dem gelesen, was du signierst',
+  'prov.described': 'Beschrieben von {source} — eine Beschreibung, keine Garantie',
+  'prov.sourcePage': 'den eingebauten Notizen dieser Seite zu {contract}',
+  'prov.fourbyte': 'Funktionsname aus einer öffentlichen Datenbank (jeder kann einen eintragen)',
+  'prov.shape': 'Sieht aus wie {what} — nur der Form nach, nicht geprüft',
+  'prov.claimed': 'Laut Anfragendem — seine Simulation, von dieser Seite nicht geprüft',
+  'shape.erc20': 'ein Token-Aufruf (ERC-20)',
+  'shape.erc721': 'ein NFT-Aufruf (ERC-721)',
+  'shape.permit': 'ein Token-Permit',
+  'shape.permit2': 'eine Permit2-Freigabe',
+  'shape.vaultDeposit': 'eine Vault-Einzahlung (ERC-4626)',
+  'shape.vaultWithdraw': 'eine Vault-Auszahlung (ERC-4626)',
+  'shape.oneInchSwap': 'ein 1inch-Tausch',
+  'shape.uniswapV2Swap': 'ein Uniswap-Tausch',
+  'shape.safeBatch': 'ein Safe-Stapel',
+  'shape.safeExec': 'eine Safe-Transaktion',
+  'sentence.shapeOnly': 'Diese Seite hat keine Beschreibung für diesen Contract. Jeder Parameter unten ist nach seinem Typ aus den Bytes gelesen; was der Contract damit macht, entscheidet allein der Contract.',
+  'sentence.swapElsewhere': 'Du zahlst {amount}; mindestens {receive} gehen an {to}, nicht an dieses Konto.',
+  'sentence.increaseUnknown': 'Das ERHÖHT das bestehende Limit um {delta}, es setzt nicht neu. Das aktuelle Limit kann diese Seite nicht sehen.',
+  'warn.notThisAccount': 'Geht an eine Adresse, die nicht dieses Konto ist ({to}) — was zurückkommt, erreicht dich nicht.',
+  'warn.dustMinimum': 'Das Mindeste, was dafür zurückkommen muss, ist {amount} — so gut wie nichts. Bewegt sich der Preis oder handelt jemand vor dir, kommt womöglich fast nichts zurück.',
+  'tag.byApp': 'laut App',
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -5028,7 +5378,7 @@ window.VelaCS.i18n.register('ru', {
   'sentence.sendSelf': 'Вы переводите {amount} на другой свой аккаунт — ничего не уходит от вас.',
   'sentence.approve': 'Вы разрешаете {spender} потратить до {amount} ваших средств.',
   'sentence.approveUnlimited': 'Вы разрешаете {spender} тратить все ваши {symbol} — без лимита.',
-  'sentence.increase': 'Это ДОБАВЛЯЕТ, а не устанавливает: сейчас {current}, после подписи {after}.',
+  'sentence.increase': 'Это ДОБАВЛЯЕТ {delta}, а не устанавливает: по словам приложения, сейчас {current}, после подписи — {after}.',
   'sentence.revoke': 'Вы отзываете одобрение для {token} — распорядитель больше не сможет его трогать.',
   'sentence.swap': 'Вы платите {amount} и получаете не менее {receive}.',
   'sentence.vaultDeposit': 'Вы вносите {amount} в {vault}.',
@@ -5041,7 +5391,7 @@ window.VelaCS.i18n.register('ru', {
   'sentence.burn': 'Получатель — сам контракт токена. Монеты, отправленные туда, никому не достанутся — они застрянут навсегда.',
   'sentence.abiOnly': 'Исходный код этого контракта проверен, и все параметры декодируются, но никто не описал, что они означают. Ниже — факты, а не объяснения.',
   'sentence.fourbyte': 'Удалось узнать только имя функции {name} — из публичной базы 4-byte. Параметры прочитаны по типам; за их смысл никто не ручается.',
-  'sentence.blindSim': 'Этот вызов невозможно декодировать. Ниже — результат его симуляции: движение активов вычислено ончейн, и сайт не может его подделать.',
+  'sentence.blindSim': 'Этот вызов невозможно декодировать. Ниже — результат симуляции со слов отправителя запроса: эта страница её не запускала, так что это его слова, а не проверка.',
   'sentence.blindUndeclared': 'Этот вызов невозможно декодировать. Симуляция показывает, что он перемещает активы, указанные ниже, — сайт об этом не сообщал.',
   'sentence.blindNothing': 'Его невозможно ни декодировать, ни смоделировать. Сейчас никто не знает, к чему приведёт эта подпись.',
   'sentence.message': 'Вы подписываете этот текст. Он не попадает в блокчейн и не перемещает активы — но сайт может с его помощью доказать, что этот аккаунт ваш.',
@@ -5065,7 +5415,7 @@ window.VelaCS.i18n.register('ru', {
   'warn.siweMismatch': 'Домен не совпадает — классический приём фишинга. Эта подпись выполнит вход на другой сайт.',
   'warn.ethSign': 'Запрос невозможно проверить — добросовестные приложения почти никогда не используют eth_sign. Отклоните, если не уверены.',
   'warn.hexData': 'Нечитаемые байты — добросовестные сайты почти никогда о таком не просят.',
-  'warn.blindSim': 'Что делает эта функция, неизвестно. Полагаться можно только на симуляцию.',
+  'warn.blindSim': 'Неизвестно — эта страница не может прочитать этот вызов, а симуляция предоставлена отправителем запроса и проверкой не является. Откажитесь, если не доверяете ему полностью.',
   'warn.blindUndeclared': 'Симуляция выявила списание, о котором сайт не сообщал, — безопаснее отказаться.',
   'warn.blindNothing': 'Последствия неизвестны — откажитесь, если не доверяете отправителю запроса полностью.',
   'warn.nested': 'Вложенный вызов: вы подписываете внешний уровень, а тратит внутренний. Проверьте каждый шаг ниже.',
@@ -5229,6 +5579,31 @@ window.VelaCS.i18n.register('ru', {
   'tag.siteCallsItself': 'называет себя «{name}»',
   'ui.requestDamaged': 'Этот запрос на подпись пришёл повреждённым и не читается, поэтому ничего не подписано. Вернитесь в Vela и начните заново.',
   'refuse.badKeyId': 'Этот запрос указывает ключ в нечитаемом виде, поэтому браузер не может его запросить. Не подписываю.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Прочитано этой страницей из самой транзакции',
+  'prov.readMessage': 'Прочитано этой страницей из того, что вы подписываете',
+  'prov.described': 'Описано: {source} — это описание, а не гарантия',
+  'prov.sourcePage': 'встроенные заметки этой страницы о {contract}',
+  'prov.fourbyte': 'Имя функции из публичной базы (зарегистрировать имя может кто угодно)',
+  'prov.shape': 'Похоже на {what} — только по форме, не проверено',
+  'prov.claimed': 'Со слов отправителя запроса — его симуляция, эта страница её не проверяла',
+  'shape.erc20': 'вызов токена (ERC-20)',
+  'shape.erc721': 'вызов NFT (ERC-721)',
+  'shape.permit': 'permit токена',
+  'shape.permit2': 'одобрение Permit2',
+  'shape.vaultDeposit': 'вклад в хранилище (ERC-4626)',
+  'shape.vaultWithdraw': 'вывод из хранилища (ERC-4626)',
+  'shape.oneInchSwap': 'обмен через 1inch',
+  'shape.uniswapV2Swap': 'обмен через Uniswap',
+  'shape.safeBatch': 'пакет вызовов Safe',
+  'shape.safeExec': 'транзакцию Safe',
+  'sentence.shapeOnly': 'У этой страницы нет описания этого контракта. Каждый параметр ниже прочитан из байтов по его типу; что контракт с ними сделает, решает сам контракт.',
+  'sentence.swapElsewhere': 'Вы платите {amount}; не менее {receive} уходит на {to}, а не на этот аккаунт.',
+  'sentence.increaseUnknown': 'Это ДОБАВЛЯЕТ {delta} к уже разрешённому, а не устанавливает. Текущее разрешение этой странице не видно.',
+  'warn.notThisAccount': 'Уходит на адрес, который не является этим аккаунтом ({to}), — то, что вернётся, до вас не дойдёт.',
+  'warn.dustMinimum': 'Минимум, который нужно получить взамен, — {amount}, то есть почти ничего. Если цена сдвинется или кто-то совершит сделку раньше вас, может не вернуться почти ничего.',
+  'tag.byApp': 'по данным приложения',
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -5310,7 +5685,7 @@ window.VelaCS.i18n.register('it', {
   'sentence.sendSelf': 'Sposti {amount} su un altro account che è sempre tuo — non esce nulla dalle tue mani.',
   'sentence.approve': 'Permetti a {spender} di spendere fino a {amount} dal tuo wallet.',
   'sentence.approveUnlimited': 'Permetti a {spender} di spendere tutti i tuoi {symbol} — senza alcun limite.',
-  'sentence.increase': 'Questo AGGIUNGE, non sostituisce: ora è {current}, dopo la firma sarà {after}.',
+  'sentence.increase': 'Questo AGGIUNGE {delta}, non sostituisce: secondo l’app ora è {current}, dopo la firma sarà {after}.',
   'sentence.revoke': 'Ritiri l’autorizzazione su {token} — non potranno più toccarlo.',
   'sentence.swap': 'Paghi {amount} e ricevi almeno {receive}.',
   'sentence.vaultDeposit': 'Depositi {amount} in {vault}.',
@@ -5323,7 +5698,7 @@ window.VelaCS.i18n.register('it', {
   'sentence.burn': 'Il destinatario è il contratto del token stesso. Le monete inviate lì non arrivano a nessuno — restano bloccate per sempre.',
   'sentence.abiOnly': 'Il codice sorgente di questo contratto è verificato e ogni parametro viene decodificato, ma nessuno ha scritto cosa significano. Qui sotto ci sono fatti, non spiegazioni.',
   'sentence.fourbyte': 'È stato recuperato solo il nome della funzione, {name}, da un database pubblico 4-byte. I parametri vengono letti in base al tipo; nessuno ne garantisce il significato.',
-  'sentence.blindSim': 'Questa chiamata non può essere decodificata. Qui sotto c’è il risultato della simulazione — il flusso di asset è calcolato on-chain e il sito non può falsificarlo.',
+  'sentence.blindSim': 'Questa chiamata non può essere decodificata. Qui sotto c’è ciò che il richiedente dice abbia prodotto la simulazione — questa pagina non l’ha eseguita, quindi è la sua parola, non una verifica.',
   'sentence.blindUndeclared': 'Questa chiamata non può essere decodificata. La simulazione mostra che sposta gli asset qui sotto — il sito non l’ha mai detto.',
   'sentence.blindNothing': 'Non si può decodificare né simulare. Al momento nessuno sa cosa succederebbe firmandola.',
   'sentence.message': 'Firmi questo testo. Non arriva mai on-chain e non sposta asset — ma il sito può usarlo per dimostrare che questo account è tuo.',
@@ -5347,7 +5722,7 @@ window.VelaCS.i18n.register('it', {
   'warn.siweMismatch': 'Dominio non corrispondente — una classica mossa di phishing. La firma ti farebbe accedere a un altro sito.',
   'warn.ethSign': 'Richiesta non verificabile: quasi nessuna app legittima usa eth_sign. Rifiuta, a meno che tu non sia certo.',
   'warn.hexData': 'Byte illeggibili — i siti legittimi non lo chiedono quasi mai.',
-  'warn.blindSim': 'Questa funzione non è compresa. Ci si può fidare solo della simulazione.',
+  'warn.blindSim': 'Impossibile saperlo — questa pagina non sa leggere questa chiamata e la simulazione è del richiedente, non una verifica. Rifiuta a meno che tu non ti fidi pienamente del richiedente.',
   'warn.blindUndeclared': 'La simulazione ha rivelato un’uscita di asset che il sito non ha mai dichiarato — rifiutare è la scelta sicura.',
   'warn.blindNothing': 'Impossibile saperlo — rifiuta, a meno che tu non ti fidi completamente di chi lo chiede.',
   'warn.nested': 'Chiamata annidata: tu firmi il livello esterno, ma è quello interno a spendere. Controlla ogni passaggio qui sotto.',
@@ -5509,6 +5884,31 @@ window.VelaCS.i18n.register('it', {
   'tag.siteCallsItself': 'si fa chiamare “{name}”',
   'ui.requestDamaged': 'Questa richiesta di firma è arrivata danneggiata e non si può leggere, quindi non è stato firmato nulla. Torna su Vela e ricominciala.',
   'refuse.badKeyId': 'Questa richiesta indica la sua chiave in una forma illeggibile, quindi non si può chiederla al browser. Non firmo.',
+  // --- 2026-10-28 (clear-signing provenance): where the intent's reading
+  //     came from, a resemblance said as one, output that is not yours
+  'prov.read': 'Letto da questa pagina dalla transazione stessa',
+  'prov.readMessage': 'Letto da questa pagina da ciò che firmi',
+  'prov.described': 'Descritto da {source} — una descrizione, non una garanzia',
+  'prov.sourcePage': 'le note interne di questa pagina su {contract}',
+  'prov.fourbyte': 'Nome della funzione da un database pubblico (chiunque può registrarne uno)',
+  'prov.shape': 'Sembra {what} — solo dalla forma, non verificato',
+  'prov.claimed': 'Detto dal richiedente — la sua simulazione, non verificata da questa pagina',
+  'shape.erc20': 'una chiamata a un token (ERC-20)',
+  'shape.erc721': 'una chiamata a un NFT (ERC-721)',
+  'shape.permit': 'un permit di token',
+  'shape.permit2': 'un’approvazione Permit2',
+  'shape.vaultDeposit': 'un deposito in un vault (ERC-4626)',
+  'shape.vaultWithdraw': 'un prelievo da un vault (ERC-4626)',
+  'shape.oneInchSwap': 'uno scambio 1inch',
+  'shape.uniswapV2Swap': 'uno scambio Uniswap',
+  'shape.safeBatch': 'un batch Safe',
+  'shape.safeExec': 'una transazione Safe',
+  'sentence.shapeOnly': 'Questa pagina non ha una descrizione di questo contratto. Ogni parametro qui sotto è letto dai byte in base al suo tipo; che cosa ne faccia il contratto dipende solo dal contratto.',
+  'sentence.swapElsewhere': 'Paghi {amount}; almeno {receive} va a {to}, non a questo account.',
+  'sentence.increaseUnknown': 'Questo AGGIUNGE {delta} a quanto già consentito, non lo sostituisce. Questa pagina non vede l’autorizzazione attuale.',
+  'warn.notThisAccount': 'Va a un indirizzo che non è questo account ({to}) — ciò che restituisce non arriverebbe a te.',
+  'warn.dustMinimum': 'Il minimo accettato in cambio è {amount} — praticamente nulla. Se il prezzo si muove o qualcuno opera prima di te, potrebbe tornare quasi nulla.',
+  'tag.byApp': 'secondo l’app',
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
@@ -6576,9 +6976,11 @@ window.VelaCS = window.VelaCS || {};
 })(window.VelaCS);
 
 // Everything the renderer knows about the world, in one readable file:
-// tokens, contacts, your own accounts, contracts, and the ERC-7730-shaped
-// descriptors. In the shipped app most of this arrives from the wallet and the
-// ethereum-data descriptor server; here it is local so the gallery is offline.
+// tokens, networks, contracts and the ERC-7730-shaped descriptors — each per
+// chain, and nothing but real ones. The gallery's made-up examples (a
+// "source verified" contract at an address nothing lives at) live in demo/fixtures.js,
+// which only the gallery loads, so the published page never names them
+// (cs-20). The page reaches no network (076): all of it is local.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
@@ -6616,17 +7018,57 @@ window.VelaCS = window.VelaCS || {};
     });
   });
 
-  var CONTRACTS = {
-    '0x1111111254eeb25477b68fb85ed929f73a960582': { name: '1inch Router', owner: '1inch Network', verified: true, descriptor: true },
-    '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45': { name: 'Uniswap V3 Router', owner: 'Uniswap Labs', verified: true, descriptor: true },
-    '0x7a250d5630b4cf539739df2c5dacb4c659f2488d': { name: 'Uniswap V2 Router', owner: 'Uniswap Labs', verified: true, descriptor: true },
-    '0x000000000022d473030f116ddee9f6b43ac78ba3': { name: 'Permit2', owner: 'Uniswap Labs', verified: true, descriptor: true },
-    '0x83f20f44975d03b1b09e64809b757c47f942beea': { name: 'Savings DAI Vault', owner: 'Sky (MakerDAO)', verified: true, descriptor: true },
-    '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d': { name: 'Bored Ape Yacht Club', owner: 'Yuga Labs', verified: true, descriptor: true },
-    '0x5f2b8c3a9d1e4f6a7b8c9d0e1f2a3b4c5d6e7f80': { name: 'StakePool', verified: true, descriptor: false }, // 源码已验证，无描述符
-    '0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a09': { verified: false, descriptor: false },                   // 什么都没有
-    '0x4e59b44847b379578588920ca78fbf26c0b4956c': { name: 'CREATE2 Deployer', verified: true, descriptor: false },
-  };
+  // Contracts this page names, PER CHAIN (cs-13), like its tokens: an address
+  // is a different contract — or nothing at all — on another network. The
+  // Uniswap router's address on Gnosis drew "Uniswap V3 Router" over a call
+  // to whatever sits there. `EVERY_CHAIN` holds only contracts whose address
+  // fixes their code wherever there is code at it: deployed through a
+  // deterministic deployer from fixed bytes (Permit2, Safe's MultiSend), or
+  // the keyless deployer itself.
+  var EVERY_CHAIN = '*';
+  var ONEINCH_V5 = '0x1111111254eeb25477b68fb85ed929f73a960582';
+  var UNISWAP_V3_ROUTER2 = '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45';
+  var UNISWAP_V2_ROUTER = '0x7a250d5630b4cf539739df2c5dacb4c659f2488d';
+  var SDAI = '0x83f20f44975d03b1b09e64809b757c47f942beea';
+  var DAI = '0x6b175474e89094c44da98b954eedeac495271d0f';
+  var PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3';
+  var MULTI_SEND = [
+    '0x38869bf66a61cf6bdb996a6ae40d5853fd43b526', // MultiSend 1.4.1
+    '0x9641d764fc13c8b624c04430c7356c1c7c8102e2', // MultiSendCallOnly 1.4.1
+    '0xa238cbeb142c10ef7ad8442c6d1f9e89e07e7761', // MultiSend 1.3.0
+    '0x40a2accbd92bca938b02010e17a5b8929b49130d', // MultiSendCallOnly 1.3.0
+  ];
+  var ONEINCH_CHAINS = [1, 10, 56, 100, 137, 8453, 42161, 43114];
+  var UNISWAP_V3_CHAINS = [1, 10, 137, 42161];
+
+  var CONTRACTS = {};
+  function contractOn(chainId, address, entry) {
+    (CONTRACTS[chainId] || (CONTRACTS[chainId] = {}))[address] = entry;
+  }
+  contractOn(EVERY_CHAIN, PERMIT2, { name: 'Permit2', owner: 'Uniswap Labs', verified: true, descriptor: true });
+  contractOn(EVERY_CHAIN, '0x4e59b44847b379578588920ca78fbf26c0b4956c', { name: 'CREATE2 Deployer', verified: true, descriptor: false });
+  MULTI_SEND.forEach(function (address) {
+    contractOn(EVERY_CHAIN, address, { name: 'Safe MultiSend', owner: 'Safe', verified: true, descriptor: true });
+  });
+  ONEINCH_CHAINS.forEach(function (chainId) {
+    contractOn(chainId, ONEINCH_V5, { name: '1inch Router', owner: '1inch Network', verified: true, descriptor: true });
+  });
+  UNISWAP_V3_CHAINS.forEach(function (chainId) {
+    contractOn(chainId, UNISWAP_V3_ROUTER2, { name: 'Uniswap V3 Router', owner: 'Uniswap Labs', verified: true, descriptor: false });
+  });
+  contractOn(1, UNISWAP_V2_ROUTER, { name: 'Uniswap V2 Router', owner: 'Uniswap Labs', verified: true, descriptor: true });
+  contractOn(1, SDAI, { name: 'Savings DAI Vault', owner: 'Sky (MakerDAO)', verified: true, descriptor: true });
+  contractOn(1, '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d', { name: 'Bored Ape Yacht Club', owner: 'Yuga Labs', verified: true, descriptor: true });
+
+  /** `{chainId: {address: binding}}` for every chain in `chains`. */
+  function on(chains, address, binding) {
+    var out = {};
+    chains.forEach(function (chainId) {
+      out[chainId] = {};
+      out[chainId][address] = binding || {};
+    });
+    return out;
+  }
 
   // Networks: the ones Vela ships, named as the apps name them
   // (lib/catalog.js), and two more this page has always known.
@@ -6641,18 +7083,29 @@ window.VelaCS = window.VelaCS || {};
   // carry), so it is absent rather than guessed.
   delete NATIVE[4217];
 
-  var CONTACTS = {
-    '0x88cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894': { name: 'Account 1', kind: 'own' },
-    '0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1': { name: 'Alice Chen', kind: 'contact' },
-    '0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6': { name: 'Account 2', kind: 'own' },
-  };
-
   // ERC-7730-shaped descriptors, keyed by the function signature. The selector
   // is DERIVED with keccak at load — never taken on faith from the descriptor.
+  //
+  // A function's shape says nothing about the contract that has it (cs-4):
+  // any contract can expose `swap(address,(…),bytes,bytes)` and do with it
+  // whatever it likes, so a reading keyed by shape alone drew "Swap · You pay
+  // 250 USDC and receive…" and a "Confirm swap" button over a call to an
+  // attacker's contract. Two kinds, then:
+  //
+  //  · `standard` — a token standard's own functions (ERC-20, ERC-721). The
+  //    standard IS the meaning, so they are read on any contract; whether
+  //    the contract is a token this page knows on this chain decides only
+  //    the provenance line (read from the bytes of a known token, or "looks
+  //    like" for anything else — resolve.js);
+  //  · `contracts` — a protocol's descriptor, bound to the contracts (and
+  //    chains) it was written for, with what each one needs that the bytes
+  //    do not carry (a vault's asset). Anywhere else the same shape is only
+  //    a resemblance, drawn as a contract call with `shape` said in words.
   var DESCRIPTORS = [
     {
       signature: 'transfer(address,uint256)',
       kind: 'transfer',
+      standard: 'erc20',
       fields: [
         { label: 'field.recipient', path: [0], format: 'addressName', role: 'recipient' },
         { label: 'field.amount', path: [1], format: 'tokenAmount', token: 'self', role: 'send-amount' },
@@ -6661,6 +7114,7 @@ window.VelaCS = window.VelaCS || {};
     {
       signature: 'approve(address,uint256)',
       kind: 'approve',
+      standard: 'erc20',
       approval: 'set',
       fields: [
         { label: 'field.allowance', path: [1], format: 'tokenAmount', token: 'self', role: 'allowance' },
@@ -6670,6 +7124,7 @@ window.VelaCS = window.VelaCS || {};
     {
       signature: 'increaseAllowance(address,uint256)',
       kind: 'increase',
+      standard: 'erc20',
       approval: 'increase',
       fields: [
         { label: 'field.allowanceDelta', path: [1], format: 'tokenAmount', token: 'self', role: 'allowance-delta' },
@@ -6679,6 +7134,7 @@ window.VelaCS = window.VelaCS || {};
     {
       signature: 'transferFrom(address,address,uint256)',
       kind: 'transferFrom',
+      standard: 'erc20',
       fields: [
         { label: 'field.from', path: [0], format: 'addressName', role: 'from' },
         { label: 'field.to', path: [1], format: 'addressName', role: 'recipient' },
@@ -6688,6 +7144,7 @@ window.VelaCS = window.VelaCS || {};
     {
       signature: 'safeTransferFrom(address,address,uint256)',
       kind: 'nftTransfer',
+      standard: 'erc721',
       fields: [
         { label: 'field.from', path: [0], format: 'addressName', role: 'from' },
         { label: 'field.to', path: [1], format: 'addressName', role: 'recipient' },
@@ -6697,6 +7154,7 @@ window.VelaCS = window.VelaCS || {};
     {
       signature: 'setApprovalForAll(address,bool)',
       kind: 'approveAll',
+      standard: 'erc721',
       approval: 'all',
       fields: [
         { label: 'field.spender', path: [0], format: 'addressName', role: 'spender' },
@@ -6704,73 +7162,95 @@ window.VelaCS = window.VelaCS || {};
       ],
     },
     {
+      // ERC-4626, as Savings DAI implements it. The asset is the vault's, in
+      // the page's own words for the vault it knows — never the app's
+      // `context.vaultAsset` (cs-4: a claimed asset drew "You deposit 1,000
+      // USDC" into a contract that takes no USDC).
       signature: 'deposit(uint256,address)',
       kind: 'vaultDeposit',
+      shape: 'shape.vaultDeposit',
+      contracts: on([1], SDAI, { asset: DAI }),
       fields: [
         { label: 'field.deposit', path: [0], format: 'tokenAmount', token: 'vaultAsset', role: 'send-amount' },
-        { label: 'field.sharesTo', path: [1], format: 'addressName', role: 'recipient' },
+        // `returns`: where what the call gives back goes — the account, as a
+        // rule, and anywhere else is said (cs-2).
+        { label: 'field.sharesTo', path: [1], format: 'addressName', role: 'recipient', returns: true },
       ],
     },
     {
       signature: 'redeem(uint256,address,address)',
       kind: 'vaultWithdraw',
+      shape: 'shape.vaultWithdraw',
+      contracts: on([1], SDAI),
       fields: [
         { label: 'field.redeem', path: [0], format: 'tokenAmount', token: 'self', role: 'send-amount' },
-        { label: 'field.assetTo', path: [1], format: 'addressName', role: 'recipient' },
+        { label: 'field.assetTo', path: [1], format: 'addressName', role: 'recipient', returns: true },
         { label: 'field.sharesFrom', path: [2], format: 'addressName', detail: true },
       ],
     },
     {
+      // 1inch AggregationRouterV5.
       signature: 'swap(address,(address,address,address,address,uint256,uint256,uint256),bytes,bytes)',
       kind: 'swap',
+      shape: 'shape.oneInchSwap',
+      contracts: on(ONEINCH_CHAINS, ONEINCH_V5),
       fields: [
         { label: 'field.pay', path: [1, 4], format: 'tokenAmount', tokenPath: [1, 0], role: 'send-amount' },
         { label: 'field.minReceive', path: [1, 5], format: 'tokenAmount', tokenPath: [1, 1], role: 'receive-amount' },
-        { label: 'field.recipient', path: [1, 3], format: 'addressName', role: 'recipient' },
+        { label: 'field.recipient', path: [1, 3], format: 'addressName', role: 'recipient', returns: true },
       ],
     },
     {
       signature: 'swapExactETHForTokens(uint256,address[],address,uint256)',
       kind: 'swap',
+      shape: 'shape.uniswapV2Swap',
+      contracts: on([1], UNISWAP_V2_ROUTER),
       nativeIn: true,
       fields: [
         { label: 'field.minReceive', path: [0], format: 'tokenAmount', tokenPath: [1, 'last'], role: 'receive-amount' },
-        { label: 'field.recipient', path: [2], format: 'addressName', role: 'recipient' },
+        { label: 'field.recipient', path: [2], format: 'addressName', role: 'recipient', returns: true },
         { label: 'field.deadline', path: [3], format: 'date' },
       ],
     },
     {
+      // Safe's MultiSend. Its legs are read from the bytes wherever it is
+      // called, but only MultiSend is known to run them as legs.
       signature: 'multiSend(bytes)',
       kind: 'multiSend',
+      shape: 'shape.safeBatch',
+      contracts: (function () {
+        var out = {};
+        out[EVERY_CHAIN] = {};
+        MULTI_SEND.forEach(function (address) { out[EVERY_CHAIN][address] = {}; });
+        return out;
+      })(),
       nested: 'multiSend',
       fields: [],
     },
     {
+      // A Safe is any address (a proxy), so this one is bound to none: it is
+      // always a resemblance, its inner call read from the bytes.
       signature: 'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)',
       kind: 'safeExec',
+      shape: 'shape.safeExec',
+      contracts: {},
       nested: 'safeExec',
       fields: [
         { label: 'field.target', path: [0], format: 'addressName' },
         { label: 'field.nativeAttached', path: [1], format: 'nativeAmount' },
       ],
     },
-    {
-      signature: 'stake(uint256,uint256,address)',
-      // Deliberately NO intent: this one stands for "源码已验证但没有描述符",
-      // so the ladder must fall to level 2 and speak in facts, not meaning.
-      abiOnly: true,
-      fields: [],
-    },
   ];
 
   var bySelector = {};
   var selectorProof = [];
-  DESCRIPTORS.forEach(function (d) {
+  function addDescriptor(d) {
     var selector = ns.keccak.selector(d.signature);
     d.selector = selector;
     bySelector[selector] = d;
     selectorProof.push({ selector: selector, signature: d.signature });
-  });
+  }
+  DESCRIPTORS.forEach(addDescriptor);
 
   // A 4-byte database entry with no descriptor behind it: we know the NAME of
   // the function and nothing about what it means. Ladder level 3.
@@ -6789,23 +7269,37 @@ window.VelaCS = window.VelaCS || {};
     nativeSymbol: function (chainId) { return NATIVE[chainId] || null; },
     tokens: TOKENS,
     contracts: CONTRACTS,
-    contacts: CONTACTS,
     bySelector: bySelector,
     fourbyte: FOURBYTE,
     selectorProof: selectorProof,
+    /** The gallery's own fixtures (demo/fixtures.js) come in through these. */
+    addContract: contractOn,
+    addDescriptor: addDescriptor,
     /** A token this page knows ON THAT CHAIN, or null. */
     token: function (address, chainId) {
       var chain = TOKENS[Number(chainId)];
       return (chain && chain[lower(address)]) || null;
     },
-    contract: function (address) {
-      return CONTRACTS[lower(address)] || null;
-    },
-    contact: function (address) {
-      return CONTACTS[lower(address)] || null;
+    /** A contract this page knows ON THAT CHAIN (or on every chain), or null. */
+    contract: function (address, chainId) {
+      var chain = CONTRACTS[Number(chainId)];
+      return (chain && chain[lower(address)]) || CONTRACTS[EVERY_CHAIN][lower(address)] || null;
     },
     descriptorFor: function (selector) {
       return bySelector[selector] || null;
+    },
+    /**
+     * What a protocol descriptor knows about the contract it is called on
+     * (`{}` at least), or null when it was not written for that contract on
+     * that chain. A `standard` descriptor is no protocol's: always `{}`.
+     */
+    binding: function (descriptor, address, chainId) {
+      if (!descriptor) return null;
+      if (descriptor.standard) return {};
+      var bound = descriptor.contracts || {};
+      var chain = bound[Number(chainId)];
+      var every = bound[EVERY_CHAIN];
+      return (chain && chain[lower(address)]) || (every && every[lower(address)]) || null;
     },
   };
 })(window.VelaCS);
@@ -6924,6 +7418,25 @@ window.VelaCS = window.VelaCS || {};
     return { key: key, params: params };
   }
 
+  // --- provenance ------------------------------------------------------------
+  //
+  // One line under the intent says where its reading came from, in the words
+  // the web wallet uses (owner, 2026-10-28), so a person can always tell what
+  // is CERTAIN from what is INTERPRETED from what is CLAIMED:
+  //
+  //   read      ✓ read by this page from the bytes that get signed
+  //   described △ a descriptor's reading — a description, not a guarantee
+  //               that the contract does what it says
+  //   fourbyte  △ only a function name, from a public database
+  //   shape     △ the call has the shape of something it may not be
+  //   claimed   ○ the only reading is the app's own word (its simulation)
+  //
+  // `whatKey` names the resemblance; `contract` the descriptor's contract.
+
+  function provenance(view, kind, extra) {
+    view.provenance = Object.assign({ kind: kind }, extra || {});
+  }
+
   // --- identity --------------------------------------------------------------
 
   /**
@@ -6942,7 +7455,9 @@ window.VelaCS = window.VelaCS || {};
   function identify(address, ctx, roleHints) {
     var lower = (address || '').toLowerCase();
     var hints = roleHints || {};
-    var known = reg.contract(lower);
+    // On the chain the signature is for: a name from another network's table
+    // is a different contract, or none (cs-13).
+    var known = reg.contract(lower, ctx.chainId);
     var tag = null;
     var self = ctx.selfAccount;
 
@@ -7137,6 +7652,9 @@ window.VelaCS = window.VelaCS || {};
       level: 1,
       signer: ctx.signer || { name: '—', letter: '?' },
       fee: null,
+      // Where the intent's reading came from (`provenance`); none for a
+      // request nothing could be read from, and for a key ceremony.
+      provenance: null,
     };
   }
 
@@ -7146,6 +7664,9 @@ window.VelaCS = window.VelaCS || {};
       params: (extra && extra.params) || [],
       addresses: (extra && extra.addresses) || [],
       sim: extra && extra.sim,
+      // A simulation summary from the context is the requester's, and the
+      // details say so beside it; `ui.simNoOther` is this page's own words.
+      simClaimed: !!(extra && extra.simClaimed && extra.sim),
       raw: calldata && calldata !== '0x' ? { bytes: abi.byteLength(calldata), hex: calldata } : null,
       values: values,
     };
@@ -7214,6 +7735,7 @@ window.VelaCS = window.VelaCS || {};
         subParams: { bytes: abi.byteLength(data) },
       };
       view.sentence = text('sentence.deploy');
+      provenance(view, 'read');
       view.warnings.push({ tone: 'caution', key: 'warn.deploy' });
       view.tech = techFor(text('value.contractCreation'), null, data, {});
       nativeOut(view, value, ctx);
@@ -7230,6 +7752,7 @@ window.VelaCS = window.VelaCS || {};
       var amount = nativeAmount(value, ctx, true);
       var moves = value > 0n;
       view.intentKey = 'intent.send';
+      provenance(view, 'read');
       // Nothing leaves at 0, so the hero is not an outgoing amount.
       view.hero = { kind: 'amount', amount: amount, direction: moves ? 'out' : 'none' };
       view.fields.push({ label: 'field.recipient', identity: meta, format: 'addressName', role: 'recipient' });
@@ -7308,15 +7831,19 @@ window.VelaCS = window.VelaCS || {};
   function resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value) {
     var to = call.to || '';
     var descriptor = selector ? reg.descriptorFor(selector) : null;
+    // What the descriptor knows about THIS contract on THIS chain — null when
+    // it was written for another one (cs-4). A token standard's is `{}`.
+    var binding = descriptor ? reg.binding(descriptor, to, ctx.chainId) : null;
 
-    // Level 1 — a verified descriptor gives us meaning.
-    if (descriptor && !descriptor.abiOnly) {
+    // Level 1 — a token standard, or a descriptor written for this contract,
+    // gives us meaning.
+    if (descriptor && !descriptor.abiOnly && binding) {
       var values = abi.decode(descriptor.signature, data);
-      if (values) return applyDescriptor(descriptor, values, call, ctx, view, meta, value, isLeg);
+      if (values) return applyDescriptor(descriptor, values, call, ctx, view, meta, value, isLeg, binding);
     }
 
     // Level 2 — source verified, ABI decodes, nobody wrote down what it means.
-    if (descriptor && descriptor.abiOnly) {
+    if (descriptor && descriptor.abiOnly && binding) {
       var abiValues = abi.decode(descriptor.signature, data);
       var parsed = abi.parseSignature(descriptor.signature);
       view.intentKey = 'intent.contractCall';
@@ -7331,10 +7858,17 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor(descriptor.signature, abiValues, data, {
         params: (abiValues || []).map(function (v, i) { return { name: parsed.types[i], value: renderRaw(v) }; }),
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
-        sim: ctx.simulation && ctx.simulation.summary,
+        sim: claimedSim(ctx, view), simClaimed: true,
       });
       if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
+    }
+
+    // Level 3 — a protocol's function, on a contract its descriptor was not
+    // written for: the shape of a swap is not a swap.
+    if (descriptor && descriptor.shape && !descriptor.abiOnly) {
+      var shaped = abi.decode(descriptor.signature, data);
+      if (shaped) return applyShape(descriptor, shaped, call, ctx, view, meta, data, selector, value, isLeg);
     }
 
     // Level 3 — only a 4-byte name.
@@ -7351,10 +7885,11 @@ window.VelaCS = window.VelaCS || {};
         return { labelRaw: p4.types[i], value: renderRaw(v), format: 'raw' };
       });
       view.warnings.push({ tone: 'caution', key: 'warn.fourbyte' });
+      provenance(view, 'fourbyte');
       view.tech = techFor(known4, v4, data, {
         params: (v4 || []).map(function (v, i) { return { name: p4.types[i], value: renderRaw(v) }; }),
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
-        sim: ctx.simulation && ctx.simulation.summary,
+        sim: claimedSim(ctx, view), simClaimed: true,
       });
       if (isLeg) legFacts(view, meta, p4.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
@@ -7375,27 +7910,31 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.blindUndeclared');
       view.warnings.push({ tone: 'danger', key: 'warn.blindUndeclared' });
     } else if (sim) {
+      // The simulation is the app's, run where this page cannot see, so it
+      // cannot make a call nobody can read any less blind (cs-6): the risk
+      // stays where "nothing decodes" puts it. Its rows are drawn as its word.
       view.level = 4;
-      view.risk = 'caution';
+      view.risk = 'danger';
       view.sentence = text('sentence.blindSim');
-      view.warnings.push({ tone: 'caution', key: 'warn.blindSim' });
+      view.warnings.push({ tone: 'danger', key: 'warn.blindSim' });
     } else {
       view.level = 6;
       view.risk = 'danger';
       view.sentence = text('sentence.blindNothing');
       view.warnings.push({ tone: 'danger', key: 'warn.blindNothing' });
     }
-    if (sim && sim.rows) view.balance = { rows: sim.rows, note: sim.note, claimed: true };
+    if (sim) provenance(view, 'claimed');
+    if (sim && sim.rows) view.balance = claimedBalance(sim, view);
     view.tech = techFor(
       selector ? text('value.unknownFunction', { selector: selector }) : text('value.emptyCalldata'),
       null, data,
-      { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: sim && sim.summary },
+      { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: claimedSim(ctx, view), simClaimed: true },
     );
     if (isLeg) legFacts(view, meta, selector || '0x', data, value, ctx, true);
     return view;
   }
 
-  function resolveToken(field, values, call, ctx) {
+  function resolveToken(field, values, call, binding) {
     if (field.tokenPath) {
       var path = field.tokenPath;
       if (path[path.length - 1] === 'last') {
@@ -7404,15 +7943,29 @@ window.VelaCS = window.VelaCS || {};
       }
       return abi.at(values, path);
     }
-    if (field.token === 'vaultAsset') return ctx.vaultAsset || call.to;
+    // The vault's asset is the descriptor's word for the vault it was written
+    // for. Nothing else names it: `context.vaultAsset` is the app's (cs-4),
+    // and without a binding the amount is raw units of an unknown token.
+    if (field.token === 'vaultAsset') return (binding && binding.asset) || null;
     return call.to;
   }
 
-  function applyDescriptor(descriptor, values, call, ctx, view, meta, callValue, isLeg) {
+  function applyDescriptor(descriptor, values, call, ctx, view, meta, callValue, isLeg, binding) {
     view.intentKey = 'intent.' + descriptor.kind;
     view.kind = descriptor.kind;
     view.level = 1;
     view.contract = meta;
+    // A token standard is read from the bytes of a token this page knows on
+    // this chain; on any other contract the standard's shape is all there
+    // is. A protocol's descriptor is a description of the contract it was
+    // written for — not a promise that contract keeps it.
+    if (descriptor.standard) {
+      if (reg.token(call.to, ctx.chainId)) provenance(view, 'read');
+      else provenance(view, 'shape', { whatKey: descriptor.standard === 'erc721' ? 'shape.erc721' : 'shape.erc20' });
+    } else {
+      var known = reg.contract(call.to, ctx.chainId);
+      provenance(view, 'described', { contract: (known && known.name) || label(meta) });
+    }
 
     if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
 
@@ -7423,7 +7976,7 @@ window.VelaCS = window.VelaCS || {};
     descriptor.fields.forEach(function (field) {
       var raw = abi.at(values, field.path);
       if (field.format === 'tokenAmount') {
-        var amount = tokenAmount(raw, resolveToken(field, values, call, ctx), ctx);
+        var amount = tokenAmount(raw, resolveToken(field, values, call, binding), ctx);
         if (field.role === 'allowance' || field.role === 'allowance-delta') {
           approval = { amount: amount, mode: descriptor.approval };
           if (!hero) hero = { kind: 'amount', amount: amount, direction: 'allowance' };
@@ -7481,8 +8034,9 @@ window.VelaCS = window.VelaCS || {};
       if (promoted) promoted.consumedByHero = true;
     }
 
-    if (approval) applyApprovalGuard(approval, view, ctx);
+    if (approval) applyApprovalGuard(approval, view, ctx, rows);
     applyRecipientGuards(call, view, rows);
+    outputGuards(descriptor, values, call, ctx, view, binding);
 
     if (!view.sentence) view.sentence = sentenceFor(descriptor, rows, meta, view);
 
@@ -7490,12 +8044,117 @@ window.VelaCS = window.VelaCS || {};
     view.tech = techFor(descriptor.signature, values, call.data, {
       params: values.map(function (v, i) { return { name: parsed2.types[i], value: renderRaw(v) }; }),
       addresses: addressesIn(rows, call, meta),
-      sim: ctx.simulation && ctx.simulation.summary,
+      sim: claimedSim(ctx, view), simClaimed: true,
     });
-    if (ctx.simulation && ctx.simulation.rows && !isLeg) {
-      view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
-    }
+    if (ctx.simulation && ctx.simulation.rows && !isLeg) view.balance = claimedBalance(ctx.simulation, view);
     return view;
+  }
+
+  /**
+   * A protocol's function on a contract its descriptor was not written for
+   * (cs-4): `swap(…)` with 1inch's shape on an attacker's contract, ERC-4626's
+   * `deposit` on something that is no vault. The same bytes are read the
+   * same way — by type, every one of them — but nothing says what the
+   * contract does with them: the intent is a contract call, the button the
+   * certain action ("Sign"), and the resemblance a line of its own ("Looks
+   * like a 1inch swap — shape only, not checked"). No token amount is
+   * guessed for it, least of all from the app's `context.vaultAsset`.
+   */
+  function applyShape(descriptor, values, call, ctx, view, meta, data, selector, value, isLeg) {
+    var parsed = abi.parseSignature(descriptor.signature);
+    view.intentKey = 'intent.contractCall';
+    view.level = 3;
+    view.risk = 'caution';
+    view.contract = meta;
+    provenance(view, 'shape', { whatKey: descriptor.shape });
+    // A batch's legs are still read from its bytes — they are what the call
+    // hands on — under the same "contract call" and the same line.
+    if (descriptor.nested) return applyNested(descriptor, values, call, ctx, view, meta);
+    view.hero = { kind: 'code', title: parsed.name + '(…)', sub: label(meta) };
+    view.sentence = text('sentence.shapeOnly');
+    view.fields = values.map(function (v, i) {
+      // A tuple's full type is a line too long for a label; the details
+      // keep it.
+      var type = parsed.types[i];
+      return { labelRaw: type.charAt(0) === '(' ? 'tuple' : type, value: renderRaw(v), format: 'raw' };
+    });
+    // Even as a resemblance, an address its bytes put where the output goes
+    // is checked against the account, and a minimum of nothing is said.
+    outputGuards(descriptor, values, call, ctx, view, null);
+    view.tech = techFor(descriptor.signature, values, data, {
+      params: values.map(function (v, i) { return { name: parsed.types[i], value: renderRaw(v) }; }),
+      addresses: [{ roleKey: 'ui.contract', name: label(meta), address: call.to }],
+      sim: claimedSim(ctx, view), simClaimed: true,
+    });
+    if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
+    return view;
+  }
+
+  /**
+   * Where a call's output goes, and how little it may be (cs-2), from the
+   * descriptor's own fields:
+   *
+   *  · a `returns` address (a swap's recipient, a vault's shares-to) that is
+   *    not the account signing — "You receive…" in green had stood over a
+   *    swap whose output went to a stranger;
+   *  · a minimum received that is next to nothing (`isDust`), which lets any
+   *    price move or trade-ahead take almost all of it.
+   *
+   * "This account" is the signature's own (`ctx.selfAccount`): with no
+   * account in the digest, nothing can be said either way.
+   */
+  function outputGuards(descriptor, values, call, ctx, view, binding) {
+    var self = ctx.selfAccount ? String(ctx.selfAccount).toLowerCase() : null;
+    descriptor.fields.forEach(function (field) {
+      var raw = abi.at(values, field.path);
+      if (field.returns && self && typeof raw === 'string' && raw.toLowerCase() !== self) {
+        view.returnsElsewhere = raw;
+        if (!view.warnings.some(function (w) { return w.key === 'warn.notThisAccount'; })) {
+          view.warnings.push({ tone: 'danger', key: 'warn.notThisAccount', params: { to: shortAddress(raw) } });
+        }
+        raise(view, 'danger');
+      }
+      if (field.role === 'receive-amount' && typeof raw === 'bigint') {
+        var amount = tokenAmount(raw, resolveToken(field, values, call, binding), ctx);
+        if (isDust(amount)) {
+          view.warnings.push({
+            tone: 'danger',
+            key: 'warn.dustMinimum',
+            params: { amount: formatUnits(amount.value, amount.token.decimals, amount.token.decimals) + ' ' + amount.symbol },
+          });
+          raise(view, 'danger');
+        }
+      }
+    });
+  }
+
+  /**
+   * A minimum that protects nothing: at most a millionth of one whole token
+   * (1 wei of an 18-decimal coin, 1 unit of USDC), or 0 or 1 of a token whose
+   * decimals this page cannot check.
+   */
+  function isDust(amount) {
+    if (amount.unlimited) return false;
+    if (amount.unverifiedDecimals) return amount.value <= 1n;
+    return amount.value * 1000000n <= 10n ** BigInt(amount.token.decimals);
+  }
+
+  /** The requester's simulation summary, made visible — its words, not ours. */
+  function claimedSim(ctx, view) {
+    var summary = ctx.simulation && ctx.simulation.summary;
+    return typeof summary === 'string' && summary ? visible(summary, view) : undefined;
+  }
+
+  /** The requester's simulated balance change, drawn as its claim. */
+  function claimedBalance(sim, view) {
+    var rows = Array.isArray(sim.rows) ? sim.rows : [];
+    return {
+      rows: rows.map(function (row) {
+        return { symbol: visible(String(row && row.symbol), view), delta: visible(String(row && row.delta), view) };
+      }),
+      note: typeof sim.note === 'string' ? visible(sim.note, view) : null,
+      claimed: true,
+    };
   }
 
   function addressesIn(rows, call, meta) {
@@ -7523,6 +8182,16 @@ window.VelaCS = window.VelaCS || {};
   // wallet's own sheet is where a cap is chosen, before the request gets here.
   // An approve-ALL stays refused — the wallet only grants one on a deliberate
   // tap, and this page has no such tap.
+  /**
+   * The allowance the app says the spender has now, or null. It is the
+   * app's word (cs-16): the page reads no chain, so a figure built on it is
+   * drawn as the app's, and without one the page says it cannot see it.
+   */
+  function claimedAllowance(ctx) {
+    if (ctx.currentAllowance === undefined || ctx.currentAllowance === null) return null;
+    return abi.quantity(ctx.currentAllowance);
+  }
+
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
@@ -7548,18 +8217,25 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
     } else if (approval.mode === 'increase') {
-      var current = ctx.currentAllowance || 0n;
-      var after = current + amount.value;
-      view.fields.push({
-        label: 'field.allowanceAfter',
-        value: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
-        format: 'raw',
-        emphasis: true,
-      });
-      view.sentence = text('sentence.increase', {
-        current: formatUnits(current, amount.token.decimals) + ' ' + amount.symbol,
-        after: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
-      });
+      var current = claimedAllowance(ctx);
+      var delta = amountPhrase(amount);
+      if (current === null) {
+        view.sentence = text('sentence.increaseUnknown', { delta: delta });
+      } else {
+        var after = current + amount.value;
+        view.fields.push({
+          label: 'field.allowanceAfter',
+          value: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
+          format: 'raw',
+          emphasis: true,
+          tagKey: 'tag.byApp',
+        });
+        view.sentence = text('sentence.increase', {
+          delta: delta,
+          current: formatUnits(current, amount.token.decimals) + ' ' + amount.symbol,
+          after: formatUnits(after, amount.token.decimals) + ' ' + amount.symbol,
+        });
+      }
       raise(view, 'caution');
     } else {
       view.badge = 'tag.capped';
@@ -7575,7 +8251,9 @@ window.VelaCS = window.VelaCS || {};
         view.sentence = text('sentence.burn');
         view.warnings.push({ tone: 'danger', key: 'warn.burn' });
         view.refuse = true;
-      } else if (row.identity.kind === 'own') {
+      } else if (row.identity.kind === 'own' && view.risk === 'normal') {
+        // Only ever from "normal": a caution already said (unknown decimals,
+        // coin sent along) is not taken back by where the tokens go.
         view.risk = 'safe';
       }
     });
@@ -7610,7 +8288,11 @@ window.VelaCS = window.VelaCS || {};
     }
     if (kind === 'swap') {
       var receive = rows.find(function (r) { return r.role === 'receive-amount'; });
-      return text('sentence.swap', { amount: amount, receive: receive ? amountPhrase(receive.amount) : '—' });
+      var receiveText = receive ? amountPhrase(receive.amount) : '—';
+      // Not "you receive" when what comes back goes to someone else (cs-2).
+      return view.returnsElsewhere
+        ? text('sentence.swapElsewhere', { amount: amount, receive: receiveText, to: shortAddress(view.returnsElsewhere) })
+        : text('sentence.swap', { amount: amount, receive: receiveText });
     }
     if (kind === 'vaultDeposit') return text('sentence.vaultDeposit', { amount: amount, vault: label(meta) });
     if (kind === 'vaultWithdraw') return text('sentence.vaultWithdraw', { amount: amount, vault: label(meta) });
@@ -7737,6 +8419,7 @@ window.VelaCS = window.VelaCS || {};
       var mismatch = siwe.domain.toLowerCase() !== origin.toLowerCase();
       var siweDomain = visible(siwe.domain, view);
       view.intentKey = 'intent.login';
+      provenance(view, 'readMessage');
       view.hero = { kind: 'siwe', domain: siweDomain, statement: visible(siwe.statement, view), mismatch: mismatch };
       view.fields = [
         { label: 'field.claimedDomain', value: siweDomain, format: 'raw', warning: mismatch },
@@ -7756,6 +8439,7 @@ window.VelaCS = window.VelaCS || {};
     }
 
     view.intentKey = 'intent.message';
+    provenance(view, 'readMessage');
     view.hero = { kind: 'message', text: visible(body, view) };
     view.sentence = text('sentence.message');
     view.tech = techFor('personal_sign (UTF-8)', null, payload, {});
@@ -7821,6 +8505,10 @@ window.VelaCS = window.VelaCS || {};
       var deadline = Number(message.deadline);
       var expired = deadline * 1000 < (ctx.now || Date.now());
       view.intentKey = 'intent.permit';
+      // A token's own permit when the token is one this page knows here;
+      // otherwise any contract can verify a struct of that shape.
+      if (reg.token(domain.verifyingContract, ctx.chainId)) provenance(view, 'readMessage');
+      else provenance(view, 'shape', { whatKey: 'shape.permit' });
       view.hero = { kind: 'amount', amount: amount, direction: 'allowance' };
       view.fields = [
         { label: 'field.spender', identity: spender, format: 'addressName', role: 'spender' },
@@ -7856,6 +8544,10 @@ window.VelaCS = window.VelaCS || {};
       var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);
       var pSpender = identify(message.spender, ctx);
       view.intentKey = 'intent.permit2';
+      // Permit2's struct is Permit2's only when Permit2 verifies it.
+      var isPermit2 = reg.contract(domain.verifyingContract, ctx.chainId);
+      if (isPermit2 && isPermit2.name === 'Permit2') provenance(view, 'readMessage');
+      else provenance(view, 'shape', { whatKey: 'shape.permit2' });
       view.hero = { kind: 'amount', amount: pAmount, direction: 'allowance' };
       view.fields = [
         { label: 'field.spender', identity: pSpender, format: 'addressName', role: 'spender' },
@@ -7878,12 +8570,15 @@ window.VelaCS = window.VelaCS || {};
           { name: 'spender', value: message.spender },
           { name: 'expiration', value: String(details.expiration || message.deadline) },
         ],
-        addresses: [{ roleKey: 'ui.verifyingContract', name: 'Permit2', address: domain.verifyingContract }],
+        // Named from the table, like every other address: a struct verified
+        // by some other contract was labelled "Permit2" here.
+        addresses: [{ roleKey: 'ui.verifyingContract', name: label(view.contract), address: domain.verifyingContract }],
       });
       return view;
     }
 
     view.intentKey = 'intent.typed';
+    provenance(view, 'readMessage');
     view.level = 2;
     view.risk = 'caution';
     view.hero = { kind: 'code', title: visible(primary, view), sub: visible(domain.name || null, view) };
@@ -8561,7 +9256,8 @@ window.VelaCS = window.VelaCS || {};
       // offer the button for exactly the tampered operation it exists to stop.
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
       liftLegWarnings(view);
-      if (ctx.simulation) view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
+      if (ctx.simulation && ctx.simulation.rows) view.balance = claimedBalance(ctx.simulation, view);
+      provenance(view, 'read');
       view.tech = techFor('wallet_sendCalls (EIP-5792)', null, null, {});
     } else if (intent.method === 'personal_sign') {
       resolvePersonalSign(intent, ctx, view);
@@ -8686,6 +9382,8 @@ window.VelaCS = window.VelaCS || {};
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    triangle: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+    circle: '<circle cx="12" cy="12" r="9"/>',
   };
 
   function icon(name, className) {
@@ -8894,6 +9592,9 @@ window.VelaCS = window.VelaCS || {};
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
         field.valueKey ? t(field.valueKey) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
+      // Whose figure it is, when it is not this page's (an allowance the app
+      // says the spender has now).
+      if (field.tagKey) value.appendChild(el('span', 'tag', t(field.tagKey)));
     }
     row.appendChild(value);
     return row;
@@ -8907,6 +9608,8 @@ window.VelaCS = window.VelaCS || {};
       head.appendChild(el('span', 'tag tag-bad', t('tag.danger')));
     }
     card.appendChild(head);
+    var source = provenanceLine(leg.view);
+    if (source) card.appendChild(source);
     leg.view.fields
       .filter(function (f) { return !f.detail && !f.consumedByHero; })
       .forEach(function (field) { card.appendChild(fieldRow(field)); });
@@ -8982,6 +9685,7 @@ window.VelaCS = window.VelaCS || {};
     if (tech.sim) {
       body.appendChild(el('div', 'tech-label', t('ui.simulation')));
       body.appendChild(el('div', 'tech-sim', typeof tech.sim === 'string' ? tech.sim : t(tech.sim)));
+      if (tech.simClaimed) body.appendChild(el('div', 'tech-note', t('ui.simClaimed')));
     }
 
     if (view.digest) {
@@ -9166,7 +9870,38 @@ window.VelaCS = window.VelaCS || {};
     var label = el('h1', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
     head.appendChild(label);
+    var source = provenanceLine(view);
+    if (source) head.appendChild(source);
     return head;
+  }
+
+  // The mark and the words for each source (resolve.js `provenance`): the
+  // same three marks as the web wallet — ✓ certain, △ interpreted, ○ claimed.
+  var PROVENANCE = {
+    read: { icon: 'check', key: 'prov.read' },
+    readMessage: { icon: 'check', key: 'prov.readMessage' },
+    described: { icon: 'triangle', key: 'prov.described' },
+    fourbyte: { icon: 'triangle', key: 'prov.fourbyte' },
+    shape: { icon: 'triangle', key: 'prov.shape' },
+    claimed: { icon: 'circle', key: 'prov.claimed' },
+  };
+
+  /**
+   * One quiet line under the intent: where its reading came from. A
+   * description is said as one ("Described by … — a description, not a
+   * guarantee"), a resemblance as one ("Looks like … — shape only").
+   */
+  function provenanceLine(view) {
+    var p = view.provenance;
+    var kind = p && PROVENANCE[p.kind];
+    if (!kind) return null;
+    var line = el('p', 'provenance provenance-' + p.kind);
+    line.appendChild(icon(kind.icon, 'provenance-mark'));
+    line.appendChild(el('span', 'provenance-text', t(kind.key, {
+      what: p.whatKey ? t(p.whatKey) : '',
+      source: p.contract ? t('prov.sourcePage', { contract: p.contract }) : '',
+    })));
+    return line;
   }
 
   /**

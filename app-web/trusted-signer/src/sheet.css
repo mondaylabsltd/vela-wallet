@@ -330,6 +330,31 @@ body {
   color: var(--color-fg-muted);
 }
 
+/* Where the intent's reading came from, under it (the web wallet's line):
+   ✓ read by this page, △ a description or a resemblance, ○ the app's word.
+   Muted words; only the mark carries the tone. */
+.provenance {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-fg-muted);
+}
+.provenance-mark {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  margin-top: 1px;
+}
+.provenance-read .provenance-mark,
+.provenance-readMessage .provenance-mark { color: var(--color-success-base); }
+.provenance-described .provenance-mark,
+.provenance-fourbyte .provenance-mark,
+.provenance-shape .provenance-mark { color: var(--color-warning-base); }
+.provenance-claimed .provenance-mark { color: var(--color-fg-subtle); }
+.leg .provenance { margin-bottom: var(--space-sm); }
+
 /* Everything the request says, in the app's block rhythm (SigningBody). */
 .blocks {
   display: flex;

@@ -355,7 +355,9 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   const deposit = ns.keccak.selector('deposit()'); // known to nobody here: the blind ladder
   const claim = ns.encode.call('claim()', []);      // a 4-byte name only
   const usdcTransfer = ns.encode.call('transfer(address,uint256)', [TO, 1_000_000n]);
-  const stake = ns.encode.call('stake(uint256,uint256,address)', [1n, 2n, TO]);
+  // A protocol's shape on a contract its descriptor was not written for
+  // (ERC-4626's deposit, on a contract that is no vault this page knows).
+  const vaultShape = ns.encode.call('deposit(uint256,address)', [1n, TO]);
   const onMainnet = { chainId: 1 };
   const outRow = (view) => view.fields.find((f) => f.label === 'field.nativeAttached' && f.amount);
   const strongTexts = (node) => node.find('strong').map((n) => n.textContent);
@@ -366,7 +368,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   for (const [name, call, level] of [
     ['deposit() (blind)', { to: WETH, value: FIVE, data: deposit }, 6],
     ['claim() (a 4-byte name)', { to: WETH, value: FIVE, data: claim }, 3],
-    ['stake(…) (source verified, no meaning)', { to: '0xae7ab96520de3a18e5e111b5eaab095312d7fe84', value: FIVE, data: stake }, 2],
+    ['deposit(…) (a vault\'s shape only)', { to: '0xae7ab96520de3a18e5e111b5eaab095312d7fe84', value: FIVE, data: vaultShape }, 3],
     ['transfer(…) on USDC (a reviewed descriptor)', { to: USDC, value: FIVE, data: usdcTransfer }, 1],
   ]) {
     const view = tx(call, onMainnet);
