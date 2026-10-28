@@ -299,6 +299,7 @@ pub fn send_state_pin(
         usd_value: 120.0,
         submitted_at_ms: None,
         typical_inclusion_s: None,
+        can_send_again: false,
     });
     let fee = crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
     FlowBody::SendReceipt(crate::flows::live::send_receipt(
@@ -567,6 +568,9 @@ fn base_view() -> CreateView {
         add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
         methods_pinned: true,
         key_count_shown: false,
+        can_cancel: false,
+        name_bytes: 0,
+        name_limit: u32::try_from(vela_core::app::MAX_USER_NAME_BYTES).unwrap_or(u32::MAX),
     }
 }
 

@@ -1062,6 +1062,10 @@ pub enum Published {
 /// answered at the registry's 202, and the session's landing watch waits on
 /// the task later through [`await_task`]. Otherwise the task is polled here
 /// until the group has landed, as it always was.
+///
+/// `ceremony` is `None` for the session's replay of a pending record (ob-2):
+/// every member there carries its creation-time proof, so nothing signs live
+/// and no window is needed — a member that would have to is refused, named.
 #[allow(
     clippy::too_many_arguments,
     reason = "the core's RegistryPublish operation, field for field, and the ceremony"
@@ -1074,7 +1078,7 @@ pub fn publish(
     method: vela_core::app::KeyMethod,
     page: Option<&str>,
     answer_when_accepted: bool,
-    ceremony: &Ceremony,
+    ceremony: Option<&Ceremony>,
 ) -> Result<Published> {
     if members.is_empty() {
         return Err(RegistryError::answered(
@@ -1130,7 +1134,7 @@ pub fn publish(
         page,
         ceremony,
     );
-    if page.is_some() {
+    if let (Some(_), Some(ceremony)) = (page, ceremony) {
         ceremony.trusted_signer.end_flow();
     }
     let proven = proven?;
@@ -1207,13 +1211,22 @@ fn prove_members(
     group_public_key: &str,
     method: vela_core::app::KeyMethod,
     page: Option<&str>,
-    ceremony: &Ceremony,
+    ceremony: Option<&Ceremony>,
 ) -> Result<Vec<ApiMember>> {
     let mut proven = Vec::with_capacity(members.len());
     for member in members {
         let proof = match &member.proof {
             Some(proof) => proof.clone(),
             None => {
+                // ob-2: the session's replay has no window to sign in, and a
+                // record it replays carries every proof — one that does not
+                // is not sent half-proven.
+                let Some(ceremony) = ceremony else {
+                    return Err(RegistryError::answered(format!(
+                        "member {} has no proof to replay, and a passkey cannot be asked here",
+                        member.credential_id
+                    )));
+                };
                 // A member with no creation-time proof signs live. On desktop
                 // that means one touch of the security key per such member —
                 // which is the login re-publish path, not the create path.

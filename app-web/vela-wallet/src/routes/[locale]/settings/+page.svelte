@@ -109,6 +109,7 @@
 		themeFromSegment,
 		withEraseFailure,
 		withEraseFailureDesktop,
+		withEraseUnsynced,
 		withFeedback,
 		withFeedbackDesktop,
 		walletKeysModel,
@@ -697,7 +698,8 @@
 			// home-9: no figure for test coins in the testnet space.
 			noValue: networkSpace.testnet,
 			// ms-24: a row the core is still reading is drawn as loading.
-			loading: balance.view.switcher.loading
+			loading: balance.view.switcher.loading,
+			unsynced: view.unsynced
 		};
 	});
 
@@ -1032,6 +1034,8 @@
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale, systemLocale);
+		// ob-2: the wallets an erase would take before they sync, by name.
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		model = withFeedback(model, m, deviceFacts);
 		model = {
@@ -1104,6 +1108,7 @@
 				return sitesShown ? [item, agentItem, sitesItem] : [item, agentItem];
 			})
 		};
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card
 		// with no handler, and a report panel that did not exist.

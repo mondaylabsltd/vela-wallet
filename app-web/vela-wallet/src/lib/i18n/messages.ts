@@ -168,6 +168,7 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
 	'onboarding.create.syncFailedTitle',
 	'onboarding.create.syncFailedMessage',
 	'onboarding.create.syncFailedHint',
+	'onboarding.create.syncFailedNext',
 	'onboarding.create.retryUploadBtn',
 	'onboarding.create.successTitle',
 	'onboarding.create.enterWalletBtn'

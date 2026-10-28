@@ -253,7 +253,9 @@
       "keeps": "A carteira continua: suas passkeys ficam com o seu provedor de passkeys, não com este app — entre de novo e o mesmo endereço volta. Não é apagado: o Vela Relay guarda as transações enviadas por até 14 dias, o índice de chaves guarda os registros por até 30 dias, e o registro da chave pública na chain é permanente; ninguém pode apagá-lo.",
       "confirm": "Apagar tudo",
       "cancel": "Cancelar",
-      "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo."
+      "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo.",
+      "unsynced": "Sincronização não concluída: {{names}}. Até sincronizar, nenhum outro dispositivo consegue encontrá-la — apagar agora pode fazer você perdê-la para sempre.",
+      "unsyncedAck": "Entendo que uma carteira não sincronizada pode ser perdida para sempre"
     },
     "formatNote": {
       "system": "Sistema",

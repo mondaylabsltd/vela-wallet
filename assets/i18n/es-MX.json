@@ -253,7 +253,9 @@
    "keeps": "La billetera se queda: tus passkeys las guarda tu proveedor de passkeys, no esta app; inicia sesión de nuevo y vuelve la misma dirección. No se borra: Vela Relay guarda las transacciones enviadas hasta 14 días, el índice de llaves guarda los registros hasta 30 días y el registro de la llave pública en la cadena es permanente; nadie puede borrarlo.",
    "confirm": "Borrar todo",
    "cancel": "Cancelar",
-   "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."
+   "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo.",
+   "unsynced": "Sin terminar de sincronizar: {{names}}. Hasta que se sincronice, ningún otro dispositivo puede encontrarla; si borras ahora, podrías perderla para siempre.",
+   "unsyncedAck": "Entiendo que una billetera sin sincronizar podría perderse para siempre"
   },
   "formatNote": {
    "system": "Sistema",
@@ -643,6 +645,8 @@
   "balanceDetailStatusPublicNodes": "Usando nodos públicos",
   "nodeFallbackNotice": "Tu nodo de {{name}} no responde; por ahora se usan nodos públicos.",
   "nodeFallbackOpen": "Ajustes de red",
+  "syncingLine": "Guardada en este dispositivo · sincronizando…",
+  "syncStalledLine": "Guardada en este dispositivo · aún sin sincronizar",
   "totalUnpriced": "Aún sin precio",
   "allUnpriced": "No se pudo obtener el precio de ninguno de tus tokens.",
   "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses."
@@ -1259,9 +1263,10 @@
    "successMessage_many": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
    "successMessage_other": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
    "successTitle": "Billetera creada",
-   "syncFailedHint": "Deja esta página abierta: Vela lo reintenta solo cuando vuelva la conexión, o toca Reintentar. Si sales o recargas ahora, esta billetera se descarta.",
-   "syncFailedMessage": "Tus passkeys ya están creadas, pero la billetera no se pudo registrar en el índice de passkeys de Vela, así que aún no se guarda en este dispositivo.",
-   "syncFailedTitle": "Aún no se guarda",
+   "syncFailedHint": "Vela lo sigue intentando solo —ahora, cuando vuelva la conexión y cada vez que lo abras— hasta lograrlo. Mientras tanto, puedes entrar a la billetera.",
+   "syncFailedMessage": "Tu billetera está guardada aquí, pero aún no se registra en el índice de passkeys de Vela, así que otros dispositivos no pueden encontrarla.",
+   "syncFailedNext": "Reintento en {{seconds}} s",
+   "syncFailedTitle": "Guardada en este dispositivo",
    "taskDeriveAddress": "Derivando la dirección de la cuenta",
    "taskVerifyKey": "Verificando la clave pública de la passkey",
    "taskWriteIndex": "Escribiendo el índice de llaves",

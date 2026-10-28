@@ -299,6 +299,8 @@
     "balanceDetailStatusPublicNodes": "Usando nodos públicos",
     "nodeFallbackNotice": "Tu nodo de {{name}} no responde; por ahora se usan nodos públicos.",
     "nodeFallbackOpen": "Ajustes de red",
+    "syncingLine": "Guardada en este dispositivo · sincronizando…",
+    "syncStalledLine": "Guardada en este dispositivo · aún sin sincronizar",
     "totalUnpriced": "Aún sin precio",
     "allUnpriced": "No se pudo obtener el precio de ninguno de tus tokens.",
     "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses."

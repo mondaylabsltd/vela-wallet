@@ -253,7 +253,9 @@
       "keeps": "Vous gardez le portefeuille : vos clés d’accès sont chez votre fournisseur de clés d’accès, pas dans cette application — reconnectez-vous et la même adresse revient. Ce qui n’est pas effacé : Vela Relay conserve les transactions envoyées jusqu’à 14 jours, l’index des clés les enregistrements jusqu’à 30 jours, et l’inscription de la clé publique sur la chaîne est permanente ; personne ne peut la supprimer.",
       "confirm": "Tout effacer",
       "cancel": "Annuler",
-      "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez."
+      "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez.",
+      "unsynced": "Synchronisation non terminée : {{names}}. Tant qu'un portefeuille n'est pas synchronisé, aucun autre appareil ne peut le trouver — effacer maintenant peut le faire perdre définitivement.",
+      "unsyncedAck": "Je comprends qu'un portefeuille non synchronisé peut être perdu définitivement"
     },
     "formatNote": {
       "system": "Système",

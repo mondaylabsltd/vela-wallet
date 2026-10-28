@@ -1225,6 +1225,44 @@ export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
 	};
 }
 
+/**
+ * ob-2: erasing means everything, the pending-upload outbox included — so a
+ * wallet on this device whose registration has not landed would go with it,
+ * and no other device can find it yet. The sheet names every such wallet (the
+ * session core's `unsynced`, by the name this device shows) and its confirm
+ * waits for an explicit acknowledgement. Nothing owed: the sheet as it was.
+ *
+ * Both layouts draw the same `ConfirmSheet`, so one builder serves both.
+ */
+export function withEraseUnsynced<M extends { eraseSheet: ConfirmSheetModel }>(
+	model: M,
+	m: SettingsMessages,
+	unsynced: readonly { name: string; address: string }[],
+	locale: string
+): M {
+	if (unsynced.length === 0) return model;
+	const names = unsynced.map((wallet) =>
+		wallet.name.trim() !== '' ? wallet.name : shortenAddress(wallet.address)
+	);
+	return {
+		...model,
+		eraseSheet: {
+			...model.eraseSheet,
+			warning: m.erase.unsynced.replace('{{names}}', listOf(names, locale)),
+			ack: m.erase.unsyncedAck
+		}
+	};
+}
+
+/** "A, B and C", in the person's language; a plain comma list where the browser has no formatter. */
+function listOf(items: readonly string[], locale: string): string {
+	try {
+		return new Intl.ListFormat(locale, { type: 'conjunction' }).format(items);
+	} catch {
+		return items.join(', ');
+	}
+}
+
 /** The same failure, in the wide layout's dialog (spec 081 FR-017). */
 export function withEraseFailureDesktop(
 	model: SettingsDesktopModel,
@@ -1318,6 +1356,8 @@ export interface LiveAccountsInput {
 	 * loading, not as an empty cell — and never as a $0.00.
 	 */
 	loading?: boolean;
+	/** ob-2: the session's wallets saved here and not synced yet (`SessionView.unsynced`). */
+	unsynced?: readonly { address: string }[];
 }
 
 /** One account's total as its row draws it: the mask, the figure, or nothing yet. */
@@ -1362,9 +1402,12 @@ export function switcherBalances(
 	return balances;
 }
 
-function liveAccountRows(input: LiveAccountsInput) {
+function liveAccountRows(input: LiveAccountsInput, syncing: string) {
+	const unsynced = new Set((input.unsynced ?? []).map((wallet) => wallet.address.toLowerCase()));
 	return input.rows.map((row, position) => {
 		return {
+			// ob-2: saved here, not yet findable elsewhere — said on its row.
+			...(unsynced.has(row.account.address.toLowerCase()) ? { note: syncing } : {}),
 			name: row.account.name,
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
@@ -1415,7 +1458,7 @@ export function liveAccountsSheet(
 	return {
 		title: m.title,
 		summary: liveAccountsSummary(input, m),
-		rows: liveAccountRows(input),
+		rows: liveAccountRows(input, m.syncing),
 		primary: m.createNew,
 		secondary: m.signInExisting,
 		remove: m.remove,
@@ -1440,7 +1483,7 @@ export function withLiveAccounts(
 		accountsSheet: {
 			...model.accountsSheet,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input),
+			rows: liveAccountRows(input, m.accounts.syncing),
 			// ob-14: an account can be removed from Settings as from the
 			// header's switcher — the same ×, the same confirm.
 			remove: m.accounts.remove,
@@ -1461,7 +1504,7 @@ export function withLiveAccountsDesktop(
 		account: {
 			...model.account,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input),
+			rows: liveAccountRows(input, m.accounts.syncing),
 			remove: m.accounts.remove,
 			removeBody: m.accounts.removeBody,
 			removeCancel: m.accounts.cancel

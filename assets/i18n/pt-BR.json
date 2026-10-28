@@ -253,7 +253,9 @@
    "keeps": "A carteira continua: suas passkeys ficam com o seu provedor de passkeys, não com este app — entre de novo e o mesmo endereço volta. Não é apagado: o Vela Relay guarda as transações enviadas por até 14 dias, o índice de chaves guarda os registros por até 30 dias, e o registro da chave pública na chain é permanente; ninguém pode apagá-lo.",
    "confirm": "Apagar tudo",
    "cancel": "Cancelar",
-   "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo."
+   "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo.",
+   "unsynced": "Sincronização não concluída: {{names}}. Até sincronizar, nenhum outro dispositivo consegue encontrá-la — apagar agora pode fazer você perdê-la para sempre.",
+   "unsyncedAck": "Entendo que uma carteira não sincronizada pode ser perdida para sempre"
   },
   "formatNote": {
    "system": "Sistema",
@@ -643,6 +645,8 @@
   "balanceDetailStatusPublicNodes": "Usando nós públicos",
   "nodeFallbackNotice": "Seu nó da {{name}} não está respondendo; por enquanto, usando nós públicos.",
   "nodeFallbackOpen": "Configurações da rede",
+  "syncingLine": "Salva neste dispositivo · sincronizando…",
+  "syncStalledLine": "Salva neste dispositivo · ainda não sincronizada",
   "totalUnpriced": "Ainda sem preço",
   "allUnpriced": "Não foi possível obter o preço de nenhum dos seus tokens.",
   "currencyUnavailable": "Não é possível carregar as cotações de {{code}} agora — os valores estão em dólares americanos."
@@ -1259,9 +1263,10 @@
    "successMessage_many": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
    "successMessage_other": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
    "successTitle": "Carteira criada",
-   "syncFailedHint": "Mantenha esta página aberta: a Vela tenta de novo sozinha quando a conexão voltar, ou toque em Tentar novamente. Sair ou recarregar agora descarta esta carteira.",
-   "syncFailedMessage": "Suas passkeys foram criadas, mas a carteira não pôde ser registrada no índice de passkeys da Vela, então ainda não foi salva neste dispositivo.",
-   "syncFailedTitle": "Ainda não foi salva",
+   "syncFailedHint": "A Vela continua tentando sozinha — agora, quando a conexão voltar e toda vez que você abrir o app — até dar certo. Enquanto isso, você pode entrar na carteira.",
+   "syncFailedMessage": "Sua carteira está salva aqui, mas ainda não foi registrada no índice de passkeys da Vela, então outros dispositivos não conseguem encontrá-la.",
+   "syncFailedNext": "Nova tentativa em {{seconds}} s",
+   "syncFailedTitle": "Salva neste dispositivo",
    "taskDeriveAddress": "Derivando o endereço da conta",
    "taskVerifyKey": "Verificando a chave pública da passkey",
    "taskWriteIndex": "Gravando o índice de chaves",

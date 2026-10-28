@@ -333,7 +333,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             *method,
             page.as_deref(),
             *answer_when_accepted,
-            ceremony,
+            Some(ceremony),
         )),
 
         ShellOperation::RegistryQueryByPublicKey { public_key_hex } => {
@@ -443,6 +443,26 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
             let _ = storage::remove_pending_upload(credential_id);
             SessionShellResult::PendingUploadRemoved
         }
+        // ob-2: a wallet's publish that never landed, replayed as its create
+        // would have sent it — every member's creation-time proof and the
+        // group key ride in the record, so no passkey and no window. Blocking,
+        // like the landing wait above, and it waits for the landing itself:
+        // only a landed group lets the record go.
+        SessionOperation::PublishPendingUpload { publish } => match registry::publish(
+            &publish.metadata_hex,
+            &publish.members,
+            &publish.group_seed_hex,
+            &publish.group_public_key_hex,
+            vela_core::app::KeyMethod::default(),
+            publish.page.as_deref(),
+            false,
+            None,
+        ) {
+            Ok(_) => SessionShellResult::RegistryLanded,
+            Err(error) => SessionShellResult::RegistryLandingUnconfirmed {
+                message: error.message,
+            },
+        },
     }
 }
 
@@ -460,7 +480,11 @@ fn published(outcome: registry::Result<registry::Published>) -> ShellResult {
 /// Does this session operation leave the machine — and so must not run on the
 /// main thread? Every other session operation is one small local file.
 pub fn session_blocks(operation: &SessionOperation) -> bool {
-    matches!(operation, SessionOperation::AwaitRegistryLanding { .. })
+    matches!(
+        operation,
+        SessionOperation::AwaitRegistryLanding { .. }
+            | SessionOperation::PublishPendingUpload { .. }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -822,6 +846,7 @@ mod landing_409_tests {
             transports: String::new(),
             members: Vec::new(),
             task_id: task_id.map(str::to_owned),
+            publish: None,
         }
     }
 
@@ -843,12 +868,22 @@ mod landing_409_tests {
         );
     }
 
-    /// Only the wait on a registry task leaves the machine; every other
+    /// Only the registry's network calls leave the machine — the wait on a
+    /// task, and (ob-2) the replay of a pending record's publish; every other
     /// session operation stays on the synchronous pump.
     #[test]
     fn only_the_landing_wait_blocks() {
         assert!(session_blocks(&SessionOperation::AwaitRegistryLanding {
             task_id: "t1".to_owned()
+        }));
+        assert!(session_blocks(&SessionOperation::PublishPendingUpload {
+            publish: vela_core::app::PendingPublish {
+                metadata_hex: String::new(),
+                members: Vec::new(),
+                group_seed_hex: String::new(),
+                group_public_key_hex: String::new(),
+                page: None,
+            }
         }));
         for local in [
             SessionOperation::LoadPendingUploads,

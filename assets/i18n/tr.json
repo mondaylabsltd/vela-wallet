@@ -253,7 +253,9 @@
    "keeps": "Cüzdan kalır: geçiş anahtarlarınızı bu uygulama değil, geçiş anahtarı sağlayıcınız saklar — yeniden giriş yapın, aynı adres geri gelir. Silinmeyenler: Vela Relay gönderilen işlemleri 14 güne kadar, anahtar dizini kayıtları 30 güne kadar saklar; zincirdeki açık anahtar kaydı kalıcıdır ve kimse silemez.",
    "confirm": "Her Şeyi Sil",
    "cancel": "İptal",
-   "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."
+   "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin.",
+   "unsynced": "Eşitlemesi bitmedi: {{names}}. Eşitlenene kadar başka hiçbir cihaz bu cüzdanı bulamaz — şimdi temizlerseniz kalıcı olarak kaybedebilirsiniz.",
+   "unsyncedAck": "Eşitlenmemiş bir cüzdanın kalıcı olarak kaybolabileceğini anlıyorum"
   },
   "formatNote": {
    "system": "Sistem",
@@ -641,6 +643,8 @@
   "balanceDetailStatusPublicNodes": "Herkese açık düğümler kullanılıyor",
   "nodeFallbackNotice": "{{name}} için düğümünüz yanıt vermiyor; şimdilik herkese açık düğümler kullanılıyor.",
   "nodeFallbackOpen": "Ağ ayarları",
+  "syncingLine": "Bu cihaza kaydedildi · eşitleniyor…",
+  "syncStalledLine": "Bu cihaza kaydedildi · henüz eşitlenmedi",
   "totalUnpriced": "Henüz fiyat yok",
   "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
   "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."
@@ -1252,9 +1256,10 @@
    "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successTitle": "Cüzdan oluşturuldu",
-   "syncFailedHint": "Bu sayfayı açık tutun: bağlantı geri geldiğinde Vela kendiliğinden yeniden dener ya da Yeniden Yükle’ye dokunun. Şimdi sayfadan çıkar veya yenilerseniz bu cüzdan silinir.",
-   "syncFailedMessage": "Passkey'leriniz oluşturuldu ancak cüzdan Vela'nın passkey dizinine kaydedilemedi, bu yüzden bu cihazda henüz kayıtlı değil.",
-   "syncFailedTitle": "Henüz kaydedilmedi",
+   "syncFailedHint": "Vela kayıt tamamlanana kadar kendiliğinden yeniden dener — şimdi, bağlantı geri geldiğinde ve uygulamayı her açtığınızda. Bu arada cüzdana girebilirsiniz.",
+   "syncFailedMessage": "Cüzdanınız burada kayıtlı, ancak henüz Vela'nın passkey dizinine kaydedilmedi; bu yüzden diğer cihazlar onu bulamaz.",
+   "syncFailedNext": "{{seconds}} sn sonra yeniden denenecek",
+   "syncFailedTitle": "Bu cihaza kaydedildi",
    "taskDeriveAddress": "Hesap adresi türetiliyor",
    "taskVerifyKey": "Passkey'in açık anahtarı doğrulanıyor",
    "taskWriteIndex": "Anahtar dizini yazılıyor",

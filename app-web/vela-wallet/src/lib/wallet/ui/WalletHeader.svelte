@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { identiconViewer } from '../identicon-viewer.svelte';
+	import { session } from '$lib/session/core/session.svelte';
 	import type { WalletHeaderModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
@@ -115,6 +116,19 @@
 				</button>
 			{/if}
 		</span>
+		{#if header.sync}
+			<!-- ob-2: saved here, not yet findable elsewhere. Quiet and neutral:
+			     the session keeps trying on its own; after a while of failing,
+			     the person may ask it to try now. -->
+			<span class="sync" role="status" class:stalled={header.sync.stalled}>
+				<span>{header.sync.text}</span>
+				{#if header.sync.retry && onclick}
+					<button type="button" class="retry" data-tap onclick={() => session.syncPending()}
+						>{header.sync.retry}</button
+					>
+				{/if}
+			</span>
+		{/if}
 	</div>
 </div>
 
@@ -225,6 +239,34 @@
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.sync {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-xs) var(--space-sm);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
+	}
+
+	.sync.stalled {
+		color: var(--color-fg-muted);
+	}
+
+	.retry {
+		padding: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: inherit;
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-decoration-thickness: var(--border-hairline);
+		text-underline-offset: var(--space-xs);
+		cursor: pointer;
 	}
 
 	.avatar {

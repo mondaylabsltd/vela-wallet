@@ -15,7 +15,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EraseIncompleteError, eraseDeviceData, isErasableKey } from './erase-device';
+import { EraseIncompleteError, KV_DATABASE, eraseDeviceData, isErasableKey } from './erase-device';
 
 /** An in-memory `localStorage`, with the two methods a sweep needs. */
 function fakeLocalStorage(seed: Record<string, string>) {
@@ -39,7 +39,7 @@ function fakeLocalStorage(seed: Record<string, string>) {
  * `whileRemoving` is the rest of the wallet, still running during the sweep.
  */
 const kv = new Map<string, string>();
-const store = { sealed: false, whileRemoving: (): void => {} };
+const store = { sealed: false, whileRemoving: (): void => {}, deleted: 0, deleteFails: false };
 const write = (key: string, value: string): Promise<void> => {
 	if (store.sealed) return Promise.reject(new Error(`sealed: ${key}`));
 	kv.set(key, value);
@@ -55,6 +55,13 @@ vi.mock('./storage', () => ({
 	sealStorage: () => {
 		store.sealed = true;
 	},
+	// The whole database goes, foreign keys and all (ob-15).
+	deleteDatabase: () => {
+		if (store.deleteFails) return Promise.reject(new Error('indexedDB delete blocked'));
+		kv.clear();
+		store.deleted += 1;
+		return Promise.resolve();
+	},
 	unsealStorage: () => {
 		store.sealed = false;
 	}
@@ -64,6 +71,8 @@ beforeEach(() => {
 	kv.clear();
 	store.sealed = false;
 	store.whileRemoving = () => {};
+	store.deleted = 0;
+	store.deleteFails = false;
 	vi.unstubAllGlobals();
 });
 
@@ -85,10 +94,11 @@ describe('the rule, stated as a rule', () => {
 		expect(isErasableKey('not.vela.contacts')).toBe(false);
 	});
 
-	it('keeps exactly the one exception the contract names', () => {
-		// contracts/erase-scope.md is the authority; this is that document as a
-		// test, against the core that now carries it.
-		expect(isErasableKey('vela.pendingUploads')).toBe(false);
+	it('keeps nothing of ours — the pending-upload outbox included', () => {
+		// Erasing means everything (owner, 2026-10-28). The outbox used to be
+		// the one exception; the confirmation now names the wallets it would
+		// lose instead, and asks for an explicit confirm.
+		expect(isErasableKey('vela.pendingUploads')).toBe(true);
 	});
 });
 
@@ -112,12 +122,22 @@ describe('the sweep', () => {
 		expect(removed).toContain('vela.contacts');
 		expect(removed).toContain('vela.transactionHistory');
 		expect(removed).toContain('recipient_id:0xabc');
-		// The outbox and the foreign keys stand.
-		expect(local.snapshot()).toEqual({
-			'vela.pendingUploads': '[{"key":"unconfirmed"}]',
-			dev_unlocked: '1'
-		});
-		expect([...kv.keys()]).toEqual(['somethingElse']);
+		expect(removed).toContain('vela.pendingUploads');
+		// Only what is not ours stands in localStorage…
+		expect(local.snapshot()).toEqual({ dev_unlocked: '1' });
+		// …and the IndexedDB database is gone whole, not left empty.
+		expect(store.deleted).toBe(1);
+		expect([...kv.keys()]).toEqual([]);
+	});
+
+	it('a database that will not go is an erase that did not finish', async () => {
+		// Swept and verified, but the database itself survived (another tab
+		// held it past the wait): said, and the store given back.
+		vi.stubGlobal('localStorage', fakeLocalStorage({ 'vela.accounts': '[]' }));
+		store.deleteFails = true;
+
+		await expect(eraseDeviceData()).rejects.toMatchObject({ remaining: [KV_DATABASE] });
+		expect(store.sealed).toBe(false);
 	});
 
 	it('REJECTS when something survives, instead of claiming a clean device', async () => {

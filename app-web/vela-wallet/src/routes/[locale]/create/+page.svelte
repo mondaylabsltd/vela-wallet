@@ -19,6 +19,7 @@
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralTemplate } from '$lib/i18n/plural';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
+	import { onMount } from 'svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
@@ -41,6 +42,13 @@
 
 	const home = $derived(resolve('/[locale]', { locale: data.locale }));
 	const wallet = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
+
+	// ob-2: a reload of the retry screen lands here, on the form, with the
+	// wallet already saved. The session's restore is what sends its pending
+	// publish again, so it boots here too — the same wasm the flow fetches.
+	onMount(() => {
+		void session.boot();
+	});
 
 	/** The prompt currently on screen, and who is waiting for its answer. */
 	let pending = $state<{ copy: PromptCopy; resolve: (accepted: boolean) => void } | null>(null);

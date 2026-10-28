@@ -253,7 +253,9 @@
       "keeps": "La billetera se queda: tus passkeys las guarda tu proveedor de passkeys, no esta app; inicia sesión de nuevo y vuelve la misma dirección. No se borra: Vela Relay guarda las transacciones enviadas hasta 14 días, el índice de llaves guarda los registros hasta 30 días y el registro de la llave pública en la cadena es permanente; nadie puede borrarlo.",
       "confirm": "Borrar todo",
       "cancel": "Cancelar",
-      "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."
+      "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo.",
+      "unsynced": "Sin terminar de sincronizar: {{names}}. Hasta que se sincronice, ningún otro dispositivo puede encontrarla; si borras ahora, podrías perderla para siempre.",
+      "unsyncedAck": "Entiendo que una billetera sin sincronizar podría perderse para siempre"
     },
     "formatNote": {
       "system": "Sistema",

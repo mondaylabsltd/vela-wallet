@@ -980,8 +980,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   favoriteRemove, noteLabel, notePlaceholder}` (the book's star and note).
 //   2209 + 9 = 2218 leaves, 119 branches.
 // 2368 (round 3 merged: + home & settings, 2026-10-29): 2239 + 9 = 2248 leaves, 120 branches.
-if (PATHS.length !== 2368) fail(`expected 2368 paths (2248 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2248) fail(`expected 2248 leaf paths, got ${leafSet.size}`);
+// 2331 (a wallet saved before it syncs, and an erase that names what it would
+//   lose — ob-2, 2026-10-28): + `onboarding.create.syncFailedNext` (the retry
+//   screen's countdown) and `settings.eraseDevice.{unsynced, unsyncedAck}`.
+//   2209 + 3 = 2212 leaves, 119 branches.
+// 2333 (the home says a wallet is saved here and still syncing, ob-2): +
+//   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
+// 2373 (round 3 merged: + onboarding & erase, 2026-10-29): 2248 + 5 = 2253 leaves, 120 branches.
+if (PATHS.length !== 2373) fail(`expected 2373 paths (2253 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2253) fail(`expected 2253 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -253,7 +253,9 @@
       "keeps": "Dompet tetap ada: passkey Anda disimpan oleh penyedia passkey, bukan aplikasi ini — masuk lagi dan alamat yang sama kembali. Yang tidak terhapus: Vela Relay menyimpan transaksi terkirim hingga 14 hari, indeks kunci menyimpan pendaftaran hingga 30 hari, dan catatan kunci publik di chain bersifat permanen; tidak ada yang bisa menghapusnya.",
       "confirm": "Hapus Semuanya",
       "cancel": "Batal",
-      "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
+      "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi.",
+      "unsynced": "Belum selesai disinkronkan: {{names}}. Sebelum tersinkron, perangkat lain tidak dapat menemukan dompet ini — menghapus sekarang bisa membuatnya hilang selamanya.",
+      "unsyncedAck": "Saya mengerti dompet yang belum tersinkron bisa hilang selamanya"
     },
     "formatNote": {
       "system": "Sistem",

@@ -151,6 +151,41 @@ export async function getAllKeys(): Promise<string[]> {
 	return keys.filter((key): key is string => typeof key === 'string');
 }
 
+/**
+ * Delete the whole database — the erase's last step (owner, 2026-10-28:
+ * erasing means everything, the database itself included, not an empty one
+ * left behind).
+ *
+ * This document's connection is closed first; another tab's closes itself on
+ * the `versionchange` the delete raises (`openDb`), after which the delete
+ * goes through. One that has not within `timeoutMs` rejects, and the erase
+ * says it did not finish.
+ */
+export async function deleteDatabase(timeoutMs = 5_000): Promise<void> {
+	const open = opening;
+	opening = null;
+	if (open) {
+		try {
+			(await open).close();
+		} catch {
+			// A failed open holds no connection to close.
+		}
+	}
+	if (typeof indexedDB === 'undefined') return;
+	await new Promise<void>((resolve, reject) => {
+		const request = indexedDB.deleteDatabase(DB_NAME);
+		const timer = setTimeout(() => reject(new Error('indexedDB delete blocked')), timeoutMs);
+		request.onsuccess = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		request.onerror = () => {
+			clearTimeout(timer);
+			reject(request.error ?? new Error('indexedDB delete failed'));
+		};
+	});
+}
+
 /** Test seam: drop the cached connection so a fresh open is observable. */
 export function resetStorageForTests(): void {
 	opening = null;

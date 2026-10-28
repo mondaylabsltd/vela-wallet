@@ -77,7 +77,8 @@
 		// home-9: the testnet space shows no figure for test coins, here too.
 		noValue: networkSpace.testnet,
 		// ms-24: a row the core is still reading is drawn as loading.
-		loading: balance.view.switcher.loading
+		loading: balance.view.switcher.loading,
+		unsynced: view.unsynced
 	}));
 
 	const sheet = $derived.by(() => {

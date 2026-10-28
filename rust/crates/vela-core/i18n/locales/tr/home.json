@@ -297,6 +297,8 @@
     "balanceDetailStatusPublicNodes": "Herkese açık düğümler kullanılıyor",
     "nodeFallbackNotice": "{{name}} için düğümünüz yanıt vermiyor; şimdilik herkese açık düğümler kullanılıyor.",
     "nodeFallbackOpen": "Ağ ayarları",
+    "syncingLine": "Bu cihaza kaydedildi · eşitleniyor…",
+    "syncStalledLine": "Bu cihaza kaydedildi · henüz eşitlenmedi",
     "totalUnpriced": "Henüz fiyat yok",
     "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
     "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."

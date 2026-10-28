@@ -253,7 +253,9 @@
    "keeps": "Vous gardez le portefeuille : vos clés d’accès sont chez votre fournisseur de clés d’accès, pas dans cette application — reconnectez-vous et la même adresse revient. Ce qui n’est pas effacé : Vela Relay conserve les transactions envoyées jusqu’à 14 jours, l’index des clés les enregistrements jusqu’à 30 jours, et l’inscription de la clé publique sur la chaîne est permanente ; personne ne peut la supprimer.",
    "confirm": "Tout effacer",
    "cancel": "Annuler",
-   "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez."
+   "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez.",
+   "unsynced": "Synchronisation non terminée : {{names}}. Tant qu'un portefeuille n'est pas synchronisé, aucun autre appareil ne peut le trouver — effacer maintenant peut le faire perdre définitivement.",
+   "unsyncedAck": "Je comprends qu'un portefeuille non synchronisé peut être perdu définitivement"
   },
   "formatNote": {
    "system": "Système",
@@ -643,6 +645,8 @@
   "balanceDetailStatusPublicNodes": "Nœuds publics utilisés",
   "nodeFallbackNotice": "Votre nœud pour {{name}} ne répond pas ; des nœuds publics sont utilisés pour l'instant.",
   "nodeFallbackOpen": "Réglages du réseau",
+  "syncingLine": "Enregistré sur cet appareil · synchronisation…",
+  "syncStalledLine": "Enregistré sur cet appareil · pas encore synchronisé",
   "totalUnpriced": "Pas encore de prix",
   "allUnpriced": "Impossible d'obtenir le prix de vos tokens.",
   "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains."
@@ -1259,9 +1263,10 @@
    "successMessage_many": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
    "successMessage_other": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
    "successTitle": "Portefeuille créé",
-   "syncFailedHint": "Gardez cette page ouverte : Vela réessaie tout seul dès que la connexion revient, ou touchez Réessayer. Quitter ou recharger maintenant abandonne ce portefeuille.",
-   "syncFailedMessage": "Vos passkeys sont créées, mais le portefeuille n'a pas pu être enregistré dans l'index des passkeys de Vela : il n'est pas encore sauvegardé sur cet appareil.",
-   "syncFailedTitle": "Pas encore enregistré",
+   "syncFailedHint": "Vela réessaie tout seul — maintenant, dès que la connexion revient et à chaque ouverture — jusqu'à ce que ce soit fait. En attendant, vous pouvez ouvrir le portefeuille.",
+   "syncFailedMessage": "Votre portefeuille est enregistré ici, mais il n'est pas encore inscrit dans l'index des passkeys de Vela : les autres appareils ne peuvent pas encore le trouver.",
+   "syncFailedNext": "Nouvel essai dans {{seconds}} s",
+   "syncFailedTitle": "Enregistré sur cet appareil",
    "taskDeriveAddress": "Dérivation de l'adresse du compte",
    "taskVerifyKey": "Vérification de la clé publique de la passkey",
    "taskWriteIndex": "Écriture de l'index des clés",

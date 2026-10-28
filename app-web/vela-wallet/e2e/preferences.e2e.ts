@@ -230,11 +230,12 @@ test('erasing leaves nothing of this wallet in the browser (SC-407)', async ({ p
 		throw new Error(`${error.message}\n${said}`);
 	});
 
-	// The IndexedDB store is empty of ours, and so is localStorage — except the
-	// passkey outbox, because a deleted upload can never be retried and that
-	// credential would then be unfindable at login on ANY device.
+	// The IndexedDB store is empty of ours, and so is localStorage — the
+	// passkey outbox included (owner, 2026-10-28: erasing means everything).
+	// This outbox's one record is unreadable, so it names no wallet and the
+	// sheet asks no acknowledgement; a readable one is named first (ob-2).
 	expect(await kvKeys(page)).toEqual([]);
-	expect(await velaKeys(page)).toContain('vela.pendingUploads');
+	expect(await velaKeys(page)).not.toContain('vela.pendingUploads');
 	expect(await velaKeys(page)).not.toContain('vela.somethingNobodyHasWrittenYet');
 	// `vela.accounts` and `vela.intro.seen` are back on this page, and that is
 	// the TEST harness rather than the app: `seedSignedIn` re-imposes a wallet

@@ -253,7 +253,9 @@
    "keeps": "Dompet tetap ada: passkey Anda disimpan oleh penyedia passkey, bukan aplikasi ini — masuk lagi dan alamat yang sama kembali. Yang tidak terhapus: Vela Relay menyimpan transaksi terkirim hingga 14 hari, indeks kunci menyimpan pendaftaran hingga 30 hari, dan catatan kunci publik di chain bersifat permanen; tidak ada yang bisa menghapusnya.",
    "confirm": "Hapus Semuanya",
    "cancel": "Batal",
-   "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
+   "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi.",
+   "unsynced": "Belum selesai disinkronkan: {{names}}. Sebelum tersinkron, perangkat lain tidak dapat menemukan dompet ini — menghapus sekarang bisa membuatnya hilang selamanya.",
+   "unsyncedAck": "Saya mengerti dompet yang belum tersinkron bisa hilang selamanya"
   },
   "formatNote": {
    "system": "Sistem",
@@ -641,6 +643,8 @@
   "balanceDetailStatusPublicNodes": "Memakai node publik",
   "nodeFallbackNotice": "Node {{name}} Anda tidak merespons; untuk sementara memakai node publik.",
   "nodeFallbackOpen": "Pengaturan jaringan",
+  "syncingLine": "Tersimpan di perangkat ini · menyinkronkan…",
+  "syncStalledLine": "Tersimpan di perangkat ini · belum tersinkron",
   "totalUnpriced": "Belum ada harga",
   "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
   "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS."
@@ -1252,9 +1256,10 @@
    "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successTitle": "Dompet dibuat",
-   "syncFailedHint": "Biarkan halaman ini terbuka: Vela mencoba lagi sendiri saat koneksi kembali, atau ketuk Coba Unggah Lagi. Keluar atau memuat ulang sekarang akan membuang dompet ini.",
-   "syncFailedMessage": "Passkey Anda sudah dibuat, tetapi dompet belum bisa didaftarkan ke indeks passkey Vela, jadi belum tersimpan di perangkat ini.",
-   "syncFailedTitle": "Belum tersimpan",
+   "syncFailedHint": "Vela terus mencoba sendiri — sekarang, saat koneksi kembali, dan setiap kali Anda membukanya — sampai berhasil. Sementara itu Anda bisa masuk ke dompet.",
+   "syncFailedMessage": "Dompet Anda tersimpan di sini, tetapi belum terdaftar di indeks passkey Vela, jadi perangkat lain belum bisa menemukannya.",
+   "syncFailedNext": "Mencoba lagi dalam {{seconds}} dtk",
+   "syncFailedTitle": "Tersimpan di perangkat ini",
    "taskDeriveAddress": "Menurunkan alamat akun",
    "taskVerifyKey": "Memverifikasi kunci publik passkey",
    "taskWriteIndex": "Menulis indeks kunci",

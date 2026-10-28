@@ -253,7 +253,9 @@
       "keeps": "Die Wallet bleibt: Ihre Passkeys liegen bei Ihrem Passkey-Anbieter, nicht in dieser App — melden Sie sich wieder an, und dieselbe Adresse kommt zurück. Nicht gelöscht wird: Vela Relay speichert gesendete Transaktionen bis zu 14 Tage, der Schlüsselindex Registrierungen bis zu 30 Tage, und der Public-Key-Eintrag auf der Chain ist dauerhaft – niemand kann ihn löschen.",
       "confirm": "Alles löschen",
       "cancel": "Abbrechen",
-      "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."
+      "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen.",
+      "unsynced": "Noch nicht fertig synchronisiert: {{names}}. Solange eine Wallet nicht synchronisiert ist, kann kein anderes Gerät sie finden – wenn Sie jetzt löschen, kann sie für immer verloren sein.",
+      "unsyncedAck": "Ich verstehe, dass eine nicht synchronisierte Wallet für immer verloren sein kann"
     },
     "formatNote": {
       "system": "System",

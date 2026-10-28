@@ -253,7 +253,9 @@
    "keeps": "钱包还在：通行密钥由你的通行密钥提供方保管，不在本应用里——重新登录，同一个地址就会回来。不会被抹除的：Vela Relay 最多保留已发送的交易 14 天，密钥索引最多保留注册信息 30 天；链上的公钥记录永久存在，任何人都无法删除。",
    "confirm": "全部清除",
    "cancel": "取消",
-   "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。"
+   "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。",
+   "unsynced": "尚未完成同步：{{names}}。钱包同步完成前，其他设备都找不到它——现在抹除可能会永久失去它。",
+   "unsyncedAck": "我了解未同步的钱包可能会永久丢失"
   },
   "formatNote": {
    "system": "系统",
@@ -641,6 +643,8 @@
   "balanceDetailStatusPublicNodes": "正在使用公共节点",
   "nodeFallbackNotice": "你的 {{name}} 节点没有响应，暂时改用公共节点。",
   "nodeFallbackOpen": "网络设置",
+  "syncingLine": "已保存在这台设备上 · 同步中…",
+  "syncStalledLine": "已保存在这台设备上 · 尚未同步",
   "totalUnpriced": "暂无价格",
   "allUnpriced": "你的代币都无法获取价格。",
   "currencyUnavailable": "暂时无法获取 {{code}} 汇率——金额以美元显示。"
@@ -1252,9 +1256,10 @@
    "successMessage_one": "单把密钥即可登录。合约在首笔交易时部署。",
    "successMessage_other": "单把密钥即可登录。合约在首笔交易时部署。",
    "successTitle": "钱包已创建",
-   "syncFailedHint": "请保持此页面打开：网络恢复后 Vela 会自动重试，也可以点“重新上传”。现在离开或刷新页面，这个钱包将被丢弃。",
-   "syncFailedMessage": "通行密钥已创建，但钱包未能登记到 Vela 的通行密钥索引，因此尚未保存在这台设备上。",
-   "syncFailedTitle": "尚未保存",
+   "syncFailedHint": "Vela 会自动重试——现在、网络恢复时，以及每次打开时——直到登记成功。在此期间你可以先进入钱包。",
+   "syncFailedMessage": "钱包已保存在这里，但尚未登记到 Vela 的通行密钥索引，其他设备暂时找不到它。",
+   "syncFailedNext": "{{seconds}} 秒后重试",
+   "syncFailedTitle": "已保存在这台设备上",
    "taskDeriveAddress": "推导账户地址",
    "taskVerifyKey": "校验通行密钥公钥",
    "taskWriteIndex": "写入密钥索引",

@@ -76,7 +76,11 @@ export const intents = new Intents({
 					device_wallets: [
 						...(seen.session?.accounts ?? []).map((row) => row.account.address),
 						...seen.multisigs.map((m) => m.address)
-					]
+					],
+					// ob-2: what an erase may lose for good — never an agent's to take.
+					unsynced_wallets: (seen.session?.unsynced ?? []).map(
+						(wallet) => wallet.name.trim() || wallet.address
+					)
 				})
 			)
 		) as IntentCheck,

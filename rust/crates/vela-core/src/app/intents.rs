@@ -1083,6 +1083,10 @@ pub enum ReasonCode {
     Busy,
     /// The person has not let the agent use this wallet (spec 107 E8).
     WalletNotAllowed,
+    /// A wallet on this device has not finished syncing, and this would lose
+    /// it for good (ob-2): an agent may not, whatever the person would
+    /// approve. The person can, from Settings, after seeing the warning.
+    UnsyncedWallets,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1486,6 +1490,10 @@ pub struct Grants {
     /// Every wallet on this device (its accounts and multisigs): what
     /// erasing it takes away.
     pub device_wallets: Vec<String>,
+    /// The wallets on this device whose registration has not landed, by the
+    /// name the person knows them by (`SessionView::unsynced`, ob-2): no other
+    /// device can find them yet, so erasing this one may lose them for good.
+    pub unsynced_wallets: Vec<String>,
 }
 
 impl Grants {
@@ -1565,6 +1573,27 @@ pub fn authorize(actor: Actor, action: &Action, grants: &Grants) -> Decision {
                 reason: reason(
                     ReasonCode::PersonOnly,
                     "nobody is signed in: erasing this device is the person's alone",
+                ),
+            };
+        }
+        // ob-2: a wallet not yet synced lives only here — erasing may lose it
+        // for good, and an approval tap on a generic sheet is not the warning
+        // that says so. Never the agent's; the person's, from Settings, where
+        // the sheet names it and asks them to acknowledge it.
+        let unsynced: Vec<&str> = grants
+            .unsynced_wallets
+            .iter()
+            .map(|name| name.trim())
+            .filter(|name| !name.is_empty())
+            .collect();
+        if !unsynced.is_empty() {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::UnsyncedWallets,
+                    format!(
+                        "not finished syncing: {} — no other device can find it yet, and erasing this device now may lose it for good. An agent may not erase it; the person can, from Settings → Erase This Device, after seeing that warning",
+                        unsynced.join(", ")
+                    ),
                 ),
             };
         }

@@ -220,6 +220,9 @@ const CALLED: Record<string, Place> = {
 	'session.boot': { machine: 'boot' },
 	'session.start': { machine: 'boot' },
 	'session.settled': { machine: 'a read' },
+	'session.syncPending': {
+		machine: 'ob-2: trying an unsynced wallet’s publish again — the session does it on its own too'
+	},
 	'session.accountEstablished': { machine: 'the account the pages were given' },
 	'balance.refresh': { intent: 'refresh_balances' },
 	'balance.reread': { intent: 'refresh_balances' },

@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+	deleteDatabase,
 	getAllKeys,
 	getItem,
 	removeItem,
@@ -93,5 +94,15 @@ describe('storage: the AsyncStorage-shaped KV', () => {
 		await setItem('vela.persist', 'kept');
 		resetStorageForTests();
 		expect(await getItem('vela.persist')).toBe('kept');
+	});
+
+	it('deleteDatabase takes the whole database, not just its keys (ob-15)', async () => {
+		await setItem('vela.contacts', '[]');
+		await setItem('not-ours', 'x');
+		await deleteDatabase();
+		const names = (await indexedDB.databases()).map((database) => database.name);
+		expect(names).not.toContain('vela');
+		// The next read opens a fresh, empty one rather than a stale handle.
+		expect(await getAllKeys()).toEqual([]);
 	});
 });

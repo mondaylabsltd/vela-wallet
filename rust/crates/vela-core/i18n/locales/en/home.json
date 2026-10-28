@@ -297,6 +297,8 @@
     "balanceDetailStatusPublicNodes": "Using public nodes",
     "nodeFallbackNotice": "Your node for {{name}} isn't answering; using public nodes for now.",
     "nodeFallbackOpen": "Network settings",
+    "syncingLine": "Saved on this device · syncing…",
+    "syncStalledLine": "Saved on this device · not synced yet",
     "totalUnpriced": "No price yet",
     "allUnpriced": "None of your tokens could be priced.",
     "currencyUnavailable": "{{code}} rates can't be loaded right now — amounts are in US dollars."

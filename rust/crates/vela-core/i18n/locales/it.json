@@ -253,7 +253,9 @@
       "keeps": "Il wallet resta: le tue passkey le conserva il tuo provider di passkey, non questa app — accedi di nuovo e torna lo stesso indirizzo. Non viene cancellato: Vela Relay conserva le transazioni inviate fino a 14 giorni, l’indice delle chiavi le registrazioni fino a 30 giorni, e il record della chiave pubblica sulla chain è permanente; nessuno può eliminarlo.",
       "confirm": "Cancella tutto",
       "cancel": "Annulla",
-      "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova."
+      "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova.",
+      "unsynced": "Sincronizzazione non completata: {{names}}. Finché un wallet non è sincronizzato, nessun altro dispositivo può trovarlo: se cancelli ora potresti perderlo per sempre.",
+      "unsyncedAck": "Capisco che un wallet non sincronizzato potrebbe andare perso per sempre"
     },
     "formatNote": {
       "system": "Sistema",

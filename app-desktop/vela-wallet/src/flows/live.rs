@@ -1943,6 +1943,7 @@ fn single_payee(send: &SendView) -> Option<SendPayee> {
         address: address.to_owned(),
         name: None,
         name_source: None,
+        first_time: false,
     }))
 }
 
@@ -2213,6 +2214,7 @@ mod sweep_tests {
             // whose word it is, and the short address under it. (It used to
             // read `recipient_identity.name` alone.)
             view.payees = vec![vela_core::app::send::SendPayee {
+                first_time: false,
                 address: PAYEE.to_owned(),
                 name: Some("alice.eth".to_owned()),
                 name_source: Some(vela_core::app::send::SendNameSource::Service {
@@ -3913,6 +3915,10 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // holds the nonce. Not a failure — "Not sent yet" ([`tx_error_notice`])
         // over what to do, and "Try again" waits for it.
         vela_core::app::send::SendTxErrorKey::PreviousPending => s.not_sent_body.clone(),
+        // Another transaction of this account spent the nonce first
+        // (send-15): nothing was sent — "Not sent", as above, and "Try
+        // again" signs anew.
+        vela_core::app::send::SendTxErrorKey::NonceUsed => s.not_sent_body.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
@@ -4159,6 +4165,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                             address: draft.address.trim().to_owned(),
                             name: None,
                             name_source: None,
+                            first_time: false,
                         });
                     let (label, mono, detail) = payee_lines(&payee, s);
                     BreakdownRow {
@@ -5436,6 +5443,7 @@ mod tests {
         let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         let mut send = CoreHost::<Send>::new().view();
         send.receipt = Some(SendReceiptView {
+            can_send_again: false,
             status,
             hold_reason: hold,
             refusal_key: refusal_key.map(str::to_owned),
@@ -5547,6 +5555,7 @@ mod tests {
         };
         send.tx_hash = Some("0xtx".to_owned());
         send.receipt = Some(SendReceiptView {
+            can_send_again: false,
             status: SendReceiptStatus::Confirmed,
             hold_reason: None,
             refusal_key: None,
@@ -8368,6 +8377,7 @@ mod tests {
             source: ContactSource::Manual,
         };
         let view = ContactsView {
+            save_failed: false,
             loaded: true,
             sections: Vec::new(),
             contacts: Vec::new(),
@@ -8421,6 +8431,7 @@ mod tests {
             source: ContactSource::Manual,
         };
         let book = |contacts: Vec<Contact>| ContactsView {
+            save_failed: false,
             loaded: true,
             sections: Vec::new(),
             contacts,
@@ -10102,6 +10113,7 @@ mod payee_tests {
             });
             view.tx_hash = Some("0xtx".to_owned());
             let receipt = |status| SendReceiptView {
+                can_send_again: false,
                 status,
                 hold_reason: None,
                 refusal_key: None,
@@ -10187,6 +10199,7 @@ mod payee_tests {
         crate::executor::storage::tests::with_temp_state("payee-one-coin", || {
             let mut view = CoreHost::<SendMachine>::new().view();
             view.receipt = Some(SendReceiptView {
+                can_send_again: false,
                 status: SendReceiptStatus::Confirmed,
                 hold_reason: None,
                 refusal_key: None,

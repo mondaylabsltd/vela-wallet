@@ -152,6 +152,10 @@ pub struct SettingsStrings {
     pub erase_keeps: SharedString,
     pub erase_cancel: SharedString,
     pub erase_failed: SharedString,
+    /// ob-2: the wallets not finished syncing (`{{names}}`) — what an erase
+    /// may lose for good — and the box the person ticks before it may go.
+    pub erase_unsynced: SharedString,
+    pub erase_unsynced_ack: SharedString,
     /// Every other question's way out.
     pub cancel: SharedString,
     // appearance panel
@@ -461,6 +465,8 @@ impl SettingsStrings {
             erase_keeps: s("settings.eraseDevice.keeps"),
             erase_cancel: s("settings.eraseDevice.cancel"),
             erase_failed: s("settings.eraseDevice.failed"),
+            erase_unsynced: s("settings.eraseDevice.unsynced"),
+            erase_unsynced_ack: s("settings.eraseDevice.unsyncedAck"),
             cancel: s("common.cancel"),
             language: s("language.title"),
             language_follow_system: s("language.followSystem"),
@@ -721,6 +727,8 @@ mod tests {
             (&s.erase_keeps, "settings.eraseDevice.keeps"),
             (&s.erase_cancel, "settings.eraseDevice.cancel"),
             (&s.erase_failed, "settings.eraseDevice.failed"),
+            (&s.erase_unsynced, "settings.eraseDevice.unsynced"),
+            (&s.erase_unsynced_ack, "settings.eraseDevice.unsyncedAck"),
             (&s.cancel, "common.cancel"),
             (&s.language_follow_system, "language.followSystem"),
             (&s.storage_clear_title, "settings.storage.clearTitle"),

@@ -122,12 +122,23 @@ fn finished(name: &str) -> Sut {
     sut
 }
 
-/// …→ pending record written → the registry publish (one get per key) in
-/// flight.
+/// …→ pending record written → account saved (ob-2: before the publish) →
+/// the registry publish in flight.
 fn uploading(name: &str) -> Sut {
     let mut sut = finished(name);
-    sut.resolve(ShellResult::PendingUploadSaved);
+    saved_then_published(&mut sut);
     sut
+}
+
+/// Answer the pending record's write and then the account's, returning the
+/// operation that follows them — the publish.
+fn saved_then_published(sut: &mut Sut) -> Vec<ShellOperation> {
+    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
+        "ob-2: the account is saved before the publish; got {next:?}"
+    );
+    sut.resolve(ShellResult::AccountSaved)
 }
 
 fn is_save_account(operation: &ShellOperation) -> bool {
@@ -385,15 +396,107 @@ fn pending_record_is_written_before_the_first_upload() {
 // Registry publish (option B: publish before entering)
 // ---------------------------------------------------------------------------
 
-/// The pending record written, the possession-proven publish is the next step.
+/// ob-2: the pending record written, the account is saved on this device
+/// next — and only then is the possession-proven publish sent, so no failure
+/// of it can leave the wallet the person made unstored.
 #[test]
-fn the_pending_record_is_followed_by_the_registry_publish() {
+fn the_account_is_saved_before_the_registry_publish() {
     let mut sut = finished("Ann");
     let next = sut.resolve(ShellResult::PendingUploadSaved);
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.id, CRED);
+            assert_eq!(account.name, "Ann");
+        }
+        other => panic!("the account first; got {other:?}"),
+    }
+    assert!(sut.view().busy, "still working: nothing says created yet");
+    assert_ne!(sut.view().stage, CreateStage::Created);
 
+    let next = sut.resolve(ShellResult::AccountSaved);
     assert!(
         matches!(next.as_slice(), [ShellOperation::RegistryPublish { .. }]),
-        "publishing runs before entry; got {next:?}"
+        "then the publish; got {next:?}"
+    );
+    assert_ne!(sut.view().stage, CreateStage::Created);
+}
+
+/// ob-2: the pending record carries the publish itself — the very one the
+/// create sends, every member proven and the group key alongside — so the
+/// session can send it again with no prompt after a failure or a reload.
+#[test]
+fn the_pending_record_carries_the_publish_it_owes() {
+    let mut sut = registered("Ann");
+    let next = sut.dispatch(Event::FinishKeys);
+    let Some(ShellOperation::SavePendingUpload { record }) = next.first().cloned() else {
+        panic!("expected the pending record, got {next:?}");
+    };
+    let publish = record
+        .publish
+        .clone()
+        .expect("the publish rides in the record");
+    assert!(
+        publish.replayable(),
+        "every member proven, the group key present"
+    );
+    assert_eq!(publish.group_seed_hex, GROUP_SEED);
+    assert_eq!(publish.group_public_key_hex, GROUP_KEY);
+    assert!(record.replayable_publish().is_some());
+
+    let sent = saved_then_published(&mut sut);
+    match sent.as_slice() {
+        [ShellOperation::RegistryPublish {
+            metadata_hex,
+            members,
+            group_seed_hex,
+            group_public_key_hex,
+            ..
+        }] => {
+            assert_eq!(*metadata_hex, publish.metadata_hex);
+            assert_eq!(*members, publish.members);
+            assert_eq!(*group_seed_hex, publish.group_seed_hex);
+            assert_eq!(*group_public_key_hex, publish.group_public_key_hex);
+        }
+        other => panic!("expected the publish, got {other:?}"),
+    }
+}
+
+/// A storage failure while saving the account is said, and nothing claims
+/// the wallet exists; the drafts stay so the person can finish again.
+#[test]
+fn an_account_that_could_not_be_saved_is_not_created() {
+    let mut sut = finished("Ann");
+    sut.resolve(ShellResult::PendingUploadSaved);
+    let next = sut.resolve(ShellResult::StorageFailed {
+        message: "quota".to_owned(),
+    });
+    assert!(
+        next.iter()
+            .any(|op| matches!(op, ShellOperation::Prompt { .. })),
+        "said: {next:?}"
+    );
+    assert!(!next
+        .iter()
+        .any(|op| matches!(op, ShellOperation::RegistryPublish { .. })));
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::Form);
+    assert_eq!(view.keys.len(), 1, "the drafts are kept");
+    assert!(view.address.is_none());
+}
+
+/// ob-2: once the account is being written, starting over is refused — the
+/// write would land behind a reset model, leaving a wallet stored that the
+/// person was told was thrown away.
+#[test]
+fn start_over_is_refused_once_the_account_is_being_saved() {
+    let mut sut = finished("Ann");
+    sut.resolve(ShellResult::PendingUploadSaved);
+    assert!(!sut.view().show_start_over);
+    assert!(sut.dispatch(Event::StartOver).is_empty());
+    let next = sut.resolve(ShellResult::AccountSaved);
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::RegistryPublish { .. }]),
+        "the run carries on; got {next:?}"
     );
 }
 
@@ -402,7 +505,7 @@ fn the_pending_record_is_followed_by_the_registry_publish() {
 #[test]
 fn a_single_key_wallet_publishes_the_historical_payload() {
     let mut sut = finished("Ann");
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = saved_then_published(&mut sut);
 
     match next.as_slice() {
         [ShellOperation::RegistryPublish { members, .. }] => {
@@ -417,10 +520,11 @@ fn a_single_key_wallet_publishes_the_historical_payload() {
     }
 }
 
-/// A published group clears the pending record, saves, and only then reveals
-/// the address — the fund-safety ordering, now gated on the publish.
+/// A published group clears the pending record, and only then is the wallet
+/// created and its address revealed — the fund-safety ordering, gated on the
+/// publish (the account itself was saved before it, ob-2).
 #[test]
-fn a_published_group_removes_the_pending_saves_and_reveals_the_address() {
+fn a_published_group_removes_the_pending_and_reveals_the_address() {
     let mut sut = uploading("Ann");
     assert!(sut.view().address.is_none());
 
@@ -435,20 +539,18 @@ fn a_published_group_removes_the_pending_saves_and_reveals_the_address() {
     assert!(sut.view().address.is_none());
 
     let next = sut.resolve(ShellResult::PendingUploadRemoved);
-    assert!(next.iter().any(is_save_account));
     assert!(
-        sut.view().address.is_none(),
-        "not even a requested save may reveal the address"
+        !next.iter().any(is_save_account),
+        "saved once, before the publish; got {next:?}"
     );
-
-    sut.resolve(ShellResult::AccountSaved);
     let view = sut.view();
     assert_eq!(view.stage, CreateStage::Created);
     assert!(view.address.is_some());
 }
 
-/// A publish failure has no silent retry (it needs a signature), so it surfaces
-/// the retry screen with the reason, keeping the passkey and its draft.
+/// ob-2: a publish failure surfaces the retry screen with the reason — over a
+/// wallet that is SAVED on this device. It may be entered from there, and is
+/// never offered to be started over: it exists.
 #[test]
 fn a_failed_publish_shows_the_retry_screen() {
     let mut sut = uploading("Ann");
@@ -466,6 +568,22 @@ fn a_failed_publish_shows_the_retry_screen() {
         !view.can_go_back,
         "the back arrow is hidden while sync-failed"
     );
+    assert!(
+        !view.show_start_over,
+        "a saved wallet is not a draft to throw away"
+    );
+    assert!(
+        sut.dispatch(Event::StartOver).is_empty(),
+        "and the event is refused"
+    );
+    assert_eq!(sut.view().stage, CreateStage::SyncFailed);
+
+    match sut.dispatch(Event::EnterWallet).as_slice() {
+        [ShellOperation::CompleteOnboarding {
+            mode: vela_core::app::shell::CompletionMode::AddAccount { account },
+        }] => assert_eq!(account.id, CRED),
+        other => panic!("the saved wallet is entered; got {other:?}"),
+    }
 }
 
 /// FR-013 — retry resumes at the publish. Re-registering would mint a second
@@ -496,7 +614,6 @@ fn entering_the_wallet_requires_no_further_ceremony() {
     let mut sut = uploading("Ann");
     sut.resolve(ShellResult::RegistryPublished);
     sut.resolve(ShellResult::PendingUploadRemoved);
-    sut.resolve(ShellResult::AccountSaved);
 
     let requested = sut.dispatch(Event::EnterWallet);
     match requested.as_slice() {
@@ -518,15 +635,16 @@ fn entering_the_wallet_requires_no_further_ceremony() {
 /// exactly the class of bug that was unreachable in a browser test.
 #[test]
 fn late_upload_result_after_start_over_is_ignored() {
-    let mut sut = uploading("Ann");
+    let mut sut = finished("Ann");
     sut.dispatch(Event::StartOver);
 
     let view = sut.view();
     assert_eq!(view.submit_label, SubmitLabel::Create);
     assert!(view.name_editable);
 
-    // The publish that was in flight when the user gave up now comes back.
-    let next = sut.resolve(ShellResult::RegistryPublished);
+    // The record write that was in flight when the user gave up comes back:
+    // no account is saved for a run the person abandoned.
+    let next = sut.resolve(ShellResult::PendingUploadSaved);
 
     assert!(
         next.is_empty(),
@@ -561,7 +679,6 @@ fn submit_after_the_wallet_exists_is_refused() {
     let mut sut = uploading("Ann");
     sut.resolve(ShellResult::RegistryPublished);
     sut.resolve(ShellResult::PendingUploadRemoved);
-    sut.resolve(ShellResult::AccountSaved);
     assert_eq!(sut.view().stage, CreateStage::Created);
 
     assert!(
@@ -955,13 +1072,12 @@ fn the_official_page_mints_in_the_app_and_becomes_the_venue() {
         "{asked:?}"
     );
     sut.dispatch(Event::FinishKeys);
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let requested = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = sut.resolve(ShellResult::AccountSaved);
     assert!(matches!(
         next.as_slice(),
         [ShellOperation::RegistryPublish { page: None, .. }]
     ));
-    sut.resolve(ShellResult::RegistryPublished);
-    let requested = sut.resolve(ShellResult::PendingUploadRemoved);
     match requested.iter().find(|op| is_save_account(op)) {
         Some(ShellOperation::SaveAccount { account }) => {
             assert_eq!(account.signing_domain, "getvela.app");
@@ -982,15 +1098,14 @@ fn the_official_page_mints_in_the_app_and_becomes_the_venue() {
 fn a_custom_domain_wallet_is_saved_locked_to_its_page() {
     let (mut sut, _) = registered_on("http://localhost:8140", Some("http://localhost:8140"));
     sut.dispatch(Event::FinishKeys);
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let requested = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = sut.resolve(ShellResult::AccountSaved);
     match next.as_slice() {
         [ShellOperation::RegistryPublish { page, .. }] => {
             assert_eq!(page.as_deref(), Some("http://localhost:8140/"));
         }
         other => panic!("expected the publish, got {other:?}"),
     }
-    sut.resolve(ShellResult::RegistryPublished);
-    let requested = sut.resolve(ShellResult::PendingUploadRemoved);
     match requested.iter().find(|op| is_save_account(op)) {
         Some(ShellOperation::SaveAccount { account }) => {
             assert_eq!(account.signing_domain, "localhost");
@@ -1142,7 +1257,8 @@ fn a_two_key_wallet_publishes_both_members_and_the_multi_address() {
         other => panic!("expected the pending record, got {other:?}"),
     }
 
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let requested = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = sut.resolve(ShellResult::AccountSaved);
     match next.as_slice() {
         [ShellOperation::RegistryPublish { members, .. }] => {
             assert_eq!(members.len(), 2, "one possession proof per founding key");
@@ -1152,8 +1268,6 @@ fn a_two_key_wallet_publishes_both_members_and_the_multi_address() {
         other => panic!("expected the publish, got {other:?}"),
     }
 
-    sut.resolve(ShellResult::RegistryPublished);
-    let requested = sut.resolve(ShellResult::PendingUploadRemoved);
     match requested
         .iter()
         .find(|op| matches!(op, ShellOperation::SaveAccount { .. }))
@@ -1175,9 +1289,7 @@ fn a_two_key_wallet_publishes_both_members_and_the_multi_address() {
 fn the_wallet_signs_with_its_first_key_over_the_route_it_was_made_on() {
     let mut sut = two_keys("Ann");
     sut.dispatch(Event::FinishKeys);
-    sut.resolve(ShellResult::PendingUploadSaved);
-    sut.resolve(ShellResult::RegistryPublished);
-    let requested = sut.resolve(ShellResult::PendingUploadRemoved);
+    let requested = sut.resolve(ShellResult::PendingUploadSaved);
     match requested.iter().find(|op| is_save_account(op)) {
         Some(ShellOperation::SaveAccount { account }) => {
             assert_eq!(
@@ -1246,7 +1358,7 @@ fn remove_key_drops_extras_but_never_the_first() {
 fn a_failed_multi_publish_retries_every_member() {
     let mut sut = two_keys("Ann");
     sut.dispatch(Event::FinishKeys);
-    sut.resolve(ShellResult::PendingUploadSaved);
+    saved_then_published(&mut sut);
     sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
@@ -1526,7 +1638,7 @@ fn wire(operation: &ShellOperation) -> serde_json::Value {
 #[test]
 fn a_one_key_wallet_is_created_right_after_the_accepted_ack_and_keeps_its_pending_record() {
     let mut sut = finished("Ann");
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = saved_then_published(&mut sut);
     match next.as_slice() {
         [publish @ ShellOperation::RegistryPublish {
             answer_when_accepted,
@@ -1554,21 +1666,23 @@ fn a_one_key_wallet_is_created_right_after_the_accepted_ack_and_keeps_its_pendin
                 Some(TASK),
                 "exactly the record the landing watch confirms by reading the task"
             );
+            assert!(
+                record.publish.is_some(),
+                "and still the publish, should the task fail"
+            );
         }
         other => panic!("accepted → the record learns its task; got {other:?}"),
     }
     assert!(
         sut.view().address.is_none(),
-        "not entered before it is saved"
+        "not created before the record says how the landing is confirmed"
     );
 
     let next = sut.resolve(ShellResult::PendingUploadSaved);
     assert!(
-        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
-        "then straight to saving the account — no wait for the chain; got {next:?}"
+        next.is_empty(),
+        "created — no wait for the chain, and the account was saved already; got {next:?}"
     );
-    let next = sut.resolve(ShellResult::AccountSaved);
-    assert!(next.is_empty(), "nothing else is asked; got {next:?}");
 
     let view = sut.view();
     assert_eq!(view.stage, CreateStage::Created);
@@ -1603,11 +1717,7 @@ fn a_one_key_wallet_whose_task_could_not_be_recorded_still_enters() {
     let next = sut.resolve(ShellResult::StorageFailed {
         message: "disk full".to_owned(),
     });
-    assert!(
-        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
-        "got {next:?}"
-    );
-    sut.resolve(ShellResult::AccountSaved);
+    assert!(next.is_empty(), "got {next:?}");
     assert_eq!(sut.view().stage, CreateStage::Created);
 }
 
@@ -1644,9 +1754,9 @@ fn the_first_pending_record_carries_no_task() {
 
 /// Several keys keep today's rule, byte for byte: the publish does not ask to
 /// be answered early (the field is not even on the wire), and the wallet is
-/// entered only after the landing — record removed, then saved, then Created.
-/// A sibling device can only rebuild a multi-key wallet's address from the
-/// on-chain group.
+/// created only after the landing — record removed, then Created. (It was
+/// saved on this device before the publish, ob-2.) A sibling device can only
+/// rebuild a multi-key wallet's address from the on-chain group.
 #[test]
 fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
     let mut sut = two_keys("Ann");
@@ -1658,7 +1768,7 @@ fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
         }
         other => panic!("got {other:?}"),
     }
-    let next = sut.resolve(ShellResult::PendingUploadSaved);
+    let next = saved_then_published(&mut sut);
     match next.as_slice() {
         [op @ ShellOperation::RegistryPublish {
             answer_when_accepted,
@@ -1692,7 +1802,7 @@ fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
         other => panic!("got {other:?}"),
     }
 
-    // Unchanged order: landed → remove pending → save → Created.
+    // Landed → remove pending → Created.
     let next = sut.resolve(ShellResult::RegistryPublished);
     assert!(
         matches!(
@@ -1703,9 +1813,7 @@ fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
     );
     assert!(sut.view().address.is_none());
     let next = sut.resolve(ShellResult::PendingUploadRemoved);
-    assert!(next.iter().any(is_save_account));
-    assert!(sut.view().address.is_none());
-    sut.resolve(ShellResult::AccountSaved);
+    assert!(next.is_empty(), "got {next:?}");
     assert_eq!(sut.view().stage, CreateStage::Created);
 }
 
@@ -1717,7 +1825,7 @@ fn a_multi_key_wallet_keeps_waiting_for_the_landing_byte_for_byte() {
 fn a_multi_key_wallet_is_never_entered_on_an_accepted_ack() {
     let mut sut = two_keys("Ann");
     sut.dispatch(Event::FinishKeys);
-    sut.resolve(ShellResult::PendingUploadSaved);
+    saved_then_published(&mut sut);
     let next = sut.resolve(ShellResult::RegistryAccepted {
         task_id: TASK.to_owned(),
     });

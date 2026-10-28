@@ -1031,3 +1031,39 @@ fn a_draft_with_more_places_than_the_token_is_refused_saying_how_many() {
         Examined::Go
     );
 }
+
+/// ob-2: the world the shell hands over carries the session's unsynced
+/// wallets, and an agent's erase over them is refused — named, never put to
+/// an approval tap. The person's own erase is theirs (their sheet warns).
+#[test]
+fn an_agent_may_not_erase_while_a_wallet_is_unsynced() {
+    use vela_core::app::intent_rules::grants;
+    use vela_core::app::intents::{check, Action, Actor, Decision, ReasonCode};
+    let mut value = json!({
+        "session": { "has_wallet": true, "address": ALICE, "active_index": 0, "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ], "unsynced": [ { "name": "Main", "address": ALICE, "retrying": true } ] },
+        "agent_enabled": true,
+        "agent_wallets": [ALICE]
+    });
+    let owed = world(value.clone());
+    assert_eq!(grants(&owed).unsynced_wallets, vec!["Main".to_owned()]);
+    match check(Actor::Agent, &Action::EraseDevice, &grants(&owed)).decision {
+        Decision::Deny { reason } => {
+            assert_eq!(reason.code, ReasonCode::UnsyncedWallets);
+            assert!(reason.detail.contains("Main"), "{}", reason.detail);
+        }
+        other => panic!("refused outright: {other:?}"),
+    }
+    assert!(matches!(
+        check(Actor::Person, &Action::EraseDevice, &grants(&owed)).decision,
+        Decision::Allow
+    ));
+
+    // Synced: the agent's erase waits for the person's approval, as before.
+    value["session"]["unsynced"] = json!([]);
+    assert!(matches!(
+        check(Actor::Agent, &Action::EraseDevice, &grants(&world(value))).decision,
+        Decision::Approve { .. }
+    ));
+}

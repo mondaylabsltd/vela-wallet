@@ -55,12 +55,60 @@ export function identityHeader(identity: WalletIdentity): WalletHeaderModel {
 	};
 }
 
+/** What the header line under an unsynced wallet says (ob-2). */
+export interface SyncWords {
+	syncing: string;
+	syncStalled: string;
+	syncRetry: string;
+}
+
+/**
+ * ob-2: the line for the wallet at `address` when the session core names it
+ * unsynced (`SessionView.unsynced`) — "syncing…" while the session is still
+ * trying on its own and has not failed for a while (`stalledRounds` of its
+ * widening retries), then "not synced yet" with a retry. A wallet the
+ * session cannot finish on its own says so, with no retry to offer.
+ */
+export function syncLine(
+	unsynced: readonly { address: string; retrying: boolean }[],
+	address: string,
+	words: SyncWords,
+	failedRounds: number,
+	stalledRounds = 2
+): WalletHeaderModel['sync'] {
+	const owed = unsynced.find(
+		(wallet) => wallet.address !== '' && wallet.address.toLowerCase() === address.toLowerCase()
+	);
+	if (!owed) return undefined;
+	if (!owed.retrying) return { text: words.syncStalled, stalled: true };
+	if (failedRounds < stalledRounds) return { text: words.syncing, stalled: false };
+	return { text: words.syncStalled, stalled: true, retry: words.syncRetry };
+}
+
 /** The mobile home model, wearing the signed-in wallet's identity. */
 export function homeWithIdentity(
 	model: WalletHomeModel,
 	identity: WalletIdentity
 ): WalletHomeModel {
 	return { ...model, header: identityHeader(identity) };
+}
+
+/** The home's header with its sync line (ob-2), when there is one. */
+export function homeWithSync(
+	model: WalletHomeModel,
+	sync: WalletHeaderModel['sync']
+): WalletHomeModel {
+	return sync ? { ...model, header: { ...model.header, sync } } : model;
+}
+
+/** The desktop sidebar's header with its sync line (ob-2). */
+export function desktopWithSync(
+	model: WalletDesktopModel,
+	sync: WalletHeaderModel['sync']
+): WalletDesktopModel {
+	return sync
+		? { ...model, sidebar: { ...model.sidebar, header: { ...model.sidebar.header, sync } } }
+		: model;
 }
 
 /** The desktop model, whose header lives in the sidebar. */

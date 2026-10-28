@@ -26,10 +26,12 @@
  * ## Whose rule
  *
  * The CORE's (`vela_core::storage_catalog::is_erasable_key`, spec 072): the
- * `vela.` namespace and its one unprefixed cache, minus `vela.pendingUploads` —
- * a passkey public key the index has never confirmed, whose retry needs no
- * account list but which, deleted, could never be found at sign-in on any
- * device. Every shell asks the same question; iOS used to walk a list.
+ * `vela.` namespace and its one unprefixed cache — everything, the
+ * pending-upload outbox included (owner, 2026-10-28). It used to be kept so a
+ * key the index never confirmed could still be retried; now the confirmation
+ * names every wallet that has not finished syncing (the session's `unsynced`)
+ * and asks for an explicit confirm first. Every shell asks the same question;
+ * iOS used to walk a list.
  *
  * What stays here is what the core has no port for: listing three key-value
  * stores, deleting from them, and the verification pass.
@@ -42,9 +44,16 @@
  * `chrome.storage.local` (the `vela.perm.*` grants and the `ext_cache`
  * snapshot). All three are swept by the same rule; a store that is not present
  * in this build contributes nothing rather than failing.
+ *
+ * And then the IndexedDB database itself goes (ob-15): swept and verified
+ * empty of ours, it was still there — an empty `vela` database, and whatever
+ * not-ours keys sat in it. Erasing means everything.
  */
 import { loadCore, storageIsErasableKey } from '$lib/core/client';
-import { getAllKeys, removeItem, sealStorage, unsealStorage } from './storage';
+import { deleteDatabase, getAllKeys, removeItem, sealStorage, unsealStorage } from './storage';
+
+/** What {@link EraseIncompleteError.remaining} names when the database itself survived. */
+export const KV_DATABASE = 'IndexedDB "vela"';
 
 /** Would {@link eraseDeviceData} delete this key? The core's rule; runs after `loadCore()`. */
 export function isErasableKey(key: string): boolean {
@@ -188,6 +197,13 @@ export async function eraseDeviceData(): Promise<readonly string[]> {
 		const after = await erasableEverywhere();
 		const remaining = [...after.local, ...after.kv, ...after.extension];
 		if (remaining.length > 0) throw new EraseIncompleteError(remaining);
+
+		// Last, once nothing of ours is left in it: the database itself.
+		try {
+			await deleteDatabase();
+		} catch {
+			throw new EraseIncompleteError([KV_DATABASE]);
+		}
 
 		// Left sealed: the caller replaces the document next, and nothing is
 		// to be written into an erased store in the meantime.
