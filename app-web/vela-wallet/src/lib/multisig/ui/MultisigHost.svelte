@@ -17,7 +17,6 @@
 	import { multisigUi } from '../core/ui.svelte';
 	import { externalSigning } from '../external/signing.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
-	import ExternalSignSheet from './ExternalSignSheet.svelte';
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
@@ -38,6 +37,24 @@
 	let { m, signing, locale, wide, closeLabel, current, onchanged }: Props = $props();
 
 	let addPrefill = $state('');
+
+	/**
+	 * The outside wallet's sheet, fetched the first time an approval is asked
+	 * of one (perf-3). It carries PeerConnect, the room transport: 79 KB of
+	 * gzip, its wasm inlined as base64 and compiled on the main thread the
+	 * moment it is imported — on every page this host is on, for a sheet most
+	 * people never open. A sheet that cannot be fetched (offline) ends the
+	 * request with the error rather than leaving the caller waiting.
+	 */
+	let ExternalSignSheet = $state<typeof import('./ExternalSignSheet.svelte').default | null>(null);
+	$effect(() => {
+		const request = externalSigning.request;
+		if (request === null || ExternalSignSheet !== null) return;
+		import('./ExternalSignSheet.svelte').then(
+			(module) => (ExternalSignSheet = module.default),
+			(error: unknown) => request.reject(error)
+		);
+	});
 
 	onMount(() => {
 		multisig.boot();
@@ -183,7 +200,7 @@
 {/if}
 
 <!-- An outside owner's wallet, asked from any sheet or from the send flow: on top of them. -->
-{#if externalSigning.request}
+{#if externalSigning.request && ExternalSignSheet}
 	{#key externalSigning.request}
 		<ExternalSignSheet
 			{m}

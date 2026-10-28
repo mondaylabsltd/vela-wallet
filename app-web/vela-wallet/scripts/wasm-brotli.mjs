@@ -113,7 +113,7 @@ export function withBrotliCoreAdapter(adapter) {
 			);
 			const { name, plain, br } = await emitBrotliCore(join(APP, config.assets.directory));
 			wrapWorker(join(APP, config.main));
-			builder.log.info(
+			console.log(
 				`wasm-brotli: ${name}.br ${(br / 1024 / 1024).toFixed(2)} MiB (plain ${(plain / 1024 / 1024).toFixed(2)} MiB)`
 			);
 		}

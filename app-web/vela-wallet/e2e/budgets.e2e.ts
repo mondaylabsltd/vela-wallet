@@ -16,7 +16,7 @@
  *      wired must still cost exactly one 3.4 MB download, and the build must
  *      carry exactly one of them.
  */
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { expect, test } from '@playwright/test';
@@ -181,4 +181,37 @@ test('the QR decoders reach neither Welcome nor the wallet’s startup path — 
 		buffer: await QRCode.toBuffer('0x' + 'a1'.repeat(20), { margin: 4, width: 600, type: 'png' })
 	});
 	await expect.poll(() => wasm.some((path) => /zbar\./.test(path)), { timeout: 20_000 }).toBe(true);
+});
+
+/**
+ * perf-3 (round 2): PeerConnect, the room transport an outside owner's wallet
+ * is asked through, stays off the signed-in pages until it is used. It is
+ * 79 KB of gzip with its wasm inlined as base64 and compiled on the main
+ * thread the moment the module is imported; it rode in with the multisig
+ * host on the wallet, settings and the address book, and on a Slow 4G phone
+ * shared the link with the core's own download. The marker is its
+ * wasm-bindgen glue's own name; the control is that the build carries it.
+ */
+const PEERCONNECT = /__wbg_peer_free/;
+
+test('PeerConnect reaches no signed-in page until an outside wallet is asked', async ({ page }) => {
+	const chunks = join(APP_ROOT, '.svelte-kit/cloudflare/_app/immutable/chunks');
+	expect(
+		readdirSync(chunks).some((name) => PEERCONNECT.test(readFileSync(join(chunks, name), 'utf8'))),
+		'the build carries no PeerConnect chunk — the absence below would prove nothing'
+	).toBe(true);
+
+	const scripts = collectScripts(page);
+	await denyOffOrigin(page);
+	await page.goto('/en/parallel');
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
+	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+	await page.waitForURL(/\/en\/wallet$/);
+	await expect(page.getByTestId('parallel-space-badge')).toBeVisible();
+	await page.waitForLoadState('networkidle');
+	for (const path of ['/en/settings', '/en/contacts']) {
+		await page.goto(path);
+		await page.waitForLoadState('networkidle');
+	}
+	expect(chunksCarrying(scripts, PEERCONNECT), 'PeerConnect reached a signed-in page').toEqual([]);
 });
