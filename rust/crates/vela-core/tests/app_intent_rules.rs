@@ -263,7 +263,12 @@ fn a_multisig_proposal_is_submitted_to_its_members_not_cancelled() {
     );
     assert_eq!(p.operation.state, OperationState::Submitted);
     assert_eq!(p.operation.safe_tx_hash.as_deref(), Some("0xabc"));
-    assert!(p.operation.reason.as_deref().unwrap().contains("waiting_proposals"));
+    assert!(p
+        .operation
+        .reason
+        .as_deref()
+        .unwrap()
+        .contains("waiting_proposals"));
     // Its review closes: still with its members.
     let closed = operation_progress(p, None, None, &[]);
     assert_eq!(closed.operation.state, OperationState::Submitted);
@@ -271,7 +276,10 @@ fn a_multisig_proposal_is_submitted_to_its_members_not_cancelled() {
     assert_eq!(wire["safe_tx_hash"], "0xabc");
     // A Vela account's operation carries no such field on the wire.
     let plain = progress("awaiting_confirmation", None, None);
-    assert!(serde_json::to_value(&plain.operation).unwrap().get("safe_tx_hash").is_none());
+    assert!(serde_json::to_value(&plain.operation)
+        .unwrap()
+        .get("safe_tx_hash")
+        .is_none());
 }
 
 #[test]
@@ -668,15 +676,25 @@ fn a_multisig_is_read_and_switched_to_like_any_account() {
         json!({ "address": SAFE, "name": "Team", "active": false, "agent_allowed": false,
             "multisig": { "threshold": 2, "members": [ALICE, BOB], "waiting_proposals": 1 } })
     );
-    assert_eq!(state["accounts"][2]["multisig"]["waiting_proposals"], Value::Null);
+    assert_eq!(
+        state["accounts"][2]["multisig"]["waiting_proposals"],
+        Value::Null
+    );
     let switch = action(json!({ "type": "switch_account", "address": SAFE }));
     assert_eq!(examine(&switch, &here), Examined::Go);
-    assert_eq!(world_needs(&switch), ["session", "multisigs", "shown_multisig"]);
+    assert_eq!(
+        world_needs(&switch),
+        ["session", "multisigs", "shown_multisig"]
+    );
     assert!(
-        matches!(check(Actor::Agent, &switch, &grants(&here)).decision, Decision::Deny { .. }),
+        matches!(
+            check(Actor::Agent, &switch, &grants(&here)).decision,
+            Decision::Deny { .. }
+        ),
         "not on the person's list"
     );
-    let unknown = action(json!({ "type": "switch_account", "address": format!("0x{}", "3".repeat(40)) }));
+    let unknown =
+        action(json!({ "type": "switch_account", "address": format!("0x{}", "3".repeat(40)) }));
     assert_eq!(code(&examine(&unknown, &here)), Some(ReasonCode::NotFound));
 
     // Shown, and allowed: it is the wallet in front, read as such.

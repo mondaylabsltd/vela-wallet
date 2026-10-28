@@ -457,7 +457,8 @@ impl World {
     /// The wallet in front is one the agent may use — or nobody is in.
     #[must_use]
     pub fn agent_may_use_active(&self) -> bool {
-        self.front().is_none_or(|address| self.agent_may_use(address))
+        self.front()
+            .is_none_or(|address| self.agent_may_use(address))
     }
 
     /// The account in front: the multisig shown, else the session's own.
@@ -1529,7 +1530,11 @@ fn from_send(progress: &mut Progress, view: &SendFacts, ceremony: Option<&Ceremo
     }
     // A multisig's: proposed, not sent. What follows is its members' — they
     // approve, one executes — not this review's.
-    if let Some(proposed) = view.proposed.as_ref().filter(|p| !p.safe_tx_hash.is_empty()) {
+    if let Some(proposed) = view
+        .proposed
+        .as_ref()
+        .filter(|p| !p.safe_tx_hash.is_empty())
+    {
         proposed_to_members(op, &proposed.safe_tx_hash);
         return;
     }
@@ -1946,12 +1951,10 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
         Action::RemoveWallet { address } => Some(wallet(address)),
         Action::SwitchAccount { address } => {
             let to = wallet(address);
-            Some(
-                match world.front() {
-                    Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
-                    _ => to,
-                },
-            )
+            Some(match world.front() {
+                Some(from) if !from.is_empty() => format!("{} → {to}", wallet(from)),
+                _ => to,
+            })
         }
         _ => approval_detail(action),
     }
@@ -2022,7 +2025,10 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
         page,
         network_space: world.network_space,
         accounts: session.map_or_else(Vec::new, |s| {
-            let shown = world.shown_multisig.as_deref().filter(|a| !a.trim().is_empty());
+            let shown = world
+                .shown_multisig
+                .as_deref()
+                .filter(|a| !a.trim().is_empty());
             s.accounts
                 .iter()
                 .map(|row| AccountOut {

@@ -34,7 +34,16 @@
 		oninput?: (value: string) => void;
 	}
 
-	let { label, labelledby, placeholder, hint, errorText, value = '', maxlength, oninput }: Props = $props();
+	let {
+		label,
+		labelledby,
+		placeholder,
+		hint,
+		errorText,
+		value = '',
+		maxlength,
+		oninput
+	}: Props = $props();
 
 	const id = $props.id();
 
