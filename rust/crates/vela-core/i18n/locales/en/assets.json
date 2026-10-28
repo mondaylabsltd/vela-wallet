@@ -32,6 +32,7 @@
     "rpcFixRestored": "Connection restored — re-fetching this network’s balances and records.",
     "addByAddress": "Add a token by address",
     "notShowingTitle": "Received a token but don’t see it?",
-    "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on."
+    "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on.",
+    "ownNodeUnreachable": "Can't reach your node for {{name}}"
   }
 }

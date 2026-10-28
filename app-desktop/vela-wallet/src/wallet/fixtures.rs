@@ -253,6 +253,7 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         address: Some(ADDRESS_FULL.to_owned()),
         display_total_usd: Some(4_500.0),
         balance_unknown: false,
+        unpriced_only: false,
         balance_partial: true,
         unreachable: false,
         notice: None,
@@ -268,6 +269,8 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             row(56, LastKnown::Empty, None, LAST_SEEN_EMPTY),
             row(137, LastKnown::NotRead, None, NOT_READ_YET),
         ],
+        fallback_chain_ids: Vec::new(),
+        fallback_status_key: String::new(),
         unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
         internal_chain_ids: Vec::new(),
         internal_key: None,
@@ -327,6 +330,8 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -377,6 +382,8 @@ pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![100, TEMPO],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: vec![TEMPO],
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -429,6 +436,8 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -576,6 +585,8 @@ pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::B
                 read_chain_ids: vec![1, 56, 100],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1230,6 +1241,8 @@ pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100, 8_453],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1284,6 +1297,8 @@ pub fn breakdown_statuses_view() -> vela_core::app::balance_dashboard::BalanceVi
                 read_chain_ids: vec![1, 56, 100, 137, TEMPO],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: vec![TEMPO],
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.

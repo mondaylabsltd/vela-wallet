@@ -21,6 +21,7 @@ import {
 	rpcShouldRateLimit
 } from './fault-injection';
 import { recordNet } from './metrics';
+import { noteOwnNodes } from './own-node.svelte';
 import {
 	collectBundlerUrls,
 	collectRpcUrls,
@@ -81,6 +82,24 @@ export function maybeDeliveredOf(body: object): boolean {
 
 let coreFailedChains: number[] = [];
 let coreRateLimitedChains: number[] = [];
+/** The pool's whole latest view — where a hedge goes (perf-6). */
+let latestView: RpcPoolView | null = null;
+
+/**
+ * Chains whose person's own node is not answering and whose figures come from
+ * public nodes for now (owner decision 2026-10-28) — the core's list.
+ */
+export function getFallbackChains(): readonly number[] {
+	return latestView?.fallback_chains ?? [];
+}
+
+/**
+ * Chains read through the person's own node alone ("Only use my node") that
+ * cannot be read now — said as "Can't reach your node for …".
+ */
+export function getOwnNodeUnreachedChains(): readonly number[] {
+	return latestView?.own_node_unreached_chains ?? [];
+}
 
 /** Fault-injected chains, apart from the projected sets (the view is a full
  *  replacement on every push and would erase a folded-in fault). */
@@ -113,7 +132,7 @@ type PendingCall = {
 	reject: (error: unknown) => void;
 };
 
-const payloads = new Map<string, { method: string; params: unknown[] }>();
+const payloads = new Map<string, { method: string; params: unknown[]; kind: RpcKind }>();
 const bodies = new Map<string, Map<string, RPCResponse>>();
 const pendingCalls = new Map<string, PendingCall>();
 const pendingBases = new Map<string, (baseUrl: string) => void>();
@@ -180,8 +199,26 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 	call.resolve(held);
 }
 
+/**
+ * perf-6: a hedge's answer the core calls one every node gives alike. The
+ * caller has it now; the payload and bodies stay until the core concludes
+ * the call in its own order (`settle`), which then finds no caller waiting.
+ */
+function answerEarly(callId: string, url: string): void {
+	const call = pendingCalls.get(callId);
+	const held = bodies.get(callId)?.get(url);
+	if (!call || !held) return;
+	pendingCalls.delete(callId);
+	recordNet('rpc', 'success');
+	// A hedged read changes nothing on any node (the core's `HEDGED_READS`).
+	deliveredMaybe.set(held, false);
+	call.resolve(held);
+}
+
 const registry: RpcPoolCallRegistry = {
 	payload: (callId) => payloads.get(callId),
+	view: () => latestView,
+	answerEarly,
 	keepBody: (callId, url, body) => {
 		const perUrl = bodies.get(callId) ?? new Map<string, RPCResponse>();
 		perUrl.set(url, body);
@@ -237,8 +274,14 @@ function ensureReady(): Promise<void> {
 			await loadCore();
 			const created = createRpcPoolSession({
 				onView: (view: RpcPoolView) => {
+					latestView = view;
 					coreFailedChains = view.failed_chains;
 					coreRateLimitedChains = view.rate_limited_chains;
+					noteOwnNodes(
+						view.fallback_chains ?? [],
+						view.own_only_chains ?? [],
+						view.own_node_unreached_chains ?? []
+					);
 				},
 				onError: (error) => {
 					console.error('[rpc-pool] core fault:', error);
@@ -271,7 +314,7 @@ async function route(
 ): Promise<RPCResponse> {
 	await ensureReady();
 	const callId = `${kind}:${chainId}:${(sequence += 1)}`;
-	payloads.set(callId, { method, params });
+	payloads.set(callId, { method, params, kind });
 	return new Promise<RPCResponse>((resolve, reject) => {
 		pendingCalls.set(callId, { kind, chainId, method, resolve, reject });
 		session?.dispatch({

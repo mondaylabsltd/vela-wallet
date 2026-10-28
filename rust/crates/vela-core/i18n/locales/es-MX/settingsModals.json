@@ -11,13 +11,17 @@
       "removeBody": "¿Eliminar esta red personalizada?",
       "removeCancel": "Cancelar",
       "removeConfirm": "Eliminar",
-      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
+      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas.",
+      "fallback": "Tu nodo no responde: por ahora se usan nodos públicos",
+      "onlyMine": "Usar solo mi nodo",
+      "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva."
     },
     "account": {
       "modalTitle": "Cuentas",
       "total": "Total {{amount}}",
       "createNew": "Crear cuenta nueva",
-      "signInExisting": "Iniciar sesión con una existente"
+      "signInExisting": "Iniciar sesión con una existente",
+      "totalPartial": "Total hasta ahora {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Proveedores RPC",

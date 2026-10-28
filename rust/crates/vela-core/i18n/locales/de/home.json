@@ -267,6 +267,13 @@
         "backupNote": "Die Einrichtung des Multisigs liegt dann auch auf Ethereum, sodass es von dort gefunden und bereitgestellt werden kann. Ein Konto auf diesem Gerät zahlt die Gebühr.",
         "remove": "Von diesem Gerät entfernen"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Dein Knoten antwortet nicht",
+    "balanceDetailStatusPublicNodes": "Öffentliche Knoten in Verwendung",
+    "nodeFallbackNotice": "Dein Knoten für {{name}} antwortet nicht; vorerst werden öffentliche Knoten verwendet.",
+    "nodeFallbackOpen": "Netzwerkeinstellungen",
+    "totalUnpriced": "Noch kein Preis",
+    "allUnpriced": "Für keinen deiner Token konnte ein Preis ermittelt werden.",
+    "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar."
   }
 }

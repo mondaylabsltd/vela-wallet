@@ -11,13 +11,17 @@
       "removeBody": "Supprimer ce réseau personnalisé ?",
       "removeCancel": "Annuler",
       "removeConfirm": "Supprimer",
-      "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez."
+      "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez.",
+      "fallback": "Votre nœud ne répond pas — nœuds publics utilisés pour l'instant",
+      "onlyMine": "N'utiliser que mon nœud",
+      "onlyMineHint": "Rien de votre compte n'est envoyé aux nœuds publics. Si votre nœud ne répond plus, ce réseau ne peut pas être lu jusqu'à son retour."
     },
     "account": {
       "modalTitle": "Comptes",
       "total": "Total {{amount}}",
       "createNew": "Créer un nouveau compte",
-      "signInExisting": "Se connecter avec un compte existant"
+      "signInExisting": "Se connecter avec un compte existant",
+      "totalPartial": "Total à ce stade {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Fournisseurs RPC",

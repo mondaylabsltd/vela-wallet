@@ -11,13 +11,17 @@
       "removeBody": "要移除此自訂網絡嗎？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。"
+      "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。",
+      "fallback": "你嘅節點冇回應——暫時改用公共節點",
+      "onlyMine": "只用我嘅節點",
+      "onlyMineHint": "關於你帳戶嘅任何資料都唔會傳俾公共節點。如果你嘅節點停咗回應，呢個網絡會讀唔到，直至佢恢復。"
     },
     "account": {
       "modalTitle": "帳戶",
       "total": "合共 {{amount}}",
       "createNew": "建立新帳戶",
-      "signInExisting": "以現有帳戶登入"
+      "signInExisting": "以現有帳戶登入",
+      "totalPartial": "暫時合共 {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "RPC 供應商",

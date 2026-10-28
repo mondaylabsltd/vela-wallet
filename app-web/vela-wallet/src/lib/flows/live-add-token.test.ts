@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { MtokView } from '$lib/core/generated/MtokView';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import { buildFlowState } from './fixtures';
-import { liveAddToken } from './live';
+import { addTokenChoice, liveAddToken } from './live';
 
 const m = resolveWalletFlowMessages('en');
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
@@ -105,16 +105,42 @@ describe('the result card', () => {
 		expect(model.ctaDisabled).toBe(true);
 	});
 
-	it('takes the first chain that answered when several did', () => {
-		const model = live({
-			input_address: CONTRACT,
-			address_valid: true,
-			found: [FOUND, { ...FOUND, chain_id: 137, network_name: 'Polygon' }]
-		});
+	// home-15: the first chain that answered was taken silently — an address
+	// that is a token on two networks was added to whichever answered first.
+	it('offers every network the address is a token on, and adds nothing until one is chosen', () => {
+		const found = [FOUND, { ...FOUND, chain_id: 137, network_name: 'Polygon' }];
+		const model = live({ input_address: CONTRACT, address_valid: true, found });
 		expect(model.result).toMatchObject({
-			kind: 'token',
-			detail: expect.stringContaining('Ethereum')
+			kind: 'suggestions',
+			lead: m['addToken.chooseNetwork'],
+			rows: [
+				expect.objectContaining({ id: String(FOUND.chain_id), name: FOUND.network_name }),
+				expect.objectContaining({ id: '137', name: 'Polygon' })
+			]
 		});
+		expect(model.ctaDisabled).toBe(true);
+
+		const chosen = liveAddToken(sheet(), {
+			view: { ...EMPTY, input_address: CONTRACT, address_valid: true, found },
+			m,
+			chosenChainId: 137
+		});
+		expect(chosen.result).toMatchObject({
+			kind: 'token',
+			detail: expect.stringContaining('Polygon')
+		});
+		expect(chosen.ctaDisabled).toBe(false);
+	});
+
+	it('the choice rule: one network is itself, several wait for the person', () => {
+		const a = { chain_id: 1 };
+		const b = { chain_id: 137 };
+		expect(addTokenChoice([a], null)).toEqual({ found: a, offer: false });
+		expect(addTokenChoice([a, b], null)).toEqual({ found: undefined, offer: true });
+		expect(addTokenChoice([a, b], 137)).toEqual({ found: b, offer: false });
+		// A pick that is not among them (the address changed) is no pick.
+		expect(addTokenChoice([a, b], 10)).toEqual({ found: undefined, offer: true });
+		expect(addTokenChoice([], 1)).toEqual({ found: undefined, offer: false });
 	});
 });
 

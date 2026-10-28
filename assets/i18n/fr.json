@@ -606,7 +606,14 @@
     "backupNote": "Sa configuration est aussi conservée sur Ethereum, pour qu'on puisse y retrouver et déployer le multisig. Un compte de cet appareil paie les frais.",
     "remove": "Retirer de cet appareil"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",
+  "balanceDetailStatusPublicNodes": "Nœuds publics utilisés",
+  "nodeFallbackNotice": "Votre nœud pour {{name}} ne répond pas ; des nœuds publics sont utilisés pour l'instant.",
+  "nodeFallbackOpen": "Réglages du réseau",
+  "totalUnpriced": "Pas encore de prix",
+  "allUnpriced": "Impossible d'obtenir le prix de vos tokens.",
+  "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains."
  },
  "send": {
   "filterStable": "Stablecoins",
@@ -900,7 +907,8 @@
   "rpcFixRestored": "Connexion rétablie — récupération des soldes et enregistrements de ce réseau.",
   "addByAddress": "Ajouter un jeton par adresse",
   "notShowingTitle": "Vous avez reçu un jeton qui n’apparaît pas ?",
-  "notShowingBody": "Les transferts confirmés s’ajoutent tout seuls. Si un jeton n’apparaît toujours pas, ajoutez-le par adresse de contrat, ou ajoutez son réseau."
+  "notShowingBody": "Les transferts confirmés s’ajoutent tout seuls. Si un jeton n’apparaît toujours pas, ajoutez-le par adresse de contrat, ou ajoutez son réseau.",
+  "ownNodeUnreachable": "Votre nœud pour {{name}} est injoignable"
  },
  "addToken": {
   "addedTokensLabel": "Tokens ajoutés",
@@ -944,7 +952,8 @@
   "invalidAddress": "Adresse de contrat invalide",
   "notCompatible": "Incompatible",
   "nativeAliasTitle": "Déjà là",
-  "nativeAliasMessage": "C'est la pièce native du réseau. Son solde figure déjà dans vos actifs."
+  "nativeAliasMessage": "C'est la pièce native du réseau. Son solde figure déjà dans vos actifs.",
+  "chooseNetwork": "Cette adresse est un token sur plusieurs réseaux. Choisissez-en un."
  },
  "tokenDetail": {
   "send": "Envoyer",
@@ -1893,7 +1902,9 @@
    "gallery": "Photos",
    "fromGallery": "Depuis les photos",
    "torch": "Lampe",
-   "flipCamera": "Retourner"
+   "flipCamera": "Retourner",
+   "permissionDenied": "L'accès à la caméra est bloqué. Autorisez-le pour ce site dans les réglages de votre navigateur, puis réessayez.",
+   "retry": "Réessayer"
   },
   "gas": {
    "estFee": "Frais estim.",
@@ -2113,13 +2124,17 @@
    "removeBody": "Supprimer ce réseau personnalisé ?",
    "removeCancel": "Annuler",
    "removeConfirm": "Supprimer",
-   "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez."
+   "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez.",
+   "fallback": "Votre nœud ne répond pas — nœuds publics utilisés pour l'instant",
+   "onlyMine": "N'utiliser que mon nœud",
+   "onlyMineHint": "Rien de votre compte n'est envoyé aux nœuds publics. Si votre nœud ne répond plus, ce réseau ne peut pas être lu jusqu'à son retour."
   },
   "account": {
    "modalTitle": "Comptes",
    "total": "Total {{amount}}",
    "createNew": "Créer un nouveau compte",
-   "signInExisting": "Se connecter avec un compte existant"
+   "signInExisting": "Se connecter avec un compte existant",
+   "totalPartial": "Total à ce stade {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "Fournisseurs RPC",

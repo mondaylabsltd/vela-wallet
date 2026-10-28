@@ -1369,6 +1369,36 @@ export function registryResolveUnitStep(unit_id: number, source: string, answers
 export function rpcCooldownMs(consecutive_failures: number): number;
 
 /**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+ * read is never an answer).
+ */
+export function rpcEarlyVerdict(kind: string, method: string, url: string, outcome_json: string): string;
+
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+ * the web's perf-6).
+ */
+export function rpcHedgeAfterMs(): number;
+
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+ * the wire word (`rpc` / `bundler`); anything else is not a read.
+ */
+export function rpcIsHedgedRead(kind: string, method: string): boolean;
+
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+ * catalog, which is built before the wasm is up and is held to this by its
+ * test; `""` for a list the core cannot read.
+ */
+export function rpcOwnOnlyPool(seeds_json: string, own_only: boolean): string;
+
+/**
  * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
  */
 export function rpcReadTimeoutMs(): number;
@@ -2027,6 +2057,10 @@ export interface InitOutput {
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
+    readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly rpcHedgeAfterMs: () => number;
+    readonly rpcIsHedgedRead: (a: number, b: number, c: number, d: number) => number;
+    readonly rpcOwnOnlyPool: (a: number, b: number, c: number) => [number, number];
     readonly rpcReadTimeoutMs: () => number;
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;

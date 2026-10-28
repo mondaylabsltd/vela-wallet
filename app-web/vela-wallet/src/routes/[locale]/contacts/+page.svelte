@@ -893,7 +893,8 @@
 	}
 
 	.page {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
 		background: var(--color-bg-base);
@@ -903,7 +904,8 @@
 	   wallet routes frame theirs the same way). */
 	.desktop-shell {
 		position: relative;
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 

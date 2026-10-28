@@ -604,7 +604,14 @@
     "backupNote": "このマルチシグの設定を Ethereum にも保存し、そこからも見つけてデプロイできるようにします。手数料はこの端末のアカウントが支払います。",
     "remove": "この端末から削除"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "あなたのノードが応答していません",
+  "balanceDetailStatusPublicNodes": "公開ノードを使用中",
+  "nodeFallbackNotice": "{{name}} のあなたのノードが応答していないため、いまは公開ノードを使っています。",
+  "nodeFallbackOpen": "ネットワーク設定",
+  "totalUnpriced": "価格はまだありません",
+  "allUnpriced": "どのトークンの価格も取得できませんでした。",
+  "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。"
  },
  "send": {
   "filterStable": "ステーブルコイン",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "接続が回復しました。このネットワークの残高と履歴を再取得しています。",
   "addByAddress": "アドレスからトークンを追加",
   "notShowingTitle": "トークンを受け取ったのに表示されない？",
-  "notShowingBody": "着金が確認された送金は自動で追加されます。それでも表示されない場合は、コントラクトアドレスから追加するか、対応するネットワークを追加してください。"
+  "notShowingBody": "着金が確認された送金は自動で追加されます。それでも表示されない場合は、コントラクトアドレスから追加するか、対応するネットワークを追加してください。",
+  "ownNodeUnreachable": "{{name}} のあなたのノードに接続できません"
  },
  "addToken": {
   "addedTokensLabel": "追加済みのトークン",
@@ -939,7 +947,8 @@
   "invalidAddress": "コントラクトアドレスが正しくありません",
   "notCompatible": "非対応",
   "nativeAliasTitle": "すでに表示中",
-  "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。"
+  "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。",
+  "chooseNetwork": "このアドレスは複数のネットワークでトークンです。1 つ選んでください。"
  },
  "tokenDetail": {
   "send": "送る",
@@ -1886,7 +1895,9 @@
    "gallery": "写真",
    "fromGallery": "写真から選ぶ",
    "torch": "ライト",
-   "flipCamera": "切り替え"
+   "flipCamera": "切り替え",
+   "permissionDenied": "カメラへのアクセスがブロックされています。ブラウザの設定でこのサイトを許可してから、もう一度お試しください。",
+   "retry": "もう一度試す"
   },
   "gas": {
    "estFee": "ネットワーク手数料",
@@ -2106,13 +2117,17 @@
    "removeBody": "このカスタムネットワークを削除しますか？",
    "removeCancel": "キャンセル",
    "removeConfirm": "削除",
-   "relayNotice": "取引を送信するリレーには、このネットワークの RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。"
+   "relayNotice": "取引を送信するリレーには、このネットワークの RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。",
+   "fallback": "あなたのノードが応答していません — いまは公開ノードを使用中",
+   "onlyMine": "自分のノードだけを使う",
+   "onlyMineHint": "あなたのアカウントに関する情報は公開ノードに一切送られません。ノードが応答しなくなると、復旧するまでこのネットワークは読み取れません。"
   },
   "account": {
    "modalTitle": "アカウント",
    "total": "合計 {{amount}}",
    "createNew": "新しいアカウントを作成",
-   "signInExisting": "既存のアカウントでサインイン"
+   "signInExisting": "既存のアカウントでサインイン",
+   "totalPartial": "現時点の合計 {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC プロバイダー",

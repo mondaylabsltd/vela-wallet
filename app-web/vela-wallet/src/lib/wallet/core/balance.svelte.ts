@@ -18,6 +18,7 @@ import { loadCore } from '$lib/core/client';
 import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { ensureCustomNetworks, inSpace } from '$lib/services/networks';
 import { loadHoldings, saveHoldings } from '$lib/services/holdings-cache';
+import { onPrivacyElsewhere } from './privacy-sync';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import {
 	balanceSettledFor,
@@ -56,6 +57,11 @@ class Balance {
 				this.view = inSpaceView(view);
 			});
 			this.view = inSpaceView(balanceView());
+			// home-12: the person hid or showed the balance in another tab — this
+			// one follows, through the same eye the person would press.
+			onPrivacyElsewhere((hidden) => {
+				if (balanceView().hidden !== hidden) dispatchBalance({ type: 'privacy_toggled' });
+			});
 			// A switch of space starts the account over in the core (home-7):
 			// nothing the other space failed or held is said here.
 			networkSpace.subscribe(() => {

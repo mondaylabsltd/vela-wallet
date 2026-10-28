@@ -366,7 +366,9 @@
       "gallery": "Fotos",
       "fromGallery": "Aus Fotos wählen",
       "torch": "Licht",
-      "flipCamera": "Wechseln"
+      "flipCamera": "Wechseln",
+      "permissionDenied": "Der Kamerazugriff ist blockiert. Erlaube ihn für diese Website in den Browsereinstellungen und versuche es dann erneut.",
+      "retry": "Erneut versuchen"
     },
     "gas": {
       "estFee": "Geschätzte Gebühr",

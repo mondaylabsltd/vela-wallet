@@ -11,13 +11,17 @@
       "removeBody": "Xóa mạng tùy chỉnh này?",
       "removeCancel": "Hủy",
       "removeConfirm": "Xóa",
-      "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng."
+      "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng.",
+      "fallback": "Node của bạn không phản hồi — tạm thời dùng node công khai",
+      "onlyMine": "Chỉ dùng node của tôi",
+      "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại."
     },
     "account": {
       "modalTitle": "Tài khoản",
       "total": "Tổng {{amount}}",
       "createNew": "Tạo tài khoản mới",
-      "signInExisting": "Đăng nhập tài khoản hiện có"
+      "signInExisting": "Đăng nhập tài khoản hiện có",
+      "totalPartial": "Tổng tạm tính {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Nhà cung cấp RPC",

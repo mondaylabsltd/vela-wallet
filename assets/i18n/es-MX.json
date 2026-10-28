@@ -606,7 +606,14 @@
     "backupNote": "Su configuración también queda en Ethereum, para poder encontrar y desplegar el multisig desde ahí. Una cuenta de este dispositivo paga la comisión.",
     "remove": "Quitar de este dispositivo"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Tu nodo no responde",
+  "balanceDetailStatusPublicNodes": "Usando nodos públicos",
+  "nodeFallbackNotice": "Tu nodo de {{name}} no responde; por ahora se usan nodos públicos.",
+  "nodeFallbackOpen": "Ajustes de red",
+  "totalUnpriced": "Aún sin precio",
+  "allUnpriced": "No se pudo obtener el precio de ninguno de tus tokens.",
+  "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses."
  },
  "send": {
   "filterStable": "Estables",
@@ -900,7 +907,8 @@
   "rpcFixRestored": "Conexión restablecida: volviendo a obtener los saldos y registros de esta red.",
   "addByAddress": "Agregar un token por dirección",
   "notShowingTitle": "¿Recibiste un token y no aparece?",
-  "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive."
+  "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive.",
+  "ownNodeUnreachable": "No podemos conectar con tu nodo de {{name}}"
  },
  "addToken": {
   "addedTokensLabel": "Tokens agregados",
@@ -944,7 +952,8 @@
   "invalidAddress": "Dirección de contrato no válida",
   "notCompatible": "No compatible",
   "nativeAliasTitle": "Ya lo tienes",
-  "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos."
+  "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos.",
+  "chooseNetwork": "Esta dirección es un token en más de una red. Elige una."
  },
  "tokenDetail": {
   "send": "Enviar",
@@ -1893,7 +1902,9 @@
    "gallery": "Fotos",
    "fromGallery": "Desde fotos",
    "torch": "Linterna",
-   "flipCamera": "Voltear"
+   "flipCamera": "Voltear",
+   "permissionDenied": "El acceso a la cámara está bloqueado. Permítelo para este sitio en la configuración de tu navegador y vuelve a intentarlo.",
+   "retry": "Reintentar"
   },
   "gas": {
    "estFee": "Comisión est.",
@@ -2113,13 +2124,17 @@
    "removeBody": "¿Eliminar esta red personalizada?",
    "removeCancel": "Cancelar",
    "removeConfirm": "Eliminar",
-   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
+   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas.",
+   "fallback": "Tu nodo no responde: por ahora se usan nodos públicos",
+   "onlyMine": "Usar solo mi nodo",
+   "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva."
   },
   "account": {
    "modalTitle": "Cuentas",
    "total": "Total {{amount}}",
    "createNew": "Crear cuenta nueva",
-   "signInExisting": "Iniciar sesión con una existente"
+   "signInExisting": "Iniciar sesión con una existente",
+   "totalPartial": "Total hasta ahora {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "Proveedores RPC",

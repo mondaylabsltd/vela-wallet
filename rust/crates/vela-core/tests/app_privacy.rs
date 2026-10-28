@@ -122,6 +122,8 @@ fn balance(hidden: bool) -> BalanceView {
         read_chain_ids: vec![1, 100, 56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     });
     sut.resolve(Res::BalanceCacheWritten);
@@ -138,6 +140,8 @@ fn balance(hidden: bool) -> BalanceView {
         read_chain_ids: vec![1, 100, 56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW + 1_000.0,
     });
     sut.dispatch(Event::SwitcherOpened {

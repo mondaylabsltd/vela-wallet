@@ -11,13 +11,17 @@
       "removeBody": "Remover esta rede personalizada?",
       "removeCancel": "Cancelar",
       "removeConfirm": "Remover",
-      "relayNotice": "O relay que envia suas transações recebe o endereço RPC desta rede — incluindo qualquer chave de API — para alcançar a rede que você usa."
+      "relayNotice": "O relay que envia suas transações recebe o endereço RPC desta rede — incluindo qualquer chave de API — para alcançar a rede que você usa.",
+      "fallback": "Seu nó não está respondendo — usando nós públicos por enquanto",
+      "onlyMine": "Usar só o meu nó",
+      "onlyMineHint": "Nada sobre sua conta vai para nós públicos. Se o seu nó parar de responder, esta rede não poderá ser lida até ele voltar."
     },
     "account": {
       "modalTitle": "Contas",
       "total": "Total {{amount}}",
       "createNew": "Criar nova conta",
-      "signInExisting": "Entrar com conta existente"
+      "signInExisting": "Entrar com conta existente",
+      "totalPartial": "Total até agora {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Provedores RPC",

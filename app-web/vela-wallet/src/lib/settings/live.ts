@@ -165,11 +165,37 @@ export interface LiveSpace {
  * The network list. With a space (spec 105), only that space's networks, and
  * a network the person added carries the move to the other one.
  */
+/**
+ * The RPC pool's word on the person's own nodes (owner decision 2026-10-28,
+ * `RpcPoolView`): the chains public nodes serve because theirs is not
+ * answering, and the chains read through their node alone that cannot be
+ * reached.
+ */
+export interface LiveOwnNodes {
+	fallback: readonly number[];
+	unreached: readonly number[];
+}
+
+/** A network's own-node notice, or none — the pool's two lists, worded. */
+function ownNodeNotice(
+	row: NetNetworkRow,
+	m: SettingsMessages,
+	nodes: LiveOwnNodes | undefined
+): NetworkRowModel['notice'] {
+	if (nodes === undefined || !row.own_rpc) return undefined;
+	if (nodes.unreached.includes(row.chain_id)) {
+		return { tone: 'error', text: fill(m.networks.ownNodeDown, { name: row.display_name }) };
+	}
+	if (nodes.fallback.includes(row.chain_id)) return { tone: 'warn', text: m.networks.fallback };
+	return undefined;
+}
+
 export function liveNetworkRows(
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	nodes?: LiveOwnNodes
 ): NetworkRowModel[] {
 	const testnet = space?.current === 'testnet';
 	const rows =
@@ -185,8 +211,14 @@ export function liveNetworkRows(
 		expanded: expandedId === row.id,
 		...(space !== undefined && row.is_custom
 			? { move: testnet ? space.words.moveToMainnet : space.words.moveToTestnet }
-			: {})
+			: {}),
+		...optional('notice', ownNodeNotice(row, m, nodes))
 	}));
+}
+
+/** `{ [key]: value }` when there is a value, else nothing — for an optional field. */
+function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+	return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
 
 /** Spec 105: the network list's heading, and the switch beside it. */
@@ -205,7 +237,12 @@ function refusedPill(m: SettingsMessages): StatusPillModel {
 	return { tone: 'error', label: m.networks.httpsRequired, dot: true };
 }
 
-export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): NetworkDetailModel {
+export function liveNetworkDetail(
+	row: NetNetworkRow,
+	m: SettingsMessages,
+	nodes?: LiveOwnNodes
+): NetworkDetailModel {
+	const notice = ownNodeNotice(row, m, nodes);
 	const mismatch = row.rpc_chain_mismatch;
 	// set-6: a refusal is never drawn beside a green latency pill. The node
 	// answered (that is how the core knows its chain), but what the field
@@ -250,7 +287,29 @@ export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): Netw
 							expected: mismatch.expected_chain_id
 						})
 					}
+				: undefined,
+		// Owner decision 2026-10-28: the switch is offered only where the RPC is
+		// the person's own; the notice is the row's, beside the field.
+		...optional(
+			'onlyMine',
+			row.own_rpc
+				? {
+						id: 'only-mine',
+						title: m.networks.onlyMine,
+						subtitle: m.networks.onlyMineHint,
+						on: row.only_mine
+					}
 				: undefined
+		),
+		...optional(
+			'nodeCallout',
+			notice === undefined
+				? undefined
+				: {
+						tone: notice.tone === 'error' ? ('danger' as const) : ('warning' as const),
+						text: notice.text
+					}
+		)
 	};
 }
 
@@ -635,7 +694,9 @@ export function withLiveNetworks(
 	expandedId?: string,
 	space?: LiveSpace,
 	/** set-5: the chain the person just added, for the wizard's answer. */
-	addedChainId?: number
+	addedChainId?: number,
+	/** Owner decision 2026-10-28: the pool's word on the person's own nodes. */
+	nodes?: LiveOwnNodes
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	const count = networkCount(view, space);
@@ -655,10 +716,11 @@ export function withLiveNetworks(
 		about: aboutWithNetworkCount(model.about, count, m),
 		networks: {
 			...model.networks,
-			rows: liveNetworkRows(view, m, expandedId, space),
+			rows: liveNetworkRows(view, m, expandedId, space, nodes),
 			...(space === undefined ? {} : { space: liveSpaceHeading(space) })
 		},
-		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
+		networkDetail:
+			expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
@@ -677,7 +739,8 @@ export function withLiveNetworksDesktop(
 	m: SettingsMessages,
 	expandedId?: string,
 	space?: LiveSpace,
-	addedChainId?: number
+	addedChainId?: number,
+	nodes?: LiveOwnNodes
 ): SettingsDesktopModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
@@ -685,9 +748,9 @@ export function withLiveNetworksDesktop(
 		about: aboutWithNetworkCount(model.about, networkCount(view, space), m),
 		networks: {
 			...model.networks,
-			rows: liveNetworkRows(view, m, expandedId, space),
+			rows: liveNetworkRows(view, m, expandedId, space, nodes),
 			...(space === undefined ? {} : { space: liveSpaceHeading(space) }),
-			detail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networks.detail
+			detail: expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networks.detail
 		},
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		rpcProviders: liveRpcProviders(view, m),
@@ -1280,14 +1343,21 @@ function liveAccountRows(input: LiveAccountsInput) {
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
 	const addresses = [...input.rows.map((row) => row.account.address), ...(input.others ?? [])];
 	let total = 0;
-	for (const address of addresses) total += input.balances.get(address.toLowerCase()) ?? 0;
+	// ms-24: an account whose figure is not known yet adds nothing — and the
+	// total says it is only what is known so far, never a whole it is not.
+	let partial = false;
+	for (const address of addresses) {
+		const usd = input.balances.get(address.toLowerCase());
+		if (usd === undefined) partial = true;
+		else total += usd;
+	}
 	const count = addresses.length;
 	const counted = fill(pluralForm(m.countPrefix, count), { count });
 	// The testnet space: how many accounts, and no money (home-9). The count's
 	// sentence ends in the joiner to the total (" · " in every language);
 	// with no total after it, it ends at the count.
 	if (input.noValue === true) return counted.replace(/\s*·\s*$/u, '');
-	return `${counted}${fill(m.total, {
+	return `${counted}${fill(partial && !input.hidden ? m.totalPartial : m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;
@@ -1662,12 +1732,21 @@ export function liveBalanceDetail(
 		});
 	}
 
+	// A network's worth is the sum of what can be priced there (home-11): a
+	// network whose every holding has no price is not "$0.00" — it is listed
+	// under the tokens that could not be priced, by name, and not here.
 	const perChain = new Map<number, number>();
 	for (const token of view.tokens) {
-		const usd = Number(token.balance) * (token.price_usd ?? 0);
+		if (token.price_usd === null) continue;
+		const usd = Number(token.balance) * token.price_usd;
 		if (!Number.isFinite(usd)) continue;
 		perChain.set(token.chain_id, (perChain.get(token.chain_id) ?? 0) + usd);
 	}
+	// Owner decision 2026-10-28: a network read through public nodes because
+	// the person's own is not answering is listed as such — its figure is
+	// real, and where it came from is said.
+	const fallback = new Set(view.fallback_chain_ids ?? []);
+	for (const id of fallback) if (!perChain.has(id)) perChain.set(id, 0);
 	const done = [...perChain.entries()]
 		.filter(([id]) => !pending.some((row) => row.id === String(id)))
 		.sort((a, b) => b[1] - a[1])
@@ -1675,15 +1754,20 @@ export function liveBalanceDetail(
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			amount: view.hidden ? MASK : moneyText(usd, currency)
+			amount: view.hidden ? MASK : moneyText(usd, currency),
+			...(fallback.has(id) ? { note: m.balanceDetail.statusPublicNodes } : {})
 		}));
 
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	return {
 		title: m.balanceDetail.title,
-		summary: fill(m.balanceDetail.total, {
-			amount: view.hidden || total === null ? MASK : moneyText(total, currency)
-		}),
+		summary:
+			// home-11: nothing held could be priced — there is no total to state.
+			view.unpriced_only && !view.hidden
+				? m.balanceDetail.allUnpriced
+				: fill(m.balanceDetail.total, {
+						amount: view.hidden || total === null ? MASK : moneyText(total, currency)
+					}),
 		sectionPending: m.balanceDetail.networksLabel,
 		pendingNote: m.balanceDetail.networksNote,
 		pending,

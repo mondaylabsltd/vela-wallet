@@ -32,5 +32,7 @@
     "rpcFixRestored": "已恢复连接——正在重新拉取该网络的余额与记录。",
     "addByAddress": "通过地址添加代币",
     "notShowingTitle": "已经收到代币但没有显示？",
-    "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。"  }
+    "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。",
+    "ownNodeUnreachable": "连不上你的 {{name}} 节点"
+  }
 }

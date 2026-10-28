@@ -131,6 +131,17 @@
 //!   shared with `tx_tracker`'s find-event (ruling 8); rate-limit wording on
 //!   `eth_getLogs` is never mistaken for one (T180).
 //!
+//! # The person's own node (owner decision 2026-10-28)
+//!
+//! A custom RPC that stops answering must not break the wallet, so by default
+//! the pool still falls back to the other tiers — but never silently: a usable
+//! answer from anyone but the person's endpoint, while the pool holds one,
+//! puts the chain in [`RpcPoolView::fallback_chains`] until their endpoint
+//! answers again. With "Only use my node" on ([`RpcShellResult::PoolConfig`]'s
+//! `own_only`) the pool holds the person's endpoint alone
+//! ([`own_only_pool`]): nobody else is asked, and a failure is said as theirs
+//! ([`RpcPoolView::own_node_unreached_chains`]).
+//!
 //! Time never originates here: every shell result carries `now_ms` (epoch
 //! milliseconds, f64). Randomness never originates here: the backoff jitter
 //! is drawn by the shell via [`RpcOperation::DrawJitter`]. The two global
@@ -434,6 +445,16 @@ pub enum RpcShellResult {
         chain_id: u32,
         rpc_endpoints: Vec<RpcEndpointSeed>,
         bundler_endpoints: Vec<RpcEndpointSeed>,
+        /// The person's "Only use my node" switch for this network (the
+        /// network config's `only_mine`, owner decision 2026-10-28). With it
+        /// on and a [`RpcSource::User`] endpoint collected, the pool holds
+        /// that endpoint alone: no other node is ever asked about the
+        /// account, and a failure is the person's node's ([`own_only_pool`]).
+        /// Ignored when no own endpoint was collected — the switch is about
+        /// the person's node, and without one there is nothing it could
+        /// mean. Absent from an older shell: off.
+        #[serde(default)]
+        own_only: bool,
         now_ms: f64,
     },
     PostOutcome {
@@ -951,6 +972,9 @@ enum PendingWork {
 struct ChainPool {
     rpc: Vec<RpcEndpointStats>,
     bundler: Vec<RpcEndpointStats>,
+    /// The RPC list holds the person's own endpoint alone, by their choice
+    /// ("Only use my node"): the last config said so and carried one.
+    own_only: bool,
     loaded_at_ms: Option<f64>,
     loading: bool,
     pending: Vec<PendingWork>,
@@ -1062,6 +1086,13 @@ pub struct Model {
     /// answer. The browser's chain notice reads `failed ∪ unreached`; the home
     /// banner keeps `failed_chains` alone.
     unreached_chains: BTreeSet<u32>,
+    /// Chains whose person's own endpoint is not answering while another node
+    /// is (owner decision 2026-10-28): the last usable RPC answer came from an
+    /// endpoint that is not [`RpcSource::User`] although the pool holds one.
+    /// A dead own node must not break the wallet, so the pool falls back —
+    /// but never silently: this set is what says so. Cleared by the person's
+    /// own endpoint answering again, and by a config without one.
+    fallback_chains: BTreeSet<u32>,
     /// Cached fastest-RPC winner per chain, 1h TTL (`fastestRpcCache`).
     fastest: BTreeMap<u32, FastestPick>,
     /// Per chain, the URLs that answered `eth_chainId` with a DIFFERENT id.
@@ -1116,14 +1147,32 @@ pub struct RpcPoolView {
     /// RPC" banner still reads `failed_chains` only.
     #[serde(default)]
     pub unreached_chains: Vec<u32>,
+    /// Chains whose person's own RPC is not answering and whose reads are
+    /// being served by other (public) nodes for now (owner decision
+    /// 2026-10-28). Sorted ascending. Never a chain in `own_only_chains`:
+    /// there the pool asks nobody else. The shells say it — the network's
+    /// row in Settings, the balance breakdown, a one-time notice.
+    #[serde(default)]
+    pub fallback_chains: Vec<u32>,
+    /// Chains whose pool asks the person's own node and nobody else ("Only
+    /// use my node" on, an own endpoint configured). Sorted ascending.
+    #[serde(default)]
+    pub own_only_chains: Vec<u32>,
+    /// The subset of `own_only_chains` that cannot be read right now — in
+    /// `failed_chains` or `unreached_chains`, not merely rate-limited. Its
+    /// words are "Can't reach your node for …", with the way to fix it:
+    /// nothing went to another node, so the person's node is the whole story.
+    #[serde(default)]
+    pub own_node_unreached_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
     /// desktop's hedged reads, spec 083 H6 — so the early ask goes where this
     /// machine goes next, past its cooldowns and 429 back-offs, never around
-    /// them. Shell-local: never serialized, never in the bindings.
-    #[serde(skip)]
-    #[cfg_attr(feature = "bindings", ts(skip))]
+    /// them. On the wire since the web shell hedges too (perf-6): a JSON
+    /// shell reads it off the view each step hands back; a decoder that does
+    /// not hedge ignores it.
+    #[serde(default)]
     pub pending_urls: BTreeMap<String, Vec<String>>,
 }
 
@@ -1235,6 +1284,14 @@ impl App for RpcPool {
             rate_limited_chains: model.rate_limited_chains.iter().copied().collect(),
             banned: model.bans.values().cloned().collect(),
             unreached_chains: model.unreached_chains.iter().copied().collect(),
+            fallback_chains: model.fallback_chains.iter().copied().collect(),
+            own_only_chains: own_only_chains(model).collect(),
+            own_node_unreached_chains: own_only_chains(model)
+                .filter(|chain| {
+                    (model.failed_chains.contains(chain) || model.unreached_chains.contains(chain))
+                        && !model.rate_limited_chains.contains(chain)
+                })
+                .collect(),
             pending_urls: model
                 .calls
                 .iter()
@@ -1257,6 +1314,7 @@ fn accept(model: &mut Model, result: RpcShellResult) -> Command<RpcEffect, Event
             chain_id,
             rpc_endpoints,
             bundler_endpoints,
+            own_only,
             now_ms,
         } => {
             let Some(pool) = model.pools.get_mut(&chain_id) else {
@@ -1268,10 +1326,21 @@ fn accept(model: &mut Model, result: RpcShellResult) -> Command<RpcEffect, Event
             }
             pool.loading = false;
             pool.loaded_at_ms = Some(now_ms);
+            let (rpc_endpoints, own_only) = own_only_pool(rpc_endpoints, own_only);
+            let switched = pool.own_only != own_only;
+            pool.own_only = own_only;
             pool.rpc = merge_endpoints(std::mem::take(&mut pool.rpc), rpc_endpoints);
             pool.bundler = merge_endpoints(std::mem::take(&mut pool.bundler), bundler_endpoints);
+            let has_own = pool.rpc.iter().any(|e| e.source == RpcSource::User);
             let pending = std::mem::take(&mut pool.pending);
             let mut commands = Vec::new();
+            // A pool that asks only the person's node, or holds none of
+            // theirs, is not falling back from it. The switch's flip shows at
+            // once, whatever the pool does next.
+            let fallback_ended = (own_only || !has_own) && model.fallback_chains.remove(&chain_id);
+            if fallback_ended || switched {
+                commands.push(render());
+            }
             for work in pending {
                 commands.push(start_work(model, work, now_ms));
             }
@@ -1371,6 +1440,57 @@ fn merge_endpoints(
         }
     }
     merged
+}
+
+/// "Only use my node" (owner decision 2026-10-28): with the switch on and an
+/// endpoint of the person's own among the collected ones, the pool is that
+/// endpoint (or those) and nothing else — no provider, no default, no public
+/// node is ever handed a read about the account, and a sweep that fails is
+/// the person's node failing. Without an own endpoint the switch means
+/// nothing and the list is kept whole. Answers the list, and whether the
+/// restriction holds.
+pub fn own_only_pool(seeds: Vec<RpcEndpointSeed>, own_only: bool) -> (Vec<RpcEndpointSeed>, bool) {
+    let has_own = seeds
+        .iter()
+        .any(|seed| seed.source == RpcSource::User && !seed.url.is_empty());
+    if !(own_only && has_own) {
+        return (seeds, false);
+    }
+    let own = seeds
+        .into_iter()
+        .filter(|seed| seed.source == RpcSource::User)
+        .collect();
+    (own, true)
+}
+
+/// The chains whose pool asks the person's node alone, ascending.
+fn own_only_chains(model: &Model) -> impl Iterator<Item = u32> + '_ {
+    model
+        .pools
+        .iter()
+        .filter(|(_, pool)| pool.own_only)
+        .map(|(chain, _)| *chain)
+}
+
+/// A usable RPC answer came from `url`: is the chain being served by another
+/// node in place of the person's own (owner decision 2026-10-28)? Their
+/// endpoint leads every pass by its tier, so an answer from anyone else while
+/// the pool holds one means theirs failed, is cooling down after failing, or
+/// is banned — it is not answering. An answer from theirs ends the fallback.
+fn note_answer_source(model: &mut Model, chain_id: u32, url: &str) {
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return;
+    };
+    let has_own = pool.rpc.iter().any(|e| e.source == RpcSource::User);
+    let from_own = pool
+        .rpc
+        .iter()
+        .any(|e| e.url == url && e.source == RpcSource::User);
+    if has_own && !from_own && !pool.own_only {
+        model.fallback_chains.insert(chain_id);
+    } else {
+        model.fallback_chains.remove(&chain_id);
+    }
 }
 
 /// The collected endpoints minus every one on a host known to be dead
@@ -2189,6 +2309,9 @@ fn handle_outcome(
         Route::Success => {
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
+            if kind == RpcKind::Rpc {
+                note_answer_source(model, chain_id, url);
+            }
             conclude(
                 model,
                 call_id,
@@ -2217,6 +2340,9 @@ fn handle_outcome(
             // failover (the next endpoint usually has the same cap), no ban.
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
+            if kind == RpcKind::Rpc {
+                note_answer_source(model, chain_id, url);
+            }
             conclude(
                 model,
                 call_id,

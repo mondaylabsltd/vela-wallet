@@ -452,6 +452,7 @@
 							showIdentity={false}
 							onfield={(field, value) => onnetevent?.({ kind: 'detail-field', field, value })}
 							onfieldblur={(field) => onnetevent?.({ kind: 'detail-blur', field })}
+							ononlymine={(on) => onnetevent?.({ kind: 'only-mine', on })}
 						/>
 					{/snippet}
 				</NetworksPanel>

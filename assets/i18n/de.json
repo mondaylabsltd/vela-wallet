@@ -604,7 +604,14 @@
     "backupNote": "Die Einrichtung des Multisigs liegt dann auch auf Ethereum, sodass es von dort gefunden und bereitgestellt werden kann. Ein Konto auf diesem Gerät zahlt die Gebühr.",
     "remove": "Von diesem Gerät entfernen"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Dein Knoten antwortet nicht",
+  "balanceDetailStatusPublicNodes": "Öffentliche Knoten in Verwendung",
+  "nodeFallbackNotice": "Dein Knoten für {{name}} antwortet nicht; vorerst werden öffentliche Knoten verwendet.",
+  "nodeFallbackOpen": "Netzwerkeinstellungen",
+  "totalUnpriced": "Noch kein Preis",
+  "allUnpriced": "Für keinen deiner Token konnte ein Preis ermittelt werden.",
+  "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar."
  },
  "send": {
   "filterStable": "Stablecoins",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "Verbindung wiederhergestellt — Guthaben und Einträge dieses Netzwerks werden neu geladen.",
   "addByAddress": "Token über Adresse hinzufügen",
   "notShowingTitle": "Token erhalten, aber nicht zu sehen?",
-  "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk."
+  "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk.",
+  "ownNodeUnreachable": "Dein Knoten für {{name}} ist nicht erreichbar"
  },
  "addToken": {
   "addedTokensLabel": "Hinzugefügte Token",
@@ -939,7 +947,8 @@
   "invalidAddress": "Ungültige Vertragsadresse",
   "notCompatible": "Nicht kompatibel",
   "nativeAliasTitle": "Schon da",
-  "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt."
+  "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt.",
+  "chooseNetwork": "Diese Adresse ist in mehr als einem Netzwerk ein Token. Wähle eines aus."
  },
  "tokenDetail": {
   "send": "Senden",
@@ -1886,7 +1895,9 @@
    "gallery": "Fotos",
    "fromGallery": "Aus Fotos wählen",
    "torch": "Licht",
-   "flipCamera": "Wechseln"
+   "flipCamera": "Wechseln",
+   "permissionDenied": "Der Kamerazugriff ist blockiert. Erlaube ihn für diese Website in den Browsereinstellungen und versuche es dann erneut.",
+   "retry": "Erneut versuchen"
   },
   "gas": {
    "estFee": "Geschätzte Gebühr",
@@ -2106,13 +2117,17 @@
    "removeBody": "Dieses eigene Netzwerk entfernen?",
    "removeCancel": "Abbrechen",
    "removeConfirm": "Entfernen",
-   "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt."
+   "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt.",
+   "fallback": "Dein Knoten antwortet nicht – vorerst werden öffentliche Knoten verwendet",
+   "onlyMine": "Nur meinen Knoten verwenden",
+   "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist."
   },
   "account": {
    "modalTitle": "Konten",
    "total": "Gesamt {{amount}}",
    "createNew": "Neues Konto erstellen",
-   "signInExisting": "Mit vorhandenem anmelden"
+   "signInExisting": "Mit vorhandenem anmelden",
+   "totalPartial": "Bisher gesamt {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC-Anbieter",

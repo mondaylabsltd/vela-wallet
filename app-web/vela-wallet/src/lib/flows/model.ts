@@ -229,6 +229,12 @@ export interface ReceiveQrModel {
 	 * calm line under it, present exactly while the code names the network.
 	 */
 	network?: { label: string; on: boolean; hint?: string };
+	/**
+	 * home-6: the code on screen is being watched — "Listening for deposits"
+	 * — and a deposit the watcher saw is said here, where the person is
+	 * looking ("5 xDAI received"). Live only.
+	 */
+	watch?: { listening: string; received?: string };
 	warning: string;
 	saveImage: string;
 	/** Live only: what 保存图片 produces — R4, about this network or token (T488). */
@@ -451,6 +457,8 @@ export type AddTokenResult =
 	 */
 	| {
 			kind: 'suggestions';
+			/** home-15: why the list is there — an address that is a token on several networks. */
+			lead?: string;
 			rows: { id: string; mark: TokenMarkModel; name: string; meta: string }[];
 	  };
 

@@ -87,6 +87,8 @@ function machine(cached: number | null) {
 					read_chain_ids: [],
 					internal_chain_ids: [],
 					registry_chain_ids: [],
+					own_node_chain_ids: [],
+					fallback_chain_ids: [],
 					now_ms: 1_000,
 					...round
 				};
@@ -117,7 +119,8 @@ describe('an unstable network, through the real core (fix-balance)', () => {
 		expect(model.balance.state).toBe('no-value');
 		expect(model.balance.status).toEqual({
 			kind: 'warning',
-			text: "Can't reach Arc Testnet right now"
+			text: "Can't reach Arc Testnet right now",
+			unread: true
 		});
 		expect(model.assetRows.length).toBe(1);
 	});

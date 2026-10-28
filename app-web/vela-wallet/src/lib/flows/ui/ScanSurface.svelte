@@ -32,11 +32,33 @@
 		 * broken; the truth is usually a refusal they can undo.
 		 */
 		notice?: string;
+		/**
+		 * home-18: after a refusal or a camera that failed, the way to ask again
+		 * — once the person has allowed it in the browser's settings.
+		 */
+		retry?: { label: string; onpress: () => void };
+		/**
+		 * home-18: the tools that need a live camera (the lamp, the flip), drawn
+		 * unavailable while there is none — never a button that does nothing.
+		 */
+		dimmed?: readonly ('torch' | 'flip')[];
 		onclose?: () => void;
 		ontool?: (id: 'gallery' | 'torch' | 'flip') => void;
 	}
 
-	let { model, variant = 'screen', feed, notice, onclose, ontool }: Props = $props();
+	let {
+		model,
+		variant = 'screen',
+		feed,
+		notice,
+		retry,
+		dimmed = [],
+		onclose,
+		ontool
+	}: Props = $props();
+
+	const isDimmed = (id: 'gallery' | 'torch' | 'flip'): boolean =>
+		id !== 'gallery' && dimmed.includes(id);
 
 	const GLYPHS: Record<'gallery' | 'torch' | 'flip', UtilityIconId> = {
 		gallery: 'image',
@@ -94,10 +116,20 @@
 	</div>
 
 	<p class="hint">{notice ?? model.hint}</p>
+	{#if retry !== undefined}
+		<button type="button" class="retry" data-testid="scan-retry" onclick={retry.onpress}>
+			{retry.label}
+		</button>
+	{/if}
 
 	<div class="tools">
 		{#each model.tools as tool (tool.id)}
-			<button type="button" class="tool" onclick={() => ontool?.(tool.id)}>
+			<button
+				type="button"
+				class="tool"
+				disabled={isDimmed(tool.id)}
+				onclick={() => ontool?.(tool.id)}
+			>
 				<span class="disc"><Icon icon={UTILITY_ICONS[GLYPHS[tool.id]]} size="md" /></span>
 				<span class="tool-label">{tool.label}</span>
 			</button>
@@ -275,6 +307,25 @@
 		background: none;
 		font-family: var(--font-ui);
 		color: var(--color-fg-muted);
+		cursor: pointer;
+	}
+
+	.tool:disabled {
+		opacity: var(--opacity-disabled);
+		cursor: default;
+	}
+
+	.retry {
+		align-self: center;
+		min-height: var(--size-hitTarget);
+		padding-inline: var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-raised);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 		cursor: pointer;
 	}
 

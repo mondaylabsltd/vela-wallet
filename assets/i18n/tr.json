@@ -604,7 +604,14 @@
     "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
     "remove": "Bu cihazdan kaldır"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",
+  "balanceDetailStatusPublicNodes": "Herkese açık düğümler kullanılıyor",
+  "nodeFallbackNotice": "{{name}} için düğümünüz yanıt vermiyor; şimdilik herkese açık düğümler kullanılıyor.",
+  "nodeFallbackOpen": "Ağ ayarları",
+  "totalUnpriced": "Henüz fiyat yok",
+  "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
+  "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "Bağlantı geri geldi — bu ağın bakiyeleri ve kayıtları yeniden alınıyor.",
   "addByAddress": "Adresle token ekle",
   "notShowingTitle": "Token geldi ama görünmüyor mu?",
-  "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin."
+  "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin.",
+  "ownNodeUnreachable": "{{name}} için düğümünüze ulaşılamıyor"
  },
  "addToken": {
   "addedTokensLabel": "Eklenen Token'lar",
@@ -939,7 +947,8 @@
   "invalidAddress": "Geçersiz sözleşme adresi",
   "notCompatible": "Uyumlu değil",
   "nativeAliasTitle": "Zaten Var",
-  "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor."
+  "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor.",
+  "chooseNetwork": "Bu adres birden fazla ağda bir token. Birini seçin."
  },
  "tokenDetail": {
   "send": "Gönder",
@@ -1886,7 +1895,9 @@
    "gallery": "Fotoğraflar",
    "fromGallery": "Fotoğraflardan seç",
    "torch": "Fener",
-   "flipCamera": "Çevir"
+   "flipCamera": "Çevir",
+   "permissionDenied": "Kamera erişimi engellendi. Tarayıcı ayarlarından bu siteye izin verin, sonra tekrar deneyin.",
+   "retry": "Tekrar dene"
   },
   "gas": {
    "estFee": "Ağ ücreti",
@@ -2106,13 +2117,17 @@
    "removeBody": "Bu özel ağ kaldırılsın mı?",
    "removeCancel": "İptal",
    "removeConfirm": "Kaldır",
-   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir."
+   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir.",
+   "fallback": "Düğümünüz yanıt vermiyor — şimdilik herkese açık düğümler kullanılıyor",
+   "onlyMine": "Yalnızca kendi düğümümü kullan",
+   "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz."
   },
   "account": {
    "modalTitle": "Hesaplar",
    "total": "Toplam {{amount}}",
    "createNew": "Yeni Hesap Oluştur",
-   "signInExisting": "Mevcut Hesapla Giriş Yap"
+   "signInExisting": "Mevcut Hesapla Giriş Yap",
+   "totalPartial": "Şimdilik toplam {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC Sağlayıcıları",

@@ -327,7 +327,9 @@
       "gallery": "相簿",
       "fromGallery": "從相簿選擇",
       "torch": "手電筒",
-      "flipCamera": "翻轉"
+      "flipCamera": "翻轉",
+      "permissionDenied": "相機權限被封鎖了。請在瀏覽器的網站設定中允許本站使用相機，然後再試一次。",
+      "retry": "再試一次"
     },
     "gas": {
       "estFee": "預估手續費",

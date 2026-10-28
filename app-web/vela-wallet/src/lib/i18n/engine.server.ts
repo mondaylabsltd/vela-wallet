@@ -181,6 +181,11 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			said: Object.fromEntries(BALANCE_SAID_KEYS.map((key) => [key, k(key)])),
 			stale: k('home.balanceStale'),
 			unpriced: k('home.balanceUnpriced'),
+			unpricedTotal: k('home.totalUnpriced'),
+			allUnpriced: k('home.allUnpriced'),
+			currencyUnavailable: k('home.currencyUnavailable'),
+			nodeFallback: k('home.nodeFallbackNotice'),
+			nodeFallbackOpen: k('home.nodeFallbackOpen'),
 			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
@@ -233,6 +238,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
 			tokenListUnreachable: k('assets.tokenListUnreachable'),
+			ownNodeUnreachable: k('assets.ownNodeUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			lastSeen: k('assets.lastSeen'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
@@ -619,7 +625,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			explorer: k('settingsModals.network.fieldExplorer'),
 			mismatch: k('settingsModals.network.rpcChainMismatch'),
 			urlRefused: k('settingsModals.health.urlRefused'),
-			relayNotice: k('settingsModals.network.relayNotice')
+			relayNotice: k('settingsModals.network.relayNotice'),
+			fallback: k('settingsModals.network.fallback'),
+			ownNodeDown: k('assets.ownNodeUnreachable'),
+			onlyMine: k('settingsModals.network.onlyMine'),
+			onlyMineHint: k('settingsModals.network.onlyMineHint')
 		},
 		addNetwork: {
 			description: k('settingsModals.addNetwork.description'),
@@ -747,6 +757,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		accounts: {
 			title: k('settingsModals.account.modalTitle'),
 			total: k('settingsModals.account.total'),
+			totalPartial: k('settingsModals.account.totalPartial'),
 			countPrefix: pluralCopy(locale, 'home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
@@ -817,6 +828,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		rescue: {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			ownNodeUnreachable: k('assets.ownNodeUnreachable'),
 			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
@@ -839,8 +851,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			statusRetrying: k('home.balanceDetailStatusRetrying'),
 			statusFailed: k('home.balanceDetailStatusFailed'),
 			statuses: Object.fromEntries(BALANCE_STATUS_KEYS.map((key) => [key, k(key)])),
+			statusPublicNodes: k('home.balanceDetailStatusPublicNodes'),
 			updatedLabel: k('home.balanceDetailUpdatedLabel'),
-			retry: k('home.balanceDetailRetry')
+			retry: k('home.balanceDetailRetry'),
+			allUnpriced: k('home.allUnpriced')
 		},
 		backup: {
 			// By corpus key: the core names which one each state says.

@@ -2445,6 +2445,65 @@ pub fn rpc_cooldown_ms(consecutive_failures: u32) -> f64 {
     vela_core::app::rpc_pool::cooldown_ms(consecutive_failures)
 }
 
+/// How long a read waits on one endpoint before the shell also asks the one
+/// the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+/// the web's perf-6).
+#[wasm_bindgen(js_name = rpcHedgeAfterMs)]
+#[must_use]
+pub fn rpc_hedge_after_ms() -> u32 {
+    vela_core::app::rpc_pool::HEDGE_AFTER_MS
+}
+
+/// May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+/// the wire word (`rpc` / `bundler`); anything else is not a read.
+#[wasm_bindgen(js_name = rpcIsHedgedRead)]
+#[must_use]
+pub fn rpc_is_hedged_read(kind: &str, method: &str) -> bool {
+    match kind {
+        "rpc" => {
+            vela_core::app::rpc_pool::is_hedged_read(vela_core::app::rpc_pool::RpcKind::Rpc, method)
+        }
+        _ => false,
+    }
+}
+
+/// "Only use my node" applied to a collected endpoint list —
+/// `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+/// `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+/// catalog, which is built before the wasm is up and is held to this by its
+/// test; `""` for a list the core cannot read.
+#[wasm_bindgen(js_name = rpcOwnOnlyPool)]
+#[must_use]
+pub fn rpc_own_only_pool(seeds_json: &str, own_only: bool) -> String {
+    use vela_core::app::rpc_pool::{own_only_pool, RpcEndpointSeed};
+    let Ok(seeds) = serde_json::from_str::<Vec<RpcEndpointSeed>>(seeds_json) else {
+        return String::new();
+    };
+    let (endpoints, own_only) = own_only_pool(seeds, own_only);
+    serde_json::json!({ "endpoints": endpoints, "own_only": own_only }).to_string()
+}
+
+/// The answer a hedge's outcome may hand the caller before the pool reaches
+/// that endpoint in its own order — `rpc_pool::early_verdict` — as the
+/// verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+/// read is never an answer).
+#[wasm_bindgen(js_name = rpcEarlyVerdict)]
+#[must_use]
+pub fn rpc_early_verdict(kind: &str, method: &str, url: &str, outcome_json: &str) -> String {
+    use vela_core::app::rpc_pool::{early_verdict, RpcKind, RpcTransportOutcome};
+    let kind = match kind {
+        "rpc" => RpcKind::Rpc,
+        "bundler" => RpcKind::Bundler,
+        _ => return String::new(),
+    };
+    let Ok(outcome) = serde_json::from_str::<RpcTransportOutcome>(outcome_json) else {
+        return String::new();
+    };
+    early_verdict(kind, method, url, &outcome)
+        .and_then(|verdict| serde_json::to_string(&verdict).ok())
+        .unwrap_or_default()
+}
+
 // ---------------------------------------------------------------------------
 // Site names, logo misses and the balance read (spec 082 RE7, RE9, RE10)
 // ---------------------------------------------------------------------------

@@ -133,6 +133,10 @@ struct StoredConfig {
     explorer_url: String,
     #[serde(rename = "bundlerURL")]
     bundler_url: String,
+    /// "Only use my node" (owner decision 2026-10-28). Written only when on;
+    /// absent, off — the bytes every client reads alike.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    only_mine: bool,
 }
 
 impl From<StoredConfig> for NetNetworkConfig {
@@ -142,6 +146,7 @@ impl From<StoredConfig> for NetNetworkConfig {
             rpc_url: s.rpc_url,
             explorer_url: s.explorer_url,
             bundler_url: s.bundler_url,
+            only_mine: s.only_mine,
         }
     }
 }
@@ -565,6 +570,7 @@ impl Machine for NetworkAdmin {
                         rpc_url: c.rpc_url.clone(),
                         explorer_url: c.explorer_url.clone(),
                         bundler_url: c.bundler_url.clone(),
+                        only_mine: c.only_mine,
                     }),
                 );
                 Answer::Now(NetShellResult::Written)

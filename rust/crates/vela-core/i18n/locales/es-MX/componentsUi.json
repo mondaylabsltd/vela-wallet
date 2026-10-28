@@ -366,7 +366,9 @@
       "gallery": "Fotos",
       "fromGallery": "Desde fotos",
       "torch": "Linterna",
-      "flipCamera": "Voltear"
+      "flipCamera": "Voltear",
+      "permissionDenied": "El acceso a la cámara está bloqueado. Permítelo para este sitio en la configuración de tu navegador y vuelve a intentarlo.",
+      "retry": "Reintentar"
     },
     "gas": {
       "estFee": "Comisión est.",

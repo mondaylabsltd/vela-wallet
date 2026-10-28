@@ -11,13 +11,17 @@
       "removeBody": "Dieses eigene Netzwerk entfernen?",
       "removeCancel": "Abbrechen",
       "removeConfirm": "Entfernen",
-      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt."
+      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt.",
+      "fallback": "Dein Knoten antwortet nicht – vorerst werden öffentliche Knoten verwendet",
+      "onlyMine": "Nur meinen Knoten verwenden",
+      "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist."
     },
     "account": {
       "modalTitle": "Konten",
       "total": "Gesamt {{amount}}",
       "createNew": "Neues Konto erstellen",
-      "signInExisting": "Mit vorhandenem anmelden"
+      "signInExisting": "Mit vorhandenem anmelden",
+      "totalPartial": "Bisher gesamt {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "RPC-Anbieter",

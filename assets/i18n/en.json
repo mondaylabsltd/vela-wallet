@@ -604,7 +604,14 @@
     "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
     "remove": "Remove from this device"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Your node isn't answering",
+  "balanceDetailStatusPublicNodes": "Using public nodes",
+  "nodeFallbackNotice": "Your node for {{name}} isn't answering; using public nodes for now.",
+  "nodeFallbackOpen": "Network settings",
+  "totalUnpriced": "No price yet",
+  "allUnpriced": "None of your tokens could be priced.",
+  "currencyUnavailable": "{{code}} rates can't be loaded right now — amounts are in US dollars."
  },
  "send": {
   "selectTokenTitle": "Select Token",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "Connection restored — re-fetching this network’s balances and records.",
   "addByAddress": "Add a token by address",
   "notShowingTitle": "Received a token but don’t see it?",
-  "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on."
+  "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on.",
+  "ownNodeUnreachable": "Can't reach your node for {{name}}"
  },
  "addToken": {
   "addedTokensLabel": "Added Tokens",
@@ -939,7 +947,8 @@
   "invalidAddress": "Invalid contract address",
   "notCompatible": "Not compatible",
   "nativeAliasTitle": "Already Yours",
-  "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets."
+  "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets.",
+  "chooseNetwork": "This address is a token on more than one network. Choose one."
  },
  "tokenDetail": {
   "send": "Send",
@@ -1889,7 +1898,9 @@
    "gallery": "Photos",
    "fromGallery": "From photos",
    "torch": "Torch",
-   "flipCamera": "Flip"
+   "flipCamera": "Flip",
+   "permissionDenied": "Camera access is blocked. Allow it for this site in your browser's settings, then try again.",
+   "retry": "Try again"
   },
   "gas": {
    "estFee": "Network fee",
@@ -2106,13 +2117,17 @@
    "removeBody": "Remove this custom network?",
    "removeCancel": "Cancel",
    "removeConfirm": "Remove",
-   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
+   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use.",
+   "fallback": "Your node isn't answering — using public nodes for now",
+   "onlyMine": "Only use my node",
+   "onlyMineHint": "Nothing about your account goes to public nodes. If your node stops answering, this network can't be read until it's back."
   },
   "account": {
    "modalTitle": "Accounts",
    "total": "Total {{amount}}",
    "createNew": "Create New Account",
-   "signInExisting": "Sign In with Existing"
+   "signInExisting": "Sign In with Existing",
+   "totalPartial": "Total {{amount}} so far"
   },
   "rpcProviders": {
    "modalTitle": "RPC Providers",

@@ -148,7 +148,8 @@ function decodeNetworkConfig(raw: unknown): NetNetworkConfig | null {
 		chain_id: chainId,
 		rpc_url: asString(r.rpcURL),
 		explorer_url: asString(r.explorerURL),
-		bundler_url: asString(r.bundlerURL)
+		bundler_url: asString(r.bundlerURL),
+		only_mine: r.onlyMine === true
 	};
 }
 
@@ -157,7 +158,10 @@ function encodeNetworkConfig(c: NetNetworkConfig): Record<string, unknown> {
 		chainId: c.chain_id,
 		rpcURL: c.rpc_url,
 		explorerURL: c.explorer_url,
-		bundlerURL: c.bundler_url
+		bundlerURL: c.bundler_url,
+		// Written only when on: the bytes of every config without it are
+		// unchanged, and every client reads its absence as off.
+		...(c.only_mine ? { onlyMine: true } : {})
 	};
 }
 

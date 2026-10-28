@@ -12,7 +12,15 @@ export type BalanceView = { address: string | null,
  * withheld by construction, not masked downstream (invariant ⑧) — AND
  * while [`Self::unreachable`]: nothing was read, so there is no figure.
  */
-display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
+display_total_usd: number | null, balance_unknown: boolean, 
+/**
+ * The wallet holds something and NOTHING it holds could be priced
+ * (home-11): the sum is not zero, it is unknown. `display_total_usd` is
+ * then `None` — "$0.00" over 8 xDAI was a wrong number — and the hero
+ * says it has no price in the figure's place, the notice saying which
+ * tokens. Never while the skeleton or the unreachable state shows.
+ */
+unpriced_only: boolean, balance_partial: boolean, 
 /**
  * Nothing could be read and nothing is known: the first fetch failed —
  * or settled with every chain it asked failed — with no cache to fall
@@ -67,6 +75,18 @@ unpriced_tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limi
  * worth, then the rest in the wallet's network order.
  */
 unreachable_networks: Array<UnreachableNetwork>, 
+/**
+ * The networks read this round through public nodes because the
+ * person's own node is not answering (owner decision 2026-10-28): their
+ * figures are real, and where they came from is said — the breakdown
+ * lists each with [`Self::fallback_status_key`]. Never one of
+ * `unreachable_networks`.
+ */
+fallback_chain_ids: Array<number>, 
+/**
+ * [`STATUS_PUBLIC_NODES`]: the breakdown's status for those networks.
+ */
+fallback_status_key: string, 
 /**
  * The corpus key of the home line over them: [`UNREACHABLE_ONE`]
  * (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`

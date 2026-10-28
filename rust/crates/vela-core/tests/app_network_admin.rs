@@ -1248,6 +1248,7 @@ fn an_unverifiable_rpc_still_saves() {
                     rpc_url: "https://offline.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
                     bundler_url: String::new(),
+                    only_mine: false,
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1333,6 +1334,7 @@ fn a_held_save_commits_once_the_probe_agrees() {
                     rpc_url: "https://my-node.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
                     bundler_url: String::new(),
+                    only_mine: false,
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1365,6 +1367,7 @@ fn a_held_save_over_an_emptied_rpc_field_still_lands() {
                 rpc_url: String::new(),
                 explorer_url: ETH_SCAN.to_owned(),
                 bundler_url: String::new(),
+                only_mine: false,
             }]
         }),
         "an unverifiable (empty) URL saves; got {ops:?}"
@@ -1412,6 +1415,7 @@ fn an_override_save_never_clears_the_saved_bundler_url() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: "https://saved-scan.example".to_owned(),
             bundler_url: "https://my-bundler.example/1".to_owned(),
+            only_mine: false,
         }],
     );
     sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
@@ -1502,6 +1506,7 @@ fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: ETH_SCAN.to_owned(),
             bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/1"),
+            only_mine: false,
         }],
         endpoints: NetStoredEndpoints {
             bundler_service_url: Some("https://my-relay.example".to_owned()),
@@ -1527,6 +1532,7 @@ fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: ETH_SCAN.to_owned(),
             bundler_url: "https://my-bundler.example/1".to_owned(),
+            only_mine: false,
         }],
         endpoints: NetStoredEndpoints {
             bundler_service_url: Some("https://my-relay.example".to_owned()),
@@ -3039,4 +3045,126 @@ fn the_rpc_field_is_offered_where_another_endpoint_is_a_way_on() {
     for key in [RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED] {
         assert!(i18n.exists(key, &opts), "{key}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// "Only use my node" (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+fn own_override(chain_id: u32, rpc: &str, only_mine: bool) -> NetNetworkConfig {
+    NetNetworkConfig {
+        chain_id,
+        rpc_url: rpc.to_owned(),
+        explorer_url: String::new(),
+        bundler_url: String::new(),
+        only_mine,
+    }
+}
+
+fn row_of(sut: &Sut, chain_id: u32) -> vela_core::app::network_admin::NetNetworkRow {
+    sut.view()
+        .networks
+        .into_iter()
+        .find(|row| row.chain_id == chain_id)
+        .expect("the network is listed")
+}
+
+/// Only a network whose saved RPC is the person's own is "theirs": a shipped
+/// default saved back, or no override at all, is not.
+#[test]
+fn a_network_has_its_own_rpc_only_when_the_saved_rpc_is_not_the_shipped_one() {
+    let gnosis = BUILTIN_CHAINS.iter().find(|c| c.chain_id == 100).unwrap();
+    let sut = started_with(
+        vec![custom_network(999)],
+        vec![
+            own_override(100, "https://my-node.example", false),
+            own_override(1, BUILTIN_CHAINS[0].rpc_url, false),
+            own_override(999, "https://mine.example", true),
+        ],
+    );
+    assert!(row_of(&sut, 100).own_rpc);
+    assert!(!row_of(&sut, 100).only_mine);
+    assert_eq!(BUILTIN_CHAINS[0].chain_id, 1);
+    assert!(
+        !row_of(&sut, 1).own_rpc,
+        "the shipped endpoint is not theirs"
+    );
+    assert!(!row_of(&sut, 10).own_rpc, "nothing saved");
+    assert!(row_of(&sut, 999).own_rpc && row_of(&sut, 999).only_mine);
+    assert_ne!(gnosis.rpc_url, "https://my-node.example");
+}
+
+/// The switch is saved with the network's config, and the chain's pool is
+/// reloaded at once so its next read obeys it.
+#[test]
+fn only_mine_is_saved_with_the_network_config_and_reloads_its_pool() {
+    let mut sut = started_with(
+        vec![],
+        vec![own_override(100, "https://my-node.example", false)],
+    );
+    let ops = sut.dispatch(Event::OnlyMineChanged {
+        chain_id: 100,
+        on: true,
+    });
+    assert_eq!(
+        ops,
+        vec![
+            Op::WriteNetworkConfigs {
+                configs: vec![own_override(100, "https://my-node.example", true)],
+            },
+            Op::InvalidatePools {
+                chain_id: Some(100)
+            },
+        ]
+    );
+    assert!(row_of(&sut, 100).only_mine);
+    // The same answer twice is no change.
+    assert!(sut
+        .dispatch(Event::OnlyMineChanged {
+            chain_id: 100,
+            on: true
+        })
+        .is_empty());
+}
+
+/// Without an RPC of the person's own there is no node to keep to: the switch
+/// is not offered, and a stray event writes nothing.
+#[test]
+fn only_mine_without_an_own_rpc_changes_nothing() {
+    let mut sut = started();
+    assert!(sut
+        .dispatch(Event::OnlyMineChanged {
+            chain_id: 100,
+            on: true
+        })
+        .is_empty());
+    assert!(!row_of(&sut, 100).only_mine);
+}
+
+/// Editing the RPC keeps the switch: a new address for their node is still
+/// their node.
+#[test]
+fn an_rpc_edit_keeps_only_mine() {
+    let mut saved = own_override(100, "https://my-node.example", true);
+    saved.explorer_url = ETH_SCAN.to_owned();
+    let mut sut = started_with(vec![], vec![saved]);
+    sut.dispatch(Event::OverrideExpanded { chain_id: 100 });
+    answer_card_probes(&mut sut, "https://my-node.example", Some(100), ETH_SCAN);
+    sut.dispatch(Event::OverrideFieldEdited {
+        chain_id: 100,
+        field: NetOverrideField::Rpc,
+        value: "https://my-other-node.example".to_owned(),
+    });
+    answer_card_probes(
+        &mut sut,
+        "https://my-other-node.example",
+        Some(100),
+        ETH_SCAN,
+    );
+    let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 100 });
+    let Some(Op::WriteNetworkConfigs { configs }) = ops.first() else {
+        panic!("expected the config write, got {ops:?}");
+    };
+    assert_eq!(configs[0].rpc_url, "https://my-other-node.example");
+    assert!(configs[0].only_mine);
 }

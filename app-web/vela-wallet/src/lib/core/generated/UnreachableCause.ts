@@ -3,4 +3,4 @@
 /**
  * Why a network in the unreachable list could not be read.
  */
-export type UnreachableCause = "network" | "token_list";
+export type UnreachableCause = "network" | "token_list" | "own_node";

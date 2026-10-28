@@ -135,6 +135,10 @@
 		feed: Snippet;
 		notice?: string;
 		tool(id: 'gallery' | 'torch' | 'flip'): void;
+		/** home-18: ask for the camera again, after a refusal or a failure. */
+		retry?: { label: string; onpress: () => void };
+		/** home-18: the camera tools that do nothing without a live camera. */
+		dimmed?: readonly ('torch' | 'flip')[];
 	}
 
 	/** The batch importer's handlers, when its own core is live. */
@@ -236,6 +240,8 @@
 			model={base.model}
 			feed={scan?.feed}
 			notice={scan?.notice}
+			retry={scan?.retry}
+			dimmed={scan?.dimmed}
 			ontool={scan ? (id) => scan.tool(id) : undefined}
 			onclose={onback}
 		/>

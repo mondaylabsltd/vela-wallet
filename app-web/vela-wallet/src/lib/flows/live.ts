@@ -30,6 +30,7 @@ import {
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
 import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
+import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
 import {
 	balanceTokenMark,
 	chainLogoURL,
@@ -59,7 +60,8 @@ import {
 	moneyText,
 	narrowedFeed,
 	tokenAmountText,
-	tokenExplorerURL
+	tokenExplorerURL,
+	trimBalance
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
 import { MASK } from '$lib/wallet/fixtures';
@@ -142,6 +144,11 @@ export interface FlowsLiveInputs {
 	 * code is the bare address and no switch is drawn.
 	 */
 	pay?: PaymentRequestView;
+	/**
+	 * home-6: the `receive_watch` core's view while a receive screen is up —
+	 * the deposits it has seen land, newest first.
+	 */
+	receiveWatch?: ReceiveWatchView;
 }
 
 /** The networks the receive list walks, in the order the page indexes them. */
@@ -285,6 +292,37 @@ export function receiveAssetPicked(
  * apart by its contract line — is about the held token instead: its logo in
  * the centre, its contract under the title, its chain in the words.
  */
+/**
+ * home-6: what the receive screen says about the deposit watcher — that it is
+ * listening, and the latest deposit it saw ("5 xDAI received", every token of
+ * it). The detection is the core's (`receive_watch`); this words it. The
+ * amount is the core's delta in whole coin; while the balance is hidden, the
+ * coin is kept and the figure masked — the one rule for a hidden amount.
+ */
+export function receiveWatchLine(
+	inputs: Pick<FlowsLiveInputs, 'fm' | 'receiveWatch' | 'balance'>
+): ReceiveQrModel['watch'] {
+	const fm = inputs.fm;
+	const watch = inputs.receiveWatch;
+	if (fm === undefined || watch === undefined) return undefined;
+	const latest = watch.deposits[0];
+	const received =
+		latest === undefined || latest.items.length === 0
+			? undefined
+			: latest.items
+					.map((item) =>
+						fill(fm['home.toastReceived'], {
+							amount: inputs.balance.hidden ? MASK : trimBalance(item.amount.toFixed(18)),
+							token: item.symbol
+						})
+					)
+					.join(' · ');
+	return {
+		listening: fm['receive.listeningForDeposits'],
+		...(received === undefined ? {} : { received })
+	};
+}
+
 function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQrModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
@@ -309,8 +347,10 @@ function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQ
 		pay.asset.chain_id === chainId &&
 		pay.asset.token_address === (token?.token_address ?? null);
 	const value = current ? pay.qr_value : identity.address;
+	const watch = receiveWatchLine(inputs);
 	return {
 		...model,
+		...(watch === undefined ? {} : { watch }),
 		title,
 		// The code is the ADDRESS, encoded (spec 028 T411). Until now this screen
 		// drew 021's placeholder pattern, which never encoded anything — a person
@@ -484,6 +524,8 @@ export interface AddTokenLiveInputs {
 	 */
 	tab?: AddTokenTab;
 	native?: AddNetworkTabInputs;
+	/** home-15: the network the person picked, when the address was found on several. */
+	chosenChainId?: number | null;
 }
 
 /** T3b's inputs: what was typed, the wizard's state, and the chain just added. */
@@ -684,42 +726,72 @@ function liveAddNetworkTab(
 	};
 }
 
+/**
+ * home-15: which of the networks an address was found on the sheet is about.
+ * One network: that one. Several: the one the person picked from the list —
+ * until they pick, none (`offer`), so nothing is added to a network nobody
+ * chose. Pure, so the rule is pinned without a page.
+ */
+export function addTokenChoice<F extends { chain_id: number }>(
+	found: readonly F[],
+	chosenChainId: number | null | undefined
+): { found: F | undefined; offer: boolean } {
+	if (found.length <= 1) return { found: found[0], offer: false };
+	const picked = found.find((f) => f.chain_id === chosenChainId);
+	return picked === undefined ? { found: undefined, offer: true } : { found: picked, offer: false };
+}
+
 export function liveAddToken(model: AddTokenModel, inputs: AddTokenLiveInputs): AddTokenModel {
 	const { view, m } = inputs;
 	if (inputs.tab === 'native' && inputs.native !== undefined) {
 		return liveAddNetworkTab(model, m, inputs.native);
 	}
-	const first = view.found[0];
+	// home-15: an address that is a token on more than one network is not
+	// taken for the first of them — every network it is a token on is offered,
+	// and the card (and the add) is the one the person chose.
+	const chosen = addTokenChoice(view.found, inputs.chosenChainId);
+	const first = chosen.found;
 	const typed = view.input_address.trim() !== '';
 	const result: AddTokenModel['result'] = view.detecting
 		? { kind: 'searching', text: m['addToken.searchingNetworks'] }
-		: first !== undefined
+		: chosen.offer
 			? {
-					kind: 'token',
-					// The found token's own logo, by its contract (T492). It is
-					// always a contract, so never `null` — that would read as
-					// the chain's own coin and wear the chain's logo.
-					mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim()),
-					name: first.name,
-					detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
-					chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
+					kind: 'suggestions',
+					lead: m['addToken.chooseNetwork'],
+					rows: view.found.map((found) => ({
+						id: String(found.chain_id),
+						mark: tokenMarkFor(found.chain_id, found.symbol, view.input_address.trim()),
+						name: found.network_name,
+						meta: `${found.name} · ${found.symbol}`
+					}))
 				}
-			: view.native_alias
+			: first !== undefined
 				? {
-						// Arc's native coin also answers an ERC-20 interface, so the
-						// probe FINDS a well-formed token here. "Not Found" would be
-						// the wrong words for a refusal that has a reason — and the
-						// reason is the thing worth saying: the balance is already on
-						// screen (spec 060).
-						kind: 'not-found',
-						text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
+						kind: 'token',
+						// The found token's own logo, by its contract (T492). It is
+						// always a contract, so never `null` — that would read as
+						// the chain's own coin and wear the chain's logo.
+						mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim()),
+						name: first.name,
+						detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
+						chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
 					}
-				: view.not_found
+				: view.native_alias
 					? {
+							// Arc's native coin also answers an ERC-20 interface, so the
+							// probe FINDS a well-formed token here. "Not Found" would be
+							// the wrong words for a refusal that has a reason — and the
+							// reason is the thing worth saying: the balance is already on
+							// screen (spec 060).
 							kind: 'not-found',
-							text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+							text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
 						}
-					: { kind: 'none' };
+					: view.not_found
+						? {
+								kind: 'not-found',
+								text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+							}
+						: { kind: 'none' };
 	return {
 		...model,
 		tab: 'erc20',

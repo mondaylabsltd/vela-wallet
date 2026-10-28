@@ -149,4 +149,28 @@ describe('the balance breakdown — a heading stands over its rows, or not at al
 		screen.unmount();
 		host.remove();
 	});
+
+	// home-11: "Some tokens couldn't be priced." over "Some tokens couldn't be priced."
+	it('says the line pressed once — never again as the title of the section that answers it', () => {
+		const screen = render(BalanceDetailBody, {
+			props: {
+				panel: panel({
+					unpriced: [{ id: '1:0xabc', mark: mark('E'), name: 'PEPE', detail: 'Ethereum · 1' }]
+				}),
+				said: UNPRICED
+			}
+		});
+		expect(screen.container.querySelector('[data-testid="balance-detail-said"]')).toBeNull();
+		expect(screen.container.textContent?.split(UNPRICED).length).toBe(2);
+	});
+
+	// Owner decision 2026-10-28: a network public nodes served is said as such.
+	it('a network read through public nodes says so beside its figure', async () => {
+		const screen = render(BalanceDetailBody, {
+			props: { panel: panel({ done: [{ ...ETHEREUM_DONE, note: 'Using public nodes' }] }) }
+		});
+		await expect
+			.element(screen.getByTestId('balance-detail-public-nodes'))
+			.toHaveTextContent('Using public nodes');
+	});
 });

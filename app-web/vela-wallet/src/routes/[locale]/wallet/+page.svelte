@@ -70,7 +70,17 @@
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { subscribeNetworks } from '$lib/services/networks';
+	import { chainName, subscribeNetworks } from '$lib/services/networks';
+	import { ownNodes } from '$lib/services/own-node.svelte';
+	import { reportToast } from '$lib/settings/report-toast.svelte';
+	import { fill } from '$lib/wallet/messages';
+	import {
+		nodeFallbackToNotice,
+		nodeNoticeTopic,
+		readNoticed,
+		staleNodeNotice,
+		writeNoticed
+	} from '$lib/wallet/node-notice';
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
@@ -99,12 +109,14 @@
 		type PaymentRequestSession
 	} from '$lib/flows/core/payment-request';
 	import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
+	import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
 	import { loadCore } from '$lib/core/client';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
 	import type { ActivityGroupModel } from '$lib/wallet/model';
 	import {
+		addTokenChoice,
 		receiveAssetPicked,
 		receiveNetworks,
 		visibleBalanceTokens,
@@ -140,7 +152,7 @@
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { dropsToldFee, feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
-	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
+	import { scanner, scanNotice, scanRecovery } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
 	import {
@@ -491,6 +503,8 @@
 	 * the chain this sheet added are the sheet's own.
 	 */
 	let addTokenTab = $state<'erc20' | 'native'>('erc20');
+	/** home-15: the network picked, when the address is a token on several. */
+	let addTokenChain = $state<number | null>(null);
 	let netQuery = $state('');
 	let netAddedChainId = $state<number | null>(null);
 	/** The chain whose add was confirmed here, until the ledger says it landed. */
@@ -515,6 +529,7 @@
 		manageTokens?.dispose();
 		manageTokens = null;
 		addTokenView = null;
+		addTokenChain = null;
 		if (addTokenTab === 'native' || netQuery !== '') {
 			networkAdmin.dispatch({ type: 'wizard_reset' });
 		}
@@ -557,6 +572,7 @@
 							networkAdmin.dispatch({ type: 'search_input', query: value });
 							return;
 						}
+						addTokenChain = null;
 						manageTokens?.dispatch({ type: 'address_input', s: value });
 					},
 					submit: () => {
@@ -573,7 +589,7 @@
 							});
 							return;
 						}
-						const first = addTokenView?.found[0];
+						const first = addTokenChoice(addTokenView?.found ?? [], addTokenChain).found;
 						if (first && !first.added) {
 							manageTokens?.dispatch({ type: 'save_requested', chain_id: first.chain_id });
 						}
@@ -588,6 +604,11 @@
 					pick: (id: string) => {
 						const chainId = Number(id);
 						if (!Number.isInteger(chainId)) return;
+						// home-15: in the ERC-20 tab, a pick is the network the token is on.
+						if (addTokenTab === 'erc20') {
+							addTokenChain = chainId;
+							return;
+						}
 						networkAdmin.dispatch({
 							type: 'chain_selected',
 							chain_id: chainId,
@@ -634,6 +655,7 @@
 					view: addTokenView,
 					m: data.flowMessages,
 					tab: addTokenTab,
+					chosenChainId: addTokenChain,
 					native: {
 						query: netQuery,
 						wizard: networkAdmin.view.wizard,
@@ -1515,6 +1537,19 @@
 			data.flowMessages
 		)
 	);
+	// home-18: after a refusal — allowed now in the browser's settings — the
+	// camera is asked for again here; the lamp and flip rest without one.
+	const scanRecover = $derived(scanRecovery(scanner));
+	const scanRetry = $derived(
+		scanRecover.retry
+			? {
+					label: data.flowMessages['componentsUi.scanner.retry'],
+					onpress: () => {
+						if (scanVideo) void scanner.start(scanVideo);
+					}
+				}
+			: undefined
+	);
 
 	// The destinations THIS client has — `WEB_DESTINATIONS` (spec 022 founder
 	// call): the web has no 探索, and every route reads the same list.
@@ -1617,6 +1652,8 @@
 	 * appearing and the total moving are the acknowledgement.
 	 */
 	let watcher: ReceiveWatchSession | null = null;
+	/** home-6: what the watcher has seen, for the receive screen to say. */
+	let receiveWatchView = $state<ReceiveWatchView | null>(null);
 	const receiving = $derived(
 		(flowState !== undefined && flowState.startsWith('r')) ||
 			(desktopFlow !== undefined && desktopFlow.startsWith('dr'))
@@ -1640,7 +1677,7 @@
 			if (disposed) return;
 			watcher = createReceiveWatchSession({
 				address,
-				onView: () => {},
+				onView: (view) => (receiveWatchView = view),
 				onDeposit: () => {
 					balance.refresh(true);
 					feed.liveTick();
@@ -1653,6 +1690,7 @@
 			disposed = true;
 			watcher?.dispose();
 			watcher = null;
+			receiveWatchView = null;
 		};
 	});
 
@@ -1837,6 +1875,7 @@
 		fm: data.flowMessages,
 		receiveChainId: selectedReceiveChainId,
 		pay: payView ?? undefined,
+		receiveWatch: receiveWatchView ?? undefined,
 		emptyCopy: data.flows.t4.base.kind === 'assets' ? data.flows.t4.base.model.empty : undefined,
 		send: sendInputs,
 		batch: batchInputs,
@@ -2249,6 +2288,36 @@
 			.then(() => networkAdmin.dispatch({ type: 'override_expanded', chain_id: chainId }));
 	}
 
+	/**
+	 * Owner decision 2026-10-28: a node of the person's own that stopped
+	 * answering is said — once per chain per session — while public nodes
+	 * serve that network, with the way to its RPC. The pool decides which
+	 * chains fall back (`ownNodes.fallback`); the notice is taken back when
+	 * the person's node answers again.
+	 */
+	const noticedFallback = readNoticed();
+	$effect(() => {
+		const fallback = ownNodes.fallback;
+		untrack(() => {
+			if (staleNodeNotice(reportToast.current?.topic, fallback)) {
+				reportToast.withdraw(reportToast.current?.topic ?? '');
+			}
+			const chainId = nodeFallbackToNotice(fallback, noticedFallback);
+			if (chainId === null) return;
+			noticedFallback.add(chainId);
+			writeNoticed(noticedFallback);
+			const words = data.walletMessages.balance;
+			reportToast.notify({
+				tone: 'warning',
+				title: fill(words.nodeFallback, { name: chainName(chainId) }),
+				action: { label: words.nodeFallbackOpen, onpress: () => openRpcFix(chainId) },
+				closeLabel: rm.common.close,
+				persistent: false,
+				topic: nodeNoticeTopic(chainId)
+			});
+		});
+	});
+
 	function closeRescue() {
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
 		if (rescue === 'relay-unreachable')
@@ -2578,6 +2647,8 @@
 						variant="modal"
 						feed={scanFeed}
 						notice={scanCopy}
+						retry={scanRetry}
+						dimmed={scanRecover.dimmed}
 						ontool={scanTool}
 						onclose={() =>
 							sendView?.show_scanner
@@ -2726,7 +2797,13 @@
 		}}
 		send={sendActions}
 		batch={batchActions}
-		scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
+		scan={{
+			feed: scanFeed,
+			notice: scanCopy,
+			tool: scanTool,
+			retry: scanRetry,
+			dimmed: scanRecover.dimmed
+		}}
 		addToken={addTokenActions}
 		ondeletetx={deleteSelectedTx}
 		onchains={() => (chainSheetOpen = true)}
@@ -2825,7 +2902,8 @@
 	   its phone the same way. */
 	.page {
 		position: relative;
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
 		background: var(--color-bg-base);
@@ -2835,7 +2913,8 @@
 	   contacts routes frame theirs the same way). The flow column lives
 	   inside the frame now, so there is nothing to lay out beside it. */
 	.desktop-shell {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 

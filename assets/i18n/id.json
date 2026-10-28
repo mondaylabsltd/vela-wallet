@@ -604,7 +604,14 @@
     "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
     "remove": "Hapus dari perangkat ini"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
+  "balanceDetailStatusPublicNodes": "Memakai node publik",
+  "nodeFallbackNotice": "Node {{name}} Anda tidak merespons; untuk sementara memakai node publik.",
+  "nodeFallbackOpen": "Pengaturan jaringan",
+  "totalUnpriced": "Belum ada harga",
+  "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
+  "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS."
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "Koneksi pulih — mengambil ulang saldo dan catatan jaringan ini.",
   "addByAddress": "Tambah token lewat alamat",
   "notShowingTitle": "Sudah menerima token tapi tidak muncul?",
-  "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya."
+  "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya.",
+  "ownNodeUnreachable": "Node {{name}} Anda tidak bisa dijangkau"
  },
  "addToken": {
   "addedTokensLabel": "Token yang Ditambahkan",
@@ -939,7 +947,8 @@
   "invalidAddress": "Alamat kontrak tidak valid",
   "notCompatible": "Tidak kompatibel",
   "nativeAliasTitle": "Sudah Ditampilkan",
-  "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda."
+  "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda.",
+  "chooseNetwork": "Alamat ini adalah token di lebih dari satu jaringan. Pilih salah satu."
  },
  "tokenDetail": {
   "send": "Kirim",
@@ -1886,7 +1895,9 @@
    "gallery": "Foto",
    "fromGallery": "Pilih dari foto",
    "torch": "Senter",
-   "flipCamera": "Balik"
+   "flipCamera": "Balik",
+   "permissionDenied": "Akses kamera diblokir. Izinkan untuk situs ini di pengaturan browser Anda, lalu coba lagi.",
+   "retry": "Coba lagi"
   },
   "gas": {
    "estFee": "Biaya jaringan",
@@ -2106,13 +2117,17 @@
    "removeBody": "Hapus jaringan kustom ini?",
    "removeCancel": "Batal",
    "removeConfirm": "Hapus",
-   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
+   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan.",
+   "fallback": "Node Anda tidak merespons — sementara memakai node publik",
+   "onlyMine": "Hanya pakai node saya",
+   "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali."
   },
   "account": {
    "modalTitle": "Akun",
    "total": "Total {{amount}}",
    "createNew": "Buat Akun Baru",
-   "signInExisting": "Masuk dengan Akun yang Ada"
+   "signInExisting": "Masuk dengan Akun yang Ada",
+   "totalPartial": "Total sejauh ini {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "Penyedia RPC",

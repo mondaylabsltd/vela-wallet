@@ -87,6 +87,8 @@ const EVERY_CHAIN_ANSWERED: Settled = {
 	read_chain_ids: [1, 100],
 	internal_chain_ids: [],
 	registry_chain_ids: [],
+	own_node_chain_ids: [],
+	fallback_chain_ids: [],
 	now_ms: 1_000
 };
 
@@ -133,7 +135,11 @@ describe('the hero’s status line before and after the first read (F19)', () =>
 		expect(missed.state).toBe('normal');
 		expect(missed.liveText).toBeUndefined();
 		expect(missed.checkingText).toBeUndefined();
-		expect(missed.status).toEqual({ kind: 'warning', text: "Can't reach Ethereum right now" });
+		expect(missed.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Ethereum right now",
+			unread: true
+		});
 	});
 
 	it('a read that threw over a cached zero is neither "Checking…" nor "Live"', () => {
@@ -227,6 +233,7 @@ describe('the Assets list’s empty state before and after the first read', () =
 		expect(wallet.before).toMatchObject({
 			tokens: [],
 			balance_unknown: false,
+			unpriced_only: false,
 			holdings_loading: false,
 			unreachable: false
 		});

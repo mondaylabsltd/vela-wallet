@@ -260,6 +260,15 @@ export interface SettingsMessages {
 		urlRefused: string;
 		/** Spec 098 §5.1: the relay is sent this RPC, key and all. */
 		relayNotice: string;
+		/**
+		 * Owner decision 2026-10-28: the row of a network whose own node is not
+		 * answering while public nodes serve it; the row of one read through its
+		 * own node alone that cannot be reached (`{{name}}`); and the switch.
+		 */
+		fallback: string;
+		ownNodeDown: string;
+		onlyMine: string;
+		onlyMineHint: string;
 	};
 	addNetwork: {
 		description: string;
@@ -418,6 +427,8 @@ export interface SettingsMessages {
 		title: string;
 		/** Template with `{{amount}}`. */
 		total: string;
+		/** ms-24: the total while an account's figure is not known yet (`{{amount}}`). */
+		totalPartial: string;
 		/**
 		 * "{{count}} accounts · " in each plural form this locale has
 		 * (`pluralForm`): one account is "1 account · ", not "1 accounts · ".
@@ -518,6 +529,8 @@ export interface SettingsMessages {
 		 */
 		unreachableOne: string;
 		unreachableMany: string;
+		/** Owner decision 2026-10-28: the one network's own node (`{{name}}`). */
+		ownNodeUnreachable: string;
 		/**
 		 * PR 3 note 4: the one network whose token list could not be loaded
 		 * (`{{name}}`) — the home's line and the list's title then, and the
@@ -562,8 +575,15 @@ export interface SettingsMessages {
 		 * unavailable" where the RPC is answering (PR 3 final note F21).
 		 */
 		statuses: Readonly<Record<string, string>>;
+		/**
+		 * Owner decision 2026-10-28: a network read through public nodes because
+		 * the person's own is not answering (`BalanceView.fallback_status_key`).
+		 */
+		statusPublicNodes: string;
 		updatedLabel: string;
 		retry: string;
+		/** home-11: the summary when nothing held can be priced. */
+		allUnpriced: string;
 	};
 	/** The Ethereum backup row (spec 062): the founding record's standing there. */
 	backup: {
@@ -684,7 +704,8 @@ export const UNREACHABLE_LINE_KEYS = [
  */
 export const BALANCE_STATUS_KEYS = [
 	'home.balanceDetailStatusFailed',
-	'home.balanceDetailStatusTokenList'
+	'home.balanceDetailStatusTokenList',
+	'home.balanceDetailStatusOwnNode'
 ] as const;
 
 /**
@@ -957,6 +978,10 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.relayNotice',
+	'settingsModals.network.fallback',
+	'settingsModals.network.onlyMine',
+	'settingsModals.network.onlyMineHint',
+	'assets.ownNodeUnreachable',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
 	'settingsModals.health.urlRefused',
@@ -1060,6 +1085,7 @@ export const SETTINGS_KEYS = [
 	'about.footer',
 	'settingsModals.account.modalTitle',
 	'settingsModals.account.total',
+	'settingsModals.account.totalPartial',
 	'settingsModals.account.createNew',
 	'settingsModals.account.signInExisting',
 	'settings.signOut.button',
@@ -1143,6 +1169,8 @@ export const SETTINGS_KEYS = [
 	'home.balanceDetailStatusTokenList',
 	'home.balanceDetailUpdatedLabel',
 	'home.balanceDetailRetry',
+	'home.balanceDetailStatusPublicNodes',
+	'home.allUnpriced',
 	'componentsUi.treasuryBootstrap.title',
 	'componentsUi.treasuryBootstrap.lead',
 	'componentsUi.treasuryBootstrap.amountHint',

@@ -37,6 +37,8 @@
       "failed_chain_ids": [
         56
       ],
+      "fallback_chain_ids": [],
+      "fallback_status_key": "home.balanceDetailStatusPublicNodes",
       "hidden": true,
       "holdings_loading": false,
       "internal_chain_ids": [],
@@ -84,6 +86,7 @@
           "token_address": null
         }
       ],
+      "unpriced_only": false,
       "unpriced_tokens": [],
       "unreachable": false,
       "unreachable_key": "assets.unreachableOne",
@@ -1025,6 +1028,8 @@
       "failed_chain_ids": [
         56
       ],
+      "fallback_chain_ids": [],
+      "fallback_status_key": "home.balanceDetailStatusPublicNodes",
       "hidden": false,
       "holdings_loading": false,
       "internal_chain_ids": [],
@@ -1081,6 +1086,7 @@
           "token_address": null
         }
       ],
+      "unpriced_only": false,
       "unpriced_tokens": [],
       "unreachable": false,
       "unreachable_key": "assets.unreachableOne",

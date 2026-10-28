@@ -89,6 +89,9 @@
 			{#if model.result.chip !== undefined}<StatusChip chip={model.result.chip} />{/if}
 		</div>
 	{:else if model.result.kind === 'suggestions'}
+		{#if model.result.lead !== undefined}
+			<p class="note">{model.result.lead}</p>
+		{/if}
 		<ul class="suggestions">
 			{#each model.result.rows as row (row.id)}
 				<li>

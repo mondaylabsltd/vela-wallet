@@ -366,7 +366,9 @@
       "gallery": "Foto",
       "fromGallery": "Dalle foto",
       "torch": "Torcia",
-      "flipCamera": "Ruota"
+      "flipCamera": "Ruota",
+      "permissionDenied": "L'accesso alla fotocamera è bloccato. Consentilo per questo sito nelle impostazioni del browser, poi riprova.",
+      "retry": "Riprova"
     },
     "gas": {
       "estFee": "Commissione di rete",

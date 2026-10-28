@@ -11,13 +11,17 @@
       "removeBody": "Rimuovere questa rete personalizzata?",
       "removeCancel": "Annulla",
       "removeConfirm": "Rimuovi",
-      "relayNotice": "Il relay che invia le tue transazioni riceve l'indirizzo RPC di questa rete — compresa l'eventuale chiave API — per raggiungere la rete che usi."
+      "relayNotice": "Il relay che invia le tue transazioni riceve l'indirizzo RPC di questa rete — compresa l'eventuale chiave API — per raggiungere la rete che usi.",
+      "fallback": "Il tuo nodo non risponde: per ora si usano i nodi pubblici",
+      "onlyMine": "Usa solo il mio nodo",
+      "onlyMineHint": "Nessun dato del tuo account va ai nodi pubblici. Se il tuo nodo smette di rispondere, questa rete non potrà essere letta finché non torna."
     },
     "account": {
       "modalTitle": "Account",
       "total": "Totale {{amount}}",
       "createNew": "Crea un nuovo account",
-      "signInExisting": "Accedi con uno esistente"
+      "signInExisting": "Accedi con uno esistente",
+      "totalPartial": "Totale finora {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Provider RPC",

@@ -475,6 +475,8 @@ export function unreachableLine(
 		unreachableOne: string;
 		unreachableMany: string;
 		tokenListUnreachable: string;
+		/** Owner decision 2026-10-28: the one network's own node (`{{name}}`). */
+		ownNodeUnreachable?: string;
 		internal?: Readonly<Record<string, string>>;
 	}
 ): string | undefined {
@@ -486,6 +488,13 @@ export function unreachableLine(
 	}
 	if (view.unreachable_key === 'assets.tokenListUnreachable' && first !== undefined) {
 		return fill(words.tokenListUnreachable, { name: chainName(first.chain_id) });
+	}
+	if (
+		view.unreachable_key === 'assets.ownNodeUnreachable' &&
+		first !== undefined &&
+		words.ownNodeUnreachable !== undefined
+	) {
+		return fill(words.ownNodeUnreachable, { name: chainName(first.chain_id) });
 	}
 	if (view.unreachable_key === 'assets.unreachableMany') {
 		return fill(words.unreachableMany, { n: view.unreachable_networks.length });
@@ -566,12 +575,23 @@ function networkStatus(
 	onCache = false
 ): BalanceModel['status'] {
 	const unreachable = unreachableLine(view, m.assets);
-	if (unreachable !== undefined) return { kind: 'warning', text: unreachable };
-	if (view.unreachable) return { kind: 'warning', text: m.balance.unreachable };
+	if (unreachable !== undefined) return { kind: 'warning', text: unreachable, unread: true };
+	if (view.unreachable) return { kind: 'warning', text: m.balance.unreachable, unread: true };
 	if (onCache || view.notice === 'still_updating') {
 		return { kind: 'refreshing', text: m.balance.stale };
 	}
 	return undefined;
+}
+
+/**
+ * home-13: the person's currency could not be priced right now, so every
+ * figure is in US dollars (`moneyParts`' degrade — `rate: null` is not 1).
+ * That is said, never a silent swap: the hero's label already names "USD",
+ * and this line says why it is not the currency they chose.
+ */
+function currencyStatus(currency: CurrencyView, m: WalletMessages): BalanceModel['status'] {
+	if (!currency.committed || currency.rate !== null || currency.code === 'USD') return undefined;
+	return { kind: 'warning', text: fill(m.balance.currencyUnavailable, { code: currency.code }) };
 }
 
 export function liveBalance(
@@ -643,6 +663,24 @@ export function liveBalance(
 		return { ...base, ...checking, currency: figureCurrency(currency), state: 'loading' };
 	}
 
+	// home-11: held, and none of it can be priced — the core gives no figure
+	// (`unpriced_only`): the sum is unknown, not "$0.00". Said in the figure's
+	// place, and the line under it says why — once, not twice.
+	if (view.unpriced_only) {
+		const status =
+			checkingText === undefined
+				? (networkStatus(view, m) ?? { kind: 'warning' as const, text: m.balance.allUnpriced })
+				: undefined;
+		return {
+			...base,
+			...checking,
+			currency: figureCurrency(currency),
+			state: 'no-value',
+			noValueText: m.balance.unpricedTotal,
+			...(status === undefined ? {} : { status })
+		};
+	}
+
 	// The core withholds the display total while the skeleton shows; the
 	// last-known cached total paints first, live replaces it (max(live,cached)
 	// is the core's rule — this only chooses what to show meanwhile).
@@ -665,6 +703,7 @@ export function liveBalance(
 				? {
 						status: {
 							kind: 'warning' as const,
+							unread: true as const,
 							text:
 								(view.internal_key ? m.assets.internal[view.internal_key] : undefined) ??
 								m.balance.unreachable
@@ -703,7 +742,8 @@ export function liveBalance(
 		checkingText !== undefined
 			? undefined
 			: (networkStatus(view, m, onCache) ??
-				(view.notice === 'unpriced' ? { kind: 'warning', text: m.balance.unpriced } : undefined));
+				(view.notice === 'unpriced' ? { kind: 'warning', text: m.balance.unpriced } : undefined) ??
+				currencyStatus(currency, m));
 
 	return {
 		...base,

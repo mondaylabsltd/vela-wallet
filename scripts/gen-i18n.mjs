@@ -916,8 +916,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   117 + 1 = 118 branches.
 // 2276 (all six of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 + 44 =
 //   2157 leaves; 116 + 1 + 2 = 119 branches.
-if (PATHS.length !== 2278) fail(`expected 2278 paths (2159 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2159) fail(`expected 2159 leaf paths, got ${leafSet.size}`);
+// 2291 (the person's own node, and the home's honest balance, 2026-10-28): +
+//   home.{balanceDetailStatusOwnNode, balanceDetailStatusPublicNodes,
+//   nodeFallbackNotice, nodeFallbackOpen, totalUnpriced, allUnpriced,
+//   currencyUnavailable}, assets.ownNodeUnreachable,
+//   settingsModals.network.{fallback, onlyMine, onlyMineHint},
+//   settingsModals.account.totalPartial, componentsUi.scanner.{permissionDenied,
+//   retry}, addToken.chooseNetwork. 2157 + 15 = 2172 leaves, 119 branches.
+// 2293 (round 2: agent + rpc, 2026-10-28): 2174 leaves, 119 branches.
+if (PATHS.length !== 2293) fail(`expected 2293 paths (2174 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2174) fail(`expected 2174 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

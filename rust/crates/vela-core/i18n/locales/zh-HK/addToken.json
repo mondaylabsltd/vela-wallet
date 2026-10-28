@@ -41,6 +41,7 @@
     "invalidAddress": "合約地址唔啱",
     "notCompatible": "唔兼容",
     "nativeAliasTitle": "已喺你嘅資產入面",
-    "nativeAliasMessage": "呢個係該網絡嘅原生代幣，餘額已經喺你嘅資產入面顯示緊。"
+    "nativeAliasMessage": "呢個係該網絡嘅原生代幣，餘額已經喺你嘅資產入面顯示緊。",
+    "chooseNetwork": "呢個地址喺多個網絡上都係代幣，請揀一個。"
   }
 }

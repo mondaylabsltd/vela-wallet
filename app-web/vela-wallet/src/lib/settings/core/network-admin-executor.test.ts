@@ -82,7 +82,9 @@ describe('read_store', () => {
 			chain_id: 1,
 			rpc_url: 'https://rpc.example',
 			explorer_url: '',
-			bundler_url: ''
+			bundler_url: '',
+			// "Only use my node": absent, off.
+			only_mine: false
 		});
 		expect(result.provider_keys).toEqual({ alchemy: 'key-a', drpc: null, ankr: null });
 		// Absent endpoint fields stay absent (null) — the core applies defaults.

@@ -11,13 +11,17 @@
       "removeBody": "移除此自定义网络？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
+      "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。",
+      "fallback": "你的节点没有响应——暂时改用公共节点",
+      "onlyMine": "只使用我的节点",
+      "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。"
     },
     "account": {
       "modalTitle": "账户",
       "total": "总计 {{amount}}",
       "createNew": "创建新账户",
-      "signInExisting": "登录已有账户"
+      "signInExisting": "登录已有账户",
+      "totalPartial": "目前合计 {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "RPC 供应商",

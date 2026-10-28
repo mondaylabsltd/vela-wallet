@@ -604,7 +604,14 @@
     "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
     "remove": "Xóa khỏi thiết bị này"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",
+  "balanceDetailStatusPublicNodes": "Đang dùng node công khai",
+  "nodeFallbackNotice": "Node {{name}} của bạn không phản hồi; tạm thời dùng node công khai.",
+  "nodeFallbackOpen": "Cài đặt mạng",
+  "totalUnpriced": "Chưa có giá",
+  "allUnpriced": "Không lấy được giá cho token nào của bạn.",
+  "currencyUnavailable": "Hiện không tải được tỷ giá {{code}} — số tiền đang hiển thị bằng đô la Mỹ."
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "Đã khôi phục kết nối — đang tải lại số dư và bản ghi của mạng này.",
   "addByAddress": "Thêm token bằng địa chỉ",
   "notShowingTitle": "Đã nhận token nhưng không thấy?",
-  "notShowingBody": "Các giao dịch đã xác nhận sẽ tự được thêm vào. Nếu token vẫn chưa xuất hiện, hãy thêm bằng địa chỉ hợp đồng, hoặc thêm mạng chứa nó."
+  "notShowingBody": "Các giao dịch đã xác nhận sẽ tự được thêm vào. Nếu token vẫn chưa xuất hiện, hãy thêm bằng địa chỉ hợp đồng, hoặc thêm mạng chứa nó.",
+  "ownNodeUnreachable": "Không kết nối được với node {{name}} của bạn"
  },
  "addToken": {
   "addedTokensLabel": "Token đã thêm",
@@ -939,7 +947,8 @@
   "invalidAddress": "Địa chỉ hợp đồng không hợp lệ",
   "notCompatible": "Không tương thích",
   "nativeAliasTitle": "Đã có sẵn",
-  "nativeAliasMessage": "Đây là đồng gốc của mạng này. Số dư đã hiển thị trong tài sản của bạn."
+  "nativeAliasMessage": "Đây là đồng gốc của mạng này. Số dư đã hiển thị trong tài sản của bạn.",
+  "chooseNetwork": "Địa chỉ này là token trên nhiều mạng. Hãy chọn một mạng."
  },
  "tokenDetail": {
   "send": "Gửi",
@@ -1886,7 +1895,9 @@
    "gallery": "Ảnh",
    "fromGallery": "Chọn từ ảnh",
    "torch": "Đèn pin",
-   "flipCamera": "Lật"
+   "flipCamera": "Lật",
+   "permissionDenied": "Quyền truy cập camera đang bị chặn. Hãy cho phép trang này trong cài đặt trình duyệt rồi thử lại.",
+   "retry": "Thử lại"
   },
   "gas": {
    "estFee": "Phí mạng",
@@ -2106,13 +2117,17 @@
    "removeBody": "Xóa mạng tùy chỉnh này?",
    "removeCancel": "Hủy",
    "removeConfirm": "Xóa",
-   "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng."
+   "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng.",
+   "fallback": "Node của bạn không phản hồi — tạm thời dùng node công khai",
+   "onlyMine": "Chỉ dùng node của tôi",
+   "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại."
   },
   "account": {
    "modalTitle": "Tài khoản",
    "total": "Tổng {{amount}}",
    "createNew": "Tạo tài khoản mới",
-   "signInExisting": "Đăng nhập tài khoản hiện có"
+   "signInExisting": "Đăng nhập tài khoản hiện có",
+   "totalPartial": "Tổng tạm tính {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "Nhà cung cấp RPC",

@@ -11,13 +11,17 @@
       "removeBody": "이 사용자 지정 네트워크를 제거할까요?",
       "removeCancel": "취소",
       "removeConfirm": "제거",
-      "relayNotice": "거래를 제출하는 릴레이에는 이 네트워크의 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다."
+      "relayNotice": "거래를 제출하는 릴레이에는 이 네트워크의 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다.",
+      "fallback": "내 노드가 응답하지 않습니다 — 당분간 공개 노드 사용 중",
+      "onlyMine": "내 노드만 사용",
+      "onlyMineHint": "계정에 관한 어떤 정보도 공개 노드로 가지 않습니다. 내 노드가 응답하지 않으면 복구될 때까지 이 네트워크를 읽을 수 없습니다."
     },
     "account": {
       "modalTitle": "계정",
       "total": "총 {{amount}}",
       "createNew": "새 계정 만들기",
-      "signInExisting": "기존 계정으로 로그인"
+      "signInExisting": "기존 계정으로 로그인",
+      "totalPartial": "지금까지 총 {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "RPC 공급자",

@@ -5505,6 +5505,90 @@ export function rpcCooldownMs(consecutive_failures) {
 }
 
 /**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+ * read is never an answer).
+ * @param {string} kind
+ * @param {string} method
+ * @param {string} url
+ * @param {string} outcome_json
+ * @returns {string}
+ */
+export function rpcEarlyVerdict(kind, method, url, outcome_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(outcome_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcEarlyVerdict(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+ * the web's perf-6).
+ * @returns {number}
+ */
+export function rpcHedgeAfterMs() {
+    const ret = wasm.rpcHedgeAfterMs();
+    return ret >>> 0;
+}
+
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+ * the wire word (`rpc` / `bundler`); anything else is not a read.
+ * @param {string} kind
+ * @param {string} method
+ * @returns {boolean}
+ */
+export function rpcIsHedgedRead(kind, method) {
+    const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.rpcIsHedgedRead(ptr0, len0, ptr1, len1);
+    return ret !== 0;
+}
+
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+ * catalog, which is built before the wasm is up and is held to this by its
+ * test; `""` for a list the core cannot read.
+ * @param {string} seeds_json
+ * @param {boolean} own_only
+ * @returns {string}
+ */
+export function rpcOwnOnlyPool(seeds_json, own_only) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(seeds_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcOwnOnlyPool(ptr0, len0, own_only);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
  * @returns {number}
  */

@@ -267,6 +267,13 @@
         "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
         "remove": "Hapus dari perangkat ini"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
+    "balanceDetailStatusPublicNodes": "Memakai node publik",
+    "nodeFallbackNotice": "Node {{name}} Anda tidak merespons; untuk sementara memakai node publik.",
+    "nodeFallbackOpen": "Pengaturan jaringan",
+    "totalUnpriced": "Belum ada harga",
+    "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
+    "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS."
   }
 }

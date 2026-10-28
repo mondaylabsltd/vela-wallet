@@ -269,6 +269,13 @@
         "backupNote": "La sua configurazione resta anche su Ethereum, così il multisig si può trovare e distribuire da lì. Un account di questo dispositivo paga la commissione.",
         "remove": "Rimuovi da questo dispositivo"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Il tuo nodo non risponde",
+    "balanceDetailStatusPublicNodes": "In uso i nodi pubblici",
+    "nodeFallbackNotice": "Il tuo nodo per {{name}} non risponde; per ora si usano i nodi pubblici.",
+    "nodeFallbackOpen": "Impostazioni di rete",
+    "totalUnpriced": "Ancora nessun prezzo",
+    "allUnpriced": "Non è stato possibile ottenere il prezzo di nessuno dei tuoi token.",
+    "currencyUnavailable": "Al momento non è possibile caricare i tassi in {{code}}: gli importi sono in dollari USA."
   }
 }

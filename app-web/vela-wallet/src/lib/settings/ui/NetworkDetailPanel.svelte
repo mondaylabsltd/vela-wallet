@@ -9,6 +9,7 @@
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 	import StatusPill from './StatusPill.svelte';
+	import SwitchRow from './SwitchRow.svelte';
 	import UrlField from './UrlField.svelte';
 
 	interface Props {
@@ -19,9 +20,11 @@
 		/** Live wiring (spec 024). Absent = the gallery's pure picture. */
 		onfield?: (field: 'rpc' | 'explorer', value: string) => void;
 		onfieldblur?: (field: 'rpc' | 'explorer') => void;
+		/** Owner decision 2026-10-28: the "Only use my node" switch. */
+		ononlymine?: (on: boolean) => void;
 	}
 
-	let { detail, showIdentity = true, onfield, onfieldblur }: Props = $props();
+	let { detail, showIdentity = true, onfield, onfieldblur, ononlymine }: Props = $props();
 </script>
 
 <div class="detail">
@@ -43,6 +46,12 @@
 	/>
 	{#if detail.callout !== undefined}
 		<Callout callout={detail.callout} />
+	{/if}
+	{#if detail.nodeCallout !== undefined}
+		<Callout callout={detail.nodeCallout} />
+	{/if}
+	{#if detail.onlyMine !== undefined}
+		<SwitchRow row={detail.onlyMine} onchange={ononlymine} />
 	{/if}
 	<UrlField
 		field={detail.explorer}

@@ -327,7 +327,9 @@
       "gallery": "相册",
       "fromGallery": "从相册选择",
       "torch": "手电筒",
-      "flipCamera": "翻转"
+      "flipCamera": "翻转",
+      "permissionDenied": "相机权限被阻止了。请在浏览器的网站设置里允许本站使用相机，然后重试。",
+      "retry": "重试"
     },
     "gas": {
       "estFee": "网络费",

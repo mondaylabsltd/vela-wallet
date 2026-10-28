@@ -366,7 +366,9 @@
       "gallery": "사진",
       "fromGallery": "사진에서 선택",
       "torch": "손전등",
-      "flipCamera": "전환"
+      "flipCamera": "전환",
+      "permissionDenied": "카메라 접근이 차단되어 있습니다. 브라우저 설정에서 이 사이트를 허용한 뒤 다시 시도하세요.",
+      "retry": "다시 시도"
     },
     "gas": {
       "estFee": "예상 수수료",

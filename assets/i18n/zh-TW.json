@@ -604,7 +604,14 @@
     "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裡也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
     "remove": "從此裝置移除"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "你的節點沒有回應",
+  "balanceDetailStatusPublicNodes": "正在使用公共節點",
+  "nodeFallbackNotice": "你的 {{name}} 節點沒有回應，暫時改用公共節點。",
+  "nodeFallbackOpen": "網路設定",
+  "totalUnpriced": "暫無價格",
+  "allUnpriced": "你的代幣都無法取得價格。",
+  "currencyUnavailable": "暫時無法取得 {{code}} 匯率——金額以美元顯示。"
  },
  "send": {
   "filterStable": "穩定幣",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "已恢復連線——正在重新取得該網路的餘額與記錄。",
   "addByAddress": "用位址新增代幣",
   "notShowingTitle": "已經收到代幣但沒有顯示？",
-  "notShowingBody": "確認到帳的轉帳會自動入帳。若代幣仍未出現，可透過合約位址手動新增，或新增對應網路。"
+  "notShowingBody": "確認到帳的轉帳會自動入帳。若代幣仍未出現，可透過合約位址手動新增，或新增對應網路。",
+  "ownNodeUnreachable": "連不上你的 {{name}} 節點"
  },
  "addToken": {
   "addedTokensLabel": "已新增的代幣",
@@ -939,7 +947,8 @@
   "invalidAddress": "無效的合約位址",
   "notCompatible": "不相容",
   "nativeAliasTitle": "已在你的資產中",
-  "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。"
+  "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。",
+  "chooseNetwork": "這個位址在多個網路上都是代幣，請選擇一個。"
  },
  "tokenDetail": {
   "send": "發送",
@@ -1847,7 +1856,9 @@
    "gallery": "相簿",
    "fromGallery": "從相簿選擇",
    "torch": "手電筒",
-   "flipCamera": "翻轉"
+   "flipCamera": "翻轉",
+   "permissionDenied": "相機權限被封鎖了。請在瀏覽器的網站設定中允許本站使用相機，然後再試一次。",
+   "retry": "再試一次"
   },
   "gas": {
    "estFee": "預估手續費",
@@ -2106,13 +2117,17 @@
    "removeBody": "要移除此自訂網路嗎？",
    "removeCancel": "取消",
    "removeConfirm": "移除",
-   "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
+   "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。",
+   "fallback": "你的節點沒有回應——暫時改用公共節點",
+   "onlyMine": "只使用我的節點",
+   "onlyMineHint": "關於你帳戶的任何資訊都不會傳給公共節點。如果你的節點停止回應，這個網路會讀取不到，直到它恢復。"
   },
   "account": {
    "modalTitle": "帳戶",
    "total": "總計 {{amount}}",
    "createNew": "建立新帳戶",
-   "signInExisting": "以現有帳戶登入"
+   "signInExisting": "以現有帳戶登入",
+   "totalPartial": "目前合計 {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC 供應商",

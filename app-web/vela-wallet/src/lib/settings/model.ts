@@ -376,6 +376,12 @@ export interface NetworkRowModel {
 	expanded?: boolean;
 	/** Spec 105: a network the person added moves to the other space — the control's words. */
 	move?: string;
+	/**
+	 * Owner decision 2026-10-28: the person's own node is not answering —
+	 * amber while public nodes serve the network, red when it is read through
+	 * their node alone and cannot be reached.
+	 */
+	notice?: { tone: 'warn' | 'error'; text: string };
 }
 
 /**
@@ -415,6 +421,13 @@ export interface NetworkDetailModel {
 	explorer: UrlFieldModel;
 	/** ST9b's red "not saved" callout. */
 	callout?: CalloutModel;
+	/**
+	 * Owner decision 2026-10-28: "Only use my node" — offered only for a
+	 * network whose RPC is the person's own.
+	 */
+	onlyMine?: SwitchRowModel;
+	/** The same notice as the row's, beside the RPC it is about. */
+	nodeCallout?: CalloutModel;
 }
 
 export interface CheckItemModel {
@@ -784,7 +797,14 @@ export interface BalanceDetailModel {
 		action?: string;
 	}[];
 	sectionDone: string;
-	done: { id: string; mark: ChainMarkModel; name: string; amount: string }[];
+	done: {
+		id: string;
+		mark: ChainMarkModel;
+		name: string;
+		amount: string;
+		/** Owner decision 2026-10-28: "Using public nodes" — its own node is not answering. */
+		note?: string;
+	}[];
 	/** Spec 038 #E8: the tokens the hero's notice is about, by name and network. */
 	sectionUnpriced: string;
 	unpriced: { id: string; mark: ChainMarkModel; name: string; detail: string }[];

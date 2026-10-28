@@ -60,6 +60,7 @@ const PRISTINE: BalanceView = {
 	address: null,
 	display_total_usd: null,
 	balance_unknown: true,
+	unpriced_only: false,
 	balance_partial: false,
 	unreachable: false,
 	notice: null,
@@ -71,6 +72,8 @@ const PRISTINE: BalanceView = {
 	failed_chain_ids: [],
 	rate_limited_chain_ids: [],
 	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
@@ -230,6 +233,7 @@ describe('no money figure before the display currency is the person’s', () => 
 	const KNOWN: BalanceView = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 1234,
 		cached_total_usd: 1234,
 		tokens: [ETH]
@@ -304,6 +308,18 @@ describe('no money figure before the display currency is the person’s', () => 
 			currency: 'USD',
 			integer: '$1,234'
 		});
+	});
+
+	// home-13: …and said why, not swapped silently.
+	it('an unpriceable choice says the figures are in US dollars, and which currency could not load', () => {
+		expect(liveBalance(KNOWN, UNPRICED_JPY, m).status).toEqual({
+			kind: 'warning',
+			text: fill(m.balance.currencyUnavailable, { code: 'JPY' })
+		});
+		expect(m.balance.currencyUnavailable).toContain('{{code}}');
+		// A priced choice, or USD itself, says nothing of the sort.
+		expect(liveBalance(KNOWN, USD, m).status).toBeUndefined();
+		expect(liveBalance(KNOWN, EUR, m).status).toBeUndefined();
 	});
 });
 
@@ -429,17 +445,24 @@ describe('liveBalance', () => {
 		const partial = {
 			...PRISTINE,
 			balance_unknown: false,
+			unpriced_only: false,
 			balance_partial: true,
 			display_total_usd: 0,
 			failed_chain_ids: [100],
 			unreachable_networks: [unreachableRow(100)],
+			fallback_chain_ids: [],
+			fallback_status_key: '',
 			unreachable_key: 'assets.unreachableOne'
 		};
 		const model = liveBalance(partial, USD, m);
 		expect(model.state).toBe('normal');
 		expect(model.liveText).toBeUndefined();
 		// Spec 092 (F08): no "RPC" on the home — a fact, calmly.
-		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
 		// Several unreachable chains: the count of every one of them.
 		expect(
 			liveBalance(
@@ -447,6 +470,8 @@ describe('liveBalance', () => {
 					...partial,
 					failed_chain_ids: [1, 100],
 					unreachable_networks: [unreachableRow(1), unreachableRow(100)],
+					fallback_chain_ids: [],
+					fallback_status_key: '',
 					unreachable_key: 'assets.unreachableMany'
 				},
 				USD,
@@ -459,12 +484,15 @@ describe('liveBalance', () => {
 			{
 				...PRISTINE,
 				balance_unknown: false,
+				unpriced_only: false,
 				balance_partial: true,
 				display_total_usd: 10,
 				tokens: [ETH],
 				failed_chain_ids: [56],
 				rate_limited_chain_ids: [56],
 				unreachable_networks: [],
+				fallback_chain_ids: [],
+				fallback_status_key: '',
 				unreachable_key: null,
 				notice: 'still_updating'
 			},
@@ -490,6 +518,7 @@ describe('the hero refresh control (issue 462)', () => {
 	const read = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 4500,
 		tokens: [ETH],
 		last_refreshed_at_ms: NOW - 120_000
@@ -736,6 +765,7 @@ describe('empty activity, chosen by the core', () => {
 	const LOOKED = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 0,
 		empty_key: 'assets.emptyTitle'
 	};
@@ -819,18 +849,25 @@ describe('an unstable network (fix-balance)', () => {
 	const gnosisDown = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		balance_partial: true,
 		display_total_usd: 4500,
 		tokens: [ETH],
 		failed_chain_ids: [100],
 		unreachable_networks: [unreachableRow(100)],
+		fallback_chain_ids: [],
+		fallback_status_key: '',
 		unreachable_key: 'assets.unreachableOne'
 	};
 
 	it('home-8: hidden, the line still names the network it cannot reach', () => {
 		const model = liveBalance({ ...gnosisDown, hidden: true, display_total_usd: null }, USD, m);
 		expect(model.state).toBe('hidden');
-		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
 		// …and the first read is "Checking…", hidden or not.
 		const checking = liveBalance(
 			{ ...PRISTINE, hidden: true, checking_key: 'componentsUi.funding.checking' },
@@ -844,7 +881,11 @@ describe('an unstable network (fix-balance)', () => {
 	it('home-1: the testnet space has no figure, but says the network it cannot reach', () => {
 		const model = liveBalance(gnosisDown, USD, m, undefined, 'Test assets · no real value');
 		expect(model.state).toBe('no-value');
-		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
 		// The last read standing is said too; a price it does not show is not.
 		expect(
 			liveBalance({ ...PRISTINE, tokens: [ETH], notice: 'still_updating' }, USD, m, undefined, 'x')
@@ -912,5 +953,142 @@ describe('an unstable network (fix-balance)', () => {
 		);
 		expect(desktop.assetsSection.mode).toBe('empty');
 		expect(desktop.assetsSection.empty?.caption).toBe(m.assets.unreachableBody);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// home-11 · the person's own node · home-6 · home-18
+// ---------------------------------------------------------------------------
+
+describe('a wallet nothing of which can be priced (home-11)', () => {
+	const xdai = {
+		chain_id: 100,
+		symbol: 'xDAI',
+		name: 'xDAI',
+		balance: '8',
+		decimals: 18,
+		token_address: null,
+		price_usd: null,
+		spam: false
+	};
+	const unpriced: BalanceView = {
+		...PRISTINE,
+		address: '0xabc',
+		balance_unknown: false,
+		unpriced_only: true,
+		display_total_usd: null,
+		cached_total_usd: 0,
+		tokens: [xdai],
+		unpriced_tokens: [xdai],
+		notice: 'unpriced'
+	};
+
+	it('says it has no price in the figure’s place — never "$0.00" — and why, once', () => {
+		const hero = liveBalance(unpriced, USD, m);
+		expect(hero.state).toBe('no-value');
+		expect(hero.noValueText).toBe(m.balance.unpricedTotal);
+		expect(hero.status).toEqual({ kind: 'warning', text: m.balance.allUnpriced });
+		expect(JSON.stringify(hero)).not.toContain('$0');
+		expect(JSON.stringify(hero)).not.toContain(m.balance.unpriced);
+	});
+
+	it('hidden stays hidden', () => {
+		expect(liveBalance({ ...unpriced, hidden: true }, USD, m).state).toBe('hidden');
+	});
+});
+
+describe('a network read through the person’s own node alone (owner decision 2026-10-28)', () => {
+	it('the home line names their node, not the network', () => {
+		const view: BalanceView = {
+			...PRISTINE,
+			address: '0xabc',
+			balance_unknown: false,
+			display_total_usd: 1,
+			failed_chain_ids: [100],
+			unreachable_networks: [{ ...unreachableRow(100), cause: 'own_node' }],
+			unreachable_key: 'assets.ownNodeUnreachable'
+		};
+		expect(liveBalance(view, USD, m).status).toEqual({
+			kind: 'warning',
+			text: "Can't reach your node for Gnosis",
+			unread: true
+		});
+	});
+});
+
+describe('the notice that a node of the person’s stopped answering', () => {
+	it('is said once per chain per session, and taken back when the node answers', async () => {
+		const { nodeFallbackToNotice, nodeNoticeTopic, staleNodeNotice } =
+			await import('./node-notice');
+		expect(nodeFallbackToNotice([100], new Set())).toBe(100);
+		expect(nodeFallbackToNotice([100], new Set([100]))).toBeNull();
+		expect(nodeFallbackToNotice([100, 56], new Set([100]))).toBe(56);
+		expect(nodeFallbackToNotice([], new Set())).toBeNull();
+		expect(staleNodeNotice(nodeNoticeTopic(100), [])).toBe(true);
+		expect(staleNodeNotice(nodeNoticeTopic(100), [100])).toBe(false);
+		// Another toast is never taken for one of these.
+		expect(staleNodeNotice('report', [])).toBe(false);
+		expect(staleNodeNotice(undefined, [])).toBe(false);
+		expect(fill(m.balance.nodeFallback, { name: 'Gnosis' })).toBe(
+			"Your node for Gnosis isn't answering; using public nodes for now."
+		);
+	});
+});
+
+describe('the receive screen hears a deposit (home-6)', () => {
+	const fm = resolveWalletFlowMessages('en');
+	it('says it is listening, then what arrived — every token of it', async () => {
+		const { receiveWatchLine } = await import('$lib/flows/live');
+		const watching = { detected: false, deposits: [] };
+		expect(receiveWatchLine({ fm, balance: PRISTINE, receiveWatch: watching })).toEqual({
+			listening: 'Listening for deposits'
+		});
+		const arrived = {
+			detected: true,
+			deposits: [
+				{
+					at_epoch_ms: 1,
+					items: [
+						{ symbol: 'xDAI', amount: 5, chain_id: 100, usd: 5 },
+						{ symbol: 'USDC', amount: 0.25, chain_id: 100, usd: 0.25 }
+					]
+				}
+			]
+		};
+		expect(receiveWatchLine({ fm, balance: PRISTINE, receiveWatch: arrived })).toEqual({
+			listening: 'Listening for deposits',
+			received: '5 xDAI received · 0.25 USDC received'
+		});
+		// Hidden: the coin is kept, the figure is the mask.
+		const hidden = receiveWatchLine({
+			fm,
+			balance: { ...PRISTINE, hidden: true },
+			receiveWatch: arrived
+		});
+		expect(hidden?.received).not.toMatch(/\d/);
+		expect(hidden?.received).toContain('xDAI');
+		// No watcher, no line.
+		expect(receiveWatchLine({ fm, balance: PRISTINE })).toBeUndefined();
+	});
+});
+
+describe('a scanner with no live camera (home-18)', () => {
+	const fm = resolveWalletFlowMessages('en');
+	it('a refusal says how to allow it, and offers to ask again; the lamp and flip rest', async () => {
+		const { scanNotice, scanRecovery } = await import('$lib/flows/core/scanner.svelte');
+		const notice = scanNotice({ status: 'denied', nothingFound: false, unusable: false }, fm);
+		expect(notice).toBe(fm['componentsUi.scanner.permissionDenied']);
+		expect(notice).toMatch(/settings/i);
+		expect(scanRecovery({ status: 'denied', torchAvailable: false })).toEqual({
+			retry: true,
+			dimmed: ['torch', 'flip']
+		});
+		expect(scanRecovery({ status: 'unavailable', torchAvailable: true }).retry).toBe(true);
+		expect(scanRecovery({ status: 'absent', torchAvailable: false }).retry).toBe(false);
+		expect(scanRecovery({ status: 'live', torchAvailable: true })).toEqual({
+			retry: false,
+			dimmed: []
+		});
+		expect(scanRecovery({ status: 'live', torchAvailable: false }).dimmed).toEqual(['torch']);
 	});
 });

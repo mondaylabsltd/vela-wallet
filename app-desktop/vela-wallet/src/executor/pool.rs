@@ -1102,6 +1102,9 @@ fn perform(
                 chain_id: *chain_id,
                 rpc_endpoints,
                 bundler_endpoints,
+                // The person's "Only use my node" (owner decision 2026-10-28):
+                // a fact of config; what it means is the core's.
+                own_only: stored_only_mine(*chain_id),
                 now_ms: now_ms(),
             }
         }
@@ -1639,6 +1642,17 @@ fn write_bans(entries: &[RpcBanEntry]) {
 
 fn stored_network_config(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_NETWORK_CONFIG, chain_id, "rpcURL")
+}
+
+/// The network config's `onlyMine`, as the web and the core read it: absent, off.
+fn stored_only_mine(chain_id: u32) -> bool {
+    let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_NETWORK_CONFIG) else {
+        return false;
+    };
+    items.iter().any(|item| {
+        item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id))
+            && item.get("onlyMine").and_then(Value::as_bool) == Some(true)
+    })
 }
 
 fn stored_custom_rpc(chain_id: u32) -> Option<String> {

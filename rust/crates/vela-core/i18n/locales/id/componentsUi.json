@@ -366,7 +366,9 @@
       "gallery": "Foto",
       "fromGallery": "Pilih dari foto",
       "torch": "Senter",
-      "flipCamera": "Balik"
+      "flipCamera": "Balik",
+      "permissionDenied": "Akses kamera diblokir. Izinkan untuk situs ini di pengaturan browser Anda, lalu coba lagi.",
+      "retry": "Coba lagi"
     },
     "gas": {
       "estFee": "Biaya jaringan",

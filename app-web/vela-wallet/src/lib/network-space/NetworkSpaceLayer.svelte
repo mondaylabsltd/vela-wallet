@@ -27,10 +27,27 @@
 	});
 
 	const to = $derived(networkSpace.testnet ? 'mainnet' : 'testnet');
+
+	/**
+	 * home-10: the bar is in the flow of the page, and every screen frames
+	 * itself at the viewport's height — so on a phone the bar pushed the tab
+	 * bar off the bottom. Its height is published as `--space-bar`, and the
+	 * frames are the viewport less it.
+	 */
+	let barHeight = $state(0);
+	$effect(() => {
+		const root = document.documentElement;
+		if (!networkSpace.testnet || barHeight === 0) {
+			root.style.removeProperty('--space-bar');
+			return;
+		}
+		root.style.setProperty('--space-bar', `${barHeight}px`);
+		return () => root.style.removeProperty('--space-bar');
+	});
 </script>
 
 {#if networkSpace.testnet}
-	<div class="bar" role="status" data-testid="testnet-bar">
+	<div class="bar" role="status" data-testid="testnet-bar" bind:offsetHeight={barHeight}>
 		<button type="button" onclick={() => networkSpace.openSwitcher()}>{messages.bar}</button>
 	</div>
 {/if}

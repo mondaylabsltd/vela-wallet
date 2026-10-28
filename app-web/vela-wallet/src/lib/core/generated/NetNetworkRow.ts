@@ -48,4 +48,16 @@ rpc_url_refused: boolean,
  * The same, for the explorer field: a `javascript:` explorer would have
  * become the `href` of every "View on explorer" link.
  */
-explorer_url_refused: boolean, };
+explorer_url_refused: boolean, 
+/**
+ * The saved RPC is the person's own — an override that is not the
+ * network's shipped endpoint — so the pool ranks it first and may fall
+ * back from it (owner decision 2026-10-28). Only such a network offers
+ * "Only use my node".
+ */
+own_rpc: boolean, 
+/**
+ * "Only use my node" is on ([`NetNetworkConfig::only_mine`]). Reported
+ * as saved; it binds the pool only while [`Self::own_rpc`] holds.
+ */
+only_mine: boolean, };

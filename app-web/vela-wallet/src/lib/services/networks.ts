@@ -208,6 +208,14 @@ const FALLBACK_EXPLORER = 'https://etherscan.io';
  * link to ({@link allowedOrNull}) — a `javascript:` explorer stored on a
  * custom network became the `href` of "View on explorer".
  */
+/**
+ * The person's saved override for `chainId` (`vela.networkConfig`), as last
+ * loaded — for a reader that cannot wait: the extension's chain catalog.
+ */
+export function networkConfigSync(chainId: number): NetworkConfigRecord | null {
+	return _networkConfigCache.find((c) => c.chainId === chainId) ?? null;
+}
+
 export function explorerBaseURL(chainId: number): string | null {
 	const configured = _networkConfigCache.find((c) => c.chainId === chainId)?.explorerURL;
 	const url = allowedOrNull(configured) ?? allowedOrNull(networkForChainId(chainId)?.explorerURL);

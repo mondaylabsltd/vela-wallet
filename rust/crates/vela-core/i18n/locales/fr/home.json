@@ -269,6 +269,13 @@
         "backupNote": "Sa configuration est aussi conservée sur Ethereum, pour qu'on puisse y retrouver et déployer le multisig. Un compte de cet appareil paie les frais.",
         "remove": "Retirer de cet appareil"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",
+    "balanceDetailStatusPublicNodes": "Nœuds publics utilisés",
+    "nodeFallbackNotice": "Votre nœud pour {{name}} ne répond pas ; des nœuds publics sont utilisés pour l'instant.",
+    "nodeFallbackOpen": "Réglages du réseau",
+    "totalUnpriced": "Pas encore de prix",
+    "allUnpriced": "Impossible d'obtenir le prix de vos tokens.",
+    "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains."
   }
 }

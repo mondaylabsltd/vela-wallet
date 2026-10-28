@@ -253,7 +253,9 @@ export function scanNotice(
 	if (state.nothingFound) return m['componentsUi.scanner.noQrFoundMsg'];
 	switch (state.status) {
 		case 'denied':
-			return m['componentsUi.scanner.permissionText'];
+			// home-18: not only that the camera is needed — that it is blocked,
+			// where to allow it, and that it can be asked for again.
+			return m['componentsUi.scanner.permissionDenied'] ?? m['componentsUi.scanner.permissionText'];
 		case 'absent':
 			return m['componentsUi.scanner.noCamera'];
 		case 'insecure':
@@ -280,7 +282,25 @@ export type ScanNoticeMessages = Pick<
 	| 'componentsUi.scanner.noCamera'
 	| 'componentsUi.scanner.insecureOrigin'
 	| 'componentsUi.scanner.cameraUnavailable'
->;
+> &
+	Partial<Pick<WalletFlowMessages, 'componentsUi.scanner.permissionDenied'>>;
+
+/**
+ * home-18: what a scanner with no live camera offers. A refusal the person
+ * can undo, or a camera that failed to open, gets a way to ask again; the
+ * lamp and the flip need a live camera and are drawn unavailable without
+ * one — the lamp also where this camera has none.
+ */
+export function scanRecovery(state: { status: ScanStatus; torchAvailable: boolean }): {
+	retry: boolean;
+	dimmed: ('torch' | 'flip')[];
+} {
+	const live = state.status === 'live';
+	const dimmed: ('torch' | 'flip')[] = [];
+	if (!live || !state.torchAvailable) dimmed.push('torch');
+	if (!live) dimmed.push('flip');
+	return { retry: state.status === 'denied' || state.status === 'unavailable', dimmed };
+}
 
 /** One scanner per page: two live camera streams is a bug, not a feature. */
 export const scanner = new Scanner();

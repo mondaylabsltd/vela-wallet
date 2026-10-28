@@ -23,6 +23,22 @@ export interface WalletMessages {
 		said: Readonly<Record<string, string>>;
 		stale: string;
 		unpriced: string;
+		/** home-11: in the figure's place when nothing held can be priced — "No price yet". */
+		unpricedTotal: string;
+		/** home-11: the line under it — "None of your tokens could be priced." */
+		allUnpriced: string;
+		/**
+		 * home-13: the chosen currency could not be priced, so the figures are in
+		 * US dollars — said, not silently swapped (`{{code}}`).
+		 */
+		currencyUnavailable: string;
+		/**
+		 * Owner decision 2026-10-28: the person's node for `{{name}}` is not
+		 * answering and public nodes serve it for now — once a session — and the
+		 * way to its settings.
+		 */
+		nodeFallback: string;
+		nodeFallbackOpen: string;
 		/** Spec 038: nothing could be read and nothing is known. */
 		unreachable: string;
 		noPrice: string;
@@ -103,6 +119,11 @@ export interface WalletMessages {
 		 * be loaded (`{{name}}`, as for the one network).
 		 */
 		tokenListUnreachable: string;
+		/**
+		 * Owner decision 2026-10-28: the one network is read through the
+		 * person's own node alone, and it did not answer (`{{name}}`).
+		 */
+		ownNodeUnreachable: string;
 		/**
 		 * "Your assets there aren't affected — we just can't read them right
 		 * now." Under the unreachable line where the Assets list has no rows
@@ -206,6 +227,12 @@ export const WALLET_KEYS = [
 	'componentsUi.funding.checking',
 	'home.balanceStale',
 	'home.balanceUnpriced',
+	// home-11 / home-13 / the person's own node (2026-10-28).
+	'home.totalUnpriced',
+	'home.allUnpriced',
+	'home.currencyUnavailable',
+	'home.nodeFallbackNotice',
+	'home.nodeFallbackOpen',
 	'home.balanceDetailNoPrice',
 	'home.a11yHideBalance',
 	'home.a11yShowBalance',
@@ -248,6 +275,7 @@ export const WALLET_KEYS = [
 	'assets.unreachableMany',
 	// PR 3 note 4: a token list that can't be loaded is not a network out of reach.
 	'assets.tokenListUnreachable',
+	'assets.ownNodeUnreachable',
 	// home-3: the list that could not be read, and a row last read elsewhere.
 	'assets.unreachableBody',
 	'assets.lastSeen',

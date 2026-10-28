@@ -267,6 +267,13 @@
         "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
         "remove": "Remove from this device"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Your node isn't answering",
+    "balanceDetailStatusPublicNodes": "Using public nodes",
+    "nodeFallbackNotice": "Your node for {{name}} isn't answering; using public nodes for now.",
+    "nodeFallbackOpen": "Network settings",
+    "totalUnpriced": "No price yet",
+    "allUnpriced": "None of your tokens could be priced.",
+    "currencyUnavailable": "{{code}} rates can't be loaded right now — amounts are in US dollars."
   }
 }

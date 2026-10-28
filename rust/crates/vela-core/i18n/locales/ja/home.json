@@ -267,6 +267,13 @@
         "backupNote": "このマルチシグの設定を Ethereum にも保存し、そこからも見つけてデプロイできるようにします。手数料はこの端末のアカウントが支払います。",
         "remove": "この端末から削除"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "あなたのノードが応答していません",
+    "balanceDetailStatusPublicNodes": "公開ノードを使用中",
+    "nodeFallbackNotice": "{{name}} のあなたのノードが応答していないため、いまは公開ノードを使っています。",
+    "nodeFallbackOpen": "ネットワーク設定",
+    "totalUnpriced": "価格はまだありません",
+    "allUnpriced": "どのトークンの価格も取得できませんでした。",
+    "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。"
   }
 }

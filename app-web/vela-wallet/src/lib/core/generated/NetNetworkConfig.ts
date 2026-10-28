@@ -4,4 +4,13 @@
  * A per-network endpoint override — 1:1 `NetworkConfig` under
  * `vela.networkConfig`.
  */
-export type NetNetworkConfig = { chain_id: number, rpc_url: string, explorer_url: string, bundler_url: string, };
+export type NetNetworkConfig = { chain_id: number, rpc_url: string, explorer_url: string, bundler_url: string, 
+/**
+ * "Only use my node" (owner decision 2026-10-28): the pool asks this
+ * override's RPC and nobody else (`rpc_pool::own_only_pool`). Off by
+ * default — a dead own node falls back to public nodes, and says so.
+ * Meaningful only while `rpc_url` is the person's own
+ * ([`NetNetworkRow::own_rpc`]); kept across RPC edits. Absent from a
+ * record written before it existed: off.
+ */
+only_mine: boolean, };

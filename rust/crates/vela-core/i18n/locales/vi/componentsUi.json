@@ -366,7 +366,9 @@
       "gallery": "Ảnh",
       "fromGallery": "Chọn từ ảnh",
       "torch": "Đèn pin",
-      "flipCamera": "Lật"
+      "flipCamera": "Lật",
+      "permissionDenied": "Quyền truy cập camera đang bị chặn. Hãy cho phép trang này trong cài đặt trình duyệt rồi thử lại.",
+      "retry": "Thử lại"
     },
     "gas": {
       "estFee": "Phí mạng",

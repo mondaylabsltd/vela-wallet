@@ -366,7 +366,9 @@
       "gallery": "Fotoğraflar",
       "fromGallery": "Fotoğraflardan seç",
       "torch": "Fener",
-      "flipCamera": "Çevir"
+      "flipCamera": "Çevir",
+      "permissionDenied": "Kamera erişimi engellendi. Tarayıcı ayarlarından bu siteye izin verin, sonra tekrar deneyin.",
+      "retry": "Tekrar dene"
     },
     "gas": {
       "estFee": "Ağ ücreti",

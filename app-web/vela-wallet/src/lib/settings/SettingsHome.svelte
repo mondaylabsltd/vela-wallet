@@ -511,6 +511,7 @@
 						detail={model.networkDetail}
 						onfield={(field, value) => onnetevent?.({ kind: 'detail-field', field, value })}
 						onfieldblur={(field) => onnetevent?.({ kind: 'detail-blur', field })}
+						ononlymine={(on) => onnetevent?.({ kind: 'only-mine', on })}
 					/>
 				{:else if page === 'add-network'}
 					<AddNetworkPanel

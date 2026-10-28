@@ -366,7 +366,9 @@
       "gallery": "写真",
       "fromGallery": "写真から選ぶ",
       "torch": "ライト",
-      "flipCamera": "切り替え"
+      "flipCamera": "切り替え",
+      "permissionDenied": "カメラへのアクセスがブロックされています。ブラウザの設定でこのサイトを許可してから、もう一度お試しください。",
+      "retry": "もう一度試す"
     },
     "gas": {
       "estFee": "ネットワーク手数料",

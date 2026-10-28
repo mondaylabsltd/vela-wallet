@@ -138,6 +138,20 @@ export async function collectRpcUrls(
 	return entries;
 }
 
+/**
+ * The person's "Only use my node" switch for the chain, as saved with its
+ * network config (owner decision 2026-10-28). A fact of config, handed to the
+ * core with the collected lists; what it means — and that it means nothing
+ * without an endpoint of theirs — is the core's (`rpc_pool::own_only_pool`).
+ */
+export async function ownNodeOnly(chainId: number): Promise<boolean> {
+	try {
+		return (await getNetworkConfig(chainId))?.onlyMine === true;
+	} catch {
+		return false;
+	}
+}
+
 export async function collectBundlerUrls(
 	chainId: number,
 	isBanned: (url: string) => boolean

@@ -62,6 +62,8 @@ const ROW: NetNetworkRow = {
 	rpc_save_deferred: false,
 	rpc_url_refused: false,
 	explorer_url_refused: false,
+	own_rpc: false,
+	only_mine: false,
 	is_testnet: false
 };
 
@@ -225,6 +227,8 @@ describe('liveNetworkDetail', () => {
 				...ROW,
 				explorer_url: 'data:text/html,x',
 				explorer_url_refused: true,
+				own_rpc: false,
+				only_mine: false,
 				explorer_health: { type: 'ok', latency_ms: 3 }
 			},
 			m
@@ -1180,6 +1184,7 @@ describe('the unreachable-networks list (spec 092)', () => {
 		address: '0xabc',
 		display_total_usd: hidden ? null : 10,
 		balance_unknown: false,
+		unpriced_only: false,
 		balance_partial: networks.length > 0,
 		unreachable: false,
 		notice: null,
@@ -1191,6 +1196,8 @@ describe('the unreachable-networks list (spec 092)', () => {
 		failed_chain_ids: networks.map((n) => n.chain_id),
 		rate_limited_chain_ids: [],
 		unreachable_networks: networks,
+		fallback_chain_ids: [],
+		fallback_status_key: '',
 		unreachable_key: key,
 		internal_chain_ids: [],
 		internal_key: null,
@@ -1464,5 +1471,202 @@ describe('the default transaction speed, live (spec 068)', () => {
 		expect(desktop.feeSpeed.rows[0].options?.filter((r) => r.selected).map((r) => r.id)).toEqual([
 			'standard'
 		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The person's own node (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+describe("a network's own node, in Settings → Networks", () => {
+	const GNOSIS: NetNetworkRow = {
+		...ROW,
+		id: 'gnosis',
+		chain_id: 100,
+		display_name: 'Gnosis',
+		native_symbol: 'xDAI',
+		rpc_url: 'https://my-node.example',
+		own_rpc: true
+	};
+	const net = (rows: NetNetworkRow[]): NetView => ({ ...VIEW, networks: rows });
+
+	it('the row reads amber while public nodes stand in for the person’s node', () => {
+		const [row] = liveNetworkRows(net([GNOSIS]), m, undefined, undefined, {
+			fallback: [100],
+			unreached: []
+		});
+		expect(row!.notice).toEqual({ tone: 'warn', text: m.networks.fallback });
+		expect(m.networks.fallback).toBe("Your node isn't answering — using public nodes for now");
+	});
+
+	it('read through the person’s node alone and unreachable: red, and says whose node', () => {
+		const [row] = liveNetworkRows(net([GNOSIS]), m, undefined, undefined, {
+			fallback: [],
+			unreached: [100]
+		});
+		expect(row!.notice).toEqual({ tone: 'error', text: "Can't reach your node for Gnosis" });
+	});
+
+	it('says nothing for a network without an RPC of the person’s, or one answering', () => {
+		const nodes = { fallback: [100], unreached: [] };
+		expect(
+			liveNetworkRows(net([{ ...GNOSIS, own_rpc: false }]), m, undefined, undefined, nodes)[0]!
+				.notice
+		).toBeUndefined();
+		expect(
+			liveNetworkRows(net([GNOSIS]), m, undefined, undefined, { fallback: [], unreached: [] })[0]!
+				.notice
+		).toBeUndefined();
+		expect(liveNetworkRows(net([GNOSIS]), m)[0]!.notice).toBeUndefined();
+	});
+
+	it('the detail offers "Only use my node" only for an RPC of the person’s, as saved', () => {
+		const detail = liveNetworkDetail({ ...GNOSIS, only_mine: true }, m, {
+			fallback: [100],
+			unreached: []
+		});
+		expect(detail.onlyMine).toEqual({
+			id: 'only-mine',
+			title: m.networks.onlyMine,
+			subtitle: m.networks.onlyMineHint,
+			on: true
+		});
+		expect(detail.nodeCallout).toEqual({ tone: 'warning', text: m.networks.fallback });
+		expect(liveNetworkDetail(ROW, m).onlyMine).toBeUndefined();
+		expect(liveNetworkDetail(ROW, m).nodeCallout).toBeUndefined();
+	});
+
+	it('every language has the words', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSettingsMessages(locale as Locale).networks;
+			for (const key of ['fallback', 'onlyMine', 'onlyMineHint', 'ownNodeDown'] as const) {
+				expect(words[key], `${key} in ${locale}`).not.toMatch(/^settingsModals\.|^assets\./);
+				expect(words[key].length).toBeGreaterThan(0);
+			}
+			expect(words.ownNodeDown).toContain('{{name}}');
+		}
+	});
+});
+
+describe('the balance breakdown (owner decision 2026-10-28, home-11)', () => {
+	const USD_VIEW: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const rescue = pickRescueMessages(m);
+	const token = (chain: number, symbol: string, balance: string, price: number | null) => ({
+		chain_id: chain,
+		symbol,
+		name: symbol,
+		balance,
+		decimals: 18,
+		token_address: null,
+		price_usd: price,
+		spam: false
+	});
+	const base: BalanceView = {
+		address: '0xabc',
+		display_total_usd: 8,
+		balance_unknown: false,
+		unpriced_only: false,
+		balance_partial: false,
+		unreachable: false,
+		notice: null,
+		hidden: false,
+		refreshing: false,
+		last_refreshed_at_ms: 1,
+		tokens: [],
+		unpriced_tokens: [],
+		failed_chain_ids: [],
+		rate_limited_chain_ids: [],
+		unreachable_networks: [],
+		fallback_chain_ids: [],
+		fallback_status_key: 'home.balanceDetailStatusPublicNodes',
+		unreachable_key: null,
+		internal_chain_ids: [],
+		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
+		holdings_loading: false,
+		cached_total_usd: null,
+		switcher: { open: false, loading: false, balances: [], hidden: false }
+	};
+
+	it('lists a network read through public nodes as such, with its real figure', async () => {
+		const { liveBalanceDetail } = await import('./live');
+		const panel = liveBalanceDetail(
+			{ ...base, tokens: [token(100, 'xDAI', '8', 1)], fallback_chain_ids: [100] },
+			USD_VIEW,
+			rescue,
+			'unpriced'
+		);
+		expect(panel.done).toEqual([
+			expect.objectContaining({ name: 'Gnosis', amount: '$8.00', note: 'Using public nodes' })
+		]);
+	});
+
+	it('a network whose holdings have no price is not "$0.00"; nothing priced is no total', async () => {
+		const { liveBalanceDetail } = await import('./live');
+		const xdai = token(100, 'xDAI', '8', null);
+		const panel = liveBalanceDetail(
+			{
+				...base,
+				display_total_usd: null,
+				unpriced_only: true,
+				tokens: [xdai],
+				unpriced_tokens: [xdai]
+			},
+			USD_VIEW,
+			rescue,
+			'Some tokens couldn’t be priced.'
+		);
+		expect(panel.done).toEqual([]);
+		expect(panel.summary).toBe(m.balanceDetail.allUnpriced);
+		expect(panel.unpriced).toHaveLength(1);
+	});
+});
+
+describe('the switcher total while an account is not known yet (ms-24)', () => {
+	const usd: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const account = (id: string, address: string) => ({
+		index: 0,
+		account: {
+			id,
+			name: id,
+			address,
+			public_key_hex: '04',
+			created_at_iso: '2026-01-01T00:00:00.000Z',
+			keys: [],
+			signing_domain: 'getvela.app',
+			signing_venue: { type: 'in_vela' as const }
+		}
+	});
+
+	it('says the total is only what is known so far, and draws no figure for the unknown one', async () => {
+		const { liveAccountsSheet, accountAmount } = await import('./live');
+		const a = '0xAAAA000000000000000000000000000000000001';
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const input = {
+			rows: [account('a', a)],
+			activeIndex: 0,
+			balances: new Map([[a.toLowerCase(), 12]]),
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe]
+		};
+		expect(accountAmount(input, safe)).toBe('');
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.summary).toContain(fill(m.accounts.totalPartial, { amount: '$12.00' }));
+		// Every figure known: the plain total.
+		const known = liveAccountsSheet(
+			{
+				...input,
+				balances: new Map([
+					[a.toLowerCase(), 12],
+					[safe.toLowerCase(), 3]
+				])
+			},
+			m.accounts
+		);
+		expect(known.summary).toContain(fill(m.accounts.total, { amount: '$15.00' }));
 	});
 });

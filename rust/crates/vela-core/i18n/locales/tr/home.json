@@ -267,6 +267,13 @@
         "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
         "remove": "Bu cihazdan kaldır"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",
+    "balanceDetailStatusPublicNodes": "Herkese açık düğümler kullanılıyor",
+    "nodeFallbackNotice": "{{name}} için düğümünüz yanıt vermiyor; şimdilik herkese açık düğümler kullanılıyor.",
+    "nodeFallbackOpen": "Ağ ayarları",
+    "totalUnpriced": "Henüz fiyat yok",
+    "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
+    "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."
   }
 }

@@ -151,6 +151,10 @@ pub const UNREACHABLE_MANY: &str = "assets.unreachableMany";
 /// `{{name}}`). "Can't reach Tempo" there named the wrong thing, and sent a
 /// person to repair an endpoint that was answering.
 pub const TOKEN_LIST_UNREACHABLE: &str = "assets.tokenListUnreachable";
+/// The home line when the one network that could not be read is read through
+/// the person's own node alone, and that node did not answer
+/// ([`UnreachableCause::OwnNode`], `{{name}}`): "Can't reach your node for …".
+pub const OWN_NODE_UNREACHABLE: &str = "assets.ownNodeUnreachable";
 /// The hero's line while the first read of an account is still out
 /// ([`BalanceView::checking_key`]): "Checking…".
 pub const CHECKING: &str = "componentsUi.funding.checking";
@@ -166,6 +170,13 @@ pub const STATUS_RPC_UNAVAILABLE: &str = "home.balanceDetailStatusFailed";
 /// … and for one whose RPC is fine and whose token list could not be loaded:
 /// "RPC unavailable" was false there.
 pub const STATUS_TOKEN_LIST_UNAVAILABLE: &str = "home.balanceDetailStatusTokenList";
+/// … for one read through the person's own node alone, which did not answer:
+/// "Your node isn't answering".
+pub const STATUS_OWN_NODE_UNAVAILABLE: &str = "home.balanceDetailStatusOwnNode";
+/// The balance breakdown's status for a network read through public nodes
+/// because the person's own node is not answering
+/// ([`BalanceView::fallback_chain_ids`]): "Using public nodes".
+pub const STATUS_PUBLIC_NODES: &str = "home.balanceDetailStatusPublicNodes";
 /// A row in the list: it held something worth `{{amount}}` when last read.
 pub const LAST_SEEN: &str = "assets.lastSeen";
 /// A row: it held something when last read, none of it priced.
@@ -770,6 +781,17 @@ pub enum BalanceShellResult {
         /// is ([`TOKEN_LIST_UNREACHABLE`]), not as "can't reach".
         #[serde(default)]
         registry_chain_ids: Vec<u32>,
+        /// The failed chains read through the person's own node alone ("Only
+        /// use my node", `rpc_pool`'s `own_node_unreached_chains`): nothing
+        /// went to another node, so the row says the person's node cannot be
+        /// reached ([`UnreachableCause::OwnNode`]) rather than the network.
+        #[serde(default)]
+        own_node_chain_ids: Vec<u32>,
+        /// The chains whose person's own node is not answering and whose
+        /// figures came from public nodes for now (`rpc_pool`'s
+        /// `fallback_chains`) — read, but said ([`BalanceView::fallback_chain_ids`]).
+        #[serde(default)]
+        fallback_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -934,6 +956,10 @@ pub struct Model {
     internal_chain_ids: Vec<u32>,
     /// [`BalanceShellResult::FetchSettled`]'s `registry_chain_ids`.
     registry_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `own_node_chain_ids`.
+    own_node_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `fallback_chain_ids`.
+    fallback_chain_ids: Vec<u32>,
     /// The last round threw inside the app ([`BalanceShellResult::FetchErrored`]).
     errored_internally: bool,
     /// Per chain, what it held the last time it answered for this account
@@ -1103,6 +1129,10 @@ pub enum UnreachableCause {
     /// Its RPC answers; the token list that names what to read there could
     /// not be loaded, and it has no native coin to read without one.
     TokenList,
+    /// It is read through the person's own node alone ("Only use my node")
+    /// and that node did not answer. Nobody else was asked, by their choice:
+    /// "Can't reach your node for …", and the fix is theirs.
+    OwnNode,
 }
 
 /// A row from before `rpc_fixable` was said: every row was the network's.
@@ -1126,6 +1156,13 @@ pub struct BalanceView {
     /// while [`Self::unreachable`]: nothing was read, so there is no figure.
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
+    /// The wallet holds something and NOTHING it holds could be priced
+    /// (home-11): the sum is not zero, it is unknown. `display_total_usd` is
+    /// then `None` — "$0.00" over 8 xDAI was a wrong number — and the hero
+    /// says it has no price in the figure's place, the notice saying which
+    /// tokens. Never while the skeleton or the unreachable state shows.
+    #[serde(default)]
+    pub unpriced_only: bool,
     pub balance_partial: bool,
     /// Nothing could be read and nothing is known: the first fetch failed —
     /// or settled with every chain it asked failed — with no cache to fall
@@ -1167,6 +1204,16 @@ pub struct BalanceView {
     /// holds now. Ordered: those last seen holding something first, by that
     /// worth, then the rest in the wallet's network order.
     pub unreachable_networks: Vec<UnreachableNetwork>,
+    /// The networks read this round through public nodes because the
+    /// person's own node is not answering (owner decision 2026-10-28): their
+    /// figures are real, and where they came from is said — the breakdown
+    /// lists each with [`Self::fallback_status_key`]. Never one of
+    /// `unreachable_networks`.
+    #[serde(default)]
+    pub fallback_chain_ids: Vec<u32>,
+    /// [`STATUS_PUBLIC_NODES`]: the breakdown's status for those networks.
+    #[serde(default)]
+    pub fallback_status_key: String,
     /// The corpus key of the home line over them: [`UNREACHABLE_ONE`]
     /// (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
     /// too — the one network's RPC is fine and its token list is what could
@@ -1380,6 +1427,9 @@ impl App for BalanceDashboard {
             [one] if one.cause == UnreachableCause::TokenList => {
                 Some(TOKEN_LIST_UNREACHABLE.to_owned())
             }
+            [one] if one.cause == UnreachableCause::OwnNode => {
+                Some(OWN_NODE_UNREACHABLE.to_owned())
+            }
             [_] => Some(UNREACHABLE_ONE.to_owned()),
             _ => Some(UNREACHABLE_MANY.to_owned()),
         };
@@ -1399,18 +1449,32 @@ impl App for BalanceDashboard {
         let holdings_loading = model.tokens.is_empty()
             && model.cached_total.unwrap_or(0.0) > 0.0
             && !(model.bootstrapped && model.rows_whole);
+        // home-11: held, and not one holding priced — the sum is unknown, not
+        // zero. Only once a figure would otherwise be drawn.
+        let held: Vec<&BalanceToken> = model
+            .tokens
+            .iter()
+            .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0)
+            .collect();
+        let unpriced_only = !unknown
+            && !unreachable
+            && total <= 0.0
+            && !held.is_empty()
+            && held.iter().all(|t| t.price_usd.is_none());
         BalanceView {
             address: model.address.clone(),
             // No figure while nothing is known: the skeleton, privacy — and a
             // round that read nothing (PR 2 polish). `unreachable` is "a
             // skeleton and a reason, never a zero"; the figure says the same
-            // rather than a 0 every shell had to know to ignore.
-            display_total_usd: if model.hidden || unknown || unreachable {
+            // rather than a 0 every shell had to know to ignore. Nor while
+            // nothing held can be priced (home-11).
+            display_total_usd: if model.hidden || unknown || unreachable || unpriced_only {
                 None
             } else {
                 Some(total)
             },
             balance_unknown: unknown,
+            unpriced_only,
             balance_partial: partial,
             unreachable,
             notice,
@@ -1422,6 +1486,8 @@ impl App for BalanceDashboard {
             failed_chain_ids: model.failed_chain_ids.clone(),
             rate_limited_chain_ids: model.rate_limited_chain_ids.clone(),
             unreachable_networks,
+            fallback_chain_ids: model.fallback_chain_ids.clone(),
+            fallback_status_key: STATUS_PUBLIC_NODES.to_owned(),
             unreachable_key,
             internal_chain_ids: model.internal_chain_ids.clone(),
             internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
@@ -1489,6 +1555,8 @@ fn reset_for(model: &mut Model, address: String, force: bool) -> Command<Balance
     model.failed_chain_ids.clear();
     model.internal_chain_ids.clear();
     model.registry_chain_ids.clear();
+    model.own_node_chain_ids.clear();
+    model.fallback_chain_ids.clear();
     model.errored_internally = false;
     model.last_read.clear();
     model.cached_total = None;
@@ -1678,6 +1746,8 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             read_chain_ids,
             internal_chain_ids,
             registry_chain_ids,
+            own_node_chain_ids,
+            fallback_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1740,6 +1810,16 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.registry_chain_ids = registry_chain_ids
                 .into_iter()
                 .filter(|id| model.failed_chain_ids.contains(id))
+                .collect();
+            model.own_node_chain_ids = own_node_chain_ids
+                .into_iter()
+                .filter(|id| model.failed_chain_ids.contains(id))
+                .collect();
+            // A chain that could not be read is not "read through public
+            // nodes": its row is the unreachable one.
+            model.fallback_chain_ids = fallback_chain_ids
+                .into_iter()
+                .filter(|id| !model.failed_chain_ids.contains(id))
                 .collect();
             model.errored_internally = false;
             model.fetch_in_flight = false;
@@ -2130,6 +2210,8 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
             };
             let cause = if model.registry_chain_ids.contains(&chain_id) {
                 UnreachableCause::TokenList
+            } else if model.own_node_chain_ids.contains(&chain_id) {
+                UnreachableCause::OwnNode
             } else {
                 UnreachableCause::Network
             };
@@ -2139,10 +2221,11 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
                 last_seen_usd: (worth > 0.0 && !model.hidden).then_some(worth),
                 line_key: line_key.to_owned(),
                 cause,
-                rpc_fixable: cause == UnreachableCause::Network,
+                rpc_fixable: cause != UnreachableCause::TokenList,
                 status_key: match cause {
                     UnreachableCause::Network => STATUS_RPC_UNAVAILABLE,
                     UnreachableCause::TokenList => STATUS_TOKEN_LIST_UNAVAILABLE,
+                    UnreachableCause::OwnNode => STATUS_OWN_NODE_UNAVAILABLE,
                 }
                 .to_owned(),
             };

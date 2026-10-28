@@ -64,6 +64,9 @@ export const WALLET_FLOW_KEYS = [
 	// Spec 090: the code's opt-in "include network" switch and its hint.
 	'receive.includeNetwork',
 	'receive.includeNetworkHint',
+	// home-6: the code on screen is being watched, and a deposit is said there.
+	'receive.listeningForDeposits',
+	'home.toastReceived',
 	// 087 F13: a receive row's button that shows its network's code.
 	'componentsUi.funding.showQr',
 
@@ -80,6 +83,9 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.scanner.noCamera',
 	'componentsUi.scanner.insecureOrigin',
 	'componentsUi.scanner.cameraUnavailable',
+	// home-18: a refused camera, how to allow it, and the way to ask again.
+	'componentsUi.scanner.permissionDenied',
+	'componentsUi.scanner.retry',
 	'componentsUi.scanner.noQrFoundMsg',
 	'home.invalidQrTitle',
 
@@ -173,6 +179,8 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.notFoundMessage',
 	'addToken.nativeAliasTitle',
 	'addToken.nativeAliasMessage',
+	// home-15: an address that is a token on more than one network.
+	'addToken.chooseNetwork',
 	'addToken.netSearchLabel',
 	'addToken.netSearchPlaceholder',
 	'addToken.netPickerEmpty',

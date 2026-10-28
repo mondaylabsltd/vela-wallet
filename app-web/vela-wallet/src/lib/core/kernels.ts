@@ -11,6 +11,9 @@
  * directly.
  */
 import type { SignedReview } from '$lib/core/generated/SignedReview';
+import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
+import type { RpcKind } from '$lib/core/generated/RpcKind';
+import type { RpcTransportOutcome } from '$lib/core/generated/RpcTransportOutcome';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
@@ -1456,6 +1459,46 @@ export function rpcReadTimeoutMs(): number {
 /** An endpoint's cool-down after `consecutiveFailures` in a row (RF2). */
 export function rpcCooldownMs(consecutiveFailures: number): number {
 	return wasm.rpcCooldownMs(consecutiveFailures);
+}
+
+/**
+ * "Only use my node" applied to a collected list — the core's
+ * `own_only_pool` (owner decision 2026-10-28). For the test that holds the
+ * extension catalog's mirror of it to the core.
+ */
+export function rpcOwnOnlyPool(
+	seeds: { url: string; source: string }[],
+	ownOnly: boolean
+): { endpoints: { url: string; source: string }[]; own_only: boolean } {
+	return JSON.parse(wasm.rpcOwnOnlyPool(JSON.stringify(seeds), ownOnly)) as {
+		endpoints: { url: string; source: string }[];
+		own_only: boolean;
+	};
+}
+
+/** How long a read waits on one endpoint before the next is asked too (perf-6). */
+export function rpcHedgeAfterMs(): number {
+	return wasm.rpcHedgeAfterMs();
+}
+
+/** May this routed call be hedged — the core's `is_hedged_read` (perf-6). */
+export function rpcIsHedgedRead(kind: RpcKind, method: string): boolean {
+	return wasm.rpcIsHedgedRead(kind, method);
+}
+
+/**
+ * The verdict a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — the core's `early_verdict` — or `null`
+ * when it must wait for the pool (perf-6).
+ */
+export function rpcEarlyVerdict(
+	kind: RpcKind,
+	method: string,
+	url: string,
+	outcome: RpcTransportOutcome
+): RpcCallVerdict | null {
+	const json = wasm.rpcEarlyVerdict(kind, method, url, JSON.stringify(outcome));
+	return json === '' ? null : (JSON.parse(json) as RpcCallVerdict);
 }
 
 /** A site's name and the line under it (`SiteLabel`, hand-written — no ts-rs type). */

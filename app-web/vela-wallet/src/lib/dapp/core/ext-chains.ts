@@ -16,6 +16,7 @@
 import {
 	DEFAULT_NETWORKS,
 	explorerBaseURL,
+	networkConfigSync,
 	spaceNetworksSync,
 	nativeSymbol
 } from '$lib/services/networks';
@@ -71,6 +72,34 @@ export const WORKER_PUBLIC_RPCS: Readonly<Record<number, readonly string[]>> = {
 	57073: ['https://rpc-qnd.inkonchain.com']
 };
 
+/**
+ * A chain's endpoint list for the worker, as the pool collects it (dapp-5):
+ * the person's own RPC first — an override that is not the shipped default —
+ * then the network's default and the curated public nodes behind it. With
+ * "Only use my node" on and an own RPC set, the person's RPC alone: a dApp's
+ * read about the account never reaches a public node either.
+ *
+ * The rule is the core's (`rpc_pool::own_only_pool`); this is its mirror for
+ * a catalog built before the wasm is up, held to the core by
+ * `ext-chains.test.ts` through the wasm.
+ */
+export function workerRpcList(
+	network: { chainId: number; rpcURL: string },
+	config: { rpcURL?: string; onlyMine?: boolean } | null
+): { rpc: string[]; ownOnly: boolean } {
+	const shipped = DEFAULT_NETWORKS.find((n) => n.chainId === network.chainId)?.rpcURL;
+	const own = config?.rpcURL && config.rpcURL !== shipped ? config.rpcURL : undefined;
+	if (own !== undefined && config?.onlyMine === true) return { rpc: [own], ownOnly: true };
+	const rpc: string[] = [];
+	const add = (url: string | undefined) => {
+		if (url && !rpc.includes(url)) rpc.push(url);
+	};
+	add(own);
+	add(network.rpcURL);
+	for (const url of WORKER_PUBLIC_RPCS[network.chainId] ?? []) add(url);
+	return { rpc, ownOnly: false };
+}
+
 /** The catalog as it is now — pure, so it can be asserted without storage. */
 export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	const chains: Record<string, ExtChainEntry> = {};
@@ -82,12 +111,8 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	// person typed when they added it.
 	const builtinChainIds = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 	for (const network of spaceNetworksSync()) {
-		const rpc: string[] = [];
-		const add = (url: string | undefined) => {
-			if (url && !rpc.includes(url)) rpc.push(url);
-		};
-		add(network.rpcURL);
-		for (const url of WORKER_PUBLIC_RPCS[network.chainId] ?? []) add(url);
+		// dapp-5: the person's RPC override, as the wallet's own pool reads it.
+		const { rpc } = workerRpcList(network, networkConfigSync(network.chainId));
 		chains[String(network.chainId)] = {
 			chainId: network.chainId,
 			name: network.displayName,

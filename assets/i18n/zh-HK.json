@@ -604,7 +604,14 @@
     "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裏也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
     "remove": "從此裝置移除"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "你嘅節點冇回應",
+  "balanceDetailStatusPublicNodes": "正在用公共節點",
+  "nodeFallbackNotice": "你嘅 {{name}} 節點冇回應，暫時改用公共節點。",
+  "nodeFallbackOpen": "網絡設定",
+  "totalUnpriced": "暫時冇價格",
+  "allUnpriced": "你嘅代幣全部都取得唔到價格。",
+  "currencyUnavailable": "暫時攞唔到 {{code}} 匯率——金額以美元顯示。"
  },
  "send": {
   "filterStable": "穩定幣",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "連線已經恢復——而家重新攞緊呢個網絡嘅餘額同記錄。",
   "addByAddress": "用地址加代幣",
   "notShowingTitle": "收咗代幣但係唔見？",
-  "notShowingBody": "確認咗嘅轉賬會自動入數。如果隻代幣仲未出現，可以用合約地址自己加，或者加返對應嘅網絡。"
+  "notShowingBody": "確認咗嘅轉賬會自動入數。如果隻代幣仲未出現，可以用合約地址自己加，或者加返對應嘅網絡。",
+  "ownNodeUnreachable": "連唔到你嘅 {{name}} 節點"
  },
  "addToken": {
   "addedTokensLabel": "已新增的代幣",
@@ -939,7 +947,8 @@
   "invalidAddress": "合約地址唔啱",
   "notCompatible": "唔兼容",
   "nativeAliasTitle": "已喺你嘅資產入面",
-  "nativeAliasMessage": "呢個係該網絡嘅原生代幣，餘額已經喺你嘅資產入面顯示緊。"
+  "nativeAliasMessage": "呢個係該網絡嘅原生代幣，餘額已經喺你嘅資產入面顯示緊。",
+  "chooseNetwork": "呢個地址喺多個網絡上都係代幣，請揀一個。"
  },
  "tokenDetail": {
   "send": "發送",
@@ -1847,7 +1856,9 @@
    "gallery": "相簿",
    "fromGallery": "喺相簿揀",
    "torch": "電筒",
-   "flipCamera": "反轉"
+   "flipCamera": "反轉",
+   "permissionDenied": "相機權限俾封鎖咗。請喺瀏覽器嘅網站設定度允許本站用相機，然後再試。",
+   "retry": "再試一次"
   },
   "gas": {
    "estFee": "預估費用",
@@ -2106,13 +2117,17 @@
    "removeBody": "要移除此自訂網絡嗎？",
    "removeCancel": "取消",
    "removeConfirm": "移除",
-   "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。"
+   "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。",
+   "fallback": "你嘅節點冇回應——暫時改用公共節點",
+   "onlyMine": "只用我嘅節點",
+   "onlyMineHint": "關於你帳戶嘅任何資料都唔會傳俾公共節點。如果你嘅節點停咗回應，呢個網絡會讀唔到，直至佢恢復。"
   },
   "account": {
    "modalTitle": "帳戶",
    "total": "合共 {{amount}}",
    "createNew": "建立新帳戶",
-   "signInExisting": "以現有帳戶登入"
+   "signInExisting": "以現有帳戶登入",
+   "totalPartial": "暫時合共 {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC 供應商",

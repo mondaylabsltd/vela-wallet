@@ -23,8 +23,12 @@
 	interface Props {
 		tone: 'success' | 'warning';
 		title: string;
-		/** A page outside the app (a new tab, no opener); pressing it also puts the toast away. */
-		action?: { label: string; href: string };
+		/**
+		 * A page outside the app (a new tab, no opener) — or, with `onpress`, a
+		 * place in the app this page opens itself. Pressing it also puts the
+		 * toast away.
+		 */
+		action?: { label: string; href: string } | { label: string; onpress: () => void };
 		closeLabel: string;
 		onclose: () => void;
 		/** The pointer or keyboard focus is in the toast — the host holds its timer. */
@@ -76,7 +80,16 @@
 	</span>
 	<div class="body">
 		<p class="title">{title}</p>
-		{#if action !== undefined}
+		{#if action !== undefined && 'onpress' in action}
+			<button
+				type="button"
+				class="action"
+				onclick={() => {
+					action.onpress();
+					onclose();
+				}}>{action.label}</button
+			>
+		{:else if action !== undefined}
 			<!-- eslint-disable svelte/no-navigation-without-resolve -- an external page, never an app route -->
 			<a
 				class="action"
@@ -155,6 +168,12 @@
 	   raised surface (4.44:1 → 5.2:1), darker on the light one (4.69:1 →
 	   5.5:1) — one rule, AA in both themes. */
 	.action {
+		padding: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: inherit;
+		cursor: pointer;
 		font-weight: var(--weight-semibold);
 		color: color-mix(in srgb, var(--color-info-base) 88%, var(--color-fg-base));
 		text-decoration: none;

@@ -990,6 +990,14 @@ pub struct NetNetworkConfig {
     pub rpc_url: String,
     pub explorer_url: String,
     pub bundler_url: String,
+    /// "Only use my node" (owner decision 2026-10-28): the pool asks this
+    /// override's RPC and nobody else (`rpc_pool::own_only_pool`). Off by
+    /// default — a dead own node falls back to public nodes, and says so.
+    /// Meaningful only while `rpc_url` is the person's own
+    /// ([`NetNetworkRow::own_rpc`]); kept across RPC edits. Absent from a
+    /// record written before it existed: off.
+    #[serde(default)]
+    pub only_mine: bool,
 }
 
 /// The four service endpoints — 1:1 `ServiceEndpoints` under
@@ -1569,6 +1577,14 @@ pub enum Event {
     OverrideBlurred {
         chain_id: u32,
     },
+    /// The network's "Only use my node" switch (owner decision 2026-10-28):
+    /// with it on the pool never asks a public node about the account. Only
+    /// for a network whose saved RPC is the person's own
+    /// ([`NetNetworkRow::own_rpc`]); elsewhere it changes nothing.
+    OnlyMineChanged {
+        chain_id: u32,
+        on: bool,
+    },
 
     // -- service endpoints --------------------------------------------------
     /// The endpoint editor opened — probe all four fields. (TS also re-reads
@@ -1991,6 +2007,16 @@ pub struct NetNetworkRow {
     /// become the `href` of every "View on explorer" link.
     #[serde(default)]
     pub explorer_url_refused: bool,
+    /// The saved RPC is the person's own — an override that is not the
+    /// network's shipped endpoint — so the pool ranks it first and may fall
+    /// back from it (owner decision 2026-10-28). Only such a network offers
+    /// "Only use my node".
+    #[serde(default)]
+    pub own_rpc: bool,
+    /// "Only use my node" is on ([`NetNetworkConfig::only_mine`]). Reported
+    /// as saved; it binds the pool only while [`Self::own_rpc`] holds.
+    #[serde(default)]
+    pub only_mine: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2185,6 +2211,7 @@ impl App for NetworkAdmin {
                 value,
             } => override_edited(model, chain_id, field, value),
             Event::OverrideBlurred { chain_id } => override_blurred(model, chain_id),
+            Event::OnlyMineChanged { chain_id, on } => only_mine_changed(model, chain_id, on),
 
             // -- endpoints ---------------------------------------------------
             Event::EndpointsOpened | Event::EndpointsRefreshRequested => endpoint_probe_wave(model),
@@ -3561,11 +3588,15 @@ fn commit_override(model: &mut Model, chain_id: u32) -> Command<NetEffect, Event
     let bundler_url = override_for(model, chain_id)
         .map(|c| c.bundler_url.clone())
         .unwrap_or(defaults.bundler_url);
+    // The person's "Only use my node" survives an RPC edit: it is about their
+    // node, and a new address for it is still theirs.
+    let only_mine = override_for(model, chain_id).is_some_and(|c| c.only_mine);
     let config = NetNetworkConfig {
         chain_id,
         rpc_url: card.rpc_draft.clone(),
         explorer_url: card.explorer_draft.clone(),
         bundler_url,
+        only_mine,
     };
     // `saveNetworkConfig`: upsert by chainId.
     model.overrides.retain(|c| c.chain_id != chain_id);
@@ -4331,7 +4362,54 @@ fn network_row(
         rpc_save_deferred: card.is_some_and(|c| c.save_deferred),
         rpc_url_refused: card.is_some_and(|c| !override_url_allowed(&c.rpc_draft)),
         explorer_url_refused: card.is_some_and(|c| !override_url_allowed(&c.explorer_draft)),
+        own_rpc: has_own_rpc(model, chain_id),
+        only_mine: saved.is_some_and(|c| c.only_mine),
     }
+}
+
+/// Is the saved RPC of `chain_id` the person's own — an override that is set
+/// and is not the built-in network's shipped endpoint? The same reading as
+/// the shells' pool collection, which ranks exactly such an override as the
+/// person's tier (`RpcSource::User`). A network the person added has no
+/// shipped endpoint, so any override RPC of theirs is theirs.
+pub fn has_own_rpc(model: &Model, chain_id: u32) -> bool {
+    override_for(model, chain_id).is_some_and(|config| {
+        !config.rpc_url.trim().is_empty()
+            && builtin(chain_id).is_none_or(|b| b.rpc_url != config.rpc_url)
+    })
+}
+
+/// "Only use my node" switched (owner decision 2026-10-28). Offered only for
+/// a network whose saved RPC is the person's own; anywhere else there is no
+/// node of theirs to keep to, and the event changes nothing. Persisted with
+/// the network's config, and the chain's pool reloads at once so the next
+/// read already obeys it.
+fn only_mine_changed(model: &mut Model, chain_id: u32, on: bool) -> Command<NetEffect, Event> {
+    if !has_own_rpc(model, chain_id) {
+        return Command::done();
+    }
+    let Some(config) = model.overrides.iter_mut().find(|c| c.chain_id == chain_id) else {
+        return Command::done();
+    };
+    if config.only_mine == on {
+        return Command::done();
+    }
+    config.only_mine = on;
+    let gen = model.load_gen;
+    Command::all([
+        render(),
+        requests_with(
+            gen,
+            vec![
+                NetOperation::WriteNetworkConfigs {
+                    configs: model.overrides.clone(),
+                },
+                NetOperation::InvalidatePools {
+                    chain_id: Some(chain_id),
+                },
+            ],
+        ),
+    ])
 }
 
 fn wizard_view(model: &Model) -> NetWizardView {

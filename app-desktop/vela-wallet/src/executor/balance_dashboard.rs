@@ -225,6 +225,8 @@ fn settled_result(
         // token list did not (PR 3 note 4): "can't load its token list",
         // and no RPC fix offered for an endpoint that is working.
         registry_chain_ids: registry,
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: crate::executor::now_ms(),
     }
 }

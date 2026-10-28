@@ -99,6 +99,7 @@ fn config(rpc: Vec<RpcEndpointSeed>, bundler: Vec<RpcEndpointSeed>, now: f64) ->
         chain_id: CHAIN,
         rpc_endpoints: rpc,
         bundler_endpoints: bundler,
+        own_only: false,
         now_ms: now,
     }
 }
@@ -2094,6 +2095,7 @@ fn best_rpc_url_loads_the_pool_before_answering() {
         chain_id: 999,
         rpc_endpoints: vec![],
         bundler_endpoints: vec![],
+        own_only: false,
         now_ms: T0 + 100.0,
     });
     assert_eq!(ops, vec![best_rpc_answer("q2", None)]);
@@ -3092,9 +3094,14 @@ fn the_view_names_each_calls_remaining_endpoints_in_the_machines_order() {
         Some(&vec![PUB2.to_owned(), USER.to_owned()])
     );
 
-    // Shell-local: never on the wire.
+    // On the wire since the web hedges too (perf-6): a JSON shell reads the
+    // same queue the desktop reads off the view.
     let wire = serde_json::to_value(sut.view()).unwrap_or_default();
-    assert!(wire.get("pending_urls").is_none(), "{wire}");
+    assert_eq!(
+        wire["pending_urls"]["c2"],
+        serde_json::json!([PUB2, USER]),
+        "{wire}"
+    );
 }
 
 /// Spec 083 H6: only reads are hedged — a hedge asks a second node the same
@@ -3264,4 +3271,210 @@ fn a_chain_the_wallet_has_still_fails_when_its_nodes_do_not_answer() {
     let verdict = sweep_to_verdict(&mut sut, "c1", |_| Out::Network);
     assert!(matches!(verdict, RpcCallVerdict::Failed { .. }));
     assert_eq!(sut.view().failed_chains, vec![CHAIN]);
+}
+
+// ---------------------------------------------------------------------------
+// The person's own node (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+/// [`config2`] (the person's endpoint, one public) with the "Only use my
+/// node" switch as given.
+fn config2_own_only(own_only: bool, now: f64) -> Res {
+    Res::PoolConfig {
+        chain_id: CHAIN,
+        rpc_endpoints: vec![seed(USER, RpcSource::User), seed(PUB1, RpcSource::Public)],
+        bundler_endpoints: vec![seed(BRELAY, RpcSource::Builtin)],
+        own_only,
+        now_ms: now,
+    }
+}
+
+/// Drive one read to its verdict at `start`, answering the config with `cfg`
+/// and every POST with `answer`; returns the verdict and every URL posted to.
+fn sweep_with(
+    sut: &mut Sut,
+    id: &str,
+    start: f64,
+    cfg: impl Fn(f64) -> Res,
+    answer: impl Fn(&str) -> Out,
+) -> (RpcCallVerdict, Vec<String>) {
+    let mut ops = sut.dispatch(rpc_call(id, "eth_getBalance", start));
+    let mut now = start;
+    let mut posted = Vec::new();
+    for _ in 0..64 {
+        now += 10.0;
+        let Some(op) = ops.into_iter().next() else {
+            panic!("the sweep stopped without a verdict");
+        };
+        ops = match op {
+            Op::LoadPoolConfig { .. } => sut.resolve(cfg(now)),
+            Op::JsonRpcPost { url, .. } => {
+                posted.push(url.clone());
+                sut.resolve(outcome(id, &url, answer(&url), 10.0, now))
+            }
+            Op::DrawJitter { .. } => sut.resolve(Res::Jitter {
+                call_id: id.to_owned(),
+                value: 0.0,
+            }),
+            Op::StartBackoff { .. } => sut.resolve(Res::BackoffElapsed {
+                call_id: id.to_owned(),
+                now_ms: now,
+            }),
+            Op::Conclude { verdict, .. } => {
+                assert!(sut.resolve(Res::Concluded).is_empty());
+                return (verdict, posted);
+            }
+            other => panic!("unexpected operation {other:?}"),
+        };
+    }
+    panic!("no verdict in 64 steps");
+}
+
+/// A dead own node does not break the wallet — a public node answers — but it
+/// is never silent: the chain is listed as falling back until the person's
+/// node answers again, and then it is not.
+#[test]
+fn an_own_node_that_does_not_answer_falls_back_and_says_so_until_it_answers() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(false, now),
+        |url| if url == USER { Out::Network } else { ok() },
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == PUB1));
+    assert_eq!(posted, vec![USER.to_owned(), PUB1.to_owned()]);
+    let view = sut.view();
+    assert_eq!(view.fallback_chains, vec![CHAIN]);
+    assert!(view.failed_chains.is_empty(), "the wallet reads on");
+    assert!(view.own_only_chains.is_empty());
+
+    // Still cooling down: the public node answers again, still said.
+    let (_, posted) = sweep_with(
+        &mut sut,
+        "c2",
+        T0 + 5_000.0,
+        |now| config2_own_only(false, now),
+        |_| ok(),
+    );
+    assert_eq!(posted, vec![PUB1.to_owned()]);
+    assert_eq!(sut.view().fallback_chains, vec![CHAIN]);
+
+    // Past the cooldown the person's node leads again, answers, and the
+    // notice clears.
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c3",
+        T0 + 40_000.0,
+        |now| config2_own_only(false, now),
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == USER));
+    assert_eq!(posted, vec![USER.to_owned()]);
+    assert!(sut.view().fallback_chains.is_empty());
+}
+
+/// A pool without an endpoint of the person's own is never "falling back":
+/// public nodes are what it has.
+#[test]
+fn a_pool_without_an_own_node_is_never_said_to_fall_back() {
+    let mut sut = Sut::new();
+    let (verdict, _) = sweep_with(&mut sut, "c1", T0, config1, |_| ok());
+    assert!(matches!(verdict, RpcCallVerdict::Respond { .. }));
+    assert!(sut.view().fallback_chains.is_empty());
+}
+
+/// "Only use my node": nobody else is asked about the account, ever — the
+/// sweep fails on the person's node, and the failure is said as theirs.
+#[test]
+fn only_my_node_never_asks_another_node_and_its_failure_is_said_as_theirs() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(true, now),
+        |_| Out::Network,
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Failed { .. }));
+    assert!(!posted.is_empty());
+    assert!(
+        posted.iter().all(|url| url == USER),
+        "only the person's node was asked: {posted:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+    assert_eq!(view.own_node_unreached_chains, vec![CHAIN]);
+    assert!(view.fallback_chains.is_empty(), "nothing fell back");
+
+    // Its node answers again: readable, and no longer unreached.
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c2",
+        T0 + 400_000.0,
+        |now| config2_own_only(true, now),
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == USER));
+    assert_eq!(posted, vec![USER.to_owned()]);
+    let view = sut.view();
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+    assert!(view.own_node_unreached_chains.is_empty());
+}
+
+/// The switch is about the person's node: with none configured it means
+/// nothing, and the pool keeps every node it has.
+#[test]
+fn only_my_node_without_an_own_node_keeps_the_pool_whole() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| Res::PoolConfig {
+            chain_id: CHAIN,
+            rpc_endpoints: vec![seed(PUB1, RpcSource::Public)],
+            bundler_endpoints: vec![seed(BRELAY, RpcSource::Builtin)],
+            own_only: true,
+            now_ms: now,
+        },
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { .. }));
+    assert_eq!(posted, vec![PUB1.to_owned()]);
+    assert!(sut.view().own_only_chains.is_empty());
+}
+
+/// Turning the switch on while the chain is falling back ends the fallback at
+/// the config reload: from then on the public node is not in the pool at all.
+#[test]
+fn switching_only_my_node_on_ends_the_fallback_at_once() {
+    let mut sut = Sut::new();
+    sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(false, now),
+        |url| if url == USER { Out::Network } else { ok() },
+    );
+    assert_eq!(sut.view().fallback_chains, vec![CHAIN]);
+
+    let ops = sut.dispatch(Event::RefreshChain { chain_id: CHAIN });
+    assert_eq!(ops, vec![Op::LoadPoolConfig { chain_id: CHAIN }]);
+    sut.resolve(config2_own_only(true, T0 + 1_000.0));
+    let view = sut.view();
+    assert!(view.fallback_chains.is_empty());
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+
+    // The bundler's header cannot name the public node either.
+    let ops = sut.dispatch(Event::BestRpcUrlRequested {
+        call_id: "q1".to_owned(),
+        chain_id: CHAIN,
+        now_ms: T0 + 2_000.0,
+    });
+    assert!(
+        !format!("{ops:?}").contains(PUB1),
+        "the public node is out of the pool: {ops:?}"
+    );
 }

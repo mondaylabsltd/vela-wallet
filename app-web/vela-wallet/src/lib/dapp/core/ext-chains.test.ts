@@ -5,7 +5,8 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildExtChainCatalog, WORKER_PUBLIC_RPCS } from './ext-chains';
+import { buildExtChainCatalog, WORKER_PUBLIC_RPCS, workerRpcList } from './ext-chains';
+import { rpcOwnOnlyPool } from '$lib/core/kernels';
 import { publicRpcUrls } from '$lib/core/client';
 import { DEFAULT_NETWORKS } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
@@ -112,5 +113,62 @@ describe('the published network catalog', () => {
 		expect(buildExtChainCatalog(1_800_000_000_000).chains['100'].bundler).toBe(
 			'https://my-relay.example/100'
 		);
+	});
+});
+
+/**
+ * dapp-5: a dApp's reads follow the person's RPC override as the wallet's own
+ * pool does — their node first, the public nodes behind it, and with "Only use
+ * my node" on, their node alone (owner decision 2026-10-28).
+ */
+describe("the person's own node in the catalog (dapp-5)", () => {
+	const gnosis = DEFAULT_NETWORKS.find((n) => n.chainId === 100)!;
+	const MINE = 'https://my-node.example/gnosis';
+
+	it('puts their RPC first, the shipped default and the public nodes behind it', () => {
+		const { rpc, ownOnly } = workerRpcList(gnosis, { rpcURL: MINE });
+		expect(rpc[0]).toBe(MINE);
+		expect(rpc[1]).toBe(gnosis.rpcURL);
+		expect(rpc.slice(2)).toEqual(WORKER_PUBLIC_RPCS[100].filter((u) => u !== gnosis.rpcURL));
+		expect(ownOnly).toBe(false);
+	});
+
+	it('with "Only use my node", lists their RPC alone', () => {
+		expect(workerRpcList(gnosis, { rpcURL: MINE, onlyMine: true })).toEqual({
+			rpc: [MINE],
+			ownOnly: true
+		});
+	});
+
+	it('a saved default, or no override, is not their node; the switch alone means nothing', () => {
+		const plain = workerRpcList(gnosis, null).rpc;
+		expect(plain[0]).toBe(gnosis.rpcURL);
+		expect(workerRpcList(gnosis, { rpcURL: gnosis.rpcURL, onlyMine: true }).rpc).toEqual(plain);
+		expect(workerRpcList(gnosis, { onlyMine: true }).rpc).toEqual(plain);
+	});
+
+	// The catalog is built before the wasm is up, so it mirrors the core's
+	// rule; this holds the mirror to it.
+	it('is the core’s own-node rule (`own_only_pool`)', () => {
+		for (const [config, ownOnly] of [
+			[{ rpcURL: MINE }, false],
+			[{ rpcURL: MINE, onlyMine: true }, true],
+			[null, false],
+			[{ rpcURL: gnosis.rpcURL, onlyMine: true }, true]
+		] as const) {
+			const mirrored = workerRpcList(gnosis, config);
+			const seeds = [
+				...(config?.rpcURL && config.rpcURL !== gnosis.rpcURL
+					? [{ url: config.rpcURL, source: 'user' }]
+					: []),
+				{ url: gnosis.rpcURL, source: 'default' },
+				...WORKER_PUBLIC_RPCS[100]
+					.filter((u) => u !== gnosis.rpcURL)
+					.map((url) => ({ url, source: 'public' }))
+			];
+			const core = rpcOwnOnlyPool(seeds, ownOnly);
+			expect(mirrored.rpc, JSON.stringify(config)).toEqual(core.endpoints.map((e) => e.url));
+			expect(mirrored.ownOnly).toBe(core.own_only);
+		}
 	});
 });

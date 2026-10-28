@@ -41,6 +41,7 @@
     "invalidAddress": "コントラクトアドレスが正しくありません",
     "notCompatible": "非対応",
     "nativeAliasTitle": "すでに表示中",
-    "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。"
+    "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。",
+    "chooseNetwork": "このアドレスは複数のネットワークでトークンです。1 つ選んでください。"
   }
 }

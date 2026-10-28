@@ -11,13 +11,17 @@
       "removeBody": "Hapus jaringan kustom ini?",
       "removeCancel": "Batal",
       "removeConfirm": "Hapus",
-      "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
+      "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan.",
+      "fallback": "Node Anda tidak merespons — sementara memakai node publik",
+      "onlyMine": "Hanya pakai node saya",
+      "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali."
     },
     "account": {
       "modalTitle": "Akun",
       "total": "Total {{amount}}",
       "createNew": "Buat Akun Baru",
-      "signInExisting": "Masuk dengan Akun yang Ada"
+      "signInExisting": "Masuk dengan Akun yang Ada",
+      "totalPartial": "Total sejauh ini {{amount}}"
     },
     "rpcProviders": {
       "modalTitle": "Penyedia RPC",

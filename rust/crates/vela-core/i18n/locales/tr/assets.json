@@ -32,6 +32,7 @@
     "rpcFixRestored": "Bağlantı geri geldi — bu ağın bakiyeleri ve kayıtları yeniden alınıyor.",
     "addByAddress": "Adresle token ekle",
     "notShowingTitle": "Token geldi ama görünmüyor mu?",
-    "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin."
+    "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin.",
+    "ownNodeUnreachable": "{{name}} için düğümünüze ulaşılamıyor"
   }
 }

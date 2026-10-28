@@ -350,6 +350,8 @@ function net(
 		rpc_save_deferred: false,
 		rpc_url_refused: false,
 		explorer_url_refused: false,
+		own_rpc: false,
+		only_mine: false,
 		is_testnet: false
 	};
 }

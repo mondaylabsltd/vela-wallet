@@ -359,3 +359,146 @@ describe('an endpoint that is not answering is skipped a while (home-17)', () =>
 		expect(skipper.skips(url, 'eth_getBalance')).toBe(false);
 	});
 });
+
+/**
+ * Owner decision 2026-10-28: the person's "Only use my node" is a fact of
+ * config, handed to the core with the collected lists — what it means is
+ * the core's (`own_only_pool`).
+ */
+describe('load_pool_config carries "Only use my node"', () => {
+	it('reads the switch from the network config, off when absent', async () => {
+		const executor = createRpcPoolExecutor(makeRegistry());
+		await expect(
+			executor.execute(effect({ type: 'load_pool_config', chain_id: 100 }))
+		).resolves.toMatchObject({ type: 'pool_config', own_only: false });
+		kv.set(
+			'vela.networkConfig',
+			JSON.stringify([{ chainId: 100, rpcURL: 'https://mine.example', onlyMine: true }])
+		);
+		await expect(
+			executor.execute(effect({ type: 'load_pool_config', chain_id: 100 }))
+		).resolves.toMatchObject({ type: 'pool_config', own_only: true });
+	});
+});
+
+/**
+ * perf-6: a read silent for the hedge delay also asks the endpoint the core
+ * will ask next (the view's `pending_urls`); the caller may take that answer
+ * when the core says it is one every node gives alike; and when the core
+ * reaches that endpoint it gets the hedge's answer, never a second request.
+ */
+describe('hedged reads (perf-6)', () => {
+	const SLOW = 'https://slow.example';
+	const NEXT = 'https://next.example';
+	const policy = {
+		afterMs: () => 1500,
+		isHedged: (kind: string) => kind === 'rpc',
+		early: (_kind: string, _method: string, url: string, outcome: { type: string }) =>
+			outcome.type === 'response'
+				? ({ type: 'respond', url, maybe_delivered: false } as const)
+				: null
+	};
+	const post = (url: string) =>
+		effect({
+			type: 'json_rpc_post',
+			call_id: 'c1',
+			url,
+			method: 'eth_getBalance',
+			x_rpc_url: null,
+			timeout_ms: 8000
+		});
+
+	function hedgeRegistry() {
+		const early: Array<{ callId: string; url: string }> = [];
+		const registry = makeRegistry({
+			payload: () => ({ method: 'eth_getBalance', params: [], kind: 'rpc' as const }),
+			view: () => ({
+				failed_chains: [],
+				rate_limited_chains: [],
+				banned: [],
+				unreached_chains: [],
+				fallback_chains: [],
+				own_only_chains: [],
+				own_node_unreached_chains: [],
+				pending_urls: { c1: [NEXT] }
+			}),
+			answerEarly: (callId, url) => early.push({ callId, url })
+		});
+		return { registry, early };
+	}
+
+	it('asks the next endpoint after the delay, answers the caller early, and the core reuses it', async () => {
+		vi.useFakeTimers();
+		try {
+			let releaseSlow: (r: Response) => void = () => {};
+			const fetchSpy = vi.fn((url: string) =>
+				url === SLOW
+					? new Promise<Response>((resolve) => (releaseSlow = resolve))
+					: Promise.resolve(
+							new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x5' }), {
+								headers: { 'content-type': 'application/json' }
+							})
+						)
+			);
+			vi.stubGlobal('fetch', fetchSpy);
+			const { registry, early } = hedgeRegistry();
+			const executor = createRpcPoolExecutor(registry, policy);
+
+			const slow = executor.execute(post(SLOW));
+			await vi.advanceTimersByTimeAsync(1499);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			await vi.advanceTimersByTimeAsync(1);
+			// The hedge went to the core's next endpoint.
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+			expect(fetchSpy.mock.calls[1][0]).toBe(NEXT);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(early).toEqual([{ callId: 'c1', url: NEXT }]);
+			expect(registry.kept).toContainEqual({ callId: 'c1', url: NEXT });
+
+			// The slow endpoint fails; the core reaches NEXT — the hedge's answer.
+			releaseSlow(new Response('down', { status: 503 }));
+			await expect(slow).resolves.toMatchObject({ outcome: { type: 'http_error' } });
+			await expect(executor.execute(post(NEXT))).resolves.toMatchObject({
+				url: NEXT,
+				outcome: { type: 'response', error: null }
+			});
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('an answer inside the delay asks nobody else', async () => {
+		vi.useFakeTimers();
+		try {
+			const fetchSpy = vi.fn(async () => new Response('busy', { status: 503 }));
+			vi.stubGlobal('fetch', fetchSpy);
+			const { registry, early } = hedgeRegistry();
+			const executor = createRpcPoolExecutor(registry, policy);
+			await executor.execute(post(SLOW));
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+			expect(early).toEqual([]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('a write, or a call without a kind, is never hedged', async () => {
+		vi.useFakeTimers();
+		try {
+			const fetchSpy = vi.fn(() => new Promise<Response>(() => {}));
+			vi.stubGlobal('fetch', fetchSpy);
+			const { registry } = hedgeRegistry();
+			const executor = createRpcPoolExecutor(
+				{ ...registry, payload: () => ({ method: 'eth_sendRawTransaction', params: [] }) },
+				{ ...policy, isHedged: () => false }
+			);
+			void executor.execute(post(SLOW));
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(fetchSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});

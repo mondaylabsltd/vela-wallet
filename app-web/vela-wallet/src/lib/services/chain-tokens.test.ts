@@ -12,6 +12,8 @@
  * Only `fetch` is stubbed: the classification and the cache are the real code.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QUIET_BASE_MS } from './chain-doc';
+import { fetchRawChainData } from './chain-registry';
 import { fetchChainTokens, readChainTokens } from './chain-tokens';
 import { NET_TIMEOUTS } from './net';
 
@@ -77,12 +79,48 @@ describe('the registry document’s three outcomes', () => {
 		}
 	);
 
-	it('a network failure: `unread`, never kept', async () => {
+	it('a network failure: `unread`, never kept — and not asked again at once (perf-7)', async () => {
+		vi.useFakeTimers();
 		const chain = freshChain();
 		fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 		expect((await readChainTokens(chain)).kind).toBe('unread');
+		// The host gave no answer: the next round's ask is answered "unread"
+		// without a request, rather than holding another full timeout.
+		expect((await readChainTokens(chain)).kind).toBe('unread');
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		// After the rest, it is asked again.
+		await vi.advanceTimersByTimeAsync(QUIET_BASE_MS);
 		fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
 		expect((await readChainTokens(chain)).kind).toBe('absent');
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('a host that keeps not answering rests longer each time, up to a cap (perf-7)', async () => {
+		vi.useFakeTimers();
+		const chain = freshChain();
+		fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+		await readChainTokens(chain);
+		await vi.advanceTimersByTimeAsync(QUIET_BASE_MS);
+		await readChainTokens(chain);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		// Doubled: one base later it is still resting.
+		await vi.advanceTimersByTimeAsync(QUIET_BASE_MS);
+		await readChainTokens(chain);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		await vi.advanceTimersByTimeAsync(QUIET_BASE_MS);
+		await readChainTokens(chain);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('both readers of the document share one request and one answer (perf-7)', async () => {
+		const chain = freshChain();
+		fetchMock.mockResolvedValue(json({ ...DOC, chainId: chain, rpc: ['https://a.example'] }));
+		const [tokens, raw] = await Promise.all([readChainTokens(chain), fetchRawChainData(chain)]);
+		expect(tokens.kind).toBe('doc');
+		expect((raw as { chainId: number }).chainId).toBe(chain);
+		await fetchRawChainData(chain);
+		await readChainTokens(chain);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('a timeout: `unread`', async () => {

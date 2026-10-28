@@ -41,8 +41,13 @@
 	 * read. "Can't reach BNB Chain right now" and "Updated 2m" do not both fit
 	 * 358 px, and the first is the one a person needs whole. The words are
 	 * still the control's name either way.
+	 *
+	 * The wide layout has the room for both — but not the right to put
+	 * "Updated now" beside "Can't reach Gnosis right now": a read that did not
+	 * reach a network is not one to call current. Beside a warning the control
+	 * is the glyph alone there too (`status.unread`), still named by its words.
 	 */
-	const worded = $derived(wide || !saying);
+	const worded = $derived(!saying || (wide && balance.status?.unread !== true));
 
 	function refresh(): void {
 		if (spinning) return;

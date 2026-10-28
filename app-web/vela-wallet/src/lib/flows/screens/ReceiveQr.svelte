@@ -121,6 +121,19 @@
 		</div>
 	{/if}
 
+	{#if model.watch !== undefined}
+		<!-- home-6: the code is watched — and a deposit it saw is said here,
+		     where the person is looking, not only on the home behind it. -->
+		<p
+			class="watch"
+			class:received={model.watch.received !== undefined}
+			role="status"
+			data-testid="receive-watch"
+		>
+			{model.watch.received ?? model.watch.listening}
+		</p>
+	{/if}
+
 	<p class="warning">{model.warning}</p>
 
 	<div class="actions">
@@ -194,6 +207,18 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.watch {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.watch.received {
+		font-weight: var(--weight-semibold);
+		color: var(--color-success-base);
 	}
 
 	.warning {

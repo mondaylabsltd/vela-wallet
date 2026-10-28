@@ -45,6 +45,19 @@ class NetworkSpaceStore {
 	#listeners = new Set<(space: NetworkSpace) => void>();
 	#booted: Promise<void> | null = null;
 
+	constructor() {
+		// home-12: the space is one value for the device. A switch in another
+		// tab is that tab's write to local storage — this tab hears it and
+		// follows, exactly as its own switch would.
+		if (browser && typeof window !== 'undefined') {
+			window.addEventListener('storage', (event) => {
+				if (event.key !== NETWORK_SPACE_KEY) return;
+				const space: NetworkSpace = event.newValue === 'testnet' ? 'testnet' : 'mainnet';
+				if (space !== this.current) this.#change(space);
+			});
+		}
+	}
+
 	/**
 	 * Read the stored space through the core — once the core is here. Never
 	 * the reason it is fetched: this runs above every page, Welcome included,

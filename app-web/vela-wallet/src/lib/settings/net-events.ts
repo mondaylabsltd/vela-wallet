@@ -21,6 +21,8 @@ export type SettingsNetEvent =
 	| { kind: 'switch-space' }
 	| { kind: 'detail-field'; field: NetOverrideField; value: string }
 	| { kind: 'detail-blur'; field: NetOverrideField }
+	// Owner decision 2026-10-28: the network's "Only use my node" switch
+	| { kind: 'only-mine'; on: boolean }
 	// Add-network wizard
 	| { kind: 'open-add' }
 	| { kind: 'search'; query: string }

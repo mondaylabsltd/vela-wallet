@@ -11,13 +11,17 @@
       "removeBody": "Remove this custom network?",
       "removeCancel": "Cancel",
       "removeConfirm": "Remove",
-      "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
+      "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use.",
+      "fallback": "Your node isn't answering — using public nodes for now",
+      "onlyMine": "Only use my node",
+      "onlyMineHint": "Nothing about your account goes to public nodes. If your node stops answering, this network can't be read until it's back."
     },
     "account": {
       "modalTitle": "Accounts",
       "total": "Total {{amount}}",
       "createNew": "Create New Account",
-      "signInExisting": "Sign In with Existing"
+      "signInExisting": "Sign In with Existing",
+      "totalPartial": "Total {{amount}} so far"
     },
     "rpcProviders": {
       "modalTitle": "RPC Providers",

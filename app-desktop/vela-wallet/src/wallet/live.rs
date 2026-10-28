@@ -1020,6 +1020,8 @@ mod tests {
                 read_chain_ids: vec![1, 56],
                 internal_chain_ids: internal.clone(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
                 now_ms: 1.0,
             }
         };

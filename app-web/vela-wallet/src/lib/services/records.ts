@@ -37,6 +37,8 @@ export interface NetworkConfigRecord {
 	rpcURL?: string;
 	explorerURL?: string;
 	bundlerURL?: string;
+	/** "Only use my node" (owner decision 2026-10-28). Absent: off. */
+	onlyMine?: boolean;
 }
 
 export type RpcProviderKeys = Partial<Record<'alchemy' | 'drpc' | 'ankr', string>>;
@@ -102,7 +104,8 @@ function asNetworkConfig(raw: unknown): NetworkConfigRecord | null {
 		chainId: r.chainId,
 		...(typeof r.rpcURL === 'string' ? { rpcURL: r.rpcURL } : {}),
 		...(typeof r.explorerURL === 'string' ? { explorerURL: r.explorerURL } : {}),
-		...(typeof r.bundlerURL === 'string' ? { bundlerURL: r.bundlerURL } : {})
+		...(typeof r.bundlerURL === 'string' ? { bundlerURL: r.bundlerURL } : {}),
+		...(r.onlyMine === true ? { onlyMine: true } : {})
 	};
 }
 

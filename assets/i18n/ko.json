@@ -604,7 +604,14 @@
     "backupNote": "이 멀티시그의 설정을 Ethereum에도 저장해 그곳에서도 찾고 배포할 수 있게 합니다. 수수료는 이 기기의 계정이 냅니다.",
     "remove": "이 기기에서 제거"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "내 노드가 응답하지 않습니다",
+  "balanceDetailStatusPublicNodes": "공개 노드 사용 중",
+  "nodeFallbackNotice": "{{name}}의 내 노드가 응답하지 않아 당분간 공개 노드를 사용합니다.",
+  "nodeFallbackOpen": "네트워크 설정",
+  "totalUnpriced": "아직 가격 없음",
+  "allUnpriced": "보유한 토큰의 가격을 하나도 가져오지 못했습니다.",
+  "currencyUnavailable": "지금은 {{code}} 환율을 불러올 수 없어 금액을 미국 달러로 표시합니다."
  },
  "send": {
   "filterStable": "스테이블코인",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "연결이 복구되었습니다 — 이 네트워크의 잔액과 기록을 다시 가져오는 중입니다.",
   "addByAddress": "주소로 토큰 추가",
   "notShowingTitle": "토큰을 받았는데 보이지 않나요?",
-  "notShowingBody": "확인된 전송은 자동으로 추가됩니다. 그래도 토큰이 보이지 않으면 컨트랙트 주소로 추가하거나 해당 네트워크를 추가하세요."
+  "notShowingBody": "확인된 전송은 자동으로 추가됩니다. 그래도 토큰이 보이지 않으면 컨트랙트 주소로 추가하거나 해당 네트워크를 추가하세요.",
+  "ownNodeUnreachable": "{{name}}의 내 노드에 연결할 수 없습니다"
  },
  "addToken": {
   "addedTokensLabel": "추가된 토큰",
@@ -939,7 +947,8 @@
   "invalidAddress": "잘못된 컨트랙트 주소입니다",
   "notCompatible": "호환되지 않음",
   "nativeAliasTitle": "이미 표시됨",
-  "nativeAliasMessage": "이 주소는 해당 네트워크의 기본 코인입니다. 잔액은 이미 자산에 표시되어 있습니다."
+  "nativeAliasMessage": "이 주소는 해당 네트워크의 기본 코인입니다. 잔액은 이미 자산에 표시되어 있습니다.",
+  "chooseNetwork": "이 주소는 여러 네트워크에서 토큰입니다. 하나를 선택하세요."
  },
  "tokenDetail": {
   "send": "보내기",
@@ -1886,7 +1895,9 @@
    "gallery": "사진",
    "fromGallery": "사진에서 선택",
    "torch": "손전등",
-   "flipCamera": "전환"
+   "flipCamera": "전환",
+   "permissionDenied": "카메라 접근이 차단되어 있습니다. 브라우저 설정에서 이 사이트를 허용한 뒤 다시 시도하세요.",
+   "retry": "다시 시도"
   },
   "gas": {
    "estFee": "예상 수수료",
@@ -2106,13 +2117,17 @@
    "removeBody": "이 사용자 지정 네트워크를 제거할까요?",
    "removeCancel": "취소",
    "removeConfirm": "제거",
-   "relayNotice": "거래를 제출하는 릴레이에는 이 네트워크의 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다."
+   "relayNotice": "거래를 제출하는 릴레이에는 이 네트워크의 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다.",
+   "fallback": "내 노드가 응답하지 않습니다 — 당분간 공개 노드 사용 중",
+   "onlyMine": "내 노드만 사용",
+   "onlyMineHint": "계정에 관한 어떤 정보도 공개 노드로 가지 않습니다. 내 노드가 응답하지 않으면 복구될 때까지 이 네트워크를 읽을 수 없습니다."
   },
   "account": {
    "modalTitle": "계정",
    "total": "총 {{amount}}",
    "createNew": "새 계정 만들기",
-   "signInExisting": "기존 계정으로 로그인"
+   "signInExisting": "기존 계정으로 로그인",
+   "totalPartial": "지금까지 총 {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC 공급자",

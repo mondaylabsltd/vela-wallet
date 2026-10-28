@@ -604,7 +604,14 @@
     "backupNote": "把这个多签的配置也保存在 Ethereum 上，以后从那里也能找到并部署它。手续费由本设备上的一个账户支付。",
     "remove": "从本设备移除"
    }
-  }
+  },
+  "balanceDetailStatusOwnNode": "你的节点没有响应",
+  "balanceDetailStatusPublicNodes": "正在使用公共节点",
+  "nodeFallbackNotice": "你的 {{name}} 节点没有响应，暂时改用公共节点。",
+  "nodeFallbackOpen": "网络设置",
+  "totalUnpriced": "暂无价格",
+  "allUnpriced": "你的代币都无法获取价格。",
+  "currencyUnavailable": "暂时无法获取 {{code}} 汇率——金额以美元显示。"
  },
  "send": {
   "selectTokenTitle": "选择代币",
@@ -895,7 +902,8 @@
   "rpcFixRestored": "已恢复连接——正在重新拉取该网络的余额与记录。",
   "addByAddress": "通过地址添加代币",
   "notShowingTitle": "已经收到代币但没有显示？",
-  "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。"
+  "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。",
+  "ownNodeUnreachable": "连不上你的 {{name}} 节点"
  },
  "addToken": {
   "addedTokensLabel": "已添加的代币",
@@ -939,7 +947,8 @@
   "invalidAddress": "无效的合约地址",
   "notCompatible": "不兼容",
   "nativeAliasTitle": "已在你的资产中",
-  "nativeAliasMessage": "这是该网络的原生代币，余额已经显示在你的资产里了。"
+  "nativeAliasMessage": "这是该网络的原生代币，余额已经显示在你的资产里了。",
+  "chooseNetwork": "这个地址在多个网络上都是代币，请选择一个。"
  },
  "tokenDetail": {
   "send": "转账",
@@ -1847,7 +1856,9 @@
    "gallery": "相册",
    "fromGallery": "从相册选择",
    "torch": "手电筒",
-   "flipCamera": "翻转"
+   "flipCamera": "翻转",
+   "permissionDenied": "相机权限被阻止了。请在浏览器的网站设置里允许本站使用相机，然后重试。",
+   "retry": "重试"
   },
   "gas": {
    "estFee": "网络费",
@@ -2106,13 +2117,17 @@
    "removeBody": "移除此自定义网络？",
    "removeCancel": "取消",
    "removeConfirm": "移除",
-   "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
+   "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。",
+   "fallback": "你的节点没有响应——暂时改用公共节点",
+   "onlyMine": "只使用我的节点",
+   "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。"
   },
   "account": {
    "modalTitle": "账户",
    "total": "总计 {{amount}}",
    "createNew": "创建新账户",
-   "signInExisting": "登录已有账户"
+   "signInExisting": "登录已有账户",
+   "totalPartial": "目前合计 {{amount}}"
   },
   "rpcProviders": {
    "modalTitle": "RPC 供应商",

@@ -87,6 +87,8 @@
 		withLiveNetworksDesktop,
 		withLiveStorage
 	} from '$lib/settings/live';
+	import type { LiveOwnNodes } from '$lib/settings/live';
+	import { ownNodes } from '$lib/services/own-node.svelte';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
 	import {
 		measureDeviceStorage,
@@ -931,6 +933,12 @@
 	 */
 	let justAdded = $state<number | null>(null);
 
+	/** Owner decision 2026-10-28: the pool's word on the person's own nodes. */
+	const ownNodeLists = $derived<LiveOwnNodes>({
+		fallback: ownNodes.fallback,
+		unreached: ownNodes.unreached
+	});
+
 	/** Spec 105: the space in front — the network pages show only its networks. */
 	const liveSpace = $derived<LiveSpace | undefined>(
 		networkSpace.words === null
@@ -942,7 +950,15 @@
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
 		let model = withLiveAccounts(homeWithIdentity(data.home, identity), accountsInput, m);
-		model = withLiveNetworks(model, net, m, selectedNetworkId, liveSpace, justAdded ?? undefined);
+		model = withLiveNetworks(
+			model,
+			net,
+			m,
+			selectedNetworkId,
+			liveSpace,
+			justAdded ?? undefined,
+			ownNodeLists
+		);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
@@ -992,7 +1008,8 @@
 			m,
 			selectedNetworkId,
 			liveSpace,
-			justAdded ?? undefined
+			justAdded ?? undefined,
+			ownNodeLists
 		);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		// After the storage numbers, as on the phone: the connections row is the
@@ -1110,6 +1127,13 @@
 						value: event.value
 					});
 					if (event.field === 'rpc') rpcEdited = chainId;
+				}
+				return;
+			}
+			case 'only-mine': {
+				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
+				if (chainId !== undefined) {
+					networkAdmin.dispatch({ type: 'only_mine_changed', chain_id: chainId, on: event.on });
 				}
 				return;
 			}
@@ -1349,7 +1373,8 @@
 	   scrolled away with it (founder, 2026-09-05). The contacts route frames
 	   its phone the same way. */
 	.page {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
 		background: var(--color-bg-base);
@@ -1360,7 +1385,8 @@
 	   frame they stood as tall as their own rows and the sunken sidebars ended
 	   mid-screen. The wallet route frames its desktop the same way. */
 	.desktop-shell {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 </style>

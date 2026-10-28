@@ -267,6 +267,13 @@
         "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裡也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
         "remove": "從此裝置移除"
       }
-    }
+    },
+    "balanceDetailStatusOwnNode": "你的節點沒有回應",
+    "balanceDetailStatusPublicNodes": "正在使用公共節點",
+    "nodeFallbackNotice": "你的 {{name}} 節點沒有回應，暫時改用公共節點。",
+    "nodeFallbackOpen": "網路設定",
+    "totalUnpriced": "暫無價格",
+    "allUnpriced": "你的代幣都無法取得價格。",
+    "currencyUnavailable": "暫時無法取得 {{code}} 匯率——金額以美元顯示。"
   }
 }

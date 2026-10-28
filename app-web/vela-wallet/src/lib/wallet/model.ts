@@ -64,7 +64,12 @@ export interface BalanceModel {
 	 * the wallet is live, and none has failed to answer.
 	 */
 	checkingText?: string;
-	status?: { kind: 'warning' | 'refreshing'; text: string };
+	/**
+	 * `unread`: the line says some of the wallet could not be read — a network
+	 * out of reach, or a read that failed inside Vela. Beside it no layout
+	 * calls the figure current ("Updated now").
+	 */
+	status?: { kind: 'warning' | 'refreshing'; text: string; unread?: true };
 	/**
 	 * Issue 462: the hero's own refresh, "↻ Updated 2m" — the same control on
 	 * all four apps. `updated` is absent until a read has settled (the glyph

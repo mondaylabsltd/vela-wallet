@@ -55,6 +55,8 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -70,6 +72,8 @@ fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> 
         read_chain_ids: read,
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -1285,6 +1289,8 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1330,6 +1336,8 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(sut.view().refreshing, "the person's own round is still out");
@@ -1771,6 +1779,8 @@ fn an_account_switch_forgets_the_last_reads() {
         read_chain_ids: vec![56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     });
     assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
@@ -2340,6 +2350,8 @@ fn an_internal_fault_is_not_a_network_out_of_reach() {
         read_chain_ids: vec![1, 56, 137],
         internal_chain_ids: internal,
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     };
     // Every failure is internal: no "Can't reach Ethereum".
@@ -2390,6 +2402,8 @@ fn an_unloaded_token_list_is_not_a_network_out_of_reach() {
         read_chain_ids: vec![1, 56, TEMPO],
         internal_chain_ids: vec![],
         registry_chain_ids: registry,
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     };
 
@@ -2494,6 +2508,8 @@ fn a_round_where_every_chain_failed_is_no_zero() {
         read_chain_ids: vec![1, 56],
         internal_chain_ids: vec![1, 56],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
         now_ms: NOW,
     };
     let view = booted(ADDR_A, None, all_failed).view();
@@ -2850,6 +2866,8 @@ fn the_breakdown_status_names_what_is_unavailable() {
             read_chain_ids: vec![1, 56, TEMPO],
             internal_chain_ids: vec![],
             registry_chain_ids: vec![TEMPO],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
             now_ms: NOW,
         },
     )
@@ -3309,4 +3327,96 @@ fn a_recovery_read_waits_for_the_app_to_be_seen() {
     assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
     let ops = sut.dispatch(Event::AppFocused);
     assert!(ops.iter().any(|op| matches!(op, Op::FetchTokens { .. })));
+}
+
+// ===========================================================================
+// The person's own node (owner decision 2026-10-28)
+// ===========================================================================
+
+/// A network read through the person's node alone ("Only use my node"), whose
+/// node did not answer, is said as theirs — "Can't reach your node for …" —
+/// with the fix; and a network served by public nodes because the person's
+/// node is not answering is listed as such, read but said.
+#[test]
+fn an_own_node_out_of_reach_is_said_as_theirs_and_a_fallback_is_listed() {
+    use vela_core::app::balance_dashboard::{
+        UnreachableCause, OWN_NODE_UNREACHABLE, STATUS_OWN_NODE_UNAVAILABLE, STATUS_PUBLIC_NODES,
+    };
+    let settle = |failed: Vec<u32>, own: Vec<u32>, fallback: Vec<u32>| Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: failed,
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 100],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: own,
+        fallback_chain_ids: fallback,
+        now_ms: NOW,
+    };
+
+    let view = booted(ADDR_A, None, settle(vec![100], vec![100], vec![])).view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(OWN_NODE_UNREACHABLE));
+    let [row] = view.unreachable_networks.as_slice() else {
+        unreachable!("one row: {:?}", view.unreachable_networks);
+    };
+    assert_eq!(row.cause, UnreachableCause::OwnNode);
+    assert_eq!(row.status_key, STATUS_OWN_NODE_UNAVAILABLE);
+    assert!(row.rpc_fixable, "the fix is the person's node");
+
+    // A chain that answered is never "own node unreachable".
+    let view = booted(ADDR_A, None, settle(vec![], vec![100], vec![])).view();
+    assert!(view.unreachable_networks.is_empty());
+
+    // Public nodes served Gnosis: read, listed, and never an unreachable row.
+    let view = booted(ADDR_A, None, settle(vec![], vec![], vec![100])).view();
+    assert_eq!(view.fallback_chain_ids, vec![100]);
+    assert_eq!(view.fallback_status_key, STATUS_PUBLIC_NODES);
+    assert!(view.unreachable_networks.is_empty());
+
+    // A chain that could not be read is its unreachable row, not a fallback.
+    let view = booted(ADDR_A, None, settle(vec![100], vec![], vec![100])).view();
+    assert!(view.fallback_chain_ids.is_empty());
+}
+
+/// home-11: 8 xDAI and 3 USDC with no price anywhere are not "$0.00" — the
+/// sum is unknown. No figure, and the view says why; one priced holding
+/// brings the figure back.
+#[test]
+fn holdings_none_of_which_can_be_priced_have_no_figure_not_a_zero() {
+    let view = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(100, "xDAI", "8", None), token(100, "USDC", "3", None)],
+            vec![],
+            vec![100],
+        ),
+    )
+    .view();
+    assert!(view.unpriced_only);
+    assert_eq!(view.display_total_usd, None);
+    assert_eq!(view.unpriced_tokens.len(), 2);
+
+    let view = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(100, "xDAI", "8", Some(1.0)),
+                token(100, "USDC", "3", None),
+            ],
+            vec![],
+            vec![100],
+        ),
+    )
+    .view();
+    assert!(!view.unpriced_only);
+    assert_eq!(view.display_total_usd, Some(8.0));
+
+    // Holding nothing is a zero, live — not "unpriced".
+    let view = booted(ADDR_A, None, settled_read(vec![], vec![], vec![100])).view();
+    assert!(!view.unpriced_only);
+    assert_eq!(view.display_total_usd, Some(0.0));
 }
