@@ -78,6 +78,7 @@
 <!-- A multisig's request: its proposal, and an outside member's wallet. -->
 <MultisigHost
 	m={data.multisigMessages}
+	signing={data.signingMessages}
 	locale={data.locale ?? 'en'}
 	wide={false}
 	closeLabel={data.signingMessages.receipt.done ?? ''}

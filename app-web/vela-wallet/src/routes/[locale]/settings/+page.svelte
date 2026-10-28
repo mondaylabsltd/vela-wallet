@@ -1183,6 +1183,7 @@
 	{/if}
 	<MultisigHost
 		m={data.multisigMessages}
+		signing={data.signingMessages}
 		locale={data.locale}
 		wide={wide.current}
 		closeLabel={liveHome.closeLabel}

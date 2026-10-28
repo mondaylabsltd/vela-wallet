@@ -2602,6 +2602,7 @@
 {#if identity}
 	<MultisigHost
 		m={data.multisigMessages}
+		signing={data.signingMessages}
 		locale={data.locale}
 		wide={wide.current}
 		closeLabel={data.walletMessages.identiconViewer.close}

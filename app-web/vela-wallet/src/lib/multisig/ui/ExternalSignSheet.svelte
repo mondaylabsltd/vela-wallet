@@ -5,6 +5,11 @@
 	 * MetaMask or Rabby, or a wallet app's browser), connects, and confirms
 	 * the SafeTx in their wallet. The answer is checked by the core before it
 	 * counts. A wallet paired before only needs the page reopened.
+	 *
+	 * The wallet is asked for a SafeTx — typed data that says nothing a person
+	 * can read about a call to another contract. So a call is drawn here
+	 * first, as the signing sheet reads it (cs-12): this sheet is all the
+	 * proposer of a dApp's call sees when no member is on this device.
 	 */
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -14,20 +19,26 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
+	import { CallReading } from '../core/call-review.svelte';
+	import { reviewTx } from '../core/kernel';
 	import { ExternalWallet, WalletDeclinedError } from '../external/session.svelte';
 	import { checked, typedDataOf, type ExternalRequest } from '../external/signing.svelte';
+	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
 		m: MultisigMessages;
+		/** The signing sheet's words, for a call's review. */
+		signing: SigningMessages;
 		locale: string;
 		request: ExternalRequest;
 		wide: boolean;
 		closeLabel: string;
 	}
 
-	let { m, locale, request, wide, closeLabel }: Props = $props();
+	let { m, signing, locale, request, wide, closeLabel }: Props = $props();
 	const w = $derived(m.external);
 
 	let wallet = $state<ExternalWallet | null>(null);
@@ -64,12 +75,26 @@
 		}
 	});
 
+	/** The call this SafeTx makes, when it is one to another contract (the core's reading). */
+	let reading = $state<CallReading | null>(null);
+
 	onMount(() => {
+		let action = null;
+		try {
+			action = reviewTx(request.chainId, request.safe, request.tx).action;
+		} catch {
+			// Nothing the core can read: the wallet's own prompt is all there is.
+		}
+		if (action?.kind === 'call') {
+			reading = new CallReading(request.chainId, request.safe, action);
+			void reading.start();
+		}
 		wallet = ExternalWallet.for(request.owners, `${location.origin}/${locale}/connect`);
 		void run();
 		return () => {
 			controller.abort();
 			wallet?.leave();
+			reading?.dispose();
 		};
 	});
 
@@ -122,6 +147,9 @@
 </script>
 
 <Sheet title={w.sheetTitle} {closeLabel} {wide} onclose={close}>
+	{#if reading}
+		<CallReview {reading} m={signing} />
+	{/if}
 	{#if wallet}
 		{#if wallet.resumed}
 			<p class="body">{fillTemplate(w.resumeBody, { wallet: wallet.wallet ?? w.ownerWallet })}</p>
