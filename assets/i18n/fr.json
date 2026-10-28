@@ -500,11 +500,15 @@
     "data": "Données",
     "changesMembers": "L’appel n° {{index}} modifie ce multisig lui-même : {{change}}. N’approuvez que si chaque membre s’y attend.",
     "siteFollows": "{{host}} a reçu l’identifiant de cette transaction et la suit jusqu’à ce que les membres l’exécutent ou la rejettent. Elle reste dans l’activité.",
-    "voided": "Annulée",
-    "voidedNote": "Annulée : une autre transaction a utilisé le numéro {{nonce}}, celle-ci ne pourra donc jamais s’exécuter.",
+    "voided": "Remplacée",
+    "voidedNote": "Remplacée par une annulation au numéro {{nonce}} : cette transaction ne pourra jamais s’exécuter.",
+    "voidedByOther": "Remplacée par une autre transaction au numéro {{nonce}} : celle-ci ne pourra jamais s’exécuter.",
     "notInMailbox": "Cette transaction n’est pas dans la boîte de ce multisig. Demandez à la personne qui a envoyé le lien de le vérifier.",
     "unknownNetwork": "Ce lien concerne un réseau que Vela n’a pas (chaîne {{chainId}}). Ajoutez le réseau dans les réglages, puis rouvrez le lien.",
-    "badLink": "Ce lien vers une transaction multisig est incomplet ou abîmé. Redemandez-le."
+    "badLink": "Ce lien vers une transaction multisig est incomplet ou abîmé. Redemandez-le.",
+    "previewNote": "Aucun compte de cet appareil n’est membre de ce multisig. Ouvrir ce lien ne l’a pas ajouté et n’a pas changé de compte.",
+    "watch": "Ajouter à cet appareil",
+    "watching": "Sur cet appareil : il figure dans votre liste de comptes. Le compte affiché n’a pas changé."
    },
    "send": {
     "propose": "Proposer et approuver",
@@ -597,7 +601,10 @@
     "pageAway": "La page du portefeuille s’est fermée. Rouvrez-la là où se trouve votre portefeuille : la demande attend toujours.",
     "connectDeclined": "La connexion a été refusée sur la page du portefeuille. Réessayez pour la redemander.",
     "declinedHere": "Vous avez refusé. Vela a été prévenu ; vous pouvez fermer cette page.",
-    "otherChain": "Le portefeuille est resté sur un autre réseau. Passez-le sur {{chain}} et réessayez."
+    "otherChain": "Le portefeuille est resté sur un autre réseau. Passez-le sur {{chain}} et réessayez.",
+    "connectingAs": "Connexion en tant que {{account}}",
+    "expectedMember": "Vela demande un membre du multisig : {{accounts}}.",
+    "notExpectedMember": "{{account}} n’est pas un membre demandé par Vela : cette page ne le connecte pas et ne signe pas avec. Dans votre wallet, passez à {{accounts}} ; la page reprend dès que c’est fait."
    },
    "import": {
     "or": "Ou importer depuis Safe{Wallet}",

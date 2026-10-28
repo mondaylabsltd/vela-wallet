@@ -499,11 +499,15 @@
     "data": "Daten",
     "changesMembers": "Aufruf #{{index}} ändert diesen Multisig selbst: {{change}}. Genehmige nur, wenn alle Mitglieder das erwarten.",
     "siteFollows": "{{host}} hat die Kennung dieser Transaktion erhalten und verfolgt sie, bis die Mitglieder sie ausführen oder ablehnen. Sie bleibt in den Aktivitäten.",
-    "voided": "Storniert",
-    "voidedNote": "Storniert: Eine andere Transaktion hat die Nummer #{{nonce}} verwendet, diese kann nie mehr ausgeführt werden.",
+    "voided": "Ersetzt",
+    "voidedNote": "Ersetzt durch eine Stornierung mit Nummer #{{nonce}}: Diese Transaktion kann nie mehr ausgeführt werden.",
+    "voidedByOther": "Ersetzt durch eine andere Transaktion mit Nummer #{{nonce}}: Diese kann nie mehr ausgeführt werden.",
     "notInMailbox": "Diese Transaktion ist nicht im Postfach dieses Multisigs. Bitte die Person, die den Link geschickt hat, ihn zu prüfen.",
     "unknownNetwork": "Dieser Link gehört zu einem Netzwerk, das Vela nicht hat (Chain {{chainId}}). Füge das Netzwerk in den Einstellungen hinzu und öffne den Link erneut.",
-    "badLink": "Dieser Link zu einer Multisig-Transaktion ist unvollständig oder beschädigt. Bitte um einen neuen."
+    "badLink": "Dieser Link zu einer Multisig-Transaktion ist unvollständig oder beschädigt. Bitte um einen neuen.",
+    "previewNote": "Kein Konto auf diesem Gerät ist Mitglied dieses Multisig. Das Öffnen des Links hat nichts hinzugefügt und kein Konto gewechselt.",
+    "watch": "Zu diesem Gerät hinzufügen",
+    "watching": "Auf diesem Gerät: Es steht in deiner Kontenliste. Das angezeigte Konto ist unverändert."
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -595,7 +599,10 @@
     "pageAway": "Die Wallet-Seite wurde geschlossen. Öffne sie dort erneut, wo deine Wallet ist: Die Anfrage wartet noch.",
     "connectDeclined": "Die Verbindung wurde auf der Wallet-Seite abgelehnt. Versuche es erneut, um noch einmal zu fragen.",
     "declinedHere": "Du hast abgelehnt. Vela weiß Bescheid; du kannst diese Seite schließen.",
-    "otherChain": "Die Wallet ist in einem anderen Netzwerk geblieben. Wechsle zu {{chain}} und versuche es erneut."
+    "otherChain": "Die Wallet ist in einem anderen Netzwerk geblieben. Wechsle zu {{chain}} und versuche es erneut.",
+    "connectingAs": "Verbindet als {{account}}",
+    "expectedMember": "Vela fragt nach einem Mitglied des Multisig: {{accounts}}.",
+    "notExpectedMember": "{{account}} ist kein Mitglied, nach dem Vela fragt. Diese Seite verbindet es nicht und signiert nicht damit. Wechsle in der Wallet zu {{accounts}}; die Seite macht weiter, sobald du das tust."
    },
    "import": {
     "or": "Oder aus Safe{Wallet} importieren",

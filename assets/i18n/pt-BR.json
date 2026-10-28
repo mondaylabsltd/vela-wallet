@@ -500,11 +500,15 @@
     "data": "Dados",
     "changesMembers": "A chamada nº {{index}} altera este multisig: {{change}}. Aprove só se todos os membros esperam isso.",
     "siteFollows": "{{host}} recebeu o identificador desta transação e a acompanha até os membros a executarem ou rejeitarem. Ela fica em Atividade.",
-    "voided": "Cancelada",
-    "voidedNote": "Cancelada: outra transação usou o número #{{nonce}}, então esta nunca poderá ser executada.",
+    "voided": "Substituída",
+    "voidedNote": "Substituída por um cancelamento no número #{{nonce}}: esta transação nunca poderá ser executada.",
+    "voidedByOther": "Substituída por outra transação no número #{{nonce}}: esta nunca poderá ser executada.",
     "notInMailbox": "Esta transação não está na caixa deste multisig. Peça a quem enviou o link para conferir.",
     "unknownNetwork": "Este link é de uma rede que a Vela não tem (chain {{chainId}}). Adicione a rede nos Ajustes e abra o link de novo.",
-    "badLink": "Este link para uma transação multisig está incompleto ou danificado. Peça de novo."
+    "badLink": "Este link para uma transação multisig está incompleto ou danificado. Peça de novo.",
+    "previewNote": "Nenhuma conta deste dispositivo é membro deste multisig. Abrir este link não o adicionou nem trocou de conta.",
+    "watch": "Adicionar a este dispositivo",
+    "watching": "Neste dispositivo: está na sua lista de contas. A conta exibida não mudou."
    },
    "send": {
     "propose": "Propor e aprovar",
@@ -597,7 +601,10 @@
     "pageAway": "A página da carteira foi fechada. Abra de novo onde está sua carteira: o pedido ainda está esperando.",
     "connectDeclined": "A conexão foi recusada na página da carteira. Tente de novo para pedir outra vez.",
     "declinedHere": "Você recusou. A Vela foi avisada; pode fechar esta página.",
-    "otherChain": "A carteira ficou em outra rede. Mude para {{chain}} e tente de novo."
+    "otherChain": "A carteira ficou em outra rede. Mude para {{chain}} e tente de novo.",
+    "connectingAs": "Conectando como {{account}}",
+    "expectedMember": "A Vela pede um membro do multisig: {{accounts}}.",
+    "notExpectedMember": "{{account}} não é um membro que a Vela pediu, então esta página não vai conectá-la nem assinar com ela. Na carteira, troque para {{accounts}}; a página continua assim que você trocar."
    },
    "import": {
     "or": "Ou importe do Safe{Wallet}",
