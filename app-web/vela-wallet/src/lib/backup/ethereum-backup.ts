@@ -45,7 +45,14 @@ export type BackupSettled =
 
 let counter = 0;
 
-function requestSignature(address: string, call: EthereumBackupCall): Promise<BackupSettled> {
+/**
+ * One transaction the wallet asks of itself, from `address`, through the
+ * signing sheet (the multisig's setup saved to Ethereum asks the same way).
+ */
+export function requestFirstPartyTransaction(
+	address: string,
+	call: EthereumBackupCall
+): Promise<BackupSettled> {
 	return new Promise((resolve) => {
 		const id = `vela-ethereum-backup-${Date.now()}-${++counter}`;
 		const transportId = signRequest.registerTransport({
@@ -99,5 +106,9 @@ export async function startEthereumBackup(
 		return { kind: 'nothing_to_do', check };
 	}
 	await signRequest.boot();
-	return { kind: 'requested', check, settled: requestSignature(account.address, check.call) };
+	return {
+		kind: 'requested',
+		check,
+		settled: requestFirstPartyTransaction(account.address, check.call)
+	};
 }

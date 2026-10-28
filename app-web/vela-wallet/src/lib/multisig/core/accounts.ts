@@ -67,23 +67,20 @@ export interface CreateChoice {
 	chainId: number;
 	/** The owner on this device whose passkey asks the service to record it. */
 	creator: LocalOwner;
-	/** Its name: part of its genesis, so of its address, on every network. */
+	/** Its name, written with its record: a label, not part of the address. */
 	name: string;
 }
 
-/**
- * The address a choice gives, for the review screen: the name and the seed
- * (fixed per draft) make its salt nonce, so the address follows the name.
- */
+/** The address a choice gives, for the review screen (the salt is fixed per draft). */
 export function draftGenesis(
 	choice: Pick<CreateChoice, 'owners' | 'threshold' | 'name'>,
-	nameSeed: string
+	saltNonce: string
 ) {
-	return multisigGenesis(choice.owners, choice.threshold, choice.name, nameSeed);
+	return multisigGenesis(choice.owners, choice.threshold, choice.name, saltNonce);
 }
 
-/** 32 random bytes: with the name, the multisig's salt nonce. */
-export function newNameSeed(): string {
+/** 32 random bytes: the multisig's salt nonce. */
+export function newSaltNonce(): string {
 	return randomSeed();
 }
 
@@ -114,9 +111,9 @@ async function record(
  */
 export async function createMultisig(
 	choice: CreateChoice,
-	nameSeed: string
+	saltNonce: string
 ): Promise<MultisigAccount> {
-	const draft = multisigGenesis(choice.owners, choice.threshold, choice.name, nameSeed);
+	const draft = multisigGenesis(choice.owners, choice.threshold, choice.name, saltNonce);
 	const proof = await signOwnerProof(choice.creator.account, draft.address, choice.chainId);
 	let recorded = false;
 	try {

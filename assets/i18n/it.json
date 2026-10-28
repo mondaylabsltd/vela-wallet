@@ -399,7 +399,12 @@
     "add": "Aggiungi multisig",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Solo lettura qui",
-    "removeBody": "Rimuovere questo multisig da questo dispositivo? I fondi non vengono toccati: puoi riaggiungerlo quando vuoi con il suo indirizzo."
+    "removeBody": "Rimuovere questo multisig da questo dispositivo? I fondi non vengono toccati: puoi riaggiungerlo quando vuoi con il suo indirizzo.",
+    "addAccount": "Aggiungi account",
+    "createAccountNote": "Un nuovo account, protetto da una passkey su questo dispositivo.",
+    "signInNote": "Un account che hai già, con la sua passkey.",
+    "createMultisigNote": "Un account condiviso da più membri: i trasferimenti richiedono abbastanza approvazioni.",
+    "addMultisigNote": "Con il suo indirizzo, oppure importa i tuoi Safe da Safe{Wallet}."
    },
    "panel": {
     "title": "Approvano {{m}} membri su {{n}}",
@@ -429,7 +434,9 @@
     "unsupported": "Una transazione che Vela non firma",
     "to": "A",
     "network": "Rete",
-    "number": "Transazione n."
+    "number": "Transazione n.",
+    "call": "Chiamata a contratto",
+    "callWithValue": "Chiamata a contratto con {{amount}} {{symbol}}"
    },
    "proposal": {
     "title": "Transazione multisig",
@@ -494,7 +501,7 @@
     "done": "Fatto",
     "name": "Nome",
     "namePlaceholder": "es. Cassa del team",
-    "nameHint": "Fa parte del suo indirizzo su ogni rete. Non potrà essere cambiato in seguito.",
+    "nameHint": "Tutti i membri vedono questo nome. Viene salvato con il multisig e non potrà essere cambiato in seguito.",
     "nameInvalid": "Usa un nome più corto, senza caratteri di controllo né spazi all'inizio o alla fine."
    },
    "add": {
@@ -555,6 +562,15 @@
     "importing": "Importazione…",
     "imported": "Importato",
     "already": "Già aggiunto"
+   },
+   "settings": {
+    "backupTitle": "Salva la configurazione su Ethereum",
+    "backedUp": "Su Ethereum",
+    "notBackedUp": "Non ancora su Ethereum",
+    "unavailable": "Non ancora disponibile su Ethereum",
+    "couldNotCheck": "Impossibile verificare",
+    "backupNote": "La sua configurazione resta anche su Ethereum, così il multisig si può trovare e distribuire da lì. Un account di questo dispositivo paga la commissione.",
+    "remove": "Rimuovi da questo dispositivo"
    }
   }
  },

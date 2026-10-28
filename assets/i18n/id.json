@@ -398,7 +398,12 @@
     "add": "Tambah multisig",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Hanya baca di sini",
-    "removeBody": "Hapus multisig ini dari perangkat ini? Dananya tidak terpengaruh — tambahkan lagi kapan saja dengan alamatnya."
+    "removeBody": "Hapus multisig ini dari perangkat ini? Dananya tidak terpengaruh — tambahkan lagi kapan saja dengan alamatnya.",
+    "addAccount": "Tambah akun",
+    "createAccountNote": "Akun baru, dijaga passkey di perangkat ini.",
+    "signInNote": "Akun yang sudah Anda miliki, dengan passkey-nya.",
+    "createMultisigNote": "Akun yang dipakai bersama beberapa anggota: transfer perlu cukup persetujuan.",
+    "addMultisigNote": "Lewat alamatnya, atau impor Safe Anda dari Safe{Wallet}."
    },
    "panel": {
     "title": "{{m}} dari {{n}} anggota menyetujui",
@@ -428,7 +433,9 @@
     "unsupported": "Transaksi yang tidak ditandatangani Vela",
     "to": "Ke",
     "network": "Jaringan",
-    "number": "Transaksi #"
+    "number": "Transaksi #",
+    "call": "Panggilan kontrak",
+    "callWithValue": "Panggilan kontrak dengan {{amount}} {{symbol}}"
    },
    "proposal": {
     "title": "Transaksi multisig",
@@ -493,7 +500,7 @@
     "done": "Selesai",
     "name": "Nama",
     "namePlaceholder": "mis. Dana tim",
-    "nameHint": "Bagian dari alamatnya di setiap jaringan. Tidak bisa diubah nanti.",
+    "nameHint": "Semua anggota melihat nama ini. Nama disimpan bersama multisig dan tidak bisa diubah nanti.",
     "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau spasi di awal maupun akhir."
    },
    "add": {
@@ -554,6 +561,15 @@
     "importing": "Mengimpor…",
     "imported": "Diimpor",
     "already": "Sudah ditambahkan"
+   },
+   "settings": {
+    "backupTitle": "Simpan pengaturannya ke Ethereum",
+    "backedUp": "Di Ethereum",
+    "notBackedUp": "Belum di Ethereum",
+    "unavailable": "Belum tersedia di Ethereum",
+    "couldNotCheck": "Tidak bisa memeriksa",
+    "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
+    "remove": "Hapus dari perangkat ini"
    }
   }
  },

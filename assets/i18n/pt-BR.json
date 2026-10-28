@@ -399,7 +399,12 @@
     "add": "Adicionar multisig",
     "rowName": "Multisig {{m}}/{{n}}",
     "readOnly": "Somente leitura aqui",
-    "removeBody": "Remover esta multisig deste dispositivo? Os fundos não são afetados — adicione-a de novo quando quiser com o endereço."
+    "removeBody": "Remover esta multisig deste dispositivo? Os fundos não são afetados — adicione-a de novo quando quiser com o endereço.",
+    "addAccount": "Adicionar conta",
+    "createAccountNote": "Uma conta nova, protegida por uma passkey neste dispositivo.",
+    "signInNote": "Uma conta que você já tem, com a passkey dela.",
+    "createMultisigNote": "Uma conta compartilhada por vários membros: transferências precisam de aprovações suficientes.",
+    "addMultisigNote": "Pelo endereço, ou importe seus Safes do Safe{Wallet}."
    },
    "panel": {
     "title": "{{m}} de {{n}} membros aprovam",
@@ -429,7 +434,9 @@
     "unsupported": "Uma transação que a Vela não assina",
     "to": "Para",
     "network": "Rede",
-    "number": "Transação nº"
+    "number": "Transação nº",
+    "call": "Chamada de contrato",
+    "callWithValue": "Chamada de contrato com {{amount}} {{symbol}}"
    },
    "proposal": {
     "title": "Transação multisig",
@@ -494,7 +501,7 @@
     "done": "Concluir",
     "name": "Nome",
     "namePlaceholder": "ex.: Fundo da equipe",
-    "nameHint": "Faz parte do endereço em todas as redes. Não pode ser alterado depois.",
+    "nameHint": "Todos os membros veem este nome. Ele é salvo com o multisig e não pode ser alterado depois.",
     "nameInvalid": "Use um nome mais curto, sem caracteres de controle nem espaços no início ou no fim."
    },
    "add": {
@@ -555,6 +562,15 @@
     "importing": "Importando…",
     "imported": "Importado",
     "already": "Já adicionado"
+   },
+   "settings": {
+    "backupTitle": "Salvar a configuração na Ethereum",
+    "backedUp": "Na Ethereum",
+    "notBackedUp": "Ainda não está na Ethereum",
+    "unavailable": "Ainda indisponível na Ethereum",
+    "couldNotCheck": "Não foi possível verificar",
+    "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
+    "remove": "Remover deste dispositivo"
    }
   }
  },

@@ -126,7 +126,7 @@ test('the wallet header opens the switcher, and a pick switches', async ({ page 
 test.describe('on the wide layout', () => {
 	test.use({ viewport: { width: 1280, height: 900 } });
 
-	test('the sidebar header opens the switcher as a dialog, with the two ways out', async ({
+	test('the sidebar header opens the switcher as a dialog, with one way to add an account', async ({
 		page
 	}) => {
 		await page.goto('/en/wallet');
@@ -135,12 +135,18 @@ test.describe('on the wide layout', () => {
 		await page.getByRole('button', { name: /First Wallet/ }).click();
 		const dialog = page.getByRole('dialog');
 		await expect(dialog.getByText('Second Wallet')).toBeVisible();
-		await dialog.getByRole('button', { name: 'Sign In with Existing' }).click();
+		// One way out, "Add account", offers the others.
+		await dialog.getByRole('button', { name: 'Add account' }).click();
+		await dialog.getByRole('button', { name: /^Sign In with Existing/ }).click();
 		await expect(page).toHaveURL(/\/en\/?$/);
 
 		await page.goto('/en/wallet');
 		await page.getByRole('button', { name: /First Wallet/ }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Create New Account' }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Add account' }).click();
+		await page
+			.getByRole('dialog')
+			.getByRole('button', { name: /^Create New Account/ })
+			.click();
 		await expect(page).toHaveURL(/\/en\/create/);
 	});
 });

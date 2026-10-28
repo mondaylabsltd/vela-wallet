@@ -398,7 +398,12 @@
     "add": "Thêm đa chữ ký",
     "rowName": "Đa chữ ký {{m}}/{{n}}",
     "readOnly": "Chỉ xem trên thiết bị này",
-    "removeBody": "Gỡ tài khoản đa chữ ký này khỏi thiết bị? Tiền không bị ảnh hưởng — bạn có thể thêm lại bất cứ lúc nào bằng địa chỉ."
+    "removeBody": "Gỡ tài khoản đa chữ ký này khỏi thiết bị? Tiền không bị ảnh hưởng — bạn có thể thêm lại bất cứ lúc nào bằng địa chỉ.",
+    "addAccount": "Thêm tài khoản",
+    "createAccountNote": "Tài khoản mới, được giữ bằng passkey trên thiết bị này.",
+    "signInNote": "Tài khoản bạn đã có, đăng nhập bằng passkey của nó.",
+    "createMultisigNote": "Tài khoản nhiều thành viên dùng chung: mỗi lần chuyển cần đủ phê duyệt.",
+    "addMultisigNote": "Bằng địa chỉ, hoặc nhập các Safe của bạn từ Safe{Wallet}."
    },
    "panel": {
     "title": "Cần {{m}} trong {{n}} thành viên duyệt",
@@ -428,7 +433,9 @@
     "unsupported": "Giao dịch Vela không ký",
     "to": "Đến",
     "network": "Mạng",
-    "number": "Giao dịch #"
+    "number": "Giao dịch #",
+    "call": "Gọi hợp đồng",
+    "callWithValue": "Gọi hợp đồng kèm {{amount}} {{symbol}}"
    },
    "proposal": {
     "title": "Giao dịch đa chữ ký",
@@ -493,7 +500,7 @@
     "done": "Xong",
     "name": "Tên",
     "namePlaceholder": "vd: Quỹ nhóm",
-    "nameHint": "Là một phần địa chỉ của nó trên mọi mạng. Không thể đổi sau này.",
+    "nameHint": "Mọi thành viên đều thấy tên này. Tên được lưu cùng multisig và không thể đổi sau này.",
     "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển hay khoảng trắng ở đầu hoặc cuối."
    },
    "add": {
@@ -554,6 +561,15 @@
     "importing": "Đang nhập…",
     "imported": "Đã nhập",
     "already": "Đã thêm"
+   },
+   "settings": {
+    "backupTitle": "Lưu thiết lập lên Ethereum",
+    "backedUp": "Đã có trên Ethereum",
+    "notBackedUp": "Chưa có trên Ethereum",
+    "unavailable": "Chưa khả dụng trên Ethereum",
+    "couldNotCheck": "Không kiểm tra được",
+    "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
+    "remove": "Xóa khỏi thiết bị này"
    }
   }
  },

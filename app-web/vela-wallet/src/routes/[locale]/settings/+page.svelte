@@ -115,6 +115,12 @@
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { LiveSpace } from '$lib/settings/live';
 	import type { PageProps } from './$types';
+	import { fillTemplate } from '$lib/i18n/fill';
+	import { multisigName } from '$lib/multisig/core/display';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
+	import MultisigSettings from '$lib/multisig/ui/MultisigSettings.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -127,14 +133,30 @@
 	const view = $derived(session.view);
 	const signedIn = $derived(view.allowed_route === 'wallet');
 
+	// A multisig shown is the account these settings are for, as on the wallet.
+	const shownMultisig = $derived(signedIn ? multisig.active : null);
 	const identity = $derived<WalletIdentity | null>(
-		signedIn
-			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
-					address: view.address,
-					identiconSvg: identiconSvgForClient(view.address)
-				}
-			: null
+		!signedIn
+			? null
+			: shownMultisig
+				? {
+						name: multisigName(shownMultisig, data.multisigMessages),
+						address: shownMultisig.address,
+						identiconSvg: identiconSvgForClient(shownMultisig.address),
+						rule: {
+							label: `${shownMultisig.threshold}/${shownMultisig.owners.length}`,
+							title: fillTemplate(data.multisigMessages.panel.title, {
+								m: shownMultisig.threshold,
+								n: shownMultisig.owners.length
+							}),
+							href: resolve('/[locale]/settings', { locale: data.locale })
+						}
+					}
+				: {
+						name: view.accounts[view.active_index]?.account.name ?? '',
+						address: view.address,
+						identiconSvg: identiconSvgForClient(view.address)
+					}
 	);
 
 	/**
@@ -151,7 +173,8 @@
 						name: identity.name,
 						addressDisplay: shortenAddress(identity.address),
 						addressFull: identity.address,
-						identiconSvg: identity.identiconSvg
+						identiconSvg: identity.identiconSvg,
+						...(identity.rule ? { rule: identity.rule } : {})
 					}
 					// No network list: it is the wallet's filter (spec 028 Phase 9,
 					// RULING 2), and a click that left this page for the wallet was a
@@ -597,7 +620,8 @@
 		const hidden = balance.view.switcher.hidden;
 		return {
 			rows: view.accounts,
-			activeIndex: view.active_index,
+			// A multisig shown: no Vela row is the active account.
+			activeIndex: shownMultisig ? -1 : view.active_index,
 			balances,
 			hidden,
 			currency: currency.view,
@@ -607,6 +631,7 @@
 
 	function selectAccount(position: number): void {
 		const row = view.accounts[position];
+		multisig.activate(null);
 		if (row !== undefined)
 			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 	}
@@ -1124,6 +1149,8 @@
 				onfeedbackopen={(open) => reportSend.surface(open)}
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
+				accountMore={multisigRows}
+				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</div>
 	{:else}
@@ -1152,9 +1179,18 @@
 				onfeedbackopen={(open) => reportSend.surface(open)}
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
+				accountMore={multisigRows}
+				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</main>
 	{/if}
+	<MultisigHost
+		m={data.multisigMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={liveHome.closeLabel}
+		current={view.address || null}
+	/>
 {:else}
 	<!-- The core has not ruled yet. An empty surface, not a fixture account. -->
 	<div class="waiting" aria-busy="true"></div>
@@ -1182,6 +1218,26 @@
 	fee={feeQuote}
 	receipt={data.signingMessages.receipt}
 />
+
+{#snippet multisigRows()}
+	<MultisigRows
+		m={data.multisigMessages}
+		removeLabel={data.multisigMessages.settings.remove}
+		cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+		onselect={(account) => multisig.activate(account.address)}
+	/>
+{/snippet}
+
+{#snippet multisigKeys()}
+	{#if shownMultisig}
+		<MultisigSettings
+			m={data.multisigMessages}
+			account={shownMultisig}
+			payer={view.address || null}
+			cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+		/>
+	{/if}
+{/snippet}
 
 <style>
 	/* The phone screens are `height: 100%` of whatever holds them, and the

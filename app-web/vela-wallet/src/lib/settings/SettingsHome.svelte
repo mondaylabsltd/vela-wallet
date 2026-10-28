@@ -71,6 +71,10 @@
 		onopencontacts?: () => void;
 		/** The Ethereum backup (spec 062): the keys block's one button. */
 		onethereumbackup?: () => void;
+		/** More rows in the account list: the multisigs on this device. */
+		accountMore?: import('svelte').Snippet;
+		/** In place of the keys block: a multisig's own settings, while one is shown. */
+		accountKeys?: import('svelte').Snippet;
 		/** The network surfaces' live wiring (spec 024). Absent = gallery. */
 		onnetevent?: OnNetEvent;
 		/** The person chose a display currency in the sheet (spec 024 phase 5). */
@@ -139,6 +143,8 @@
 		onsignout,
 		onopencontacts,
 		onethereumbackup,
+		accountMore,
+		accountKeys,
 		onnetevent,
 		oncurrencyselect,
 		onstorageclear,
@@ -388,10 +394,13 @@
 				{#if page === 'home'}
 					<AccountRow account={model.account} onselect={openAccounts} />
 
-					{#if model.keys !== undefined}
+					{#if accountKeys || model.keys !== undefined}
 						<!-- Under the account it belongs to (spec 062). -->
 						<div class="keys-block">
-							<KeysBlock model={model.keys} onbackup={() => onethereumbackup?.()} />
+							{#if accountKeys}{@render accountKeys()}{:else if model.keys}<KeysBlock
+									model={model.keys}
+									onbackup={() => onethereumbackup?.()}
+								/>{/if}
 						</div>
 					{/if}
 
@@ -585,6 +594,7 @@
 						}}
 						oncreate={onaccountcreate}
 						onsignin={onaccountsignin}
+						more={accountMore}
 					/>
 				{:else if overlay === 'sign-out'}
 					<ConfirmSheet sheet={model.signOutSheet} onconfirm={onsignout} oncancel={close} />

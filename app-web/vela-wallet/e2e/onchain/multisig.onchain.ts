@@ -91,7 +91,9 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 			.first()
 			.click();
 		await shot(page, '02-switcher');
-		await page.getByRole('button', { name: 'Create multisig' }).click();
+		await page.getByRole('button', { name: 'Add account' }).click();
+		await page.getByRole('button', { name: /^Create multisig/ }).click();
+		await page.getByRole('textbox', { name: 'Name' }).fill('Team fund');
 		await expect(page.getByText('New multisig')).toBeVisible();
 		await page.getByText('Parallel Two', { exact: true }).click();
 		await page.getByText('Parallel Three', { exact: true }).click();
@@ -101,7 +103,6 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 		await shot(page, '04-threshold');
 		await page.getByRole('button', { name: 'Next' }).click();
 		await shot(page, '05-review');
-		await page.getByRole('textbox', { name: 'Name' }).fill('Team fund');
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible();
 		await shot(page, '06-created');
@@ -110,7 +111,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 
 	const multisig = await page.evaluate(() => localStorage.getItem('vela.activeMultisig'));
 	expect(multisig).toMatch(/^0x[0-9a-fA-F]{40}$/);
-	await expect(page.getByText('2 of 3 members approve').first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2/3' }).first()).toBeVisible();
 	// The name is the multisig's own, from its genesis.
 	await expect(page.getByText('Team fund', { exact: true }).first()).toBeVisible();
 	await shot(page, '07-home');
@@ -157,7 +158,9 @@ test('two devices: one proposes, the other opens the link, approves and executes
 			.getByRole('button', { name: /Parallel One/ })
 			.first()
 			.click();
-		await pageA.getByRole('button', { name: 'Create multisig' }).click();
+		await pageA.getByRole('button', { name: 'Add account' }).click();
+		await pageA.getByRole('button', { name: /^Create multisig/ }).click();
+		await pageA.getByRole('textbox', { name: 'Name' }).fill('Shared 2/2');
 		await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
 		await pageA.getByRole('button', { name: 'Add', exact: true }).click();
 		await expect(pageA.getByText('Members · 2')).toBeVisible();
@@ -166,10 +169,9 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await expect(pageA.getByText(/Every member must approve/)).toBeVisible();
 		await shot(pageA, 'x1-threshold-all');
 		await pageA.getByRole('button', { name: 'Next' }).click();
-		await pageA.getByRole('textbox', { name: 'Name' }).fill('Shared 2/2');
 		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 		await pageA.getByRole('button', { name: 'Done' }).click();
-		await expect(pageA.getByText(/This device/i).first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: '2/2' }).first()).toBeVisible();
 		await shot(pageA, 'x2-home-a');
 	});
 
@@ -205,7 +207,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 
 	await test.step('device A sees it done', async () => {
 		await pageA.reload();
-		await expect(pageA.getByText('2 of 2 members approve').first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: '2/2' }).first()).toBeVisible();
 		// Nothing left waiting: the executed transaction is gone from the panel.
 		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
 		// Executed on device B, found on chain here, and in this device's activity.
@@ -233,22 +235,37 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 		.first()
 		.click();
 	await shot(page, 'd1-switcher');
-	await page.getByRole('button', { name: 'Create multisig' }).click();
+	await expect(page.getByRole('button', { name: 'Add account' })).toBeVisible();
+	await shot(page, 'd1-switcher-open');
+	await page.getByRole('button', { name: 'Add account' }).click();
+	await shot(page, 'd1-add-account');
+	await page.getByRole('button', { name: /^Create multisig/ }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Desk fund');
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await shot(page, 'd2-create');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Desk fund');
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
 	await setBalance(multisig, 2n * 10n ** 18n);
 	await page.reload();
-	await expect(page.getByText('2 of 2 members approve').first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2/2' }).first()).toBeVisible();
 	await shot(page, 'd3-home');
 	await proposeSend(page, '0.5', 'd4-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
 	await shot(page, 'd5-proposal');
+	await page.keyboard.press('Escape');
+
+	// The waiting transaction is a row of Activity, as a pending transfer is.
+	await expect(page.getByText('Waiting for approval').first()).toBeVisible();
+	await shot(page, 'd6-activity');
+
+	// Its settings are where a Vela account's are: Settings → Account.
+	await page.getByRole('link', { name: '2/2' }).first().click();
+	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByText('Save its setup to Ethereum')).toBeVisible();
+	await shot(page, 'd7-settings');
 	expect(thrown).toEqual([]);
 	await ctx.close();
 });
@@ -265,18 +282,19 @@ test('a network the genesis service does not read: propose, approve and execute 
 		.getByRole('button', { name: /Parallel One/ })
 		.first()
 		.click();
-	await page.getByRole('button', { name: 'Create multisig' }).click();
+	await page.getByRole('button', { name: 'Add account' }).click();
+	await page.getByRole('button', { name: /^Create multisig/ }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Base fund');
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Base fund');
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
 	// Funds on "Base" only: the second fork, which the service has no RPC for.
 	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
 	await page.reload();
-	await expect(page.getByText('2 of 2 members approve').first()).toBeVisible();
+	await expect(page.getByRole('link', { name: '2/2' }).first()).toBeVisible();
 
 	await proposeSend(page, '0.5', 'u1-propose', { row: /^ETH Base/, symbol: 'ETH' });
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
@@ -307,13 +325,14 @@ test('an outside owner signs with their own wallet, through the connect page', a
 			.getByRole('button', { name: /Parallel One/ })
 			.first()
 			.click();
-		await page.getByRole('button', { name: 'Create multisig' }).click();
+		await page.getByRole('button', { name: 'Add account' }).click();
+		await page.getByRole('button', { name: /^Create multisig/ }).click();
+		await page.getByRole('textbox', { name: 'Name' }).fill('With MetaMask');
 		await page.getByPlaceholder("Member's address (0x…)").fill(EOA_ONE);
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await expect(page.getByText('2 of 2')).toBeVisible();
 		await page.getByRole('button', { name: 'Next' }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('With MetaMask');
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
 	});
@@ -438,7 +457,8 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 			.getByRole('button', { name: /Parallel One/ })
 			.first()
 			.click();
-		await page.getByRole('button', { name: 'Add multisig' }).click();
+		await page.getByRole('button', { name: 'Add account' }).click();
+		await page.getByRole('button', { name: /^Add multisig/ }).click();
 		await page.locator('input[type=file]').setInputFiles(file);
 		await expect(page.getByText('Choose the Safes to import')).toBeVisible();
 		await expect(page.getByText('Public treasury')).toBeVisible();

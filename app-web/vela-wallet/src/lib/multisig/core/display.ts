@@ -12,7 +12,7 @@ import { chainMeta } from '$lib/services/chains';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { MultisigMessages } from '../messages';
-import { sameAddress, type Action } from './kernel';
+import { sameAddress, validName, type Action } from './kernel';
 import { formatUnits } from './units';
 
 export { formatUnits, parseUnits } from './units';
@@ -30,19 +30,28 @@ export function memberLabel(address: string): string {
 }
 
 /**
- * A multisig's name: the one in its genesis (part of its address, so the
- * core has checked it), else its rule ("Multisig 2/3") for one created
- * without a name.
+ * A multisig's name: the one written with its record (a label anyone who
+ * recorded it chose — shown only if it is a displayable name), else this
+ * device's own label, else its rule ("Multisig 2/3").
  */
 export function multisigName(
 	account: { genesis: { name?: string }; label?: string; threshold: number; owners: string[] },
 	m: MultisigMessages
 ): string {
+	const recorded = account.genesis.name;
 	return (
-		account.genesis.name ??
+		(recorded && displayable(recorded) ? recorded : undefined) ??
 		account.label ??
 		fillTemplate(m.switcher.rowName, { m: account.threshold, n: account.owners.length })
 	);
+}
+
+function displayable(name: string): boolean {
+	try {
+		return validName(name);
+	} catch {
+		return false;
+	}
 }
 
 export interface TokenInfo {
@@ -127,12 +136,20 @@ export async function actionTitle(
 			return m.action.swapOwner;
 		case 'changeThreshold':
 			return fillTemplate(m.action.changeThreshold, { threshold: action.threshold });
+		case 'call': {
+			if (BigInt(action.value) === 0n) return m.action.call;
+			const info = await tokenInfo(chainId, null);
+			return fillTemplate(m.action.callWithValue, {
+				amount: formatUnits(action.value, info.decimals),
+				symbol: info.symbol
+			});
+		}
 	}
 }
 
 /** Who a transaction pays, when it pays one address. */
 export function actionRecipient(action: Action | null): string | null {
-	if (action?.kind === 'transfer') return action.to;
+	if (action?.kind === 'transfer' || action?.kind === 'call') return action.to;
 	return null;
 }
 

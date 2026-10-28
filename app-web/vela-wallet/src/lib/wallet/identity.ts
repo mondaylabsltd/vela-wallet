@@ -20,6 +20,8 @@ export interface WalletIdentity {
 	name: string;
 	address: string;
 	identiconSvg: string;
+	/** A multisig's approval rule, linking to its settings. */
+	rule?: { label: string; title: string; href: string };
 }
 
 /** The header a page carries before the session has answered. */
@@ -48,7 +50,8 @@ export function identityHeader(identity: WalletIdentity): WalletHeaderModel {
 		name: identity.name,
 		addressDisplay: shortenAddress(identity.address),
 		addressFull: identity.address,
-		identiconSvg: identity.identiconSvg
+		identiconSvg: identity.identiconSvg,
+		...(identity.rule ? { rule: identity.rule } : {})
 	};
 }
 

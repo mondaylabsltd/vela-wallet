@@ -861,9 +861,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   113 + 1 = 114 branches.
 // 2144 (importing Safes from a Safe{Wallet} export, 2026-10-28): +
 //   `home.multisig.import`, 11 words. 2018 + 11 = 2029 leaves, 115 branches.
-if (PATHS.length !== 2144) fail(`expected 2144 paths (2029 leaf + 115 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2029) fail(`expected 2029 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 115) fail(`expected 115 branch paths, got ${branchSet.size}`);
+// 2149 (one "Add account" in the switcher, its four choices, 2026-10-28): +
+//   5 `home.multisig.switcher` words. 2029 + 5 = 2034 leaves, 115 branches.
+// 2157 (a multisig's settings, its setup saved to Ethereum, 2026-10-28): +
+//   `home.multisig.settings`, 7 words. 2034 + 7 = 2041 leaves, 116 branches.
+// 2159 (a dApp's call from a multisig, 2026-10-28): + 2 `home.multisig.action`
+//   words. 2041 + 2 = 2043 leaves, 116 branches.
+if (PATHS.length !== 2159) fail(`expected 2159 paths (2043 leaf + 116 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2043) fail(`expected 2043 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -105,3 +105,36 @@ export async function recordRemoteExecutions(
 	}
 	return wrote;
 }
+
+/**
+ * The transaction that executed `safeTxHash` (its `ExecutionSuccess`), or
+ * `null` while the chain shows none — what a dApp that asked for it is
+ * answered with.
+ */
+export async function executionTxHash(
+	multisig: string,
+	chainId: number,
+	safeTxHash: string
+): Promise<string | null> {
+	try {
+		const head = BigInt((await poolRpcCall('eth_blockNumber', [], chainId)).result as string);
+		const from = head > LOOKBACK ? head - LOOKBACK : 0n;
+		const logs = (
+			await poolRpcCall(
+				'eth_getLogs',
+				[
+					{
+						address: multisig,
+						topics: [EXECUTION_SUCCESS, safeTxHash],
+						fromBlock: `0x${from.toString(16)}`,
+						toBlock: 'latest'
+					}
+				],
+				chainId
+			)
+		).result as { transactionHash: string }[] | undefined;
+		return logs?.[0]?.transactionHash ?? null;
+	} catch {
+		return null;
+	}
+}

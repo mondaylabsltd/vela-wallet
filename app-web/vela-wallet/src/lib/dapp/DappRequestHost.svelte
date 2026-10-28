@@ -1,4 +1,13 @@
 <script lang="ts">
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { multisigAccountsForExt } from '$lib/multisig/core/ext';
+	import { proposals, proposeCall } from '$lib/multisig/core/proposals.svelte';
+	import { executionTxHash } from '$lib/multisig/core/records';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+
+	/** How often a multisig request asks whether its transaction was executed. */
+	const MULTISIG_POLL_MS = 5_000;
+
 	/**
 	 * One dApp request, from arrival to answer — wherever it is answered.
 	 *
@@ -105,9 +114,15 @@
 	 */
 	let addingChain = $state<number | null>(null);
 
+	// A multisig shown is the account dApps see, as on the wallet.
 	const facts = $derived({
-		activeAddress: session.view.address,
-		addresses: session.view.loading ? null : session.view.accounts.map((r) => r.account.address)
+		activeAddress: multisig.active?.address ?? session.view.address,
+		addresses: session.view.loading
+			? null
+			: [
+					...session.view.accounts.map((r) => r.account.address),
+					...multisig.accounts.map((a) => a.address)
+				]
 	});
 
 	/**
@@ -194,8 +209,14 @@
 				publishExtSnapshot({
 					isLoading: session.view.loading,
 					hasWallet: session.view.has_wallet,
-					accounts: session.view.accounts.map((row) => row.account),
-					active: session.view.accounts[session.view.active_index]?.account ?? null,
+					accounts: [
+						...session.view.accounts.map((row) => row.account),
+						...multisigAccountsForExt().accounts
+					],
+					active:
+						multisigAccountsForExt().active ??
+						session.view.accounts[session.view.active_index]?.account ??
+						null,
 					theme: 'dark',
 					locale
 				}),
@@ -218,7 +239,9 @@
 				request = null;
 				leave();
 			} else if (stage.kind === 'signing') {
-				await handOffToSigning(incoming, stage.grantedAddress);
+				const shared = multisig.find(stage.grantedAddress);
+				if (shared) await handOffToMultisig(incoming, shared.address);
+				else await handOffToSigning(incoming, stage.grantedAddress);
 			}
 		} finally {
 			taking = false;
@@ -342,6 +365,81 @@
 			// A site's request is never the wallet's own, whatever its words.
 			first_party: false
 		});
+	}
+
+	/**
+	 * A request to a multisig: a transaction is proposed (approved here with
+	 * a member's passkey, or by a member's own wallet) and the request waits
+	 * — as long as the approvals take — to be answered with the transaction
+	 * that executed it. The proposal opens where the wallet is. A multisig
+	 * signs no messages yet: that needs every approving member's signature.
+	 */
+	async function handOffToMultisig(incoming: ExtensionRequest, address: string): Promise<void> {
+		const rid = incoming.rid;
+		const settle = async (answer: {
+			result?: unknown;
+			error?: { code: number; message: string };
+		}) => {
+			if (owing !== rid) return;
+			owing = null;
+			request = null;
+			await answerRequest(rid, answer as Parameters<typeof answerRequest>[1]);
+			leave();
+		};
+		if (incoming.method !== 'eth_sendTransaction') {
+			await settle({
+				error: { code: 4200, message: 'A multisig account signs no messages yet' }
+			});
+			return;
+		}
+		const params = (Array.isArray(incoming.params) ? incoming.params[0] : null) as {
+			to?: string;
+			value?: string;
+			data?: string;
+		} | null;
+		if (!params?.to || chainId <= 0) {
+			await settle({ error: { code: -32602, message: 'A transaction needs `to` and a chain' } });
+			return;
+		}
+		let safeTxHash: string;
+		try {
+			({ safeTxHash } = await proposeCall(address, chainId, {
+				to: params.to,
+				value: params.value ?? '0x0',
+				data: params.data ?? '0x'
+			}));
+		} catch (error) {
+			const dismissed =
+				error instanceof DOMException &&
+				(error.name === 'NotAllowedError' || error.name === 'AbortError');
+			await settle({
+				error: dismissed
+					? { code: 4001, message: 'User rejected the request' }
+					: { code: -32603, message: error instanceof Error ? error.message : String(error) }
+			});
+			return;
+		}
+		multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
+		// Pending until it is executed — here, or by another member anywhere.
+		while (owing === rid && !disposed) {
+			await new Promise((done) => setTimeout(done, MULTISIG_POLL_MS));
+			const account = multisig.find(address);
+			if (!account) break;
+			await proposals.refresh(account, account.chainIds).catch(() => {});
+			const item = proposals
+				.chain(chainId)
+				?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase());
+			if (item?.status !== 'done') continue;
+			const hash = await executionTxHash(address, chainId, safeTxHash);
+			// Done at its nonce but not by this transaction: another one (a
+			// cancellation) took its place.
+			await settle(
+				hash
+					? { result: hash }
+					: { error: { code: 4001, message: 'The members cancelled the transaction' } }
+			);
+			return;
+		}
 	}
 
 	/**

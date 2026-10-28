@@ -10,6 +10,7 @@
  */
 import { error } from '@sveltejs/kit';
 import {
+	resolveMultisigMessages,
 	resolveSettingsMessages,
 	resolveSigningMessages,
 	resolveWalletMessages
@@ -53,6 +54,7 @@ export const load: PageServerLoad = ({ params }) => {
 		// NOT `messages`: the layout already publishes the Welcome copy under
 		// that name, and a page-level key of the same name would shadow it.
 		settingsMessages: messages,
+		multisigMessages: resolveMultisigMessages(locale),
 		home: { ...home, account: { ...home.account, ...EMPTY_ACCOUNT } },
 		desktop: {
 			...desktop,

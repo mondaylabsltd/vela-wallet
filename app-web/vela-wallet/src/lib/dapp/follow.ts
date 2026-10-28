@@ -24,6 +24,7 @@ import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 import { publishExtSnapshot, type SnapshotFacts } from './core/ext-cache';
 import { sitesAreSetAside } from './space-sites';
+import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 
 export interface FollowFacts {
 	/** The account the wallet switched TO. */
@@ -158,9 +159,11 @@ export class SessionFollower {
 		options: { locale?: string; nowMs?: number } = {}
 	): Promise<FollowOutcome> | null {
 		if (view.loading) return null;
-		// Read now: the view is live state, and the follow runs later.
-		const address = view.address;
-		const accounts = view.accounts.map((row) => row.account);
+		// Read now: the view is live state, and the follow runs later. A
+		// multisig shown is the account dApps see, as on the wallet.
+		const multisigs = multisigAccountsForExt();
+		const address = multisigs.active?.address ?? view.address;
+		const accounts = [...view.accounts.map((row) => row.account), ...multisigs.accounts];
 		const addresses = accounts.map((account) => account.address);
 		// Read with the accounts it describes: whose list this is must not be
 		// decided later, when the queued follow runs.
@@ -177,7 +180,7 @@ export class SessionFollower {
 			isLoading: false,
 			hasWallet: view.has_wallet,
 			accounts,
-			active: accounts[view.active_index] ?? null,
+			active: multisigs.active ?? accounts[view.active_index] ?? null,
 			theme: 'dark',
 			locale: options.locale ?? 'en'
 		};

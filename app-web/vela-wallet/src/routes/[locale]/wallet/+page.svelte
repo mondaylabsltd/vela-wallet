@@ -74,11 +74,12 @@
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
+	import { fillTemplate } from '$lib/i18n/fill';
 	import { multisigName } from '$lib/multisig/core/display';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import MultisigPanel from '$lib/multisig/ui/MultisigPanel.svelte';
+	import { proposalOfRow, waitingRows } from '$lib/multisig/core/activity.svelte';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
@@ -100,6 +101,7 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
+	import type { ActivityGroupModel } from '$lib/wallet/model';
 	import {
 		receiveAssetPicked,
 		receiveNetworks,
@@ -196,6 +198,14 @@
 			: multisig.active
 				? {
 						name: multisigName(multisig.active, data.multisigMessages),
+						rule: {
+							label: `${multisig.active.threshold}/${multisig.active.owners.length}`,
+							title: fillTemplate(data.multisigMessages.panel.title, {
+								m: multisig.active.threshold,
+								n: multisig.active.owners.length
+							}),
+							href: resolve('/[locale]/settings', { locale: data.locale })
+						},
 						address: multisig.active.address,
 						identiconSvg: identiconSvgForClient(multisig.active.address)
 					}
@@ -1745,23 +1755,62 @@
 		// Spec 105: the testnet space has no total and no worth on a row.
 		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined
 	});
+	// A multisig's transactions waiting for approval come first in Activity,
+	// drawn as its pending rows; a tap opens the transaction.
+	$effect(() => {
+		if (multisig.active) waitingRows.follow(data.multisigMessages);
+	});
+	const waiting = $derived(multisig.active ? waitingRows.group(data.multisigMessages) : null);
+	/** A tap on Activity: a waiting multisig transaction opens as one; anything else, its detail. */
+	function openActivity(row: { id?: string }) {
+		const proposal = proposalOfRow(row.id);
+		if (proposal) {
+			// The row's own tap goes on to the transaction detail: not for this one.
+			proposalTapped = true;
+			multisigUi.open({ kind: 'proposal', ...proposal });
+		} else selectedTxId = row.id ?? null;
+	}
+	let proposalTapped = false;
+	function flowTo(...args: Parameters<typeof enter>) {
+		if (args[0] === 'tx-detail' && proposalTapped) {
+			proposalTapped = false;
+			return;
+		}
+		enter(...args);
+	}
+	function withWaiting<
+		T extends {
+			activityGroups: ActivityGroupModel[];
+			activitySection: { mode: 'rows' | 'empty' | 'loading' };
+		}
+	>(model: T): T {
+		return waiting
+			? {
+					...model,
+					activityGroups: [waiting, ...model.activityGroups],
+					activitySection: { ...model.activitySection, mode: 'rows' }
+				}
+			: model;
+	}
 	const liveHome = $derived(
 		identity === null
 			? data.home
-			: withLiveWallet(homeWithIdentity(data.home, identity), liveInputs)
+			: withWaiting(withLiveWallet(homeWithIdentity(data.home, identity), liveInputs))
 	);
 	const liveDesktop = $derived(
 		identity === null
 			? data.desktop
-			: withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
-					customChainIds,
-					...liveInputs,
-					// Two things cannot occupy one column (founder, 2026-09-05: the
-					// token's detail and the picker were drawn side by side). While a
-					// flow holds the column the asset panel stays closed; the flow
-					// itself still reads `selectedToken` through `flowInputs`.
-					selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
-				})
+			: withWaiting(
+					withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
+						customChainIds,
+						...liveInputs,
+						// Two things cannot occupy one column (founder, 2026-09-05: the
+						// token's detail and the picker were drawn side by side). While a
+						// flow holds the column the asset panel stays closed; the flow
+						// itself still reads `selectedToken` through `flowInputs`.
+						selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
+					})
+				)
 	);
 
 	/** The pushed assets screen shows the same holdings as the home (D10). */
@@ -2456,9 +2505,6 @@
 <!-- "Get Vela on your phone" — draws nothing until the store links exist
      (`$lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
-	{#if multisig.active}
-		<MultisigPanel m={data.multisigMessages} account={multisig.active} />
-	{/if}
 	<AppPrompt placement="home" messages={data.appPrompt} />
 {/snippet}
 
@@ -2477,7 +2523,7 @@
 					: undefined}
 				onnav={select}
 				onaccounts={() => (switching = true)}
-				onflow={enter}
+				onflow={flowTo}
 				onbalancetoggle={toggleBalances}
 				onstatus={openRescue}
 				onbalancerefresh={refreshBalances}
@@ -2490,7 +2536,7 @@
 					selectedAssetId = row.id ?? null;
 				}}
 				onassetclose={() => (selectedAssetId = null)}
-				onactivity={(row) => (selectedTxId = row.id ?? null)}
+				onactivity={openActivity}
 			/>
 		</div>
 		{#if desktopFlow === 'ds1'}
@@ -2521,11 +2567,11 @@
 					destinations={WEB_DESTINATIONS}
 					onselect={select}
 					onaccounts={() => (switching = true)}
-					onflow={enter}
+					onflow={flowTo}
 					onbalancetoggle={toggleBalances}
 					onstatus={openRescue}
 					onbalancerefresh={refreshBalances}
-					onactivity={(row) => (selectedTxId = row.id ?? null)}
+					onactivity={openActivity}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 				/>
 				{#if shownFlowState !== undefined}

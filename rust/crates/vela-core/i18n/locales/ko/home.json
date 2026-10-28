@@ -81,7 +81,12 @@
         "add": "멀티시그 추가",
         "rowName": "멀티시그 {{m}}/{{n}}",
         "readOnly": "이 기기에서는 보기만 가능",
-        "removeBody": "이 기기에서 멀티시그를 제거할까요? 자금에는 영향이 없으며, 주소로 언제든 다시 추가할 수 있습니다."
+        "removeBody": "이 기기에서 멀티시그를 제거할까요? 자금에는 영향이 없으며, 주소로 언제든 다시 추가할 수 있습니다.",
+        "addAccount": "계정 추가",
+        "createAccountNote": "이 기기의 패스키로 관리하는 새 계정.",
+        "signInNote": "이미 있는 계정에 그 패스키로 로그인.",
+        "createMultisigNote": "여러 멤버가 함께 쓰는 계정: 송금에는 충분한 승인이 필요합니다.",
+        "addMultisigNote": "주소를 입력하거나 Safe{Wallet}에서 Safe를 가져옵니다."
       },
       "panel": {
         "title": "{{n}}명 중 {{m}}명 승인 필요",
@@ -111,7 +116,9 @@
         "unsupported": "Vela가 서명하지 않는 거래",
         "to": "받는 사람",
         "network": "네트워크",
-        "number": "거래 번호"
+        "number": "거래 번호",
+        "call": "컨트랙트 호출",
+        "callWithValue": "{{amount}} {{symbol}}을(를) 보내는 컨트랙트 호출"
       },
       "proposal": {
         "title": "멀티시그 거래",
@@ -176,7 +183,7 @@
         "done": "완료",
         "name": "이름",
         "namePlaceholder": "예: 팀 자금",
-        "nameHint": "모든 네트워크에서 주소의 일부가 됩니다. 나중에 바꿀 수 없습니다.",
+        "nameHint": "모든 멤버에게 이 이름이 보입니다. 멀티시그와 함께 저장되며 나중에 바꿀 수 없습니다.",
         "nameInvalid": "더 짧은 이름을 사용하세요. 제어 문자나 앞뒤 공백은 쓸 수 없습니다."
       },
       "add": {
@@ -237,6 +244,15 @@
         "importing": "가져오는 중…",
         "imported": "가져옴",
         "already": "이미 추가됨"
+      },
+      "settings": {
+        "backupTitle": "설정을 Ethereum에 저장",
+        "backedUp": "Ethereum에 있음",
+        "notBackedUp": "아직 Ethereum에 없음",
+        "unavailable": "아직 Ethereum에서 사용할 수 없음",
+        "couldNotCheck": "확인할 수 없음",
+        "backupNote": "이 멀티시그의 설정을 Ethereum에도 저장해 그곳에서도 찾고 배포할 수 있게 합니다. 수수료는 이 기기의 계정이 냅니다.",
+        "remove": "이 기기에서 제거"
       }
     }
   }

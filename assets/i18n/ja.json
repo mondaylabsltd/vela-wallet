@@ -398,7 +398,12 @@
     "add": "マルチシグを追加",
     "rowName": "マルチシグ {{m}}/{{n}}",
     "readOnly": "この端末では閲覧のみ",
-    "removeBody": "このマルチシグをこの端末から削除しますか？資金には影響しません。アドレスを入力すればいつでも追加し直せます。"
+    "removeBody": "このマルチシグをこの端末から削除しますか？資金には影響しません。アドレスを入力すればいつでも追加し直せます。",
+    "addAccount": "アカウントを追加",
+    "createAccountNote": "このデバイスのパスキーで管理する新しいアカウント。",
+    "signInNote": "お持ちのアカウントに、そのパスキーでサインイン。",
+    "createMultisigNote": "複数のメンバーで共有するアカウント。送金には十分な数の承認が必要です。",
+    "addMultisigNote": "アドレスを入力するか、Safe{Wallet} から Safe を読み込みます。"
    },
    "panel": {
     "title": "{{n}} 人中 {{m}} 人の承認が必要",
@@ -428,7 +433,9 @@
     "unsupported": "Vela が署名しない取引",
     "to": "送金先",
     "network": "ネットワーク",
-    "number": "取引番号"
+    "number": "取引番号",
+    "call": "コントラクトの呼び出し",
+    "callWithValue": "{{amount}} {{symbol}} を付けたコントラクトの呼び出し"
    },
    "proposal": {
     "title": "マルチシグ取引",
@@ -493,7 +500,7 @@
     "done": "完了",
     "name": "名前",
     "namePlaceholder": "例：チームの資金",
-    "nameHint": "すべてのネットワークでアドレスの一部になります。あとから変更できません。",
+    "nameHint": "すべてのメンバーにこの名前が表示されます。マルチシグと一緒に保存され、あとから変更できません。",
     "nameInvalid": "もっと短い名前にしてください。制御文字や前後の空白は使えません。"
    },
    "add": {
@@ -554,6 +561,15 @@
     "importing": "読み込み中…",
     "imported": "読み込みました",
     "already": "追加済み"
+   },
+   "settings": {
+    "backupTitle": "設定を Ethereum に保存",
+    "backedUp": "Ethereum に保存済み",
+    "notBackedUp": "まだ Ethereum にありません",
+    "unavailable": "Ethereum ではまだ使えません",
+    "couldNotCheck": "確認できませんでした",
+    "backupNote": "このマルチシグの設定を Ethereum にも保存し、そこからも見つけてデプロイできるようにします。手数料はこのデバイスのアカウントが支払います。",
+    "remove": "このデバイスから削除"
    }
   }
  },

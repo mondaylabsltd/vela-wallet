@@ -81,7 +81,12 @@
         "add": "添加多签账户",
         "rowName": "多签 {{m}}/{{n}}",
         "readOnly": "本设备只读",
-        "removeBody": "从本设备移除这个多签账户？资金不受影响，随时可以用地址重新添加。"
+        "removeBody": "从本设备移除这个多签账户？资金不受影响，随时可以用地址重新添加。",
+        "addAccount": "添加账户",
+        "createAccountNote": "新建一个账户，由本设备上的 passkey 保管。",
+        "signInNote": "登录你已有的账户，用它的 passkey。",
+        "createMultisigNote": "几位成员共用的账户：转账需要足够多的成员批准。",
+        "addMultisigNote": "输入多签地址，或从 Safe{Wallet} 导入你的 Safe。"
       },
       "panel": {
         "title": "{{n}} 位成员中需 {{m}} 位批准",
@@ -111,7 +116,9 @@
         "unsupported": "Vela 不签的交易",
         "to": "收款方",
         "network": "网络",
-        "number": "交易序号"
+        "number": "交易序号",
+        "call": "合约调用",
+        "callWithValue": "合约调用，附带 {{amount}} {{symbol}}"
       },
       "proposal": {
         "title": "多签交易",
@@ -176,7 +183,7 @@
         "done": "完成",
         "name": "名称",
         "namePlaceholder": "例如：团队资金",
-        "nameHint": "名称是它地址的一部分，在所有网络上都一样，创建后不能修改。",
+        "nameHint": "所有成员都会看到这个名字。它和多签一起保存，之后不能修改。",
         "nameInvalid": "请用更短的名称，不能包含控制字符，首尾不能有空格。"
       },
       "add": {
@@ -237,6 +244,15 @@
         "importing": "正在导入…",
         "imported": "已导入",
         "already": "已添加"
+      },
+      "settings": {
+        "backupTitle": "把多签配置保存到 Ethereum",
+        "backedUp": "已在 Ethereum 上",
+        "notBackedUp": "尚未保存到 Ethereum",
+        "unavailable": "Ethereum 上暂不可用",
+        "couldNotCheck": "无法检查",
+        "backupNote": "把这个多签的配置也保存在 Ethereum 上，以后从那里也能找到并部署它。手续费由本设备上的一个账户支付。",
+        "remove": "从本设备移除"
       }
     }
   }

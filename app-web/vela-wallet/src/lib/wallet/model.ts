@@ -24,6 +24,11 @@ export interface WalletHeaderModel {
 	addressFull: string;
 	/** Inline SVG markup from vela-core (circular variant, no ids). */
 	identiconSvg: string;
+	/**
+	 * A multisig's approval rule ("2/3"), beside its address: the one thing
+	 * that tells it from a Vela account, and the way to its settings.
+	 */
+	rule?: { label: string; title: string; href: string };
 }
 
 /** `no-value`: the testnet space (spec 105) — nothing there has a fiat worth. */

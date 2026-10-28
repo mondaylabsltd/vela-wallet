@@ -1,10 +1,9 @@
 <script lang="ts">
 	/**
-	 * Creating a multisig, in three steps: who its members are (in order —
-	 * the order is part of the address), how many must approve, and a review
-	 * that names it and shows the address before anything is signed. The name
-	 * is part of the address too (registry v2): the address follows it as it
-	 * is typed. One passkey prompt at
+	 * Creating a multisig, in three steps: its name and who its members are
+	 * (in order — the order is part of the address; the name is a label
+	 * written with its record), how many must approve, and a review that
+	 * shows the address before anything is signed. One passkey prompt at
 	 * the end: the creator's proof, with which the genesis service records the
 	 * multisig. Nothing is deployed and no fee is paid until its first
 	 * transfer out.
@@ -18,7 +17,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { createMultisig, draftGenesis, newNameSeed } from '../core/accounts';
+	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
 	import { memberLabel, shortenAddress } from '../core/display';
 	import { sameAddress, validName } from '../core/kernel';
 	import { localOwners } from '../core/owners';
@@ -40,7 +39,7 @@
 
 	const accounts = loadAccounts();
 	const networks = spaceNetworksSync();
-	const nameSeed = newNameSeed();
+	const saltNonce = newSaltNonce();
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
@@ -62,7 +61,6 @@
 
 	const local = $derived(localOwners(owners));
 	const creator = $derived(local.find((o) => o.address === creatorChoice) ?? local[0] ?? null);
-	const membersOk = $derived(owners.length >= 2 && local.length >= 1);
 	const cleanName = $derived(name.trim());
 	const nameOk = $derived.by(() => {
 		try {
@@ -71,10 +69,11 @@
 			return false;
 		}
 	});
+	const membersOk = $derived(owners.length >= 2 && local.length >= 1 && nameOk);
 	const draft = $derived.by(() => {
 		try {
 			return owners.length > 0 && nameOk
-				? draftGenesis({ owners, threshold, name: cleanName }, nameSeed)
+				? draftGenesis({ owners, threshold, name: cleanName }, saltNonce)
 				: null;
 		} catch {
 			return null;
@@ -125,7 +124,7 @@
 		try {
 			const account = await createMultisig(
 				{ owners, threshold, chainId, creator, name: cleanName },
-				nameSeed
+				saltNonce
 			);
 			created = account.address;
 			step = 'created';
@@ -162,6 +161,21 @@
 >
 	{#if step === 'members'}
 		<p class="intro">{m.create.intro}</p>
+		<!-- First, as a Vela account's name is: it is part of the address. -->
+		<label class="select">
+			<span>{m.create.name}</span>
+			<input
+				class="name-field"
+				placeholder={m.create.namePlaceholder}
+				autocomplete="off"
+				bind:value={name}
+			/>
+		</label>
+		{#if cleanName !== '' && !nameOk}
+			<p class="error">{m.create.nameInvalid}</p>
+		{:else}
+			<p class="hint">{m.create.nameHint}</p>
+		{/if}
 		<h3>{m.create.yourAccounts}</h3>
 		<ul class="choices">
 			{#each accounts as a (a.address)}
@@ -254,20 +268,6 @@
 			>
 		</div>
 	{:else if step === 'review'}
-		<label class="select">
-			<span>{m.create.name}</span>
-			<input
-				class="name-field"
-				placeholder={m.create.namePlaceholder}
-				autocomplete="off"
-				bind:value={name}
-			/>
-		</label>
-		{#if cleanName !== '' && !nameOk}
-			<p class="error">{m.create.nameInvalid}</p>
-		{:else}
-			<p class="hint">{m.create.nameHint}</p>
-		{/if}
 		{#if draft}
 			<div class="hero">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->

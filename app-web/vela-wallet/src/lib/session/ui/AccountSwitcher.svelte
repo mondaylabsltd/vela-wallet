@@ -5,8 +5,10 @@
 	 * The name-and-chevron in the wallet header drew a disclosure it did not
 	 * have: the only switcher was three taps away on the settings screen. This
 	 * is that switcher, opened where the name is — every account this browser
-	 * is signed into, the active one checked, and the two ways to add one
-	 * (create, or sign in to one you already have).
+	 * is signed into, its multisigs among them (a multisig is an account; its
+	 * row adds its rule), the active one checked, and ONE way to add one:
+	 * "Add account" offers the four (create, sign in, create a multisig, add
+	 * one).
 	 *
 	 * Nothing here is decided by the shell. The rows are the session's own, in
 	 * its order; the totals are the balance core's switcher cache, refreshed
@@ -29,7 +31,10 @@
 	import type { MultisigMessages } from '$lib/multisig/messages';
 	import { multisig, type MultisigAccount } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import MultisigSwitcherSection from '$lib/multisig/ui/MultisigSwitcherSection.svelte';
+	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
+	import Icon from '$lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		copy: { accounts: SettingsMessages['accounts']; close: string };
@@ -102,6 +107,44 @@
 	 * because the list under it just changed: leaving it open would put the
 	 * next row where the finger already is.
 	 */
+	/** "Add account": the list gives way to the four ways to add one. */
+	let adding = $state(false);
+
+	const choices = $derived.by(() => {
+		const m = multisigCopy;
+		type Choice = { icon: UtilityIconId; title: string; note: string; go: () => void };
+		const base: Choice[] = [
+			{
+				icon: 'user-round-plus',
+				title: sheet.primary,
+				note: m?.switcher.createAccountNote ?? '',
+				go: oncreate
+			},
+			{
+				icon: 'user-round',
+				title: sheet.secondary,
+				note: m?.switcher.signInNote ?? '',
+				go: onsignin
+			}
+		];
+		if (!m) return base;
+		const more: Choice[] = [
+			{
+				icon: 'users-round',
+				title: m.switcher.create,
+				note: m.switcher.createMultisigNote,
+				go: () => openMultisig('create')
+			},
+			{
+				icon: 'download',
+				title: m.switcher.add,
+				note: m.switcher.addMultisigNote,
+				go: () => openMultisig('add')
+			}
+		];
+		return [...base, ...more];
+	});
+
 	function remove(position: number): void {
 		const row = view.accounts[position];
 		if (row !== undefined)
@@ -111,33 +154,126 @@
 </script>
 
 {#if wide}
-	<Dialog title={sheet.title} closeLabel={copy.close} {onclose}>
-		<AccountsSheetBody
-			{sheet}
-			layout="inline"
-			onselect={select}
-			onremove={remove}
-			{oncreate}
-			{onsignin}
-		/>
-		{@render multisigSection()}
+	<Dialog
+		title={adding ? (multisigCopy?.switcher.addAccount ?? sheet.title) : sheet.title}
+		closeLabel={copy.close}
+		{onclose}
+	>
+		{@render body()}
 	</Dialog>
 {:else}
-	<BottomSheet title={sheet.title} closeLabel={copy.close} height="tall" {onclose}>
-		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin} />
-		{@render multisigSection()}
+	<BottomSheet
+		title={adding ? (multisigCopy?.switcher.addAccount ?? sheet.title) : sheet.title}
+		closeLabel={copy.close}
+		height="tall"
+		{onclose}
+	>
+		{@render body()}
 	</BottomSheet>
 {/if}
 
-{#snippet multisigSection()}
-	{#if multisigCopy}
-		<MultisigSwitcherSection
-			m={multisigCopy}
-			removeLabel={sheet.remove ?? ''}
-			cancelLabel={sheet.removeCancel ?? ''}
-			onselect={selectMultisig}
-			oncreate={() => openMultisig('create')}
-			onadd={() => openMultisig('add')}
-		/>
+{#snippet body()}
+	{#if adding}
+		<ul class="choices">
+			{#each choices as choice (choice.title)}
+				<li>
+					<button type="button" class="choice" onclick={choice.go}>
+						<span class="icon"><Icon icon={UTILITY_ICONS[choice.icon]} size="md" /></span>
+						<span class="text">
+							<span class="title">{choice.title}</span>
+							{#if choice.note}<span class="note">{choice.note}</span>{/if}
+						</span>
+						<span class="chev"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{:else}
+		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin}>
+			{#snippet more()}
+				{#if multisigCopy}
+					<MultisigRows
+						m={multisigCopy}
+						removeLabel={sheet.remove ?? ''}
+						cancelLabel={sheet.removeCancel ?? ''}
+						onselect={selectMultisig}
+					/>
+				{/if}
+			{/snippet}
+			{#snippet actions()}
+				<Button variant="secondary" shape="rounded" onclick={() => (adding = true)}>
+					<span class="add"
+						><Icon icon={UTILITY_ICONS.plus} size="sm" />{multisigCopy?.switcher.addAccount ??
+							sheet.primary}</span
+					>
+				</Button>
+			{/snippet}
+		</AccountsSheetBody>
 	{/if}
 {/snippet}
+
+<style>
+	.add {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+	}
+
+	.choices {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.choices li + li {
+		border-top: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.choice {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		width: 100%;
+		padding: var(--space-lg) 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		text-align: start;
+		color: var(--color-fg-base);
+		cursor: pointer;
+	}
+
+	.icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+		width: var(--size-control-md);
+		height: var(--size-control-md);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-sunken);
+	}
+
+	.text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		flex: 1;
+		min-width: 0;
+	}
+
+	.title {
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+	}
+
+	.note {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.chev {
+		display: flex;
+		color: var(--color-fg-subtle);
+	}
+</style>

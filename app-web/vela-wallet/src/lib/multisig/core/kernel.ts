@@ -12,12 +12,10 @@ export interface Genesis {
 	saltNonce: string;
 	initializer: string;
 	/**
-	 * A Safe created with a name (registry v2 `recordNamed`): the salt nonce
-	 * is derived from it and `nameSeed`, so the name is part of the address.
-	 * The core refuses a genesis whose name did not make its salt nonce.
+	 * A name written with the record (registry v2 `recordNamed`): a label,
+	 * not part of the address, never changed, not unique.
 	 */
 	name?: string;
-	nameSeed?: string;
 }
 
 export interface MultisigGenesis {
@@ -88,7 +86,9 @@ export type Action =
 	| { kind: 'addOwner'; owner: string; threshold: string }
 	| { kind: 'removeOwner'; owner: string; threshold: string }
 	| { kind: 'swapOwner'; oldOwner: string; newOwner: string }
-	| { kind: 'changeThreshold'; threshold: string };
+	| { kind: 'changeThreshold'; threshold: string }
+	/** A dApp's call to another contract; `value` in base units, decimal. */
+	| { kind: 'call'; to: string; value: string; data: string };
 
 export interface Review {
 	safeTxHash: string;
@@ -138,8 +138,8 @@ export const multisigGenesis = (
 	owners: string[],
 	threshold: number,
 	name: string,
-	nameSeed: string
-) => call<MultisigGenesis>('genesis', { owners, threshold, name, nameSeed });
+	saltNonce: string
+) => call<MultisigGenesis>('genesis', { owners, threshold, name, saltNonce });
 
 /** Whether a multisig can be created with this name (the registry's rule). */
 export const validName = (name: string) => call<boolean>('validName', { name });
@@ -213,3 +213,9 @@ export const safeWalletPropsGenesis = (props: unknown, address: string) =>
 
 /** A Safe{Wallet} export, merged by address. Throws on a file that is not one. */
 export const parseSafeExport = (json: string) => call<ExportedSafe[]>('parseSafeExport', { json });
+
+/** The genesis registry (v2): the same address on every chain. */
+export const GENESIS_REGISTRY = '0x70b35C0FC8885019ff938542CD4E431725874802';
+
+/** The registry call that records `genesis` (with its name) on any chain; anyone may send it. */
+export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genesis });

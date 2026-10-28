@@ -81,7 +81,12 @@
         "add": "Çoklu imza ekle",
         "rowName": "Çoklu imza {{m}}/{{n}}",
         "readOnly": "Burada salt okunur",
-        "removeBody": "Bu çoklu imza bu cihazdan kaldırılsın mı? Fonları etkilenmez — adresiyle istediğin zaman yeniden ekleyebilirsin."
+        "removeBody": "Bu çoklu imza bu cihazdan kaldırılsın mı? Fonları etkilenmez — adresiyle istediğin zaman yeniden ekleyebilirsin.",
+        "addAccount": "Hesap ekle",
+        "createAccountNote": "Bu cihazdaki bir passkey ile korunan yeni bir hesap.",
+        "signInNote": "Zaten sahip olduğunuz bir hesap, passkey'iyle.",
+        "createMultisigNote": "Birkaç üyenin paylaştığı bir hesap: transferler yeterli onay gerektirir.",
+        "addMultisigNote": "Adresiyle ya da Safe'lerinizi Safe{Wallet}'tan içe aktararak."
       },
       "panel": {
         "title": "{{n}} üyeden {{m}} onayı gerekir",
@@ -111,7 +116,9 @@
         "unsupported": "Vela’nın imzalamadığı bir işlem",
         "to": "Alıcı",
         "network": "Ağ",
-        "number": "İşlem #"
+        "number": "İşlem #",
+        "call": "Sözleşme çağrısı",
+        "callWithValue": "{{amount}} {{symbol}} ile sözleşme çağrısı"
       },
       "proposal": {
         "title": "Çoklu imza işlemi",
@@ -176,7 +183,7 @@
         "done": "Bitti",
         "name": "Ad",
         "namePlaceholder": "ör. Ekip fonu",
-        "nameHint": "Her ağda adresinin bir parçasıdır. Sonradan değiştirilemez.",
+        "nameHint": "Tüm üyeler bu adı görür. Multisig ile birlikte kaydedilir ve sonradan değiştirilemez.",
         "nameInvalid": "Daha kısa bir ad kullanın; kontrol karakteri ya da başta veya sonda boşluk olmasın."
       },
       "add": {
@@ -237,6 +244,15 @@
         "importing": "İçe aktarılıyor…",
         "imported": "İçe aktarıldı",
         "already": "Zaten eklendi"
+      },
+      "settings": {
+        "backupTitle": "Kurulumunu Ethereum'a kaydet",
+        "backedUp": "Ethereum'da",
+        "notBackedUp": "Henüz Ethereum'da değil",
+        "unavailable": "Ethereum'da henüz yok",
+        "couldNotCheck": "Kontrol edilemedi",
+        "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
+        "remove": "Bu cihazdan kaldır"
       }
     }
   }

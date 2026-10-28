@@ -81,7 +81,12 @@
         "add": "Add multisig",
         "rowName": "Multisig {{m}}/{{n}}",
         "readOnly": "Read-only here",
-        "removeBody": "Remove this multisig from this device? Its funds are not affected — add it again any time with its address."
+        "removeBody": "Remove this multisig from this device? Its funds are not affected — add it again any time with its address.",
+        "addAccount": "Add account",
+        "createAccountNote": "A new account, kept by a passkey on this device.",
+        "signInNote": "An account you already have, with its passkey.",
+        "createMultisigNote": "An account several members share: transfers need enough of their approvals.",
+        "addMultisigNote": "By its address, or import your Safes from Safe{Wallet}."
       },
       "panel": {
         "title": "{{m}} of {{n}} members approve",
@@ -111,7 +116,9 @@
         "unsupported": "A transaction Vela doesn't sign",
         "to": "To",
         "network": "Network",
-        "number": "Transaction #"
+        "number": "Transaction #",
+        "call": "Contract call",
+        "callWithValue": "Contract call with {{amount}} {{symbol}}"
       },
       "proposal": {
         "title": "Multisig transaction",
@@ -176,7 +183,7 @@
         "done": "Done",
         "name": "Name",
         "namePlaceholder": "e.g. Team fund",
-        "nameHint": "Part of its address on every network. It can't be changed later.",
+        "nameHint": "Every member sees this name. It's saved with the multisig and can't be changed later.",
         "nameInvalid": "Use a shorter name, without control characters or spaces at either end."
       },
       "add": {
@@ -237,6 +244,15 @@
         "importing": "Importing…",
         "imported": "Imported",
         "already": "Already added"
+      },
+      "settings": {
+        "backupTitle": "Save its setup to Ethereum",
+        "backedUp": "On Ethereum",
+        "notBackedUp": "Not on Ethereum yet",
+        "unavailable": "Not available on Ethereum yet",
+        "couldNotCheck": "Couldn't check",
+        "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
+        "remove": "Remove from this device"
       }
     }
   }

@@ -338,6 +338,49 @@ export async function proposeTransfers(
 	chainId: number,
 	transfers: { to: string; token: string | null; amount: string }[]
 ): Promise<{ safeTxHash: string }> {
+	return proposeBuilt(address, chainId, (nonce) =>
+		transfersTx(
+			transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
+			`0x${nonce.toString(16)}`
+		)
+	);
+}
+
+/**
+ * A dApp's `eth_sendTransaction` from a multisig: the call, proposed on
+ * `chainId` at the next free nonce and approved at once, as a transfer is.
+ */
+export async function proposeCall(
+	address: string,
+	chainId: number,
+	call: { to: string; value: string; data: string }
+): Promise<{ safeTxHash: string }> {
+	const zero = '0x0';
+	const none = '0x0000000000000000000000000000000000000000';
+	return proposeBuilt(address, chainId, (nonce) => ({
+		to: call.to,
+		value: call.value || zero,
+		data: call.data || '0x',
+		operation: 0,
+		safeTxGas: zero,
+		baseGas: zero,
+		gasPrice: zero,
+		gasToken: none,
+		refundReceiver: none,
+		nonce: `0x${nonce.toString(16)}`
+	}));
+}
+
+/**
+ * Propose what `build` makes at the next free nonce, read back by the core
+ * first: approved by an owner on this device (its passkey), else by an
+ * owner's own wallet through the connect page.
+ */
+async function proposeBuilt(
+	address: string,
+	chainId: number,
+	build: (nonce: bigint) => SafeTx
+): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
 	multisig.useChain(account.address, chainId);
@@ -346,15 +389,9 @@ export async function proposeTransfers(
 	// The owners on that chain now (a Safe's owners may have changed since its genesis).
 	const owners = proposals.chain(chainId)?.members.owners ?? account.owners;
 	const owner = localOwners(owners)[0];
-	const nonce = proposals.nextNonce(chainId);
-	const tx = transfersTx(
-		transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
-		`0x${nonce.toString(16)}`
-	);
+	const tx = build(proposals.nextNonce(chainId));
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
-	// An owner on this device approves with its passkey; otherwise an owner's
-	// own wallet does, through the connect page.
 	const { safeTxHash } = owner
 		? await propose(fresh, chainId, tx, owner)
 		: await approveExternally(fresh, chainId, tx, owners);

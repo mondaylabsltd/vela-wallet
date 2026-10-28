@@ -9,6 +9,7 @@
 	 * identicon viewer on that account's address (founder call, 2026-09-05),
 	 * and a button inside a button is invalid HTML.
 	 */
+	import type { Snippet } from 'svelte';
 	import type { AccountsSheetModel } from '../model';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -27,9 +28,22 @@
 		 * affordance, which is what a fixture board wants.
 		 */
 		onremove?: (index: number) => void;
+		/** More rows in the same list (a multisig is an account too): `<li>`s. */
+		more?: Snippet;
+		/** In place of the two buttons (the switcher's single "Add account"). */
+		actions?: Snippet;
 	}
 
-	let { sheet, layout = 'stacked', onselect, oncreate, onsignin, onremove }: Props = $props();
+	let {
+		sheet,
+		layout = 'stacked',
+		onselect,
+		oncreate,
+		onsignin,
+		onremove,
+		more,
+		actions
+	}: Props = $props();
 
 	/** The row a confirmation is open for. */
 	let removing = $state<number | null>(null);
@@ -99,12 +113,17 @@
 			</li>
 		{/if}
 	{/each}
+	{@render more?.()}
 </ul>
 
-<div class="actions {layout}">
-	<Button variant="primary" shape="rounded" onclick={oncreate}>{sheet.primary}</Button>
-	<Button variant="secondary" shape="rounded" onclick={onsignin}>{sheet.secondary}</Button>
-</div>
+{#if actions}
+	{@render actions()}
+{:else}
+	<div class="actions {layout}">
+		<Button variant="primary" shape="rounded" onclick={oncreate}>{sheet.primary}</Button>
+		<Button variant="secondary" shape="rounded" onclick={onsignin}>{sheet.secondary}</Button>
+	</div>
+{/if}
 
 <style>
 	.summary {

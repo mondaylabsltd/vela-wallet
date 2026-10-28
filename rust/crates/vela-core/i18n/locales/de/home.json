@@ -81,7 +81,12 @@
         "add": "Multisig hinzufügen",
         "rowName": "Multisig {{m}}/{{n}}",
         "readOnly": "Hier nur lesen",
-        "removeBody": "Dieses Multisig von diesem Gerät entfernen? Das Guthaben bleibt unberührt – mit seiner Adresse kannst du es jederzeit wieder hinzufügen."
+        "removeBody": "Dieses Multisig von diesem Gerät entfernen? Das Guthaben bleibt unberührt – mit seiner Adresse kannst du es jederzeit wieder hinzufügen.",
+        "addAccount": "Konto hinzufügen",
+        "createAccountNote": "Ein neues Konto, gesichert durch einen Passkey auf diesem Gerät.",
+        "signInNote": "Ein Konto, das du schon hast, mit seinem Passkey.",
+        "createMultisigNote": "Ein Konto, das mehrere Mitglieder teilen: Überweisungen brauchen genug Genehmigungen.",
+        "addMultisigNote": "Über seine Adresse, oder importiere deine Safes aus Safe{Wallet}."
       },
       "panel": {
         "title": "{{m}} von {{n}} Mitgliedern genehmigen",
@@ -111,7 +116,9 @@
         "unsupported": "Eine Transaktion, die Vela nicht signiert",
         "to": "An",
         "network": "Netzwerk",
-        "number": "Transaktion #"
+        "number": "Transaktion #",
+        "call": "Vertragsaufruf",
+        "callWithValue": "Vertragsaufruf mit {{amount}} {{symbol}}"
       },
       "proposal": {
         "title": "Multisig-Transaktion",
@@ -176,7 +183,7 @@
         "done": "Fertig",
         "name": "Name",
         "namePlaceholder": "z. B. Teamkasse",
-        "nameHint": "Teil seiner Adresse in jedem Netzwerk. Er kann später nicht geändert werden.",
+        "nameHint": "Alle Mitglieder sehen diesen Namen. Er wird mit dem Multisig gespeichert und kann später nicht geändert werden.",
         "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen und ohne Leerzeichen am Anfang oder Ende."
       },
       "add": {
@@ -237,6 +244,15 @@
         "importing": "Wird importiert…",
         "imported": "Importiert",
         "already": "Bereits hinzugefügt"
+      },
+      "settings": {
+        "backupTitle": "Einrichtung auf Ethereum sichern",
+        "backedUp": "Auf Ethereum",
+        "notBackedUp": "Noch nicht auf Ethereum",
+        "unavailable": "Auf Ethereum noch nicht verfügbar",
+        "couldNotCheck": "Konnte nicht prüfen",
+        "backupNote": "Die Einrichtung des Multisigs liegt dann auch auf Ethereum, sodass es von dort gefunden und bereitgestellt werden kann. Ein Konto auf diesem Gerät zahlt die Gebühr.",
+        "remove": "Von diesem Gerät entfernen"
       }
     }
   }

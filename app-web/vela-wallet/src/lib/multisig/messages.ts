@@ -11,6 +11,11 @@ export interface MultisigMessages {
 		rowName: string;
 		readOnly: string;
 		removeBody: string;
+		addAccount: string;
+		createAccountNote: string;
+		signInNote: string;
+		createMultisigNote: string;
+		addMultisigNote: string;
 	};
 	panel: {
 		title: string;
@@ -41,6 +46,8 @@ export interface MultisigMessages {
 		to: string;
 		network: string;
 		number: string;
+		call: string;
+		callWithValue: string;
 	};
 	proposal: {
 		title: string;
@@ -157,6 +164,15 @@ export interface MultisigMessages {
 		imported: string;
 		already: string;
 	};
+	settings: {
+		backupTitle: string;
+		backedUp: string;
+		notBackedUp: string;
+		unavailable: string;
+		couldNotCheck: string;
+		backupNote: string;
+		remove: string;
+	};
 	add: {
 		title: string;
 		intro: string;
@@ -177,7 +193,12 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		add: '',
 		rowName: '',
 		readOnly: '',
-		removeBody: ''
+		removeBody: '',
+		addAccount: '',
+		createAccountNote: '',
+		signInNote: '',
+		createMultisigNote: '',
+		addMultisigNote: ''
 	},
 	panel: {
 		title: '',
@@ -207,7 +228,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		to: '',
 		network: '',
-		number: ''
+		number: '',
+		call: '',
+		callWithValue: ''
 	},
 	proposal: {
 		title: '',
@@ -323,6 +346,15 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		importing: '',
 		imported: '',
 		already: ''
+	},
+	settings: {
+		backupTitle: '',
+		backedUp: '',
+		notBackedUp: '',
+		unavailable: '',
+		couldNotCheck: '',
+		backupNote: '',
+		remove: ''
 	},
 	add: {
 		title: '',

@@ -24,6 +24,8 @@
 	 */
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import { session } from '$lib/session/core/session.svelte';
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { browser } from '$app/environment';
 	import { followSharedTracker } from '$lib/wallet/core/tracker-resident';
@@ -71,4 +73,13 @@
 	receipt={data.signingMessages.receipt}
 	onlanding={() => host?.noteLanding()}
 	onreceiptdone={() => host?.noteReceiptDone()}
+/>
+
+<!-- A multisig's request: its proposal, and an outside member's wallet. -->
+<MultisigHost
+	m={data.multisigMessages}
+	locale={data.locale ?? 'en'}
+	wide={false}
+	closeLabel={data.signingMessages.receipt.done ?? ''}
+	current={session.view.address || null}
 />
