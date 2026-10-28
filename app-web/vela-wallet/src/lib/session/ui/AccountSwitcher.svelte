@@ -27,6 +27,7 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '$lib/multisig/messages';
@@ -66,7 +67,9 @@
 		hidden: balance.view.switcher.hidden,
 		currency: currency.view,
 		identicon: identiconSvgForClient,
-		others: multisig.accounts.map((a) => a.address)
+		others: multisig.accounts.map((a) => a.address),
+		// home-9: the testnet space shows no figure for test coins, here too.
+		noValue: networkSpace.testnet
 	}));
 
 	const sheet = $derived.by(() => {

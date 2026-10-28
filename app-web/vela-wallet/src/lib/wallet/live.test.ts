@@ -795,3 +795,104 @@ describe('empty activity, chosen by the core', () => {
 		expect(filtered.base.model.emptyText).toBe(fm['history.emptyFilter']);
 	});
 });
+
+describe('an unstable network (fix-balance)', () => {
+	const base = buildMobileState('h1', m, (seed) => `<svg data-seed="${seed}"></svg>`);
+	const gnosisDown = {
+		...PRISTINE,
+		balance_unknown: false,
+		balance_partial: true,
+		display_total_usd: 4500,
+		tokens: [ETH],
+		failed_chain_ids: [100],
+		unreachable_networks: [unreachableRow(100)],
+		unreachable_key: 'assets.unreachableOne'
+	};
+
+	it('home-8: hidden, the line still names the network it cannot reach', () => {
+		const model = liveBalance({ ...gnosisDown, hidden: true, display_total_usd: null }, USD, m);
+		expect(model.state).toBe('hidden');
+		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		// …and the first read is "Checking…", hidden or not.
+		const checking = liveBalance(
+			{ ...PRISTINE, hidden: true, checking_key: 'componentsUi.funding.checking' },
+			USD,
+			m
+		);
+		expect(checking.checkingText).toBe('Checking…');
+		expect(checking.status).toBeUndefined();
+	});
+
+	it('home-1: the testnet space has no figure, but says the network it cannot reach', () => {
+		const model = liveBalance(gnosisDown, USD, m, undefined, 'Test assets · no real value');
+		expect(model.state).toBe('no-value');
+		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		// The last read standing is said too; a price it does not show is not.
+		expect(
+			liveBalance({ ...PRISTINE, tokens: [ETH], notice: 'still_updating' }, USD, m, undefined, 'x')
+				.status
+		).toEqual({ kind: 'refreshing', text: m.balance.stale });
+		expect(
+			liveBalance({ ...PRISTINE, tokens: [ETH], notice: 'unpriced' }, USD, m, undefined, 'x').status
+		).toBeUndefined();
+		// Nothing to say: nothing said — and nothing under "Checking…".
+		expect(liveBalance(PRISTINE, USD, m, undefined, 'x').status).toBeUndefined();
+	});
+
+	it('a row whose network did not answer is the last read there, and says so', () => {
+		const row = liveAssetRow(ETH, USD, m, false, false, true);
+		expect(row.stale).toBe(true);
+		expect(row.fiat).toEqual({
+			kind: 'value',
+			text: fill(m.assets.lastSeen, { amount: '$4,500.00' })
+		});
+		expect(liveAssetRow(ETH, USD, m, false).stale).toBeUndefined();
+		const model = withLiveWallet(base, {
+			balance: {
+				...gnosisDown,
+				tokens: [ETH, { ...ETH, chain_id: 100, symbol: 'xDAI', price_usd: 1 }]
+			},
+			currency: USD,
+			m
+		});
+		expect(model.assetRows.map((r) => [r.ticker, r.stale === true])).toEqual([
+			['ETH', false],
+			['xDAI', true]
+		]);
+	});
+
+	it('home-3: an ended read with no rows says why, never an endless skeleton', () => {
+		const ended = {
+			...gnosisDown,
+			tokens: [],
+			display_total_usd: 0
+		};
+		const model = withLiveWallet(base, { balance: ended, currency: USD, m });
+		expect(model.assetsSection.mode).toBe('empty');
+		expect(model.assetsSection.empty).toEqual({
+			title: "Can't reach Gnosis right now",
+			caption: m.assets.unreachableBody
+		});
+		// Nothing read at all: the hero's own sentence.
+		const nothing = withLiveWallet(base, {
+			balance: { ...PRISTINE, balance_unknown: false, unreachable: true },
+			currency: USD,
+			m
+		});
+		expect(nothing.assetsSection.empty?.title).toBe(m.balance.unreachable);
+		// Still reading: the skeleton.
+		const reading = withLiveWallet(base, {
+			balance: { ...ended, checking_key: 'componentsUi.funding.checking' },
+			currency: USD,
+			m
+		});
+		expect(reading.assetsSection.mode).toBe('loading');
+		// The wide layout says the same.
+		const desktop = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			{ balance: ended, currency: USD, m }
+		);
+		expect(desktop.assetsSection.mode).toBe('empty');
+		expect(desktop.assetsSection.empty?.caption).toBe(m.assets.unreachableBody);
+	});
+});

@@ -1154,10 +1154,16 @@ export interface LiveAccountsInput {
 	 * summed with the rows, their own rows drawn by the multisig section.
 	 */
 	others?: readonly string[];
+	/**
+	 * The testnet space (spec 105, home-9): test coins have no value, so no
+	 * row and no total says a figure — the hero says none either.
+	 */
+	noValue?: boolean;
 }
 
 /** One account's total as its row draws it: the mask, the figure, or nothing yet. */
 export function accountAmount(input: LiveAccountsInput, address: string): string {
+	if (input.noValue === true) return '';
 	if (input.hidden) return MASK;
 	const usd = input.balances.get(address.toLowerCase());
 	return usd === undefined ? '' : moneyText(usd, input.currency);
@@ -1208,7 +1214,12 @@ function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['acco
 	let total = 0;
 	for (const address of addresses) total += input.balances.get(address.toLowerCase()) ?? 0;
 	const count = addresses.length;
-	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
+	const counted = fill(pluralForm(m.countPrefix, count), { count });
+	// The testnet space: how many accounts, and no money (home-9). The count's
+	// sentence ends in the joiner to the total (" · " in every language);
+	// with no total after it, it ends at the count.
+	if (input.noValue === true) return counted.replace(/\s*·\s*$/u, '');
+	return `${counted}${fill(m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;

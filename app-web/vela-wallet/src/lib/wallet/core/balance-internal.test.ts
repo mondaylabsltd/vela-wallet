@@ -137,7 +137,12 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 				m
 			} as Parameters<typeof withLiveWallet>[1]
 		);
-		expect(home.assetsSection.mode).toBe('loading');
+		// The list says Vela's own sentence too (home-3) — never the invitation,
+		// and never a skeleton that waits for ever.
+		expect(home.assetsSection.mode).toBe('empty');
+		expect(home.assetsSection.empty?.title).toBe(
+			m.assets.internal['componentsUi.gas.reasonInternal']
+		);
 		// …and the same with every chain simply down: the network's sentence.
 		const down = homeAfter(() => ({ ...settled([1, 100], []), tokens: [] }));
 		expect(down.unreachable).toBe(true);

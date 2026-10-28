@@ -68,7 +68,9 @@ describe('a holdings row, hidden', () => {
 	it('shown, draws the figures the masks stand for', () => {
 		expect(drawn(FIXTURE.shown.balance)).toEqual([
 			{ amount: '418.25', worth: '$418.25' },
-			{ amount: '376.5432', worth: '$376.54' }
+			{ amount: '376.5432', worth: '$376.54' },
+			// BNB Chain's row, kept while it does not answer (fix-balance).
+			{ amount: '0.5', worth: '$157.00' }
 		]);
 	});
 });

@@ -526,6 +526,29 @@ export function balanceRefresh(
 	};
 }
 
+/**
+ * What the hero's line says about the networks, whatever the figure above it
+ * shows — a figure, a mask, or the testnet space's words: the networks the
+ * wallet cannot reach (spec 092 — every one, held or not; a rate limit heals
+ * on its own and is never listed), or in their place a read that failed
+ * inside Vela (PR 2 note 11); else that what is shown is still the last
+ * read (`onCache`, or the core's "still updating" notice). `undefined` when
+ * the networks have nothing to say.
+ */
+function networkStatus(
+	view: BalanceView,
+	m: WalletMessages,
+	onCache = false
+): BalanceModel['status'] {
+	const unreachable = unreachableLine(view, m.assets);
+	if (unreachable !== undefined) return { kind: 'warning', text: unreachable };
+	if (view.unreachable) return { kind: 'warning', text: m.balance.unreachable };
+	if (onCache || view.notice === 'still_updating') {
+		return { kind: 'refreshing', text: m.balance.stale };
+	}
+	return undefined;
+}
+
 export function liveBalance(
 	view: BalanceView,
 	currency: CurrencyView,
@@ -545,27 +568,6 @@ export function liveBalance(
 		...(refreshInput === undefined ? {} : { refresh: balanceRefresh(view, m, refreshInput) })
 	};
 
-	if (view.hidden) {
-		return {
-			...base,
-			currency: figureCurrency(currency),
-			state: 'hidden',
-			integer: BALANCE_MASK
-		};
-	}
-
-	// The testnet space (spec 105): no figure at all — a "$12" of test coins
-	// would read as money. Said in the figure's place; the line under it
-	// still says what the wallet has to say.
-	if (noValue !== undefined) {
-		return {
-			...base,
-			state: 'no-value',
-			noValueText: noValue,
-			...(view.checking_key ? { checkingText: m.balance.said[view.checking_key] } : {})
-		};
-	}
-
 	// PR 3 final note F19: the first read of this account is still out
 	// (`checking_key`, the core's): the status line says "Checking…" from the
 	// first frame — under the skeleton and under a cached figure alike — and
@@ -575,6 +577,37 @@ export function liveBalance(
 	// had read, and then swapped it for "Can't reach 24 networks".
 	const checkingText = view.checking_key ? m.balance.said[view.checking_key] : undefined;
 	const checking = checkingText === undefined ? {} : { checkingText };
+
+	// Hidden, the figure is masked — never what the wallet has to say about
+	// it (home-8): a network it cannot reach is no secret, and the masked
+	// hero under "Updated now" read as a wallet read a moment ago.
+	if (view.hidden) {
+		const status = checkingText === undefined ? networkStatus(view, m) : undefined;
+		return {
+			...base,
+			...checking,
+			currency: figureCurrency(currency),
+			state: 'hidden',
+			integer: BALANCE_MASK,
+			...(status === undefined ? {} : { status })
+		};
+	}
+
+	// The testnet space (spec 105): no figure at all — a "$12" of test coins
+	// would read as money. Said in the figure's place; the line under it
+	// still says what the wallet has to say (home-1): the network it cannot
+	// reach, or that what is shown is the last read — never a bare "Updated
+	// now" over a network that did not answer.
+	if (noValue !== undefined) {
+		const status = checkingText === undefined ? networkStatus(view, m) : undefined;
+		return {
+			...base,
+			...checking,
+			state: 'no-value',
+			noValueText: noValue,
+			...(status === undefined ? {} : { status })
+		};
+	}
 
 	// The display currency is not the person's yet (`CurrencyView.committed`):
 	// the skeleton, whatever the balance already knows. The cached total is
@@ -639,19 +672,13 @@ export function liveBalance(
 	// control they pressed says that itself, turning in place. As a line here
 	// it landed ABOVE the control and pushed it a row down under the finger —
 	// and a figure re-read on request is current, not "still updating".
-	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
 		// "Checking…" stands alone on the line (F19): a cached figure under a
 		// first read is not "still updating" yet — nothing has been read at all.
 		checkingText !== undefined
 			? undefined
-			: unreachable !== undefined
-				? { kind: 'warning', text: unreachable }
-				: onCache || view.notice === 'still_updating'
-					? { kind: 'refreshing', text: m.balance.stale }
-					: view.notice === 'unpriced'
-						? { kind: 'warning', text: m.balance.unpriced }
-						: undefined;
+			: (networkStatus(view, m, onCache) ??
+				(view.notice === 'unpriced' ? { kind: 'warning', text: m.balance.unpriced } : undefined));
 
 	return {
 		...base,
@@ -675,19 +702,26 @@ export function liveAssetRow(
 	m: WalletMessages,
 	hidden: boolean,
 	/** Spec 105: the testnet space — a row has no worth to show. */
-	noValue = false
+	noValue = false,
+	/**
+	 * The row's network did not answer the last read (`unreachable_networks`):
+	 * what it shows is what was last read there, and it says so — "Last seen
+	 * $2.00" — rather than passing for a balance read just now.
+	 */
+	stale = false
 ): AssetRowModel {
 	const art = balanceTokenMark(token);
+	const worth = (): string => {
+		const text = moneyText((parseFloat(token.balance) || 0) * (token.price_usd ?? 0), currency);
+		return stale ? fill(m.assets.lastSeen, { amount: text }) : text;
+	};
 	const fiat: AssetRowModel['fiat'] = hidden
 		? { kind: 'masked' }
 		: noValue
 			? { kind: 'none' }
 			: token.price_usd === null
 				? { kind: 'no-price', text: m.balance.noPrice }
-				: {
-						kind: 'value',
-						text: moneyText((parseFloat(token.balance) || 0) * token.price_usd, currency)
-					};
+				: { kind: 'value', text: worth() };
 	return {
 		id: balanceTokenId(token),
 		ticker: token.symbol,
@@ -703,7 +737,8 @@ export function liveAssetRow(
 		// display currency, which every figure on the screen shares.
 		balance: hidden ? maskedAmount(token.symbol) : tokenAmountText(token.balance),
 		fiat,
-		masked: hidden
+		masked: hidden,
+		...(stale ? { stale: true } : {})
 	};
 }
 
@@ -714,8 +749,37 @@ function assetsMode(view: BalanceView): SectionModel['mode'] {
 	// nothing held. This shell used to take "no tokens, a known total" for an
 	// empty wallet — which a cached total of 0 satisfies before anything has
 	// been read, so it invited a first deposit under "Checking…". With no
-	// tokens and no key the list is still being read: the skeleton.
-	return (view.empty_key ?? null) !== null ? 'empty' : 'loading';
+	// tokens and no key the list is still being read: the skeleton — unless
+	// the read has ended and could not reach what it asked (`unreadAssets`).
+	return (view.empty_key ?? null) !== null || unreadAssets(view) ? 'empty' : 'loading';
+}
+
+/**
+ * home-3 / vis-3: the list has no rows, the core gave no empty state, and the
+ * read has ENDED (no "Checking…") saying why it could not list them — a
+ * network it cannot reach, a fault inside Vela, or nothing read at all. A
+ * skeleton there stood for ever; the list says what the hero's line says.
+ */
+function unreadAssets(view: BalanceView): boolean {
+	return (
+		view.tokens.length === 0 &&
+		(view.empty_key ?? null) === null &&
+		(view.checking_key ?? null) === null &&
+		(view.unreachable ||
+			view.unreachable_networks.length > 0 ||
+			(view.internal_key ?? null) !== null)
+	);
+}
+
+/** The words of {@link unreadAssets}' list: the hero line's sentence, and that nothing is lost. */
+function unreadAssetsEmpty(
+	view: BalanceView,
+	m: WalletMessages
+): { title: string; caption: string } {
+	return {
+		title: unreachableLine(view, m.assets) ?? m.balance.unreachable,
+		caption: m.assets.unreachableBody
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,6 +1199,8 @@ function liveSections(inputs: WalletLiveInputs) {
 	const filter = inputs.chainFilter ?? null;
 	const tokens = filter === null ? view.tokens : view.tokens.filter((t) => t.chain_id === filter);
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
+	// The networks the last read could not reach: their rows are last-known.
+	const quiet = new Set(view.unreachable_networks.map((row) => row.chain_id));
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh, inputs.noValue),
 		// The filter's own case, not the core's empty wallet (`empty_key` is
@@ -1144,8 +1210,10 @@ function liveSections(inputs: WalletLiveInputs) {
 			filter !== null && tokens.length === 0 && view.tokens.length > 0
 				? ('empty' as const)
 				: assetsMode(view),
+		/** The list's words when the read could not reach what it asked (home-3). */
+		assetsEmpty: unreadAssets(view) ? unreadAssetsEmpty(view, m) : undefined,
 		assetRows: tokens.map((t) =>
-			liveAssetRow(t, currency, m, view.hidden, inputs.noValue !== undefined)
+			liveAssetRow(t, currency, m, view.hidden, inputs.noValue !== undefined, quiet.has(t.chain_id))
 		),
 		activityMode: activityMode(view, feed),
 		// The home's Activity is the newest three (issue 469): the core's
@@ -1172,7 +1240,11 @@ export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs)
 	return {
 		...model,
 		balance: live.balance,
-		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
+		assetsSection: {
+			...model.assetsSection,
+			mode: live.assetsMode,
+			...(live.assetsEmpty === undefined ? {} : { empty: live.assetsEmpty })
+		},
 		assetRows: live.assetRows,
 		activitySection: {
 			...model.activitySection,
@@ -1201,7 +1273,11 @@ export function withLiveWalletDesktop(
 			)
 		},
 		balance: live.balance,
-		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
+		assetsSection: {
+			...model.assetsSection,
+			mode: live.assetsMode,
+			...(live.assetsEmpty === undefined ? {} : { empty: live.assetsEmpty })
+		},
 		assetRows: live.assetRows,
 		activitySection: {
 			...model.activitySection,

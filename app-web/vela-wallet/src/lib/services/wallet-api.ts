@@ -32,7 +32,11 @@ import {
 	peggedNativeUsd,
 	type NativeQuoteGroup
 } from './native-price';
-import { fetchChainlinkPrices, resolveChainlinkPrice } from './price-service';
+import {
+	fetchChainlinkPrices,
+	lastKnownChainlinkPrices,
+	resolveChainlinkPrice
+} from './price-service';
 import {
 	MULTICALL3,
 	encAggregate3,
@@ -407,6 +411,39 @@ export function getCachedNativePriceUsd(
 
 type ChainOutcome = { answered: boolean; tokens: APIToken[] };
 
+/**
+ * How long a round waits for Ethereum's Chainlink read before pricing with the
+ * last prices it knew (perf-5). A chain that needs one waits at most this
+ * long after its own answer — never for Ethereum's whole failover.
+ */
+export const CHAINLINK_PRICE_CAP_MS = 2_500;
+
+/**
+ * `live`, or — once {@link CHAINLINK_PRICE_CAP_MS} has passed, or the read
+ * failed — the last prices this device read (`lastKnownChainlinkPrices`:
+ * memory, then storage). The live read is not abandoned: it lands in the
+ * price cache, and the next round prices with it.
+ */
+export function cappedChainlinkPrices(
+	live: Promise<Record<string, number>>,
+	capMs = CHAINLINK_PRICE_CAP_MS
+): Promise<Record<string, number>> {
+	return new Promise((resolve) => {
+		let done = false;
+		const settle = (prices: Record<string, number>) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve(prices);
+		};
+		const fallback = () => {
+			void lastKnownChainlinkPrices().then(settle, () => settle({}));
+		};
+		const timer = setTimeout(fallback, capMs);
+		live.then((prices) => (Object.keys(prices).length > 0 ? settle(prices) : fallback()), fallback);
+	});
+}
+
 async function fetchAllChainTokens(
 	address: string,
 	previous: readonly APIToken[],
@@ -414,8 +451,14 @@ async function fetchAllChainTokens(
 	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void,
 	includeZeroBalance?: boolean
 ): Promise<APIToken[]> {
-	// Phase 1: load prerequisites in parallel
-	const [customTokens, clPrices] = await Promise.all([loadCustomTokens(), fetchChainlinkPrices()]);
+	// Phase 1: the person's tokens (local). The Ethereum Chainlink prices are
+	// NOT waited for here (perf-5): every chain's read used to start only once
+	// Ethereum had answered, so one slow Ethereum node held the whole home at
+	// "Checking…" for 42 s, and with Ethereum unreachable nothing was read at
+	// all. They are read beside the chains, capped, and a chain that needs one
+	// waits for it only after its own answer is in.
+	const customTokens = await loadCustomTokens();
+	const clPrices = cappedChainlinkPrices(fetchChainlinkPrices());
 
 	// Phase 2: query each chain in parallel, streaming results as each chain finishes
 	const networks = spaceNetworksSync();
@@ -515,7 +558,11 @@ async function queryChainAssets(
 	address: string,
 	chainId: number,
 	customTokens: CustomToken[],
-	chainlinkPrices: Record<string, number>
+	/**
+	 * The Ethereum Chainlink prices — a promise, awaited only once this chain
+	 * has answered (perf-5): the chain's own read never waits on Ethereum's.
+	 */
+	chainlinkPricesP: Promise<Record<string, number>>
 ): Promise<APIToken[]> {
 	// 1. Discover tokens on this chain
 	const registry = await readChainTokens(chainId);
@@ -730,9 +777,8 @@ async function queryChainAssets(
 	// there is no feed to read, because there is nothing to measure. The peg is
 	// also what earns such a chain the ordinary $0.01 fee floor, which is
 	// "$0.01 worth of the native coin" and needs a price to exist (spec 060).
-	const ethClPrice =
-		peggedNativeUsd(nativeCurrency.symbol) ??
-		resolveChainlinkPrice(nativeCurrency.symbol, chainlinkPrices);
+	const pegged = peggedNativeUsd(nativeCurrency.symbol);
+	const ethClPrice = pegged ?? resolveChainlinkPrice(nativeCurrency.symbol, await chainlinkPricesP);
 
 	// Pick best price: DEX preferred, but sanity-check against Chainlink.
 	// If DEX price deviates >50% from Chainlink, DEX likely has low liquidity → prefer Chainlink.

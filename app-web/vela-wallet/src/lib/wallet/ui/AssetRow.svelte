@@ -49,7 +49,7 @@
 		<span class="ticker">{row.ticker}</span>
 		<span class="chain">{row.chain}</span>
 	</span>
-	<span class="numbers" class:masked={row.masked}>
+	<span class="numbers" class:masked={row.masked} class:stale={row.stale === true}>
 		<span class="balance">
 			{#if row.masked && row.balance.startsWith(MASK)}
 				<!-- Hidden, the amount is the mask and the coin ("•••• BNB"). Only
@@ -182,6 +182,13 @@
 
 	.no-price {
 		color: var(--color-warning-base);
+	}
+
+	/* The network did not answer: the figure is the last read there, and it
+	   says so ("Last seen $2.00") — drawn in the quieter ink, never dimmed
+	   below what can be read. */
+	.stale .balance {
+		color: var(--color-fg-muted);
 	}
 
 	.masked .dots,

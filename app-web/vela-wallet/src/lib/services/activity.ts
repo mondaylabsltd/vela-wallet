@@ -16,7 +16,8 @@
 
 import { fromBaseUnits } from './eip681';
 import { fetchIncomingTransfers } from './incoming-transfers';
-import { nativeSymbol } from './networks';
+import { inSpace, nativeSymbol, spaceNetworksSync } from './networks';
+import { watchNativeBalances } from './native-watch';
 import { mergeTransactions } from './records';
 import { resolveTokenMetadata } from './token-metadata';
 import { tokenChainId, type APIToken } from './tokens-model';
@@ -176,6 +177,9 @@ async function enrichTokenIndex(
 /** Mirrored by `token_trust.rs`'s `DEFAULT_MONITOR_CHAINS`. */
 export const DEFAULT_MONITOR_CHAINS = [1, 56, 137, 42161, 8453, 100];
 
+/** How many of the space's networks a wallet holding nothing has its native coin watched on (home-5). */
+const NATIVE_WATCH_FALLBACK = 6;
+
 /**
  * Discover and persist new receipts for `address`. Answers how many landed;
  * any failure answers 0 (a failed scan is a scan that found nothing).
@@ -188,6 +192,19 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
 		const tokens = await fetchTokens(address).catch(() => [] as APIToken[]);
 		const active = [...new Set(tokens.map(tokenChainId))];
 		const chainIds = active.length ? active : DEFAULT_MONITOR_CHAINS;
+		// home-5: a native coin paid to an account with no code leaves no log
+		// for the scan below to find — its balance is what moves. Read beside
+		// the scan, on the networks of the space in front; a move re-reads the
+		// balances (`onNativeBalanceMoved`).
+		const watched = chainIds.filter(inSpace);
+		void watchNativeBalances(
+			address,
+			watched.length > 0
+				? watched
+				: spaceNetworksSync()
+						.slice(0, NATIVE_WATCH_FALLBACK)
+						.map((net) => net.chainId)
+		);
 		const incoming = await fetchIncomingTransfers(address, chainIds);
 		if (incoming.length === 0) return 0;
 		const index = buildTokenIndex(tokens);

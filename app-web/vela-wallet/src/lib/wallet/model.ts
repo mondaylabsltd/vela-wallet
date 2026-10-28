@@ -163,6 +163,11 @@ export interface AssetRowModel {
 	balance: string;
 	fiat: AssetFiatModel;
 	masked: boolean;
+	/**
+	 * Live rows only: the row's network did not answer the last read — what it
+	 * shows is the last read there ("Last seen $2.00"), drawn quieter.
+	 */
+	stale?: boolean;
 }
 
 export interface SectionModel {

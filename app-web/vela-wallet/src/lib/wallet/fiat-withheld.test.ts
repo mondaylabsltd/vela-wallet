@@ -184,15 +184,18 @@ describe('no fiat figure before the display currency commits — every surface t
 			balance.tokens.map((token) => liveAssetRow(token, currency, m, false));
 		expectWithheld('holdings', rows);
 		const withheld = rows(ON_ITS_WAY);
+		// The third row is BNB Chain's, kept while it does not answer (fix-balance).
 		expect(withheld.map((row) => row.fiat)).toEqual([
+			{ kind: 'value', text: MONEY_PENDING },
 			{ kind: 'value', text: MONEY_PENDING },
 			{ kind: 'value', text: MONEY_PENDING }
 		]);
 		// A token amount is not fiat: it does not wait.
-		expect(withheld.map((row) => row.balance)).toEqual(['418.25', '376.5432']);
+		expect(withheld.map((row) => row.balance)).toEqual(['418.25', '376.5432', '0.5']);
 		expect(rows(COMMITTED).map((row) => row.fiat)).toEqual([
 			{ kind: 'value', text: 'CN¥3,011.40' },
-			{ kind: 'value', text: 'CN¥2,711.11' }
+			{ kind: 'value', text: 'CN¥2,711.11' },
+			{ kind: 'value', text: 'CN¥1,130.40' }
 		]);
 	});
 

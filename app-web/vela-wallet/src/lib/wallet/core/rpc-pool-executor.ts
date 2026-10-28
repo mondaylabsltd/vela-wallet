@@ -154,6 +154,87 @@ async function probe(
 }
 
 // ---------------------------------------------------------------------------
+// Fail-fast for an endpoint that is not answering (home-17)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads only: nothing a fail-fast could stop is a write, so no send is ever
+ * told "not sent" by this rather than by the wire.
+ */
+const READ_METHODS = new Set([
+	'eth_call',
+	'eth_getBalance',
+	'eth_getLogs',
+	'eth_blockNumber',
+	'eth_chainId',
+	'eth_getCode',
+	'eth_getTransactionCount',
+	'eth_getTransactionReceipt',
+	'eth_getTransactionByHash',
+	'eth_getBlockByNumber',
+	'eth_getBlockByHash',
+	'eth_gasPrice',
+	'eth_feeHistory',
+	'eth_maxPriorityFeePerGas',
+	'eth_estimateGas'
+]);
+
+/** Transport failures in a row before an endpoint is skipped for a while. */
+export const SKIP_AFTER_FAILURES = 3;
+/** The first skip window; it doubles with each further failure. */
+export const SKIP_BASE_MS = 1_000;
+/** The longest an endpoint is skipped before it is tried again. */
+export const SKIP_CAP_MS = 30_000;
+
+/**
+ * Per endpoint, the transport failures in a row and until when its reads are
+ * not put on the wire.
+ *
+ * During an outage every call still sweeps every endpoint, three passes each
+ * (the core's routing, unchanged), and with refused connections failing in a
+ * millisecond that was 567 requests to one dead node in 40 s (home-17). Once
+ * an endpoint has failed on transport {@link SKIP_AFTER_FAILURES} times in a
+ * row, a read bound for it is answered `not_connected` at once — the truth:
+ * nothing left the device — and the core routes on exactly as it would
+ * after a refused connection. When the window ends one read goes through; an
+ * answer of any kind closes it, another failure doubles it. A hung endpoint
+ * (`timeout`) is skipped the same way, so after three it no longer holds
+ * every read for the whole per-endpoint timeout.
+ */
+export function createEndpointSkipper(now: () => number = Date.now) {
+	const failing = new Map<string, { failures: number; until: number }>();
+	return {
+		/** Is a read for `url` to be answered without the wire, now? */
+		skips(url: string, method: string): boolean {
+			if (!READ_METHODS.has(method)) return false;
+			const entry = failing.get(url);
+			return entry !== undefined && now() < entry.until;
+		},
+		/** What the wire said for `url` (a skipped read is not a report). */
+		note(url: string, outcome: RpcTransportOutcome): void {
+			const transport =
+				outcome.type === 'network' ||
+				outcome.type === 'not_connected' ||
+				outcome.type === 'timeout';
+			if (!transport) {
+				failing.delete(url);
+				return;
+			}
+			const failures = (failing.get(url)?.failures ?? 0) + 1;
+			const until =
+				failures < SKIP_AFTER_FAILURES
+					? 0
+					: now() + Math.min(SKIP_CAP_MS, SKIP_BASE_MS * 2 ** (failures - SKIP_AFTER_FAILURES));
+			failing.set(url, { failures, until });
+		},
+		/** The device is back online: every endpoint is tried afresh. */
+		reset(): void {
+			failing.clear();
+		}
+	};
+}
+
+// ---------------------------------------------------------------------------
 // The executor
 // ---------------------------------------------------------------------------
 
@@ -164,6 +245,11 @@ export type RpcPoolExecutor = {
 
 /** A factory bound to the shell's call registry — testable with its own. */
 export function createRpcPoolExecutor(registry: RpcPoolCallRegistry): RpcPoolExecutor {
+	const skipper = createEndpointSkipper();
+	// Offline, every endpoint failed alike; back online, none of that is news
+	// about an endpoint (home-2's re-read must reach the wire).
+	if (typeof window !== 'undefined') window.addEventListener('online', () => skipper.reset());
+
 	async function execute(effect: RpcPoolEffect): Promise<RpcShellResult> {
 		const operation = effect.operation;
 		switch (operation.type) {
@@ -188,6 +274,17 @@ export function createRpcPoolExecutor(registry: RpcPoolCallRegistry): RpcPoolExe
 			case 'json_rpc_post': {
 				const held = registry.payload(operation.call_id);
 				const t0 = Date.now();
+				// home-17: an endpoint failing on transport is skipped a while.
+				if (held && skipper.skips(operation.url, operation.method)) {
+					return {
+						type: 'post_outcome',
+						call_id: operation.call_id,
+						url: operation.url,
+						outcome: { type: 'not_connected' },
+						latency_ms: 0,
+						now_ms: Date.now()
+					};
+				}
 				const { outcome, body } = held
 					? await post(
 							operation.url,
@@ -202,6 +299,7 @@ export function createRpcPoolExecutor(registry: RpcPoolCallRegistry): RpcPoolExe
 						// the core routes on rather than waiting forever.
 						{ outcome: { type: 'network' } as RpcTransportOutcome, body: undefined };
 				if (body) registry.keepBody(operation.call_id, operation.url, body);
+				if (held) skipper.note(operation.url, outcome);
 				return {
 					type: 'post_outcome',
 					call_id: operation.call_id,

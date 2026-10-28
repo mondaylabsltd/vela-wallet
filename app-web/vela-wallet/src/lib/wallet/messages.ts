@@ -104,6 +104,14 @@ export interface WalletMessages {
 		 */
 		tokenListUnreachable: string;
 		/**
+		 * "Your assets there aren't affected — we just can't read them right
+		 * now." Under the unreachable line where the Assets list has no rows
+		 * to show (home-3).
+		 */
+		unreachableBody: string;
+		/** "Last seen {{amount}}" — a row whose network did not answer. */
+		lastSeen: string;
+		/**
 		 * PR 2 note 11 (issue 483): the line when the last read failed inside
 		 * Vela itself, by the key the core names (`BalanceView.internal_key`) —
 		 * drawn where the unreachable line goes, never "Can't reach Ethereum".
@@ -240,6 +248,9 @@ export const WALLET_KEYS = [
 	'assets.unreachableMany',
 	// PR 3 note 4: a token list that can't be loaded is not a network out of reach.
 	'assets.tokenListUnreachable',
+	// home-3: the list that could not be read, and a row last read elsewhere.
+	'assets.unreachableBody',
+	'assets.lastSeen',
 	// PR 2 note 11: a read that failed inside Vela, said as that.
 	...BALANCE_INTERNAL_KEYS,
 	// Spec 038: the home's sentence for a first launch with no network.

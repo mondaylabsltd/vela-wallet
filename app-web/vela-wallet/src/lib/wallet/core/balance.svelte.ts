@@ -17,6 +17,7 @@
 import { loadCore } from '$lib/core/client';
 import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { ensureCustomNetworks, inSpace } from '$lib/services/networks';
+import { loadHoldings, saveHoldings } from '$lib/services/holdings-cache';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import {
 	balanceSettledFor,
@@ -51,15 +52,44 @@ class Balance {
 			await Promise.all([ensureCustomNetworks(), loadCore()]);
 			ensureBalanceDashboard();
 			subscribeBalanceDashboard((view) => {
+				this.#keepSettledRows(view);
 				this.view = inSpaceView(view);
 			});
 			this.view = inSpaceView(balanceView());
+			// A switch of space starts the account over in the core (home-7):
+			// nothing the other space failed or held is said here.
 			networkSpace.subscribe(() => {
 				this.view = inSpaceView(balanceView());
-				this.refresh(true);
+				dispatchBalance({ type: 'space_changed' });
+				void this.#restoreRows();
 			});
 		})();
 		return this.#booted;
+	}
+
+	/** The settle the rows were last kept for: `address` and its settle time. */
+	#kept: { address: string | null; at: number | null } = { address: null, at: null };
+
+	/**
+	 * A round settled (`last_refreshed_at_ms` moved for the same account): the
+	 * rows it left on the home are kept for the next visit (home-1, home-3).
+	 */
+	#keepSettledRows(view: BalanceView): void {
+		const { address, last_refreshed_at_ms: at } = view;
+		const settled = address !== null && address === this.#kept.address && at !== this.#kept.at;
+		this.#kept = { address, at };
+		if (settled && at !== null) void saveHoldings(address, networkSpace.current, view.tokens);
+	}
+
+	/**
+	 * The rows the home showed last time for the account and space in front,
+	 * handed to the core, which lets them stand until each chain answers.
+	 */
+	async #restoreRows(): Promise<void> {
+		const address = balanceView().address;
+		if (address === null) return;
+		const tokens = await loadHoldings(address, networkSpace.current);
+		if (tokens.length > 0) dispatchBalance({ type: 'holdings_restored', address, tokens });
 	}
 
 	/**
@@ -83,7 +113,9 @@ class Balance {
 	/** The signed-in address changed (or arrived). The core re-hydrates for it. */
 	async setAccount(address: string): Promise<void> {
 		await this.boot();
+		const changed = balanceView().address !== address;
 		dispatchBalance({ type: 'account_changed', address });
+		if (changed) await this.#restoreRows();
 	}
 
 	refresh(force = false, pull = false): void {

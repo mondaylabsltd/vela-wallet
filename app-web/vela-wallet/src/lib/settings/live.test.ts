@@ -784,6 +784,26 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.summary).toContain('2');
 	});
 
+	// home-9: test coins have no value — the testnet space shows no figure on
+	// a row or in the total, as its hero shows none.
+	it('the testnet space: no figure on any row, and the count alone', async () => {
+		const { liveAccountsSheet, accountAmount } = await import('./live');
+		const balances = new Map<string, number>([[rows[0]!.account.address.toLowerCase(), 0.25]]);
+		const input = {
+			rows,
+			activeIndex: 0,
+			balances,
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			noValue: true
+		};
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows.map((r) => r.amount)).toEqual(['', '']);
+		expect(sheet.summary).toBe('2 accounts');
+		expect(accountAmount({ ...input, hidden: true }, rows[0]!.account.address)).toBe('');
+	});
+
 	// "home.switcherAccountCount" is a plural family: a wallet with one account
 	// read "1 accounts · Total". The form is the locale's own for the count,
 	// chosen by the core's rule (`pluralForm`), never by `count === 1` here.

@@ -15,6 +15,7 @@ import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
+import { onNativeBalanceMoved } from '$lib/services/native-watch';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -66,6 +67,14 @@ class Feed {
 				});
 			space();
 			subscribeNetworks(space);
+			// home-5: a native coin arrived where the scan finds no log (an
+			// account with no code yet) — its balance moved, so the hero and
+			// the rows read again past the token cache, as for a found receipt.
+			onNativeBalanceMoved((address) => {
+				if (balance.view.address?.toLowerCase() === address.toLowerCase()) {
+					balance.refresh(true);
+				}
+			});
 			this.view = activityFeedView();
 		})();
 		return this.#booted;

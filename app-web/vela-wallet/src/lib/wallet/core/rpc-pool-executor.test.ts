@@ -25,7 +25,14 @@ vi.mock('$lib/services/rpc-pool-endpoints', async (importOriginal) => {
 	};
 });
 
-import { createRpcPoolExecutor, readStoredBans } from './rpc-pool-executor';
+import {
+	createEndpointSkipper,
+	createRpcPoolExecutor,
+	readStoredBans,
+	SKIP_AFTER_FAILURES,
+	SKIP_BASE_MS,
+	SKIP_CAP_MS
+} from './rpc-pool-executor';
 
 const effect = (operation: RpcPoolEffect['operation']): RpcPoolEffect => ({ id: 1, operation });
 
@@ -280,4 +287,75 @@ describe('the relay status method is the core’s spelling (spec 082 RA7, G13)',
 		expect(USER_OP_STATUS_METHOD).toBe('pimlico_getUserOperationStatus');
 		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
 	}, 30_000);
+});
+
+/**
+ * home-17: 567 requests to one dead node in 40 s. An endpoint that failed on
+ * transport three times in a row has its reads answered `not_connected` —
+ * nothing left the device — for a window that doubles, and any answer from
+ * it ends that. A write is never held back.
+ */
+describe('an endpoint that is not answering is skipped a while (home-17)', () => {
+	const read = (url = 'https://dead.rpc', method = 'eth_call') =>
+		effect({
+			type: 'json_rpc_post',
+			call_id: 'c1',
+			url,
+			method,
+			x_rpc_url: null,
+			timeout_ms: 1000
+		});
+
+	it('three refusals, then reads go nowhere until the window ends; an answer ends it', async () => {
+		const fetchSpy = vi.fn(async () => {
+			throw new TypeError('Failed to fetch');
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		vi.stubGlobal('navigator', { onLine: true });
+		const executor = createRpcPoolExecutor(makeRegistry());
+		for (let i = 0; i < SKIP_AFTER_FAILURES; i++) {
+			await expect(executor.execute(read())).resolves.toMatchObject({
+				outcome: { type: 'network' }
+			});
+		}
+		expect(fetchSpy).toHaveBeenCalledTimes(SKIP_AFTER_FAILURES);
+		// Skipped: honest about it — nothing was sent.
+		await expect(executor.execute(read())).resolves.toMatchObject({
+			outcome: { type: 'not_connected' },
+			latency_ms: 0
+		});
+		expect(fetchSpy).toHaveBeenCalledTimes(SKIP_AFTER_FAILURES);
+		// Another endpoint is not affected.
+		await executor.execute(read('https://other.rpc'));
+		expect(fetchSpy).toHaveBeenCalledTimes(SKIP_AFTER_FAILURES + 1);
+		// A write to the dead one still goes on the wire.
+		await executor.execute(read('https://dead.rpc', 'eth_sendRawTransaction'));
+		expect(fetchSpy).toHaveBeenCalledTimes(SKIP_AFTER_FAILURES + 2);
+	});
+
+	it('the window doubles while it keeps failing, caps, and closes on any answer', () => {
+		let now = 0;
+		const skipper = createEndpointSkipper(() => now);
+		const url = 'https://dead.rpc';
+		for (let i = 0; i < SKIP_AFTER_FAILURES; i++) skipper.note(url, { type: 'timeout' });
+		expect(skipper.skips(url, 'eth_call')).toBe(true);
+		now += SKIP_BASE_MS;
+		expect(skipper.skips(url, 'eth_call')).toBe(false);
+		skipper.note(url, { type: 'network' });
+		now += SKIP_BASE_MS;
+		expect(skipper.skips(url, 'eth_call')).toBe(true); // doubled
+		now += SKIP_BASE_MS;
+		expect(skipper.skips(url, 'eth_call')).toBe(false);
+		for (let i = 0; i < 20; i++) skipper.note(url, { type: 'network' });
+		now += SKIP_CAP_MS;
+		expect(skipper.skips(url, 'eth_call')).toBe(false);
+		skipper.note(url, { type: 'http_error', status: 503 });
+		skipper.note(url, { type: 'network' });
+		expect(skipper.skips(url, 'eth_call')).toBe(false);
+		// Back online: every endpoint afresh.
+		for (let i = 0; i < SKIP_AFTER_FAILURES; i++) skipper.note(url, { type: 'not_connected' });
+		expect(skipper.skips(url, 'eth_getBalance')).toBe(true);
+		skipper.reset();
+		expect(skipper.skips(url, 'eth_getBalance')).toBe(false);
+	});
 });

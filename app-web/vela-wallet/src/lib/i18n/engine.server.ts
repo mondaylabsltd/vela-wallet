@@ -232,6 +232,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
 			tokenListUnreachable: k('assets.tokenListUnreachable'),
+			unreachableBody: k('assets.unreachableBody'),
+			lastSeen: k('assets.lastSeen'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {

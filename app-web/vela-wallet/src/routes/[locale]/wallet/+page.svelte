@@ -1585,10 +1585,11 @@
 	});
 
 	// The 10-minute aggregate poll the Expo home ran too (the core's
-	// `AUTO_REFRESH_MS`; the timer is the shell's). A transfer nothing else
-	// notices — a native coin arriving while the home sits open — is at most
-	// this stale (issue 188). Not forced: the core drops it while backgrounded,
-	// and the 5-minute token cache has expired by then anyway.
+	// `AUTO_REFRESH_MS`; the timer is the shell's). A native coin arriving
+	// while the home sits open is caught by the 10s Activity tick's balance
+	// watch now (home-5, `native-watch.ts`); this is the floor for anything
+	// else. Not forced: the core drops it while backgrounded, and the
+	// 5-minute token cache has expired by then anyway.
 	onMount(() => {
 		const id = setInterval(() => balance.refresh(false), 600_000);
 		return () => clearInterval(id);
@@ -1687,7 +1688,19 @@
 			} else balance.backgrounded();
 		};
 		document.addEventListener('visibilitychange', onvisibility);
-		return () => document.removeEventListener('visibilitychange', onvisibility);
+		// home-2: the browser says the network is back — read now, past the
+		// token cache, rather than at the core's next recovery step or the
+		// 10-minute poll. The core's own re-reads cover a network that comes
+		// back without the browser noticing (a node, not the connection).
+		const ononline = () => {
+			balance.refresh(true);
+			feed.liveTick();
+		};
+		window.addEventListener('online', ononline);
+		return () => {
+			document.removeEventListener('visibilitychange', onvisibility);
+			window.removeEventListener('online', ononline);
+		};
 	});
 
 	// --- The hero's refresh (issue 462) ----------------------------------------
