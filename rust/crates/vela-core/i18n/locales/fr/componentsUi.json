@@ -7,6 +7,8 @@
       "cancel": "Pas maintenant"
     },
     "signing": {
+      "verdictBelow": "Nouveau résultat de vérification ci-dessous ↓",
+      "verdictAbove": "Nouveau résultat de vérification ci-dessus ↑",
       "loading": "Chargement...",
       "signatureRequest": "Demande de signature",
       "signing": "Signature...",

@@ -142,7 +142,7 @@
 	);
 	const verdictKey = $derived(verdicts.join('\n'));
 	let confirmAt: number | null = null;
-	let seen: string[] = [];
+	let seen: string[] | null = null;
 	$effect.pre(() => {
 		void verdictKey;
 		confirmAt = sheet?.placeOf(CONFIRM) ?? null;
@@ -150,9 +150,12 @@
 	$effect(() => {
 		void verdictKey;
 		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt);
-		const landed = verdicts.flatMap((said, nth) => (seen.includes(said) ? [] : [nth]));
+		const before = seen;
+		const landed = verdicts.flatMap((said, nth) => (before?.includes(said) ? [] : [nth]));
 		seen = verdicts;
 		if (landed.length === 0) return;
+		// Landed (or changed) on the open sheet: the confirm is held a moment.
+		if (before !== null) holdConfirm();
 		// Once the card has been laid out with its foot held. Each one that
 		// landed, the last first: they all end in sight when the body's window
 		// holds them together, and when it cannot, the first — the relay's
@@ -181,6 +184,32 @@
 			for (let nth = said - 1; nth >= 0; nth--) sheet?.reveal(VERDICT, { nth, under: HEADER });
 		});
 	});
+	/**
+	 * How long the confirm stays held once a verdict lands — the AI agent's
+	 * approval sheet's `ARM_MS` (`AgentLayer`).
+	 */
+	const ARM_MS = 700;
+	/**
+	 * A verdict that lands (or changes) on the open sheet holds the confirm
+	 * for `ARM_MS` (owner, 2026-10-28): a tap already on its way to it does
+	 * not confirm a request whose verdict the person has not yet seen. The
+	 * core's gate (`model.confirm.enabled`, its `sign_confirm_state`) stays
+	 * the authority — this only ever holds a confirm it opened, never opens
+	 * one it shut, as `transfers.settling` does for an agent's draft. Drawn
+	 * shut (visibly), and a tap during it does nothing.
+	 */
+	let held = $state(false);
+	let holdTimer: ReturnType<typeof setTimeout> | undefined;
+	function holdConfirm(): void {
+		held = true;
+		clearTimeout(holdTimer);
+		holdTimer = setTimeout(() => (held = false), ARM_MS);
+	}
+	$effect(() => () => clearTimeout(holdTimer));
+	function confirmNow(): void {
+		if (held || !model.confirm.enabled) return;
+		onconfirm?.();
+	}
 	// The form gives way to the status (or comes back): another sheet's worth
 	// of content, in the middle again.
 	const showsStatus = $derived(model.status !== undefined && model.status !== null);
@@ -199,7 +228,7 @@
      never under a fold and never moved by what is read above it. -->
 {#snippet foot()}
 	<div class="foot" data-signing-foot>
-		<SigningAction {model} {onconfirm} {onclose} />
+		<SigningAction {model} {held} onconfirm={confirmNow} {onclose} />
 	</div>
 {/snippet}
 
@@ -211,6 +240,7 @@
 	dismissible={dismissible ? 'explicit' : false}
 	{onclose}
 	footer={showsForm ? foot : undefined}
+	revealCue={model.revealCue}
 >
 	<!-- A refused request (spec 081) already offers its one way out, the
 	     labelled Close under the refusal; a second ✕ would be two doors. -->
@@ -254,7 +284,7 @@
 		<SigningBody
 			{model}
 			pinned={showsForm}
-			{onconfirm}
+			onconfirm={confirmNow}
 			{onclose}
 			{onchip}
 			{oncustom}

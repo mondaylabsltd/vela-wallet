@@ -920,6 +920,15 @@ describe('a verdict is shown whole, and the confirm does not move (device round,
 		await tick();
 		await frame();
 		await frame();
+		// A reveal is a short smooth scroll (`BottomSheet.reveal`): measured once
+		// the body has come to rest — three frames running at the same place.
+		const scroller = scrollerOf(view.sheet);
+		let last = scroller.scrollTop;
+		for (let same = 0, frames = 0; same < 3 && frames < 300; frames++) {
+			await frame();
+			same = scroller.scrollTop === last ? same + 1 : 0;
+			last = scroller.scrollTop;
+		}
 	}
 
 	/** Whole, on screen, and the thing a tap there reaches. */
@@ -1711,6 +1720,77 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		// And still nothing moves when the longest usual verdict lands in it.
 		expect(await land(view, sheetWith(LONGEST, true))).toEqual(larger);
 		expect(await land(view, sheetWith(SWAP, true))).toEqual(larger);
+		await view.screen.unmount();
+	});
+
+	/*
+	 * Owner, 2026-10-28: a verdict that lands (or changes) on the open sheet
+	 * holds its confirm a moment (`ARM_MS`, the AI agent approval sheet's
+	 * 700 ms), so a tap already on its way does not confirm a request whose
+	 * verdict the person has not yet seen. The core's gate stays the authority.
+	 */
+	it('a verdict that lands over an open confirm holds it a moment: a tap then confirms nothing', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: out(), onconfirm });
+		await resting(view.sheet);
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		expect(button.disabled).toBe(false);
+
+		await view.screen.rerender({ model: sheetWith(SWAP, true) });
+		await tick();
+		// Held, visibly — and the tap that was on its way lands on nothing.
+		expect(button.disabled).toBe(true);
+		button.click();
+		await pause(300);
+		expect(button.disabled).toBe(true);
+		button.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		// Then it takes a tap again.
+		await vi.waitFor(() => expect(button.disabled).toBe(false), { timeout: 2000 });
+		button.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
+
+		// What it says changes: held again.
+		await view.screen.rerender({ model: sheetWith(FAILS, true) });
+		await tick();
+		expect(button.disabled).toBe(true);
+		await vi.waitFor(() => expect(button.disabled).toBe(false), { timeout: 2000 });
+
+		// The same verdict, said again: nothing landed, nothing is held.
+		await view.screen.rerender({ model: sheetWith(FAILS, true) });
+		await tick();
+		expect(button.disabled).toBe(false);
+		await view.screen.unmount();
+	});
+
+	it('the hold never opens a confirm the core keeps shut', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: out(), onconfirm });
+		await resting(view.sheet);
+		const shut = {
+			...sheetWith(SWAP, true),
+			confirm: { action: 'Send', enabled: false, note: 'Working out the network fee…' }
+		};
+		await view.screen.rerender({ model: shut });
+		await tick();
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		await pause(1000);
+		expect(button.disabled).toBe(true);
+		button.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		await view.screen.unmount();
+	});
+
+	it('a sheet that opens with its verdict already said is not held', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: sheetWith(SWAP, true), onconfirm });
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		expect(button.disabled).toBe(false);
+		button.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
 		await view.screen.unmount();
 	});
 });

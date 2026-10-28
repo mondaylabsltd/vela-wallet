@@ -517,6 +517,12 @@ export interface SigningModel {
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
 	/**
+	 * The cue over the body's foot when a verdict lands out of sight of a
+	 * person who scrolled away from it (owner, 2026-10-28): "New check
+	 * result below ↓" / "…above ↑". Live only; without it the sheet scrolls.
+	 */
+	revealCue?: { below: string; above: string };
+	/**
 	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
 	 * a form. No fee controls, no confirm (never a greyed one): the request's one
 	 * line and where it stands. Absent while the request is still a request.

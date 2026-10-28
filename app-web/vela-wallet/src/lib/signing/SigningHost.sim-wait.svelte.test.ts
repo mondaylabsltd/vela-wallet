@@ -546,14 +546,18 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		]);
 		expect(core.view.sim_checking).toBe(false);
 		expect(core.view.sim_waited_out_key).toBeNull();
-		// The confirm opened WITH its verdict: no frame had one without the
-		// other — not a confirm open over "Checking…", not a verdict drawn
-		// over a confirm still waiting for it.
+		// The confirm never opened before its verdict: no frame had a confirm
+		// open over "Checking…". Once the verdict is drawn the core's gate is
+		// open — no frame shows its line over the verdict — and the shell holds
+		// the confirm a moment more (owner, 2026-10-28: `SigningSheet`'s
+		// `ARM_MS`), so a tap on its way does not confirm what nobody has read.
 		expect(frames.frames.filter((frame) => !frame.disabled && frame.said !== NO_CHANGE)).toEqual(
 			[]
 		);
 		expect(
-			frames.frames.filter((frame) => frame.disabled && frame.said !== PLACE_CHECKING)
+			frames.frames.filter(
+				(frame) => frame.disabled && frame.said !== PLACE_CHECKING && frame.line !== null
+			)
 		).toEqual([]);
 		expect(place()!.dataset.stage).toBe('landed');
 		// The deadline, passing now, is nobody's: nothing is said, nothing shut.
@@ -611,6 +615,7 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		).toEqual([]);
 
 		// The node answers after all: its verdict takes the caution's place.
+		const answered = frames.frames.length;
 		node.asked[0].answer(NOTHING_MOVES);
 		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(NO_CHANGE), WAIT);
 		expect(cardNote()!.dataset.tone).not.toBe('caution');
@@ -618,8 +623,12 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		expect(dialog()!.textContent).not.toContain(COULD_NOT_CHECK);
 		await vi.waitFor(() => expect(core.view.sim_waited_out_key).toBeNull(), WAIT);
 		expect(core.sim.at(-1)).toEqual({ type: 'sim_settled', id: 'tx:1' });
-		// The confirm stayed open through it.
+		// The core's gate stayed open through it: its line never came back. A
+		// verdict that replaces another holds the confirm a moment (owner,
+		// 2026-10-28: `SigningSheet`'s `ARM_MS`), and then it is open again.
+		await open();
 		await frames.further();
+		expect(frames.frames.slice(answered).filter((frame) => frame.line !== null)).toEqual([]);
 		expect(confirmEl()!.disabled).toBe(false);
 		expect(heldLine()).toBeNull();
 		frames.stop();

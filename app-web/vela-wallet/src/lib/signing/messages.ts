@@ -122,6 +122,9 @@ export interface SigningMessages {
 	signingAccount: string;
 	advancedToggle: string;
 	close: string;
+	/** The cue to a verdict that landed out of sight: "New check result below ↓". */
+	verdictBelow: string;
+	verdictAbove: string;
 	confirmSend: string;
 	confirmSwap: string;
 	confirmDeposit: string;

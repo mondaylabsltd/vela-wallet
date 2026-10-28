@@ -17,9 +17,15 @@
 		onconfirm?: () => void;
 		/** Spec 081: the way out of a refused request. */
 		onclose?: () => void;
+		/**
+		 * The shell holds an open confirm a moment after a verdict lands
+		 * (`SigningSheet`'s `ARM_MS`): drawn shut, with no line of its own —
+		 * the core's gate is still the one that says why a confirm is shut.
+		 */
+		held?: boolean;
 	}
 
-	let { model, onconfirm, onclose }: Props = $props();
+	let { model, onconfirm, onclose, held = false }: Props = $props();
 
 	/** Spec 099 R7: why the confirm is shut, in the core's words. */
 	const note = $derived(model.confirm.enabled ? undefined : model.confirm.note);
@@ -65,7 +71,7 @@
 				variant={model.confirm.danger ? 'danger' : 'value'}
 				shape="rounded"
 				testid="signing-confirm"
-				disabled={!model.confirm.enabled}
+				disabled={!model.confirm.enabled || held}
 				onclick={() => onconfirm?.()}
 			>
 				{model.confirm.action}

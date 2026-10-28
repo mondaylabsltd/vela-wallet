@@ -1996,6 +1996,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 				: {})
 		},
 		closeLabel: m.close,
+		revealCue: { below: m.verdictBelow, above: m.verdictAbove },
 		...(status ? { status } : {}),
 		panelTitle: m.panelTitle
 	};

@@ -1327,6 +1327,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signingAccount: k('componentsUi.signing.signingAccount'),
 		advancedToggle: k('componentsUi.signing.advancedToggle'),
 		close: k('componentsUi.signing.close'),
+		verdictBelow: k('componentsUi.signing.verdictBelow'),
+		verdictAbove: k('componentsUi.signing.verdictAbove'),
 		confirmSend: k('componentsUi.signing.confirmSend'),
 		confirmSwap: k('componentsUi.signing.confirmSwap'),
 		confirmDeposit: k('componentsUi.signing.confirmDeposit'),

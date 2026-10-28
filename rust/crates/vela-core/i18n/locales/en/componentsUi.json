@@ -49,6 +49,8 @@
       "previewNone": "none"
     },
     "signing": {
+      "verdictBelow": "New check result below ↓",
+      "verdictAbove": "New check result above ↑",
       "loading": "Loading...",
       "submitted": "Submitted — waiting for confirmation",
       "historicalNote": "A past signature — exactly what you approved.",

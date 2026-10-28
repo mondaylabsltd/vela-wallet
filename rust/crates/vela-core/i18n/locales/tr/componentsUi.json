@@ -7,6 +7,8 @@
       "cancel": "Şimdi değil"
     },
     "signing": {
+      "verdictBelow": "Yeni kontrol sonucu aşağıda ↓",
+      "verdictAbove": "Yeni kontrol sonucu yukarıda ↑",
       "loading": "Yükleniyor...",
       "signatureRequest": "İmza isteği",
       "signing": "İmzalanıyor...",

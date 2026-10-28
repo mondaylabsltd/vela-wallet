@@ -7,6 +7,8 @@
       "cancel": "Nanti saja"
     },
     "signing": {
+      "verdictBelow": "Hasil pemeriksaan baru di bawah ↓",
+      "verdictAbove": "Hasil pemeriksaan baru di atas ↑",
       "loading": "Memuat...",
       "signatureRequest": "Permintaan tanda tangan",
       "signing": "Menandatangani...",

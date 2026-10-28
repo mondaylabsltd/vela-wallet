@@ -7,6 +7,8 @@
       "cancel": "Не сейчас"
     },
     "signing": {
+      "verdictBelow": "Новый результат проверки ниже ↓",
+      "verdictAbove": "Новый результат проверки выше ↑",
       "loading": "Загрузка…",
       "signatureRequest": "Запрос подписи",
       "signing": "Подписание…",

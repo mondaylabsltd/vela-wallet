@@ -943,8 +943,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `connect.browser` words (signed out, a multisig asked for a message, a
 //   multisig's connect). 2157 + 21 = 2178 leaves, 119 branches.
 // 2326 (round 2: agent + rpc + send + multisig, 2026-10-28): 2207 leaves, 119 branches.
-if (PATHS.length !== 2326) fail(`expected 2326 paths (2207 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2207) fail(`expected 2207 leaf paths, got ${leafSet.size}`);
+// 2328 (a verdict that lands out of the reader's sight, 2026-10-28): +
+//   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
+//   cue to it, instead of a scroll that takes the person from where they
+//   were reading. 2207 + 2 = 2209 leaves, 119 branches.
+if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

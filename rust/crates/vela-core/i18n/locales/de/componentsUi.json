@@ -7,6 +7,8 @@
       "cancel": "Jetzt nicht"
     },
     "signing": {
+      "verdictBelow": "Neues Prüfergebnis unten ↓",
+      "verdictAbove": "Neues Prüfergebnis oben ↑",
       "loading": "Wird geladen ...",
       "signatureRequest": "Signaturanfrage",
       "signing": "Wird signiert ...",
