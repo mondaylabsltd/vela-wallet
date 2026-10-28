@@ -171,6 +171,7 @@ test('a stored replacement-character name shows the address, not mojibake', asyn
 	await openContacts(page);
 	await expect(page.getByText('小明.eth', { exact: true })).toBeVisible();
 	await expect(page.getByText(/�/)).toHaveCount(0);
-	// `shortenAddress`: first 8 characters, an ellipsis, the last 6.
-	await expect(page.getByText('0xd4d4d4…d4d4d4', { exact: true }).first()).toBeVisible();
+	// `shortenAddress`: first 8 characters, an ellipsis, the last 6 — in the
+	// address's checksummed case (vis-22), as every other screen spells it.
+	await expect(page.getByText('0xd4d4d4…d4D4d4', { exact: true }).first()).toBeVisible();
 });

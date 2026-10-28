@@ -618,7 +618,16 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		await context.close();
 	});
 
-	test('EX6: closing the side panel answers 4900 "The browser closed…" at once', async () => {
+	/**
+	 * EX6 (spec 082): Chrome's ✕ on the panel settles what it owed AT ONCE,
+	 * never leaving the dApp waiting. What it is told depends on what had
+	 * happened (dapp-6, owner 2026-10-28): closed before anything happened —
+	 * nothing claimed, or only the passkey prompt raised — is the person
+	 * declining, their 4001; once a grant or proposal may exist (an `approve`
+	 * claim), 4900 "The browser closed…" stays, and a claimed submit that
+	 * carried its hash is "not confirmed yet" (G35, below).
+	 */
+	test('EX6: closing the side panel before anything happened answers 4001 at once', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const wallet = await seedWallet(context, extensionId());
 		const page = await context.newPage();
@@ -636,11 +645,77 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		);
 		expect((await results(page)).personal_sign).toEqual({
 			ok: false,
+			code: 4001,
+			message: 'The person closed the request without approving it'
+		});
+		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
+		expect(await workerLog(wallet)).toMatch(/req\.settled cause=surface_closed/);
+		await context.close();
+	});
+
+	test('EX6: closing the side panel once a grant may exist answers 4900 "The browser closed…" at once', async () => {
+		const context = await loadExtension({ surface: 'panel' });
+		const wallet = await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${DAPP_PORT}/`);
+		await connectInPanel(page, wallet);
+
+		const asked = page.evaluate(() =>
+			window.__ask('personal_sign', ['0x68690a', window.ethereum.selectedAddress])
+		) as Promise<AskResult>;
+		await expect
+			.poll(async () => (await ledger(wallet)).session, { timeout: 10_000 })
+			.toHaveLength(1);
+
+		// The surface's half of the protocol (as G35's stand-in below): the
+		// request is claimed for `approve` — from here a grant may exist — and
+		// then the panel's port goes, as Chrome's ✕ takes it.
+		const live = await wallet.evaluate(async (port) => {
+			type Msg = { type: string; nonce?: number; live?: boolean; request?: { rid: string } };
+			type Port = {
+				postMessage(m: unknown): void;
+				disconnect(): void;
+				onMessage: { addListener(fn: (m: Msg) => void): void };
+			};
+			const chrome = (
+				window as unknown as {
+					chrome: {
+						tabs: { query(q: { url: string }): Promise<{ windowId: number }[]> };
+						runtime: { connect(info: { name: string }): Port };
+					};
+				}
+			).chrome;
+			const [tab] = await chrome.tabs.query({ url: `http://localhost:${port}/*` });
+			const surface = chrome.runtime.connect({ name: 'vela.surface' });
+			const heard: Msg[] = [];
+			surface.onMessage.addListener((m: Msg) => heard.push(m));
+			const next = async (match: (m: Msg) => boolean) => {
+				for (let i = 0; i < 100; i += 1) {
+					const found = heard.find(match);
+					if (found) return found;
+					await new Promise((r) => setTimeout(r, 50));
+				}
+				throw new Error('the worker said nothing');
+			};
+			surface.postMessage({ type: 'hello', kind: 'panel', windowId: tab.windowId });
+			const owed = await next((m) => m.type === 'owed');
+			surface.postMessage({ type: 'claim', rid: owed.request!.rid, phase: 'approve', nonce: 1 });
+			const claimed = await next((m) => m.type === 'claimResult' && m.nonce === 1);
+			surface.disconnect();
+			return claimed.live;
+		}, DAPP_PORT);
+		expect(live).toBe(true);
+
+		const answer = await asked;
+		expect(answer).toMatchObject({
+			ok: false,
 			code: 4900,
 			message: 'The browser closed before the request finished'
 		});
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
-		expect(await workerLog(wallet)).toMatch(/req\.settled cause=surface_closed/);
+		await expect
+			.poll(() => workerLog(wallet), { timeout: 5_000 })
+			.toMatch(/req\.settled cause=surface_closed/);
 		await context.close();
 	});
 

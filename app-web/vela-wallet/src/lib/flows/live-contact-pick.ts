@@ -7,10 +7,9 @@
  * constructs its own `ContactsCore` session while a send is open (024 D8: a
  * route-scoped session, not a global ledger) and hands its view here.
  */
-import { displayName } from '$lib/contacts/live';
+import { addressLine, displayName } from '$lib/contacts/live';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import { CHAIN_COLORS, chainColor } from '$lib/wallet/fixtures';
-import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { pluralForm, type PluralCopy } from '$lib/i18n/plural';
 import type { WalletFlowMessages } from './messages';
@@ -52,11 +51,10 @@ export function liveContactPick(
 			name: displayName(contact),
 			group: view.groups.find((g) => g.members.some((mb) => mb.address === contact.address))?.name,
 			// An unnamed contact is titled by its short address already: the
-			// line under it would only say it again (send-20).
-			addressDisplay:
-				displayName(contact) === shortenAddress(contact.address)
-					? ''
-					: shortenAddress(contact.address),
+			// line under it would only say it again (send-20). Asked of the
+			// name, not by comparing spellings: the title is checksummed
+			// (vis-22) and the book's address is not.
+			addressDisplay: addressLine(contact),
 			addressFull: contact.address,
 			identiconSvg: identicon(contact.address)
 		}))

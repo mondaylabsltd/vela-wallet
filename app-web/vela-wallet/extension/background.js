@@ -25,8 +25,10 @@
  *   - the surface CLAIMS a request before a grant, before the passkey and
  *     before the relay POST, so nothing is ever signed or sent for a page that
  *     is gone (RB5);
- *   - a request that ends without a decision answers 4900, never 4001 and
- *     never Chrome's own error text (RB6) — except a claimed submit whose
+ *   - a request that ends without a decision answers 4900, never Chrome's
+ *     own error text (RB6) — except a window or panel the person closed
+ *     before anything happened (nothing claimed, or only the passkey
+ *     prompt), which is their 4001 (dapp-6), and a claimed submit whose
  *     claim carried the operation hash: that one may have been sent, and its
  *     page is told "not confirmed yet" when its surface goes (RJ2, 083; a
  *     batch: its id), never 4900.
@@ -404,7 +406,8 @@ function pushOwed(caller) {
 
 /**
  * End a request without a decision, exactly once: the page is told 4900 with
- * the cause's plain words (RB6), the surface is told `withdrawn` (it closes
+ * the cause's plain words (RB6) — 4001 for a surface closed before anything
+ * happened (dapp-6, `settlement`) — the surface is told `withdrawn` (it closes
  * the card or sheet without words, RB15), and the next owed request moves up.
  */
 async function settle(rid, cause) {

@@ -117,7 +117,7 @@ test.describe('the injected provider', () => {
 		await context.close();
 	});
 
-	test('closing the window without deciding settles 4900, never 4001', async () => {
+	test('closing the window before deciding is the person declining: 4001, at once', async () => {
 		const context = await loadExtension();
 		const page = await context.newPage();
 		await page.goto(`http://localhost:${DAPP_PORT}/`);
@@ -128,16 +128,19 @@ test.describe('the injected provider', () => {
 		const win = await requestWindow(context);
 		await win.close();
 
-		// The dApp is told, rather than left waiting — but NOT with 4001. That
-		// code means "the user said no, nothing happened", and a dApp that reads
-		// it re-sends; if the request had reached the bundler, the re-send is a
-		// double spend. The code is `dapp_permissions`', asked rather than
-		// restated (spec 027 D43), and `instant.test.ts` pins the worker's
-		// backstop against the core's own answer.
+		// The dApp is told, rather than left waiting. Nothing was claimed — no
+		// grant, nothing signed or sent — so the window closed is the person
+		// saying no, the 4001 Cancel answers (dapp-6, owner 2026-10-28). Once a
+		// grant or proposal may exist, or the bytes may be at the bundler, a close
+		// stays 4900 / "not confirmed yet": a dApp that reads 4001 re-sends, and
+		// that re-send must never be a double spend (`request-life.test.ts`,
+		// `background.test.ts`, and EX6 in `extension-lifecycle.e2e.ts`).
 		const answer = await asked;
-		expect(answer.ok).toBe(false);
-		expect(answer.code).not.toBe(4001);
-		expect(answer.code).toBe(4900);
+		expect(answer).toMatchObject({
+			ok: false,
+			code: 4001,
+			message: 'The person closed the request without approving it'
+		});
 		await context.close();
 	});
 

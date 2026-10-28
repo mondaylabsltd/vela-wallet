@@ -86,8 +86,12 @@ test('a deposit landing while the receive screen is open updates the total by it
 		.first()
 		.click();
 	await expect(page.getByRole('heading', { name: en('receive.title') }).first()).toBeVisible();
-	// Every network row carries the person's real (derived) address.
-	await expect(page.getByText(TEST_ACCOUNT_SHORT, { exact: true })).toHaveCount(CHAINS.length);
+	// Every network row carries the person's real (derived) address — one row
+	// per network of the space in front, the mainnet space a device starts in
+	// (spec 105).
+	await expect(page.getByText(TEST_ACCOUNT_SHORT, { exact: true })).toHaveCount(
+		CHAINS.filter((c) => !c.testnet).length
+	);
 	// The watcher takes its baseline.
 	await expect.poll(() => mainnetCalls, { timeout: 15_000 }).toBeGreaterThan(beforeOpen);
 

@@ -238,6 +238,8 @@ async function look(page: Page) {
 				fee: at('.footer > .line'),
 				signer: at('.footer > .signer'),
 				confirm: at('[data-testid="signing-confirm"]'),
+				/** The foot of the body's window: what scrolls is in sight above it. */
+				view: Math.round(scroller.getBoundingClientRect().bottom * 10) / 10,
 				scrolled: Math.round(scroller.scrollTop)
 			},
 			/** The rows of the balance card in the place: "USDC −10". */
@@ -260,6 +262,38 @@ async function look(page: Page) {
 					: null
 		};
 	});
+}
+
+type Where = Awaited<ReturnType<typeof look>>['where'];
+
+/**
+ * NOTHING MOVED when the verdict landed: the sheet's top and height, its ✕,
+ * the body's window and the confirm in its foot are where they were, the
+ * place is as tall as it was, and the body is laid out as it was.
+ *
+ * One movement is the sheet's own rule, not a shift: a place that did not
+ * stand whole in the body's window is scrolled into sight as its verdict
+ * lands (`BottomSheet.reveal`, d1460bc27). Then — and only then — the body's
+ * blocks are where they were less exactly that scroll. At 320 × 700 the
+ * request now carries its contract's line (a registry token names its
+ * contract on a single call, r2-agent), and the place starts under the fold.
+ */
+function expectLandedInPlace(before: Where, after: Where): void {
+	const shift = after.scrolled - before.scrolled;
+	if (shift !== 0) {
+		expect(shift, 'the reveal scrolls down, to the verdict').toBeGreaterThan(0);
+		expect(
+			(before.place ?? 0) + (before.placeHeight ?? 0),
+			'a reveal only for a place that was not whole in sight'
+		).toBeGreaterThan(before.view);
+	}
+	const body = ['request', 'place', 'details', 'fee', 'signer'] as const;
+	const unscrolled = { ...after, scrolled: before.scrolled };
+	for (const key of body) {
+		const at = after[key];
+		unscrolled[key] = at === null ? null : Math.round((at + shift) * 10) / 10;
+	}
+	expect(unscrolled).toEqual(before);
 }
 
 /** Where everything RESTS: the same figures twice running, past the sheet's entrance. */
@@ -378,7 +412,7 @@ for (const [name, width, height] of SIZES) {
 		// NOTHING MOVED: the sheet's top and height, its ✕, the request, the
 		// place and its height, the details, the fee row, the account, the confirm.
 		record(testInfo, `${width}x${height} moves assets`, before.where, after.where);
-		expect(after.where).toEqual(before.where);
+		expectLandedInPlace(before.where, after.where);
 		// One read served the fee and the sheet.
 		expect(node.asked).toBe(1);
 		await page.screenshot({ path: testInfo.outputPath(`moves-after-en-${width}x${height}.png`) });
@@ -426,7 +460,7 @@ for (const [name, width, height] of SIZES) {
 		await expect(page.getByTestId('signing-confirm')).toBeInViewport({ ratio: 1 });
 
 		record(testInfo, `${width}x${height} expected to fail`, before.where, after.where);
-		expect(after.where).toEqual(before.where);
+		expectLandedInPlace(before.where, after.where);
 		await page.screenshot({ path: testInfo.outputPath(`fails-after-en-${width}x${height}.png`) });
 	});
 }

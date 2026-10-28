@@ -134,11 +134,14 @@ function fakeLocks() {
 let locks: ReturnType<typeof fakeLocks>;
 let win = new EventTarget();
 
-// The first import compiles the bridge (runes): not a test's own time.
+// The first import compiles the bridge (runes): not a test's own time. It is
+// the hook's, and a hook's default 10 s is what a loaded full run overran
+// ("Hook timed out in 10000ms": the whole file failed); the hook gets the
+// room a test has.
 vi.setConfig({ testTimeout: 30_000 });
 beforeAll(async () => {
 	await import('./bridge.svelte');
-});
+}, 30_000);
 
 beforeEach(() => {
 	clients.length = 0;

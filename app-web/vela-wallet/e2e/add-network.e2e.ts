@@ -390,8 +390,12 @@ test('the add-token sheet’s network tab: no RPC listed → the field it asks f
 
 	// Assets → "Add a token by address" → the network tab. (The home's rows
 	// are in the server's HTML before the page hydrates: press until the list
-	// answers.)
-	const byAddress = page.getByRole('button', { name: en('assets.addByAddress') });
+	// answers.) This wallet holds nothing, so once the core has looked the
+	// screen is its empty state (vis-4: skeletons while it reads, never a bare
+	// list) and the same sheet opens from that state's "Add Token".
+	const byAddress = page
+		.getByRole('button', { name: en('assets.addByAddress') })
+		.or(page.getByRole('button', { name: en('addToken.navTitle'), exact: true }));
 	await expect(async () => {
 		if (!(await byAddress.isVisible())) {
 			// The second "All": the Assets section's (the first is Activity's).

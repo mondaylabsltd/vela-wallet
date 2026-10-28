@@ -41,6 +41,7 @@ function serveDApp(): Promise<Server> {
 interface AskResult {
 	ok: boolean;
 	code?: number;
+	message?: string;
 	result?: unknown;
 }
 
@@ -190,11 +191,17 @@ test.describe('signing for a dApp', () => {
 		await expect(win.getByText('Hello, Vela')).toBeVisible({ timeout: 30_000 });
 		await win.close();
 
-		// Torn down with an answer owed: 4900, never 4001 — the code that keeps a
-		// dApp from re-sending an operation that may already be at the bundler.
+		// No signature leaves by any other way: the page is refused. Closed with
+		// nothing claimed (no passkey asked, nothing signed), that is the person
+		// declining — 4001 (dapp-6). The cases where a close must stay 4900 —
+		// something may already have happened — are EX6's and the worker's tests.
 		const answer = await asked;
-		expect(answer.ok).toBe(false);
-		expect(answer.code).not.toBe(4001);
+		expect(answer).toMatchObject({
+			ok: false,
+			code: 4001,
+			message: 'The person closed the request without approving it'
+		});
+		expect(answer.result).toBeUndefined();
 		await context.close();
 	});
 
@@ -444,9 +451,9 @@ test.describe('signing for a dApp', () => {
 
 	/**
 	 * Spec 094 S12: typed data (EIP-712 v4), the shape Permit2 and most dApp
-	 * logins use, signed end to end. A document no descriptor describes is a
-	 * blind signature, and the sheet says so; the confirm and the fixture key
-	 * still sign it, and the page gets a signature.
+	 * logins use, signed end to end. A document no descriptor describes is
+	 * said to be one, and drawn as its fields (dapp-9); the confirm and the
+	 * fixture key still sign it, and the page gets a signature.
 	 */
 	test('eth_signTypedData_v4: the sheet shows it, and approving returns a signature', async () => {
 		const context = await loadExtension();
@@ -479,7 +486,18 @@ test.describe('signing for a dApp', () => {
 		await expect(win.getByRole('dialog', { name: 'Signature request' })).toBeVisible({
 			timeout: 30_000
 		});
-		await expect(win.getByText('Blind signature')).toBeVisible();
+		// dapp-9: no descriptor reads it, so the sheet says so — and still draws
+		// the message as what it is: domain, type, site and every field, not a
+		// blind "0 bytes".
+		await expect(
+			win.getByText(
+				'This typed data could not be decoded with a known descriptor. Review carefully.'
+			)
+		).toBeVisible();
+		await expect(win.getByText('Sign structured data')).toBeVisible();
+		await expect(win.getByText('Vela e2e', { exact: true })).toBeVisible();
+		await expect(win.getByText('Mail', { exact: true })).toBeVisible();
+		await expect(win.getByText('Hello from the typed-data e2e', { exact: true })).toBeVisible();
 		await expect(win.getByText(`localhost:${PORT}`).first()).toBeVisible();
 		await confirmSigning(win);
 		const answer = await asked;
@@ -491,7 +509,8 @@ test.describe('signing for a dApp', () => {
 	/**
 	 * Spec 094 S5: a dApp asking with no wallet in the extension. The window
 	 * used to show a Connect that asked the core to grant nobody — it threw,
-	 * and the button did nothing. It says what is missing now, opens the
+	 * and the button did nothing. It says what is missing now (signed out,
+	 * dapp-8), opens the
 	 * welcome in a tab, and the moment a wallet exists (here: the parallel
 	 * space, in another tab) the card turns into the consent, whose Connect
 	 * works.
@@ -504,7 +523,14 @@ test.describe('signing for a dApp', () => {
 
 		const asked = page.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
 		const win = await requestWindow(context);
-		await expect(win.getByText('Create a wallet first')).toBeVisible({ timeout: 30_000 });
+		// dapp-8: signed out is said as that — sign in, or create a wallet —
+		// not "Create a wallet first" to someone who may already have one.
+		await expect(
+			win.getByText(
+				'You’re not signed in to Vela. Sign in with your passkey, or create a wallet, to continue.'
+			)
+		).toBeVisible({ timeout: 30_000 });
+		await expect(win.getByRole('button', { name: 'I already have a wallet' })).toBeVisible();
 		await expect(win.getByRole('button', { name: 'Connect' })).toHaveCount(0);
 
 		const opened = context.waitForEvent('page');

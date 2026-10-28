@@ -101,7 +101,7 @@ export function displayName(contact: Contact): string {
  * The address line under a name — none when the name already IS the short
  * address (vis-22): an unnamed row read "0xAbCd…1234 / 0xAbCd…1234".
  */
-function addressLine(contact: Contact): string {
+export function addressLine(contact: Contact): string {
 	return contact.name || contact.resolved_name ? shortenAddress(contact.address) : '';
 }
 

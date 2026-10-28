@@ -27,7 +27,8 @@ import { denyOffOrigin, readKv, stubJsonRpc } from './stub-chain';
 const KNOWN = '0x' + 'b0b0'.repeat(10);
 /** Nobody knows this one — the reporter's `0x600746…95f4d4`. */
 const STRANGER = '0x600746' + '0'.repeat(28) + '95f4d4';
-const STRANGER_SHORT = '0x600746…95f4d4';
+// vis-22: the short form is spelled in the address's checksummed case.
+const STRANGER_SHORT = '0x600746…95F4D4';
 const REGISTRY_NAME = "Bob's Vela";
 
 function sendTo(to: string, id: string, ageSeconds: number) {

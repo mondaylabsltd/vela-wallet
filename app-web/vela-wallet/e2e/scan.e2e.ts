@@ -144,7 +144,7 @@ test('a code in a chosen image is read, and its address reaches the send form', 
 	await stubCamera(page, 'NotAllowedError');
 	await openHome(page);
 	await openScanner(page);
-	await expect(page.getByText(en('componentsUi.scanner.permissionText'))).toBeVisible();
+	await expect(page.getByText(en('componentsUi.scanner.permissionDenied'))).toBeVisible();
 
 	await pick(page, ALICE);
 
@@ -366,7 +366,12 @@ test('a refused camera says so — and still offers the way round it', async ({ 
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await openScanner(page);
 
-	await expect(page.getByText(en('componentsUi.scanner.permissionText'))).toBeVisible();
+	// home-18: not only that the camera is needed — that it is blocked, where
+	// to allow it, and that it can be asked for again from here.
+	await expect(page.getByText(en('componentsUi.scanner.permissionDenied'))).toBeVisible();
+	await expect(
+		page.getByRole('button', { name: en('componentsUi.scanner.retry') }).first()
+	).toBeVisible();
 	// The alternative is on the same screen, not in a help article.
 	await expect(page.getByText(en('componentsUi.scanner.gallery')).first()).toBeVisible();
 });
