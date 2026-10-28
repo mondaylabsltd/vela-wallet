@@ -76,6 +76,7 @@
 	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
 	import {
 		accountAmount,
+		accountLoading,
 		switcherBalances,
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -687,7 +688,9 @@
 			identicon: identiconSvgForClient,
 			others: multisig.accounts.map((a) => a.address),
 			// home-9: no figure for test coins in the testnet space.
-			noValue: networkSpace.testnet
+			noValue: networkSpace.testnet,
+			// ms-24: a row the core is still reading is drawn as loading.
+			loading: balance.view.switcher.loading
 		};
 	});
 
@@ -1373,6 +1376,7 @@
 		removeLabel={data.multisigMessages.settings.remove}
 		cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
 		amount={(address) => accountAmount(accountsInput, address)}
+		loading={(address) => accountLoading(accountsInput, address)}
 		onselect={(account) => multisig.activate(account.address)}
 	/>
 {/snippet}

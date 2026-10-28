@@ -1290,6 +1290,12 @@ export interface LiveAccountsInput {
 	 * row and no total says a figure — the hero says none either.
 	 */
 	noValue?: boolean;
+	/**
+	 * ms-24: the balance core is still reading the rows
+	 * (`BalanceSwitcherView.loading`): a row with no figure yet is drawn as
+	 * loading, not as an empty cell — and never as a $0.00.
+	 */
+	loading?: boolean;
 }
 
 /** One account's total as its row draws it: the mask, the figure, or nothing yet. */
@@ -1298,6 +1304,16 @@ export function accountAmount(input: LiveAccountsInput, address: string): string
 	if (input.hidden) return MASK;
 	const usd = input.balances.get(address.toLowerCase());
 	return usd === undefined ? '' : moneyText(usd, input.currency);
+}
+
+/**
+ * ms-24: the row has no figure yet and the balance core is still reading
+ * it — drawn as loading. Once the read is over, a row still without one is
+ * an empty cell, and the total says it is partial.
+ */
+export function accountLoading(input: LiveAccountsInput, address: string): boolean {
+	if (input.noValue === true || input.hidden || input.loading !== true) return false;
+	return !input.balances.has(address.toLowerCase());
 }
 
 /**
@@ -1334,6 +1350,7 @@ function liveAccountRows(input: LiveAccountsInput) {
 			// Hidden: the mask, whatever is known. No cached total yet: an empty
 			// cell, never a mocked figure.
 			amount: accountAmount(input, row.account.address),
+			loading: accountLoading(input, row.account.address),
 			selected: position === input.activeIndex
 		};
 	});

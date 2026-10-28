@@ -329,6 +329,8 @@ export interface AccountsSheetModel {
 		addressFull: string;
 		identiconSvg: string;
 		amount: string;
+		/** ms-24: no figure yet, and it is being read: drawn as loading. */
+		loading?: boolean;
 		selected: boolean;
 	}[];
 	primary: string;

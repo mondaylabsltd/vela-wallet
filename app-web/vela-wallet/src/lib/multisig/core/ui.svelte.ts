@@ -4,6 +4,7 @@
  * wallet page's own doors open them.
  */
 import type { DappCall } from './proposals.svelte';
+import type { LinkedProposals } from './linked.svelte';
 
 /**
  * A dApp's transaction from a multisig, owned by the request it came with
@@ -36,6 +37,11 @@ export type MultisigSheet =
 	| { kind: 'create' }
 	| { kind: 'add' }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
+	/**
+	 * ms-21: a link's transaction on a device with none of its multisig's
+	 * members — read from `source`, with nothing added and nothing switched.
+	 */
+	| { kind: 'preview'; chainId: number; safeTxHash: string; source: LinkedProposals }
 	| { kind: 'invite' }
 	/** ms-22: what a link could not open, said (a damaged link, a network Vela lacks). */
 	| { kind: 'notice'; text: string }

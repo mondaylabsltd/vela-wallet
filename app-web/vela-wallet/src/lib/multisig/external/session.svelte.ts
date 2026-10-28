@@ -21,6 +21,7 @@ import { chainIdOf } from '$lib/walletpair/networks/evm';
 import { ErrorCode, type Json } from '$lib/walletpair/protocol';
 import { sameAddress } from '../core/kernel';
 import { connectRoom, relayUrl } from './relay';
+import { connectLink } from './connect-link';
 
 const SAVED_KEY = 'vela.multisig.externalWallets.v1';
 
@@ -90,8 +91,9 @@ export class ExternalWallet {
 	chain = $state<string | null>(null);
 	wallet = $state<string | null>(null);
 	/**
-	 * The page to open: with the invite for a new room, plain for one paired
-	 * before. Fixed for the session (ms-13): the sheet's words and code do not
+	 * The page to open: with the invite for a new room, none for one paired
+	 * before — and the members who may sign (ms-14), all in the fragment.
+	 * Fixed for the session (ms-13): the sheet's words and code do not
 	 * change under the person once the page has paired.
 	 */
 	link = $state('');
@@ -107,13 +109,14 @@ export class ExternalWallet {
 	readonly #client: WalletPairClient;
 	readonly #saved: Saved;
 
-	private constructor(saved: Saved, page: string, fresh: boolean) {
+	private constructor(saved: Saved, page: string, fresh: boolean, owners: string[]) {
 		this.#saved = saved;
 		const room = Room.parse(saved.record);
 		this.#connection = connectRoom(room);
 		this.#client = new WalletPairClient(this.#connection, namespaceRules);
-		this.link = fresh && room.invite ? `${page}#${encodeURIComponent(room.invite)}` : page;
-		this.resumed = this.link === page;
+		const invite = fresh && room.invite ? room.invite : null;
+		this.link = connectLink(page, invite, owners);
+		this.resumed = invite === null;
 		this.accounts = saved.accounts;
 		// A name this page once gave itself is no wallet's (ms-13).
 		this.wallet = saved.wallet && saved.wallet !== 'Vela connect' ? saved.wallet : null;
@@ -154,7 +157,7 @@ export class ExternalWallet {
 		const known = readSaved()
 			.reverse()
 			.find((s) => s.accounts.some((a) => owners.some((o) => sameAddress(o, a))));
-		if (known) return new ExternalWallet(known, page, false);
+		if (known) return new ExternalWallet(known, page, false, owners);
 		const room = Room.create(relayUrl());
 		const saved: Saved = {
 			id: crypto.randomUUID(),
@@ -162,7 +165,7 @@ export class ExternalWallet {
 			accounts: [],
 			savedMs: Date.now()
 		};
-		return new ExternalWallet(saved, page, true);
+		return new ExternalWallet(saved, page, true, owners);
 	}
 
 	/** The accounts the wallet reports, among `owners`. */

@@ -205,6 +205,9 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 	await test.step('the funder signs through the connect page; Alice executes', async () => {
 		await page.getByRole('button', { name: 'Sign with another wallet' }).first().click();
 		const link = (await page.getByTestId('external-link').textContent())!.trim();
+		// ms-14: the member asked for rides in the fragment, never the query.
+		expect(new URL(link).search).toBe('');
+		expect(new URL(link).hash).toContain(`for=${FUNDER.toLowerCase()}`);
 		await shot(page, 'x2-external');
 		const other = await browser.newContext({ viewport: { width: 430, height: 900 } });
 		// Both sides bring a relay token of their own, issued by Vela's site.
@@ -223,6 +226,7 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 		await wallet.goto(link);
 		await wallet.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 60_000 });
 		await expect(wallet.getByTestId('connect-connected')).toBeVisible({ timeout: 60_000 });
+		await expect(wallet.getByTestId('connect-wrong-account')).toHaveCount(0);
 		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 120_000 });
 		await shot(wallet, 'x3-connect');
 		if (!process.env.LIVE_PEERCONNECT) {

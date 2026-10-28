@@ -162,11 +162,15 @@
         "data": "數據",
         "changesMembers": "第 {{index}} 個調用會修改這個多簽本身：{{change}}。只有在所有成員都知情時才批准。",
         "siteFollows": "{{host}} 已收到這筆交易的 ID，會一直跟蹤到成員執行或拒絕它。交易仍留在活動中。",
-        "voided": "已作廢",
-        "voidedNote": "已作廢：另一筆交易用掉了序號 #{{nonce}}，這筆交易永遠不會執行。",
+        "voided": "已被取代",
+        "voidedNote": "已被序號 #{{nonce}} 上的作廢交易取代，這筆交易永遠不會執行。",
+        "voidedByOther": "已被序號 #{{nonce}} 上的另一筆交易取代，這筆交易永遠不會執行。",
         "notInMailbox": "這筆交易不在這個多簽的信箱裡。請讓發連結的人核對一下。",
         "unknownNetwork": "這個連結對應的網絡 Vela 裡沒有（鏈 {{chainId}}）。請先在設定中加入該網絡，再重新打開連結。",
-        "badLink": "這個多簽交易連結不完整或已損壞。請重新索取。"
+        "badLink": "這個多簽交易連結不完整或已損壞。請重新索取。",
+        "previewNote": "此裝置上沒有這個多簽帳戶的成員帳戶。開啟此連結並沒有加入它，也沒有切換帳戶。",
+        "watch": "加入此裝置",
+        "watching": "已在此裝置上：它在你的帳戶列表中。目前顯示的帳戶沒有改變。"
       },
       "send": {
         "propose": "發起並批准",
@@ -258,7 +262,10 @@
         "pageAway": "錢包頁面已關閉。請在錢包所在的地方重新打開：請求仍在等待。",
         "connectDeclined": "錢包頁面拒絕了連接。按重試可以再請求一次。",
         "declinedHere": "你已拒絕，Vela 已收到通知；可以關閉此頁面。",
-        "otherChain": "錢包仍停留在其他網絡。請切換到 {{chain}} 後重試。"
+        "otherChain": "錢包仍停留在其他網絡。請切換到 {{chain}} 後重試。",
+        "connectingAs": "正以 {{account}} 連接",
+        "expectedMember": "Vela 要求的是這個多簽的成員：{{accounts}}。",
+        "notExpectedMember": "{{account}} 不是 Vela 要求的成員，此頁面不會連接它，也不會用它簽署。請在錢包中切換到 {{accounts}}，切換後此頁面會繼續。"
       },
       "import": {
         "or": "或從 Safe{Wallet} 匯入",

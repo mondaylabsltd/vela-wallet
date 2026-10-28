@@ -4,17 +4,22 @@
 	 * active multisig's proposals, answers the two links (`#ms=` opens a
 	 * transaction to approve, `#msa=` adds a multisig) and draws whichever
 	 * multisig sheet is open. The page stays the session's; this only adds.
+	 *
+	 * ms-21: a `#ms=` link on a device with none of the multisig's members
+	 * adds nothing and switches nothing — its transaction is shown, read
+	 * only, and following it here is the person's tap.
 	 */
 	import { replaceUrl } from '$lib/ui/history';
 	import { onMount } from 'svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { addMultisig, followUnrecorded } from '../core/accounts';
+	import { followUnrecorded, keepMultisig } from '../core/accounts';
+	import { openProposalLink } from '../core/linked.svelte';
 	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
 	import { chainMeta } from '$lib/services/chains';
 	import { flushOutbox, proposals } from '../core/proposals.svelte';
-	import { recordExecution } from '../core/records';
-	import { multisig } from '../core/store.svelte';
+	import { recordExecution, useCancelTitle } from '../core/records';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { externalSigning } from '../external/signing.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
@@ -63,8 +68,13 @@
 		);
 	});
 
+	/** ms-21: the linked multisig was added here, on the person's tap. */
+	let watched = $state(false);
+
 	onMount(() => {
 		multisig.boot();
+		// ms-9: an executed cancellation's Activity row is titled as its proposal.
+		useCancelTitle(m.action.cancel);
 		proposals.onrecorded = () => onchanged?.();
 		// ms-19: what was signed and never reached the mailbox goes now.
 		void flushOutbox().then((sent) => {
@@ -133,18 +143,39 @@
 			});
 			return;
 		}
-		let account = multisig.find(proposal.multisig);
-		if (!account) {
-			const outcome = await addMultisig(proposal.multisig, [proposal.chainId]);
-			if (!outcome.ok) {
-				addPrefill = proposal.multisig;
-				pendingLink = proposal;
-				multisigUi.open({ kind: 'add' });
-				return;
-			}
-			account = outcome.account;
+		// Reading the multisig may take a while (ms-16): said, never a blank wait.
+		multisigUi.open({ kind: 'notice', text: m.proposal.opening });
+		const opening = await openProposalLink(proposal);
+		// Closed meanwhile: the person left it; nothing opens over what they do now.
+		const sheetNow = multisigUi.sheet;
+		if (sheetNow?.kind !== 'notice' || sheetNow.text !== m.proposal.opening) return;
+		if (opening.kind === 'failed') {
+			// ms-22: the person adds it themselves; its transaction opens then.
+			addPrefill = proposal.multisig;
+			pendingLink = proposal;
+			multisigUi.open({ kind: 'add' });
+			return;
 		}
-		openLinked(account.address, proposal);
+		if (opening.kind === 'member') {
+			// A member is here: kept (if new) and shown, as a member's link always was.
+			const account = opening.added ? opening.account : keepMultisig(opening.account);
+			openLinked(account.address, proposal);
+			return;
+		}
+		// ms-21: none is — the transaction alone. Nothing added, nothing switched.
+		watched = opening.added;
+		multisigUi.open({
+			kind: 'preview',
+			chainId: proposal.chainId,
+			safeTxHash: proposal.safeTxHash,
+			source: opening.source
+		});
+	}
+
+	/** ms-21: the person chose to follow the linked multisig here. It is not shown. */
+	function watch(account: MultisigAccount) {
+		keepMultisig(account);
+		watched = true;
 	}
 
 	/** The link's transaction, on its multisig (now on this device). */
@@ -214,6 +245,25 @@
 		onclose={() => multisigUi.close()}
 		onexecuted={({ item, txHash, userOpHash }) => {
 			void recordExecution(active.address, item, txHash, userOpHash).finally(() => onchanged?.());
+		}}
+	/>
+{:else if sheet?.kind === 'preview'}
+	<!-- ms-21: a link's transaction on a device with none of its members. -->
+	{@const linked = sheet.source.account}
+	<ProposalSheet
+		{m}
+		{signing}
+		account={linked}
+		chainId={sheet.chainId}
+		safeTxHash={sheet.safeTxHash}
+		source={sheet.source}
+		watch={{ added: watched, onwatch: () => watch(linked) }}
+		{locale}
+		{wide}
+		{closeLabel}
+		onclose={() => multisigUi.close()}
+		onexecuted={({ item, txHash, userOpHash }) => {
+			void recordExecution(linked.address, item, txHash, userOpHash).finally(() => onchanged?.());
 		}}
 	/>
 {:else if sheet?.kind === 'dapp' && dappAccount}

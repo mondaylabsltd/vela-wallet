@@ -1051,9 +1051,10 @@ pub struct Model {
     switcher_open: bool,
     switcher_roster: Vec<String>,
     /// `displayTotal` captured at the moment the switcher was tapped — the
-    /// closure capture in `openSwitcher` (`useHomeController.ts:470-479`).
-    /// Doubles as the "an open is pending" latch.
-    switcher_pinned_total: Option<f64>,
+    /// closure capture in `openSwitcher` (`useHomeController.ts:470-479`):
+    /// `Some(None)` when the hero had no figure then (ms-24). The outer
+    /// `Option` doubles as the "an open is pending" latch.
+    switcher_pinned_total: Option<Option<f64>>,
     switcher_pending: u32,
     switcher_balances: Vec<BalanceCacheEntry>,
 }
@@ -1435,17 +1436,7 @@ impl App for BalanceDashboard {
     fn view(&self, model: &Model) -> BalanceView {
         let partial = balance_partial(model);
         let total = display_total(model);
-        // Nothing known yet → skeleton, never a fake $0 (invariant ②,
-        // `useHomeController.ts:186-188`). The first chain to answer with a
-        // holding it can PRICE ends it: what can be counted is shown at once
-        // (#188). Until then there is no figure — a stream that has so far
-        // listed only unpriced tokens would otherwise paint $0.00.
-        // Rows restored from the last visit are known too: their sum is the
-        // figure (home-4), drawn from the first frame.
-        let unknown = model.cached_total.is_none()
-            && !model.bootstrapped
-            && model.stream_peak <= 0.0
-            && !(model.rows_whole && !model.tokens.is_empty());
+        let unknown = balance_unknown(model);
         // Never mid-refresh: before prices arrive every token is unpriced,
         // and "some tokens couldn't be priced" flashing while chains are still
         // answering was #188's second half.
@@ -1476,9 +1467,7 @@ impl App for BalanceDashboard {
             .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0 && t.price_usd.is_none())
             .cloned()
             .collect();
-        // Nothing could be read and nothing is known (spec 038 finding 15).
-        let unreachable =
-            model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
+        let unreachable = balance_unreachable(model);
         // The first read of this account is still out ("Checking…").
         let first_read_ended = !(model.address.is_some() && !model.bootstrapped);
         // Rows every chain answered for, or kept, are not "loading": with
@@ -1486,18 +1475,7 @@ impl App for BalanceDashboard {
         let holdings_loading = model.tokens.is_empty()
             && model.cached_total.unwrap_or(0.0) > 0.0
             && !(model.bootstrapped && model.rows_whole);
-        // home-11: held, and not one holding priced — the sum is unknown, not
-        // zero. Only once a figure would otherwise be drawn.
-        let held: Vec<&BalanceToken> = model
-            .tokens
-            .iter()
-            .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0)
-            .collect();
-        let unpriced_only = !unknown
-            && !unreachable
-            && total <= 0.0
-            && !held.is_empty()
-            && held.iter().all(|t| t.price_usd.is_none());
+        let unpriced_only = only_unpriced(model, unknown || unreachable, total);
         BalanceView {
             address: model.address.clone(),
             // No figure while nothing is known: the skeleton, privacy — and a
@@ -1759,24 +1737,23 @@ fn switcher_opened(model: &mut Model, addresses: Vec<String>) -> Command<Balance
     // Captured NOW, exactly as `openSwitcher`'s closure captures
     // `displayTotal` — a settle landing before the cache read answers must
     // not move the pinned row.
-    let total = display_total(model);
+    let total = known_total(model);
     model.switcher_roster = addresses.clone();
     model.switcher_pinned_total = Some(total);
-    requests(
-        model,
-        vec![
-            // Ported verbatim (`useHomeController.ts:473`): the CURRENT
-            // displayTotal is poked into the persisted cache so the active
-            // row matches the hero — even when that value is a partial
-            // `max(live, cached)`, or 0 while still unknown. In tension with
-            // invariant ⑥; today's shipped behavior.
-            BalanceOperation::WriteBalanceCache {
-                address,
-                usd: total,
-            },
-            BalanceOperation::ReadBalanceCacheMany { addresses },
-        ],
-    )
+    let mut operations = Vec::new();
+    // Ported (`useHomeController.ts:473`): the CURRENT displayTotal is poked
+    // into the persisted cache so the active row matches the hero — even
+    // when that value is a partial `max(live, cached)`. In tension with
+    // invariant ⑥; today's shipped behavior. ms-24: only a figure the hero
+    // has. While it has none (still checking, nothing readable) the poke
+    // was a $0 — the row read "$0.00", the cache kept it for the next open,
+    // and the total counted it as known. Now the row stays without a figure
+    // until the account's own refresh below answers.
+    if let Some(usd) = total {
+        operations.push(BalanceOperation::WriteBalanceCache { address, usd });
+    }
+    operations.push(BalanceOperation::ReadBalanceCacheMany { addresses });
+    requests(model, operations)
 }
 
 // ---------------------------------------------------------------------------
@@ -2021,10 +1998,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 return Command::done(); // no open pending
             };
             model.switcher_balances = balances;
-            if let Some(address) = model.address.clone() {
+            if let (Some(address), Some(usd)) = (model.address.clone(), pinned) {
                 // `balances.set(address, displayTotal)` (`:475`) — the active
-                // row always matches what the hero showed at open.
-                upsert_balance(&mut model.switcher_balances, &address, pinned);
+                // row always matches what the hero showed at open; a hero
+                // with no figure pins none (ms-24).
+                upsert_balance(&mut model.switcher_balances, &address, usd);
             }
             // Invariant ⑩: open NOW, with cached numbers on every row …
             model.switcher_open = true;
@@ -2148,6 +2126,49 @@ fn arm_recovery(model: &mut Model, operations: &mut Vec<BalanceOperation>, unrea
 /// The display rule (invariants ① and the cache fallback): no live data →
 /// cached; a chain missing → `max(live, cached)` — never the confident
 /// undercount; otherwise the live sum, unpriced holdings and all (#188).
+/// Nothing known yet → skeleton, never a fake $0 (invariant ②,
+/// `useHomeController.ts:186-188`). The first chain to answer with a
+/// holding it can PRICE ends it: what can be counted is shown at once
+/// (#188). Until then there is no figure — a stream that has so far
+/// listed only unpriced tokens would otherwise paint $0.00.
+/// Rows restored from the last visit are known too: their sum is the
+/// figure (home-4), drawn from the first frame.
+fn balance_unknown(model: &Model) -> bool {
+    model.cached_total.is_none()
+        && !model.bootstrapped
+        && model.stream_peak <= 0.0
+        && !(model.rows_whole && !model.tokens.is_empty())
+}
+
+/// Nothing could be read and nothing is known (spec 038 finding 15).
+fn balance_unreachable(model: &Model) -> bool {
+    model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none()
+}
+
+/// home-11: held, and not one holding priced — the sum is unknown, not
+/// zero. Only once a figure would otherwise be drawn (`no_figure` says it
+/// would not: unknown or unreachable).
+fn only_unpriced(model: &Model, no_figure: bool, total: f64) -> bool {
+    if no_figure || total > 0.0 {
+        return false;
+    }
+    let held: Vec<&BalanceToken> = model
+        .tokens
+        .iter()
+        .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0)
+        .collect();
+    !held.is_empty() && held.iter().all(|t| t.price_usd.is_none())
+}
+
+/// The hero's figure, privacy aside — `None` whenever the view would draw
+/// none (`BalanceView::display_total_usd`): nothing read yet, nothing
+/// readable, or nothing held that can be priced.
+fn known_total(model: &Model) -> Option<f64> {
+    let total = display_total(model);
+    let no_figure = balance_unknown(model) || balance_unreachable(model);
+    (!no_figure && !only_unpriced(model, no_figure, total)).then_some(total)
+}
+
 fn display_total(model: &Model) -> f64 {
     let live = live_total(&model.tokens);
     // home-4: the rows are every chain's — so the figure is their sum, during

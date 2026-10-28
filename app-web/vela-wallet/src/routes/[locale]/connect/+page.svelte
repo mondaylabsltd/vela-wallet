@@ -5,6 +5,10 @@
 	 * transaction, a network switch — to the wallet in this browser, which
 	 * asks the owner. It keeps its sessions, so Vela can ask the same wallet
 	 * again: reopening this page resumes them.
+	 *
+	 * ms-14: the link names the members Vela asks for (in its fragment, like
+	 * the invite). The page says which account is connecting, and refuses —
+	 * loudly, with what to do — an account that is not one of them.
 	 */
 	import { replaceUrl } from '$lib/ui/history';
 	import { onMount } from 'svelte';
@@ -14,8 +18,10 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { chainName } from '$lib/services/networks';
 	import { discoverProviders, type ProviderDetail } from '$lib/multisig/external/eip6963';
-	import { Bridge, inviteFromHash, type SessionView } from '$lib/multisig/external/bridge';
+	import { Bridge, type SessionView } from '$lib/multisig/external/bridge';
+	import { connectLink, isExpected, readConnectHash } from '$lib/multisig/external/connect-link';
 	import { currentChain } from '$lib/multisig/external/injected';
+	import { fillTemplate } from '$lib/i18n/fill';
 
 	let { data } = $props();
 	const m = $derived(data.multisigMessages.external);
@@ -26,16 +32,21 @@
 	let sessions = $state<SessionView[]>([]);
 	let tick = $state(0);
 	let invite: string | null = null;
+	/** ms-14: the members Vela asked for (the link's), lowercase; empty for an older link. */
+	let members = $state<string[]>([]);
 	let link = $state('');
 	let copied = $state(false);
 	let failure = $state('');
 
 	onMount(async () => {
-		// The invite is a bearer credential until paired: out of the address bar and history.
-		invite = inviteFromHash(location.hash);
+		// The invite is a bearer credential until paired: out of the address bar
+		// and history. The members it names stay, so a reload still checks them.
+		const read = readConnectHash(location.hash);
+		invite = read.invite;
+		members = read.members;
 		if (invite) {
 			link = location.href;
-			replaceUrl(location.pathname);
+			replaceUrl(connectLink(location.pathname, null, members));
 		}
 		providers = await discoverProviders();
 		discovered = true;
@@ -62,7 +73,7 @@
 			b.addEventListener('activity', refresh);
 			b.addEventListener('prompt', refresh);
 			b.resumeAll();
-			if (invite) b.join(invite);
+			if (invite) b.join(invite, members);
 			invite = null;
 			bridge = b;
 			refresh();
@@ -113,6 +124,9 @@
 		return chain ? chainName(Number(chain.split(':')[1])) : '';
 	});
 	const live = $derived(sessions.filter((s) => s.approved));
+	/** ms-14: the wallet's account is not one of the members the link named. */
+	const wrongAccount = $derived(!!account && !isExpected(members, account));
+	const memberList = $derived(members.map((a) => shortenAddress(eip55(a))).join(', '));
 
 	/** vis-20: a request's time to the minute, as every other time in the app. */
 	function at(ms: number): string {
@@ -179,23 +193,32 @@
 			<section class="card ask" aria-live="polite">
 				<p class="lead">{m.askConnect}</p>
 				<p class="muted">{m.askNote}</p>
+				{@render who()}
 				<div class="row">
 					<Button variant="secondary" shape="rounded" onclick={() => prompt.answer(false)}
 						>{m.decline}</Button
 					>
-					<Button variant="primary" shape="rounded" onclick={() => prompt.answer(true)}
-						>{m.connect}</Button
+					<!-- ms-14: an account that is not a member is not connected. -->
+					<Button
+						variant="primary"
+						shape="rounded"
+						disabled={wrongAccount}
+						onclick={() => prompt.answer(true)}>{m.connect}</Button
 					>
 				</div>
 			</section>
 		{:else if live.length > 0}
 			<section class="card">
-				<p class="lead" data-testid="connect-connected">{m.keepOpen}</p>
-				{#if account}
-					<p class="who">
-						<span class="mono">{shortenAddress(eip55(account))}</span>
-						{#if network}<span class="muted">· {network}</span>{/if}
-					</p>
+				{#if wrongAccount}
+					{@render who()}
+				{:else}
+					<p class="lead" data-testid="connect-connected">{m.keepOpen}</p>
+					{#if account}
+						<p class="who">
+							<span class="mono">{shortenAddress(eip55(account))}</span>
+							{#if network}<span class="muted">· {network}</span>{/if}
+						</p>
+					{/if}
 				{/if}
 			</section>
 		{:else if sessions.some((s) => s.declined)}
@@ -236,6 +259,27 @@
 
 	{#if failure}<p class="error" role="alert">{failure}</p>{/if}
 </main>
+
+<!-- ms-14: who is connecting, and whom Vela asked for — a stranger refused aloud. -->
+{#snippet who()}
+	{#if account}
+		<p class="who" data-testid="connect-account">
+			<span class="muted"
+				>{fillTemplate(m.connectingAs, { account: shortenAddress(eip55(account)) })}</span
+			>
+		</p>
+	{/if}
+	{#if wrongAccount}
+		<p class="error" role="alert" data-testid="connect-wrong-account">
+			{fillTemplate(m.notExpectedMember, {
+				account: shortenAddress(eip55(account ?? '')),
+				accounts: memberList
+			})}
+		</p>
+	{:else if members.length > 0}
+		<p class="muted">{fillTemplate(m.expectedMember, { accounts: memberList })}</p>
+	{/if}
+{/snippet}
 
 <style>
 	/* vis-20: the app's screen gutter and type scale — the page had a gutter

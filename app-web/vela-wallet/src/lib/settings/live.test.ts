@@ -1669,4 +1669,35 @@ describe('the switcher total while an account is not known yet (ms-24)', () => {
 		);
 		expect(known.summary).toContain(fill(m.accounts.total, { amount: '$15.00' }));
 	});
+
+	it('draws a row still being read as loading, never a figure, and the total as partial', async () => {
+		const { liveAccountsSheet, accountAmount, accountLoading } = await import('./live');
+		const a = '0xAAAA000000000000000000000000000000000001';
+		const b = '0xBBBB000000000000000000000000000000000002';
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const input = {
+			rows: [account('a', a), account('b', b)],
+			activeIndex: 0,
+			balances: new Map([[a.toLowerCase(), 12]]),
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe],
+			loading: true
+		};
+		// Unread while the core reads: loading, and no figure (no "$0.00").
+		expect(accountLoading(input, safe)).toBe(true);
+		expect(accountAmount(input, safe)).toBe('');
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows.map((r) => r.loading)).toEqual([false, true]);
+		expect(sheet.rows[1].amount).toBe('');
+		expect(sheet.summary).toContain(fill(m.accounts.totalPartial, { amount: '$12.00' }));
+		// A known row is its figure, loading or not.
+		expect(accountLoading(input, a)).toBe(false);
+		// The read is over: a row still without a figure is no longer "loading".
+		expect(accountLoading({ ...input, loading: false }, safe)).toBe(false);
+		// Hidden or the testnet space: neither a figure nor a loading bar.
+		expect(accountLoading({ ...input, hidden: true }, safe)).toBe(false);
+		expect(accountLoading({ ...input, noValue: true }, safe)).toBe(false);
+	});
 });

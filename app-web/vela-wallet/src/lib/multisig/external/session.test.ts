@@ -35,7 +35,8 @@ class FakeConnection extends EventTarget {
 let connection: FakeConnection;
 vi.mock('$lib/vendor/peerconnect/index.js', () => ({
 	Room: {
-		parse: () => ({ invite: undefined }),
+		// A room just created still has its invite; one paired before has none.
+		parse: (record: string) => ({ invite: record === 'fresh' ? 'wss://relay#x' : undefined }),
 		create: () => ({ invite: 'wss://relay#x', toString: () => 'fresh' })
 	}
 }));
@@ -86,5 +87,23 @@ describe("an outside owner's paired wallet", () => {
 		);
 		ExternalWallet.for([OWNER], 'https://wallet.getvela.app/en/connect').end();
 		expect(saved()).toEqual([]);
+	});
+});
+
+/** ms-14: the link names the members who may sign, in its fragment with the invite. */
+describe("the connect page's link", () => {
+	it('a new room: the invite and the members, after #, nothing in the query', () => {
+		store.clear();
+		const wallet = ExternalWallet.for([OWNER], 'https://wallet.getvela.app/en/connect');
+		expect(wallet.resumed).toBe(false);
+		const url = new URL(wallet.link);
+		expect(url.search).toBe('');
+		expect(url.hash).toBe(`#${encodeURIComponent('wss://relay#x')}&for=${OWNER}`);
+	});
+
+	it('a room paired before: the members alone', () => {
+		const wallet = ExternalWallet.for([OWNER], 'https://wallet.getvela.app/en/connect');
+		expect(wallet.resumed).toBe(true);
+		expect(wallet.link).toBe(`https://wallet.getvela.app/en/connect#for=${OWNER}`);
 	});
 });

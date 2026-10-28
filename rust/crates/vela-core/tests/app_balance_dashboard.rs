@@ -1957,21 +1957,73 @@ fn switcher_paints_cache_before_refreshing_every_account() {
     assert!(!sut.view().switcher.open);
 }
 
-/// The verbatim quirk pinned: opening the switcher while the balance is still
-/// unknown pokes a $0 into the cache — exactly what `openSwitcher` ships.
+/// ms-24: opening the switcher while the balance is still unknown pokes
+/// nothing into the cache and pins no figure on the active row — it used to
+/// poke a $0, which the row drew as "$0.00", the cache kept for the next
+/// open, and the total counted as known. The row waits for its own refresh.
 #[test]
-fn switcher_open_while_unknown_pokes_zero_verbatim() {
+fn switcher_open_while_unknown_pins_no_figure() {
     let mut sut = boot(ADDR_A);
     let ops = sut.dispatch(Event::SwitcherOpened {
         addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
     });
     assert_eq!(
-        ops[0],
-        Op::WriteBalanceCache {
-            address: ADDR_A.to_owned(),
-            usd: 0.0
-        },
-        "displayTotal is 0 while unknown — ported verbatim"
+        ops,
+        vec![Op::ReadBalanceCacheMany {
+            addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()]
+        }],
+        "no $0 is written for a total nobody has read"
+    );
+    sut.resolve(Res::CachedBalancesLoaded {
+        balances: vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0,
+        }],
+    });
+    let view = sut.view();
+    assert!(view.switcher.open);
+    assert!(view.switcher.loading, "every row is still being read");
+    assert_eq!(
+        view.switcher.balances,
+        vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0
+        }],
+        "the active row has no figure until its refresh answers"
+    );
+    sut.resolve(Res::AccountAssetsFetched {
+        address: ADDR_A.to_owned(),
+        tokens: Some(vec![token(1, "ETH", "7", Some(1.0))]),
+    });
+    assert!(sut.view().switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 7.0
+    }));
+}
+
+/// ms-24: a home that read nothing (every chain failed, nothing cached) has
+/// no figure either — the switcher pins none for it.
+#[test]
+fn switcher_open_while_unreachable_pins_no_figure() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    assert!(sut.view().unreachable);
+    assert_eq!(sut.view().display_total_usd, None);
+    let ops = sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned()],
+    });
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::WriteBalanceCache { .. })),
+        "nothing read, nothing written: {ops:?}"
     );
 }
 

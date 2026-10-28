@@ -499,11 +499,15 @@
     "data": "Data",
     "changesMembers": "Panggilan #{{index}} mengubah multisig ini sendiri: {{change}}. Setujui hanya jika semua anggota mengharapkannya.",
     "siteFollows": "{{host}} sudah menerima ID transaksi ini dan memantaunya sampai anggota mengeksekusi atau menolaknya. Transaksi tetap ada di Aktivitas.",
-    "voided": "Dibatalkan",
-    "voidedNote": "Dibatalkan: transaksi lain memakai nomor #{{nonce}}, jadi transaksi ini tidak akan pernah bisa dijalankan.",
+    "voided": "Digantikan",
+    "voidedNote": "Digantikan oleh pembatalan di nomor #{{nonce}}: transaksi ini tidak akan pernah bisa dijalankan.",
+    "voidedByOther": "Digantikan oleh transaksi lain di nomor #{{nonce}}: transaksi ini tidak akan pernah bisa dijalankan.",
     "notInMailbox": "Transaksi ini tidak ada di kotak surat multisig ini. Minta pengirim tautan untuk memeriksanya.",
     "unknownNetwork": "Tautan ini untuk jaringan yang tidak dimiliki Vela (chain {{chainId}}). Tambahkan jaringannya di Pengaturan, lalu buka tautan lagi.",
-    "badLink": "Tautan ke transaksi multisig ini tidak lengkap atau rusak. Minta lagi tautannya."
+    "badLink": "Tautan ke transaksi multisig ini tidak lengkap atau rusak. Minta lagi tautannya.",
+    "previewNote": "Tidak ada akun di perangkat ini yang menjadi anggota multisig ini. Membuka tautan ini tidak menambahkannya dan tidak mengganti akun.",
+    "watch": "Tambahkan ke perangkat ini",
+    "watching": "Ada di perangkat ini: multisig ini ada di daftar akun. Akun yang ditampilkan tidak berubah."
    },
    "send": {
     "propose": "Usulkan dan setujui",
@@ -595,7 +599,10 @@
     "pageAway": "Halaman dompet tertutup. Buka lagi di tempat dompetmu berada: permintaannya masih menunggu.",
     "connectDeclined": "Koneksi ditolak di halaman dompet. Coba lagi untuk meminta sekali lagi.",
     "declinedHere": "Kamu menolak. Vela sudah diberi tahu; kamu bisa menutup halaman ini.",
-    "otherChain": "Dompet tetap di jaringan lain. Pindahkan ke {{chain}} lalu coba lagi."
+    "otherChain": "Dompet tetap di jaringan lain. Pindahkan ke {{chain}} lalu coba lagi.",
+    "connectingAs": "Menghubungkan sebagai {{account}}",
+    "expectedMember": "Vela meminta anggota multisig: {{accounts}}.",
+    "notExpectedMember": "{{account}} bukan anggota yang diminta Vela, jadi halaman ini tidak akan menghubungkan atau menandatangani dengannya. Di dompet, beralihlah ke {{accounts}}; halaman ini lanjut begitu Anda melakukannya."
    },
    "import": {
     "or": "Atau impor dari Safe{Wallet}",

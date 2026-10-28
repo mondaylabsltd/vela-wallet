@@ -1,7 +1,10 @@
 <script lang="ts">
 	interface Props {
-		/** 'row' mimics list-row geometry; 'block' is a free-standing bar. */
-		kind?: 'row' | 'block';
+		/**
+		 * 'row' mimics list-row geometry; 'block' is a free-standing bar;
+		 * 'figure' stands in a list row's trailing figure while it is read.
+		 */
+		kind?: 'row' | 'block' | 'figure';
 	}
 
 	let { kind = 'row' }: Props = $props();
@@ -16,6 +19,8 @@
 		</span>
 		<span class="line trail shimmer"></span>
 	</div>
+{:else if kind === 'figure'}
+	<span class="figure shimmer" aria-hidden="true" data-testid="skeleton-figure"></span>
 {:else}
 	<span class="block shimmer" aria-hidden="true"></span>
 {/if}
@@ -66,6 +71,14 @@
 		border-radius: var(--radius-md);
 	}
 
+	.figure {
+		display: inline-block;
+		width: calc(var(--space-2xl) * 2.5);
+		height: calc(var(--text-lg) * var(--text-scale, 1));
+		border-radius: var(--radius-sm);
+		vertical-align: middle;
+	}
+
 	.shimmer {
 		background: var(--color-bg-sunken);
 		animation: pulse calc(var(--motion-entrance-fadeUp) * 2) ease-in-out infinite alternate;
@@ -82,6 +95,14 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
+		.figure {
+			display: inline-block;
+			width: calc(var(--space-2xl) * 2.5);
+			height: calc(var(--text-lg) * var(--text-scale, 1));
+			border-radius: var(--radius-sm);
+			vertical-align: middle;
+		}
+
 		.shimmer {
 			animation: none;
 		}

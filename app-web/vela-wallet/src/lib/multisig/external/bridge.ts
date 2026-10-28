@@ -10,6 +10,7 @@ import type { ConnectParams, Request, Response } from '$lib/walletpair/protocol'
 import { ReferenceWallet, emptyStore, type WalletStore } from '$lib/walletpair/wallet';
 import { connectRoom } from './relay';
 import { injectedSigner, currentChain, type InjectedSigner } from './injected';
+import { isExpected, readConnectHash } from './connect-link';
 
 const STORAGE_KEY = 'vela.connect.sessions.v1';
 
@@ -18,6 +19,11 @@ interface Saved {
 	record: string;
 	created: number;
 	dapp?: { name: string; origin?: string; icon?: string };
+	/**
+	 * ms-14: the members Vela asked for in the link that opened this room
+	 * (lowercase). A request to sign as anyone else is refused here.
+	 */
+	members?: string[];
 	store: {
 		approved: string[];
 		chains: Record<string, string>;
@@ -108,14 +114,18 @@ export class Bridge extends EventTarget {
 		for (const saved of this.#saved) this.#start(saved);
 	}
 
-	/** Joins the room of a scanned invite. Returns the session id. */
-	join(invite: string): string {
+	/**
+	 * Joins the room of a scanned invite, for `members` (the link's; empty
+	 * when it named none). Returns the session id.
+	 */
+	join(invite: string, members: string[] = []): string {
 		const room = Room.join(invite);
 		// The joiner keeps its record before the first handshake (PeerConnect §3.4).
 		const saved: Saved = {
 			id: crypto.randomUUID(),
 			record: room.toString(),
 			created: Date.now(),
+			members: members.map((a) => a.toLowerCase()),
 			store: { approved: [], chains: {}, records: [], forwarded: [] }
 		};
 		this.#saved.push(saved);
@@ -163,14 +173,19 @@ export class Bridge extends EventTarget {
 				connect: (params, offered, origin, cancelled) =>
 					this.#askConnect(saved, params, offered, origin, cancelled),
 				approve: async (request: Request) => {
+					// ms-14: a signature or a transaction as someone the link did
+					// not name is refused here, before the wallet is asked.
+					const as = signingAccount(request);
+					const refused = as !== null && !isExpected(saved.members ?? [], as);
 					// The wallet app asks the user itself; the bridge shows what is happening.
 					this.#log({
 						at: Date.now(),
 						session: saved.id,
 						origin: request.origin,
-						method: request.method
+						method: request.method,
+						...(refused ? { outcome: 'rejected' as const } : {})
 					});
-					return true;
+					return !refused;
 				}
 			}
 		});
@@ -290,14 +305,22 @@ export class Bridge extends EventTarget {
 	}
 }
 
-/** The PeerConnect invite carried in the bridge URL's fragment: `/connect#<encoded invite>`. */
+/** The PeerConnect invite carried in the bridge URL's fragment (`connect-link.ts`). */
 export function inviteFromHash(hash: string): string | null {
-	const raw = hash.replace(/^#/, '');
-	if (!raw) return null;
-	try {
-		const invite = decodeURIComponent(raw);
-		return /^wss?:\/\/[^#]+#[A-Za-z0-9_-]{86}$/.test(invite) ? invite : null;
-	} catch {
-		return null;
-	}
+	return readConnectHash(hash).invite;
+}
+
+/** The account a request signs or sends as, lowercase; `null` for one that names none. */
+export function signingAccount(request: Pick<Request, 'method' | 'params'>): string | null {
+	const params = Array.isArray(request.params) ? request.params : [];
+	const first = params[0] as unknown;
+	const account =
+		request.method === 'eth_sendTransaction'
+			? (first as { from?: unknown } | undefined)?.from
+			: request.method === 'eth_signTypedData_v4' || request.method === 'eth_sign'
+				? first
+				: request.method === 'personal_sign'
+					? params[1]
+					: null;
+	return typeof account === 'string' ? account.toLowerCase() : null;
 }

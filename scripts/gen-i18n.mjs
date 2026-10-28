@@ -947,8 +947,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
 //   cue to it, instead of a scroll that takes the person from where they
 //   were reading. 2207 + 2 = 2209 leaves, 119 branches.
-if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
+// 2335 (round 3, multisig, 2026-10-28): + `home.multisig.proposal.{voidedByOther,
+//   previewNote, watch, watching}` (ms-9: a voided transaction says what
+//   replaced it, in one wording; ms-21: a link's transaction on a device with
+//   no member, nothing added or switched) and
+//   `home.multisig.external.{connectingAs, expectedMember, notExpectedMember}`
+//   (ms-14: the connect page names who connects, and refuses a stranger).
+//   2209 + 7 = 2216 leaves, 119 branches.
+if (PATHS.length !== 2335) fail(`expected 2335 paths (2216 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2216) fail(`expected 2216 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

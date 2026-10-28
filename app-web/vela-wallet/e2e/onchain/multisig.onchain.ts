@@ -361,6 +361,10 @@ test('an outside owner signs with their own wallet, through the connect page', a
 		await page.getByRole('button', { name: 'Sign with another wallet' }).click();
 		link = (await page.getByTestId('external-link').textContent())!.trim();
 		expect(link).toMatch(/\/en\/connect#ws/);
+		// ms-14: the member Vela asks for rides in the fragment with the
+		// invite — nothing in the query, which a server would log.
+		expect(new URL(link).search).toBe('');
+		expect(new URL(link).hash).toContain(`&for=${EOA_ONE.toLowerCase()}`);
 		await expect(page.getByTestId('external-status')).toContainText('Waiting for the wallet page');
 		await shot(page, 'e2-external-sheet');
 	});
@@ -377,6 +381,8 @@ test('an outside owner signs with their own wallet, through the connect page', a
 		await shot(walletPage, 'e3-connect-ask');
 		await walletPage.getByRole('button', { name: 'Connect', exact: true }).click();
 		await expect(walletPage.getByTestId('connect-connected')).toBeVisible({ timeout: 30_000 });
+		// The member Vela asked for: no refusal on the page.
+		await expect(walletPage.getByTestId('connect-wrong-account')).toHaveCount(0);
 		// Vela checks the signature and hands it to the mailbox: the sheet closes, both approved.
 		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
 		await shot(walletPage, 'e4-connect-done');

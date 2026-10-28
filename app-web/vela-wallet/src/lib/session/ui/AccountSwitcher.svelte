@@ -21,7 +21,12 @@
 	import AccountsSheetBody from '$lib/settings/ui/AccountsSheetBody.svelte';
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import { accountAmount, liveAccountsSheet, switcherBalances } from '$lib/settings/live';
+	import {
+		accountAmount,
+		accountLoading,
+		liveAccountsSheet,
+		switcherBalances
+	} from '$lib/settings/live';
 	import { shownAddress } from '$lib/multisig/core/shown';
 	import type { SettingsMessages } from '$lib/settings/messages';
 	import { session } from '$lib/session/core/session.svelte';
@@ -70,7 +75,9 @@
 		identicon: identiconSvgForClient,
 		others: multisig.accounts.map((a) => a.address),
 		// home-9: the testnet space shows no figure for test coins, here too.
-		noValue: networkSpace.testnet
+		noValue: networkSpace.testnet,
+		// ms-24: a row the core is still reading is drawn as loading.
+		loading: balance.view.switcher.loading
 	}));
 
 	const sheet = $derived.by(() => {
@@ -231,6 +238,7 @@
 						removeLabel={sheet.remove ?? ''}
 						cancelLabel={sheet.removeCancel ?? ''}
 						amount={(address) => accountAmount(input, address)}
+						loading={(address) => accountLoading(input, address)}
 						onselect={selectMultisig}
 					/>
 				{/if}

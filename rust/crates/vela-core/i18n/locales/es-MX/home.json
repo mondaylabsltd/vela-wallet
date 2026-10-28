@@ -163,11 +163,15 @@
         "data": "Datos",
         "changesMembers": "La llamada #{{index}} cambia esta multifirma: {{change}}. Apruébala solo si todos los miembros lo esperan.",
         "siteFollows": "{{host}} recibió el identificador de esta transacción y la sigue hasta que los miembros la ejecuten o la rechacen. Queda en Actividad.",
-        "voided": "Cancelada",
-        "voidedNote": "Cancelada: otra transacción usó el número #{{nonce}}, así que esta ya nunca podrá ejecutarse.",
+        "voided": "Reemplazada",
+        "voidedNote": "Reemplazada por una cancelación con el número #{{nonce}}: esta transacción ya nunca podrá ejecutarse.",
+        "voidedByOther": "Reemplazada por otra transacción con el número #{{nonce}}: esta ya nunca podrá ejecutarse.",
         "notInMailbox": "Esta transacción no está en el buzón de esta multifirma. Pide a quien te envió el enlace que lo revise.",
         "unknownNetwork": "Este enlace es de una red que Vela no tiene (cadena {{chainId}}). Agrega la red en Ajustes y vuelve a abrir el enlace.",
-        "badLink": "Este enlace a una transacción multifirma está incompleto o dañado. Pídelo de nuevo."
+        "badLink": "Este enlace a una transacción multifirma está incompleto o dañado. Pídelo de nuevo.",
+        "previewNote": "Ninguna cuenta de este dispositivo es miembro de esta multifirma. Abrir este enlace no la agregó ni cambió de cuenta.",
+        "watch": "Agregar a este dispositivo",
+        "watching": "En este dispositivo: está en tu lista de cuentas. La cuenta que se muestra no cambió."
       },
       "send": {
         "propose": "Proponer y aprobar",
@@ -260,7 +264,10 @@
         "pageAway": "La página de la billetera se cerró. Ábrela de nuevo donde está tu billetera: la solicitud sigue esperando.",
         "connectDeclined": "La conexión se rechazó en la página de la billetera. Vuelve a intentarlo para preguntar otra vez.",
         "declinedHere": "Rechazaste. Vela ya lo sabe; puedes cerrar esta página.",
-        "otherChain": "La billetera se quedó en otra red. Cámbiala a {{chain}} y vuelve a intentarlo."
+        "otherChain": "La billetera se quedó en otra red. Cámbiala a {{chain}} y vuelve a intentarlo.",
+        "connectingAs": "Conectando como {{account}}",
+        "expectedMember": "Vela pide un miembro de la multifirma: {{accounts}}.",
+        "notExpectedMember": "{{account}} no es un miembro que Vela pidió, así que esta página no la conectará ni firmará con ella. En tu wallet, cambia a {{accounts}}; la página sigue en cuanto lo hagas."
       },
       "import": {
         "or": "O importa desde Safe{Wallet}",

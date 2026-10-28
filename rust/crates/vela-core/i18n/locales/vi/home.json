@@ -162,11 +162,15 @@
         "data": "Dữ liệu",
         "changesMembers": "Lệnh gọi #{{index}} thay đổi chính multisig này: {{change}}. Chỉ phê duyệt nếu mọi thành viên đều biết trước.",
         "siteFollows": "{{host}} đã nhận mã của giao dịch này và theo dõi đến khi các thành viên thực thi hoặc từ chối. Giao dịch vẫn nằm trong Hoạt động.",
-        "voided": "Đã hủy",
-        "voidedNote": "Đã hủy: một giao dịch khác đã dùng số #{{nonce}}, nên giao dịch này sẽ không bao giờ chạy.",
+        "voided": "Đã bị thay thế",
+        "voidedNote": "Đã bị thay thế bởi một giao dịch hủy ở số #{{nonce}}: giao dịch này sẽ không bao giờ chạy.",
+        "voidedByOther": "Đã bị thay thế bởi một giao dịch khác ở số #{{nonce}}: giao dịch này sẽ không bao giờ chạy.",
         "notInMailbox": "Giao dịch này không có trong hộp thư của multisig. Hãy nhờ người gửi liên kết kiểm tra lại.",
         "unknownNetwork": "Liên kết này dành cho mạng Vela chưa có (chain {{chainId}}). Hãy thêm mạng trong Cài đặt rồi mở lại liên kết.",
-        "badLink": "Liên kết tới giao dịch multisig này bị thiếu hoặc hỏng. Hãy xin lại liên kết."
+        "badLink": "Liên kết tới giao dịch multisig này bị thiếu hoặc hỏng. Hãy xin lại liên kết.",
+        "previewNote": "Không tài khoản nào trên thiết bị này là thành viên của ví đa chữ ký này. Mở liên kết này không thêm ví và không chuyển tài khoản.",
+        "watch": "Thêm vào thiết bị này",
+        "watching": "Đã có trên thiết bị này: ví nằm trong danh sách tài khoản của bạn. Tài khoản đang hiển thị không thay đổi."
       },
       "send": {
         "propose": "Đề xuất và duyệt",
@@ -258,7 +262,10 @@
         "pageAway": "Trang ví đã đóng. Hãy mở lại ở nơi có ví của bạn: yêu cầu vẫn đang chờ.",
         "connectDeclined": "Kết nối đã bị từ chối trên trang ví. Thử lại để hỏi thêm lần nữa.",
         "declinedHere": "Bạn đã từ chối. Vela đã được báo; bạn có thể đóng trang này.",
-        "otherChain": "Ví vẫn ở mạng khác. Hãy chuyển sang {{chain}} rồi thử lại."
+        "otherChain": "Ví vẫn ở mạng khác. Hãy chuyển sang {{chain}} rồi thử lại.",
+        "connectingAs": "Đang kết nối bằng {{account}}",
+        "expectedMember": "Vela yêu cầu một thành viên của ví đa chữ ký: {{accounts}}.",
+        "notExpectedMember": "{{account}} không phải thành viên Vela yêu cầu, nên trang này sẽ không kết nối hay ký bằng tài khoản đó. Trong ví, hãy chuyển sang {{accounts}}; trang sẽ tiếp tục ngay khi bạn chuyển."
       },
       "import": {
         "or": "Hoặc nhập từ Safe{Wallet}",

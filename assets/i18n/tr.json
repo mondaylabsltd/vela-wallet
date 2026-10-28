@@ -499,11 +499,15 @@
     "data": "Veri",
     "changesMembers": "#{{index}} numaralı çağrı bu çoklu imzanın kendisini değiştiriyor: {{change}}. Yalnızca tüm üyeler bunu bekliyorsa onayla.",
     "siteFollows": "{{host}} bu işlemin kimliğini aldı ve üyeler onu yürütene ya da reddedene kadar takip ediyor. İşlem Etkinlik’te kalır.",
-    "voided": "İptal edildi",
-    "voidedNote": "İptal edildi: #{{nonce}} numarasını başka bir işlem kullandı, bu işlem artık hiç çalışamaz.",
+    "voided": "Değiştirildi",
+    "voidedNote": "#{{nonce}} numarasındaki bir iptal işlemiyle değiştirildi: bu işlem artık hiç çalışamaz.",
+    "voidedByOther": "#{{nonce}} numarasındaki başka bir işlemle değiştirildi: bu işlem artık hiç çalışamaz.",
     "notInMailbox": "Bu işlem bu çoklu imzanın posta kutusunda yok. Bağlantıyı gönderen kişiden kontrol etmesini iste.",
     "unknownNetwork": "Bu bağlantı Vela’da olmayan bir ağ için (zincir {{chainId}}). Ağı Ayarlar’dan ekle, sonra bağlantıyı yeniden aç.",
-    "badLink": "Bu çoklu imza işlemi bağlantısı eksik ya da bozuk. Yeniden iste."
+    "badLink": "Bu çoklu imza işlemi bağlantısı eksik ya da bozuk. Yeniden iste.",
+    "previewNote": "Bu cihazdaki hiçbir hesap bu çoklu imzanın üyesi değil. Bağlantıyı açmak onu eklemedi ve hesap değiştirmedi.",
+    "watch": "Bu cihaza ekle",
+    "watching": "Bu cihazda: hesap listesinde. Gösterilen hesap değişmedi."
    },
    "send": {
     "propose": "Öner ve onayla",
@@ -595,7 +599,10 @@
     "pageAway": "Cüzdan sayfası kapandı. Cüzdanının olduğu yerde yeniden aç: istek hâlâ bekliyor.",
     "connectDeclined": "Bağlantı cüzdan sayfasında reddedildi. Yeniden sormak için tekrar dene.",
     "declinedHere": "Reddettin. Vela’ya bildirildi; bu sayfayı kapatabilirsin.",
-    "otherChain": "Cüzdan başka bir ağda kaldı. {{chain}} ağına geçir ve tekrar dene."
+    "otherChain": "Cüzdan başka bir ağda kaldı. {{chain}} ağına geçir ve tekrar dene.",
+    "connectingAs": "{{account}} olarak bağlanıyor",
+    "expectedMember": "Vela çoklu imzanın bir üyesini istiyor: {{accounts}}.",
+    "notExpectedMember": "{{account}}, Vela'nın istediği bir üye değil; bu sayfa onu bağlamaz ve onunla imzalamaz. Cüzdanda {{accounts}} hesabına geçin; geçtiğinizde sayfa devam eder."
    },
    "import": {
     "or": "Ya da Safe{Wallet}'tan içe aktarın",

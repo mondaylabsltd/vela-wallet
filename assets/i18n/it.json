@@ -500,11 +500,15 @@
     "data": "Dati",
     "changesMembers": "La chiamata n. {{index}} modifica questo multisig: {{change}}. Approva solo se tutti i membri se lo aspettano.",
     "siteFollows": "{{host}} ha ricevuto l’identificativo di questa transazione e la segue finché i membri non la eseguono o la rifiutano. Resta in Attività.",
-    "voided": "Annullata",
-    "voidedNote": "Annullata: un’altra transazione ha usato il numero {{nonce}}, quindi questa non potrà mai essere eseguita.",
+    "voided": "Sostituita",
+    "voidedNote": "Sostituita da un annullamento con il numero {{nonce}}: questa transazione non potrà mai essere eseguita.",
+    "voidedByOther": "Sostituita da un’altra transazione con il numero {{nonce}}: questa non potrà mai essere eseguita.",
     "notInMailbox": "Questa transazione non è nella casella di questo multisig. Chiedi a chi ha inviato il link di controllarlo.",
     "unknownNetwork": "Questo link è per una rete che Vela non ha (chain {{chainId}}). Aggiungi la rete nelle Impostazioni, poi riapri il link.",
-    "badLink": "Questo link a una transazione multisig è incompleto o danneggiato. Chiedilo di nuovo."
+    "badLink": "Questo link a una transazione multisig è incompleto o danneggiato. Chiedilo di nuovo.",
+    "previewNote": "Nessun account di questo dispositivo è membro di questo multisig. Aprire il link non l’ha aggiunto né ha cambiato account.",
+    "watch": "Aggiungi a questo dispositivo",
+    "watching": "Su questo dispositivo: è nel tuo elenco di account. L’account mostrato non è cambiato."
    },
    "send": {
     "propose": "Proponi e approva",
@@ -597,7 +601,10 @@
     "pageAway": "La pagina del wallet si è chiusa. Riaprila dove si trova il tuo wallet: la richiesta è ancora in attesa.",
     "connectDeclined": "La connessione è stata rifiutata nella pagina del wallet. Riprova per chiederla di nuovo.",
     "declinedHere": "Hai rifiutato. Vela è stato avvisato; puoi chiudere questa pagina.",
-    "otherChain": "Il wallet è rimasto su un’altra rete. Passa a {{chain}} e riprova."
+    "otherChain": "Il wallet è rimasto su un’altra rete. Passa a {{chain}} e riprova.",
+    "connectingAs": "Connessione come {{account}}",
+    "expectedMember": "Vela chiede un membro del multisig: {{accounts}}.",
+    "notExpectedMember": "{{account}} non è un membro richiesto da Vela, quindi questa pagina non lo collega né firma con esso. Nel wallet, passa a {{accounts}}; la pagina prosegue appena lo fai."
    },
    "import": {
     "or": "Oppure importa da Safe{Wallet}",

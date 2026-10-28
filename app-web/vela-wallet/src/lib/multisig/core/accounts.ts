@@ -18,6 +18,7 @@ import { hasCode } from './chain';
 import { creationGenesis, hasTransactionService } from './safe-service';
 import {
 	genesisAddress,
+	genesisMembers,
 	multisigGenesis,
 	safeWalletPropsGenesis,
 	sameAddress,
@@ -203,10 +204,10 @@ export type AddOutcome =
 	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' };
 
 /**
- * Add a multisig by address. When the registry does not hold it yet but it
- * is deployed on one of `chainIds`, the service resolves its genesis from that
- * chain and records it (its creator paid for a deployment, so the service
- * pays), and the address is looked up again.
+ * Add a multisig by address, and show it. When the registry does not hold it
+ * yet but it is deployed on one of `chainIds`, the service resolves its
+ * genesis from that chain and records it (its creator paid for a
+ * deployment, so the service pays), and the address is looked up again.
  */
 export async function addMultisig(address: string, chainIds: number[]): Promise<AddOutcome> {
 	const existing = multisig.find(address);
@@ -214,6 +215,19 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 		multisig.activate(existing.address);
 		return { ok: true, account: existing };
 	}
+	const found = await findMultisig(address, chainIds);
+	if (!found.ok) return found;
+	const account = keepMultisig(found.account);
+	multisig.activate(account.address);
+	return { ok: true, account };
+}
+
+/**
+ * The multisig at `address`, read and checked as {@link addMultisig} does —
+ * but kept nowhere (ms-21): an account to read a link's transaction from on
+ * a device that has none of its members, which only the person's tap adds.
+ */
+export async function findMultisig(address: string, chainIds: number[]): Promise<AddOutcome> {
 	// What the address is on chain, read beside the registry (ms-16): the
 	// wait for a record on its way is only for an address with no code and no
 	// transactions anywhere — a multisig created moments ago.
@@ -269,16 +283,32 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
-	const account = multisig.add(
-		address,
-		genesis,
-		!answer.pending,
-		used.length > 0 ? used : chainIds.slice(0, 1)
-	);
+	const { owners, threshold } = genesisMembers(genesis);
+	return {
+		ok: true,
+		account: {
+			address,
+			genesis,
+			owners,
+			threshold,
+			recorded: !answer.pending,
+			// It came from the service: the service can hand it out.
+			shared: true,
+			chainIds: used.length > 0 ? used : chainIds.slice(0, 1),
+			addedMs: Date.now()
+		}
+	};
+}
+
+/**
+ * Keep a multisig {@link findMultisig} read on this device — in the account
+ * list, not shown: which account is shown stays the person's to pick.
+ */
+export function keepMultisig(found: MultisigAccount): MultisigAccount {
+	const account = multisig.add(found.address, found.genesis, found.recorded, found.chainIds);
 	// It came from the service: the service can hand it out.
 	multisig.markShared(account.address);
-	multisig.activate(account.address);
-	return { ok: true, account };
+	return multisig.find(account.address) ?? account;
 }
 
 /** `address` has sent a transaction of its own on one of `chainIds`: an account, no undeployed Safe. */

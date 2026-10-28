@@ -95,10 +95,19 @@ export interface MultisigMessages {
 		changesMembers: string;
 		siteFollows: string;
 		voided: string;
+		/** ms-9: replaced by the cancellation proposed at its number (`{{nonce}}`). */
 		voidedNote: string;
+		/** ms-9: replaced by another transaction at its number (`{{nonce}}`). */
+		voidedByOther: string;
 		notInMailbox: string;
 		unknownNetwork: string;
 		badLink: string;
+		/** ms-21: a link's transaction on a device with no member of its multisig. */
+		previewNote: string;
+		/** ms-21: add the multisig to this device, only to follow it. */
+		watch: string;
+		/** ms-21: it was added, on the person's tap; the account shown is unchanged. */
+		watching: string;
 	};
 	send: {
 		propose: string;
@@ -182,6 +191,12 @@ export interface MultisigMessages {
 		connectDeclined: string;
 		declinedHere: string;
 		otherChain: string;
+		/** ms-14: the account the wallet connects this page with (`{{account}}`). */
+		connectingAs: string;
+		/** ms-14: the members Vela asked for, from the link (`{{accounts}}`). */
+		expectedMember: string;
+		/** ms-14: the wallet's account is none of them — refused, with what to do. */
+		notExpectedMember: string;
 	};
 	import: {
 		or: string;
@@ -309,9 +324,13 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		siteFollows: '',
 		voided: '',
 		voidedNote: '',
+		voidedByOther: '',
 		notInMailbox: '',
 		unknownNetwork: '',
-		badLink: ''
+		badLink: '',
+		previewNote: '',
+		watch: '',
+		watching: ''
 	},
 	send: {
 		propose: '',
@@ -392,7 +411,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		pageAway: '',
 		connectDeclined: '',
 		declinedHere: '',
-		otherChain: ''
+		otherChain: '',
+		connectingAs: '',
+		expectedMember: '',
+		notExpectedMember: ''
 	},
 	import: {
 		or: '',
