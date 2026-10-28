@@ -251,6 +251,16 @@
         "feeWouldFail": "이대로 보내면 실패합니다.",
         "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…",
         "simChecking": "이 거래의 결과를 확인 중…"
+      },
+      "agentAdvice": {
+        "title": "AI 에이전트의 의견",
+        "looksFine": "문제없어 보임",
+        "caution": "주의",
+        "danger": "위험",
+        "unsure": "판단하기 어려움",
+        "sources": "출처",
+        "footer": "AI 에이전트의 의견입니다. 틀릴 수 있으며, 서명되는 내용은 바뀌지 않습니다.",
+        "stale": "이 요청의 이전 버전에 대한 의견입니다"
       }
     },
     "signingApprove": {

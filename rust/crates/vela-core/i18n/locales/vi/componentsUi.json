@@ -251,6 +251,16 @@
         "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
         "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
         "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…"
+      },
+      "agentAdvice": {
+        "title": "Ý kiến của tác nhân AI của bạn",
+        "looksFine": "Có vẻ ổn",
+        "caution": "Thận trọng",
+        "danger": "Nguy hiểm",
+        "unsure": "Không chắc",
+        "sources": "Nguồn",
+        "footer": "Ý kiến từ tác nhân AI của bạn. Nó có thể sai. Nó không thay đổi những gì được ký.",
+        "stale": "Đưa ra cho một phiên bản trước của yêu cầu này"
       }
     },
     "signingApprove": {

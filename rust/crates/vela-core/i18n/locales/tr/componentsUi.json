@@ -251,6 +251,16 @@
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
         "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
         "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
+      },
+      "agentAdvice": {
+        "title": "Yapay zekâ ajanınızın görüşü",
+        "looksFine": "Sorunsuz görünüyor",
+        "caution": "Dikkat",
+        "danger": "Tehlike",
+        "unsure": "Emin değil",
+        "sources": "Kaynaklar",
+        "footer": "Yapay zekâ ajanınızın görüşüdür. Yanlış olabilir. İmzalanan şeyi değiştirmez.",
+        "stale": "Bu isteğin önceki bir sürümü için verildi"
       }
     },
     "signingApprove": {

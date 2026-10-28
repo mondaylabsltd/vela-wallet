@@ -251,6 +251,16 @@
         "feeWouldFail": "So gesendet würde sie fehlschlagen.",
         "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
         "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…"
+      },
+      "agentAdvice": {
+        "title": "Einschätzung Ihres KI-Agenten",
+        "looksFine": "Sieht unbedenklich aus",
+        "caution": "Vorsicht",
+        "danger": "Gefahr",
+        "unsure": "Unsicher",
+        "sources": "Quellen",
+        "footer": "Eine Einschätzung Ihres KI-Agenten. Sie kann falsch sein. Sie ändert nicht, was signiert wird.",
+        "stale": "Für eine frühere Version dieser Anfrage abgegeben"
       }
     },
     "signingApprove": {

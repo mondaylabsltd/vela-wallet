@@ -872,9 +872,12 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2162 (a multisig's executor who cannot pay, an execution that has not
 //   landed, 2026-10-28): + 2 `home.multisig.proposal` words. 2044 + 2 =
 //   2046 leaves, 116 branches.
-if (PATHS.length !== 2162) fail(`expected 2162 paths (2046 leaf + 116 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2046) fail(`expected 2046 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
+// 2171 (your AI agent's opinion on the signing sheet, 2026-10-28): +
+//   `componentsUi.signing.agentAdvice`, 8 words. 2046 + 8 = 2054 leaves,
+//   116 + 1 = 117 branches.
+if (PATHS.length !== 2171) fail(`expected 2171 paths (2054 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2054) fail(`expected 2054 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -28,6 +28,9 @@ import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 import { accepted, ClientMCP, completed, rejected, type Risk, type Status } from './clientmcp';
 import { agentSettings } from './settings.svelte';
 import { shownAddress } from '$lib/multisig/core/shown';
+import { exposeAdvisor } from './advisor.svelte';
+import { ADVISOR_INSTRUCTIONS } from './advisor';
+import { sheetFacts } from './advice.svelte';
 
 const INSTRUCTIONS = `This is the person's Vela Wallet, open in their browser right now. They see every change you make.
 
@@ -135,10 +138,12 @@ async function exposeTools(client: ClientMCP): Promise<void> {
 				draftedBy: operation ? transfers.draftedBy(operation.id) : null,
 				account: shownAddress(session.view.address ?? '') || null,
 				networks: networkAdmin.view.loaded ? networkAdmin.view : null,
-				signing: signRequest.view.request ?? null
+				signing: signRequest.view.request ?? null,
+				sheet: sheetFacts()
 			});
 		}
 	});
+	exposeAdvisor(client);
 	client.expose('vela_wait', {
 		title: 'Follow a transfer',
 		description:
@@ -214,7 +219,7 @@ class AgentBridge {
 		const client = new ClientMCP({
 			url,
 			token,
-			instructions: INSTRUCTIONS,
+			instructions: `${INSTRUCTIONS}\n${ADVISOR_INSTRUCTIONS}`,
 			onStatus: (status, detail) => {
 				if (this.#client !== client) return;
 				this.status = status;

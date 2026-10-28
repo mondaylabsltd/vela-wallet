@@ -1724,6 +1724,16 @@
     "feeWouldFail": "按现在的方式发送会失败。",
     "previousPending": "正在等待这个网络上的上一笔交易完成…",
     "simChecking": "正在检查这笔交易的结果…"
+   },
+   "agentAdvice": {
+    "title": "你的 AI 智能体的看法",
+    "looksFine": "看起来没问题",
+    "caution": "需谨慎",
+    "danger": "危险",
+    "unsure": "不确定",
+    "sources": "来源",
+    "footer": "这是你的 AI 智能体给出的看法，可能有误，不会改变所签署的内容。",
+    "stale": "这是针对此请求较早版本给出的看法"
    }
   },
   "currency": {

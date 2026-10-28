@@ -1719,6 +1719,16 @@
     "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
     "previousPending": "En attente de votre transaction précédente sur ce réseau…",
     "simChecking": "Vérification de ce que fait cette transaction…"
+   },
+   "agentAdvice": {
+    "title": "L'avis de votre agent IA",
+    "looksFine": "Semble correct",
+    "caution": "Prudence",
+    "danger": "Danger",
+    "unsure": "Incertain",
+    "sources": "Sources",
+    "footer": "Un avis de votre agent IA. Il peut se tromper. Il ne change pas ce qui est signé.",
+    "stale": "Donné pour une version précédente de cette demande"
    }
   },
   "signingApprove": {

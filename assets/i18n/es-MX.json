@@ -1719,6 +1719,16 @@
     "feeWouldFail": "Fallaría si se envía así.",
     "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
     "simChecking": "Comprobando qué hace esta transacción…"
+   },
+   "agentAdvice": {
+    "title": "La opinión de tu agente de IA",
+    "looksFine": "Parece estar bien",
+    "caution": "Precaución",
+    "danger": "Peligro",
+    "unsure": "No está seguro",
+    "sources": "Fuentes",
+    "footer": "Una opinión de tu agente de IA. Puede equivocarse. No cambia lo que se firma.",
+    "stale": "Dada para una versión anterior de esta solicitud"
    }
   },
   "signingApprove": {

@@ -1714,6 +1714,16 @@
     "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
     "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…",
     "simChecking": "Memeriksa hasil transaksi ini…"
+   },
+   "agentAdvice": {
+    "title": "Pendapat agen AI Anda",
+    "looksFine": "Tampak aman",
+    "caution": "Hati-hati",
+    "danger": "Bahaya",
+    "unsure": "Tidak yakin",
+    "sources": "Sumber",
+    "footer": "Pendapat dari agen AI Anda. Bisa saja keliru. Tidak mengubah apa yang ditandatangani.",
+    "stale": "Diberikan untuk versi sebelumnya dari permintaan ini"
    }
   },
   "signingApprove": {
