@@ -811,6 +811,7 @@
 	<!-- The switcher's "Create multisig" / "Add multisig" open their sheets here too. -->
 	<MultisigHost
 		m={data.multisigMessages}
+		signing={data.signingMessages}
 		locale={data.locale}
 		wide={wide.current}
 		closeLabel={data.identiconViewer.close}

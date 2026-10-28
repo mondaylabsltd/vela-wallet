@@ -742,6 +742,19 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 const stillReading = (clear: ClearSigningView): boolean =>
 	clear.surface === 'loading' || clear.resolving;
 
+/**
+ * cs-12: the request's own blocks and nothing around them — no header, fee,
+ * verdict or confirm — read through the same two passes `buildSigningModel`
+ * gives them. A multisig member reviewing a call someone else proposed sees
+ * exactly what this sheet would have drawn for that call.
+ */
+export function requestBlocks(inputs: SigningLiveInputs): Block[] {
+	return blocksFor({
+		...inputs,
+		clear: cappedApproval(localizedTerms(inputs.clear, inputs.m), inputs.guard)
+	});
+}
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
