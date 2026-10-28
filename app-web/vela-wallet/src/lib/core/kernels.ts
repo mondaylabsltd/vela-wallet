@@ -868,21 +868,25 @@ export function typicalInclusionSeconds(chainId: number): number {
 /**
  * Spec 099 R7: may the signing confirm open, and if not, why — the core's one
  * gate (`sign_confirm::confirm_state`), the same on every client. `null`
- * when a view does not read: the confirm stays shut.
+ * when a view does not read: the confirm stays shut. `messageUnread` is the
+ * sheet's observation that a message runs past its window and its end has
+ * not been in sight yet (cs-10, `ConfirmBlock::MessageUnread`).
  */
 export function signConfirmState(
 	sign: SignView,
 	guard: GuardView,
 	clear: ClearSigningView,
 	fee: FeeView | null,
-	speedTier: FeeTier | null
+	speedTier: FeeTier | null,
+	messageUnread = false
 ): ConfirmState | null {
 	const out = wasm.signConfirmState(
 		JSON.stringify(sign),
 		JSON.stringify(guard),
 		JSON.stringify(clear),
 		fee === null ? undefined : JSON.stringify(fee),
-		speedTier ?? undefined
+		speedTier ?? undefined,
+		messageUnread
 	);
 	return out ? (JSON.parse(out) as ConfirmState) : null;
 }

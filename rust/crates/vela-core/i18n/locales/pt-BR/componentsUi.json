@@ -39,6 +39,8 @@
       "siweDomain": "Site",
       "siweStatement": "Declaração",
       "siweMismatch": "Este login é para {{domain}}, mas a solicitação veio de {{origin}}. Provável tentativa de phishing — rejeite.",
+      "hiddenChars": "Esta solicitação contém caracteres ocultos ou que mudam a direção do texto — eles aparecem como ⟨U+…⟩.",
+      "blankLines": "⋯ linhas vazias: {{lines}} ⋯",
       "siweOk": "Login verificado em {{domain}}",
       "ethSignIntent": "Assinatura cega",
       "ethSignTitle": "eth_sign — hash bruto",
@@ -250,7 +252,8 @@
         "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
         "feeWouldFail": "Falharia se fosse enviada assim.",
         "previousPending": "Aguardando sua transação anterior nesta rede terminar…",
-        "simChecking": "Verificando o que esta transação faz…"
+        "simChecking": "Verificando o que esta transação faz…",
+        "messageUnread": "A mensagem continua — role para ler tudo"
       }
     },
     "signingApprove": {

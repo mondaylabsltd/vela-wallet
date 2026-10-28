@@ -1502,6 +1502,8 @@
    "siweDomain": "Seite",
    "siweStatement": "Erklärung",
    "siweMismatch": "Diese Anmeldung ist für {{domain}}, doch die Anfrage kam von {{origin}}. Wahrscheinlich ein Phishing-Versuch — lehnen Sie sie ab.",
+   "hiddenChars": "Diese Anfrage enthält versteckte oder richtungsändernde Zeichen — sie werden als ⟨U+…⟩ angezeigt.",
+   "blankLines": "⋯ leere Zeilen: {{lines}} ⋯",
    "siweOk": "Anmeldung bei {{domain}} verifiziert",
    "ethSignIntent": "Blindsignatur",
    "ethSignTitle": "eth_sign — roher Hash",
@@ -1713,7 +1715,8 @@
     "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
     "feeWouldFail": "So gesendet würde sie fehlschlagen.",
     "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
-    "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…"
+    "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…",
+    "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen"
    }
   },
   "signingApprove": {

@@ -101,6 +101,8 @@
       "siweDomain": "Site",
       "siweStatement": "Statement",
       "siweMismatch": "This sign-in is for {{domain}} but the request came from {{origin}}. Likely a phishing attempt — reject it.",
+      "hiddenChars": "This request contains hidden or direction-changing characters — they are shown as ⟨U+…⟩.",
+      "blankLines": "⋯ empty lines: {{lines}} ⋯",
       "siweOk": "Verified sign-in to {{domain}}",
       "ethSignIntent": "Blind signature",
       "ethSignTitle": "eth_sign — raw hash",
@@ -292,7 +294,8 @@
         "feeRetrying": "Couldn't work out the fee yet. Retrying…",
         "feeWouldFail": "This would fail if sent as it is.",
         "previousPending": "Waiting for your last transaction on this network…",
-        "simChecking": "Checking what this transaction does…"
+        "simChecking": "Checking what this transaction does…",
+        "messageUnread": "The message continues — scroll to read all of it"
       }
     },
     "currency": {

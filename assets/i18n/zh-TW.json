@@ -1512,6 +1512,8 @@
    "siweDomain": "網站",
    "siweStatement": "聲明",
    "siweMismatch": "此登入是針對 {{domain}}，但請求來自 {{origin}}。很可能是釣魚攻擊 — 請拒絕。",
+   "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
+   "blankLines": "⋯ 空白行：{{lines}} ⋯",
    "siweOk": "已驗證登入 {{domain}}",
    "ethSignIntent": "盲簽",
    "ethSignTitle": "eth_sign — 原始雜湊",
@@ -1713,7 +1715,8 @@
     "feeRetrying": "暫時沒能算出費用，正在自動重試…",
     "feeWouldFail": "照現在的方式送出會失敗。",
     "previousPending": "正在等待這個網路上的上一筆交易完成…",
-    "simChecking": "正在檢查這筆交易的結果…"
+    "simChecking": "正在檢查這筆交易的結果…",
+    "messageUnread": "訊息尚未結束 — 請捲動閱讀全文"
    }
   },
   "currency": {

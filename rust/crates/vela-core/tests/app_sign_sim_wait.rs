@@ -134,6 +134,7 @@ fn gate(sign: SignView) -> ConfirmState {
         clear,
         fee: Some(fee),
         speed_tier: Some(FeeTier::Fast),
+        message_unread: false,
     })
 }
 
@@ -375,6 +376,7 @@ fn the_checking_line_stands_only_when_the_verdict_is_all_that_is_missing() {
         clear,
         fee: Some(fee),
         speed_tier: None,
+        message_unread: false,
     };
     assert_eq!(confirm_state(&input).block, Some(ConfirmBlock::Reading));
     input.clear.resolving = false;

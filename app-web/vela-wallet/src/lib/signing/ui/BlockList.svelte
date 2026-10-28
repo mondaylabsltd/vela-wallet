@@ -26,9 +26,11 @@
 		onchip?: (id: string, leg?: number) => void;
 		/** The custom cap's keystrokes, on their way back to the guard. */
 		oncustom?: (text: string, leg?: number) => void;
+		/** cs-10: a message to read to its end has, or has not, been read (`CodeBlock`). */
+		onmessageunread?: (unread: boolean) => void;
 	}
 
-	let { blocks, onchip, oncustom }: Props = $props();
+	let { blocks, onchip, oncustom, onmessageunread }: Props = $props();
 </script>
 
 {#each blocks as block, i (i)}
@@ -63,7 +65,11 @@
 	{:else if block.kind === 'positive'}
 		<PositiveNote text={block.text} />
 	{:else if block.kind === 'code'}
-		<CodeBlock lines={block.lines} note={block.note} />
+		<CodeBlock
+			lines={block.lines}
+			note={block.note}
+			onunread={block.readToEnd ? (unread) => onmessageunread?.(unread) : undefined}
+		/>
 	{:else if block.kind === 'card'}
 		<DetailCard title={block.title} rows={block.rows} tone={block.tone} />
 	{:else if block.kind === 'verdict'}

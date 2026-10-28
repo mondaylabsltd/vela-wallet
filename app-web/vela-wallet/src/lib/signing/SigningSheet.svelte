@@ -58,6 +58,11 @@
 		onretry?: () => void;
 		/** Spec 102 (D4): Open on the hand-off card — the apps' only; absent on the web. */
 		onopenpage?: () => void;
+		/**
+		 * cs-10: the message on the sheet runs past the body's window and its
+		 * last line has (not) been in sight — for the core's gate.
+		 */
+		onmessageunread?: (unread: boolean) => void;
 	}
 
 	let {
@@ -74,7 +79,8 @@
 		onfeerefresh,
 		onclosestart,
 		onretry,
-		onopenpage
+		onopenpage,
+		onmessageunread
 	}: Props = $props();
 
 	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
@@ -258,6 +264,7 @@
 			{onspeedpick}
 			{onfeerefresh}
 			{onopenpage}
+			{onmessageunread}
 		/>
 	{/if}
 </BottomSheet>

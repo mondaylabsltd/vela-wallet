@@ -1507,6 +1507,8 @@
    "siweDomain": "Site",
    "siweStatement": "Déclaration",
    "siweMismatch": "Cette connexion concerne {{domain}}, mais la demande provient de {{origin}}. Il s'agit probablement d'une tentative de hameçonnage — refusez-la.",
+   "hiddenChars": "Cette demande contient des caractères cachés ou qui changent le sens du texte — ils sont affichés sous la forme ⟨U+…⟩.",
+   "blankLines": "⋯ lignes vides : {{lines}} ⋯",
    "siweOk": "Connexion à {{domain}} vérifiée",
    "ethSignIntent": "Signature à l'aveugle",
    "ethSignTitle": "eth_sign — hash brut",
@@ -1718,7 +1720,8 @@
     "feeRetrying": "Frais pas encore calculés. Nouvelle tentative automatique…",
     "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
     "previousPending": "En attente de votre transaction précédente sur ce réseau…",
-    "simChecking": "Vérification de ce que fait cette transaction…"
+    "simChecking": "Vérification de ce que fait cette transaction…",
+    "messageUnread": "Le message continue — faites défiler pour le lire en entier"
    }
   },
   "signingApprove": {

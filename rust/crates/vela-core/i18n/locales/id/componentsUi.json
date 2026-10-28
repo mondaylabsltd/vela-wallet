@@ -39,6 +39,8 @@
       "siweDomain": "Situs",
       "siweStatement": "Pernyataan",
       "siweMismatch": "Proses masuk ini untuk {{domain}}, tetapi permintaan datang dari {{origin}}. Kemungkinan upaya phishing — tolak permintaan ini.",
+      "hiddenChars": "Permintaan ini berisi karakter tersembunyi atau pengubah arah teks — karakter tersebut ditampilkan sebagai ⟨U+…⟩.",
+      "blankLines": "⋯ baris kosong: {{lines}} ⋯",
       "siweOk": "Proses masuk ke {{domain}} terverifikasi",
       "ethSignIntent": "Tanda tangan buta",
       "ethSignTitle": "eth_sign — hash mentah",
@@ -250,7 +252,8 @@
         "feeRetrying": "Biaya belum bisa dihitung. Mencoba lagi otomatis…",
         "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
         "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…",
-        "simChecking": "Memeriksa hasil transaksi ini…"
+        "simChecking": "Memeriksa hasil transaksi ini…",
+        "messageUnread": "Pesan berlanjut — gulir untuk membaca semuanya"
       }
     },
     "signingApprove": {

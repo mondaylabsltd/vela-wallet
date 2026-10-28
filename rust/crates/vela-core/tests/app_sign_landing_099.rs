@@ -43,6 +43,7 @@ fn ready() -> ConfirmInput {
         clear,
         fee: Some(fee),
         speed_tier: Some(FeeTier::Fast),
+        message_unread: false,
     }
 }
 

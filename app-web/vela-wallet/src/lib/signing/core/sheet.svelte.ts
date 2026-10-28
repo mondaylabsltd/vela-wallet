@@ -37,7 +37,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	batch: null,
 	record_intent: null,
 	native_value: null,
-	record_reading: null
+	record_reading: null,
+	has_invisible_chars: false
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {

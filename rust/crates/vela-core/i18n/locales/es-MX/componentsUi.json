@@ -39,6 +39,8 @@
       "siweDomain": "Sitio",
       "siweStatement": "Declaración",
       "siweMismatch": "Este inicio de sesión es para {{domain}}, pero la solicitud vino de {{origin}}. Probablemente sea un intento de phishing; recházalo.",
+      "hiddenChars": "Esta solicitud contiene caracteres ocultos o que cambian la dirección del texto; se muestran como ⟨U+…⟩.",
+      "blankLines": "⋯ líneas vacías: {{lines}} ⋯",
       "siweOk": "Inicio de sesión verificado en {{domain}}",
       "ethSignIntent": "Firma a ciegas",
       "ethSignTitle": "eth_sign — hash sin procesar",
@@ -250,7 +252,8 @@
         "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
         "feeWouldFail": "Fallaría si se envía así.",
         "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
-        "simChecking": "Comprobando qué hace esta transacción…"
+        "simChecking": "Comprobando qué hace esta transacción…",
+        "messageUnread": "El mensaje continúa; desplázate para leerlo completo"
       }
     },
     "signingApprove": {

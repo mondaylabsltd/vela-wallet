@@ -1365,10 +1365,11 @@ export function signAnswered(payload_json: string): string | undefined;
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
- * every client reads: the four views' JSON, the speed in force, a
+ * every client reads: the four views' JSON, the speed in force, whether the
+ * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
  */
-export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null): string | undefined;
+export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null, message_unread?: boolean | null): string | undefined;
 
 /**
  * The ending of a request whose answer to the page was `payload_json` (the
@@ -2005,7 +2006,7 @@ export interface InitOutput {
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
     readonly signAnswered: (a: number, b: number) => [number, number];
-    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
+    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signErrorWords: (a: number, b: number, c: number, d: number) => [number, number];

@@ -1187,7 +1187,11 @@ export const CONFIRM_BLOCK_KEYS = [
 	// PR 3: everything else is ready and the sheet's own simulation has not
 	// given its verdict yet (`ConfirmBlock::SimChecking`) — "Checking what
 	// this transaction does…", for four seconds at most.
-	'componentsUi.signing.confirmBlock.simChecking'
+	'componentsUi.signing.confirmBlock.simChecking',
+	// cs-10: a message taller than the sheet whose end has not been in sight
+	// (`ConfirmBlock::MessageUnread`) — "The message continues — scroll to
+	// read all of it".
+	'componentsUi.signing.confirmBlock.messageUnread'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1305,6 +1309,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnEthSign: k('componentsUi.signing.ethSignWarning'),
 		bodyEthSign: k('componentsUi.signing.ethSignBody'),
 		warnSiweMismatch: k('componentsUi.signing.siweMismatch'),
+		warnHiddenChars: k('componentsUi.signing.hiddenChars'),
+		messageBlankLines: k('componentsUi.signing.blankLines'),
 		okSiwe: k('componentsUi.signing.siweOk'),
 		warnTokenToContract: k('componentsUi.signing.tokenToContractWarning'),
 		warnUnverifiedAmount: k('componentsUi.signing.unverifiedWarning'),

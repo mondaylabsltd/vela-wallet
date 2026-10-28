@@ -1502,6 +1502,8 @@
    "siweDomain": "사이트",
    "siweStatement": "안내문",
    "siweMismatch": "이 로그인은 {{domain}}용이지만 요청은 {{origin}}에서 왔습니다. 피싱일 가능성이 높으니 거부하세요.",
+   "hiddenChars": "이 요청에는 보이지 않거나 글자 방향을 바꾸는 문자가 있습니다. ⟨U+…⟩로 표시했습니다.",
+   "blankLines": "⋯ 빈 줄: {{lines}} ⋯",
    "siweOk": "{{domain}} 로그인이 확인되었습니다",
    "ethSignIntent": "블라인드 서명",
    "ethSignTitle": "eth_sign — 원시 해시",
@@ -1713,7 +1715,8 @@
     "feeRetrying": "아직 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중…",
     "feeWouldFail": "이대로 보내면 실패합니다.",
     "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…",
-    "simChecking": "이 거래의 결과를 확인 중…"
+    "simChecking": "이 거래의 결과를 확인 중…",
+    "messageUnread": "메시지가 이어집니다. 끝까지 스크롤해 읽어 주세요"
    }
   },
   "signingApprove": {

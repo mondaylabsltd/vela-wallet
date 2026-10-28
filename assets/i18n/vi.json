@@ -1502,6 +1502,8 @@
    "siweDomain": "Trang web",
    "siweStatement": "Nội dung",
    "siweMismatch": "Lượt đăng nhập này dành cho {{domain}} nhưng yêu cầu lại đến từ {{origin}}. Rất có thể là lừa đảo — hãy từ chối.",
+   "hiddenChars": "Yêu cầu này chứa ký tự ẩn hoặc ký tự đổi hướng văn bản — chúng được hiển thị dưới dạng ⟨U+…⟩.",
+   "blankLines": "⋯ dòng trống: {{lines}} ⋯",
    "siweOk": "Đã xác minh đăng nhập vào {{domain}}",
    "ethSignIntent": "Chữ ký mù",
    "ethSignTitle": "eth_sign — hash thô",
@@ -1713,7 +1715,8 @@
     "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
     "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
     "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
-    "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…"
+    "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…",
+    "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết"
    }
   },
   "signingApprove": {

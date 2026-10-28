@@ -63,6 +63,7 @@ pub mod fee_tier_pref;
 pub mod intent_json;
 pub mod intent_rules;
 pub mod intents;
+pub mod invisible_chars;
 pub mod login;
 pub mod manage_tokens;
 pub mod method_words;

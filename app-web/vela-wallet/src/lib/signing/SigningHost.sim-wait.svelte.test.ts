@@ -162,6 +162,7 @@ const READY_CLEAR = {
 	record_intent: null,
 	native_value: null,
 	record_reading: null,
+	has_invisible_chars: false,
 	result: {
 		intent: 'Approve USDC',
 		intent_term: null,

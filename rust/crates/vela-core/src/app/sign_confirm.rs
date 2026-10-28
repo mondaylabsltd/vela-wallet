@@ -86,6 +86,12 @@ pub enum ConfirmBlock {
     /// out says its own line first, and this one stands only when the
     /// verdict is all that is missing.
     SimChecking,
+    /// A message is drawn taller than the sheet's window and its end has not
+    /// been in sight yet (cs-10): "The message continues — scroll to read
+    /// all of it". The shell observes the scroll and says so
+    /// ([`ConfirmInput::message_unread`]); the gate is this. Asked only on
+    /// [`ClearSurface::MessageSign`], and only once everything else is open.
+    MessageUnread,
 }
 
 /// The line while the account's previous transaction on this network is
@@ -97,6 +103,10 @@ pub const PREVIOUS_PENDING_KEY: &str = "componentsUi.signing.confirmBlock.previo
 /// the present tense of the sentence the verdict's place says when nothing
 /// could be checked (`simUnavailableWarning`).
 pub const SIM_CHECKING_KEY: &str = "componentsUi.signing.confirmBlock.simChecking";
+
+/// The line under a confirm held until a message has been read to its end
+/// ([`ConfirmBlock::MessageUnread`]).
+pub const MESSAGE_UNREAD_KEY: &str = "componentsUi.signing.confirmBlock.messageUnread";
 
 /// The title when the relay would not take an operation because the
 /// account's previous one on this network still holds the nonce, at submit
@@ -124,6 +134,11 @@ pub struct ConfirmInput {
     pub fee: Option<FeeView>,
     #[serde(default)]
     pub speed_tier: Option<FeeTier>,
+    /// The shell's observation (cs-10): the message on the sheet runs past
+    /// the sheet's window and its last line has not been in sight yet. A
+    /// shell that does not observe it leaves it `false`, and nothing is held.
+    #[serde(default)]
+    pub message_unread: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,6 +173,7 @@ impl ConfirmBlock {
             Self::FeeMeasuring => "componentsUi.signing.confirmBlock.feeMeasuring",
             Self::FeeFailed => "componentsUi.signing.confirmBlock.feeFailed",
             Self::SimChecking => SIM_CHECKING_KEY,
+            Self::MessageUnread => MESSAGE_UNREAD_KEY,
         })
     }
 }
@@ -199,13 +215,33 @@ pub fn fee_of_another_coin(fee: &FeeView) -> bool {
 /// The one gate (module doc).
 #[must_use]
 pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
-    confirm_state_of(
+    let state = confirm_state_of(
         &input.sign,
         &input.guard,
         &input.clear,
         input.fee.as_ref(),
         input.speed_tier,
-    )
+    );
+    message_read_gate(state, &input.clear, input.message_unread)
+}
+
+/// cs-10: a message is signed only once the person could have read all of
+/// it. Asked last — any other line names its own reason first — and only of
+/// a message, whatever a shell reports for another surface.
+#[must_use]
+pub fn message_read_gate(
+    state: ConfirmState,
+    clear: &ClearSigningView,
+    message_unread: bool,
+) -> ConfirmState {
+    if !state.enabled || !message_unread || clear.surface != ClearSurface::MessageSign {
+        return state;
+    }
+    ConfirmState {
+        enabled: false,
+        block: Some(ConfirmBlock::MessageUnread),
+        key: ConfirmBlock::MessageUnread.key(false).map(str::to_owned),
+    }
 }
 
 /// [`confirm_state`] over borrowed views — for a shell that links the core
@@ -290,8 +326,9 @@ pub fn confirm_state_of(
 }
 
 /// [`confirm_state`] over the four views as the shell last received them, in
-/// JSON (UniFFI, wasm), and the speed in force as its wire name. `None` when a
-/// view does not read — the shell keeps the confirm disabled.
+/// JSON (UniFFI, wasm), the speed in force as its wire name, and whether the
+/// message on the sheet is still unread ([`ConfirmInput::message_unread`]).
+/// `None` when a view does not read — the shell keeps the confirm disabled.
 #[must_use]
 pub fn confirm_state_json(
     sign_json: &str,
@@ -299,6 +336,7 @@ pub fn confirm_state_json(
     clear_json: &str,
     fee_json: Option<&str>,
     speed_tier: Option<&str>,
+    message_unread: bool,
 ) -> Option<String> {
     let input = ConfirmInput {
         sign: serde_json::from_str(sign_json).ok()?,
@@ -314,6 +352,7 @@ pub fn confirm_state_json(
             }
             None => None,
         },
+        message_unread,
     };
     serde_json::to_string(&confirm_state(&input)).ok()
 }

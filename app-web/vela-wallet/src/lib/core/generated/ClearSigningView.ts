@@ -82,4 +82,16 @@ native_value: ClearNativeValue | null,
  * `None` on every surface but [`ClearSurface::ClearSign`] and
  * [`ClearSurface::Batch`], and when the reading named nothing.
  */
-record_reading: DappReading | null, };
+record_reading: DappReading | null, 
+/**
+ * What the sheet draws for this request carries a hidden or
+ * direction-changing character (cs-11): the message on
+ * [`ClearSurface::MessageSign`] / [`ClearSurface::EthSign`], a reading's
+ * fields on [`ClearSurface::ClearSign`] (typed data or a call), any
+ * call's on [`ClearSurface::Batch`]. Each is drawn as its `⟨U+…⟩` marker
+ * already; every shell also says so in one line
+ * (`componentsUi.signing.hiddenChars`). The blind typed-data rows carry
+ * their own flag ([`ClearBlindTyped::has_invisible_chars`]) for the
+ * shells that draw them.
+ */
+has_invisible_chars: boolean, };

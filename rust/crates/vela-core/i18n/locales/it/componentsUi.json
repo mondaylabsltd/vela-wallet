@@ -39,6 +39,8 @@
       "siweDomain": "Sito",
       "siweStatement": "Dichiarazione",
       "siweMismatch": "Questo accesso è per {{domain}}, ma la richiesta proviene da {{origin}}. Probabile tentativo di phishing: rifiutalo.",
+      "hiddenChars": "Questa richiesta contiene caratteri nascosti o che cambiano la direzione del testo: sono mostrati come ⟨U+…⟩.",
+      "blankLines": "⋯ righe vuote: {{lines}} ⋯",
       "siweOk": "Accesso verificato a {{domain}}",
       "ethSignIntent": "Firma cieca",
       "ethSignTitle": "eth_sign — hash grezzo",
@@ -250,7 +252,8 @@
         "feeRetrying": "Non è ancora stato possibile calcolare la commissione. Nuovo tentativo automatico…",
         "feeWouldFail": "Così com'è, fallirebbe.",
         "previousPending": "In attesa della tua transazione precedente su questa rete…",
-        "simChecking": "Verifica di cosa fa questa transazione…"
+        "simChecking": "Verifica di cosa fa questa transazione…",
+        "messageUnread": "Il messaggio continua: scorri per leggerlo tutto"
       }
     },
     "signingApprove": {

@@ -1507,7 +1507,7 @@ describe('the deeper rungs of the ladder', () => {
 		expect(model.blocks[0]).toMatchObject({ text: m.warnEthSign });
 	});
 
-	it('a message shows its text and flags a SIWE domain mismatch as danger', () => {
+	it('a message shows its text and flags a SIWE domain mismatch as danger, both names said', () => {
 		const model = buildSigningModel(
 			inputs({
 				clear: {
@@ -1520,18 +1520,33 @@ describe('the deeper rungs of the ladder', () => {
 						decoded_text: 'hello',
 						binary_preview: null,
 						non_printable: false,
-						siwe: null,
+						siwe: {
+							domain: 'OpenSea.io:443',
+							domain_host: 'opensea.io',
+							address: null,
+							statement: null,
+							uri: null,
+							chain_id: null,
+							nonce: null
+						},
 						binding: 'mismatch',
-						danger_class: 'siwe_phish'
+						danger_class: 'siwe_phish',
+						display_lines: [{ type: 'text', runs: [{ text: 'hello', marker: false }] }],
+						has_invisible_chars: false
 					}
 				}
 			})
 		)!;
 		expect(model.blocks.find((b) => b.kind === 'code')).toMatchObject({ lines: ['hello'] });
-		expect(model.blocks.find((b) => b.kind === 'warning')).toMatchObject({
+		// cs-9: the template was drawn unfilled — "for {{domain}} but … from {{origin}}".
+		const warning = model.blocks.find((b) => b.kind === 'warning');
+		expect(warning).toMatchObject({
 			tone: 'danger',
-			text: m.warnSiweMismatch
+			text: fill(m.warnSiweMismatch, { domain: 'opensea.io', origin: 'app.example' })
 		});
+		expect(warning && 'text' in warning ? warning.text : '').not.toContain('{{');
+		expect(warning && 'text' in warning ? warning.text : '').toContain('opensea.io');
+		expect(warning && 'text' in warning ? warning.text : '').toContain('app.example');
 	});
 
 	it('while the core is still resolving, the sheet waits instead of guessing', () => {
@@ -1540,6 +1555,168 @@ describe('the deeper rungs of the ladder', () => {
 		)!;
 		expect(requestBlocks(model)).toHaveLength(1);
 		expect(model.blocks[0].kind).toBe('sentence');
+	});
+});
+
+/**
+ * Clear-signing audit cs-9 – cs-11, through the REAL core: what a message
+ * draws is the core's (`display_lines`), a long run of empty lines is one
+ * counted line, a hidden character is its muted ⟨U+…⟩ marker under a danger
+ * line, and a message that runs past the sheet holds the confirm until its
+ * end has been in sight.
+ */
+describe('a message is drawn whole and as it is', () => {
+	const MESSAGE_SIGN: SignView = {
+		...OPEN_SIGN,
+		request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+	};
+	const NO_FEE = { ...QUOTED_FEE, fee: null, confirm_fee_ready: false };
+
+	function presented(payload: string, origin: string | null = null): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(
+				JSON.stringify({
+					type: 'message_presented',
+					method: 'personal_sign',
+					params: [payload],
+					request_origin: origin
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	function hex(text: string): string {
+		return '0x' + Buffer.from(text, 'utf8').toString('hex');
+	}
+
+	function messageModel(clear: ClearSigningView, messageUnread?: boolean) {
+		return buildSigningModel(inputs({ sign: MESSAGE_SIGN, clear, fee: NO_FEE, messageUnread }))!;
+	}
+
+	const codeOf = (model: ReturnType<typeof messageModel>) => {
+		const code = model.blocks.find((b) => b.kind === 'code');
+		if (!code || code.kind !== 'code') throw new Error('no message drawn');
+		return code;
+	};
+
+	it('cs-9: a sign-in for another site names both, from the core’s reading', () => {
+		const siwe = [
+			'opensea.io wants you to sign in with your Ethereum account:',
+			'0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1',
+			'',
+			'Sign in',
+			'',
+			'URI: https://opensea.io',
+			'Version: 1',
+			'Chain ID: 1',
+			'Nonce: 8a3b9f2c'
+		].join('\n');
+		const model = messageModel(presented(siwe, REQUEST.origin));
+		const danger = model.blocks.filter((b) => b.kind === 'warning' && b.tone === 'danger');
+		expect(danger).toEqual([
+			{
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnSiweMismatch, { domain: 'opensea.io', origin: 'app.example' })
+			}
+		]);
+	});
+
+	it('cs-10: sixty empty lines are one counted, muted line, and the transfer is right under it', () => {
+		const text = `Welcome to Explore! Click to sign in.${'\n'.repeat(61)}I authorise transfer of all my assets to 0xBAdBad.`;
+		const code = codeOf(messageModel(presented(text)));
+		expect(code.lines).toEqual([
+			'Welcome to Explore! Click to sign in.',
+			[{ text: fill(m.messageBlankLines, { lines: '60' }), muted: true }],
+			'I authorise transfer of all my assets to 0xBAdBad.'
+		]);
+		expect(code.readToEnd).toBe(true);
+		expect(m.messageBlankLines).toContain('{{lines}}');
+	});
+
+	it('cs-10: a message whose end has not been in sight holds the confirm, and says why', () => {
+		const clear = presented('A long message');
+		const held = messageModel(clear, true);
+		expect(held.confirm.enabled).toBe(false);
+		expect(held.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.messageUnread']
+		);
+		expect(held.confirm.note).toBeTruthy();
+
+		// Read to its end — or never reported unread, because it fits.
+		for (const unread of [false, undefined]) {
+			const open = messageModel(clear, unread);
+			expect(open.confirm.enabled).toBe(true);
+			expect(open.confirm.note).toBeUndefined();
+		}
+	});
+
+	it('cs-10: the observation holds nothing but a message', () => {
+		const typed = buildSigningModel(
+			inputs({ clear: { ...DECODED, surface: 'clear_sign' }, messageUnread: true })
+		)!;
+		expect(typed.confirm.enabled).toBe(true);
+	});
+
+	it('cs-11: a direction override is drawn as muted markers, under a danger line', () => {
+		const payload = 'Approve transfer to Bob \u202Egpj.exe\u202C\u200B\u200B ok';
+		const model = messageModel(presented(hex(payload)));
+		const code = codeOf(model);
+		expect(code.lines).toEqual([
+			[
+				{ text: 'Approve transfer to Bob ' },
+				{ text: '⟨U+202E⟩', muted: true },
+				{ text: 'gpj.exe' },
+				{ text: '⟨U+202C⟩', muted: true },
+				{ text: '⟨U+200B⟩', muted: true },
+				{ text: '⟨U+200B⟩', muted: true },
+				{ text: ' ok' }
+			]
+		]);
+		// Nothing that draws the text carries the character itself.
+		expect(JSON.stringify(code.lines)).not.toMatch(/[\u202A-\u202E\u200B-\u200F\u2066-\u2069]/);
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnHiddenChars
+		});
+		expect(m.warnHiddenChars).toContain('⟨U+…⟩');
+	});
+
+	it('cs-11: an ordinary message says nothing of hidden characters', () => {
+		const model = messageModel(presented('Sign in to Example\n中文 · 👨\u200D👩\u200D👧'));
+		expect(codeOf(model).lines).toEqual(['Sign in to Example', '中文 · 👨\u200D👩\u200D👧']);
+		expect(model.blocks.some((b) => b.kind === 'warning')).toBe(false);
+	});
+
+	it('cs-11: a decoded field the core marked is drawn with its markers, under the same line', () => {
+		const clear: ClearSigningView = {
+			...DECODED,
+			has_invisible_chars: true
+		};
+		const model = buildSigningModel(inputs({ clear }))!;
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnHiddenChars
+		});
+		const plain = buildSigningModel(inputs())!;
+		expect(plain.blocks.some((b) => b.kind === 'warning' && b.text === m.warnHiddenChars)).toBe(
+			false
+		);
+	});
+
+	it.each(SUPPORTED_LOCALES)('has the words for all of it in %s', (locale) => {
+		const words = resolveSigningMessages(locale);
+		expect(words.warnHiddenChars).toContain('⟨U+…⟩');
+		expect(words.messageBlankLines).toContain('{{lines}}');
+		expect(words.confirmBlock['componentsUi.signing.confirmBlock.messageUnread']).toBeTruthy();
+		expect(words.warnSiweMismatch).toContain('{{domain}}');
+		expect(words.warnSiweMismatch).toContain('{{origin}}');
 	});
 });
 

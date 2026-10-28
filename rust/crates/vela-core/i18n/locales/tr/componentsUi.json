@@ -39,6 +39,8 @@
       "siweDomain": "Site",
       "siweStatement": "Açıklama",
       "siweMismatch": "Bu oturum açma {{domain}} için ama istek {{origin}} adresinden geldi. Büyük olasılıkla bir kimlik avı denemesi — reddedin.",
+      "hiddenChars": "Bu istek gizli ya da metnin yönünü değiştiren karakterler içeriyor — bunlar ⟨U+…⟩ olarak gösteriliyor.",
+      "blankLines": "⋯ boş satır: {{lines}} ⋯",
       "siweOk": "{{domain}} oturum açma işlemi doğrulandı",
       "ethSignIntent": "Kör imza",
       "ethSignTitle": "eth_sign — ham hash",
@@ -250,7 +252,8 @@
         "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
         "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
-        "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
+        "simChecking": "Bu işlemin ne yapacağı denetleniyor…",
+        "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın"
       }
     },
     "signingApprove": {
