@@ -224,6 +224,12 @@
     "fiatRates": "Fiat-Kurse"
    }
   },
+  "sites": {
+   "title": "Verbundene Websites",
+   "subtitle": "Websites, die deine Adresse sehen können",
+   "listLabel": "Trennst du eine Website, verliert sie, was sie sehen darf; beim nächsten Mal fragt sie dich erneut.",
+   "empty": "Keine Website ist verbunden."
+  },
   "about": {
    "title": "Über",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "Die wartenden Transaktionen dieses Multisigs ließen sich nicht lesen, deshalb wurde nichts vorgeschlagen. Versuche es gleich noch einmal.",
     "notSent": "Das Netzwerk hat sie nicht angenommen, es wurde nichts gesendet. Versuche es erneut.",
     "siteAsks": "{{host}} möchte diese Transaktion.",
-    "siteWaits": "{{host}} wartet, bis die Mitglieder sie ausführen oder ablehnen. Wenn du das hier schließt, erfährt die Seite, dass sie vorgeschlagen wurde; sie bleibt in den Aktivitäten.",
+    "siteWaits": "{{host}} erhält die Transaktion, sobald sie ausgeführt ist. Dauert das länger als 5 Minuten oder schließt du das hier, erfährt die Seite, dass sie vorgeschlagen wurde und auf Freigaben wartet; sie bleibt in den Aktivitäten.",
+    "stillNeeded": "Noch nötige Freigaben: {{missing}}",
+    "siteTold": "{{host}} hat erfahren, dass sie vorgeschlagen wurde und auf Freigaben wartet; den Transaktions-Hash erhält die Seite nicht. Die Transaktion bleibt in den Aktivitäten, und die Mitglieder können sie weiterhin ausführen.",
     "data": "Daten",
     "changesMembers": "Aufruf #{{index}} ändert diesen Multisig selbst: {{change}}. Genehmige nur, wenn alle Mitglieder das erwarten.",
     "siteFollows": "{{host}} hat die Kennung dieser Transaktion erhalten und verfolgt sie, bis die Mitglieder sie ausführen oder ablehnen. Sie bleibt in den Aktivitäten.",
@@ -1376,6 +1384,12 @@
    "a11yClose": "Browser schließen",
    "addLead": "{{host}} möchte ein Netzwerk hinzufügen",
    "addFromSite": "Nicht in Velas Netzwerkliste – Name und Coin stammen von der Website.",
+   "addRpcFromSite": "Vela’s Netzwerkliste hat für dieses Netzwerk keinen RPC, den Vela nutzen kann – der RPC ist der der Website.",
+   "addWhyNoRpc": "Vela hat keinen RPC gefunden, über den es dieses Netzwerk prüfen kann: Es prüft nur über https, und die Website hat keinen nutzbaren angegeben.",
+   "addWhyUnreachable": "Vela konnte {{host}} nicht erreichen, um es zu prüfen. Der Knoten ist vielleicht offline oder langsam oder lässt Vela nicht zu – lokale Knoten tun das oft nicht.",
+   "addUnverified": "Ohne Prüfung hinzufügen",
+   "addUnverifiedWarning": "Vela konnte dieses Netzwerk nicht prüfen. Wenn {{host}} nicht Chain {{chainId}} ist oder Velas Verträge dort fehlen, kann Geld, das an deine Vela-Adresse in diesem Netzwerk geht, festsitzen. Füge es nur hinzu, wenn du es selbst betreibst oder ihm vertraust.",
+   "addUnverifiedConfirm": "Ungeprüftes Netzwerk hinzufügen",
    "a11yBack": "Zurück",
    "a11yReload": "Seite neu laden",
    "a11yOpenSystem": "Im System-Browser öffnen",
@@ -1725,6 +1739,8 @@
    "verifiedAbiWarning": "Kein ERC-7730-Deskriptor für diesen Vertrag — die Werte oben sind eine direkte Dekodierung der verifizierten On-Chain-ABI. Bitte prüfen.",
    "bestEffortSummary": "Aufruf von {{fn}} — aus der öffentlichen Funktionssignatur gelesen, nicht aus einem verifizierten Deskriptor.",
    "simUnavailableWarning": "Vela konnte nicht prüfen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simRecheck": "Erneut prüfen",
+   "simRechecking": "Wird erneut geprüft …",
    "drainSummary": "Die Website nennt das eine kostenlose Beanspruchung, doch die Simulation zeigt, wie Vermögenswerte deine Wallet verlassen.",
    "drainWarning": "Es fließen Vermögenswerte ab, die die Website nie erwähnt hat — das sieht stark nach einem Leerräumen aus. Lehne ab.",
    "selectorNotListed": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor, Selektor nicht verzeichnet ({{bytes}} Bytes)",

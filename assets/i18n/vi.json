@@ -224,6 +224,12 @@
     "fiatRates": "Tỷ giá fiat"
    }
   },
+  "sites": {
+   "title": "Trang web đã kết nối",
+   "subtitle": "Các trang web có thể thấy địa chỉ của bạn",
+   "listLabel": "Ngắt kết nối một trang web sẽ thu hồi những gì nó được xem; lần sau nó sẽ hỏi lại bạn.",
+   "empty": "Không có trang web nào được kết nối."
+  },
   "about": {
    "title": "Giới thiệu",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "Không đọc được các giao dịch đang chờ của multisig này nên chưa có gì được đề xuất. Hãy thử lại sau giây lát.",
     "notSent": "Mạng không nhận giao dịch nên chưa có gì được gửi. Hãy thử lại.",
     "siteAsks": "{{host}} yêu cầu giao dịch này.",
-    "siteWaits": "{{host}} chờ đến khi các thành viên thực hiện hoặc từ chối giao dịch. Nếu bạn đóng mục này, trang web được báo là giao dịch đã được đề xuất, và giao dịch vẫn nằm trong Hoạt động.",
+    "siteWaits": "{{host}} nhận giao dịch ngay khi giao dịch được thực hiện. Nếu mất hơn 5 phút, hoặc bạn đóng mục này, trang web được báo là giao dịch đã được đề xuất và đang chờ phê duyệt; giao dịch vẫn nằm trong Hoạt động.",
+    "stillNeeded": "Số phê duyệt còn cần: {{missing}}",
+    "siteTold": "{{host}} đã được báo là giao dịch đã được đề xuất và đang chờ phê duyệt; trang web sẽ không nhận được mã băm giao dịch. Giao dịch vẫn nằm trong Hoạt động, và các thành viên vẫn có thể thực hiện nó.",
     "data": "Dữ liệu",
     "changesMembers": "Lệnh gọi #{{index}} thay đổi chính multisig này: {{change}}. Chỉ phê duyệt nếu mọi thành viên đều biết trước.",
     "siteFollows": "{{host}} đã nhận mã của giao dịch này và theo dõi đến khi các thành viên thực thi hoặc từ chối. Giao dịch vẫn nằm trong Hoạt động.",
@@ -1376,6 +1384,12 @@
    "a11yClose": "Đóng trình duyệt",
    "addLead": "{{host}} muốn thêm một mạng",
    "addFromSite": "Không có trong danh sách mạng của Vela — tên và coin do trang web đưa ra.",
+   "addRpcFromSite": "Danh sách mạng của Vela không có RPC nào dùng được cho mạng này, nên RPC là của trang web.",
+   "addWhyNoRpc": "Vela không tìm thấy RPC nào dùng được để kiểm tra mạng này: Vela chỉ kiểm tra qua https, và trang web không đưa RPC nào dùng được.",
+   "addWhyUnreachable": "Vela không kết nối được tới {{host}} để kiểm tra. Node có thể đang tắt, chậm, hoặc không cho Vela truy cập — node cục bộ thường như vậy.",
+   "addUnverified": "Thêm mà không xác minh",
+   "addUnverifiedWarning": "Vela không kiểm tra được mạng này. Nếu {{host}} không phải chuỗi {{chainId}}, hoặc các hợp đồng của Vela không có trên đó, tiền gửi đến địa chỉ Vela của bạn trên mạng này có thể bị kẹt. Chỉ thêm nếu bạn tự vận hành hoặc tin tưởng nó.",
+   "addUnverifiedConfirm": "Thêm mạng chưa xác minh",
    "a11yBack": "Quay lại",
    "a11yReload": "Tải lại trang",
    "a11yOpenSystem": "Mở trong trình duyệt hệ thống",
@@ -1725,6 +1739,8 @@
    "verifiedAbiWarning": "Hợp đồng này không có bộ mô tả ERC-7730 — các giá trị ở trên là kết quả giải mã trực tiếp từ ABI đã xác minh on-chain. Hãy kiểm tra kỹ.",
    "bestEffortSummary": "Gọi {{fn}} — đọc từ chữ ký hàm công khai, không phải bộ mô tả đã xác minh.",
    "simUnavailableWarning": "Vela không kiểm tra được giao dịch này sẽ làm gì. Hãy xem kỹ trước khi ký.",
+   "simRecheck": "Kiểm tra lại",
+   "simRechecking": "Đang kiểm tra lại…",
    "drainSummary": "Trang này gọi đây là một lần nhận miễn phí, nhưng mô phỏng cho thấy tài sản rời khỏi ví của bạn.",
    "drainWarning": "Có tài sản rời đi mà trang này chưa hề nhắc tới — rất giống một vụ rút sạch ví. Hãy từ chối.",
    "selectorNotListed": "Không giải mã được — không có bộ mô tả ERC-7730, selector chưa được ghi nhận ({{bytes}} byte)",

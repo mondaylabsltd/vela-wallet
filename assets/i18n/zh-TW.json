@@ -224,6 +224,12 @@
     "fiatRates": "法幣匯率"
    }
   },
+  "sites": {
+   "title": "已連線的網站",
+   "subtitle": "能看到你地址的網站",
+   "listLabel": "中斷連線後，網站就不能再看到這些；下次它會再次徵求你的同意。",
+   "empty": "沒有已連線的網站。"
+  },
   "about": {
    "title": "關於",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "無法讀取這個多簽的待核准交易，因此沒有發起任何提案。請稍後重試。",
     "notSent": "網路未接受這筆交易，因此沒有送出任何內容。請重試。",
     "siteAsks": "{{host}} 請求這筆交易。",
-    "siteWaits": "{{host}} 會一直等到成員執行或拒絕它。關閉後，網站會被告知交易已發起，交易仍保留在動態中。",
+    "siteWaits": "交易一執行，{{host}} 就會收到這筆交易。如果超過 5 分鐘，或你關閉這裡，網站會被告知交易已發起、正在等待核准；交易仍保留在動態中。",
+    "stillNeeded": "仍需核准：{{missing}}",
+    "siteTold": "已告知 {{host}} 交易已發起、正在等待核准；網站不會收到交易雜湊。交易仍保留在動態中，成員仍可執行它。",
     "data": "資料",
     "changesMembers": "第 {{index}} 個呼叫會修改這個多簽本身：{{change}}。只有在所有成員都知情時才核准。",
     "siteFollows": "{{host}} 已收到這筆交易的 ID，會一直追蹤到成員執行或拒絕它。交易仍留在活動中。",
@@ -1376,6 +1384,12 @@
    "a11yClose": "關閉瀏覽器",
    "addLead": "{{host}} 要求新增網路",
    "addFromSite": "不在 Vela 的網路列表中——名稱和幣種由網站提供。",
+   "addRpcFromSite": "Vela 的網路清單沒有這個網路可用的 RPC，所以使用的是網站提供的 RPC。",
+   "addWhyNoRpc": "Vela 找不到可用來檢查這個網路的 RPC：它只透過 https 檢查，而網站也沒有提供可用的 RPC。",
+   "addWhyUnreachable": "Vela 無法連線到 {{host}} 來檢查。節點可能已停止或很慢，也可能不讓 Vela 存取——本機節點經常如此。",
+   "addUnverified": "不驗證直接新增",
+   "addUnverifiedWarning": "Vela 未能檢查這個網路。如果 {{host}} 不是鏈 {{chainId}}，或上面沒有 Vela 的合約，轉到你在這個網路上的 Vela 地址的錢可能會被卡住。只有在你自己運行或信任它時才新增。",
+   "addUnverifiedConfirm": "新增未驗證的網路",
    "a11yBack": "返回",
    "a11yReload": "重新載入頁面",
    "a11yOpenSystem": "在系統瀏覽器中開啟",
@@ -1725,6 +1739,8 @@
    "verifiedAbiWarning": "此合約無 ERC-7730 描述符 — 以上為鏈上驗證 ABI 的直接解碼，請核對參數。",
    "bestEffortSummary": "呼叫 {{fn}} — 依公開函式簽章解析，非驗證描述符。",
    "simUnavailableWarning": "Vela 未能檢查這筆交易的結果，請核對後再簽名。",
+   "simRecheck": "重新檢查",
+   "simRechecking": "正在重新檢查…",
    "drainSummary": "站點聲稱這是一次免費領取（claim），但模擬顯示資產將離開你的錢包。",
    "drainWarning": "未在站點意圖中聲明的資產流出 — 高度疑似盜刷，請拒絕。",
    "selectorNotListed": "無法解碼 — 無 ERC-7730 描述符，選擇器未收錄（{{bytes}} 位元組）",
