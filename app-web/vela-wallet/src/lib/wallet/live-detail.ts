@@ -442,6 +442,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 			: { status: statusChip(status, m) }),
 		// Spec 097 N4: a failed row says why, under its status.
 		...(failure === null ? {} : { note: failureText(failure, m) }),
+		heading: m['componentsTx.detail.sectionTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount,
 		fiat,
@@ -562,6 +563,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
+		heading: m['componentsTx.detail.sectionTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		// Hidden: the mask and the coin ("•••• xDAI"). A sweep's hero names no
 		// one coin — it counts them — so its mask stands alone.

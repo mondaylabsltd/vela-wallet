@@ -48,6 +48,9 @@
 	// out the very fallback it sits over (founder-adjacent, 2026-09-19: a site
 	// with no icon drew an empty disc instead of its initial).
 	let loaded = $state<string | undefined>();
+	// The element says which bytes arrived (ob-16): a logo that lands after its
+	// row has gone (a sheet closed mid-load) read `src`, a derived of an effect
+	// already destroyed — Svelte's `derived_inert` warning, on every such row.
 </script>
 
 {#if src !== undefined}
@@ -60,8 +63,8 @@
 		decoding="async"
 		referrerpolicy="no-referrer"
 		draggable="false"
-		onload={() => (loaded = src)}
-		onerror={() => fail(src)}
+		onload={(event) => (loaded = event.currentTarget.getAttribute('src') ?? undefined)}
+		onerror={(event) => fail(event.currentTarget.getAttribute('src') ?? '')}
 	/>
 {/if}
 

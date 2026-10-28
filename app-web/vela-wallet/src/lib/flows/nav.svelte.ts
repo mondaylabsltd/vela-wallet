@@ -14,6 +14,7 @@
  * thing. Without that, Back would leave the wallet entirely from four screens
  * deep, which on a phone is the single most common way out of a flow.
  */
+import { markHistory } from '$lib/ui/history';
 import type { DesktopFlowStateId, FlowStateId } from './model';
 
 /** Where a flow can be entered from the wallet home. */
@@ -230,7 +231,6 @@ export class FlowNav {
 	 * back STACK, which pushState gives without inventing URLs.
 	 */
 	#mark(): void {
-		if (typeof history === 'undefined') return;
-		history.pushState({ velaFlow: this.mobile.length }, '');
+		markHistory({ velaFlow: this.mobile.length });
 	}
 }

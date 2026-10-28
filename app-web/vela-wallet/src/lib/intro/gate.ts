@@ -47,6 +47,13 @@ export const ACCOUNTS_KEY = 'vela.accounts';
 /** Welcome opened on purpose: to sign into ANOTHER wallet, or sent here by a session that holds none. */
 export const STAY_PARAM = 'stay';
 
+/**
+ * Welcome opened to sign in (vis-22): the way-in sheet is up on arrival. What
+ * the retired `/import` placeholder forwards to, so an old link or a typed
+ * address lands on the real thing.
+ */
+export const SIGN_IN_PARAM = 'signin';
+
 /** {@link STAY_PARAM} as the query a route is resolved with. */
 export const STAY_QUERY = `?${STAY_PARAM}` as const;
 

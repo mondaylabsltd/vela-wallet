@@ -17,6 +17,7 @@
 	 * into events, hands files in and out, and carries a person to /wallet
 	 * when they want to move money (`contact-handoff.ts`).
 	 */
+	import { markHistory } from '$lib/ui/history';
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -674,7 +675,7 @@
 	$effect(() => {
 		const away = ui.screen !== 'list';
 		if (away && !screenMarked) {
-			history.pushState({ velaContacts: ui.screen }, '');
+			markHistory({ velaContacts: ui.screen });
 			screenMarked = true;
 		} else if (!away && screenMarked) {
 			screenMarked = false;

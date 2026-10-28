@@ -55,6 +55,14 @@ const model: WalletKeysModel = {
 	copy: { action: 'Copy', done: 'Copied' }
 };
 
+describe('a key row’s holder line (vis-21)', () => {
+	it('reads "holder · fingerprint", a space either side of the dot', async () => {
+		const screen = render(KeysBlock, { props: { model } });
+		const meta = screen.container.querySelector('li.key .meta');
+		expect(meta?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Built-in passkey · 197d…647b');
+	});
+});
+
 describe('the key this device signs with', () => {
 	it('wears the one filled pill, first in its row, and no other row does', async () => {
 		const screen = render(KeysBlock, { props: { model } });

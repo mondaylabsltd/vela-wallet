@@ -101,6 +101,9 @@
 		display: inline-block;
 		padding-block: var(--space-md);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
 	}
 </style>

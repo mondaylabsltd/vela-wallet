@@ -99,6 +99,17 @@
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
+		/* vis-21: near-even lines, and CJK broken where a reader would — ja
+		   read "あなたの鍵、あなた / の資産", a word cut in two. */
+		text-wrap: balance;
+	}
+
+	:global(html[lang='ja']) .tagline {
+		word-break: auto-phrase;
+	}
+
+	:global(html[lang='ko']) .tagline {
+		word-break: keep-all;
 	}
 
 	.rule {

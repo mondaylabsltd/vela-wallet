@@ -185,6 +185,7 @@ function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 		...model,
 		header: livePill(model, inputs),
 		rows,
+		loading: rows.length === 0 && !settledEmpty && !filteredEmpty,
 		empty: settledEmpty || filteredEmpty ? inputs.emptyCopy : undefined
 	};
 }

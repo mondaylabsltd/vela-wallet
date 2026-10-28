@@ -465,6 +465,7 @@ function txDetail(
 				? fill(m['history.txLabelReceived'], { symbol: 'USDT' })
 				: fill(m['history.txLabelSent'], { symbol: 'POL' }),
 		status: { text: m['componentsTx.receipt.statusConfirmed'], tone: 'success' },
+		heading: m['componentsTx.detail.sectionTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount: kind === 'received' ? '+120 USDT' : '−2 POL',
 		fiat: kind === 'received' ? '≈ $120.00' : '≈ $0.98',

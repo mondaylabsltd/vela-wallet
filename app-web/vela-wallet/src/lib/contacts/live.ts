@@ -23,7 +23,8 @@ import type { FeedView } from '$lib/core/generated/FeedView';
 import { liveActivityRow, type RowMessages } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import { pluralForm } from '$lib/i18n/plural';
-import { shortenAddress } from '$lib/wallet/identity';
+import { checksumAddress } from '$lib/core/kernels';
+import { shortenAddress as shortenSpelled } from '$lib/wallet/identity';
 import type { SidebarModel } from '$lib/wallet/model';
 import { contactContextMenu, groupContextMenu, headerDropdown } from './fixtures';
 import type { ContactsMessages } from './messages';
@@ -74,12 +75,34 @@ const INDEX_LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
 /** The avatar producer: the address's identicon. */
 type Identicon = (seed: string) => string;
 
+/**
+ * An address's short form, in its checksummed case (vis-22). The book stores
+ * addresses lower-cased, and an auto-created contact was titled
+ * "0xabcdef…123456" where every other screen spells the same account
+ * "0xAbCdEf…123456".
+ */
+function shortenAddress(address: string): string {
+	try {
+		return shortenSpelled(checksumAddress(address));
+	} catch {
+		return shortenSpelled(address);
+	}
+}
+
 /** What the person calls this contact — their name wins over a resolved one,
  *  and an unnamed address introduces itself as its short form. */
 export function displayName(contact: Contact): string {
 	// `||`, not `??`: an empty string is a missing name, exactly as the core's
 	// `contact_display_name` reads it.
 	return contact.name || contact.resolved_name || shortenAddress(contact.address);
+}
+
+/**
+ * The address line under a name — none when the name already IS the short
+ * address (vis-22): an unnamed row read "0xAbCd…1234 / 0xAbCd…1234".
+ */
+function addressLine(contact: Contact): string {
+	return contact.name || contact.resolved_name ? shortenAddress(contact.address) : '';
 }
 
 /**
@@ -97,7 +120,7 @@ function nameAction(contact: Contact, m: ContactsMessages): string | undefined {
 function toContactModel(contact: Contact, view: ContactsView, identicon: Identicon): ContactModel {
 	return {
 		name: displayName(contact),
-		addressDisplay: shortenAddress(contact.address),
+		addressDisplay: addressLine(contact),
 		addressFull: contact.address,
 		identiconSvg: identicon(contact.address),
 		groups: view.groups
@@ -443,7 +466,7 @@ export function memberPickModel(
 		rows: bookOrder(view).map((contact) => ({
 			id: contact.address,
 			name: displayName(contact),
-			detail: shortenAddress(contact.address),
+			detail: addressLine(contact),
 			identiconSvg: identicon(contact.address),
 			checked: members.has(contact.address)
 		}))

@@ -75,6 +75,26 @@ describe('a contact nobody has named (issue 191)', () => {
 		expect(displayName(HISTORY_ROW)).toMatch(/^0x606060…606060$/);
 	});
 
+	it('is titled by its short address, checksummed, and says it once (vis-22)', () => {
+		const row = contact({
+			address: '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed',
+			source: 'auto',
+			tx_count: 1
+		});
+		expect(displayName(row)).toBe('0x5aAeb6…1BeAed');
+		const view = (c: Contact): ContactsView => ({
+			...VIEW,
+			contacts: [c],
+			sections: [{ letter: '#', addresses: [c.address] }]
+		});
+		const drawn = letterSections(view(row), identicon, '')[0].contacts[0];
+		expect(drawn.name).toBe('0x5aAeb6…1BeAed');
+		expect(drawn.addressDisplay).toBe('');
+		// Named, the short address is the line under the name.
+		const named = letterSections(view({ ...row, name: 'Bob' }), identicon, '')[0].contacts[0];
+		expect(named.addressDisplay).toBe('0x5aAeb6…1BeAed');
+	});
+
 	it('an empty string is a missing name, as the core reads it', () => {
 		expect(displayName({ ...HISTORY_ROW, name: '', resolved_name: 'bob.eth' })).toBe('bob.eth');
 		expect(displayName({ ...HISTORY_ROW, name: '', resolved_name: '' })).toMatch(/^0x/);

@@ -111,6 +111,20 @@
 		flex-shrink: 0;
 	}
 
+	/* vis-23: the name opens the switcher; under a pointer it says so, as a
+	   link does, and the chevron joins it. */
+	@media (hover: hover) and (pointer: fine) {
+		.name-row:hover .name {
+			text-decoration: underline;
+			text-decoration-thickness: var(--border-hairline);
+			text-underline-offset: var(--space-xs);
+		}
+
+		.name-row:hover .chevron {
+			color: var(--color-fg-base);
+		}
+	}
+
 	.name {
 		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);

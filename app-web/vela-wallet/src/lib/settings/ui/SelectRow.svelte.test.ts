@@ -96,6 +96,20 @@ describe('SelectRow', () => {
 		expect(button.scrollWidth).toBeLessThanOrEqual(Math.ceil(buttonBox.width));
 	});
 
+	it('keeps a long currency symbol inside its disc at the largest text size (set-24)', async () => {
+		document.documentElement.style.setProperty('--text-scale', '1.35');
+		try {
+			for (const glyph of ['NT$', 'CHF', 'HK$']) {
+				const { button } = await drawRow({ id: glyph, label: 'X', glyph });
+				const disc = button.querySelector('.glyph') as HTMLElement;
+				// Nothing drawn past the disc's edge.
+				expect(disc.scrollWidth, glyph).toBeLessThanOrEqual(disc.clientWidth);
+			}
+		} finally {
+			document.documentElement.style.removeProperty('--text-scale');
+		}
+	});
+
 	it('draws no second line for a row that has no advantage to state', async () => {
 		const { detail } = await drawRow({ id: 'en', label: 'English', note: 'System' });
 		expect(detail).toBeNull();

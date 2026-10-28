@@ -1190,6 +1190,10 @@ export interface SettingsDesktopModel {
 		rows: AccountsSheetModel['rows'];
 		primary: string;
 		secondary: string;
+		/** ob-14: the switcher's remove and its confirm, here too (live only). */
+		remove?: string;
+		removeBody?: string;
+		removeCancel?: string;
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };

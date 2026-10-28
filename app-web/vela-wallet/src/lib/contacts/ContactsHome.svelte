@@ -153,7 +153,9 @@
 					address={detail.contact.addressFull}
 				/>
 				<p class="hero-name">{detail.contact.name}</p>
-				<p class="hero-address">{detail.contact.addressDisplay}</p>
+				{#if detail.contact.addressDisplay !== ''}
+					<p class="hero-address">{detail.contact.addressDisplay}</p>
+				{/if}
 				{#if detail.nameAction !== undefined && onuievent !== undefined}
 					<!-- The header's pencil names it too; this says so in words, under
 					     the address that is standing in for a name (issue 191). -->

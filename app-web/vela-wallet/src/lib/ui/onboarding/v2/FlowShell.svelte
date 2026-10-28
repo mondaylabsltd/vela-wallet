@@ -74,14 +74,15 @@
 
 	@media (min-width: 1280px) {
 		.shell {
-			/* Left-aligned beside the rail, and at its NATURAL height. Pinning
+			/* Centred beside the rail (vis-17: the same column Welcome and the
+			   intro stand in), and at its NATURAL height. Pinning
 			   the CTA to the viewport's bottom is a phone pattern — the screen is
 			   the height of a hand there — and stretched to a desktop window it
 			   opened the hole that made this read as a phone page pulled tall. */
 			/* box-sizing is border-box globally, so the measure has to carry its own
 			   padding — 520 of text plus 72 a side. */
 			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
-			margin-inline: 0;
+			margin-inline: auto;
 			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
 		}
 

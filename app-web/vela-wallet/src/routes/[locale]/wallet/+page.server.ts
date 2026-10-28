@@ -6,6 +6,7 @@ import {
 	resolveSigningMessages,
 	resolveWalletFlowMessages,
 	resolveMultisigMessages,
+	resolveMemberCountCopy,
 	resolveWalletMessages
 } from '$lib/i18n/engine.server';
 import { pickRescueMessages } from '$lib/settings/live';
@@ -71,6 +72,8 @@ export const load: PageServerLoad = ({ params }) => {
 		// were built with (spec 026), so a live screen and its drawn twin can
 		// never disagree about a label.
 		flowMessages,
+		// The send picker's group line, in the locale's plural (set-16).
+		memberCount: resolveMemberCountCopy(locale),
 		// The signing sheet's copy (spec 026): the same manifest the gallery
 		// boards are built from, so a live sheet and its drawn twin cannot
 		// disagree about a word.

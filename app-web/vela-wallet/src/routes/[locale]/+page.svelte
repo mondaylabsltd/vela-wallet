@@ -39,6 +39,7 @@
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import {
+		SIGN_IN_PARAM,
 		STAY_PARAM,
 		markIntroSeen,
 		shouldShowIntro,
@@ -243,10 +244,17 @@
 		// The address as the browser holds it: the extension serves this page
 		// as `en.html`, and only the query changes.
 		const url = new URL(location.href);
-		if (!url.searchParams.has(STAY_PARAM)) return;
+		if (!url.searchParams.has(STAY_PARAM) && !url.searchParams.has(SIGN_IN_PARAM)) return;
 		url.searchParams.delete(STAY_PARAM);
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address, minus one query parameter
-		replaceState(url, page.state);
+		url.searchParams.delete(SIGN_IN_PARAM);
+		// After the router has started (ob-16): the first `afterNavigate` runs
+		// inside its start, and SvelteKit refuses a `replaceState` there —
+		// "Cannot call replaceState(...) before router is initialized", a page
+		// error on every `?stay` load.
+		queueMicrotask(() =>
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address, minus one query parameter
+			replaceState(url, page.state)
+		);
 	});
 
 	onMount(() => {
@@ -263,6 +271,11 @@
 			};
 		}
 		if (shouldShowIntro()) intro = true;
+		// Sent here to sign in (`/import`, vis-22): the way-in sheet, past the intro.
+		if (new URLSearchParams(location.search).has(SIGN_IN_PARAM)) {
+			if (intro) leaveIntro();
+			methodsOpen = true;
+		}
 		// The inline script in app.html hid Welcome before paint on the same
 		// rule; whichever way the gate went, the decision is now this
 		// component's, and the attribute must not outlive it.
@@ -502,6 +515,17 @@
 		font-size: var(--text-heroTight);
 	}
 
+	/* Where an authored line is still too wide (a phone narrower than 390,
+	   which is allowed to wrap), it wraps at a phrase, not mid-word: ja left
+	   "ト" alone under "イーサリアムウォレッ" (vis-21). */
+	:global(html[lang='ja']) .headline {
+		word-break: auto-phrase;
+	}
+
+	:global(html[lang='ko']) .headline {
+		word-break: keep-all;
+	}
+
 	/* Two sentences that overrun the column by a word or two. Wrapped greedily
 	   they leave that word alone on the last line («… never goes to / Vela.»,
 	   «…ことはあ / りません。»); balanced, the lines come out near-even — the
@@ -573,9 +597,12 @@
 	/* ------------------------------------------------------------------ */
 
 	@media (min-width: 1280px) {
-		/* Beside the rail: left-aligned, vertically centred, and at its natural
-		   height. The mobile layout anchors the two ways in to the bottom of the
-		   viewport, which is right on a phone and opens a hole on a desktop. */
+		/* Beside the rail: centred in the room the rail leaves, vertically
+		   centred, and at its natural height. The mobile layout anchors the two
+		   ways in to the bottom of the viewport, which is right on a phone and
+		   opens a hole on a desktop. Hugging the rail (the first desktop pass)
+		   left a 1920 window's right two thirds empty (vis-17); the text keeps
+		   its left edge inside the column. */
 		.column {
 			flex: 0 1 auto;
 			justify-content: center;
@@ -583,7 +610,7 @@
 			/* box-sizing is border-box globally, so the measure has to carry its own
 			   padding — 520 of text plus 72 a side. */
 			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
-			margin-inline: 0;
+			margin-inline: auto;
 			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
 		}
 

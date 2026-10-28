@@ -14,6 +14,7 @@
  *              the bridge address and token to `apply` (the person's
  *              `configure_agent`).
  */
+import { replaceUrl } from '$lib/ui/history';
 import { browser } from '$app/environment';
 import {
 	clientmcpInstallationId,
@@ -132,7 +133,7 @@ class AgentLink {
 	async finish(apply: (linked: Linked) => Promise<void>): Promise<boolean> {
 		const query = location.hash.slice(RETURN_FRAGMENT.length);
 		// The code leaves the address bar (and the history) at once.
-		history.replaceState(history.state, '', location.pathname + location.search);
+		replaceUrl(location.pathname + location.search);
 		const kept = this.kept();
 		try {
 			sessionStorage.removeItem(PENDING_KEY);

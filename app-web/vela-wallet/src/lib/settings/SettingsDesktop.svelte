@@ -86,6 +86,8 @@
 		onaccountselect?: (position: number) => void;
 		onaccountcreate?: () => void;
 		onaccountsignin?: () => void;
+		/** ob-14: an account's × was confirmed (its position in the list). Live only. */
+		onaccountremove?: (position: number) => void;
 		/** The account page is showing: the balance core refreshes its rows while it is. */
 		onaccountsopen?: (open: boolean) => void;
 		/** The Ethereum backup (spec 062): the keys block's one button. */
@@ -123,6 +125,7 @@
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
+		onaccountremove,
 		onaccountsopen,
 		onethereumbackup,
 		accountMore,
@@ -302,10 +305,14 @@
 						summary: model.account.summary,
 						rows: model.account.rows,
 						primary: model.account.primary,
-						secondary: model.account.secondary
+						secondary: model.account.secondary,
+						remove: model.account.remove,
+						removeBody: model.account.removeBody,
+						removeCancel: model.account.removeCancel
 					}}
 					layout="inline"
 					onselect={onaccountselect}
+					onremove={onaccountremove}
 					oncreate={onaccountcreate}
 					onsignin={onaccountsignin}
 					more={accountMore}

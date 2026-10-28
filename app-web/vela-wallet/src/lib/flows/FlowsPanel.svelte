@@ -201,6 +201,7 @@
 			onselect={(i) => (send ? send.selectToken(i) : go('send-form', i))}
 			onselectall={send ? () => send.selectAll() : undefined}
 			oncta={send ? () => send.pickCta() : undefined}
+			onreceive={() => go('receive')}
 		/>
 	{:else if body.kind === 'send-form'}
 		<SendForm

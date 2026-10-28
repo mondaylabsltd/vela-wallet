@@ -107,6 +107,19 @@
 		transform: scale(var(--motion-press-row));
 	}
 
+	/* vis-23: a pointer over a row that opens something says so. The rows
+	   have no inline padding (they line up with the headers), so the tint
+	   reaches past each side by a shadow instead of moving the row's text. */
+	@media (hover: hover) and (pointer: fine) {
+		.row:not(.stated):not(:disabled):hover {
+			border-radius: var(--radius-md);
+			background: var(--color-bg-sunken);
+			box-shadow:
+				calc(var(--space-md) * -1) 0 0 0 var(--color-bg-sunken),
+				var(--space-md) 0 0 0 var(--color-bg-sunken);
+		}
+	}
+
 	/* Nothing to pick: no invitation, and no press under the finger. */
 	.row.stated,
 	.row.stated:active {

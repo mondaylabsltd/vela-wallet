@@ -163,14 +163,23 @@ function toStoredGroup(group: ContactGroup): StoredGroup {
 	};
 }
 
+/** The one shape a stored contact's key can have. */
+const ADDRESS = /^0x[0-9a-f]{40}$/i;
+
 async function readContacts(): Promise<Contact[]> {
 	const raw = await readJson<StoredContact[]>(CONTACTS_KEY);
 	if (!Array.isArray(raw)) return [];
+	// set-23: a damaged record is skipped, not drawn — an "address" that is
+	// not one became a row nothing could be sent to, and two records of one
+	// address became two rows that edited each other. The first one stands.
+	const seen = new Set<string>();
 	return raw
 		.filter(
-			(c): c is StoredContact => !!c && typeof c === 'object' && typeof c.address === 'string'
+			(c): c is StoredContact =>
+				!!c && typeof c === 'object' && typeof c.address === 'string' && ADDRESS.test(c.address)
 		)
-		.map(toWireContact);
+		.map(toWireContact)
+		.filter((c) => !seen.has(c.address) && !!seen.add(c.address));
 }
 
 async function readTombstones(): Promise<ContactTombstone[]> {

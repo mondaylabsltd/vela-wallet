@@ -10,6 +10,7 @@
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Dropdown from '$lib/settings/ui/Dropdown.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralForm } from '$lib/i18n/plural';
 	import { loadAccounts } from '$lib/onboarding/core/storage';
@@ -56,6 +57,9 @@
 		networks.find((n) => n.chainId === 100)?.chainId ?? networks[0]?.chainId ?? 100
 	);
 	let creatorChoice = $state<string | null>(null);
+	/** vis-19: which of the review's two choices has its menu open. */
+	let menu = $state<'network' | 'creator' | null>(null);
+	const toggleMenu = (which: 'network' | 'creator') => (menu = menu === which ? null : which);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
 	let created = $state<string | null>(null);
@@ -304,19 +308,46 @@
 				</li>
 			{/each}
 		</ol>
-		<label class="select">
+		<!-- vis-19: the app's own select (the settings dropdown and its rows),
+		     not the browser's — a native menu drew in the system's face and
+		     colours, the one control in the sheet that did. -->
+		<div class="select">
 			<span>{m.create.network}</span>
-			<select bind:value={chainId}>
-				{#each networks as n (n.chainId)}<option value={n.chainId}>{n.displayName}</option>{/each}
-			</select>
-		</label>
+			<Dropdown
+				label={m.create.network}
+				value={networks.find((n) => n.chainId === chainId)?.displayName ?? ''}
+				open={menu === 'network'}
+				rows={networks.map((n) => ({
+					id: String(n.chainId),
+					label: n.displayName,
+					selected: n.chainId === chainId
+				}))}
+				ontoggle={() => toggleMenu('network')}
+				onselect={(id) => {
+					chainId = Number(id);
+					menu = null;
+				}}
+			/>
+		</div>
 		{#if local.length > 1}
-			<label class="select">
+			<div class="select">
 				<span>{m.create.creator}</span>
-				<select value={creator?.address} onchange={(e) => (creatorChoice = e.currentTarget.value)}>
-					{#each local as o (o.address)}<option value={o.address}>{o.name}</option>{/each}
-				</select>
-			</label>
+				<Dropdown
+					label={m.create.creator}
+					value={creator?.name ?? ''}
+					open={menu === 'creator'}
+					rows={local.map((o) => ({
+						id: o.address,
+						label: o.name,
+						selected: o.address === creator?.address
+					}))}
+					ontoggle={() => toggleMenu('creator')}
+					onselect={(id) => {
+						creatorChoice = id;
+						menu = null;
+					}}
+				/>
+			</div>
 		{/if}
 		{#if failure}<p class="error" role="alert">
 				{fillTemplate(m.proposal.failed, { reason: failure })}
@@ -464,8 +495,7 @@
 	}
 
 	input.mono,
-	input.name-field,
-	select {
+	input.name-field {
 		min-height: var(--size-control-lg);
 		padding: 0 var(--space-md);
 		border: var(--border-hairline) solid var(--color-border-strong);
@@ -476,7 +506,6 @@
 		color: var(--color-fg-base);
 	}
 
-	select,
 	input.name-field {
 		font-family: var(--font-ui);
 	}
@@ -511,7 +540,9 @@
 		width: var(--icon-lg);
 		text-align: center;
 		font-family: var(--font-numeric);
-		color: var(--color-rail-ordinal);
+		/* The rail's ordinal ink is a decoration's, too faint to read a
+		   member's number by (vis-21): the muted ink the addresses carry. */
+		color: var(--color-fg-muted);
 	}
 
 	.remove {

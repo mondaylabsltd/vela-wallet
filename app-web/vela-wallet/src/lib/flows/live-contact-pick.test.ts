@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact } from '$lib/core/generated/Contact';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import { resolveMemberCountCopy, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
@@ -60,6 +60,21 @@ describe('liveContactPick', () => {
 			[expect.stringMatching(/^0xc1c1/i), undefined]
 		]);
 		expect(live.contacts[0].identiconSvg).toContain(ALICE.address);
+	});
+
+	it('counts a group’s members in the locale’s plural (set-16)', () => {
+		const drawn = buildDesktopFlowState('dsd2e', m, identicon);
+		if (drawn.body.kind !== 'contact-pick') throw new Error('dsd2e is the picker');
+		const memberCount = resolveMemberCountCopy('en');
+		const one = liveContactPick(drawn.body.model, { view: VIEW, m, memberCount, identicon });
+		expect(one.groups[0].count).toBe('1 member');
+		const two = liveContactPick(drawn.body.model, {
+			view: { ...VIEW, groups: [{ ...VIEW.groups[0], members: [ALICE, RECENT] }] },
+			m,
+			memberCount,
+			identicon
+		});
+		expect(two.groups[0].count).toBe('2 members');
 	});
 });
 

@@ -675,6 +675,16 @@
 			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 	}
 
+	/**
+	 * ob-14: the account's ×, confirmed — the switcher's own act (the core's
+	 * `remove_wallet`), so a removal here and there is one thing.
+	 */
+	function removeAccount(position: number): void {
+		const row = view.accounts[position];
+		if (row !== undefined)
+			void intents.invoke('person', { type: 'remove_wallet', address: row.account.address });
+	}
+
 	/** The switcher is on screen: the balance core refreshes every row's total. */
 	function accountsOpen(open: boolean): void {
 		if (open)
@@ -1228,6 +1238,7 @@
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
+				onaccountremove={removeAccount}
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
@@ -1259,6 +1270,7 @@
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
+				onaccountremove={removeAccount}
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
 				onfeedbacksend={(report) => void sendFeedback(report)}

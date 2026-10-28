@@ -286,6 +286,12 @@ export interface TxDetailModel {
 	status?: StatusChipModel;
 	/** Spec 093: "Off-chain signature — nothing was sent on-chain." */
 	note?: string;
+	/**
+	 * vis-19: the phone sheet's title ("Transaction Details"), drawn with its ×
+	 * as every other sheet's is — the desktop column's title says the same.
+	 * Absent: the sheet keeps its title for the screen reader only.
+	 */
+	heading?: string;
 	closeLabel: string;
 	amount: string;
 	fiat: string;
@@ -353,6 +359,11 @@ export interface AssetsModel {
 	rows: AssetRowModel[];
 	/** T1's trailing link under the list. */
 	addByAddress: string;
+	/**
+	 * vis-4: the holdings are still being read and none is in yet — the list
+	 * draws skeleton rows, as the home's Assets section does, not a blank.
+	 */
+	loading?: boolean;
 	/** T4: the guided-empty body replaces the rows entirely. */
 	empty?: {
 		title: string;
@@ -484,6 +495,12 @@ export interface SendPickModel {
 	 * has rows.
 	 */
 	empty?: string;
+	/**
+	 * vis-22: the way in for an account that holds nothing — "Receive", under
+	 * the empty list. Only then: a list a filter emptied, or one still being
+	 * read, is not a reason to send the person somewhere else.
+	 */
+	receive?: string;
 	/** SD1b: which rows are chosen, and which are off-network and greyed. */
 	selection?: { selected: boolean[]; dimmed: boolean[]; selectAll: string };
 	/** SD1's "send several tokens" ghost CTA, or SD1b's accent one. */

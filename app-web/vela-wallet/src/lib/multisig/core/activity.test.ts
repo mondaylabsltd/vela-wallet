@@ -79,7 +79,7 @@ describe('a waiting contract call in Activity', () => {
 		await settle();
 		const row = waitingRows.group(m)!.rows[0];
 		expect(row.title).toBe('Contract call');
-		expect(row.amount).toBe('-5');
+		expect(row.amount).toBe('\u22125');
 		expect(row.unit).toBe('xDAI');
 	});
 });

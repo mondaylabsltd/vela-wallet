@@ -11,6 +11,7 @@
 	 * exactly the moment a person committed to creating a wallet. The Welcome
 	 * page that hosts it never loads it.
 	 */
+	import { markHistory } from '$lib/ui/history';
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import FlowShell from './FlowShell.svelte';
 	import { RAIL_STEPS, type RailSlot } from './rail';
@@ -262,7 +263,7 @@
 	});
 	$effect(() => {
 		if (screen === 'keys' && !stepMarked) {
-			history.pushState({ velaCreate: 'keys' }, '');
+			markHistory({ velaCreate: 'keys' });
 			stepMarked = true;
 		} else if ((screen === 'form' || screen === 'done') && stepMarked) {
 			stepMarked = false;

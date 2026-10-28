@@ -83,6 +83,9 @@ describe('withLiveFlow (assets)', () => {
 		if (unknown.base.kind !== 'assets') throw new Error('kind');
 		expect(unknown.base.model.empty).toBeUndefined();
 		expect(unknown.base.model.rows).toEqual([]);
+		// vis-4: and not a blank page meanwhile — the list says it is loading.
+		expect(unknown.base.model.loading).toBe(true);
+		expect(looked.base.model.loading).toBe(false);
 	});
 
 	it('leaves screens without a live overlay alone (send is 026)', () => {

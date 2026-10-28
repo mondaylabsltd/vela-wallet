@@ -937,6 +937,14 @@ export function resolveWalletFlowMessages(locale: Locale): WalletFlowMessages {
 }
 
 /**
+ * The send picker's "N members" under a group (set-16): the address book's
+ * own plural key, picked by count where the picker draws.
+ */
+export function resolveMemberCountCopy(locale: Locale): PluralCopy {
+	return pluralCopy(locale, 'contacts.memberCount');
+}
+
+/**
  * A plural key as the forms `locale` has — the core's categories for it, the
  * same set `resolveFlowMessages` ships — for a screen that knows the count
  * only when it draws (`pluralForm`).

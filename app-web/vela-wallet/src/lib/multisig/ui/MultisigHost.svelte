@@ -5,6 +5,7 @@
 	 * transaction to approve, `#msa=` adds a multisig) and draws whichever
 	 * multisig sheet is open. The page stays the session's; this only adds.
 	 */
+	import { replaceUrl } from '$lib/ui/history';
 	import { onMount } from 'svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
@@ -64,7 +65,7 @@
 	});
 
 	function clearHash() {
-		history.replaceState(history.state, '', location.pathname + location.search);
+		replaceUrl(location.pathname + location.search);
 	}
 
 	/** A link someone sent: a transaction to approve, or a multisig to add. */

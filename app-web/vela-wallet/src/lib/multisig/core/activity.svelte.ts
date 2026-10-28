@@ -11,7 +11,8 @@ import { chainName } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { ActivityGroupModel, ActivityRowModel } from '$lib/wallet/model';
 import type { MultisigMessages } from '../messages';
-import { actionTitle, formatUnits, tokenInfo } from './display';
+import { actionTitle, formatUnits, localName, shortenAddress, tokenInfo } from './display';
+import { checksumAddress } from '$lib/core/kernels';
 import { proposals, type ProposalItem } from './proposals.svelte';
 import { readCall } from './call-review.svelte';
 import type { SigningMessages } from '$lib/signing/messages';
@@ -120,7 +121,7 @@ class WaitingRows {
 	 * last transactions it gave — never "No activity yet" over ones it has
 	 * not answered for. Reads only.
 	 */
-	group(m: MultisigMessages): ActivityGroupModel | null {
+	group(m: MultisigMessages, toName?: string): ActivityGroupModel | null {
 		const open = proposals.open;
 		if (open.length === 0 && !proposals.stale) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
@@ -136,14 +137,18 @@ class WaitingRows {
 						approved: item.approved,
 						threshold: item.threshold
 					}),
-					chainName(item.chainId)
+					// vis-18: whom a transfer goes to, as a Vela account's row
+					// says it; the chain logo on the glyph already names the
+					// network, so a transfer's line has room for the person.
+					recipientLine(item, toName) ?? chainName(item.chainId)
 				]
 					.filter(Boolean)
 					.join(' · '),
+				// The typographic minus every other row's amount carries (vis-18).
 				amount: drawn?.amount
 					? drawn.amount.startsWith('<')
 						? drawn.amount
-						: `-${drawn.amount}`
+						: `\u2212${drawn.amount}`
 					: '',
 				unit: drawn?.unit ?? '',
 				positive: false,
@@ -156,6 +161,23 @@ class WaitingRows {
 			? { label: m.panel.pending, note: m.panel.stale, rows }
 			: { label: m.panel.pending, rows };
 	}
+}
+
+/**
+ * "To Alice" / "To 0x1234AB…34abcd" for a transfer to one address — this
+ * device's name for it when it is one of its accounts, else its checksummed
+ * short form; `null` for anything else (a batch, a member change).
+ */
+function recipientLine(item: ProposalItem, toName: string | undefined): string | null {
+	const action = item.review.action;
+	if (toName === undefined || action?.kind !== 'transfer') return null;
+	let address = action.to;
+	try {
+		address = checksumAddress(action.to);
+	} catch {
+		// Not an address the core can read: shown as it came.
+	}
+	return fillTemplate(toName, { name: localName(address) ?? shortenAddress(address) });
 }
 
 function statusOf(m: MultisigMessages, item: ProposalItem): string {

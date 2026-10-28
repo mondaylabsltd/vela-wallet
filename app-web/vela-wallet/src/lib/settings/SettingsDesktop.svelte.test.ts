@@ -8,7 +8,7 @@
  * key it showed.
  */
 import { tick } from 'svelte';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
@@ -96,7 +96,8 @@ describe('a destructive row asks first', () => {
 
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.storage.clear)));
 		expect(view.cleared).toEqual(['contacts']);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 
 	it('cancelling a storage row clears nothing', async () => {
@@ -108,7 +109,8 @@ describe('a destructive row asks first', () => {
 		await view.click(row?.querySelector('button'));
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.common.cancel)));
 		expect(view.cleared).toEqual([]);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 
 	it('removing a custom network names it, and removes only on confirm', async () => {
@@ -154,7 +156,8 @@ describe('erase', () => {
 		await view.click(card);
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.erase.cancel)));
 		expect(view.prefs).toEqual([]);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 });
 

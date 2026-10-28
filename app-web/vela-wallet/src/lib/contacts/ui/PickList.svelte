@@ -68,7 +68,7 @@
 						<span class="text">
 							<span class="name">{row.name}</span>
 							{#if row.detail !== undefined}
-								<span class="detail">{row.detail}</span>
+								{#if row.detail !== ''}<span class="detail">{row.detail}</span>{/if}
 							{/if}
 						</span>
 						<span class="box" class:on={checked.has(row.id)} aria-hidden="true">

@@ -20,6 +20,7 @@
 	import type { Snippet } from 'svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { dialogPop, scrimFade } from '$lib/ui/dialog-motion';
 
 	interface Props {
 		title: string;
@@ -94,9 +95,11 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="scrim" role="presentation" onclick={onclose}></div>
+<!-- vis-19: it leaves as it came, rather than in one frame. -->
+<div class="scrim" role="presentation" onclick={onclose} transition:scrimFade|global></div>
 <div
 	class="dialog"
+	transition:dialogPop|global={{ centred: true }}
 	role="dialog"
 	aria-modal="true"
 	aria-label={title}
@@ -139,20 +142,6 @@
 		background: var(--color-bg-raised);
 		border: var(--border-hairline) solid var(--color-border-base);
 		box-shadow: var(--shadow-lg);
-		animation: rise var(--motion-duration-fast) ease-out;
-	}
-
-	@keyframes rise {
-		from {
-			transform: translate(-50%, -50%) scale(0.97);
-			opacity: 0;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.dialog {
-			animation: none;
-		}
 	}
 
 	header {
@@ -195,8 +184,14 @@
 	   otherwise, and the bottom of a long proposal was cut off). The two
 	   `local` covers ride with the content and hide the two `scroll` shades
 	   at either end, so a shade shows only where there is more to scroll to. */
+	/* A scroller clips at its box, and a full-width last control (the new
+	   multisig's Next) stood flush with it: its bottom edge, and any focus
+	   ring, were cut (vis-21). A little room inside on each side, handed back
+	   outside, so the content lines up exactly where it did. */
 	.content {
 		min-height: 0;
+		margin-inline: calc(var(--space-sm) * -1);
+		padding: 0 var(--space-sm) var(--space-sm);
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		background:

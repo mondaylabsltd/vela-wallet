@@ -582,6 +582,9 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 					? m['send.loadingTokens']
 					: m['send.noTokensWithBalance']
 			: m['send.noMatchingTokens'];
+	// Nothing to send from at all — read, and settled: the door is Receive.
+	const holdsNothing =
+		send.tokens.length === 0 && !send.loading && inputs.alert?.type !== 'load_tokens_failed';
 	const recipient = pickRecipient(inputs);
 	if (!inputs.sweepPicking) {
 		return {
@@ -593,6 +596,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 			selection: undefined,
 			rows,
 			empty,
+			receive: holdsNothing ? m['receive.title'] : undefined,
 			cta: { label: m['send.multiSendTitle'], accent: false }
 		};
 	}

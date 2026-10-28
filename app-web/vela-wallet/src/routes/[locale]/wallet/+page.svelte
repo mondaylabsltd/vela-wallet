@@ -20,6 +20,7 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
+	import { markHistory } from '$lib/ui/history';
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { transfers } from '$lib/intents/transfers.svelte';
@@ -1772,7 +1773,11 @@
 		if (multisig.active)
 			waitingRows.follow(data.multisigMessages, data.signingMessages, multisig.active.address);
 	});
-	const waiting = $derived(multisig.active ? waitingRows.group(data.multisigMessages) : null);
+	const waiting = $derived(
+		multisig.active
+			? waitingRows.group(data.multisigMessages, data.walletMessages.activity.toName)
+			: null
+	);
 	/** A tap on Activity: a waiting multisig transaction opens as one; anything else, its detail. */
 	function openActivity(row: { id?: string }) {
 		const proposal = proposalOfRow(row.id);
@@ -1838,7 +1843,12 @@
 		addToken: addTokenInputs,
 		contactPick:
 			contactsView && sendView
-				? { view: contactsView, m: data.flowMessages, identicon: identiconSvgForClient }
+				? {
+						view: contactsView,
+						m: data.flowMessages,
+						memberCount: data.memberCount,
+						identicon: identiconSvgForClient
+					}
 				: undefined
 	});
 
@@ -1874,7 +1884,7 @@
 			// ‹ does, and puts the entry it used back for the next Back.
 			if (sendView?.stage === 'confirm' && sendSession) {
 				sendSession.dispatch({ type: 'back' });
-				history.pushState({ velaFlow: nav.mobile.length }, '');
+				markHistory({ velaFlow: nav.mobile.length });
 				return;
 			}
 			nav.back();

@@ -58,7 +58,10 @@
 		>
 			<span class="text">
 				<span class="name">{contact.name}</span>
-				<span class="address">{contact.addressDisplay}</span>
+				<!-- None when the name is the address already (vis-22). -->
+				{#if contact.addressDisplay !== ''}
+					<span class="address">{contact.addressDisplay}</span>
+				{/if}
 			</span>
 		</button>
 	</div>

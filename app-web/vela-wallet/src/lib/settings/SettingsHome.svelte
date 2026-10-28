@@ -107,6 +107,8 @@
 		onaccountselect?: (position: number) => void;
 		onaccountcreate?: () => void;
 		onaccountsignin?: () => void;
+		/** ob-14: an account's × was confirmed (its position in the list). Live only. */
+		onaccountremove?: (position: number) => void;
 		/** The switcher opened or closed: the balance core refreshes its rows while it is up. */
 		onaccountsopen?: (open: boolean) => void;
 		/** The storage page's "clear all caches" was confirmed. Absent in the gallery. */
@@ -154,6 +156,7 @@
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
+		onaccountremove,
 		onaccountsopen,
 		onclearcaches,
 		onfeedbacksend,
@@ -595,6 +598,12 @@
 						}}
 						oncreate={onaccountcreate}
 						onsignin={onaccountsignin}
+						onremove={onaccountremove === undefined
+							? undefined
+							: (position) => {
+									onaccountremove(position);
+									close();
+								}}
 						more={accountMore}
 					/>
 				{:else if overlay === 'sign-out'}

@@ -1070,7 +1070,10 @@
 		text-align: center;
 		/* es-MX left "reporte →" alone on the second line. */
 		text-wrap: balance;
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
 	}
 
 	/* --- filed ------------------------------------------------------------ */

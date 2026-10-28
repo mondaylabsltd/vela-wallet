@@ -273,6 +273,7 @@
 				onselect={(i) => (send ? send.selectToken(i) : go('send-form', i))}
 				onselectall={send ? () => send.selectAll() : undefined}
 				oncta={() => (send ? send.pickCta() : go('send-multi'))}
+				onreceive={() => go('receive')}
 			/>
 		</FlowScreen>
 	{:else if base.kind === 'send-form'}
@@ -350,11 +351,12 @@
 				<ReceiveQr model={sheet.model} {onincludenetwork} />
 			</BottomSheet>
 		{:else if sheet.kind === 'tx-detail'}
+			<!-- vis-19: titled, with its ×, as every other sheet is. -->
 			<BottomSheet
-				title={sheet.model.title}
+				title={sheet.model.heading ?? sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				hideTitle
+				hideTitle={sheet.model.heading === undefined}
 				onclose={closeSheet}
 			>
 				<TxDetail model={sheet.model} ondelete={ondeletetx} />

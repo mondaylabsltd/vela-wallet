@@ -618,6 +618,22 @@ describe('one figure for one balance (spec 078)', () => {
 		);
 	});
 
+	it('an account that holds nothing is offered Receive, and only then (vis-22)', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: false })).receive).toBe(
+			m['receive.title']
+		);
+		expect(
+			liveSendPick(pickModel(), inputs({ tokens: [], loading: true })).receive
+		).toBeUndefined();
+		expect(
+			liveSendPick(pickModel(), {
+				...inputs({ tokens: [] }),
+				alert: { type: 'load_tokens_failed' }
+			}).receive
+		).toBeUndefined();
+		expect(liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] })).receive).toBeUndefined();
+	});
+
 	it('the picker lists the same figure', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] }));
 		expect(model.rows[0].balance).toBe('0.043968');

@@ -154,3 +154,18 @@ describe('"Delete record" is not the heaviest thing on the page', () => {
 		host.remove();
 	});
 });
+
+describe('a copied fact says so (ob-16)', () => {
+	it('ticks the fact that was copied — a proxied copy of it never matched', async () => {
+		const model = detail({
+			facts: [{ label: 'To', value: '0x14fb…1d1e', copy: 'Copy address', copyValue: '0x14fb' }]
+		});
+		const screen = render(TxDetail, { props: { model } });
+		const button = screen.container.querySelector<HTMLButtonElement>(
+			'button[aria-label="Copy address"]'
+		)!;
+		button.click();
+		await expect.poll(() => button.classList.contains('copied')).toBe(true);
+		screen.unmount();
+	});
+});

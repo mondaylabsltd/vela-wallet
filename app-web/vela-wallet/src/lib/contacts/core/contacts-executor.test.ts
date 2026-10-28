@@ -72,12 +72,17 @@ describe('read_store', () => {
 			JSON.stringify([
 				{ address: ADDR, kind: 'nonsense', txCount: 'three', lastUsed: null, source: 'weird' },
 				{ noAddress: true },
-				null
+				null,
+				// set-23: not an address, and the same address twice.
+				{ address: 'not-an-address', name: 'Ghost' },
+				{ address: '0x1234', name: 'Short' },
+				{ address: ADDR.toUpperCase().replace('0X', '0x'), name: 'Twin' }
 			])
 		);
 		const result = await executeContactOperation(effect({ type: 'read_store' }));
 		if (result.type !== 'store_loaded') throw new Error('wrong variant');
 		expect(result.contacts).toHaveLength(1);
+		expect(result.contacts[0].name).toBeNull();
 		expect(result.contacts[0]).toMatchObject({
 			kind: 'unknown',
 			tx_count: 0,

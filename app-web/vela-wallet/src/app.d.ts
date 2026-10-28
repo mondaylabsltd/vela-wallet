@@ -18,7 +18,12 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		/** The history entries the app's own Back stacks write (`$lib/ui/history`). */
+		interface PageState {
+			velaFlow?: number;
+			velaContacts?: string;
+			velaCreate?: string;
+		}
 	}
 }
 

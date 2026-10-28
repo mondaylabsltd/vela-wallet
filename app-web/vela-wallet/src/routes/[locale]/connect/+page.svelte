@@ -6,8 +6,11 @@
 	 * asks the owner. It keeps its sessions, so Vela can ask the same wallet
 	 * again: reopening this page resumes them.
 	 */
+	import { replaceUrl } from '$lib/ui/history';
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import BrandMark from '$lib/ui/BrandMark.svelte';
+	import { eip55 } from '$lib/multisig/external/eip55';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { chainName } from '$lib/services/networks';
 	import { discoverProviders, type ProviderDetail } from '$lib/multisig/external/eip6963';
@@ -32,7 +35,7 @@
 		invite = inviteFromHash(location.hash);
 		if (invite) {
 			link = location.href;
-			history.replaceState(null, '', location.pathname);
+			replaceUrl(location.pathname);
 		}
 		providers = await discoverProviders();
 		discovered = true;
@@ -110,6 +113,11 @@
 	});
 	const live = $derived(sessions.filter((s) => s.approved));
 
+	/** vis-20: a request's time to the minute, as every other time in the app. */
+	function at(ms: number): string {
+		return new Date(ms).toLocaleTimeString(data.locale, { hour: 'numeric', minute: '2-digit' });
+	}
+
 	function describe(method: string): string {
 		if (method === 'eth_signTypedData_v4') return m.signTx;
 		if (method === 'eth_sendTransaction') return m.sendTx;
@@ -131,6 +139,12 @@
 <svelte:head><title>{m.pageTitle}</title></svelte:head>
 
 <main class="page">
+	<!-- vis-20: whose page this is, before anything else — the outside
+	     member opened it from a link, in a browser Vela has never drawn in. -->
+	<header class="brand">
+		<BrandMark size={32} />
+		<span class="wordmark">VELA WALLET</span>
+	</header>
 	<h1>{m.pageTitle}</h1>
 
 	{#if !discovered}
@@ -178,7 +192,7 @@
 				<p class="lead" data-testid="connect-connected">{m.keepOpen}</p>
 				{#if account}
 					<p class="who">
-						<span class="mono">{shortenAddress(account)}</span>
+						<span class="mono">{shortenAddress(eip55(account))}</span>
 						{#if network}<span class="muted">· {network}</span>{/if}
 					</p>
 				{/if}
@@ -196,16 +210,18 @@
 					{#each activity as a (a.at + a.method)}
 						<li>
 							<span>{describe(a.method)}</span>
-							<time class="muted">{new Date(a.at).toLocaleTimeString(data.locale)}</time>
+							<time class="muted">{at(a.at)}</time>
 						</li>
 					{/each}
 				</ul>
 			</section>
 		{/if}
 
-		{#if sessions.length > 0}
+		<!-- Only a connection there is can be ended (vis-20): a session still
+		     waiting for its answer has the Decline above. -->
+		{#if live.length > 0}
 			<div class="end">
-				{#each sessions as s (s.id)}
+				{#each live as s (s.id)}
 					<Button variant="secondary" shape="rounded" onclick={() => bridge?.end(s.id)}
 						>{m.disconnect}</Button
 					>
@@ -218,35 +234,50 @@
 </main>
 
 <style>
+	/* vis-20: the app's screen gutter and type scale — the page had a gutter
+	   half the app's and body copy smaller than anything else Vela draws. */
 	.page {
 		box-sizing: border-box;
-		max-width: var(--layout-onboardingColumn);
+		max-width: calc(var(--layout-onboardingColumn) + var(--layout-screenPaddingX) * 2);
 		margin: 0 auto;
-		padding: var(--space-xl) var(--space-lg);
+		padding: var(--space-3xl) var(--layout-screenPaddingX);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-lg);
+		gap: var(--space-xl);
 		font-family: var(--font-ui);
 		color: var(--color-fg-base);
 	}
 
+	.brand {
+		display: flex;
+		gap: var(--space-md);
+		align-items: center;
+	}
+
+	.wordmark {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-bold);
+		letter-spacing: 0.11em;
+	}
+
 	h1 {
 		margin: 0;
-		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
-		font-weight: var(--weight-semibold);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
+		font-weight: var(--weight-bold);
+		line-height: var(--leading-tight);
 	}
 
 	h2 {
 		margin: 0 0 var(--space-sm);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 	}
 
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
-		padding: var(--space-lg);
+		gap: var(--space-lg);
+		padding: var(--space-xl);
 		border: var(--border-hairline) solid var(--color-border-base);
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-raised);
@@ -254,12 +285,14 @@
 
 	.lead {
 		margin: 0;
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
 	}
 
 	.muted {
 		margin: 0;
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
 	}
 
@@ -318,12 +351,12 @@
 		display: flex;
 		justify-content: space-between;
 		gap: var(--space-md);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.error {
 		margin: 0;
 		color: var(--color-error-base);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 </style>

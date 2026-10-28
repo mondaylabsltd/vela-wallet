@@ -1331,7 +1331,12 @@ export function withLiveAccounts(
 		accountsSheet: {
 			...model.accountsSheet,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input)
+			rows: liveAccountRows(input),
+			// ob-14: an account can be removed from Settings as from the
+			// header's switcher — the same ×, the same confirm.
+			remove: m.accounts.remove,
+			removeBody: m.accounts.removeBody,
+			removeCancel: m.accounts.cancel
 		}
 	};
 }
@@ -1347,7 +1352,10 @@ export function withLiveAccountsDesktop(
 		account: {
 			...model.account,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input)
+			rows: liveAccountRows(input),
+			remove: m.accounts.remove,
+			removeBody: m.accounts.removeBody,
+			removeCancel: m.accounts.cancel
 		}
 	};
 }

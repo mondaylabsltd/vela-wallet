@@ -143,6 +143,11 @@ const WEB_ADDITIONS = [
 		'issue 195: the widest a label\u2194value row grows on the desktop (an asset and its amount, a setting and its control). Rows are two-ended, so every pixel of column width past this lands as dead space BETWEEN the two things the eye has to connect \u2014 at the 800 content column a token sat 610px from its balance. 560 is the settings control column (280) doubled: the label gets as much room as the control and no more. NOT multiplied by --text-scale: larger text fills the row from both ends, and the gap is the thing being bounded'
 	],
 	[
+		'layout-feedMin',
+		'448px',
+		'vis-17: the narrowest a desktop home list (Activity, Assets) is drawn before the two stop standing side by side. Past the breakpoint the home put both lists in one 560 measure and left the rest of the window empty (half of a 1440, two thirds of a 1920); two measures side by side use it without stretching a row. 448 still holds an activity row (glyph, title, "To 0x1234…abcd · time", amount) on one line, puts the two side by side from the 1280 window up, and stacks them again whenever the third column is open'
+	],
+	[
 		'layout-settingsDialogW',
 		'520px',
 		'spec 023: the centred desktop dialog (DST4b / DSR1), measured 520 — wide enough for a URL in the mono face without becoming a second page'
