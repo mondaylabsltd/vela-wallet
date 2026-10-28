@@ -9,6 +9,8 @@ in-band fee legs, deployments, a multisig's `execTransaction` — execute on the
 forked chain's real contracts.
 
     RPC_URL      the fork (default http://127.0.0.1:8545)
+    RPCS         one fork per chain, as JSON {"100": url, …} (default: chain
+                 100 at RPC_URL); a request at `/{chainId}` goes to its own
     RELAY_PORT   where to listen (default 8790)
     BUNDLER_KEY  the key that pays for handleOps (default: a fixed fresh key)
     FEE_RECIPIENT where in-band fees go (default: a fixed fresh address)
@@ -24,6 +26,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 RPC_URL = os.environ.get("RPC_URL", "http://127.0.0.1:8545")
+RPCS: dict[str, str] = json.loads(os.environ.get("RPCS", "{}")) or {"100": RPC_URL}
 PORT = int(os.environ.get("RELAY_PORT", "8790"))
 # Fresh keys, not anvil's defaults: on Gnosis those carry EIP-7702 delegations
 # (sweepers), and a payment to one reverts the whole bundle (AA91).
@@ -36,11 +39,16 @@ PACKED = "(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)"
 
 lock = threading.Lock()
 ops: dict[str, str] = {}  # userOpHash -> transaction hash
+here = threading.local()  # .url: the fork this request's chain runs on
+
+
+def url() -> str:
+    return getattr(here, "url", RPC_URL)
 
 
 def rpc(method, params):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
-    req = urllib.request.Request(RPC_URL, body, {"content-type": "application/json"})
+    req = urllib.request.Request(url(), body, {"content-type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:
         answer = json.loads(r.read())
     if "error" in answer:
@@ -81,7 +89,7 @@ def packed(op: dict) -> str:
 
 def user_op_hash(op: dict) -> str:
     return cast(
-        "call", ENTRY_POINT, f"getUserOpHash({PACKED})(bytes32)", packed(op), "--rpc-url", RPC_URL
+        "call", ENTRY_POINT, f"getUserOpHash({PACKED})(bytes32)", packed(op), "--rpc-url", url()
     )
 
 
@@ -92,7 +100,7 @@ def send(op: dict) -> str:
             return h
         data = cast("calldata", f"handleOps({PACKED}[],address)", f"[{packed(op)}]", FEE_RECIPIENT)
         out = cast(
-            "send", ENTRY_POINT, data, "--private-key", BUNDLER_KEY, "--rpc-url", RPC_URL,
+            "send", ENTRY_POINT, data, "--private-key", BUNDLER_KEY, "--rpc-url", url(),
             "--gas-limit", "15000000", "--json",
         )
         receipt = json.loads(out)
@@ -204,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/v1/sponsor"):
             return self._send(200, {"sponsored": False})
         if path in ("/", "/health"):
-            return self._send(200, {"relay": "multisig-fork", "rpc": RPC_URL})
+            return self._send(200, {"relay": "multisig-fork", "rpcs": RPCS})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -216,6 +224,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "not json"})
         if self.path.startswith("/v1/sponsor"):
             return self._send(200, {"sponsored": False})
+        chain = self.path.split("?")[0].strip("/").split("/")[0]
+        if chain not in RPCS:
+            return self._send(404, {"error": f"no fork for chain {chain}"})
+        here.url = RPCS[chain]
 
         def one(req):
             try:
@@ -230,5 +242,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"[relay] listening on 127.0.0.1:{PORT}, fork {RPC_URL}", flush=True)
+    print(f"[relay] listening on 127.0.0.1:{PORT}, forks {RPCS}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

@@ -7,6 +7,7 @@ genesis service (`safe-genesis-registry`'s docker shell) and a local relay.
 | --- | --- | --- |
 | anvil | `127.0.0.1:8545` | Gnosis fork, `--hardfork osaka` (the P-256 precompile at `0x100` that passkey signatures need) |
 | genesis service | `127.0.0.1:8787` | `genesis-server`: the registry at `0xdA88…fb89`, sponsored records, the proposal mailbox |
+| second anvil | `127.0.0.1:8546` | the same Gnosis state answering as Base (8453): a network the wallet has and the service is NOT configured to read |
 | relay | `127.0.0.1:8790` | `relay.py`: the ERC-4337 methods and REST endpoints the wallet asks the Vela relay; bundles each operation with `EntryPoint.handleOps` |
 
 The relay pays from a fresh key, not anvil's defaults: on Gnosis those
@@ -28,7 +29,9 @@ scripts/onchain/multisig-fork/down.sh
 - one device, 2-of-3: create, fund, propose, approve and execute;
 - two devices, 2-of-2: one proposes, the other opens the link, approves and
   executes; the first finds the execution on chain and shows it;
-- the desktop layout.
+- the desktop layout;
+- a network the service does not read (the second fork, as Base): propose,
+  approve and execute there.
 
 Screenshots land in `e2e/onchain/.shots/`.
 
@@ -37,7 +40,8 @@ To use the harness by hand, point a browser profile at it:
 ```js
 localStorage['vela.genesisServiceURL'] = 'http://127.0.0.1:8787'
 localStorage['vela.serviceEndpoints'] = '{"bundlerServiceURL":"http://127.0.0.1:8790"}'
-// IndexedDB vela/kv 'vela.networkConfig' = '[{"chainId":100,"rpcURL":"http://127.0.0.1:8545"}]'
+// IndexedDB vela/kv 'vela.networkConfig' =
+//   '[{"chainId":100,"rpcURL":"http://127.0.0.1:8545"},{"chainId":8453,"rpcURL":"http://127.0.0.1:8546"}]'
 ```
 
 The service's sponsor allows 5 owner-proved records per owner per day; a run

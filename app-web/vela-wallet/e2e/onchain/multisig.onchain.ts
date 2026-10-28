@@ -6,7 +6,14 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en } from '../live-helpers';
-import { FIXTURES, balanceOf, enterParallel, setBalance, useHarness } from './harness';
+import {
+	FIXTURES,
+	UNREAD_CHAIN,
+	balanceOf,
+	enterParallel,
+	setBalance,
+	useHarness
+} from './harness';
 
 const SHOTS = 'e2e/onchain/.shots';
 const RECIPIENT = '0x000000000000000000000000000000000000bEEF';
@@ -15,7 +22,12 @@ const RECIPIENT = '0x000000000000000000000000000000000000bEEF';
  * The send every account has — token, recipient, amount, Continue — whose
  * confirm, for a multisig, proposes and approves instead of sending.
  */
-async function proposeSend(page: Page, amount: string, name: string): Promise<void> {
+async function proposeSend(
+	page: Page,
+	amount: string,
+	name: string,
+	coin = { row: /^xDAI Gnosis/, symbol: 'xDAI' }
+): Promise<void> {
 	await page
 		.getByRole('button', { name: en('componentsUi.dock.send') })
 		.first()
@@ -23,19 +35,16 @@ async function proposeSend(page: Page, amount: string, name: string): Promise<vo
 	await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
 	// The picker's row, not the home's: on the desktop both are on screen, and
 	// the picker (the third column) is the last.
-	await page
-		.getByRole('button', { name: /^xDAI Gnosis/ })
-		.last()
-		.click({ timeout: 60_000 });
+	await page.getByRole('button', { name: coin.row }).last().click({ timeout: 60_000 });
 	await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
-	await page.getByRole('textbox', { name: 'xDAI' }).fill(amount);
+	await page.getByRole('textbox', { name: coin.symbol }).fill(amount);
 	await expect(page.getByText('2 of', { exact: false }).first()).toBeVisible();
 	await shot(page, `${name}-form`);
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
 	await advance.click();
 	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
-	await expect(page.getByText(`${amount} xDAI`, { exact: true }).first()).toBeVisible();
+	await expect(page.getByText(`${amount} ${coin.symbol}`, { exact: true }).first()).toBeVisible();
 	await shot(page, `${name}-confirm`);
 	await page.getByRole('button', { name: 'Propose and approve' }).click();
 }
@@ -229,6 +238,45 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await proposeSend(page, '0.5', 'd4-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
 	await shot(page, 'd5-proposal');
+	expect(thrown).toEqual([]);
+	await ctx.close();
+});
+
+test('a network the genesis service does not read: propose, approve and execute there', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	await page
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await page.getByRole('button', { name: 'Create multisig' }).click();
+	await page.getByText('Parallel Two', { exact: true }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Create', exact: true }).click();
+	await page.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	// Funds on "Base" only: the second fork, which the service has no RPC for.
+	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
+	await page.reload();
+	await expect(page.getByText('2 of 2 members approve').first()).toBeVisible();
+
+	await proposeSend(page, '0.5', 'u1-propose', { row: /^ETH Base/, symbol: 'ETH' });
+	await expect(page.getByText('1/2 approved').first()).toBeVisible();
+	await shot(page, 'u2-proposal');
+
+	const before = await balanceOf(RECIPIENT, UNREAD_CHAIN);
+	await page.getByRole('button', { name: 'Approve and execute' }).click();
+	await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+		timeout: 120_000
+	});
+	await shot(page, 'u3-executed');
+	expect((await balanceOf(RECIPIENT, UNREAD_CHAIN)) - before).toBe(5n * 10n ** 17n);
 	expect(thrown).toEqual([]);
 	await ctx.close();
 });

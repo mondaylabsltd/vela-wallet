@@ -7,6 +7,13 @@
 import type { BrowserContext, Page } from '@playwright/test';
 
 export const FORK_RPC = 'http://127.0.0.1:8545';
+/**
+ * The second fork, answering as Base (8453): a network the wallet has and the
+ * genesis service is not configured to read.
+ */
+export const UNREAD_CHAIN = 8453;
+export const UNREAD_RPC = 'http://127.0.0.1:8546';
+const RPCS: Record<number, string> = { 100: FORK_RPC, [UNREAD_CHAIN]: UNREAD_RPC };
 export const GENESIS = 'http://127.0.0.1:8787';
 export const RELAY = 'http://127.0.0.1:8790';
 
@@ -16,8 +23,8 @@ export const FIXTURES = {
 	three: '0x58cd0ce6A27099220543b31710d7860d75Ba1d3d'
 } as const;
 
-export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
-	const response = await fetch(FORK_RPC, {
+export async function rpc<T>(method: string, params: unknown[], chainId = 100): Promise<T> {
+	const response = await fetch(RPCS[chainId], {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
@@ -27,12 +34,12 @@ export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
 	return body.result as T;
 }
 
-export async function setBalance(address: string, wei: bigint): Promise<void> {
-	await rpc('anvil_setBalance', [address, `0x${wei.toString(16)}`]);
+export async function setBalance(address: string, wei: bigint, chainId = 100): Promise<void> {
+	await rpc('anvil_setBalance', [address, `0x${wei.toString(16)}`], chainId);
 }
 
-export async function balanceOf(address: string): Promise<bigint> {
-	return BigInt(await rpc<string>('eth_getBalance', [address, 'latest']));
+export async function balanceOf(address: string, chainId = 100): Promise<bigint> {
+	return BigInt(await rpc<string>('eth_getBalance', [address, 'latest'], chainId));
 }
 
 /** Point the profile at the harness before any page runs. */
@@ -48,19 +55,22 @@ export async function useHarness(context: BrowserContext): Promise<void> {
 }
 
 async function seedNetwork(page: Page): Promise<void> {
-	await page.evaluate((rpcURL) => {
-		return new Promise<void>((resolve, reject) => {
-			const open = indexedDB.open('vela', 1);
-			open.onupgradeneeded = () => open.result.createObjectStore('kv');
-			open.onerror = () => reject(open.error);
-			open.onsuccess = () => {
-				const tx = open.result.transaction('kv', 'readwrite');
-				tx.objectStore('kv').put(JSON.stringify([{ chainId: 100, rpcURL }]), 'vela.networkConfig');
-				tx.oncomplete = () => resolve();
-				tx.onerror = () => reject(tx.error);
-			};
-		});
-	}, FORK_RPC);
+	await page.evaluate(
+		(networks) => {
+			return new Promise<void>((resolve, reject) => {
+				const open = indexedDB.open('vela', 1);
+				open.onupgradeneeded = () => open.result.createObjectStore('kv');
+				open.onerror = () => reject(open.error);
+				open.onsuccess = () => {
+					const tx = open.result.transaction('kv', 'readwrite');
+					tx.objectStore('kv').put(JSON.stringify(networks), 'vela.networkConfig');
+					tx.oncomplete = () => resolve();
+					tx.onerror = () => reject(tx.error);
+				};
+			});
+		},
+		Object.entries(RPCS).map(([chainId, rpcURL]) => ({ chainId: Number(chainId), rpcURL }))
+	);
 }
 
 /**

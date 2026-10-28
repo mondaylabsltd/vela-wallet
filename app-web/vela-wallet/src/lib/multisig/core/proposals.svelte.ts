@@ -12,7 +12,7 @@
  * prompt, and each is safe to retry: the mailbox merges, and an execution that
  * may have been sent is followed rather than sent again.
  */
-import { readMembers, type ChainMembers } from './chain';
+import { hasCode, readMembers, type ChainMembers } from './chain';
 import { submitExecution } from './execute';
 import {
 	cancelTx,
@@ -260,6 +260,12 @@ export async function propose(
 	tx: SafeTx,
 	owner: LocalOwner
 ) {
+	// A delegatecall into nothing "succeeds" doing nothing and spends the
+	// nonce: the batch contract (MultiSendCallOnly) must be on this chain, which
+	// a network the wallet accepts for Vela accounts does not promise.
+	if (Number(tx.operation) === 1 && !(await hasCode(chainId, tx.to))) {
+		throw new Error(`${tx.to} has no code on chain ${chainId}`);
+	}
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await signApproval(owner.account, chainId, hash);
 	const answer = await submitApproval({
