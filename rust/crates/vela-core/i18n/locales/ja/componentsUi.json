@@ -289,7 +289,17 @@
         "byVela": "Vela（トランザクションから）"
       },
       "hiddenChars": "このリクエストには、見えない文字や文字の向きを変える文字が含まれています。⟨U+…⟩ として表示しています。",
-      "blankLines": "⋯ 空行：{{lines}} ⋯"
+      "blankLines": "⋯ 空行：{{lines}} ⋯",
+      "agentAdvice": {
+        "title": "AI エージェントの意見",
+        "looksFine": "問題なさそう",
+        "caution": "注意",
+        "danger": "危険",
+        "unsure": "判断できない",
+        "sources": "情報源",
+        "footer": "AI エージェントによる意見です。誤っている可能性があります。署名される内容は変わりません。",
+        "stale": "このリクエストの以前の内容に対する意見です"
+      }
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

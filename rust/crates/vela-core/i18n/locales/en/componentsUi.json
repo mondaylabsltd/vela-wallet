@@ -331,7 +331,17 @@
         "byVela": "Vela, from the transaction"
       },
       "hiddenChars": "This request contains hidden or direction-changing characters — they are shown as ⟨U+…⟩.",
-      "blankLines": "⋯ empty lines: {{lines}} ⋯"
+      "blankLines": "⋯ empty lines: {{lines}} ⋯",
+      "agentAdvice": {
+        "title": "Your AI agent's opinion",
+        "looksFine": "Looks fine",
+        "caution": "Caution",
+        "danger": "Danger",
+        "unsure": "Unsure",
+        "sources": "Sources",
+        "footer": "An opinion from your AI agent. It can be wrong. It does not change what is signed.",
+        "stale": "Given for an earlier version of this request"
+      }
     },
     "currency": {
       "title": "Display currency",

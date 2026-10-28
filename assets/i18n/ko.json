@@ -1752,7 +1752,17 @@
     "byVela": "Vela (거래 자체에서)"
    },
    "hiddenChars": "이 요청에는 보이지 않거나 글자 방향을 바꾸는 문자가 있습니다. ⟨U+…⟩로 표시했습니다.",
-   "blankLines": "⋯ 빈 줄: {{lines}} ⋯"
+   "blankLines": "⋯ 빈 줄: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "AI 에이전트의 의견",
+    "looksFine": "문제없어 보임",
+    "caution": "주의",
+    "danger": "위험",
+    "unsure": "판단하기 어려움",
+    "sources": "출처",
+    "footer": "AI 에이전트의 의견입니다. 틀릴 수 있으며, 서명되는 내용은 바뀌지 않습니다.",
+    "stale": "이 요청의 이전 버전에 대한 의견입니다"
+   }
   },
   "signingApprove": {
    "resultingTotal": "새 총 승인 한도",

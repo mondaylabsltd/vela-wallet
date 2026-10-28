@@ -289,7 +289,17 @@
         "byVela": "Vela, depuis la transaction"
       },
       "hiddenChars": "Cette demande contient des caractères cachés ou qui changent le sens du texte — ils sont affichés sous la forme ⟨U+…⟩.",
-      "blankLines": "⋯ lignes vides : {{lines}} ⋯"
+      "blankLines": "⋯ lignes vides : {{lines}} ⋯",
+      "agentAdvice": {
+        "title": "L'avis de votre agent IA",
+        "looksFine": "Semble correct",
+        "caution": "Prudence",
+        "danger": "Danger",
+        "unsure": "Incertain",
+        "sources": "Sources",
+        "footer": "Un avis de votre agent IA. Il peut se tromper. Il ne change pas ce qui est signé.",
+        "stale": "Donné pour une version précédente de cette demande"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

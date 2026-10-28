@@ -20,6 +20,12 @@ export type ReviewInput = {
 	/** The networks, for a chain's name and native coin. */
 	networks: NetView | null;
 	signing: SignRequestView | null;
+	/**
+	 * What the signing sheet reads of `signing` (`agent_review::SheetFacts`):
+	 * the clear-signing and guard views, the simulation, the fee
+	 * (`agent/advice.svelte.ts` `sheetFacts`).
+	 */
+	sheet?: Record<string, unknown> | null;
 };
 
 export function reviewOf(input: ReviewInput) {
@@ -31,7 +37,8 @@ export function reviewOf(input: ReviewInput) {
 				drafted_by: input.draftedBy,
 				account: input.account,
 				networks: input.networks,
-				signing: input.signing
+				signing: input.signing,
+				sheet: input.sheet ?? null
 			})
 		)
 	) as Record<string, unknown> & { note: string; transfer: unknown; signing: unknown };

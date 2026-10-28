@@ -1378,6 +1378,17 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			CERTAIN_KEYS.map((key) => [key, k(`componentsUi.signing.certain.${key}`)])
 		) as SigningMessages['certain'],
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
+		// Spec 103: the AI agent's opinion, in its own card.
+		agentAdvice: {
+			title: k('componentsUi.signing.agentAdvice.title'),
+			looksFine: k('componentsUi.signing.agentAdvice.looksFine'),
+			caution: k('componentsUi.signing.agentAdvice.caution'),
+			danger: k('componentsUi.signing.agentAdvice.danger'),
+			unsure: k('componentsUi.signing.agentAdvice.unsure'),
+			sources: k('componentsUi.signing.agentAdvice.sources'),
+			footer: k('componentsUi.signing.agentAdvice.footer'),
+			stale: k('componentsUi.signing.agentAdvice.stale')
+		},
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

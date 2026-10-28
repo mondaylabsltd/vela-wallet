@@ -880,9 +880,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   cs-1…cs-19, 2026-10-28): + `componentsUi.signing.labelAddsToAllowance`
 //   and `componentsUi.signing.certain`, 32 words. 2049 + 33 = 2082 leaves,
 //   116 + 1 = 117 branches.
-if (PATHS.length !== 2199) fail(`expected 2199 paths (2082 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2082) fail(`expected 2082 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
+// 2208 (your AI agent's opinion on the signing sheet, 2026-10-28): +
+//   `componentsUi.signing.agentAdvice`, 8 words. 2082 + 8 = 2090 leaves,
+//   117 + 1 = 118 branches.
+if (PATHS.length !== 2208) fail(`expected 2208 paths (2090 leaf + 118 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2090) fail(`expected 2090 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 118) fail(`expected 118 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

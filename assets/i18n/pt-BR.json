@@ -1757,7 +1757,17 @@
     "byVela": "Vela, da transação"
    },
    "hiddenChars": "Esta solicitação contém caracteres ocultos ou que mudam a direção do texto — eles aparecem como ⟨U+…⟩.",
-   "blankLines": "⋯ linhas vazias: {{lines}} ⋯"
+   "blankLines": "⋯ linhas vazias: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "A opinião do seu agente de IA",
+    "looksFine": "Parece tudo certo",
+    "caution": "Cuidado",
+    "danger": "Perigo",
+    "unsure": "Incerto",
+    "sources": "Fontes",
+    "footer": "Uma opinião do seu agente de IA. Ela pode estar errada. Não muda o que é assinado.",
+    "stale": "Dada para uma versão anterior desta solicitação"
+   }
   },
   "signingApprove": {
    "resultingTotal": "Novo limite total",

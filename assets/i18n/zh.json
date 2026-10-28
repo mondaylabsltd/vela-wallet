@@ -1762,7 +1762,17 @@
     "byVela": "Vela，从交易本身"
    },
    "hiddenChars": "此请求含有隐藏或会改变文字方向的字符 — 已显示为 ⟨U+…⟩。",
-   "blankLines": "⋯ 空行：{{lines}} ⋯"
+   "blankLines": "⋯ 空行：{{lines}} ⋯",
+   "agentAdvice": {
+    "title": "你的 AI 智能体的看法",
+    "looksFine": "看起来没问题",
+    "caution": "需谨慎",
+    "danger": "危险",
+    "unsure": "不确定",
+    "sources": "来源",
+    "footer": "这是你的 AI 智能体给出的看法，可能有误，不会改变所签署的内容。",
+    "stale": "这是针对此请求较早版本给出的看法"
+   }
   },
   "currency": {
    "title": "显示货币",

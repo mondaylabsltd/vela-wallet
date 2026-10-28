@@ -54,6 +54,8 @@
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { openReview, sheetBeside } from '$lib/agent/advice.svelte';
+	import { adviceCard } from '$lib/agent/advisor';
 
 	interface Props {
 		messages: SigningMessages;
@@ -555,7 +557,32 @@
 	 */
 	let unreadFor = $state<string | null>(null);
 
-	const model = $derived.by(() => {
+	/**
+	 * Spec 103: what this sheet holds beside the request — its simulation and
+	 * its fee — for the agent's `vela_review`, and for the digest an opinion
+	 * is bound to. Published for the request on the sheet, and for no other.
+	 */
+	$effect(() => {
+		const request = signView.request;
+		const id = request && signView.surface !== 'hidden' ? request.id : null;
+		const sim = id !== null && checked?.requestId === id ? checked.sim : null;
+		const onChain = request?.kind === 'transaction' || request?.kind === 'batch';
+		// A figure for another chain is a previous request's, not this one's.
+		const fee =
+			id !== null && (!feeShown.fee || feeShown.fee.chain_id === request?.chain_id)
+				? feeShown
+				: null;
+		untrack(() =>
+			sheetBeside.publish({
+				requestId: id,
+				sim,
+				simPending: id !== null && onChain && sim === null,
+				fee
+			})
+		);
+	});
+
+	const built = $derived.by(() => {
 		if (!identity) return null;
 		return buildSigningModel({
 			sign: signView,
@@ -576,6 +603,21 @@
 			identity,
 			identicon: identiconSvgForClient
 		});
+	});
+
+	/**
+	 * The sheet, with the AI agent's opinion on this request beside it
+	 * (spec 103, `vela_advise`) — its own card, set here and never by the
+	 * blocks. Drawn as current only while the review it was given for is the
+	 * one on the sheet (its digest); otherwise greyed, as given for an earlier
+	 * version. Nothing else of the model reads it.
+	 */
+	const model = $derived.by(() => {
+		const sheet = built;
+		const held = sheetBeside.advice;
+		if (!sheet || !held || held.requestId !== signView.request?.id) return sheet;
+		const current = openReview()?.review_digest ?? null;
+		return { ...sheet, advice: adviceCard(held.advice, current, messages.agentAdvice) };
 	});
 
 	/**

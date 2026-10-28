@@ -8,6 +8,8 @@
  * decoded ones instead of forking the layout.
  */
 
+import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+
 export type SigningStateId =
 	| 'cs1'
 	| 'cs2'
@@ -479,6 +481,13 @@ export interface SigningModel {
 	 * landed first must still be in sight once it has. Absent once read.
 	 */
 	reading?: 'out';
+	/**
+	 * The person's AI agent's opinion on this request (spec 103,
+	 * `vela_advise`), drawn in its own card under the blocks and over the fee
+	 * — set by the host beside the model, never by `blocksFor`, and read by
+	 * nothing else: no block, tone or confirm depends on it.
+	 */
+	advice?: AgentAdviceCardModel | null;
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
 	techOpen: boolean;

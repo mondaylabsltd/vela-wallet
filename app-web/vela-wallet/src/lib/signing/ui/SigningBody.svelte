@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AgentAdviceCard from './AgentAdviceCard.svelte';
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import HandoffCard from './HandoffCard.svelte';
@@ -94,6 +95,13 @@
 		<BlockList blocks={model.blocks} {onchip} {oncustom} {onmessageunread} />
 	</div>
 
+	{#if model.advice}
+		<!-- The AI agent's opinion: its own card, under Vela's lines, over the fee. -->
+		<div class="advice">
+			<AgentAdviceCard card={model.advice} />
+		</div>
+	{/if}
+
 	<div class="footer">
 		<TechDetails tech={model.tech} open={techOpen} ontoggle={() => (techOverride = !techOpen)} />
 		{#if !model.dismissOnly}
@@ -124,6 +132,10 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-block: var(--space-xl);
+	}
+
+	.advice {
+		padding-bottom: var(--space-xl);
 	}
 
 	.footer {

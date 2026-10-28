@@ -1752,7 +1752,17 @@
     "byVela": "Vela, aus der Transaktion"
    },
    "hiddenChars": "Diese Anfrage enthält versteckte oder richtungsändernde Zeichen — sie werden als ⟨U+…⟩ angezeigt.",
-   "blankLines": "⋯ leere Zeilen: {{lines}} ⋯"
+   "blankLines": "⋯ leere Zeilen: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "Einschätzung Ihres KI-Agenten",
+    "looksFine": "Sieht unbedenklich aus",
+    "caution": "Vorsicht",
+    "danger": "Gefahr",
+    "unsure": "Unsicher",
+    "sources": "Quellen",
+    "footer": "Eine Einschätzung Ihres KI-Agenten. Sie kann falsch sein. Sie ändert nicht, was signiert wird.",
+    "stale": "Für eine frühere Version dieser Anfrage abgegeben"
+   }
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",

@@ -1752,7 +1752,17 @@
     "byVela": "Vela，從交易本身"
    },
    "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
-   "blankLines": "⋯ 空白行：{{lines}} ⋯"
+   "blankLines": "⋯ 空白行：{{lines}} ⋯",
+   "agentAdvice": {
+    "title": "你的 AI 代理的看法",
+    "looksFine": "看來沒問題",
+    "caution": "需謹慎",
+    "danger": "危險",
+    "unsure": "不確定",
+    "sources": "來源",
+    "footer": "這是你的 AI 代理提供的看法，可能有誤，不會改變所簽署的內容。",
+    "stale": "這是針對此請求較早版本提供的看法"
+   }
   },
   "currency": {
    "title": "顯示貨幣",

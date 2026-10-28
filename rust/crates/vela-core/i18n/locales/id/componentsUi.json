@@ -289,7 +289,17 @@
         "byVela": "Vela, dari transaksinya"
       },
       "hiddenChars": "Permintaan ini berisi karakter tersembunyi atau pengubah arah teks — karakter tersebut ditampilkan sebagai ⟨U+…⟩.",
-      "blankLines": "⋯ baris kosong: {{lines}} ⋯"
+      "blankLines": "⋯ baris kosong: {{lines}} ⋯",
+      "agentAdvice": {
+        "title": "Pendapat agen AI Anda",
+        "looksFine": "Tampak aman",
+        "caution": "Hati-hati",
+        "danger": "Bahaya",
+        "unsure": "Tidak yakin",
+        "sources": "Sumber",
+        "footer": "Pendapat dari agen AI Anda. Bisa saja keliru. Tidak mengubah apa yang ditandatangani.",
+        "stale": "Diberikan untuk versi sebelumnya dari permintaan ini"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

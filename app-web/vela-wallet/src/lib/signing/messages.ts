@@ -17,6 +17,7 @@
 
 import type { SpeedWords } from '$lib/flows/speed-control';
 import type { SettingsMessages } from '$lib/settings/messages';
+import type { AgentAdviceMessages } from '$lib/agent/advisor';
 
 /**
  * Every quiet line the core can name for the verdict's place
@@ -478,4 +479,9 @@ export interface SigningMessages {
 	labelTotal: string;
 	expiredValue: string;
 	sentToTokenContract: string;
+	/**
+	 * The person's AI agent's opinion, in its own card under Vela's own lines
+	 * (spec 103, `vela_advise`): never one of the sheet's words.
+	 */
+	agentAdvice: AgentAdviceMessages;
 }

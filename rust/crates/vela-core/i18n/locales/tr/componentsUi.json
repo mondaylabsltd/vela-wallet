@@ -289,7 +289,17 @@
         "byVela": "Vela, işlemin kendisinden"
       },
       "hiddenChars": "Bu istek gizli ya da metnin yönünü değiştiren karakterler içeriyor — bunlar ⟨U+…⟩ olarak gösteriliyor.",
-      "blankLines": "⋯ boş satır: {{lines}} ⋯"
+      "blankLines": "⋯ boş satır: {{lines}} ⋯",
+      "agentAdvice": {
+        "title": "Yapay zekâ ajanınızın görüşü",
+        "looksFine": "Sorunsuz görünüyor",
+        "caution": "Dikkat",
+        "danger": "Tehlike",
+        "unsure": "Emin değil",
+        "sources": "Kaynaklar",
+        "footer": "Yapay zekâ ajanınızın görüşüdür. Yanlış olabilir. İmzalanan şeyi değiştirmez.",
+        "stale": "Bu isteğin önceki bir sürümü için verildi"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

@@ -289,7 +289,17 @@
         "byVela": "Vela, từ chính giao dịch"
       },
       "hiddenChars": "Yêu cầu này chứa ký tự ẩn hoặc ký tự đổi hướng văn bản — chúng được hiển thị dưới dạng ⟨U+…⟩.",
-      "blankLines": "⋯ dòng trống: {{lines}} ⋯"
+      "blankLines": "⋯ dòng trống: {{lines}} ⋯",
+      "agentAdvice": {
+        "title": "Ý kiến của tác nhân AI của bạn",
+        "looksFine": "Có vẻ ổn",
+        "caution": "Thận trọng",
+        "danger": "Nguy hiểm",
+        "unsure": "Không chắc",
+        "sources": "Nguồn",
+        "footer": "Ý kiến từ tác nhân AI của bạn. Nó có thể sai. Nó không thay đổi những gì được ký.",
+        "stale": "Đưa ra cho một phiên bản trước của yêu cầu này"
+      }
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",
