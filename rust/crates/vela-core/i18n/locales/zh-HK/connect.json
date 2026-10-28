@@ -32,7 +32,7 @@
       "retry": "重試",
       "invalidLinkTitle": "連結無效",
       "invalidLinkBody": "並非有效的連接連結。支援：WalletPair URI 或 Remote Inject URL。",
-      "pasteHint": "連接 dApp，或開任何網頁"
+      "pasteHint": "連接 dApp，或開啟任何網頁"
     },
     "dapp": {
       "noWallet": "請先建立錢包",
@@ -62,8 +62,8 @@
       "signMsg": "簽署訊息",
       "signTyped": "簽署類型化數據",
       "sendTxDesc": "此應用程式想從你的錢包發送一筆交易。",
-      "signMsgDesc": "此應用程式想你簽署一則訊息。",
-      "signTypedDesc": "此應用程式想你簽署結構化數據。",
+      "signMsgDesc": "此應用程式請求你簽署一則訊息。",
+      "signTypedDesc": "此應用程式請求你簽署結構化數據。",
       "signDesc": "此應用程式正在請求簽署。",
       "structuredData": "結構化數據",
       "detailTo": "至",
@@ -88,7 +88,7 @@
       "connect": "連接",
       "a11yClose": "關閉瀏覽器",
       "addLead": "{{host}} 要求加入網絡",
-      "addFromSite": "唔喺 Vela 嘅網絡列表——名稱同幣種由網站提供。",
+      "addFromSite": "不在 Vela 的網絡列表中——名稱及幣種由網站提供。",
       "a11yBack": "返回",
       "a11yReload": "重新載入頁面",
       "a11yOpenSystem": "在系統瀏覽器中開啟",
@@ -118,8 +118,8 @@
       "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員批准，但不能請求它簽署訊息。"
     },
     "ext": {
-      "installedNote": "之前開咗嘅分頁要重新載入，啲網站先搵到 Vela。",
-      "accessNote": "網站存取權受咗限制：網站搵唔到 Vela，通行密鑰都用唔到。",
+      "installedNote": "之前已開啟的分頁需要重新載入，網站才能找到 Vela。",
+      "accessNote": "網站存取權已受限制：網站無法找到 Vela，通行密鑰亦無法使用。",
       "accessAllow": "允許存取"
     }
   },
@@ -146,7 +146,7 @@
     "oneTapTitle": "一鍵簽署",
     "oneTapBody": "Face ID 確認後便會自動返回網頁。在擴充功能彈出視窗中點按一次「測試一鍵簽署」，連「打開 Vela？」的提示也不會再出現。",
     "cta": "在 Safari 中開啟 getvela.app",
-    "ctaHint": "「Aa」選單就在那裡。",
+    "ctaHint": "「Aa」選單就在那裏。",
     "sectionLabel": "瀏覽器",
     "settingsTitle": "在 Safari 中使用 Vela",
     "settingsSubtitle": "在瀏覽器中連接任何 dApp"

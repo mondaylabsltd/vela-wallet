@@ -19,11 +19,11 @@
     "linkSafeWallet": "Safe Wallet",
     "linkPrivacy": "私隱政策",
     "linkTerms": "服務條款",
-    "linkSupport": "幫助同支援",
+    "linkSupport": "幫助與支援",
     "footer": "用心打造。你的密鑰，你的資產。",
     "sectionLinks": "連結",
     "debugMode": "除錯模式",
-    "debugModeBody": "畀本地網絡上嘅 http 網頁用個錢包。只係開發用。",
-    "debugModeRevealed": "而家可以用除錯模式喇"
+    "debugModeBody": "允許本地網絡上的 http 網頁使用此錢包。僅供開發用途。",
+    "debugModeRevealed": "現已可使用除錯模式"
   }
 }

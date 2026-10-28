@@ -10,7 +10,7 @@
     "balanceDetailUnpricedNote": "這些餘額是準確的——只是暫時沒有價格來源，因此未計入你的總額。",
     "balanceDetailStatusRetrying": "被限流 · 正在自動重試",
     "balanceDetailStatusFailed": "RPC 無法連接",
-    "balanceDetailStatusTokenList": "代幣清單讀唔到",
+    "balanceDetailStatusTokenList": "無法讀取代幣清單",
     "balanceDetailRetry": "立即重試",
     "balanceDetailNoPrice": "沒有價格",
     "balanceDetailEmpty": "全部都是最新的。",
@@ -20,7 +20,7 @@
     "refreshBalance": "重新整理餘額",
     "rescanButton": "重新掃描",
     "rescanTitle": "重新掃描近期動態",
-    "rescanSubtitle": "收不到某筆款項？直接向區塊鏈重新查詢近期轉帳。",
+    "rescanSubtitle": "收不到某筆款項？直接向區塊鏈重新查詢近期轉賬。",
     "rescanWindow10m": "最近 10 分鐘",
     "rescanWindow1h": "最近 1 小時",
     "rescanWindow6h": "最近 6 小時",
@@ -28,7 +28,7 @@
     "rescanScanning": "正在掃描{{window}}…",
     "rescanFound": "發現 {{count}} 筆新到帳。",
     "rescanNone": "在{{window}}內未發現新到帳。",
-    "rescanFailed": "無法連線 {{names}}。請在首頁橫幅修復其 RPC，或前往區塊鏈瀏覽器查看。",
+    "rescanFailed": "無法連接 {{names}}。請在首頁橫幅修復其 RPC，或前往區塊鏈瀏覽器查看。",
     "rescanAgain": "再次掃描",
     "rescanClose": "完成",
     "rescanExplorerTitle": "直接在區塊鏈瀏覽器查看",
@@ -58,7 +58,7 @@
     "toastReceived": "已收到 {{amount}} {{token}}",
     "connClear": "清除",
     "connClearTitle": "清除連接活動？",
-    "connClearBody": "會從此裝置移除此連接的所有簽署紀錄。鏈上交易不受影響。",
+    "connClearBody": "會從此裝置移除此連接的所有簽署記錄。鏈上交易不受影響。",
     "connClearConfirm": "清除",
     "connDelete": "刪除",
     "connPending": "處理中",
@@ -109,7 +109,7 @@
       },
       "action": {
         "send": "傳送 {{amount}} {{symbol}}",
-        "batch": "{{total}} 筆轉帳",
+        "batch": "{{total}} 筆轉賬",
         "cancel": "作廢第 {{nonce}} 號交易",
         "addOwner": "新增成員",
         "removeOwner": "移除成員",
@@ -151,7 +151,7 @@
         "notMember": "只有成員才能批准，本裝置上沒有登入的成員帳戶。",
         "failed": "沒有完成：{{reason}}",
         "noExpiry": "批准不會過期：在交易執行或作廢前一直有效。",
-        "notFound": "信箱裡還沒有這筆交易。",
+        "notFound": "信箱裏還沒有這筆交易。",
         "opening": "正在開啟交易…",
         "cannotPay": "{{name}} 的 {{symbol}} 不足以支付網絡費用：大約需要 {{fee}}，現有 {{balance}}。請先增值，或讓其他成員執行。",
         "notLanded": "三分鐘內仍未上鏈。如果稍後仍未顯示已執行，請重試。",
@@ -284,12 +284,12 @@
         "remove": "從此裝置移除"
       }
     },
-    "balanceDetailStatusOwnNode": "你嘅節點冇回應",
+    "balanceDetailStatusOwnNode": "你的節點沒有回應",
     "balanceDetailStatusPublicNodes": "正在用公共節點",
-    "nodeFallbackNotice": "你嘅 {{name}} 節點冇回應，暫時改用公共節點。",
+    "nodeFallbackNotice": "你的 {{name}} 節點沒有回應，暫時改用公共節點。",
     "nodeFallbackOpen": "網絡設定",
-    "totalUnpriced": "暫時冇價格",
-    "allUnpriced": "你嘅代幣全部都取得唔到價格。",
-    "currencyUnavailable": "暫時攞唔到 {{code}} 匯率——金額以美元顯示。"
+    "totalUnpriced": "暫時未有價格",
+    "allUnpriced": "你的所有代幣暫時都未能取得價格。",
+    "currencyUnavailable": "暫時未能取得 {{code}} 匯率——金額以美元顯示。"
   }
 }

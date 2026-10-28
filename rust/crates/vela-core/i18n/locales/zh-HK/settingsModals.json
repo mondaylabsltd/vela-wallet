@@ -11,10 +11,10 @@
       "removeBody": "要移除此自訂網絡嗎？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。",
-      "fallback": "你嘅節點冇回應——暫時改用公共節點",
-      "onlyMine": "只用我嘅節點",
-      "onlyMineHint": "關於你帳戶嘅任何資料都唔會傳俾公共節點。如果你嘅節點停咗回應，呢個網絡會讀唔到，直至佢恢復。"
+      "relayNotice": "提交你交易的中繼會收到此網絡的 RPC 地址（包括其中的 API 金鑰），以便連接你所使用的網絡。",
+      "fallback": "你的節點沒有回應——暫時改用公共節點",
+      "onlyMine": "只使用我的節點",
+      "onlyMineHint": "不會向公共節點傳送任何與你帳戶相關的資料。如你的節點停止回應，此網絡將無法讀取，直至節點恢復。"
     },
     "account": {
       "modalTitle": "帳戶",
@@ -34,7 +34,7 @@
       "supportsCount": "支援 {{total}} 個網絡中的 {{count}} 個",
       "unavailable": "無法使用",
       "avgLatency": "平均 {{ms}}ms",
-      "relayNotice": "提交你交易嘅中繼會收到錢包為每條網絡用緊嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。"
+      "relayNotice": "提交你交易的中繼會收到錢包為每條網絡所使用的 RPC 地址（包括其中的 API 金鑰），以便連接你所使用的網絡。"
     },
     "endpoints": {
       "modalTitle": "服務端點",
@@ -50,7 +50,7 @@
       "resetToDefaults": "四項全部還原預設",
       "selfHostGuide": "自行部署指南 →",
       "resetTitle": "重設服務端點？",
-      "resetBody": "四項服務都會改回 Vela 的地址，你在這裡填寫的地址將被清除。",
+      "resetBody": "四項服務都會改回 Vela 的地址，你在這裏填寫的地址將被清除。",
       "resetConfirm": "重設",
       "resetCancel": "取消"
     },
@@ -67,22 +67,22 @@
       "bestRpc": "最佳 RPC：{{latencyMs}}ms",
       "compatibilityCheck": "兼容性檢查",
       "unableToVerify": "無法驗證 — RPC 請求失敗",
-      "noRpcEndpoint": "呢個網絡冇列出 RPC 端點。請填寫一個，再重新檢查。",
+      "noRpcEndpoint": "此網絡沒有列出 RPC 端點。請填寫一個，然後重新檢查。",
       "retry": "重試",
       "addNetworkBtn": "新增網絡",
-      "incompatibleHint": "呢個網絡仲未有 Vela 需要嘅部分合約。區塊鏈設定工具會列出缺邊啲、邊個可以部署。",
-      "noP256Hint": "呢個網絡驗證唔到通行密鑰簽署：佢冇 P-256 驗證器（EIP-7951 / RIP-7212，地址 0x100），只有呢個網絡自己嘅團隊先可以加。Vela 錢包喺度用唔到。唔好轉錢去你喺呢個網絡上嘅 Vela 地址，轉咗入去會卡住。",
+      "incompatibleHint": "此網絡尚未具備 Vela 所需的部分合約。區塊鏈設定工具會列出缺少哪些合約，以及誰可以部署。",
+      "noP256Hint": "此網絡無法驗證通行密鑰簽署：它沒有 P-256 驗證器（EIP-7951 / RIP-7212，地址 0x100），只有該網絡自己的團隊才能加入。Vela 錢包無法在此網絡使用。請勿轉賬至你在此網絡上的 Vela 地址，轉入的資金將會被卡住。",
       "openChainSetupTool": "開啟區塊鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",
       "nativeLabel": "原生代幣：{{symbol}}",
       "testnet": "測試網",
-      "compatible": "相容",
-      "incompatible": "唔相容",
+      "compatible": "兼容",
+      "incompatible": "不兼容",
       "checkSafe": "Safe L2 合約",
       "checkSigner": "P-256 預編譯合約",
       "checkRemaining": "其餘 {{count}} 項合約",
-      "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
+      "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裏未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
     },
     "treasury": {
       "modalTitle": "資金庫",
@@ -96,22 +96,22 @@
       "offline": "離線",
       "httpsRequired": "需要 HTTPS",
       "invalid": "無效",
-      "urlRefused": "未儲存——請用 https:// 地址（只有本機可以用普通 http://）。仍然使用之前嘅地址。"
+      "urlRefused": "未儲存——請使用 https:// 地址（只有本機可使用普通 http://）。仍然使用之前的地址。"
     },
     "backup": {
-      "title": "將錢包紀錄複製去以太坊",
+      "title": "將錢包記錄複製至以太坊",
       "backedUp": "已複製到以太坊",
       "notBackedUp": "未複製（可選）",
-      "couldNotCheck": "檢查唔到，㩒一下再試",
-      "cannotCopy": "呢個較早開嘅錢包複製唔到",
-      "explain": "錢包喺 Gnosis 上面嘅紀錄係公開嘅：錢包嘅地址同名稱，仲有每條鎖匙嘅名稱、公鑰、憑證 ID 同驗證器型號。有你通行密鑰嘅裝置就係靠佢搵到呢個錢包。呢度會喺以太坊上面再存多一份副本。呢個係一筆以太坊交易：由你用通行密鑰確認，再用你喺以太坊上面持有嘅幣支付網絡費。副本唔可以郁到資金，亦都搵唔返遺失咗嘅通行密鑰。"
+      "couldNotCheck": "無法檢查，請點按重試",
+      "cannotCopy": "無法複製這個較早建立的錢包",
+      "explain": "錢包在 Gnosis 上的記錄是公開的：錢包的地址及名稱，以及每個密鑰的名稱、公鑰、憑證 ID 及驗證器型號。持有你通行密鑰的裝置正是靠這些記錄找到此錢包。此操作會在以太坊上另存一份副本。這是一筆以太坊交易：由你以通行密鑰確認，並以你在以太坊上持有的幣支付網絡費。副本無法動用資金，亦無法找回已遺失的通行密鑰。"
     },
     "keys": {
-      "title": "鎖匙",
-      "subtitle": "當中任何一條通行密鑰都可以幫呢個錢包簽署，所有網絡通用。",
-      "keyN": "鎖匙 {{n}}",
+      "title": "密鑰",
+      "subtitle": "其中任何一個通行密鑰均可為此錢包簽署，適用於所有網絡。",
+      "keyN": "密鑰 {{n}}",
       "notSynced": "裝置綁定",
-      "fromDevice": "暫時連唔到註冊表，只顯示呢部機記得嘅內容。",
+      "fromDevice": "暫時無法連接註冊表，只顯示此裝置記錄的內容。",
       "publicKey": "公鑰",
       "credential": "憑證",
       "transport": "傳輸方式",

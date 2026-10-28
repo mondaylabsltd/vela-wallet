@@ -6,8 +6,8 @@
     "shareButton": "分享",
     "listeningForDeposits": "正在等候存款",
     "warningTitle": "接收前須知",
-    "warningBody": "只可在支援的網絡上發送資產 — 不受支援的轉帳可能永久遺失。",
-    "warningReminder": "只限支援的網絡 — 其他網絡的轉帳可能遺失。",
+    "warningBody": "只可在支援的網絡上發送資產 — 不受支援的轉賬可能永久遺失。",
+    "warningReminder": "只限支援的網絡 — 其他網絡的轉賬可能遺失。",
     "warningConfirm": "我明白",
     "networksLine": "一個地址通用於全部 {{count}} 個網絡",
     "networkDetail": "{{name}} · 鏈 ID {{id}}",
@@ -22,7 +22,7 @@
     "copied": "已複製",
     "copyRequestLink": "複製付款連結",
     "shareAddressSummary": "我的錢包地址",
-    "warningCounterfactual": "你的地址在每個支援的網絡上都相同。發送到這裡的資金安全且屬於你 — 即使你的錢包尚未部署亦然。",
+    "warningCounterfactual": "你的地址在每個支援的網絡上都相同。發送到這裏的資金安全且屬於你 — 即使你的錢包尚未部署亦然。",
     "request": {
       "network": "網絡",
       "token": "代幣",
@@ -68,13 +68,13 @@
       "invalidBody": "此連結缺少有效的收款人或網絡，請向發送方索取新連結。"
     },
     "addressLabel": "你的收款地址",
-    "searchNetworkPlaceholder": "搵網絡",
-    "searchNetworkEmpty": "搵唔到同「{{query}}」夾嘅網絡",
-    "qrTitleNetwork": "用呢個地址收 {{network}} 上面嘅資產",
-    "qrTitleAsset": "用呢個地址收 {{network}} 上面嘅 {{symbol}}",
-    "shareCardNetworkNote": "淨係收 {{network}} 網絡嘅付款",
+    "searchNetworkPlaceholder": "搜尋網絡",
+    "searchNetworkEmpty": "找不到與「{{query}}」相符的網絡",
+    "qrTitleNetwork": "以此地址接收 {{network}} 上的資產",
+    "qrTitleAsset": "以此地址接收 {{network}} 上的 {{symbol}}",
+    "shareCardNetworkNote": "只接收 {{network}} 網絡的付款",
     "tokenContract": "代幣合約",
     "includeNetwork": "附上網絡資料",
-    "includeNetworkHint": "有啲錢包讀唔到。對方掃唔到就熄咗佢。"
+    "includeNetworkHint": "部分錢包無法讀取。如對方無法掃描，請關閉此選項。"
   }
 }
