@@ -223,9 +223,9 @@
       "successMessage_one": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
       "successMessage_other": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
       "successTitle": "Wallet erstellt",
-      "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
-      "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
-      "syncFailedTitle": "Synchronisierung fehlgeschlagen",
+      "syncFailedHint": "Lassen Sie diese Seite geöffnet: Vela versucht es selbst erneut, sobald die Verbindung zurück ist – oder tippen Sie auf „Erneut hochladen“. Wenn Sie die Seite jetzt verlassen oder neu laden, wird diese Wallet verworfen.",
+      "syncFailedMessage": "Ihre Passkeys sind erstellt, aber die Wallet konnte nicht im Passkey-Verzeichnis von Vela registriert werden – sie ist auf diesem Gerät noch nicht gespeichert.",
+      "syncFailedTitle": "Noch nicht gespeichert",
       "taskDeriveAddress": "Kontoadresse wird abgeleitet",
       "taskVerifyKey": "Öffentlicher Schlüssel des Passkeys wird geprüft",
       "taskWriteIndex": "Schlüsselindex wird geschrieben",
@@ -234,7 +234,12 @@
       "touchFingerprintBody": "{{product}} blinkt. Legen Sie Ihren Finger auf den Sensor, um zu bestätigen, dass Sie es sind.",
       "touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
       "touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
-      "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit."
+      "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Auf diesem Gerät gibt es bereits eine Wallet namens „{{name}}“.",
+      "keyKeptTitle": "Schlüssel behalten, noch nicht bestätigt",
+      "keyKeptBodyNetwork": "Dieses Gerät ist offline, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie daneben auf „Bestätigen“, sobald Sie wieder online sind.",
+      "keyKeptBodyIndex": "Das Passkey-Verzeichnis von Vela hat nicht geantwortet, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie gleich daneben auf „Bestätigen“."
     },
     "login": {
       "alertNotSupportedTitle": "Nicht unterstützt",
@@ -267,7 +272,8 @@
       "switchDeviceBtn": "Auf einem anderen Gerät anmelden",
       "pickTitle": "Welche Wallet?",
       "pickBody": "Auf {{product}} liegt mehr als eine Vela-Wallet. Wählen Sie die aus, in der Sie sich anmelden möchten.",
-      "pickUnnamed": "Wallet ohne Namen"
+      "pickUnnamed": "Wallet ohne Namen",
+      "noPasskeyHint": "Wenn dieses Gerät keinen Vela-Passkey hat, versuchen Sie es mit Ihrem Telefon oder einem Sicherheitsschlüssel – oder erstellen Sie eine Wallet."
     },
     "storage": {
       "unreadableTitle": "Die Wallet-Daten dieses Browsers sind nicht lesbar",

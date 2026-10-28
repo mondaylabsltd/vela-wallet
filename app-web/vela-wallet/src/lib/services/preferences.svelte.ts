@@ -34,6 +34,7 @@
  */
 import { browser } from '$app/environment';
 import { loadCore, prefsMigrations, prefsRead } from '$lib/core/client';
+import { languageCookie } from '$lib/i18n/locales';
 
 /** What a person picks in 外观. `system` pins nothing and follows the OS. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -122,6 +123,21 @@ function remove(key: string): void {
 	}
 }
 
+/**
+ * Tell `/` about the language (set-12): the Worker there cannot read
+ * localStorage, so a pin also rides in a cookie (`languageCookie`), and
+ * `auto` removes it.
+ */
+function stateLanguageCookie(language: string): void {
+	if (!browser) return;
+	const secure = typeof location !== 'undefined' && location.protocol === 'https:';
+	try {
+		document.cookie = languageCookie(language, secure);
+	} catch {
+		/* No cookies here: `/` negotiates, as it did before there was a pin. */
+	}
+}
+
 /** A stored value only wins if it is one of the values we ship. */
 function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
 	return allowed.includes(raw as T) ? (raw as T) : fallback;
@@ -196,6 +212,7 @@ class Preferences {
 	textScale = $state<TextScaleLevel>(DEFAULT_TEXT_SCALE);
 
 	#booted = false;
+	#watching = false;
 	/** Set by every setter: a choice made this visit is newer than any stored read. */
 	#chosen = false;
 	#ready: Promise<void> = Promise.resolve();
@@ -221,6 +238,7 @@ class Preferences {
 	boot(): void {
 		if (this.#booted || !browser) return;
 		this.#booted = true;
+		this.#followOtherDocuments();
 		this.#adopt(readSharedSpelling());
 		this.#ready = loadCore().then(
 			() => this.#readThroughCore(),
@@ -250,9 +268,28 @@ class Preferences {
 		this.#adopt(JSON.parse(prefsRead(storedEntries())) as PrefsRecord);
 	}
 
+	/**
+	 * The palette chosen in another tab reaches this one. `storage` fires in
+	 * every OTHER document of the origin when one writes (a `null` key is a
+	 * cleared store), so a tab left open no longer keeps the old palette until
+	 * it is reloaded.
+	 */
+	#followOtherDocuments(): void {
+		if (this.#watching || typeof window === 'undefined') return;
+		this.#watching = true;
+		window.addEventListener('storage', (event) => {
+			if (event.key !== null && event.key !== PREF_KEYS.theme) return;
+			this.theme = oneOf(read(PREF_KEYS.theme), THEMES, 'system');
+			this.applyTheme();
+		});
+	}
+
 	#adopt(record: PrefsRecord): void {
 		this.theme = record.theme;
 		this.language = record.language;
+		// Every read restates the pin for `/`, so a language pinned before the
+		// cookie existed reaches it on the next visit.
+		stateLanguageCookie(record.language);
 		this.textScale = record.textScale;
 		this.numberFormat = record.numberFormat;
 		this.dateFormat = record.dateFormat;
@@ -299,6 +336,7 @@ class Preferences {
 		this.language = value;
 		this.#chosen = true;
 		write(PREF_KEYS.language, value);
+		stateLanguageCookie(value);
 	}
 
 	setTextScale(value: TextScaleLevel): void {

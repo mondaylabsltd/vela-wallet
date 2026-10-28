@@ -75,6 +75,16 @@
     "viewAllActivity": "查看全部往來",
     "deleteContact": "刪除聯絡人",
     "edit": "編輯",
-    "invalidChecksum": "呢個地址嘅大小寫同校驗和唔對得上——可能打錯字，或者複製嘅地址俾人改過。請核對後重新複製。"
+    "invalidChecksum": "呢個地址嘅大小寫同校驗和唔對得上——可能打錯字，或者複製嘅地址俾人改過。請核對後重新複製。",
+    "duplicateAddress": "已經儲存做「{{name}}」。儲存會更新呢個聯絡人。",
+    "updateExisting": "更新聯絡人",
+    "groupPickEmpty": "仲未有群組。請先建立群組，再將聯絡人移入。",
+    "saveFailed": "無法儲存到呢部裝置。你嘅修改暫時喺度顯示，但閂咗頁面之後就會消失。",
+    "memberCount_other": "{{count}} 位成員",
+    "batchSendHintCount_other": "向本群組 {{count}} 人轉賬，金額可分別設定。",
+    "batchSendHintTitledCount_other": "群發轉賬：向本群組 {{count}} 人轉賬，金額可分別設定。",
+    "memberCount_one": "{{count}} 位成員",
+    "batchSendHintCount_one": "向本群組 {{count}} 人轉賬，金額可分別設定。",
+    "batchSendHintTitledCount_one": "群發轉賬：向本群組 {{count}} 人轉賬，金額可分別設定。"
   }
 }

@@ -67,6 +67,16 @@ key_count_shown: boolean,
  */
 can_finish: boolean, 
 /**
+ * A passkey prompt is waiting (a key being made or confirming): the
+ * screen offers to close it ([`Event::CancelPending`], ob-7).
+ */
+can_cancel: boolean, 
+/**
+ * The trimmed name's size against the passkey's user-name budget, so the
+ * limit is shown before it is hit (ob-12). Bytes, as the budget counts.
+ */
+name_bytes: number, name_limit: number, 
+/**
  * The sole drafted key is NOT a synced passkey: one lost device would
  * make the wallet unrecoverable, so finishing requires a second key.
  * Drives the friendly hint under the key list.

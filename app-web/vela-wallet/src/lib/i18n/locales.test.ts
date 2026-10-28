@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
 	FALLBACK_LOCALE,
 	SUPPORTED_LOCALES,
+	languageCookie,
 	localeOfPath,
 	negotiate,
+	negotiateLanguages,
+	pinnedLocale,
 	toLocale,
 	usesCjkFont
 } from './locales';
@@ -114,5 +117,41 @@ describe('usesCjkFont (perf-9)', () => {
 		expect(cjk.sort()).toEqual(['ja', 'ko', 'zh', 'zh-HK', 'zh-TW']);
 		expect(usesCjkFont('en')).toBe(false);
 		expect(usesCjkFont('vi')).toBe(false);
+	});
+});
+
+describe('negotiateLanguages — what "Follow system" follows (set-13)', () => {
+	it('takes the first of the browser’s languages the table supports', () => {
+		expect(negotiateLanguages(['th', 'de-AT', 'en'])).toBe('de');
+		expect(negotiateLanguages(['zh-Hant-HK'])).toBe('zh-HK');
+		expect(negotiateLanguages(['pt-PT', 'ja'])).toBe('pt-BR');
+	});
+
+	it('falls back to en when the browser names nothing it ships', () => {
+		expect(negotiateLanguages(['th', 'he'])).toBe(FALLBACK_LOCALE);
+		expect(negotiateLanguages([])).toBe(FALLBACK_LOCALE);
+		expect(negotiateLanguages(undefined)).toBe(FALLBACK_LOCALE);
+	});
+});
+
+describe('the pinned-language cookie `/` reads (set-12)', () => {
+	it('pins a supported tag in its canonical case, and clears for anything else', () => {
+		expect(languageCookie('zh-tw', true)).toBe(
+			'vela_lang=zh-TW; Max-Age=31536000; Path=/; SameSite=Lax; Secure'
+		);
+		expect(languageCookie('de', false)).toBe(
+			'vela_lang=de; Max-Age=31536000; Path=/; SameSite=Lax'
+		);
+		expect(languageCookie('auto', false)).toBe('vela_lang=; Max-Age=0; Path=/; SameSite=Lax');
+		expect(languageCookie('xx', false)).toBe('vela_lang=; Max-Age=0; Path=/; SameSite=Lax');
+	});
+
+	it('reads the pin out of a Cookie header, and trusts only a supported tag', () => {
+		expect(pinnedLocale('a=1; vela_lang=ja; b=2')).toBe('ja');
+		expect(pinnedLocale('vela_lang=pt-br')).toBe('pt-BR');
+		expect(pinnedLocale('vela_lang=')).toBeUndefined();
+		expect(pinnedLocale('vela_lang=<script>')).toBeUndefined();
+		expect(pinnedLocale('other=ja')).toBeUndefined();
+		expect(pinnedLocale(null)).toBeUndefined();
 	});
 });

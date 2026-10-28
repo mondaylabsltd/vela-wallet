@@ -332,6 +332,8 @@
     "wizardTestnet": "Testnet — tanpa nilai nyata",
     "wizardMainnet": "Mainnet — bernilai nyata",
     "headingMainnet": "Ruang mainnet",
-    "headingTestnet": "Ruang testnet"
+    "headingTestnet": "Ruang testnet",
+    "addedTestnet": "{{name}} ditambahkan ke ruang testnet.",
+    "addedMainnet": "{{name}} ditambahkan ke ruang mainnet."
   }
 }

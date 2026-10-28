@@ -38,6 +38,7 @@ import type { ContactShellResult } from '$lib/core/generated/ContactShellResult'
 import type { ContactHistoryTx } from '$lib/core/generated/ContactHistoryTx';
 import type { ContactTombstone } from '$lib/core/generated/ContactTombstone';
 import type { ContactEffect } from './contacts-types';
+import { announceContactsChanged } from './contacts-sync';
 
 // The three keys `services/contacts.ts` owns — value formats unchanged.
 const CONTACTS_KEY = 'vela.contacts';
@@ -86,17 +87,22 @@ function kind(value: unknown): ContactKind {
 }
 
 async function readJson<T>(key: string): Promise<T | null> {
+	// A storage fault REJECTS (the failure twin answers `store_unreadable`):
+	// with the store shared between tabs the core re-reads before it writes,
+	// and a fault read as "no contacts" would write the book away (set-1).
+	const raw = await getItem(key);
 	try {
-		const raw = await getItem(key);
 		return raw ? (JSON.parse(raw) as T) : null;
 	} catch {
-		// Unreadable or corrupt — the TS loaders' `catch { [] }`.
+		// Corrupt — the TS loaders' `catch { [] }`.
 		return null;
 	}
 }
 
 async function writeJson(key: string, value: unknown): Promise<void> {
 	await setItem(key, JSON.stringify(value));
+	// Every other tab's book reads the stores again (set-1).
+	announceContactsChanged();
 }
 
 // ---------------------------------------------------------------------------
@@ -273,14 +279,15 @@ export function contactOperationFailure(effect: ContactEffect): ContactShellResu
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_store':
-			// An unreadable store means "no address book yet" (today's catch).
-			return { type: 'store_loaded', contacts: [], tombstones: [], groups: [] };
+			// Unreadable, which is not "empty": the core reads it as no book yet
+			// on the first read and keeps the book it holds on a re-read.
+			return { type: 'store_unreadable' };
 		case 'write_contacts':
 		case 'write_dismissed':
 		case 'write_groups':
-			// Best-effort, as every `persist*` swallows storage errors today;
-			// the in-memory ledger stays authoritative.
-			return { type: 'written' };
+			// The in-memory ledger keeps the change; the core says it is not
+			// kept on this device (set-22) instead of the old silent `written`.
+			return { type: 'write_failed' };
 		case 'load_send_history':
 			return { type: 'history_failed' };
 		case 'resolve_identity':

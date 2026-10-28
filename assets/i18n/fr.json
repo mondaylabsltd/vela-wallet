@@ -332,7 +332,9 @@
   "wizardTestnet": "Testnet — sans valeur réelle",
   "wizardMainnet": "Mainnet — valeur réelle",
   "headingMainnet": "Espace mainnet",
-  "headingTestnet": "Espace testnet"
+  "headingTestnet": "Espace testnet",
+  "addedTestnet": "{{name}} a été ajouté à l'espace testnet.",
+  "addedMainnet": "{{name}} a été ajouté à l'espace mainnet."
  },
  "home": {
   "totalBalance": "Solde total",
@@ -1204,9 +1206,9 @@
    "successMessage_many": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
    "successMessage_other": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
    "successTitle": "Portefeuille créé",
-   "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",
-   "syncFailedMessage": "Portefeuille créé, mais votre clé publique n'a pas été synchronisée avec le serveur. Vous ne pourrez pas vous connecter sur d'autres appareils tant que ce problème n'est pas résolu.",
-   "syncFailedTitle": "Échec de la synchronisation",
+   "syncFailedHint": "Gardez cette page ouverte : Vela réessaie tout seul dès que la connexion revient, ou touchez Réessayer. Quitter ou recharger maintenant abandonne ce portefeuille.",
+   "syncFailedMessage": "Vos passkeys sont créées, mais le portefeuille n'a pas pu être enregistré dans l'index des passkeys de Vela : il n'est pas encore sauvegardé sur cet appareil.",
+   "syncFailedTitle": "Pas encore enregistré",
    "taskDeriveAddress": "Dérivation de l'adresse du compte",
    "taskVerifyKey": "Vérification de la clé publique de la passkey",
    "taskWriteIndex": "Écriture de l'index des clés",
@@ -1215,7 +1217,12 @@
    "touchFingerprintBody": "{{product}} clignote. Posez votre doigt sur son capteur pour confirmer que c'est bien vous.",
    "touchSelectBody": "Plusieurs clés de sécurité sont branchées et clignotent toutes. Touchez celle que vous voulez utiliser.",
    "touchTitle": "Touchez votre clé de sécurité",
-   "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt."
+   "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Vous avez déjà un portefeuille nommé « {{name}} » sur cet appareil.",
+   "keyKeptTitle": "Clé conservée, pas encore confirmée",
+   "keyKeptBodyNetwork": "Cet appareil est hors ligne : votre nouvelle passkey n'a pas pu être confirmée. Elle reste dans la liste ; touchez Confirmer à côté dès que vous êtes de nouveau en ligne.",
+   "keyKeptBodyIndex": "L'index des passkeys de Vela n'a pas répondu : votre nouvelle passkey n'a pas pu être confirmée. Elle reste dans la liste ; touchez Confirmer à côté dans un instant."
   },
   "login": {
    "alertNotSupportedTitle": "Non pris en charge",
@@ -1248,7 +1255,8 @@
    "switchDeviceBtn": "Se connecter sur un autre appareil",
    "pickTitle": "Quel portefeuille ?",
    "pickBody": "{{product}} contient plusieurs portefeuilles Vela. Choisissez celui auquel vous connecter.",
-   "pickUnnamed": "Portefeuille sans nom"
+   "pickUnnamed": "Portefeuille sans nom",
+   "noPasskeyHint": "Si cet appareil n'a pas de passkey Vela, essayez votre téléphone ou une clé de sécurité, ou créez un portefeuille."
   },
   "storage": {
    "unreadableTitle": "Les données du portefeuille de ce navigateur sont illisibles",
@@ -2135,7 +2143,8 @@
   "health": {
    "offline": "Hors ligne",
    "httpsRequired": "HTTPS requis",
-   "invalid": "Invalide"
+   "invalid": "Invalide",
+   "urlRefused": "Non enregistré : utilisez une adresse https:// (http:// seulement pour cet ordinateur). L'adresse précédente reste utilisée."
   },
   "backup": {
    "title": "Copier l'enregistrement de ce portefeuille sur Ethereum",
@@ -2236,7 +2245,20 @@
   "viewAllActivity": "Voir toute l'activité",
   "deleteContact": "Supprimer le contact",
   "edit": "Modifier",
-  "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau."
+  "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau.",
+  "duplicateAddress": "Déjà enregistré sous « {{name}} ». Enregistrer met ce contact à jour.",
+  "updateExisting": "Mettre à jour le contact",
+  "groupPickEmpty": "Aucun groupe pour l'instant. Créez d'abord un groupe, puis déplacez-y des contacts.",
+  "saveFailed": "Impossible d'enregistrer sur cet appareil. Votre modification s'affiche ici, mais elle disparaîtra à la fermeture de la page.",
+  "memberCount_one": "{{count}} membre",
+  "memberCount_other": "{{count}} membres",
+  "memberCount_many": "{{count}} membres",
+  "batchSendHintCount_one": "Envoyez à {{count}} membre du groupe ; le montant peut être défini individuellement.",
+  "batchSendHintCount_other": "Envoyez aux {{count}} membres du groupe ; les montants peuvent être définis individuellement.",
+  "batchSendHintCount_many": "Envoyez aux {{count}} membres du groupe ; les montants peuvent être définis individuellement.",
+  "batchSendHintTitledCount_one": "Envoyer au groupe : envoyez à {{count}} membre ; montant individuel.",
+  "batchSendHintTitledCount_other": "Envoyer au groupe : envoyez aux {{count}} membres ; montants individuels.",
+  "batchSendHintTitledCount_many": "Envoyer au groupe : envoyez aux {{count}} membres ; montants individuels."
  },
  "explore": {
   "title": "Explorer",

@@ -191,9 +191,9 @@
 					onclick={ontoggle}
 					bind:this={figure}
 				>
-					<span class="integer">{balance.integer}</span><span class="decimals"
-						>{balance.decimalMark ?? '.'}{balance.decimals}</span
-					>
+					<span class="integer">{balance.integer}</span>{#if balance.decimals !== ''}<span
+							class="decimals">{balance.decimalMark ?? '.'}{balance.decimals}</span
+						>{/if}
 				</button>
 			{:else}
 				<p
@@ -202,9 +202,9 @@
 					style:--fit={fit < 1 ? fit : undefined}
 					bind:this={figure}
 				>
-					<span class="integer">{balance.integer}</span><span class="decimals"
-						>{balance.decimalMark ?? '.'}{balance.decimals}</span
-					>
+					<span class="integer">{balance.integer}</span>{#if balance.decimals !== ''}<span
+							class="decimals">{balance.decimalMark ?? '.'}{balance.decimals}</span
+						>{/if}
 				</p>
 			{/if}
 		</div>

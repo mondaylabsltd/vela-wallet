@@ -28,13 +28,18 @@
 		name: string;
 		nameEditable: boolean;
 		nameTooLong: boolean;
+		/** The core's `name_bytes` / `name_limit`: the budget, shown before it is hit (ob-12). */
+		nameBytes?: number;
+		nameLimit?: number;
+		/** Names of the wallets already on this device (ob-12). */
+		takenNames?: string[];
 		acks: boolean[];
 		canSubmit: boolean;
 		busy: boolean;
 		submitLabel: string;
 		statusText?: string;
 		showStartOver: boolean;
-		strings: (key: string) => string;
+		strings: (key: string, params?: Record<string, string | number>) => string;
 		privacyUrl: string;
 		termsUrl: string;
 		onName: (value: string) => void;
@@ -47,6 +52,9 @@
 		name,
 		nameEditable,
 		nameTooLong,
+		nameBytes = 0,
+		nameLimit = 0,
+		takenNames = [],
 		acks,
 		canSubmit,
 		busy,
@@ -63,6 +71,21 @@
 	}: Props = $props();
 
 	const uid = $props.id();
+
+	/** A wallet on this device already goes by this name (ob-12): said, not refused. */
+	const duplicate = $derived.by(() => {
+		const wanted = name.trim().toLowerCase();
+		return wanted !== '' && takenNames.some((taken) => taken.trim().toLowerCase() === wanted);
+	});
+
+	/** The counter, from the first letter — so the limit is never a surprise. */
+	const hint = $derived(
+		duplicate
+			? strings('onboarding.create.nameDuplicate', { name: name.trim() })
+			: nameLimit > 0 && name.trim() !== ''
+				? strings('onboarding.create.nameCounter', { used: nameBytes, limit: nameLimit })
+				: undefined
+	);
 </script>
 
 <!--
@@ -79,6 +102,7 @@
 		labelledby="{uid}-title"
 		placeholder={strings('onboarding.create.accountNamePlaceholder')}
 		errorText={nameTooLong ? strings('onboarding.create.nameTooLong') : undefined}
+		{hint}
 		value={name}
 		oninput={nameEditable ? onName : undefined}
 	/>

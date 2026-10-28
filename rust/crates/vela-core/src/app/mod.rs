@@ -1114,6 +1114,17 @@ pub enum PromptKind {
         /// reads `false`.
         #[serde(default)]
         phone_link: bool,
+        /// ob-4: the passkey WAS made and stays on the key list, unconfirmed —
+        /// only its membership confirmation could not reach the passkey index.
+        /// The sheet says the key is kept and that its row's Confirm finishes
+        /// it, instead of the index's raw words under "Error". Omitted when
+        /// false, so a reader that predates it reads the old sheet.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        key_kept: bool,
+        /// With `key_kept`: the request never left this device (offline), so
+        /// the sheet says "check your connection" rather than blame the index.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        local: bool,
     },
     /// Only on Gnosis's verdict that the passkey has no record: the rebuild
     /// makes a ONE-key wallet, and nobody else's "no record" can rule out a
@@ -1144,7 +1155,24 @@ impl PromptKind {
     #[must_use]
     pub fn create_failed(detail: String) -> Self {
         let phone_link = crate::cable::conn::is_link_failure(&detail);
-        Self::CreateFailed { detail, phone_link }
+        Self::CreateFailed {
+            detail,
+            phone_link,
+            key_kept: false,
+            local: false,
+        }
+    }
+
+    /// ob-4: a drafted key's membership confirmation could not reach the
+    /// passkey index. The key is kept; `local` = never left this device.
+    #[must_use]
+    pub fn key_kept_unconfirmed(detail: String, local: bool) -> Self {
+        Self::CreateFailed {
+            detail,
+            phone_link: false,
+            key_kept: true,
+            local,
+        }
     }
 
     /// A failed sign-in, classified as [`PromptKind::create_failed`].
@@ -1163,7 +1191,12 @@ impl PromptKind {
     pub fn create_failed_via(detail: String, method: KeyMethod) -> Self {
         let phone_link =
             method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
-        Self::CreateFailed { detail, phone_link }
+        Self::CreateFailed {
+            detail,
+            phone_link,
+            key_kept: false,
+            local: false,
+        }
     }
 
     /// A create ceremony `method` could not run here (issue #450).

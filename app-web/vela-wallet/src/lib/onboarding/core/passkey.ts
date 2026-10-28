@@ -146,8 +146,12 @@ export async function register(
 ): Promise<Registration> {
 	assertSupported();
 	const { attachment } = methodRouting(method);
+	pendingCreate?.abort();
+	const controller = new AbortController();
+	pendingCreate = controller;
 	try {
 		const credential = (await navigator.credentials.create({
+			signal: controller.signal,
 			publicKey: {
 				rp: { id: relyingPartyId(), name: 'Vela Wallet' },
 				user: {
@@ -219,7 +223,23 @@ export async function register(
 		};
 	} catch (error) {
 		throw classify(error);
+	} finally {
+		if (pendingCreate === controller) pendingCreate = null;
 	}
+}
+
+/** The registration in flight, so the person can close its prompt (ob-7). */
+let pendingCreate: AbortController | null = null;
+
+/**
+ * Close whichever passkey prompt this page has up — a key being made or one
+ * signing (ob-7: "Cancel" over the waiting prompt). The ceremony rejects as
+ * cancelled; the core has already moved on and drops its answer.
+ */
+export function cancelCeremony(): void {
+	pendingCreate?.abort();
+	pendingCreate = null;
+	cancelSign();
 }
 
 /**

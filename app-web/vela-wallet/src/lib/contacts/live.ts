@@ -22,6 +22,7 @@ import type { ContactsView } from '$lib/core/generated/ContactsView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { liveActivityRow, type RowMessages } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { SidebarModel } from '$lib/wallet/model';
 import { contactContextMenu, groupContextMenu, headerDropdown } from './fixtures';
@@ -135,6 +136,11 @@ export function letterSections(
 	return out;
 }
 
+/** set-16: "1 member", "3 members" — the core's plural rule, never "1 members". */
+function members(m: ContactsMessages, count: number): string {
+	return fill(pluralForm(m.memberCount, count), { count });
+}
+
 function toGroupModel(
 	group: ContactGroupView,
 	view: ContactsView,
@@ -144,9 +150,9 @@ function toGroupModel(
 	return {
 		id: group.id,
 		name: group.name,
-		countLabel: fill(m.groupMembers, { count: group.members.length }),
+		countLabel: members(m, group.members.length),
 		count: String(group.members.length),
-		membersLabel: fill(m.membersCount, { count: group.members.length }),
+		membersLabel: members(m, group.members.length),
 		members: group.members.map((member) => toContactModel(member, view, identicon))
 	};
 }
@@ -168,8 +174,12 @@ function liveGroupDetail(
 		group: toGroupModel(group, view, m, identicon),
 		addMember: m.addMember,
 		cta: m.batchSend,
-		ctaCaption: empty ? m.batchSendNeedsMembers : fill(m.batchSendHint, { count }),
-		captionTitled: empty ? m.batchSendNeedsMembers : fill(m.batchSendHintTitled, { count }),
+		ctaCaption: empty
+			? m.batchSendNeedsMembers
+			: fill(pluralForm(m.batchSendHintCount, count), { count }),
+		captionTitled: empty
+			? m.batchSendNeedsMembers
+			: fill(pluralForm(m.batchSendHintTitledCount, count), { count }),
 		menuLabel: m.manage
 	};
 }
@@ -257,7 +267,8 @@ export function buildContactsLive(
 		addLabel: m.addContact,
 		editLabel: m.edit,
 		menuLabel: m.manage,
-		backLabel: m.cancel,
+		backLabel: m.back,
+		clearLabel: m.cancel,
 		tabs: {
 			wallet: m.shell.navWallet,
 			contacts: m.shell.navContacts,
@@ -427,7 +438,9 @@ export function memberPickModel(
 		searchPlaceholder: m.searchPlaceholder,
 		save: m.save,
 		empty: m.groupNoContacts,
-		rows: view.contacts.map((contact) => ({
+		// The book's own order — A to Z, as its list reads — not the core's
+		// recency order, which read as reversed in a picker (S4).
+		rows: bookOrder(view).map((contact) => ({
 			id: contact.address,
 			name: displayName(contact),
 			detail: shortenAddress(contact.address),
@@ -435,6 +448,22 @@ export function memberPickModel(
 			checked: members.has(contact.address)
 		}))
 	};
+}
+
+/** The book as its A–Z list orders it (`sections`), then anything unfiled. */
+function bookOrder(view: ContactsView): Contact[] {
+	const byAddress = new Map(view.contacts.map((contact) => [contact.address, contact]));
+	const ordered: Contact[] = [];
+	for (const section of view.sections) {
+		for (const address of section.addresses) {
+			const contact = byAddress.get(address);
+			if (contact !== undefined) {
+				ordered.push(contact);
+				byAddress.delete(address);
+			}
+		}
+	}
+	return [...ordered, ...byAddress.values()];
 }
 
 /** 移入分组: every group, the ones holding this contact ticked. */
@@ -447,11 +476,13 @@ export function groupPickModel(
 		title: m.moveGroup,
 		searchPlaceholder: m.searchPlaceholder,
 		save: m.save,
-		empty: m.groupNoContacts,
+		// set-15: no group yet is its own sentence (it read "save some
+		// contacts first" over a contact that is saved).
+		empty: m.groupPickEmpty,
 		rows: view.groups.map((group) => ({
 			id: group.id,
 			name: group.name,
-			detail: fill(m.groupMembers, { count: group.members.length }),
+			detail: members(m, group.members.length),
 			checked: group.members.some((member) => member.address === address)
 		}))
 	};

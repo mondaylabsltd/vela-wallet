@@ -28,6 +28,7 @@
 	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
@@ -178,7 +179,11 @@
 
 	let { data }: PageProps = $props();
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 	const settings = $derived(resolve('/[locale]/settings', { locale: data.locale }));
 	const contactsHref = $derived(resolve('/[locale]/contacts', { locale: data.locale }));

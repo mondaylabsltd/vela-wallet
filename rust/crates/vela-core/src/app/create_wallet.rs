@@ -165,7 +165,15 @@ pub enum Event {
     /// Re-run the index upload after it exhausted its retries.
     RetryUpload,
     EnterWallet,
+    /// From the key list: back to the name and agreements, which are kept.
+    /// Also while a passkey prompt is waiting (ob-7): that prompt is closed
+    /// first, as [`Event::CancelPending`] closes it.
     GoBack,
+    /// Close the passkey prompt that is waiting — a key being made, or a key
+    /// confirming its membership (ob-7). The person lands on the key list,
+    /// every drafted key intact (one being confirmed stays, unconfirmed, with
+    /// its Confirm); the name and agreements are untouched.
+    CancelPending,
     /// Internal: an effect resolved. Never sent by a shell — `attempt` is
     /// captured by the core when the request is made, which is what makes a
     /// late result from an abandoned attempt identifiable.
@@ -512,6 +520,16 @@ pub struct CreateView {
     pub key_count_shown: bool,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
+    /// A passkey prompt is waiting (a key being made or confirming): the
+    /// screen offers to close it ([`Event::CancelPending`], ob-7).
+    #[serde(default)]
+    pub can_cancel: bool,
+    /// The trimmed name's size against the passkey's user-name budget, so the
+    /// limit is shown before it is hit (ob-12). Bytes, as the budget counts.
+    #[serde(default)]
+    pub name_bytes: u32,
+    #[serde(default)]
+    pub name_limit: u32,
     /// The sole drafted key is NOT a synced passkey: one lost device would
     /// make the wallet unrecoverable, so finishing requires a second key.
     /// Drives the friendly hint under the key list.
@@ -568,10 +586,21 @@ impl App for CreateWallet {
                 //
                 // The drafts survive: the form re-entered with drafts is the
                 // "finish verification" state, and its submit returns here.
-                if model.stage != Stage::AddKeys {
+                if prompt_pending(&model.stage) {
+                    cancel_pending(model);
+                } else if model.stage != Stage::AddKeys {
                     return Command::done();
                 }
                 model.stage = Stage::Form;
+                model.status = None;
+                render()
+            }
+            Event::CancelPending => {
+                if !prompt_pending(&model.stage) {
+                    return Command::done();
+                }
+                cancel_pending(model);
+                model.stage = Stage::AddKeys;
                 model.status = None;
                 render()
             }
@@ -605,7 +634,8 @@ impl App for CreateWallet {
         };
 
         let at_key_list = model.stage == Stage::AddKeys;
-        let can_add_key = at_key_list && model.drafts.len() < crate::safe::MAX_MULTI_KEYS;
+        let below_cap = model.drafts.len() < crate::safe::MAX_MULTI_KEYS;
+        let can_add_key = at_key_list && below_cap;
         CreateView {
             stage,
             name: model.name.clone(),
@@ -635,7 +665,10 @@ impl App for CreateWallet {
             // Does the CORE have a step to go back to? Only the key list
             // does — everywhere else "back" means leaving the flow, which
             // the host owns because the core cannot see what contains it.
-            can_go_back: model.stage == Stage::AddKeys,
+            can_go_back: model.stage == Stage::AddKeys || prompt_pending(&model.stage),
+            can_cancel: prompt_pending(&model.stage),
+            name_bytes: u32::try_from(trimmed.len()).unwrap_or(u32::MAX),
+            name_limit: u32::try_from(super::MAX_USER_NAME_BYTES).unwrap_or(u32::MAX),
             keys: model
                 .drafts
                 .iter()
@@ -672,7 +705,11 @@ impl App for CreateWallet {
             can_choose_page: !busy && !has_draft,
             add_methods: methods_for(),
             add_heading_key: add_heading_key(model.drafts.len()).to_owned(),
-            methods_pinned: !has_draft && can_add_key,
+            // Still drawn while the first key's prompt is up (ob-7): the
+            // places stay where the person chose one, disabled by `busy`.
+            methods_pinned: !has_draft
+                && below_cap
+                && (at_key_list || model.stage == Stage::Registering),
             key_count_shown: has_draft,
             can_finish: at_key_list
                 && has_draft
@@ -1000,6 +1037,24 @@ fn pending_record(prepared: &Prepared, task_id: Option<String>) -> PendingUpload
     }
 }
 
+/// Is a passkey prompt up — the only in-flight work a person may abandon
+/// mid-way (ob-7)?
+fn prompt_pending(stage: &Stage) -> bool {
+    matches!(stage, Stage::Registering | Stage::SigningKey)
+}
+
+/// Abandon the prompt in flight: the shell's ceremony is aborted and its late
+/// answer, carrying the old attempt, is dropped. A key that was confirming
+/// stays drafted, unconfirmed.
+fn cancel_pending(model: &mut Model) {
+    model.attempt += 1;
+    if let Some(handle) = model.abort.take() {
+        handle.abort();
+    }
+    model.signing_index = None;
+    model.registering_label = String::new();
+}
+
 fn start_over(model: &mut Model) -> Command<Effect, Event> {
     // Abandon the drafted passkeys. Nothing about them was persisted (no
     // account, and the pending upload only exists once the set is frozen), so
@@ -1229,9 +1284,11 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             }
         }
         // The member-mode challenge could not be fetched (index/network).
-        (Stage::SigningKey, ShellResult::IndexFailed { message, .. }) => {
+        // The passkey is made and stays drafted, unconfirmed; the sheet says
+        // so and points at its row's Confirm (ob-4), not the raw error.
+        (Stage::SigningKey, ShellResult::IndexFailed { message, network }) => {
             model.signing_index = None;
-            fail_to_add_keys(model, PromptKind::create_failed(message))
+            fail_to_add_keys(model, PromptKind::key_kept_unconfirmed(message, network))
         }
 
         // -- pending record --------------------------------------------------

@@ -91,7 +91,8 @@
     "health": {
       "offline": "오프라인",
       "httpsRequired": "HTTPS 필요",
-      "invalid": "유효하지 않음"
+      "invalid": "유효하지 않음",
+      "urlRefused": "저장되지 않았습니다. https:// 주소를 사용하세요(일반 http://는 이 컴퓨터에서만 가능). 이전 주소가 계속 사용됩니다."
     },
     "backup": {
       "title": "지갑 기록을 이더리움에 복사",

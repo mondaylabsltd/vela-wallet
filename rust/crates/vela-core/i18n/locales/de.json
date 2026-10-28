@@ -332,6 +332,8 @@
     "wizardTestnet": "Testnet — kein echter Wert",
     "wizardMainnet": "Mainnet — echter Wert",
     "headingMainnet": "Mainnet-Bereich",
-    "headingTestnet": "Testnet-Bereich"
+    "headingTestnet": "Testnet-Bereich",
+    "addedTestnet": "{{name}} wurde zum Testnet-Bereich hinzugefügt.",
+    "addedMainnet": "{{name}} wurde zum Mainnet-Bereich hinzugefügt."
   }
 }

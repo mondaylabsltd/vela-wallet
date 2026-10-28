@@ -59,6 +59,17 @@
 	/** What is typed into a field and not yet applied. */
 	let bridgeDraft: string | null = null;
 	let tokenDraft: string | null = null;
+
+	/**
+	 * "Use your own bridge" stays the way the person left it (set-10). Bound
+	 * to the model, the fold snapped shut on the re-render that saving a field
+	 * causes — the address just applied vanished with it. The model only ever
+	 * OPENS it (a bridge is already configured); closing is the person's.
+	 */
+	let ownOpen = $state(false);
+	$effect.pre(() => {
+		if (link.ownOpen) ownOpen = true;
+	});
 </script>
 
 <p class="description">{panel.description}</p>
@@ -142,7 +153,7 @@
 		{/if}
 	</div>
 
-	<details class="own" open={link.ownOpen}>
+	<details class="own" bind:open={ownOpen}>
 		<summary>{link.ownBridge}</summary>
 		<div class="switch"><SwitchRow row={panel.enable} onchange={onenable} /></div>
 

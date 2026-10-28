@@ -6,4 +6,10 @@ export type NetEndpointView = { field: NetEndpointField, value: string,
 /**
  * The placeholder.
  */
-default_value: string, health: NetServiceHealth, };
+default_value: string, health: NetServiceHealth, 
+/**
+ * The last blur was REFUSED by the URL rule ([`is_allowed_endpoint_url`]):
+ * nothing was written and the service still uses the address it had.
+ * The shell says so beside the field; the next edit clears it.
+ */
+refused: boolean, };

@@ -618,7 +618,7 @@ export interface AgentLinkModel {
 	disconnect: string;
 	/** "Use your own bridge": the address and token fields, folded. */
 	ownBridge: string;
-	/** The fields start unfolded: a token was entered by hand. */
+	/** The fields start unfolded: a bridge address or token is configured by hand. */
 	ownOpen: boolean;
 }
 

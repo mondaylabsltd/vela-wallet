@@ -200,33 +200,49 @@ export function liveSpaceHeading(space: LiveSpace): NetworkSpaceHeadingModel {
 	};
 }
 
+/** The pill over a field whose address the URL rule refused (set-6). */
+function refusedPill(m: SettingsMessages): StatusPillModel {
+	return { tone: 'error', label: m.networks.httpsRequired, dot: true };
+}
+
 export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): NetworkDetailModel {
 	const mismatch = row.rpc_chain_mismatch;
+	// set-6: a refusal is never drawn beside a green latency pill. The node
+	// answered (that is how the core knows its chain), but what the field
+	// holds was NOT saved — the pill says so, and the callout says why.
+	const rpcBadge = row.rpc_url_refused
+		? refusedPill(m)
+		: mismatch !== null
+			? { tone: 'error' as const, label: m.networks.invalid, dot: true }
+			: probePill(row.rpc_health, m);
 	const rpc: UrlFieldModel = {
 		id: 'rpc',
 		label: m.networks.rpcUrl,
 		value: row.rpc_url,
 		// Spec 098 §5.1: said where it is set — the relay receives this URL.
 		hint: `${m.networks.saveHint} ${m.networks.relayNotice}`,
-		badge: probePill(row.rpc_health, m),
-		tone: mismatch !== null ? 'error' : 'default'
+		badge: rpcBadge,
+		tone: mismatch !== null || row.rpc_url_refused ? 'error' : 'default'
 	};
+	const refused = row.rpc_url_refused || row.explorer_url_refused;
 	return {
 		title: row.display_name,
 		subtitle: `${chainMeta(m, row.chain_id)} · ${row.native_symbol}`,
 		mark: chainMark(row.id, row.display_name, row.chain_id),
 		name: row.display_name,
 		note: row.is_custom ? m.networks.custom : m.networks.builtinNote,
-		badge: probePill(row.rpc_health, m) ?? { tone: 'neutral', label: m.networks.online },
+		badge: rpcBadge ?? { tone: 'neutral', label: m.networks.online },
 		rpc,
 		explorer: {
 			id: 'explorer',
 			label: m.networks.explorer,
 			value: row.explorer_url,
-			badge: probePill(row.explorer_health, m)
+			badge: row.explorer_url_refused ? refusedPill(m) : probePill(row.explorer_health, m),
+			tone: row.explorer_url_refused ? 'error' : 'default'
 		},
-		callout:
-			mismatch !== null
+		callout: refused
+			? { tone: 'danger', text: m.networks.urlRefused }
+			: mismatch !== null
 				? {
 						tone: 'danger',
 						text: fill(m.networks.mismatch, {
@@ -254,7 +270,8 @@ function suggestionRow(entry: NetChainIndexEntry, m: SettingsMessages): NetworkR
 export function liveAddNetwork(
 	wizard: NetWizardView,
 	m: SettingsMessages,
-	space?: NetworkSpaceMessages
+	space?: NetworkSpaceMessages,
+	added?: NetNetworkRow
 ): AddNetworkModel {
 	const base = {
 		title: m.advanced.addNetworkTitle,
@@ -266,10 +283,26 @@ export function liveAddNetwork(
 	// core's query — the model always had a place for it and nothing filled
 	// it, so the field kept its text only for as long as it stayed mounted.
 	if (wizard.phase === 'idle' || wizard.phase === 'searching' || wizard.phase === 'suggested') {
+		// set-5: an add empties the wizard, and it used to say nothing else —
+		// the search came back blank as if the tap had not taken. It says what
+		// was added and to which space (it may not be the one in front), until
+		// the person types again.
+		const notice =
+			added !== undefined && space !== undefined && wizard.phase === 'idle' && wizard.query === ''
+				? {
+						callout: {
+							tone: 'success' as const,
+							text: fill(added.is_testnet ? space.addedTestnet : space.addedMainnet, {
+								name: added.display_name
+							})
+						}
+					}
+				: {};
 		return {
 			...base,
 			query: wizard.query,
-			results: wizard.suggestions.map((s) => suggestionRow(s, m))
+			results: wizard.suggestions.map((s) => suggestionRow(s, m)),
+			...notice
 		};
 	}
 
@@ -472,6 +505,24 @@ function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['s
 
 const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
 
+/**
+ * A provider's pill (set-9). A key is "Connected" only once the core's probe
+ * has heard a network answer it: a made-up key read green "Connected" over
+ * "Supports 0 of 23 networks". Being tried — or being typed, when leaving
+ * the field is what starts the try — it says so; tried and answered by none,
+ * it is unavailable.
+ */
+function providerPill(p: NetView['providers'][number], m: SettingsMessages): StatusPillModel {
+	if (!p.has_key) return { tone: 'neutral', label: m.rpcProviders.notSet, dot: true };
+	const test = p.test;
+	if (test === null || !test.done) {
+		return { tone: 'neutral', label: m.rpcProviders.checking, dot: true };
+	}
+	return test.ok_count > 0
+		? { tone: 'ok', label: m.rpcProviders.connected, dot: true }
+		: { tone: 'error', label: m.rpcProviders.unavailable, dot: true };
+}
+
 export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
 	return {
 		title: m.advanced.rpcProvidersTitle,
@@ -483,9 +534,7 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 			return {
 				id: p.provider,
 				name: PROVIDER_NAMES[p.provider],
-				badge: p.has_key
-					? { tone: 'ok' as const, label: m.rpcProviders.connected, dot: true }
-					: { tone: 'neutral' as const, label: m.rpcProviders.notSet, dot: true },
+				badge: providerPill(p, m),
 				field: {
 					id: p.provider,
 					label: '',
@@ -497,12 +546,12 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 				// test on the empty field under that label.
 				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
 				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
+				// No second "Get a key →" under the field: the in-field action above
+				// already is that link, and two of them read as two different things.
 				support:
 					test !== null && test.done
 						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
-						: undefined,
-				link: p.has_key ? undefined : `${m.rpcProviders.getKey} →`,
-				linkUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider]
+						: undefined
 			};
 		})
 	};
@@ -526,8 +575,11 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 				label: m.endpoints[copy.label],
 				value: e.value,
 				placeholder: e.default_value,
-				hint: m.endpoints[copy.hint],
-				badge: servicePill(e.health, m)
+				// set-8: a refused address was not saved; the field says so in
+				// place of its usual line, outlined, until it is edited.
+				hint: e.refused ? m.networks.urlRefused : m.endpoints[copy.hint],
+				badge: servicePill(e.health, m),
+				tone: e.refused ? ('error' as const) : ('default' as const)
 			};
 		}),
 		reset: m.endpoints.reset,
@@ -581,7 +633,9 @@ export function withLiveNetworks(
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	/** set-5: the chain the person just added, for the wizard's answer. */
+	addedChainId?: number
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	const count = networkCount(view, space);
@@ -605,10 +659,15 @@ export function withLiveNetworks(
 			...(space === undefined ? {} : { space: liveSpaceHeading(space) })
 		},
 		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
-		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};
+}
+
+/** The row of the chain just added, once the ledger lists it. */
+function addedRow(view: NetView, chainId: number | undefined): NetNetworkRow | undefined {
+	return chainId === undefined ? undefined : view.networks.find((row) => row.chain_id === chainId);
 }
 
 /** The desktop shape of the same overlay: `detail` rides inside `networks`. */
@@ -617,7 +676,8 @@ export function withLiveNetworksDesktop(
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	addedChainId?: number
 ): SettingsDesktopModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
@@ -629,7 +689,7 @@ export function withLiveNetworksDesktop(
 			...(space === undefined ? {} : { space: liveSpaceHeading(space) }),
 			detail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networks.detail
 		},
-		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};
@@ -936,9 +996,15 @@ const FORMAT_SAMPLE = new Date(2026, 5, 13, 13, 45);
  * says, and a row ticked for a language the person is not reading is a lie —
  * the founder saw 简体中文 ticked on `/en`. "Follow system" is ticked only
  * while nothing is pinned; choosing a language navigates (settings page).
+ * Its note names `systemLocale` — what the browser asks for — and not the
+ * page's: on `/ja` a browser in German follows German (set-13).
  */
-function liveLanguageRows(m: SettingsMessages, locale: string): SelectRowModel[] {
-	return languageRows(m, locale).map((row) => ({
+function liveLanguageRows(
+	m: SettingsMessages,
+	locale: string,
+	systemLocale: string
+): SelectRowModel[] {
+	return languageRows(m, systemLocale).map((row) => ({
 		...row,
 		selected: preferences.language === 'auto' ? row.id === 'system' : row.id === locale
 	}));
@@ -961,7 +1027,8 @@ export function withLivePreferences(
 	model: SettingsHomeModel,
 	m: SettingsMessages,
 	languageValue: string,
-	locale: string
+	locale: string,
+	systemLocale: string = locale
 ): SettingsHomeModel {
 	const examples = currentExamples();
 	const value: Record<string, string> = {
@@ -985,7 +1052,7 @@ export function withLivePreferences(
 		},
 		languageSheet: {
 			...model.languageSheet,
-			rows: liveLanguageRows(m, locale)
+			rows: liveLanguageRows(m, locale, systemLocale)
 		},
 		numberSheet: formatSheet(model.numberSheet, numberFormatOptions(), preferences.numberFormat, m),
 		dateSheet: formatSheet(model.dateSheet, dateFormatOptions(), preferences.dateFormat, m),
@@ -1004,7 +1071,8 @@ export function withLivePreferencesDesktop(
 	model: SettingsDesktopModel,
 	m: SettingsMessages,
 	languageValue: string,
-	locale: string
+	locale: string,
+	systemLocale: string = locale
 ): SettingsDesktopModel {
 	const examples = currentExamples();
 	const empty: SelectSheetModel = { title: '', rows: [] };
@@ -1027,7 +1095,7 @@ export function withLivePreferencesDesktop(
 			language: {
 				...model.appearance.language,
 				value: languageValue,
-				options: liveLanguageRows(m, locale)
+				options: liveLanguageRows(m, locale, systemLocale)
 			},
 			textScale: {
 				...model.appearance.textScale,
@@ -1324,14 +1392,29 @@ function storageItemMeta(
  * every row's meta line come from `measureDeviceStorage`. The connections
  * row keeps what `withLiveConnections` wrote (the grants are its), so this
  * runs before it.
+ *
+ * The headline and the bar count what the page LISTS (set-19): the rows'
+ * bytes and the rows' records. Every key a row names is in a row; the rest —
+ * the wallet list and the preferences, which no row lists and no Clear here
+ * touches (that is sign-out's and erase's) — made "2 KB · 10 records in
+ * total" stand over rows that added up to 1 KB and 0 records.
  */
 export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'] }>(
 	model: M,
 	report: DeviceStorageReport,
 	m: SettingsMessages
 ): M {
-	const { amount, unit } = formatBytes(report.totalBytes);
-	const total = report.totalBytes;
+	const listed = (Object.entries(report.items) as [StorageItemId, StorageItemReport][]).filter(
+		([id]) => !WEB_HAS_NO[id]
+	);
+	const groupBytes = { user: 0, cache: 0, sessions: 0 };
+	for (const [, item] of listed) groupBytes[item.group] += item.bytes;
+	const total = groupBytes.user + groupBytes.cache + groupBytes.sessions;
+	// Records as the rows count them: the user rows' entries and the sites.
+	const records = listed
+		.filter(([, item]) => item.group !== 'cache')
+		.reduce((sum, [, item]) => sum + item.count, 0);
+	const { amount, unit } = formatBytes(total);
 	const share = (bytes: number) => (total === 0 ? 0 : bytes / total);
 	const segmentGroup: Record<string, 'user' | 'cache' | 'sessions'> = {
 		user: 'user',
@@ -1347,12 +1430,10 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 			...model.storage,
 			amount,
 			unit,
-			summary: fill(m.storage.summary, { count: report.keyCount }),
+			summary: fill(m.storage.summary, { count: records }),
 			segments: model.storage.segments.map((segment) => {
 				const group = segmentGroup[segment.id];
-				return group === undefined
-					? segment
-					: { ...segment, fraction: share(report.groups[group]) };
+				return group === undefined ? segment : { ...segment, fraction: share(groupBytes[group]) };
 			}),
 			groups: model.storage.groups.map((group) => ({
 				...group,

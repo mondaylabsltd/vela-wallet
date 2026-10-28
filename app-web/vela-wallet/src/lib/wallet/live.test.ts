@@ -114,6 +114,23 @@ describe('moneyParts', () => {
 	it('converts at the committed rate', () => {
 		expect(moneyParts(4500, EUR)).toMatchObject({ code: 'EUR', integer: '€2,250' });
 	});
+	it('a zero-decimal currency has no cents, and no decimal mark (settings S4)', () => {
+		const held = (code: string, rate: number): CurrencyView => ({
+			code,
+			rate,
+			committed: true,
+			pending: null
+		});
+		// The tester's home: "¥194,911.60".
+		expect(moneyParts(1299.4106667, held('JPY', 150))).toMatchObject({
+			integer: '¥194,912',
+			decimals: ''
+		});
+		expect(moneyText(10, held('KRW', 1385.5))).toBe('₩13,855');
+		expect(moneyText(10, held('IDR', 16250.25))).toBe('Rp\u00A0162,503');
+		// …while an unpriced one is the USD figure, cents and all.
+		expect(moneyText(4500, UNPRICED_JPY)).toBe('$4,500.00');
+	});
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
 	});
@@ -175,7 +192,8 @@ describe('the symbol a fiat figure is written with', () => {
 
 	it('a symbol that ends in a letter, and a bare code, stand off the digits by a no-break space', () => {
 		expect(moneyText(4, held('PLN'))).toBe('zł\u00A04.00');
-		expect(moneyText(4, held('IDR'))).toBe('Rp\u00A04.00');
+		// The rupiah has no minor unit in use: no cents (settings S4).
+		expect(moneyText(4, held('IDR'))).toBe('Rp\u00A04');
 		// No glyph anybody would recognise: the code leads, spaced the same way.
 		expect(moneyText(4, held('CHF'))).toBe('CHF\u00A04.00');
 		expect(moneyText(4, held('SEK'))).toBe('SEK\u00A04.00');

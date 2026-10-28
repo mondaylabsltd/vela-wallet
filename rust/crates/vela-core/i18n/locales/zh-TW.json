@@ -332,6 +332,8 @@
     "wizardTestnet": "測試網 — 無真實價值",
     "wizardMainnet": "主網 — 有真實價值",
     "headingMainnet": "主網空間",
-    "headingTestnet": "測試網空間"
+    "headingTestnet": "測試網空間",
+    "addedTestnet": "已將 {{name}} 加入測試網空間。",
+    "addedMainnet": "已將 {{name}} 加入主網空間。"
   }
 }

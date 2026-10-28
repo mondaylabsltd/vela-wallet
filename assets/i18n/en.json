@@ -332,7 +332,9 @@
   "wizardTestnet": "Testnet — no real value",
   "wizardMainnet": "Mainnet — real value",
   "headingMainnet": "Mainnet space",
-  "headingTestnet": "Testnet space"
+  "headingTestnet": "Testnet space",
+  "addedTestnet": "{{name}} was added to the testnet space.",
+  "addedMainnet": "{{name}} was added to the mainnet space."
  },
  "home": {
   "totalBalance": "Total balance",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "Your key can sign in on its own. The contract deploys with your first transaction.",
    "successMessage_other": "Any of your {{count}} keys can sign in on its own. The contract deploys with your first transaction.",
    "successTitle": "Wallet created",
-   "syncFailedHint": "Check your network, or configure a custom endpoint below.",
-   "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
-   "syncFailedTitle": "Sync failed",
+   "syncFailedHint": "Keep this page open: Vela retries on its own when the connection is back, or tap Retry Upload. Leaving or reloading now discards this wallet.",
+   "syncFailedMessage": "Your passkeys are made, but the wallet couldn't be registered with Vela's passkey index, so it isn't saved on this device yet.",
+   "syncFailedTitle": "Not saved yet",
    "taskDeriveAddress": "Deriving the account address",
    "taskVerifyKey": "Verifying the passkey's public key",
    "taskWriteIndex": "Writing the key index",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} is blinking. Rest your finger on its sensor to confirm it is you.",
    "touchSelectBody": "Several security keys are plugged in and all of them are blinking. Touch the one you want to use.",
    "touchTitle": "Touch your security key",
-   "verifyHint": "Your passkey is verified and your key is synced — you're all set."
+   "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "You already have a wallet named “{{name}}” on this device.",
+   "keyKeptTitle": "Key kept, not confirmed yet",
+   "keyKeptBodyNetwork": "This device is offline, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it once you're back online.",
+   "keyKeptBodyIndex": "Vela's passkey index didn't answer, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it in a moment."
   },
   "login": {
    "alertNotSupportedTitle": "Not Supported",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "Sign in on another device",
    "pickTitle": "Which wallet?",
    "pickBody": "{{product}} holds more than one Vela wallet. Choose the one to sign in to.",
-   "pickUnnamed": "Unnamed wallet"
+   "pickUnnamed": "Unnamed wallet",
+   "noPasskeyHint": "If this device has no Vela passkey, try your phone or a security key, or create a wallet."
   },
   "storage": {
    "unreadableTitle": "This browser's wallet data can't be read",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS required",
-   "invalid": "Invalid"
+   "invalid": "Invalid",
+   "urlRefused": "Not saved — use an https:// address (plain http:// only for this computer). The previous address is still in use."
   },
   "backup": {
    "title": "Copy this wallet's record to Ethereum",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "View all activity",
   "deleteContact": "Delete contact",
   "edit": "Edit",
-  "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again."
+  "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again.",
+  "duplicateAddress": "Already saved as “{{name}}”. Saving updates that contact.",
+  "updateExisting": "Update contact",
+  "groupPickEmpty": "No groups yet. Create a group first, then move contacts into it.",
+  "saveFailed": "Couldn't save to this device. Your change shows here, but it will be gone when you close the page.",
+  "memberCount_one": "{{count}} member",
+  "memberCount_other": "{{count}} members",
+  "batchSendHintCount_one": "Send to {{count}} member — amounts can be set individually.",
+  "batchSendHintCount_other": "Send to all {{count}} members — amounts can be set individually.",
+  "batchSendHintTitledCount_one": "Send to group: pay {{count}} member — amounts can be set individually.",
+  "batchSendHintTitledCount_other": "Send to group: pay all {{count}} members — amounts can be set individually."
  },
  "explore": {
   "title": "Explore",

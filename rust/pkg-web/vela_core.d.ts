@@ -769,6 +769,14 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
 /**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+ * and the other zero-decimal currencies, three for the dinars, two
+ * otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+ */
+export function currencyFractionDigits(code: string): number;
+
+/**
  * An exact token figure cut to the precision a person reads
  * (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
  * at its first significant digit. Dot-decimal in, dot-decimal out; text
@@ -1850,6 +1858,7 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly currencyFractionDigits: (a: number, b: number) => number;
     readonly cutTokenAmount: (a: number, b: number) => [number, number];
     readonly dappAddChainAsk: (a: number, b: number, c: number) => [number, number];
     readonly dappAddOutcomeError: (a: number, b: number, c: number) => [number, number];

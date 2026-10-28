@@ -225,9 +225,9 @@
       "successMessage_many": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
       "successMessage_other": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
       "successTitle": "Carteira criada",
-      "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
-      "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
-      "syncFailedTitle": "Falha na sincronização",
+      "syncFailedHint": "Mantenha esta página aberta: a Vela tenta de novo sozinha quando a conexão voltar, ou toque em Tentar novamente. Sair ou recarregar agora descarta esta carteira.",
+      "syncFailedMessage": "Suas passkeys foram criadas, mas a carteira não pôde ser registrada no índice de passkeys da Vela, então ainda não foi salva neste dispositivo.",
+      "syncFailedTitle": "Ainda não foi salva",
       "taskDeriveAddress": "Derivando o endereço da conta",
       "taskVerifyKey": "Verificando a chave pública da passkey",
       "taskWriteIndex": "Gravando o índice de chaves",
@@ -236,7 +236,12 @@
       "touchFingerprintBody": "A {{product}} está piscando. Apoie o dedo no sensor dela para confirmar que é você.",
       "touchSelectBody": "Há várias chaves de segurança conectadas e todas estão piscando. Toque naquela que você quer usar.",
       "touchTitle": "Toque na sua chave de segurança",
-      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto."
+      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Você já tem uma carteira chamada “{{name}}” neste dispositivo.",
+      "keyKeptTitle": "Chave mantida, ainda não confirmada",
+      "keyKeptBodyNetwork": "Este dispositivo está offline, então sua nova passkey não pôde ser confirmada. Ela continua na lista: toque em Confirmar ao lado dela quando voltar a ficar online.",
+      "keyKeptBodyIndex": "O índice de passkeys da Vela não respondeu, então sua nova passkey não pôde ser confirmada. Ela continua na lista: daqui a pouco, toque em Confirmar ao lado dela."
     },
     "login": {
       "alertNotSupportedTitle": "Não compatível",
@@ -269,7 +274,8 @@
       "switchDeviceBtn": "Entrar em outro aparelho",
       "pickTitle": "Qual carteira?",
       "pickBody": "A {{product}} guarda mais de uma carteira Vela. Escolha em qual você quer entrar.",
-      "pickUnnamed": "Carteira sem nome"
+      "pickUnnamed": "Carteira sem nome",
+      "noPasskeyHint": "Se este dispositivo não tem uma passkey da Vela, tente pelo celular ou por uma chave de segurança, ou crie uma carteira."
     },
     "storage": {
       "unreadableTitle": "Os dados da carteira neste navegador não podem ser lidos",

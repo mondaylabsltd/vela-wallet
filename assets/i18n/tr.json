@@ -332,7 +332,9 @@
   "wizardTestnet": "Test ağı — gerçek değer yok",
   "wizardMainnet": "Ana ağ — gerçek değer",
   "headingMainnet": "Ana ağ alanı",
-  "headingTestnet": "Test ağı alanı"
+  "headingTestnet": "Test ağı alanı",
+  "addedTestnet": "{{name}} test ağı alanına eklendi.",
+  "addedMainnet": "{{name}} ana ağ alanına eklendi."
  },
  "home": {
   "totalBalance": "Toplam bakiye",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successTitle": "Cüzdan oluşturuldu",
-   "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
-   "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
-   "syncFailedTitle": "Eşitleme başarısız",
+   "syncFailedHint": "Bu sayfayı açık tutun: bağlantı geri geldiğinde Vela kendiliğinden yeniden dener ya da Yeniden Yükle’ye dokunun. Şimdi sayfadan çıkar veya yenilerseniz bu cüzdan silinir.",
+   "syncFailedMessage": "Passkey'leriniz oluşturuldu ancak cüzdan Vela'nın passkey dizinine kaydedilemedi, bu yüzden bu cihazda henüz kayıtlı değil.",
+   "syncFailedTitle": "Henüz kaydedilmedi",
    "taskDeriveAddress": "Hesap adresi türetiliyor",
    "taskVerifyKey": "Passkey'in açık anahtarı doğrulanıyor",
    "taskWriteIndex": "Anahtar dizini yazılıyor",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} yanıp sönüyor. Siz olduğunuzu doğrulamak için parmağınızı sensörüne koyun.",
    "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
    "touchTitle": "Güvenlik anahtarınıza dokunun",
-   "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır."
+   "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Bu cihazda zaten “{{name}}” adlı bir cüzdanınız var.",
+   "keyKeptTitle": "Anahtar saklandı, henüz onaylanmadı",
+   "keyKeptBodyNetwork": "Bu cihaz çevrimdışı olduğu için yeni passkey'iniz onaylanamadı. Listede duruyor: yeniden çevrimiçi olduğunuzda yanındaki Onayla'ya dokunun.",
+   "keyKeptBodyIndex": "Vela'nın passkey dizini yanıt vermediği için yeni passkey'iniz onaylanamadı. Listede duruyor: birazdan yanındaki Onayla'ya dokunun."
   },
   "login": {
    "alertNotSupportedTitle": "Desteklenmiyor",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "Başka bir cihazda giriş yap",
    "pickTitle": "Hangi cüzdan?",
    "pickBody": "{{product}} birden fazla Vela cüzdanı içeriyor. Giriş yapmak istediğinizi seçin.",
-   "pickUnnamed": "Adsız cüzdan"
+   "pickUnnamed": "Adsız cüzdan",
+   "noPasskeyHint": "Bu cihazda Vela passkey'i yoksa telefonunuzu veya bir güvenlik anahtarını deneyin ya da bir cüzdan oluşturun."
   },
   "storage": {
    "unreadableTitle": "Bu tarayıcıdaki cüzdan verileri okunamıyor",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "Çevrimdışı",
    "httpsRequired": "HTTPS gerekli",
-   "invalid": "Geçersiz"
+   "invalid": "Geçersiz",
+   "urlRefused": "Kaydedilmedi — https:// adresi kullanın (düz http:// yalnızca bu bilgisayar için). Önceki adres kullanılmaya devam ediyor."
   },
   "backup": {
    "title": "Cüzdan kaydını Ethereum'a kopyala",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "Tüm işlemleri gör",
   "deleteContact": "Kişiyi sil",
   "edit": "Düzenle",
-  "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın."
+  "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+  "duplicateAddress": "Zaten “{{name}}” olarak kayıtlı. Kaydetmek o kişiyi günceller.",
+  "updateExisting": "Kişiyi güncelle",
+  "groupPickEmpty": "Henüz grup yok. Önce bir grup oluşturun, sonra kişileri içine taşıyın.",
+  "saveFailed": "Bu cihaza kaydedilemedi. Değişikliğiniz burada görünüyor ama sayfayı kapattığınızda kaybolacak.",
+  "memberCount_one": "{{count}} üye",
+  "memberCount_other": "{{count}} üye",
+  "batchSendHintCount_one": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+  "batchSendHintCount_other": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+  "batchSendHintTitledCount_one": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir.",
+  "batchSendHintTitledCount_other": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir."
  },
  "explore": {
   "title": "Keşfet",

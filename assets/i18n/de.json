@@ -332,7 +332,9 @@
   "wizardTestnet": "Testnet — kein echter Wert",
   "wizardMainnet": "Mainnet — echter Wert",
   "headingMainnet": "Mainnet-Bereich",
-  "headingTestnet": "Testnet-Bereich"
+  "headingTestnet": "Testnet-Bereich",
+  "addedTestnet": "{{name}} wurde zum Testnet-Bereich hinzugefügt.",
+  "addedMainnet": "{{name}} wurde zum Mainnet-Bereich hinzugefügt."
  },
  "home": {
   "totalBalance": "Gesamtguthaben",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
    "successMessage_other": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
    "successTitle": "Wallet erstellt",
-   "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
-   "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
-   "syncFailedTitle": "Synchronisierung fehlgeschlagen",
+   "syncFailedHint": "Lassen Sie diese Seite geöffnet: Vela versucht es selbst erneut, sobald die Verbindung zurück ist – oder tippen Sie auf „Erneut hochladen“. Wenn Sie die Seite jetzt verlassen oder neu laden, wird diese Wallet verworfen.",
+   "syncFailedMessage": "Ihre Passkeys sind erstellt, aber die Wallet konnte nicht im Passkey-Verzeichnis von Vela registriert werden – sie ist auf diesem Gerät noch nicht gespeichert.",
+   "syncFailedTitle": "Noch nicht gespeichert",
    "taskDeriveAddress": "Kontoadresse wird abgeleitet",
    "taskVerifyKey": "Öffentlicher Schlüssel des Passkeys wird geprüft",
    "taskWriteIndex": "Schlüsselindex wird geschrieben",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} blinkt. Legen Sie Ihren Finger auf den Sensor, um zu bestätigen, dass Sie es sind.",
    "touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
    "touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
-   "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit."
+   "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Auf diesem Gerät gibt es bereits eine Wallet namens „{{name}}“.",
+   "keyKeptTitle": "Schlüssel behalten, noch nicht bestätigt",
+   "keyKeptBodyNetwork": "Dieses Gerät ist offline, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie daneben auf „Bestätigen“, sobald Sie wieder online sind.",
+   "keyKeptBodyIndex": "Das Passkey-Verzeichnis von Vela hat nicht geantwortet, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie gleich daneben auf „Bestätigen“."
   },
   "login": {
    "alertNotSupportedTitle": "Nicht unterstützt",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "Auf einem anderen Gerät anmelden",
    "pickTitle": "Welche Wallet?",
    "pickBody": "Auf {{product}} liegt mehr als eine Vela-Wallet. Wählen Sie die aus, in der Sie sich anmelden möchten.",
-   "pickUnnamed": "Wallet ohne Namen"
+   "pickUnnamed": "Wallet ohne Namen",
+   "noPasskeyHint": "Wenn dieses Gerät keinen Vela-Passkey hat, versuchen Sie es mit Ihrem Telefon oder einem Sicherheitsschlüssel – oder erstellen Sie eine Wallet."
   },
   "storage": {
    "unreadableTitle": "Die Wallet-Daten dieses Browsers sind nicht lesbar",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS erforderlich",
-   "invalid": "Ungültig"
+   "invalid": "Ungültig",
+   "urlRefused": "Nicht gespeichert – verwenden Sie eine https://-Adresse (einfaches http:// nur für diesen Computer). Die bisherige Adresse bleibt in Gebrauch."
   },
   "backup": {
    "title": "Wallet-Eintrag auf Ethereum kopieren",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "Gesamte Aktivität ansehen",
   "deleteContact": "Kontakt löschen",
   "edit": "Bearbeiten",
-  "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut."
+  "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut.",
+  "duplicateAddress": "Bereits gespeichert als „{{name}}“. Beim Speichern wird dieser Kontakt aktualisiert.",
+  "updateExisting": "Kontakt aktualisieren",
+  "groupPickEmpty": "Noch keine Gruppen. Erstellen Sie zuerst eine Gruppe und verschieben Sie dann Kontakte hinein.",
+  "saveFailed": "Speichern auf diesem Gerät nicht möglich. Ihre Änderung wird hier angezeigt, ist aber weg, sobald Sie die Seite schließen.",
+  "memberCount_one": "{{count}} Mitglied",
+  "memberCount_other": "{{count}} Mitglieder",
+  "batchSendHintCount_one": "An {{count}} Mitglied senden; der Betrag lässt sich einzeln festlegen.",
+  "batchSendHintCount_other": "An alle {{count}} Mitglieder senden; Beträge lassen sich einzeln festlegen.",
+  "batchSendHintTitledCount_one": "An Gruppe senden: an {{count}} Mitglied; Betrag einzeln festlegbar.",
+  "batchSendHintTitledCount_other": "An Gruppe senden: an alle {{count}} Mitglieder; Beträge einzeln festlegbar."
  },
  "explore": {
   "title": "Entdecken",

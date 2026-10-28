@@ -30,6 +30,7 @@
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
@@ -48,7 +49,12 @@
 		checkEthereumBackup,
 		type EthereumBackupRow
 	} from '$lib/services/registry-backup';
-	import { deviceOnlyKeys, readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
+	import {
+		deviceOnlyKeys,
+		keysWorthAskingAgain,
+		readWalletKeys,
+		type WalletKeys
+	} from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
@@ -56,7 +62,12 @@
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
-	import { agentSettings, bridgeUrlProblem, mcpEndpoint } from '$lib/agent/settings.svelte';
+	import {
+		agentSetUp,
+		agentSettings,
+		bridgeUrlProblem,
+		mcpEndpoint
+	} from '$lib/agent/settings.svelte';
 	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
 	import type { AgentMessages } from '$lib/agent/messages';
 	import { page } from '$app/state';
@@ -99,7 +110,7 @@
 	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import type { IntentPreference } from '$lib/core/generated/IntentPreference';
 	import { loadCurrencyCodes } from '$lib/settings/core/currency-catalog';
-	import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+	import { negotiateLanguages, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
 	import {
 		AREA_OTHER,
 		buildBugReport,
@@ -128,7 +139,11 @@
 
 	let { data }: PageProps = $props();
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
 	const contactsHref = $derived(resolve('/[locale]/contacts', { locale: data.locale }));
@@ -320,6 +335,28 @@
 	});
 
 	/**
+	 * ob-11: "Couldn't reach the registry" is a fact about a moment, not about
+	 * the wallet. When the network is back — or the person returns to the
+	 * page — the registry is asked again, behind the rows already shown (no
+	 * flash back to "asking"), and the block takes the answer.
+	 */
+	let rereadingKeys = false;
+	function rereadKeys() {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		if (!account || rereadingKeys || !keysWorthAskingAgain(walletKeys)) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		rereadingKeys = true;
+		void readWalletKeys(account)
+			.then((keys) => {
+				const still = session.view.accounts[session.view.active_index]?.account;
+				if (still?.address === account.address && keys.source !== 'device') walletKeys = keys;
+			})
+			.finally(() => {
+				rereadingKeys = false;
+			});
+	}
+
+	/**
 	 * The backup is signed on THIS page (founder, 2026-09-18: tapping the row
 	 * used to land a person on the wallet home with a sheet over it). The
 	 * signing machine is app-resident; this route mounts a host for its sheet
@@ -404,13 +441,24 @@
 	}
 
 	/**
+	 * What "Follow system" follows: the browser's own languages, resolved to a
+	 * locale we ship (set-13) — not the page's, which is only where the person
+	 * happens to be. Read on mount: the prerendered page has no navigator.
+	 */
+	let browserLocale = $state<Locale | null>(null);
+	const systemLocale = $derived(browserLocale ?? data.locale);
+	onMount(() => {
+		browserLocale = negotiateLanguages(navigator.languages);
+	});
+
+	/**
 	 * The language row's own text: the endonym, plus "· system" when the person
 	 * has not pinned one. The web's language is the URL, so choosing one
 	 * NAVIGATES — every locale is its own prerendered page.
 	 */
 	const languageValue = $derived.by(() => {
 		const pinned = preferences.language;
-		const shown = pinned === 'auto' ? data.locale : pinned;
+		const shown = pinned === 'auto' ? systemLocale : pinned;
 		const endonym = LOCALE_ENDONYMS.find((l) => l.id === shown)?.label ?? shown;
 		return pinned === 'auto' ? `${endonym} · ${m.common.system}` : endonym;
 	});
@@ -430,7 +478,7 @@
 				// `system` unpins and follows the browser again; anything else is a
 				// locale, and on the web a locale is a route (the intent goes there).
 				const chosen = event.id === 'system' ? 'auto' : event.id;
-				const target = chosen === 'auto' ? data.locale : chosen;
+				const target = chosen === 'auto' ? systemLocale : chosen;
 				// Before the navigation: the page is about to become another locale's.
 				const locale = SUPPORTED_LOCALES.find((code) => code === target);
 				if (locale !== undefined) track('setting_language_changed', { locale });
@@ -770,12 +818,18 @@
 				reconnect: a.reconnect,
 				disconnect: a.disconnect,
 				ownBridge: a.ownBridge,
-				ownOpen: agentSettings.token.trim() !== ''
+				// Open while one is configured — an address alone counts (set-10).
+				ownOpen: agentSettings.token.trim() !== '' || agentSettings.url.trim() !== ''
 			},
 			wallets: {
 				title: a.wallets,
 				hint: a.walletsHint,
-				none: agentSettings.wallets.length === 0 ? a.walletsNone : undefined,
+				// The red "turn one on" only once there is an agent to turn one on
+				// for: never on a panel the person has not set up.
+				none:
+					agentSettings.wallets.length === 0 && agentSetUp(agentSettings)
+						? a.walletsNone
+						: undefined,
 				// Every account here, multisigs among them.
 				rows: [
 					...session.view.accounts.map((row) => ({
@@ -860,6 +914,13 @@
 		return signingVenueBlock(domain, { type: 'in_vela' }) === null ? undefined : domain;
 	});
 
+	/**
+	 * set-5: the chain this page just added, so the emptied wizard can say
+	 * what was added and to which space. Cleared by the next search, or by
+	 * opening the wizard again.
+	 */
+	let justAdded = $state<number | null>(null);
+
 	/** Spec 105: the space in front — the network pages show only its networks. */
 	const liveSpace = $derived<LiveSpace | undefined>(
 		networkSpace.words === null
@@ -871,13 +932,13 @@
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
 		let model = withLiveAccounts(homeWithIdentity(data.home, identity), accountsInput, m);
-		model = withLiveNetworks(model, net, m, selectedNetworkId, liveSpace);
+		model = withLiveNetworks(model, net, m, selectedNetworkId, liveSpace, justAdded ?? undefined);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
-		model = withLivePreferences(model, m, languageValue, data.locale);
+		model = withLivePreferences(model, m, languageValue, data.locale, systemLocale);
 		model = withEraseFailure(model, m, eraseFailed);
 		model = withFeedback(model, m, deviceFacts);
 		model = {
@@ -915,7 +976,14 @@
 			accountsInput,
 			m
 		);
-		model = withLiveNetworksDesktop(model, net, m, selectedNetworkId, liveSpace);
+		model = withLiveNetworksDesktop(
+			model,
+			net,
+			m,
+			selectedNetworkId,
+			liveSpace,
+			justAdded ?? undefined
+		);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		// After the storage numbers, as on the phone: the connections row is the
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
@@ -944,7 +1012,7 @@
 		// with no handler, and a report panel that did not exist.
 		model = withEraseFailureDesktop(model, m, eraseFailed);
 		model = withFeedbackDesktop(model, m, deviceFacts);
-		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
+		return withLivePreferencesDesktop(model, m, languageValue, data.locale, systemLocale);
 	});
 
 	/**
@@ -959,6 +1027,7 @@
 		const landed = net.last_added_chain_id;
 		if (addingChain === null || landed !== addingChain) return;
 		addingChain = null;
+		justAdded = landed;
 		track('network_added', { chain: landed });
 	});
 	$effect(() => {
@@ -1044,9 +1113,11 @@
 				return;
 			}
 			case 'open-add':
+				justAdded = null;
 				networkAdmin.dispatch({ type: 'wizard_reset' });
 				return;
 			case 'search':
+				justAdded = null;
 				networkAdmin.dispatch({ type: 'search_input', query: event.query });
 				return;
 			case 'pick-suggestion':
@@ -1132,6 +1203,9 @@
 		void intents.invoke('person', { type: 'sign_out' });
 	}
 </script>
+
+<svelte:window ononline={rereadKeys} onfocus={rereadKeys} />
+<svelte:document onvisibilitychange={rereadKeys} />
 
 <svelte:head>
 	<title>{data.settingsMessages.title}</title>

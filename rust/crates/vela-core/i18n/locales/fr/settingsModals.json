@@ -91,7 +91,8 @@
     "health": {
       "offline": "Hors ligne",
       "httpsRequired": "HTTPS requis",
-      "invalid": "Invalide"
+      "invalid": "Invalide",
+      "urlRefused": "Non enregistré : utilisez une adresse https:// (http:// seulement pour cet ordinateur). L'adresse précédente reste utilisée."
     },
     "backup": {
       "title": "Copier l'enregistrement de ce portefeuille sur Ethereum",

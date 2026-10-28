@@ -237,6 +237,16 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				message: t('onboarding.login.alertIncompatibleBody')
 			};
 		case 'create_failed':
+			// ob-4: the new passkey is made and kept — only its confirmation
+			// could not reach the passkey index. Say that, and where to finish
+			// it (the row's Confirm), not "Error" over a raw fetch failure.
+			if (kind.key_kept)
+				return {
+					title: t('onboarding.create.keyKeptTitle'),
+					message: kind.local
+						? t('onboarding.create.keyKeptBodyNetwork')
+						: t('onboarding.create.keyKeptBodyIndex')
+				};
 			// The platform's own words. Opaque by nature — it goes straight into
 			// the bug report, and inventing friendlier text here would lose the
 			// detail that makes the report worth filing.

@@ -91,7 +91,8 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS richiesto",
-      "invalid": "Non valido"
+      "invalid": "Non valido",
+      "urlRefused": "Non salvato: usa un indirizzo https:// (http:// semplice solo per questo computer). L'indirizzo precedente resta in uso."
     },
     "backup": {
       "title": "Copia il record di questo wallet su Ethereum",

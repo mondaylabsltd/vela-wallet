@@ -188,6 +188,53 @@ describe('what is written', () => {
 		expect(() => preferences.setTheme('dark')).not.toThrow();
 		expect(preferences.theme).toBe('dark');
 	});
+
+	it('a pinned language rides in the cookie `/` reads; `auto` removes it (set-12)', () => {
+		// `/` runs on the Worker and cannot see localStorage: without the cookie
+		// a person who chose Deutsch landed on their Accept-Language instead.
+		const doc: ReturnType<typeof fakeDocument> & { cookie?: string } = fakeDocument();
+		vi.stubGlobal('localStorage', fakeLocalStorage({ [PREF_KEYS.language]: 'ja' }));
+		vi.stubGlobal('document', doc);
+		preferences.boot();
+		// A pin made before the cookie existed reaches `/` on the next visit.
+		expect(doc.cookie).toMatch(/^vela_lang=ja;/);
+		preferences.setLanguage('de');
+		expect(doc.cookie).toMatch(/^vela_lang=de;/);
+		preferences.setLanguage('auto');
+		expect(doc.cookie).toMatch(/^vela_lang=; Max-Age=0;/);
+	});
+
+	it('a theme chosen in another tab reaches this one', () => {
+		const listeners: ((event: { key: string | null }) => void)[] = [];
+		vi.stubGlobal('window', {
+			addEventListener: (type: string, listener: (event: { key: string | null }) => void) => {
+				if (type === 'storage') listeners.push(listener);
+			}
+		});
+		const store = fakeLocalStorage();
+		const doc = fakeDocument();
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', doc);
+		preferences.boot();
+		expect(listeners).toHaveLength(1);
+
+		// The other tab writes; this one hears the key, not the value.
+		store.setItem(PREF_KEYS.theme, 'dark');
+		listeners[0]({ key: PREF_KEYS.theme });
+		expect(preferences.theme).toBe('dark');
+		expect(doc.documentElement.dataset.theme).toBe('dark');
+
+		// Another key is not the palette's business.
+		store.setItem(PREF_KEYS.theme, 'light');
+		listeners[0]({ key: PREF_KEYS.textScale });
+		expect(preferences.theme).toBe('dark');
+
+		// A cleared store is `system` again.
+		store.clear();
+		listeners[0]({ key: null });
+		expect(preferences.theme).toBe('system');
+		expect(doc.documentElement.dataset.theme).toBeUndefined();
+	});
 });
 
 describe("every shell's spelling reads the same (spec 072)", () => {

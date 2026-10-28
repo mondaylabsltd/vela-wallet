@@ -332,6 +332,8 @@
     "wizardTestnet": "Testnet — không có giá trị thật",
     "wizardMainnet": "Mainnet — có giá trị thật",
     "headingMainnet": "Không gian mainnet",
-    "headingTestnet": "Không gian testnet"
+    "headingTestnet": "Không gian testnet",
+    "addedTestnet": "Đã thêm {{name}} vào không gian mạng thử nghiệm.",
+    "addedMainnet": "Đã thêm {{name}} vào không gian mạng chính."
   }
 }

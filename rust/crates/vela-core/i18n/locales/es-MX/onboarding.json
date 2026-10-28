@@ -225,9 +225,9 @@
       "successMessage_many": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
       "successMessage_other": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
       "successTitle": "Billetera creada",
-      "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
-      "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
-      "syncFailedTitle": "Falló la sincronización",
+      "syncFailedHint": "Deja esta página abierta: Vela lo reintenta solo cuando vuelva la conexión, o toca Reintentar. Si sales o recargas ahora, esta billetera se descarta.",
+      "syncFailedMessage": "Tus passkeys ya están creadas, pero la billetera no se pudo registrar en el índice de passkeys de Vela, así que aún no se guarda en este dispositivo.",
+      "syncFailedTitle": "Aún no se guarda",
       "taskDeriveAddress": "Derivando la dirección de la cuenta",
       "taskVerifyKey": "Verificando la clave pública de la passkey",
       "taskWriteIndex": "Escribiendo el índice de llaves",
@@ -236,7 +236,12 @@
       "touchFingerprintBody": "{{product}} está parpadeando. Apoya el dedo en su sensor para confirmar que eres tú.",
       "touchSelectBody": "Hay varias llaves de seguridad conectadas y todas están parpadeando. Toca la que quieras usar.",
       "touchTitle": "Toca tu llave de seguridad",
-      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo."
+      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Ya tienes una billetera llamada “{{name}}” en este dispositivo.",
+      "keyKeptTitle": "Llave guardada, aún sin confirmar",
+      "keyKeptBodyNetwork": "Este dispositivo está sin conexión, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: toca Confirmar junto a ella cuando vuelvas a tener conexión.",
+      "keyKeptBodyIndex": "El índice de passkeys de Vela no respondió, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: en un momento toca Confirmar junto a ella."
     },
     "login": {
       "alertNotSupportedTitle": "No compatible",
@@ -269,7 +274,8 @@
       "switchDeviceBtn": "Entrar en otro dispositivo",
       "pickTitle": "¿Cuál cartera?",
       "pickBody": "{{product}} guarda más de una cartera Vela. Elige en cuál quieres entrar.",
-      "pickUnnamed": "Cartera sin nombre"
+      "pickUnnamed": "Cartera sin nombre",
+      "noPasskeyHint": "Si este dispositivo no tiene una passkey de Vela, prueba con tu teléfono o una llave de seguridad, o crea una billetera."
     },
     "storage": {
       "unreadableTitle": "No se pueden leer los datos de la wallet en este navegador",

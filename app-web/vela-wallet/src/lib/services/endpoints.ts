@@ -9,6 +9,7 @@
  */
 
 import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
+import { allowedOrNull } from './url-policy';
 
 export const DEFAULT_SERVICE_ENDPOINTS = {
 	ethereumDataURL: 'https://ethereum-data.getvela.app',
@@ -23,25 +24,37 @@ export const DEFAULT_SERVICE_ENDPOINTS = {
 	aaguidDirectoryURL: 'https://aaguid-explorer.awesometools.dev'
 } as const;
 
+/**
+ * The stored address for one service, when it is one the wallet may use
+ * ({@link allowedOrNull}), else the default. `||` alone used whatever was
+ * stored — `javascript:`, `ftp://`, a word — for every request after it.
+ */
+function stored(value: string | undefined, fallback: string): string {
+	return allowedOrNull(value) ?? fallback;
+}
+
 export function getEthereumDataURL(): string {
-	return loadServiceEndpoints().ethereumDataURL || DEFAULT_SERVICE_ENDPOINTS.ethereumDataURL;
+	return stored(loadServiceEndpoints().ethereumDataURL, DEFAULT_SERVICE_ENDPOINTS.ethereumDataURL);
 }
 
 export function getBundlerServiceURL(): string {
-	return loadServiceEndpoints().bundlerServiceURL || DEFAULT_SERVICE_ENDPOINTS.bundlerServiceURL;
+	return stored(
+		loadServiceEndpoints().bundlerServiceURL,
+		DEFAULT_SERVICE_ENDPOINTS.bundlerServiceURL
+	);
 }
 
 export function getFiatRatesURL(): string {
-	return loadServiceEndpoints().fiatRatesURL || DEFAULT_SERVICE_ENDPOINTS.fiatRatesURL;
+	return stored(loadServiceEndpoints().fiatRatesURL, DEFAULT_SERVICE_ENDPOINTS.fiatRatesURL);
 }
 
 export function getPasskeyIndexURL(): string {
-	return loadServiceEndpoints().passkeyIndexURL || DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL;
+	return stored(loadServiceEndpoints().passkeyIndexURL, DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL);
 }
 
 export function getAaguidDirectoryURL(): string {
-	return (
-		loadServiceEndpoints().aaguidDirectoryURL?.trim() ||
+	return stored(
+		loadServiceEndpoints().aaguidDirectoryURL,
 		DEFAULT_SERVICE_ENDPOINTS.aaguidDirectoryURL
 	);
 }

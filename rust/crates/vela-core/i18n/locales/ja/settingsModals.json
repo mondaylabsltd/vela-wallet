@@ -91,7 +91,8 @@
     "health": {
       "offline": "オフライン",
       "httpsRequired": "HTTPS が必要です",
-      "invalid": "無効"
+      "invalid": "無効",
+      "urlRefused": "保存されていません。https:// のアドレスを使ってください（http:// はこのコンピューター上のみ可）。以前のアドレスが引き続き使われます。"
     },
     "backup": {
       "title": "ウォレットの記録を Ethereum にコピー",

@@ -251,6 +251,36 @@ fn restore_failure_lands_empty_not_stuck() {
     assert_eq!(sut.view(), view);
 }
 
+/// Settings set-21 — an account list that could not be READ is not a
+/// clean sign-out: the view says so (and nothing was written over it), while
+/// a list that is simply empty says nothing of the kind. A wallet
+/// established afterwards (the person signed in again) clears it.
+#[test]
+fn unreadable_accounts_say_so_rather_than_look_signed_out() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Boot);
+    assert!(
+        sut.resolve(Res::AccountsUnavailable).is_empty(),
+        "an unreadable list is left where it is — nothing is written"
+    );
+    assert!(sut.view().accounts_unreadable);
+    assert!(!sut.view().has_wallet);
+
+    let ops = sut.dispatch(Event::AccountEstablished {
+        mode: CompletionMode::AddAccount {
+            account: legacy("c1", "Ann", ADDR_A),
+        },
+    });
+    assert_eq!(ops, vec![Op::SaveActiveIndex { index: 0 }]);
+    assert!(!sut.view().accounts_unreadable);
+
+    let empty = restored(vec![], 0);
+    assert!(
+        !empty.view().accounts_unreadable,
+        "an empty list is not unreadable"
+    );
+}
+
 /// Invariant ④ — during the loading window the index is NEVER persisted (the
 /// initial 0 would overwrite the user's saved value); the persist happens
 /// exactly when the window closes.

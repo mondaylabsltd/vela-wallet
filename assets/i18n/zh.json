@@ -332,7 +332,9 @@
   "wizardTestnet": "测试网 — 无真实价值",
   "wizardMainnet": "主网 — 有真实价值",
   "headingMainnet": "主网空间",
-  "headingTestnet": "测试网空间"
+  "headingTestnet": "测试网空间",
+  "addedTestnet": "已将 {{name}} 添加到测试网空间。",
+  "addedMainnet": "已将 {{name}} 添加到主网空间。"
  },
  "home": {
   "totalBalance": "总余额",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "单把密钥即可登录。合约在首笔交易时部署。",
    "successMessage_other": "单把密钥即可登录。合约在首笔交易时部署。",
    "successTitle": "钱包已创建",
-   "syncFailedHint": "请检查网络，或在下方配置自定义端点。",
-   "syncFailedMessage": "钱包已创建，但您的公钥未同步到服务器。在此问题解决之前，您将无法在其他设备上登录。",
-   "syncFailedTitle": "同步失败",
+   "syncFailedHint": "请保持此页面打开：网络恢复后 Vela 会自动重试，也可以点“重新上传”。现在离开或刷新页面，这个钱包将被丢弃。",
+   "syncFailedMessage": "通行密钥已创建，但钱包未能登记到 Vela 的通行密钥索引，因此尚未保存在这台设备上。",
+   "syncFailedTitle": "尚未保存",
    "taskDeriveAddress": "推导账户地址",
    "taskVerifyKey": "校验通行密钥公钥",
    "taskWriteIndex": "写入密钥索引",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} 正在闪烁。把手指放在它的传感器上，确认是你本人。",
    "touchSelectBody": "插着多个安全密钥，它们都在闪烁。触摸你想使用的那一个。",
    "touchTitle": "触摸你的安全密钥",
-   "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。"
+   "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "这台设备上已有名为“{{name}}”的钱包。",
+   "keyKeptTitle": "密钥已保留，尚未确认",
+   "keyKeptBodyNetwork": "这台设备已离线，新的通行密钥未能确认。它仍保留在列表中：恢复联网后，点它旁边的“确认”即可。",
+   "keyKeptBodyIndex": "Vela 的通行密钥索引没有响应，新的通行密钥未能确认。它仍保留在列表中：稍后点它旁边的“确认”即可。"
   },
   "login": {
    "alertNotSupportedTitle": "不支持",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "换一台设备登录",
    "pickTitle": "登录哪个钱包？",
    "pickBody": "{{product}} 上保存了多个 Vela 钱包，请选择要登录的那个。",
-   "pickUnnamed": "未命名钱包"
+   "pickUnnamed": "未命名钱包",
+   "noPasskeyHint": "如果这台设备上没有 Vela 的通行密钥，可以改用手机或安全密钥，或者创建一个钱包。"
   },
   "storage": {
    "unreadableTitle": "此浏览器里的钱包数据无法读取",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "离线",
    "httpsRequired": "需要 HTTPS",
-   "invalid": "无效"
+   "invalid": "无效",
+   "urlRefused": "未保存——请使用 https:// 地址（仅本机可用普通 http://）。仍在使用之前的地址。"
   },
   "backup": {
    "title": "把钱包记录复制到以太坊",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "查看全部往来",
   "deleteContact": "删除联系人",
   "edit": "编辑",
-  "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
+  "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+  "duplicateAddress": "已保存为“{{name}}”。保存将更新该联系人。",
+  "updateExisting": "更新联系人",
+  "groupPickEmpty": "还没有分组。请先新建分组，再把联系人移入。",
+  "saveFailed": "无法保存到这台设备。你的修改暂时显示在这里，但关闭页面后就会消失。",
+  "memberCount_other": "{{count}} 人",
+  "batchSendHintCount_other": "向本组 {{count}} 人转账，金额可分别设置。",
+  "batchSendHintTitledCount_other": "群发转账：向本组 {{count}} 人转账，金额可分别设置。",
+  "memberCount_one": "{{count}} 人",
+  "batchSendHintCount_one": "向本组 {{count}} 人转账，金额可分别设置。",
+  "batchSendHintTitledCount_one": "群发转账：向本组 {{count}} 人转账，金额可分别设置。"
  },
  "explore": {
   "title": "探索",

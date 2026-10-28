@@ -94,6 +94,33 @@ describe('read_store', () => {
 		});
 	});
 
+	// set-2: `[null]`, a record with no chain, a chain id serde cannot read as
+	// a u32 — each would have refused the whole load. They are dropped; the
+	// good record beside them still loads.
+	it('drops records that name no chain the core can read, keeps the rest', async () => {
+		kv.set(
+			'vela.customNetworks',
+			JSON.stringify([
+				null,
+				{},
+				{ ...STORED_CUSTOM, chainId: -1 },
+				{ ...STORED_CUSTOM, chainId: 1.5 },
+				{ ...STORED_CUSTOM, chainId: 2 ** 40 },
+				'Linea',
+				{ chainId: 59144 },
+				STORED_CUSTOM
+			])
+		);
+		kv.set('vela.networkConfig', JSON.stringify([null, { chainId: 'x' }, { chainId: 1 }]));
+		const result = await executeNetworkAdminOperation(effect({ type: 'read_store' }));
+		if (result.type !== 'store_loaded') throw new Error(result.type);
+		expect(result.custom_networks.map((n) => [n.id, n.chain_id])).toEqual([
+			['custom-59144', 59144],
+			['xlayer', 196]
+		]);
+		expect(result.network_configs.map((c) => c.chain_id)).toEqual([1]);
+	});
+
 	it('reads junk as nothing-configured, still loaded', async () => {
 		kv.set('vela.customNetworks', '{not json');
 		const result = await executeNetworkAdminOperation(effect({ type: 'read_store' }));

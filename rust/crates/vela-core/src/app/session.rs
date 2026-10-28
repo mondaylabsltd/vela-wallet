@@ -3,7 +3,7 @@
 //! ```text
 //! Boot ─► Restoring ─┬─ accounts ─► migrate addresses ─► clamp index ─► Active
 //!                    ├─ none ────────────────────────────────────────► Empty
-//!                    └─ read failed ──────────────────────────────────► Empty
+//!                    └─ read failed ──────────────────────────────────► Empty (unreadable)
 //! Active ─ SwitchAccount / AccountEstablished ─► Active (index persisted)
 //! Active ─ SignOut ─► CheckPendingUploads ─► confirm dialog ─► SignedOut
 //!
@@ -32,7 +32,9 @@
 //!   corrected record is written back best-effort, and a single failure keeps
 //!   that account's old address without blocking the others.
 //! - ③ The saved index is clamped into range, and a failed restore lands
-//!   `Empty` — never a forever-spinner.
+//!   `Empty` — never a forever-spinner — and SAYS so
+//!   ([`SessionView::accounts_unreadable`]): a stored list that cannot be
+//!   read is not a clean sign-out, and must not look like one.
 //! - ④ While the restore is in flight the index is NEVER persisted — the
 //!   initial 0 would overwrite the user's saved value.
 //! - ⑤ Signing out first asks the shell whether un-synced pending uploads
@@ -374,6 +376,9 @@ pub struct Model {
     /// dropped. This is what keeps a late restore from clobbering a session
     /// already established by onboarding.
     attempt: u64,
+    /// The restore's account read failed (settings set-21): `Empty` because
+    /// nothing could be READ, not because nothing is stored.
+    accounts_unreadable: bool,
     /// The landing watch (issue 409): the generation of the newest one.
     watch: u64,
     /// Records this watch has still to confirm: `(credential id, task id)`.
@@ -439,6 +444,12 @@ pub struct SessionView {
     pub allowed_route: SessionRoute,
     /// `Some` ⇒ the sign-out confirmation dialog is open.
     pub sign_out: Option<SessionSignOutView>,
+    /// The stored account list could not be read (settings set-21). The
+    /// route is onboarding as for any empty list, but the shell must say the
+    /// accounts could not be read — and offer to rebuild or reset them —
+    /// rather than look signed out. Nothing was written: the list is where it
+    /// was. Clears once a wallet is established.
+    pub accounts_unreadable: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +558,7 @@ impl App for Session {
                     pending_upload_warning,
                     account_count: model.accounts.len(),
                 }),
+            accounts_unreadable: model.phase == Phase::Empty && model.accounts_unreadable,
         }
     }
 }
@@ -786,6 +798,7 @@ fn accept(model: &mut Model, result: SessionShellResult) -> Command<SessionEffec
             model.loaded_accounts = None;
             model.loaded_index = None;
             model.phase = Phase::Empty;
+            model.accounts_unreadable = true;
             render()
         }
 

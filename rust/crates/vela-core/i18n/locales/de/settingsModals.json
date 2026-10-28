@@ -91,7 +91,8 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS erforderlich",
-      "invalid": "Ungültig"
+      "invalid": "Ungültig",
+      "urlRefused": "Nicht gespeichert – verwenden Sie eine https://-Adresse (einfaches http:// nur für diesen Computer). Die bisherige Adresse bleibt in Gebrauch."
     },
     "backup": {
       "title": "Wallet-Eintrag auf Ethereum kopieren",

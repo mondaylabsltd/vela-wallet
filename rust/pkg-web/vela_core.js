@@ -3419,6 +3419,21 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+ * and the other zero-decimal currencies, three for the dinars, two
+ * otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+ * @param {string} code
+ * @returns {number}
+ */
+export function currencyFractionDigits(code) {
+    const ptr0 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.currencyFractionDigits(ptr0, len0);
+    return ret >>> 0;
+}
+
+/**
  * An exact token figure cut to the precision a person reads
  * (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
  * at its first significant digit. Dot-decimal in, dot-decimal out; text

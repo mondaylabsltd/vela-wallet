@@ -20,7 +20,7 @@ import type { Account } from '$lib/core/generated/Account';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 import { walletKeysModel } from '$lib/settings/live';
 import { CHECKING_ROW } from './registry-backup';
-import { deviceOnlyKeys, readWalletKeys } from './wallet-keys';
+import { deviceOnlyKeys, keysWorthAskingAgain, readWalletKeys } from './wallet-keys';
 
 const m = resolveSettingsMessages('en');
 
@@ -185,5 +185,20 @@ describe('before any chain is asked', () => {
 			].sort()
 		);
 		expect(model.backupLines).not.toContain(model.backup?.title);
+	});
+});
+
+// ob-11: "Couldn't reach the registry" clears once it answers — only that
+// fallback is asked again on online / focus; an answer, or a read still in
+// flight, is left alone.
+describe('keysWorthAskingAgain', () => {
+	it('asks again only after no chain answered', () => {
+		expect(keysWorthAskingAgain({ source: 'device', chainId: null, keys: [] })).toBe(true);
+		expect(keysWorthAskingAgain({ source: 'device', chainId: null, keys: [], asking: true })).toBe(
+			false
+		);
+		expect(keysWorthAskingAgain({ source: 'registry', chainId: 100, keys: [] })).toBe(false);
+		expect(keysWorthAskingAgain({ source: 'not_registered', chainId: 100, keys: [] })).toBe(false);
+		expect(keysWorthAskingAgain(null)).toBe(false);
 	});
 });

@@ -90,7 +90,7 @@
 {#if pending}
 	<PromptSheet
 		copy={pending.copy}
-		dismissLabel={strings('onboarding.common.back')}
+		dismissLabel={strings('common.gotIt')}
 		onAnswer={(accepted) => {
 			pending?.resolve(accepted);
 			pending = null;

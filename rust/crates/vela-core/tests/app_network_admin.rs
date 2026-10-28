@@ -20,16 +20,16 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::network_admin::{
     build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
-    explorer_base_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
-    p256_call_indicates_support, parse_chain_data, provider_chain_ids, public_rpc_urls,
-    rank_search, Event, NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
-    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
-    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
-    NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
-    NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
-    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL,
-    MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS, REQUIRED_CONTRACTS,
-    SEARCH_DEBOUNCE_MS,
+    explorer_base_url, is_allowed_endpoint_url, is_builtin_chain, is_code_deployed,
+    is_localhost_http, net_blocker, p256_call_indicates_support, parse_chain_data,
+    provider_chain_ids, public_rpc_urls, rank_search, Event, NetBlocker, NetChainIndexEntry,
+    NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op,
+    NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData,
+    NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth, NetShellResult as Res,
+    NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
+    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS,
+    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
 
@@ -184,6 +184,14 @@ fn checked_compatible() -> Sut {
     assert!(resolve_contracts_ok(&mut sut, RPC_FAST).is_empty());
     assert_eq!(sut.view().wizard.phase, NetWizardPhase::Checked);
     sut
+}
+
+fn endpoint_refused(sut: &Sut, field: NetEndpointField) -> bool {
+    sut.view()
+        .endpoints
+        .into_iter()
+        .find(|e| e.field == field)
+        .is_some_and(|e| e.refused)
 }
 
 fn endpoint_view(sut: &Sut, field: NetEndpointField) -> NetServiceHealth {
@@ -1858,27 +1866,159 @@ fn the_probe_base_url_drops_one_trailing_slash_but_the_saved_value_keeps_it() {
     }));
 }
 
-/// Health badges NEVER gate saves (current behavior, kept): even a URL the
-/// badge will flag as not-HTTPS persists on blur.
+/// set-8: the URL rule DOES gate a save. A value that is not an address the
+/// wallet may use is not written (it used to be, and was then used for every
+/// request); the service keeps the address it had and the field says so.
+/// Health badges still never gate: an https address saves whatever its
+/// badge will read.
 #[test]
-fn health_badges_never_gate_endpoint_saves() {
+fn an_endpoint_the_url_rule_refuses_is_not_saved() {
+    for bad in [
+        "http://insecure.example",
+        "javascript:alert(1)",
+        "ftp://index.example",
+        "notaurl",
+        "https://",
+    ] {
+        let mut sut = started();
+        sut.dispatch(Event::EndpointEdited {
+            field: NetEndpointField::PasskeyIndex,
+            value: bad.to_owned(),
+        });
+        let ops = sut.dispatch(Event::EndpointBlurred {
+            field: NetEndpointField::PasskeyIndex,
+        });
+        assert!(
+            !ops.iter()
+                .any(|op| matches!(op, Op::WriteServiceEndpoints { .. })),
+            "{bad:?} must not be written: {ops:?}"
+        );
+        assert!(!ops.contains(&Op::InvalidatePools { chain_id: None }));
+        let view = sut.view();
+        let field = view
+            .endpoints
+            .iter()
+            .find(|e| e.field == NetEndpointField::PasskeyIndex)
+            .expect("field");
+        assert!(field.refused, "{bad:?}: the field says it was not saved");
+        assert_eq!(field.value, bad, "the typed value stays, to be fixed");
+        assert_eq!(field.health, NetServiceHealth::NotHttps);
+
+        // The next keystroke clears the refusal; a good address then saves.
+        sut.dispatch(Event::EndpointEdited {
+            field: NetEndpointField::PasskeyIndex,
+            value: "https://index.example".to_owned(),
+        });
+        assert!(!endpoint_refused(&sut, NetEndpointField::PasskeyIndex));
+        let ops = sut.dispatch(Event::EndpointBlurred {
+            field: NetEndpointField::PasskeyIndex,
+        });
+        let Some(Op::WriteServiceEndpoints { endpoints }) = ops.first() else {
+            panic!("expected the endpoints write, got {ops:?}");
+        };
+        assert_eq!(endpoints.passkey_index_url, "https://index.example");
+    }
+}
+
+#[test]
+fn a_blank_endpoint_still_saves_and_reset_clears_a_refusal() {
     let mut sut = started();
     sut.dispatch(Event::EndpointEdited {
-        field: NetEndpointField::PasskeyIndex,
-        value: "http://insecure.example".to_owned(),
+        field: NetEndpointField::FiatRates,
+        value: "data:text/plain,1".to_owned(),
+    });
+    sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::FiatRates,
+    });
+    assert!(endpoint_refused(&sut, NetEndpointField::FiatRates));
+    sut.dispatch(Event::ResetEndpointsToDefaults);
+    assert!(!endpoint_refused(&sut, NetEndpointField::FiatRates));
+
+    // Blank is "the default", not a refused address.
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::FiatRates,
+        value: "   ".to_owned(),
     });
     let ops = sut.dispatch(Event::EndpointBlurred {
-        field: NetEndpointField::PasskeyIndex,
+        field: NetEndpointField::FiatRates,
     });
-    let Some(Op::WriteServiceEndpoints { endpoints }) = ops.first() else {
-        panic!("expected the endpoints write, got {ops:?}");
+    assert!(matches!(
+        ops.first(),
+        Some(Op::WriteServiceEndpoints { .. })
+    ));
+    assert!(!endpoint_refused(&sut, NetEndpointField::FiatRates));
+}
+
+/// A refused address already in storage is not used: `effective` answers
+/// the default, as for a blank field.
+#[test]
+fn a_stored_endpoint_the_url_rule_refuses_resolves_to_the_default() {
+    let e = NetServiceEndpoints {
+        passkey_index_url: "javascript:alert(1)".to_owned(),
+        ethereum_data_url: "http://data.example".to_owned(),
+        fiat_rates_url: "http://localhost:8080/rates".to_owned(),
+        ..NetServiceEndpoints::default()
     };
-    assert_eq!(endpoints.passkey_index_url, "http://insecure.example");
     assert_eq!(
-        endpoint_view(&sut, NetEndpointField::PasskeyIndex),
-        NetServiceHealth::NotHttps,
-        "the badge complains — but the save went through"
+        e.effective(NetEndpointField::PasskeyIndex),
+        DEFAULT_PASSKEY_INDEX_URL
     );
+    assert_eq!(
+        e.effective(NetEndpointField::EthereumData),
+        DEFAULT_ETHEREUM_DATA_URL
+    );
+    assert_eq!(
+        e.effective(NetEndpointField::FiatRates),
+        "http://localhost:8080/rates"
+    );
+}
+
+/// The one URL rule. The same lists are pinned on the web's draw-time guard
+/// (`app-web/vela-wallet/src/lib/services/url-policy.test.ts`); a case added
+/// here belongs there too.
+#[test]
+fn the_url_rule_allows_https_and_loopback_http_only() {
+    for ok in [
+        "https://rpc.example",
+        "https://rpc.example/v2/key?x=1#y",
+        "https://rpc.example:8545",
+        "https://user:pass@node.example/rpc",
+        "HTTPS://Rpc.Example",
+        "https://[2001:db8::1]:443/",
+        "https://例え.jp",
+        "http://localhost",
+        "http://localhost:8545/rpc",
+        "http://127.0.0.1:3000",
+        "http://[::1]:8545",
+    ] {
+        assert!(is_allowed_endpoint_url(ok), "{ok:?} is allowed");
+    }
+    for bad in [
+        "",
+        "javascript:alert(1)",
+        "JavaScript:alert(1)",
+        "data:text/html,<script>1</script>",
+        "ftp://rpc.example",
+        "ws://rpc.example",
+        "wss://rpc.example",
+        "notaurl",
+        "rpc.example",
+        "https://",
+        "https:///path",
+        "https://.example",
+        "https://rpc.example:",
+        "https://rpc.example:abc",
+        "https://rpc example",
+        "https://[::1]x",
+        "https://rpc.example/\r\nX-Injected: 1",
+        "http://rpc.example",
+        "http://127.0.0.1.evil.com",
+        "http://localhost.evil.com",
+        "http://localhost:abc",
+        "http://localhost?x",
+    ] {
+        assert!(!is_allowed_endpoint_url(bad), "{bad:?} is refused");
+    }
 }
 
 #[test]
@@ -2174,6 +2314,124 @@ fn an_unknown_chain_yields_no_explorer_link() {
     let mut bare = custom_network(998);
     bare.explorer_url = String::new();
     assert_eq!(explorer_base_url(998, &[bare]), None);
+    // set-7: an explorer the URL rule refuses is no link either — a
+    // `javascript:` one used to become the `href` of "View on explorer".
+    for bad in [
+        "javascript:alert(1)",
+        "data:text/html,x",
+        "http://scan.example",
+    ] {
+        let mut evil = custom_network(997);
+        evil.explorer_url = bad.to_owned();
+        assert_eq!(explorer_base_url(997, &[evil]), None, "{bad:?}");
+    }
+}
+
+/// The catalog's explorer list is data from the network: the first entry the
+/// URL rule allows is the one saved.
+#[test]
+fn a_catalog_explorer_the_url_rule_refuses_is_skipped() {
+    let mut data = raw_chain();
+    data.explorers = vec![
+        "javascript:alert(1)".to_owned(),
+        String::new(),
+        "https://scan.example".to_owned(),
+    ];
+    let info = parse_chain_data(&data, NEW_CHAIN, DEFAULT_ETHEREUM_DATA_URL);
+    assert_eq!(info.explorer_url, "https://scan.example");
+    data.explorers = vec!["javascript:alert(1)".to_owned()];
+    let info = parse_chain_data(&data, NEW_CHAIN, DEFAULT_ETHEREUM_DATA_URL);
+    assert_eq!(info.explorer_url, "");
+}
+
+/// set-6: a per-network RPC or explorer the URL rule refuses is never probed
+/// and never written — the previous endpoint keeps serving — and the card
+/// says which field. A `data:` explorer "answers" a no-cors fetch, which is
+/// how a green pill once stood beside one.
+#[test]
+fn an_override_the_url_rule_refuses_is_neither_probed_nor_saved() {
+    for (field, bad) in [
+        (NetOverrideField::Rpc, "javascript:alert(1)"),
+        (NetOverrideField::Rpc, "ftp://rpc.example"),
+        (NetOverrideField::Rpc, "http://rpc.example"),
+        (NetOverrideField::Explorer, "javascript:alert(1)"),
+        (NetOverrideField::Explorer, "data:text/html,x"),
+    ] {
+        let mut sut = started();
+        sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
+        answer_card_probes(
+            &mut sut,
+            "https://ethereum-rpc.publicnode.com",
+            Some(1),
+            ETH_SCAN,
+        );
+        let ops = sut.dispatch(Event::OverrideFieldEdited {
+            chain_id: 1,
+            field,
+            value: bad.to_owned(),
+        });
+        assert!(
+            !ops.iter().any(|op| matches!(
+                op,
+                Op::ProbeRpc { url } | Op::ProbeReachable { url } if url == bad
+            )),
+            "{bad:?} is never fetched: {ops:?}"
+        );
+        let row = &sut.view().networks[0];
+        assert_eq!(
+            row.rpc_url_refused,
+            field == NetOverrideField::Rpc,
+            "{bad:?}"
+        );
+        assert_eq!(
+            row.explorer_url_refused,
+            field == NetOverrideField::Explorer,
+            "{bad:?}"
+        );
+        let refused_health = match field {
+            NetOverrideField::Rpc => row.rpc_health.clone(),
+            NetOverrideField::Explorer => row.explorer_health.clone(),
+        };
+        assert_eq!(refused_health, Some(NetProbeHealth::Error), "{bad:?}");
+
+        // Answer whatever the other field asked for, then leave the field.
+        for op in ops {
+            match op {
+                Op::ProbeRpc { url } => {
+                    sut.resolve(probe(&url, Some(1), 12.0));
+                }
+                Op::ProbeReachable { url } => {
+                    sut.resolve(Res::Reachable {
+                        url,
+                        ok: true,
+                        latency_ms: 20.0,
+                    });
+                }
+                _ => {}
+            }
+        }
+        let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 1 });
+        assert!(ops.is_empty(), "{bad:?}: nothing written: {ops:?}");
+        assert!(!sut.view().networks[0].rpc_save_deferred);
+    }
+}
+
+/// A blur while the RPC probe is still out does not hold a refused save:
+/// the URL rule answers it at once.
+#[test]
+fn a_refused_explorer_is_refused_even_before_the_rpc_probe_answers() {
+    let mut sut = started();
+    sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
+    sut.dispatch(Event::OverrideFieldEdited {
+        chain_id: 1,
+        field: NetOverrideField::Explorer,
+        value: "javascript:alert(1)".to_owned(),
+    });
+    let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 1 });
+    assert!(ops.is_empty());
+    let row = &sut.view().networks[0];
+    assert!(!row.rpc_save_deferred);
+    assert!(row.explorer_url_refused);
 }
 
 // ===========================================================================

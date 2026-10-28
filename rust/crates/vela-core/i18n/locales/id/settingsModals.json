@@ -91,7 +91,8 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS diperlukan",
-      "invalid": "Tidak valid"
+      "invalid": "Tidak valid",
+      "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
     },
     "backup": {
       "title": "Salin catatan dompet ini ke Ethereum",

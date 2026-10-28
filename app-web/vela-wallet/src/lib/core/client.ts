@@ -47,6 +47,7 @@ import init, {
 	dappOriginLock,
 	dpermSettleOnClose,
 	DisplayCurrencyCore,
+	currencyFractionDigits,
 	fiatSymbol,
 	ExtCacheCore,
 	FeePolicyCore,
@@ -166,6 +167,10 @@ export { maskedAmount };
 // `language` is the page's locale; a currency with no glyph of its own comes
 // back as its code. Synchronous, callable once `loadCore()` has resolved.
 export { fiatSymbol };
+// How many fraction digits a fiat figure in a currency carries
+// (`l10n::currency_fraction_digits`): none for the yen, the won and the other
+// zero-decimal currencies. Synchronous, callable once `loadCore()` has resolved.
+export { currencyFractionDigits };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Spec 106: connecting the agent with clientmcp.dev — the exchange's every
 // decision (`vela_core::clientmcp_link`), JSON in and out. Callable once

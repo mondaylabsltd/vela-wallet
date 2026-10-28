@@ -11,7 +11,13 @@
 
 import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { CHAINS, chainIdToApiNetwork, chainMeta } from './chains';
-import { loadCustomNetworks, type CustomNetworkRecord } from './records';
+import {
+	loadCustomNetworks,
+	loadNetworkConfigs,
+	type CustomNetworkRecord,
+	type NetworkConfigRecord
+} from './records';
+import { allowedOrNull } from './url-policy';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
@@ -56,6 +62,9 @@ const BUILTIN_IDS = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetworkRecord[] = [];
+/** The per-network overrides Settings writes (`vela.networkConfig`) — the
+ *  explorer links read the one a person set, built-in network or not. */
+let _networkConfigCache: NetworkConfigRecord[] = [];
 let _allNetworksSnapshot: Network[] = DEFAULT_NETWORKS;
 
 let _spaceSnapshot: Network[] = [];
@@ -91,7 +100,10 @@ export function subscribeNetworks(listener: () => void): () => void {
  * executor does — restoring the invalidation 024 had to leave out).
  */
 export async function refreshCustomNetworks(): Promise<void> {
-	_customNetworkCache = await loadCustomNetworks();
+	[_customNetworkCache, _networkConfigCache] = await Promise.all([
+		loadCustomNetworks(),
+		loadNetworkConfigs()
+	]);
 	rebuildNetworkSnapshot();
 	for (const l of _networkListeners) l();
 }
@@ -186,11 +198,20 @@ export function networkForChainId(chainId: number): Network | null {
 /** Etherscan as the display fallback when a chain has no configured explorer. */
 const FALLBACK_EXPLORER = 'https://etherscan.io';
 
-/** Explorer base (trailing slash stripped), or null for an unknown chain —
- *  security surfaces show NO link rather than a misleading one. */
+/**
+ * Explorer base (trailing slash stripped), or null for an unknown chain —
+ * security surfaces show NO link rather than a misleading one.
+ *
+ * The explorer a person set in Settings comes first, for a built-in network
+ * too: it was saved and then never used, every link still going to the
+ * shipped explorer. Either one only when it is an address the wallet may
+ * link to ({@link allowedOrNull}) — a `javascript:` explorer stored on a
+ * custom network became the `href` of "View on explorer".
+ */
 export function explorerBaseURL(chainId: number): string | null {
-	const url = networkForChainId(chainId)?.explorerURL;
-	return url ? url.replace(/\/$/, '') : null;
+	const configured = _networkConfigCache.find((c) => c.chainId === chainId)?.explorerURL;
+	const url = allowedOrNull(configured) ?? allowedOrNull(networkForChainId(chainId)?.explorerURL);
+	return url === null ? null : url.replace(/\/$/, '');
 }
 
 export function explorerTxURL(chainId: number, txHash: string): string {

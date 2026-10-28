@@ -1,7 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FORCE_PARAM, SKIP_PARAM, STORAGE_KEY, markIntroSeen, shouldShowIntro } from './gate';
+import {
+	ACCOUNTS_KEY,
+	FORCE_PARAM,
+	SKIP_PARAM,
+	STAY_PARAM,
+	STORAGE_KEY,
+	markIntroSeen,
+	shouldShowIntro,
+	welcomeBelongsInWallet
+} from './gate';
 
 /** A `Window` stand-in with just the two surfaces the gate touches. */
 function fakeWindow(search = '', stored: string | null = null) {
@@ -104,5 +113,32 @@ describe('the pre-paint copy in app.html', () => {
 	it('only ever sets the attribute the CSS hides on', () => {
 		const css = readFileSync(join(import.meta.dirname, '..', '..', 'app.css'), 'utf8');
 		expect(css).toContain("html[data-intro='pending'] [data-intro-page]");
+	});
+});
+
+/** ob-6: a signed-in person who lands on Welcome belongs in the wallet. */
+describe('welcomeBelongsInWallet', () => {
+	const win = (search: string, accounts: string | null) =>
+		({
+			location: { search },
+			localStorage: { getItem: (key: string) => (key === ACCOUNTS_KEY ? accounts : null) }
+		}) as unknown as Window;
+
+	it('sends a signed-in visit to the wallet', () => {
+		expect(welcomeBelongsInWallet(win('', '[{"address":"0x1"}]'))).toBe(true);
+	});
+	it('keeps everybody else on the landing page', () => {
+		expect(welcomeBelongsInWallet(win('', null))).toBe(false);
+		expect(welcomeBelongsInWallet(win('', '[]'))).toBe(false);
+		expect(welcomeBelongsInWallet(win('', '{oops'))).toBe(false);
+	});
+	it('stays when asked to — adding a wallet, a session holding none, or the intro by name', () => {
+		expect(welcomeBelongsInWallet(win(`?${STAY_PARAM}`, '[{}]'))).toBe(false);
+		expect(welcomeBelongsInWallet(win(`?${FORCE_PARAM}`, '[{}]'))).toBe(false);
+	});
+	it('app.html hides Welcome before paint on the same rule', () => {
+		const html = readFileSync(join(import.meta.dirname, '..', '..', 'app.html'), 'utf8');
+		expect(html).toContain(`localStorage.getItem('${ACCOUNTS_KEY}')`);
+		expect(html).toContain(`introParams.has('${STAY_PARAM}')`);
 	});
 });

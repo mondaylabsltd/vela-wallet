@@ -20,6 +20,7 @@
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import ContactsDesktop from '$lib/contacts/ContactsDesktop.svelte';
@@ -71,7 +72,11 @@
 	let { data }: PageProps = $props();
 	const m = $derived(data.contactsMessages);
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 
@@ -639,8 +644,42 @@
 			save: m.save,
 			cancel: m.cancel,
 			invalidAddress: m.invalidAddress,
-			invalidChecksum: m.invalidChecksum
+			invalidChecksum: m.invalidChecksum,
+			existingName: savedNameAt,
+			duplicateAddress: m.duplicateAddress,
+			updateExisting: m.updateExisting
 		};
+	}
+
+	/** set-3: the name a saved contact at `address` goes by, or null. */
+	function savedNameAt(address: string): string | null {
+		const wanted = address.toLowerCase();
+		const contact = view?.contacts.find((row) => row.source === 'manual' && row.address === wanted);
+		if (contact === undefined) return null;
+		return contact.name ?? contact.resolved_name ?? address;
+	}
+
+	/**
+	 * set-17: a contact's (or group's) screen is a step in the browser's
+	 * history, so Back returns to the list instead of leaving Contacts. The
+	 * same `pushState`-without-a-URL the wallet's flows use.
+	 */
+	let screenMarked = false;
+	$effect(() => {
+		const away = ui.screen !== 'list';
+		if (away && !screenMarked) {
+			history.pushState({ velaContacts: ui.screen }, '');
+			screenMarked = true;
+		} else if (!away && screenMarked) {
+			screenMarked = false;
+			history.back();
+		}
+	});
+
+	function onPopState() {
+		if (!screenMarked) return;
+		screenMarked = false;
+		ui = { ...ui, screen: 'list', selectedAddress: undefined, selectedGroupId: undefined };
 	}
 
 	const groupCopy = $derived<GroupFormCopy>({
@@ -652,10 +691,18 @@
 	});
 </script>
 
+<svelte:window onpopstate={onPopState} />
+
 <svelte:head>
 	<title>{m.title}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
+
+{#if view?.save_failed}
+	<!-- set-22: the storage refused the change; the book shows it, but it is
+	     not kept on this device — said, where it used to be silent. -->
+	<p class="save-failed" role="alert">{m.saveFailed}</p>
+{/if}
 
 {#if signedIn && model !== null && desktopModel !== null && view !== null}
 	{#if wide.current}
@@ -821,6 +868,22 @@
 {/if}
 
 <style>
+	.save-failed {
+		position: fixed;
+		inset-inline: var(--space-xl);
+		inset-block-end: var(--space-4xl);
+		z-index: 10;
+		margin: 0 auto;
+		max-width: 28rem;
+		padding: var(--space-md) var(--space-lg);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-raised);
+		box-shadow: var(--shadow-lg);
+		color: var(--color-error-base);
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+	}
+
 	.page {
 		height: 100dvh;
 		display: flex;

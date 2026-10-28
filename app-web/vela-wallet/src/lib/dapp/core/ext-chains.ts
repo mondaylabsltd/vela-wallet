@@ -13,7 +13,12 @@
  * Nothing is decided here; the pool's ban and latency state stays where it is
  * (core state, on the wallet's side of the boundary).
  */
-import { DEFAULT_NETWORKS, spaceNetworksSync, nativeSymbol } from '$lib/services/networks';
+import {
+	DEFAULT_NETWORKS,
+	explorerBaseURL,
+	spaceNetworksSync,
+	nativeSymbol
+} from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
 import { CHAINS_KEY } from '../keys';
 
@@ -91,7 +96,9 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 			bundler: builtinChainIds.has(network.chainId)
 				? `${getBuiltinBundlerUrl()}/${network.chainId}`
 				: network.bundlerURL,
-			explorer: network.explorerURL
+			// The explorer the wallet links to: the person's, else the network's,
+			// and never one the URL rule refuses — a page is handed this.
+			explorer: explorerBaseURL(network.chainId) ?? ''
 		};
 	}
 	return { version: 1, chains, updatedAtMs: nowMs };

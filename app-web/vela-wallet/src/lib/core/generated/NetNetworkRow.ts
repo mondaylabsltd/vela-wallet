@@ -37,4 +37,15 @@ rpc_chain_mismatch: NetChainMismatch | null,
  * been written yet. The card's `rpc_health` is `Checking` for the same
  * reason, so a shell that renders nothing extra is still honest.
  */
-rpc_save_deferred: boolean, };
+rpc_save_deferred: boolean, 
+/**
+ * The RPC in the open card is not an address the wallet may use
+ * ([`is_allowed_endpoint_url`]): it is not probed, and a blur writes
+ * nothing — the previous endpoint keeps serving. The shell says why.
+ */
+rpc_url_refused: boolean, 
+/**
+ * The same, for the explorer field: a `javascript:` explorer would have
+ * become the `href` of every "View on explorer" link.
+ */
+explorer_url_refused: boolean, };

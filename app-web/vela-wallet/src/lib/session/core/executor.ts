@@ -22,8 +22,10 @@ export type SessionEffect = { id: number; operation: SessionOperation };
 export async function executeSession(effect: SessionEffect): Promise<SessionShellResult> {
 	const operation = effect.operation;
 	switch (operation.type) {
+		// The restore reads strictly (settings set-21): a list that cannot be
+		// read throws, and answers `accounts_unavailable` — never "no accounts".
 		case 'load_accounts':
-			return { type: 'accounts_loaded', accounts: Storage.loadAccounts() };
+			return { type: 'accounts_loaded', accounts: Storage.loadAccountsForRestore() };
 
 		case 'load_active_index':
 			return { type: 'active_index_loaded', index: Storage.loadActiveIndex() };

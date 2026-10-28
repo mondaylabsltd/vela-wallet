@@ -102,6 +102,10 @@ const FLOW_FORM_KEYS = [
 	'onboarding.create.nameTitle',
 	'onboarding.create.accountNamePlaceholder',
 	'onboarding.create.nameTooLong',
+	// ob-12: the name's budget, counted from the first letter, and a name
+	// another wallet on this device already has.
+	'onboarding.create.nameCounter',
+	'onboarding.create.nameDuplicate',
 	'onboarding.create.ack0',
 	'onboarding.create.ack1',
 	'onboarding.create.ack2',
@@ -189,6 +193,12 @@ export const FLOW_PLURAL_KEYS = [
 /** Every prompt the two machines can raise (spec 019). */
 const FLOW_PROMPT_KEYS = [
 	'onboarding.create.alertErrorTitle',
+	// ob-4: a new key kept, its confirmation still to do.
+	'onboarding.create.keyKeptTitle',
+	'onboarding.create.keyKeptBodyNetwork',
+	'onboarding.create.keyKeptBodyIndex',
+	// A notice is acknowledged, not backed out of (ob-4, ob-15).
+	'common.gotIt',
 	'onboarding.create.alertNotSupportedTitle',
 	'onboarding.create.alertNotSupportedBody',
 	'onboarding.common.notDiscoverableTitle',
@@ -222,6 +232,8 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.switchDeviceBtn',
 	'onboarding.login.statusCancelledTitle',
 	'onboarding.login.statusCancelledBody',
+	// ob-13: said under it — a device with no Vela passkey looks the same.
+	'onboarding.login.noPasskeyHint',
 	'onboarding.settings.warningText',
 	'onboarding.storage.unreadableTitle',
 	'onboarding.storage.unreadableBody',

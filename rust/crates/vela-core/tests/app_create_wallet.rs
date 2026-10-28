@@ -749,8 +749,9 @@ fn the_first_heading_does_not_repeat_the_screens_title() {
 }
 
 /// Mid-registration of the first key nothing can be added; the heading
-/// still names what the list is for, and the list is not pinned open over
-/// the ceremony.
+/// still names what the list is for. The three places stay drawn (disabled by
+/// `busy`) over the ceremony, with the prompt cancellable — they used to
+/// collapse under a spinner with no way out (ob-7).
 #[test]
 fn the_heading_waits_out_the_first_ceremony() {
     let mut sut = filled("Ann");
@@ -764,7 +765,60 @@ fn the_heading_waits_out_the_first_ceremony() {
     let view = sut.view();
     assert!(!view.can_add_key);
     assert_eq!(view.add_heading_key, ADD_HEADING_FIRST);
-    assert!(!view.methods_pinned);
+    assert!(view.methods_pinned);
+    assert!(view.busy);
+    assert!(view.can_cancel);
+}
+
+/// ob-7: closing the waiting prompt lands on the key list with the name and
+/// agreements intact, and the ceremony's late answer is dropped.
+#[test]
+fn a_waiting_prompt_can_be_cancelled_and_its_late_answer_is_dropped() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Platform,
+    });
+    sut.dispatch(Event::CancelPending);
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::AddKeys);
+    assert!(!view.busy && !view.can_cancel && view.can_add_key);
+    assert_eq!(view.name, "Ann");
+    assert!(view.acks.iter().all(|ack| *ack));
+    assert!(view.keys.is_empty());
+}
+
+/// ob-7: Back while the prompt is up closes it and returns to the form —
+/// name and agreements kept — instead of leaving the flow.
+#[test]
+fn back_over_a_waiting_prompt_returns_to_the_form_with_everything_kept() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Platform,
+    });
+    assert!(sut.view().can_go_back);
+    sut.dispatch(Event::GoBack);
+    let view = sut.view();
+    assert_eq!(view.stage, CreateStage::Form);
+    assert_eq!(view.name, "Ann");
+    assert!(view.acks.iter().all(|ack| *ack));
+    assert!(view.can_submit);
+}
+
+/// ob-12: the name's size and the budget ride on the view.
+#[test]
+fn the_name_budget_is_shown_before_it_is_hit() {
+    let sut = filled("Ann");
+    let view = sut.view();
+    assert_eq!(view.name_bytes, 3);
+    assert_eq!(view.name_limit, 27);
 }
 
 #[test]
@@ -1211,6 +1265,43 @@ fn a_failed_multi_publish_retries_every_member() {
 // ---------------------------------------------------------------------------
 // Interleaved confirmation (create → sign, per key)
 // ---------------------------------------------------------------------------
+
+/// ob-4: the passkey index unreachable while a new key confirms — the key is
+/// kept, and the sheet says so (and whether it was this device's connection)
+/// instead of the raw fetch error under "Error".
+#[test]
+fn an_unreachable_index_at_confirmation_keeps_the_key_and_says_so() {
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Backup".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration: support::second_registration(CRED2),
+        now_iso: NOW.to_owned(),
+    });
+    let next = sut.resolve(ShellResult::IndexFailed {
+        message: "Challenge failed: Failed to fetch".to_owned(),
+        network: true,
+    });
+    let [ShellOperation::Prompt { kind, .. }] = next.as_slice() else {
+        panic!("expected one prompt, got {next:?}");
+    };
+    assert!(
+        matches!(
+            kind,
+            PromptKind::CreateFailed {
+                key_kept: true,
+                local: true,
+                ..
+            }
+        ),
+        "{kind:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.keys.len(), 2);
+    assert!(!view.keys[1].confirmed, "kept, waiting for its Confirm");
+}
 
 /// A cancelled membership get leaves the key DRAFTED but unconfirmed: its row
 /// offers a retry, and the set cannot be frozen until every key confirmed.

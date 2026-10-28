@@ -72,7 +72,7 @@
 			{#if search !== undefined}
 				<SearchHeader
 					{search}
-					clearLabel={model.backLabel}
+					clearLabel={model.clearLabel ?? model.backLabel}
 					onquery={(value) => onuievent?.({ kind: 'query', value })}
 				/>
 			{/if}

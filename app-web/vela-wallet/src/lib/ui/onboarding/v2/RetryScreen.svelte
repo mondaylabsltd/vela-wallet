@@ -7,9 +7,18 @@
 	 * attempt, so retry resumes at the publish — which is why this screen offers
 	 * a retry rather than starting over, and why "start over" is the quiet
 	 * secondary rather than the obvious escape.
+	 *
+	 * ob-2: until the publish lands NOTHING is saved — the account is written
+	 * only after it — so the screen says "not saved yet", never "created". And
+	 * it does not wait for a tap: the publish replays the proofs the keys
+	 * already made (no prompt), so it is retried on its own while the page is
+	 * open — when the connection comes back, and on a widening timer.
 	 */
+	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import TechDetails from '../TechDetails.svelte';
+
+	const RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 40_000, 60_000];
 
 	interface Props {
 		/** The publish's own error, forwarded verbatim — it goes into the bug
@@ -20,9 +29,35 @@
 		strings: (key: string) => string;
 		onRetry: () => void;
 		onStartOver: () => void;
+		/** How many times this screen has shown already, for the wait below. */
+		round?: number;
+		/** The widening wait between retries on their own (the last repeats). */
+		retryDelaysMs?: number[];
 	}
 
-	let { detail, busy, strings, onRetry, onStartOver }: Props = $props();
+	let {
+		detail,
+		busy,
+		strings,
+		onRetry,
+		onStartOver,
+		round = 0,
+		retryDelaysMs = RETRY_DELAYS_MS
+	}: Props = $props();
+
+	// One retry per showing: a failed retry brings this screen back with the
+	// next `round`, and so the next, longer wait.
+	onMount(() => {
+		const retry = () => {
+			if (!busy) onRetry();
+		};
+		const timer = setTimeout(retry, retryDelaysMs[Math.min(round, retryDelaysMs.length - 1)]);
+		window.addEventListener('online', retry);
+		return () => {
+			clearTimeout(timer);
+			window.removeEventListener('online', retry);
+		};
+	});
 </script>
 
 <section class="screen">

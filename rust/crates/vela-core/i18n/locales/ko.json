@@ -332,6 +332,8 @@
     "wizardTestnet": "테스트넷 — 실제 가치 없음",
     "wizardMainnet": "메인넷 — 실제 가치 있음",
     "headingMainnet": "메인넷 공간",
-    "headingTestnet": "테스트넷 공간"
+    "headingTestnet": "테스트넷 공간",
+    "addedTestnet": "{{name}}이(가) 테스트넷 공간에 추가되었습니다.",
+    "addedMainnet": "{{name}}이(가) 메인넷 공간에 추가되었습니다."
   }
 }

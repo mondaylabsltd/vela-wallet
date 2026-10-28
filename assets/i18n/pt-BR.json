@@ -332,7 +332,9 @@
   "wizardTestnet": "Testnet — sem valor real",
   "wizardMainnet": "Mainnet — valor real",
   "headingMainnet": "Espaço mainnet",
-  "headingTestnet": "Espaço testnet"
+  "headingTestnet": "Espaço testnet",
+  "addedTestnet": "{{name}} foi adicionada ao espaço de testnet.",
+  "addedMainnet": "{{name}} foi adicionada ao espaço de mainnet."
  },
  "home": {
   "totalBalance": "Saldo total",
@@ -1204,9 +1206,9 @@
    "successMessage_many": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
    "successMessage_other": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
    "successTitle": "Carteira criada",
-   "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
-   "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
-   "syncFailedTitle": "Falha na sincronização",
+   "syncFailedHint": "Mantenha esta página aberta: a Vela tenta de novo sozinha quando a conexão voltar, ou toque em Tentar novamente. Sair ou recarregar agora descarta esta carteira.",
+   "syncFailedMessage": "Suas passkeys foram criadas, mas a carteira não pôde ser registrada no índice de passkeys da Vela, então ainda não foi salva neste dispositivo.",
+   "syncFailedTitle": "Ainda não foi salva",
    "taskDeriveAddress": "Derivando o endereço da conta",
    "taskVerifyKey": "Verificando a chave pública da passkey",
    "taskWriteIndex": "Gravando o índice de chaves",
@@ -1215,7 +1217,12 @@
    "touchFingerprintBody": "A {{product}} está piscando. Apoie o dedo no sensor dela para confirmar que é você.",
    "touchSelectBody": "Há várias chaves de segurança conectadas e todas estão piscando. Toque naquela que você quer usar.",
    "touchTitle": "Toque na sua chave de segurança",
-   "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto."
+   "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Você já tem uma carteira chamada “{{name}}” neste dispositivo.",
+   "keyKeptTitle": "Chave mantida, ainda não confirmada",
+   "keyKeptBodyNetwork": "Este dispositivo está offline, então sua nova passkey não pôde ser confirmada. Ela continua na lista: toque em Confirmar ao lado dela quando voltar a ficar online.",
+   "keyKeptBodyIndex": "O índice de passkeys da Vela não respondeu, então sua nova passkey não pôde ser confirmada. Ela continua na lista: daqui a pouco, toque em Confirmar ao lado dela."
   },
   "login": {
    "alertNotSupportedTitle": "Não compatível",
@@ -1248,7 +1255,8 @@
    "switchDeviceBtn": "Entrar em outro aparelho",
    "pickTitle": "Qual carteira?",
    "pickBody": "A {{product}} guarda mais de uma carteira Vela. Escolha em qual você quer entrar.",
-   "pickUnnamed": "Carteira sem nome"
+   "pickUnnamed": "Carteira sem nome",
+   "noPasskeyHint": "Se este dispositivo não tem uma passkey da Vela, tente pelo celular ou por uma chave de segurança, ou crie uma carteira."
   },
   "storage": {
    "unreadableTitle": "Os dados da carteira neste navegador não podem ser lidos",
@@ -2135,7 +2143,8 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS obrigatório",
-   "invalid": "Inválido"
+   "invalid": "Inválido",
+   "urlRefused": "Não salvo — use um endereço https:// (http:// simples só para este computador). O endereço anterior continua em uso."
   },
   "backup": {
    "title": "Copiar o registro desta carteira para a Ethereum",
@@ -2236,7 +2245,20 @@
   "viewAllActivity": "Ver toda a atividade",
   "deleteContact": "Excluir contato",
   "edit": "Editar",
-  "invalidChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo."
+  "invalidChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo.",
+  "duplicateAddress": "Já está salvo como “{{name}}”. Salvar atualiza esse contato.",
+  "updateExisting": "Atualizar contato",
+  "groupPickEmpty": "Ainda não há grupos. Crie um grupo primeiro e depois mova contatos para ele.",
+  "saveFailed": "Não foi possível salvar neste dispositivo. Sua alteração aparece aqui, mas some quando você fechar a página.",
+  "memberCount_one": "{{count}} membro",
+  "memberCount_other": "{{count}} membros",
+  "memberCount_many": "{{count}} membros",
+  "batchSendHintCount_one": "Envie a {{count}} membro do grupo; o valor pode ser definido individualmente.",
+  "batchSendHintCount_other": "Envie aos {{count}} membros do grupo; os valores podem ser definidos individualmente.",
+  "batchSendHintCount_many": "Envie aos {{count}} membros do grupo; os valores podem ser definidos individualmente.",
+  "batchSendHintTitledCount_one": "Enviar ao grupo: envie a {{count}} membro; valor individual.",
+  "batchSendHintTitledCount_other": "Enviar ao grupo: envie aos {{count}} membros; valores individuais.",
+  "batchSendHintTitledCount_many": "Enviar ao grupo: envie aos {{count}} membros; valores individuais."
  },
  "explore": {
   "title": "Explorar",

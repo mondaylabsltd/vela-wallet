@@ -75,6 +75,16 @@
     "viewAllActivity": "Gesamte Aktivität ansehen",
     "deleteContact": "Kontakt löschen",
     "edit": "Bearbeiten",
-    "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut."
+    "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut.",
+    "duplicateAddress": "Bereits gespeichert als „{{name}}“. Beim Speichern wird dieser Kontakt aktualisiert.",
+    "updateExisting": "Kontakt aktualisieren",
+    "groupPickEmpty": "Noch keine Gruppen. Erstellen Sie zuerst eine Gruppe und verschieben Sie dann Kontakte hinein.",
+    "saveFailed": "Speichern auf diesem Gerät nicht möglich. Ihre Änderung wird hier angezeigt, ist aber weg, sobald Sie die Seite schließen.",
+    "memberCount_one": "{{count}} Mitglied",
+    "memberCount_other": "{{count}} Mitglieder",
+    "batchSendHintCount_one": "An {{count}} Mitglied senden; der Betrag lässt sich einzeln festlegen.",
+    "batchSendHintCount_other": "An alle {{count}} Mitglieder senden; Beträge lassen sich einzeln festlegen.",
+    "batchSendHintTitledCount_one": "An Gruppe senden: an {{count}} Mitglied; Betrag einzeln festlegbar.",
+    "batchSendHintTitledCount_other": "An Gruppe senden: an alle {{count}} Mitglieder; Beträge einzeln festlegbar."
   }
 }

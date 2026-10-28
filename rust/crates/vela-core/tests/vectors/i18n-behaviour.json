@@ -2117,6 +2117,50 @@
    }
   },
   {
+   "name": "fallback/en-misses/contacts.batchSendHintCount_few",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount_few"
+   },
+   "expect": {
+    "value": "contacts.batchSendHintCount_few"
+   }
+  },
+  {
+   "name": "fallback/en-misses/contacts.batchSendHintCount_many",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount_many"
+   },
+   "expect": {
+    "value": "contacts.batchSendHintCount_many"
+   }
+  },
+  {
+   "name": "fallback/en-misses/contacts.batchSendHintTitledCount_few",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount_few"
+   },
+   "expect": {
+    "value": "contacts.batchSendHintTitledCount_few"
+   }
+  },
+  {
+   "name": "fallback/en-misses/contacts.batchSendHintTitledCount_many",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount_many"
+   },
+   "expect": {
+    "value": "contacts.batchSendHintTitledCount_many"
+   }
+  },
+  {
    "name": "fallback/en-misses/contacts.groupMembers_few",
    "fn": "i18n_t",
    "input": {
@@ -2136,50 +2180,6 @@
    },
    "expect": {
     "value": "contacts.groupMembers_many"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.groupMembers_one",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.groupMembers_one"
-   },
-   "expect": {
-    "value": "contacts.groupMembers_one"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.groupMembers_other",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.groupMembers_other"
-   },
-   "expect": {
-    "value": "contacts.groupMembers_other"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.sends_few",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.sends_few"
-   },
-   "expect": {
-    "value": "contacts.sends_few"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.sends_many",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.sends_many"
-   },
-   "expect": {
-    "value": "contacts.sends_many"
    }
   },
   {

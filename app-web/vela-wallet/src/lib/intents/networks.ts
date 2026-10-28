@@ -94,6 +94,22 @@ export async function setNetworkEndpoint(
 		});
 	}
 	networkAdmin.dispatch({ type: 'override_blurred', chain_id: chainId });
+	// The core's URL rule (set-6/7): an address that is not https (or http to
+	// this computer) is never written. Same answer as a refusal below.
+	const refusedRow = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
+	if (refusedRow?.rpc_url_refused || refusedRow?.explorer_url_refused) {
+		if (before !== undefined)
+			networkAdmin.dispatch({
+				type: 'override_field_edited',
+				chain_id: chainId,
+				field,
+				value: before
+			});
+		return {
+			code: 'refused',
+			detail: 'only an https address (or http to this computer) can be used; nothing was saved'
+		};
+	}
 	if (field !== 'rpc') return null;
 	const deadline = Date.now() + GATE_MS;
 	for (;;) {

@@ -896,10 +896,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   places, too large, not one figure, a sheet row's checksum) + 1
 //   `contacts.invalidChecksum` + 1 `home.multisig.send.invalidChecksum`.
 //   2046 + 9 = 2055 leaves, 116 branches.
-// 2205 (all four of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 = 2088
-//   leaves, 117 branches.
-if (PATHS.length !== 2205) fail(`expected 2205 paths (2088 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2088) fail(`expected 2088 leaf paths, got ${leafSet.size}`);
+// 2187 (onboarding + settings fixes from the exploratory test, 2026-10-28):
+//   onboarding.create.{nameCounter, nameDuplicate, keyKeptTitle,
+//   keyKeptBodyNetwork, keyKeptBodyIndex}, onboarding.login.noPasskeyHint,
+//   contacts.{duplicateAddress, updateExisting, groupPickEmpty, saveFailed},
+//   three plural families contacts.{memberCount, batchSendHintCount,
+//   batchSendHintTitledCount} (4 forms each = 12), settingsModals.health.urlRefused,
+//   networkSpace.{addedTestnet, addedMainnet}. 2046 + 25 = 2071 leaves, 116 branches.
+// 2230 (all five of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 =
+//   2113 leaves, 117 branches.
+if (PATHS.length !== 2230) fail(`expected 2230 paths (2113 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2113) fail(`expected 2113 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

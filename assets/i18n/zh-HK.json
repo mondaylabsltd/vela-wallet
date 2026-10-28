@@ -332,7 +332,9 @@
   "wizardTestnet": "測試網 — 無真實價值",
   "wizardMainnet": "主網 — 有真實價值",
   "headingMainnet": "主網空間",
-  "headingTestnet": "測試網空間"
+  "headingTestnet": "測試網空間",
+  "addedTestnet": "已將 {{name}} 加入測試網空間。",
+  "addedMainnet": "已將 {{name}} 加入主網空間。"
  },
  "home": {
   "totalBalance": "總餘額",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。",
    "successMessage_other": "一條密鑰就可以自己登入。合約喺第一筆交易先部署。",
    "successTitle": "錢包整好咗",
-   "syncFailedHint": "請檢查你的網絡，或於下方設定自訂端點。",
-   "syncFailedMessage": "錢包已建立，但你的公鑰未能同步至伺服器。在此問題解決前，你將無法在其他裝置上登入。",
-   "syncFailedTitle": "同步失敗",
+   "syncFailedHint": "請保持呢個頁面開住：網絡恢復後 Vela 會自動重試，亦可以撳「重新上載」。而家離開或者重新載入，呢個錢包就會被捨棄。",
+   "syncFailedMessage": "通行密鑰已經建立，但錢包未能登記到 Vela 嘅通行密鑰索引，所以仲未儲存喺呢部裝置。",
+   "syncFailedTitle": "仲未儲存",
    "taskDeriveAddress": "推導緊戶口地址",
    "taskVerifyKey": "驗緊通行密鑰嘅公鑰",
    "taskWriteIndex": "寫緊密鑰索引",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} 正喺度閃緊。將手指放喺佢嘅感應器上面，確認係你本人。",
    "touchSelectBody": "插咗幾個安全金鑰，全部都喺度閃緊。掂一掂你想用嗰個。",
    "touchTitle": "掂一掂你嘅安全金鑰",
-   "verifyHint": "你的通行密鑰已驗證，密鑰已同步——一切就緒。"
+   "verifyHint": "你的通行密鑰已驗證，密鑰已同步——一切就緒。",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "呢部裝置已經有一個叫「{{name}}」嘅錢包。",
+   "keyKeptTitle": "密鑰已保留，仲未確認",
+   "keyKeptBodyNetwork": "呢部裝置離線咗，新嘅通行密鑰未能確認。佢仲喺列表度：恢復上網之後，撳旁邊嘅「確認」就得。",
+   "keyKeptBodyIndex": "Vela 嘅通行密鑰索引冇回應，新嘅通行密鑰未能確認。佢仲喺列表度：等陣撳旁邊嘅「確認」就得。"
   },
   "login": {
    "alertNotSupportedTitle": "不支援",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "換部機登入",
    "pickTitle": "登入邊個錢包？",
    "pickBody": "{{product}} 上面存咗唔止一個 Vela 錢包，揀返你要登入嗰個。",
-   "pickUnnamed": "未命名錢包"
+   "pickUnnamed": "未命名錢包",
+   "noPasskeyHint": "如果呢部裝置冇 Vela 嘅通行密鑰，可以改用手機或者安全密鑰，或者建立一個錢包。"
   },
   "storage": {
    "unreadableTitle": "呢個瀏覽器入面嘅錢包資料讀唔到",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "離線",
    "httpsRequired": "需要 HTTPS",
-   "invalid": "無效"
+   "invalid": "無效",
+   "urlRefused": "未儲存——請用 https:// 地址（只有本機可以用普通 http://）。仍然使用之前嘅地址。"
   },
   "backup": {
    "title": "將錢包紀錄複製去以太坊",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "查看全部往來",
   "deleteContact": "刪除聯絡人",
   "edit": "編輯",
-  "invalidChecksum": "呢個地址嘅大小寫同校驗和唔對得上——可能打錯字，或者複製嘅地址俾人改過。請核對後重新複製。"
+  "invalidChecksum": "呢個地址嘅大小寫同校驗和唔對得上——可能打錯字，或者複製嘅地址俾人改過。請核對後重新複製。",
+  "duplicateAddress": "已經儲存做「{{name}}」。儲存會更新呢個聯絡人。",
+  "updateExisting": "更新聯絡人",
+  "groupPickEmpty": "仲未有群組。請先建立群組，再將聯絡人移入。",
+  "saveFailed": "無法儲存到呢部裝置。你嘅修改暫時喺度顯示，但閂咗頁面之後就會消失。",
+  "memberCount_other": "{{count}} 位成員",
+  "batchSendHintCount_other": "向本群組 {{count}} 人轉賬，金額可分別設定。",
+  "batchSendHintTitledCount_other": "群發轉賬：向本群組 {{count}} 人轉賬，金額可分別設定。",
+  "memberCount_one": "{{count}} 位成員",
+  "batchSendHintCount_one": "向本群組 {{count}} 人轉賬，金額可分別設定。",
+  "batchSendHintTitledCount_one": "群發轉賬：向本群組 {{count}} 人轉賬，金額可分別設定。"
  },
  "explore": {
   "title": "探索",

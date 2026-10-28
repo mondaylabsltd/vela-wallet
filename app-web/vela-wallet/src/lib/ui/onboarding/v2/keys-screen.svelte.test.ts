@@ -304,3 +304,42 @@ describe('the words are the core’s key, never this screen’s choice', () => {
 		expect(() => stringsIn(zh)('onboarding.create.addKeyBtn')).toThrow();
 	});
 });
+
+/**
+ * ob-7: while the first key's passkey prompt is up the three places stay
+ * drawn (waiting, not gone), and the way out is said — a Cancel the core
+ * hears as `cancel_pending`.
+ */
+describe('a passkey prompt waiting', () => {
+	it('keeps the places drawn but disabled, and offers Cancel', () => {
+		let cancelled = 0;
+		const screen = render(KeysScreen, {
+			props: {
+				keys: [],
+				canAddKey: false,
+				canFinish: false,
+				needsSecondKey: false,
+				busy: true,
+				maxKeys: 7,
+				addMethods: ['platform', 'hybrid', 'security_key'],
+				addHeadingKey: 'onboarding.create.keyPlaceHeading',
+				keyCountShown: false,
+				methodsPinned: true,
+				canCancel: true,
+				onCancel: () => (cancelled += 1),
+				strings: stringsIn(en),
+				onAddKey: () => {},
+				onConfirmKey: () => {},
+				onRemoveKey: () => {},
+				onFinish: () => {}
+			}
+		});
+		const methods = [...screen.container.querySelectorAll<HTMLButtonElement>('button.method')];
+		expect(methods).toHaveLength(3);
+		expect(methods.every((button) => button.disabled)).toBe(true);
+		const cancel = screen.container.querySelector<HTMLButtonElement>('button.cancel');
+		expect(cancel?.textContent?.trim()).toBe('Cancel');
+		cancel?.click();
+		expect(cancelled).toBe(1);
+	});
+});

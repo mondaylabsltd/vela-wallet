@@ -91,7 +91,8 @@
     "health": {
       "offline": "Sin conexión",
       "httpsRequired": "Se requiere HTTPS",
-      "invalid": "Inválido"
+      "invalid": "Inválido",
+      "urlRefused": "No se guardó: usa una dirección https:// (http:// solo para esta computadora). Se sigue usando la dirección anterior."
     },
     "backup": {
       "title": "Copiar el registro de esta billetera a Ethereum",

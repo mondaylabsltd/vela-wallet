@@ -92,6 +92,41 @@ export function loadAccounts(): Account[] {
 }
 
 /**
+ * The session's restore read (settings set-21): `loadAccounts`, except that a
+ * list which is THERE and cannot be read throws instead of reading as empty —
+ * damaged JSON, something that is not a list, or a list not one record of
+ * which is an account. Read as empty, it looked exactly like being signed
+ * out, and the next sign-in wrote over it unannounced. Thrown, the session
+ * answers `accounts_unavailable` and the core says the list is unreadable;
+ * nothing here writes to it.
+ *
+ * Only the restore reads this strictly. Every other reader keeps the lenient
+ * `loadAccounts`, so "Sign in again" can still rebuild the list once the
+ * person has been told.
+ */
+export function loadAccountsForRestore(): Account[] {
+	let raw: string | null;
+	try {
+		raw = store().getItem(STORAGE_KEYS.accounts);
+	} catch (error) {
+		throw new StorageError(describe(error));
+	}
+	if (!raw) return [];
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		throw new StorageError('The stored account list is not valid JSON');
+	}
+	if (!Array.isArray(parsed)) throw new StorageError('The stored account list is not a list');
+	const accounts = loadAccounts();
+	if (parsed.length > 0 && accounts.length === 0) {
+		throw new StorageError('No record in the stored account list is an account');
+	}
+	return accounts;
+}
+
+/**
  * One record in the current spelling, whatever spelling it was written in.
  * Returns the SAME object when nothing had to change (so the caller can tell a
  * rewrite is due), `null` for a record that is not an account at all.

@@ -18,7 +18,12 @@ import type { IntentPreference } from '$lib/core/generated/IntentPreference';
 import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 import { revokeAll } from '$lib/dapp/connections';
 import { packagedHref } from '$lib/extension/page-url';
-import { localeOfPath, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
+import {
+	localeOfPath,
+	negotiateLanguages,
+	SUPPORTED_LOCALES,
+	type Locale
+} from '$lib/i18n/locales';
 import { clearAllCaches, clearStorageItem, type StorageItemId } from '$lib/services/device-storage';
 import { eraseDeviceData } from '$lib/services/erase-device';
 import {
@@ -104,11 +109,14 @@ export async function show(screen: IntentScreen): Promise<string | null> {
 	return whole ? null : screenDesk.present(screen);
 }
 
-/** The language is part of the URL on the web: the page goes to its own locale. */
+/**
+ * The language is part of the URL on the web: the page goes to its own locale.
+ * `auto` follows the BROWSER's language (set-13), not the page the person is on.
+ */
 async function chooseLanguage(value: string): Promise<void> {
 	preferences.setLanguage(value);
 	const here = currentLocale();
-	const target = value === 'auto' ? here : value;
+	const target = value === 'auto' ? negotiateLanguages(navigator.languages) : value;
 	if (target === here || !SUPPORTED_LOCALES.includes(target as Locale)) return;
 	const path = location.pathname.replace(/^\/[^/.]+/, `/${target}`);
 	// eslint-disable-next-line svelte/no-navigation-without-resolve -- this very page, in another locale

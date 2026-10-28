@@ -26,8 +26,12 @@ import {
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
 	withLiveNetworks,
-	withLiveNetworksDesktop
+	withLiveNetworksDesktop,
+	withLivePreferences,
+	withLivePreferencesDesktop,
+	withLiveStorage
 } from './live';
+import type { DeviceStorageReport } from '$lib/services/device-storage';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { resolveNetworkSpaceMessages } from '$lib/i18n/engine.server';
 import { fill } from '$lib/wallet/messages';
@@ -56,6 +60,8 @@ const ROW: NetNetworkRow = {
 	explorer_health: null,
 	rpc_chain_mismatch: null,
 	rpc_save_deferred: false,
+	rpc_url_refused: false,
+	explorer_url_refused: false,
 	is_testnet: false
 };
 
@@ -93,13 +99,15 @@ const VIEW: NetView = {
 			field: 'passkey_index',
 			value: 'https://idx.example',
 			default_value: 'https://p256-index-v2.getvela.app',
-			health: { type: 'ok', latency_ms: 88, rate_count: null }
+			health: { type: 'ok', latency_ms: 88, rate_count: null },
+			refused: false
 		},
 		{
 			field: 'fiat_rates',
 			value: '',
 			default_value: 'https://vela-currency.getvela.app/v2/rates?base=USD',
-			health: { type: 'unreachable', http_status: null, latency_ms: null }
+			health: { type: 'unreachable', http_status: null, latency_ms: null },
+			refused: false
 		}
 	],
 	providers: [
@@ -187,6 +195,88 @@ describe('liveNetworkDetail', () => {
 		expect(detail.callout?.tone).toBe('danger');
 		expect(detail.callout?.text).toContain('56');
 		expect(detail.callout?.text).toContain('1');
+	});
+
+	// set-6: the node answered (that is how the core knew its chain), so the
+	// probe reads "ok" — but the save was refused, and a green latency pill
+	// beside a refusal read as "saved".
+	it('a refused RPC never wears a green pill', () => {
+		const detail = liveNetworkDetail(
+			{ ...ROW, rpc_chain_mismatch: { expected_chain_id: 1, reported_chain_id: 56 } },
+			m
+		);
+		expect(detail.rpc.badge).toMatchObject({ tone: 'error', label: m.networks.invalid });
+		expect(detail.badge.tone).toBe('error');
+	});
+
+	it('an address the URL rule refused says why, on the field it is in', () => {
+		const rpc = liveNetworkDetail(
+			{ ...ROW, rpc_url: 'javascript:alert(1)', rpc_url_refused: true },
+			m
+		);
+		expect(rpc.rpc).toMatchObject({
+			tone: 'error',
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
+		expect(rpc.callout).toEqual({ tone: 'danger', text: m.networks.urlRefused });
+
+		const explorer = liveNetworkDetail(
+			{
+				...ROW,
+				explorer_url: 'data:text/html,x',
+				explorer_url_refused: true,
+				explorer_health: { type: 'ok', latency_ms: 3 }
+			},
+			m
+		);
+		expect(explorer.explorer).toMatchObject({
+			tone: 'error',
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
+		expect(explorer.rpc.tone).toBe('default');
+		expect(explorer.callout?.text).toBe(m.networks.urlRefused);
+	});
+});
+
+// set-5: an add empties the wizard; it now says what was added, and where.
+describe('the wizard after an add', () => {
+	const words = resolveNetworkSpaceMessages('en');
+	const linea: NetNetworkRow = {
+		...CUSTOM,
+		id: 'custom-59144',
+		chain_id: 59144,
+		display_name: 'Linea',
+		is_testnet: true
+	};
+
+	it('names the network and the space it went to', () => {
+		const panel = liveAddNetwork(WIZARD_IDLE, m, words, linea);
+		expect(panel.callout).toEqual({
+			tone: 'success',
+			text: fill(words.addedTestnet, { name: 'Linea' })
+		});
+		const mainnet = liveAddNetwork(WIZARD_IDLE, m, words, { ...linea, is_testnet: false });
+		expect(mainnet.callout?.text).toBe(fill(words.addedMainnet, { name: 'Linea' }));
+	});
+
+	it('says nothing once the person searches again, or with nothing added', () => {
+		expect(
+			liveAddNetwork({ ...WIZARD_IDLE, phase: 'searching', query: 'ba' }, m, words, linea).callout
+		).toBeUndefined();
+		expect(liveAddNetwork(WIZARD_IDLE, m, words).callout).toBeUndefined();
+	});
+
+	it('the overlay finds the added chain in the ledger', () => {
+		const view: NetView = { ...VIEW, networks: [ROW, CUSTOM, linea] };
+		const model = withLiveNetworks(
+			buildMobileState('st1b', m, (seed) => `<svg data-seed="${seed}"></svg>`),
+			view,
+			m,
+			undefined,
+			{ current: 'mainnet', words },
+			59144
+		);
+		expect(model.addNetwork.callout?.text).toBe(fill(words.addedTestnet, { name: 'Linea' }));
 	});
 });
 
@@ -550,15 +640,37 @@ describe('liveEndpoints', () => {
 		expect(model.fields[1].badge).toMatchObject({ tone: 'error', label: m.networks.offline });
 		// The default rides as the placeholder — an empty override shows it.
 		expect(model.fields[1].placeholder).toContain('vela-currency');
+		expect(model.fields[0].tone).toBe('default');
+	});
+
+	// set-8: a refused value is not saved, and the field says so.
+	it('a refused value says it was not saved, outlined, in place of its hint', () => {
+		const view: NetView = {
+			...VIEW,
+			endpoints: [
+				{
+					field: 'passkey_index',
+					value: 'javascript:alert(1)',
+					default_value: 'https://p256-index-v2.getvela.app',
+					health: { type: 'not_https' },
+					refused: true
+				}
+			]
+		};
+		expect(liveEndpoints(view, m).fields[0]).toMatchObject({
+			tone: 'error',
+			hint: m.networks.urlRefused,
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
 	});
 });
 
 describe('liveRpcProviders', () => {
-	it('a set key reads connected with the check action; an unset one invites', () => {
+	it('a set key reads checking with the check action; an unset one invites', () => {
 		const model = liveRpcProviders(VIEW, m);
 		expect(model.providers[0]).toMatchObject({
 			id: 'alchemy',
-			badge: { tone: 'ok', label: m.rpcProviders.connected },
+			badge: { tone: 'neutral', label: m.rpcProviders.checking },
 			action: m.rpcProviders.checkKey
 		});
 		expect(model.providers[1]).toMatchObject({
@@ -568,14 +680,45 @@ describe('liveRpcProviders', () => {
 		});
 	});
 
+	// set-9: a made-up key read green "Connected" over "Supports 0 of 23".
+	it('a key reads connected only once a network has answered it', () => {
+		const tested = (ok: number, done = true) =>
+			liveRpcProviders(
+				{
+					...VIEW,
+					providers: [
+						{
+							provider: 'alchemy',
+							key: 'alch-key',
+							has_key: true,
+							test: { done, results: [], ok_count: ok, total: 23 }
+						}
+					]
+				},
+				m
+			).providers[0].badge;
+		expect(tested(0)).toMatchObject({ tone: 'error', label: m.rpcProviders.unavailable });
+		expect(tested(12)).toMatchObject({ tone: 'ok', label: m.rpcProviders.connected });
+		expect(tested(5, false)).toMatchObject({ tone: 'neutral', label: m.rpcProviders.checking });
+	});
+
 	it('an unset provider links to its OWN site, never another provider', () => {
 		const model = liveRpcProviders(VIEW, m);
 		const drpc = model.providers.find((p) => p.id === 'drpc');
-		expect(drpc?.linkUrl).toBe('https://drpc.org/');
+		expect(drpc?.actionUrl).toBe('https://drpc.org/');
 		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
 		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
-		expect(all.find((p) => p.id === 'alchemy')?.linkUrl).toBe('https://dashboard.alchemy.com/');
-		expect(model.providers.find((p) => p.id === 'alchemy')?.linkUrl).toBeUndefined();
+		expect(all.find((p) => p.id === 'alchemy')?.actionUrl).toBe('https://dashboard.alchemy.com/');
+		expect(model.providers.find((p) => p.id === 'alchemy')?.actionUrl).toBeUndefined();
+	});
+
+	it('"Get a key" is offered once per provider, not again under the field', () => {
+		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
+		for (const provider of liveRpcProviders({ ...VIEW, providers: unset }, m).providers) {
+			expect(provider.action).toBe(m.rpcProviders.getKey);
+			expect(provider.link).toBeUndefined();
+			expect(provider.linkUrl).toBeUndefined();
+		}
 	});
 
 	it('"Get key" opens the key page; only a key is tested (spec 072)', () => {
@@ -588,6 +731,64 @@ describe('liveRpcProviders', () => {
 		const alchemy = model.providers.find((p) => p.id === 'alchemy');
 		expect(alchemy?.action).toBe(m.rpcProviders.checkKey);
 		expect(alchemy?.actionUrl).toBeUndefined();
+	});
+});
+
+describe('"Follow system" follows the browser, not the page (set-13)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+
+	it('names the browser’s language beside "Follow system", while the page’s own stays ticked by URL', () => {
+		// On `/ja` in a German browser: following the system means German.
+		const home = withLivePreferences(buildMobileState('st1b', m, IDENTICON), m, '', 'ja', 'de');
+		const system = home.languageSheet.rows.find((row) => row.id === 'system');
+		expect(system?.note).toBe(`${m.common.system} · Deutsch`);
+		// Nothing pinned (the store's default): "Follow system" is the ticked row.
+		expect(system?.selected).toBe(true);
+
+		const desktop = withLivePreferencesDesktop(
+			buildDesktopState('dst8', m, IDENTICON),
+			m,
+			'',
+			'ja',
+			'de'
+		);
+		const options = desktop.appearance.language.options ?? [];
+		expect(options.find((row) => row.id === 'system')?.note).toBe(`${m.common.system} · Deutsch`);
+	});
+});
+
+describe('device storage counts what it lists (set-19)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const item = (group: 'user' | 'cache' | 'sessions', bytes: number, count: number) => ({
+		group,
+		bytes,
+		count
+	});
+	// 1 KB of named rows, and 1 KB of the wallet list and preferences no row names.
+	const REPORT: DeviceStorageReport = {
+		totalBytes: 2048,
+		keyCount: 10,
+		groups: { user: 1024 + 512, cache: 512, sessions: 0 },
+		items: {
+			transactions: item('user', 0, 0),
+			contacts: item('user', 512, 3),
+			custom: item('user', 0, 0),
+			browsing: item('user', 0, 0),
+			balances: item('cache', 0, 0),
+			rates: item('cache', 512, 1),
+			scan: item('cache', 0, 0),
+			dapps: item('sessions', 0, 0)
+		}
+	};
+
+	it('the headline is the rows’ bytes and the rows’ records, not every key on the device', () => {
+		const home = withLiveStorage(buildMobileState('st1b', m, IDENTICON), REPORT, m);
+		expect(`${home.storage.amount} ${home.storage.unit}`).toBe('1 KB');
+		expect(home.storage.summary).toBe(fill(m.storage.summary, { count: 3 }));
+		const fraction = (id: string) => home.storage.segments.find((s) => s.id === id)?.fraction;
+		expect(fraction('user')).toBe(0.5);
+		expect(fraction('cache')).toBe(0.5);
+		expect(fraction('sessions')).toBe(0);
 	});
 });
 

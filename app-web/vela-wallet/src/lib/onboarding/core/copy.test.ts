@@ -114,6 +114,35 @@ describe('a failed phone ceremony', () => {
 });
 
 /**
+ * ob-4 — the index unreachable while a new key confirms: the key is kept, and
+ * the sheet says so (offline or the index) instead of "Error" over the raw
+ * fetch failure. The core sets `key_kept` and `local`.
+ */
+describe('a new key whose confirmation could not reach the index', () => {
+	it('is said as kept, with the way to finish it', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string) => key;
+		const offline = promptCopy(
+			{
+				type: 'create_failed',
+				detail: 'Challenge failed: Failed to fetch',
+				phone_link: false,
+				key_kept: true,
+				local: true
+			},
+			t
+		);
+		expect(offline.title).toBe('onboarding.create.keyKeptTitle');
+		expect(offline.message).toBe('onboarding.create.keyKeptBodyNetwork');
+		const index = promptCopy(
+			{ type: 'create_failed', detail: 'HTTP 503', phone_link: false, key_kept: true },
+			t
+		);
+		expect(index.message).toBe('onboarding.create.keyKeptBodyIndex');
+	});
+});
+
+/**
  * Issue #450 — a security key this device could not use is about the key;
  * the core sets `security_key`. A passkey route keeps the biometrics sheet.
  */

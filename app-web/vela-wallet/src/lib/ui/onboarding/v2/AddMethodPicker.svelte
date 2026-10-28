@@ -42,9 +42,11 @@
 		 * row scans — it creates nothing.
 		 */
 		chooser?: KeyChooser;
+		/** A prompt is already up (ob-7): the places stay drawn, but wait. */
+		disabled?: boolean;
 	}
 
-	let { open, allowed, strings, onPick, chooser = 'create' }: Props = $props();
+	let { open, allowed, strings, onPick, chooser = 'create', disabled = false }: Props = $props();
 
 	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
@@ -61,7 +63,7 @@
 					class="method"
 					class:off={!can}
 					type="button"
-					disabled={!can}
+					disabled={!can || disabled}
 					onclick={() => onPick(method)}
 				>
 					<PasskeyMethodIcon glyph={methodGlyph(method)} />

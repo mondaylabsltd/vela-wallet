@@ -27,11 +27,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Send to all 0 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 0 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -192,6 +234,34 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Send to 1 member — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay 1 member — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -203,6 +273,20 @@
    },
    "expect": {
     "value": "1 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 member"
    }
   },
   {
@@ -357,11 +441,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Send to all 2 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 2 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -522,11 +648,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Send to all 3 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 3 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -687,11 +855,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Send to all 5 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 5 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -852,11 +1062,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Send to all 11 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 11 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -1017,11 +1269,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Send to all 21 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 21 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -1182,11 +1476,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Send to all 101 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 101 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -1347,11 +1683,53 @@
    }
   },
   {
+   "name": "en/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Send to all 1000000 members — amounts can be set individually."
+   }
+  },
+  {
+   "name": "en/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Send to group: pay all 1000000 members — amounts can be set individually."
+   }
+  },
+  {
    "name": "en/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "en",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 members"
+   }
+  },
+  {
+   "name": "en/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -1525,11 +1903,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "向本组 0 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 0 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -1690,11 +2110,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "向本组 1 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 1 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -1855,11 +2317,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "向本组 2 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 2 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -2020,11 +2524,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "向本组 3 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 3 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -2185,11 +2731,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "向本组 5 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 5 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -2350,11 +2938,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "向本组 11 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 11 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -2515,11 +3145,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "向本组 21 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 21 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -2680,11 +3352,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "向本组 101 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 101 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -2845,11 +3559,53 @@
    }
   },
   {
+   "name": "zh/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "向本组 1000000 人转账，金额可分别设置。"
+   }
+  },
+  {
+   "name": "zh/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "群发转账：向本组 1000000 人转账，金额可分别设置。"
+   }
+  },
+  {
    "name": "zh/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 人"
+   }
+  },
+  {
+   "name": "zh/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -3023,11 +3779,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "向本群組 0 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 0 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -3188,11 +3986,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "向本群組 1 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 1 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -3353,11 +4193,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "向本群組 2 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 2 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -3518,11 +4400,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "向本群組 3 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 3 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -3683,11 +4607,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "向本群組 5 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 5 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -3848,11 +4814,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "向本群組 11 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 11 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -4013,11 +5021,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "向本群組 21 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 21 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -4178,11 +5228,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "向本群組 101 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 101 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -4343,11 +5435,53 @@
    }
   },
   {
+   "name": "zh-TW/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "向本群組 1000000 人轉帳，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "群發轉帳：向本群組 1000000 人轉帳，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-TW/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-TW",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 位成員"
+   }
+  },
+  {
+   "name": "zh-TW/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -4521,11 +5655,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "向本群組 0 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 0 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -4686,11 +5862,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "向本群組 1 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 1 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -4851,11 +6069,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "向本群組 2 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 2 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -5016,11 +6276,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "向本群組 3 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 3 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -5181,11 +6483,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "向本群組 5 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 5 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -5346,11 +6690,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "向本群組 11 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 11 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -5511,11 +6897,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "向本群組 21 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 21 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -5676,11 +7104,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "向本群組 101 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 101 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -5841,11 +7311,53 @@
    }
   },
   {
+   "name": "zh-HK/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "向本群組 1000000 人轉賬，金額可分別設定。"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "群發轉賬：向本群組 1000000 人轉賬，金額可分別設定。"
+   }
+  },
+  {
    "name": "zh-HK/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "zh-HK",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 位成員"
+   }
+  },
+  {
+   "name": "zh-HK/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -6019,11 +7531,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "このグループの 0 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 0 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -6184,11 +7738,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "このグループの 1 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 1 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -6349,11 +7945,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "このグループの 2 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 2 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -6514,11 +8152,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "このグループの 3 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 3 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -6679,11 +8359,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "このグループの 5 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 5 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -6844,11 +8566,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "このグループの 11 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 11 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -7009,11 +8773,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "このグループの 21 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 21 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -7174,11 +8980,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "このグループの 101 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 101 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -7339,11 +9187,53 @@
    }
   },
   {
+   "name": "ja/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "このグループの 1000000 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
+   "name": "ja/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "グループ送金：このグループの 1000000 名に送金します。金額は個別に設定できます。"
+   }
+  },
+  {
    "name": "ja/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ja",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 名のメンバー"
+   }
+  },
+  {
+   "name": "ja/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -7517,11 +9407,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 0명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 0명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "구성원 0명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -7682,11 +9614,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 1명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 1명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "구성원 1명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -7847,11 +9821,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 2명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 2명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "구성원 2명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -8012,11 +10028,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 3명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 3명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "구성원 3명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -8177,11 +10235,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 5명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 5명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "구성원 5명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -8342,11 +10442,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 11명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 11명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "구성원 11명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -8507,11 +10649,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 21명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 21명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "구성원 21명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -8672,11 +10856,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 101명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 101명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "구성원 101명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -8837,11 +11063,53 @@
    }
   },
   {
+   "name": "ko/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "이 그룹의 1000000명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "그룹 송금: 이 그룹의 1000000명에게 송금합니다. 금액은 각각 설정할 수 있습니다."
+   }
+  },
+  {
    "name": "ko/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ko",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "구성원 1000000명"
+   }
+  },
+  {
+   "name": "ko/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -9015,11 +11283,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 0 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 0 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -9180,11 +11490,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 1 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 1 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -9345,11 +11697,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 2 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 2 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -9510,11 +11904,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 3 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 3 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -9675,11 +12111,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 5 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 5 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -9840,11 +12318,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 11 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 11 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -10005,11 +12525,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 21 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 21 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -10170,11 +12732,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 101 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 101 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -10335,11 +12939,53 @@
    }
   },
   {
+   "name": "vi/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Gửi cho 1000000 người trong nhóm; số tiền có thể đặt riêng từng người."
+   }
+  },
+  {
+   "name": "vi/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Gửi cho cả nhóm: gửi cho 1000000 người; số tiền đặt riêng từng người."
+   }
+  },
+  {
    "name": "vi/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "vi",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 thành viên"
+   }
+  },
+  {
+   "name": "vi/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -10513,11 +13159,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 0 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 0 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -10678,11 +13366,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 1 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 1 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -10843,11 +13573,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 2 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 2 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -11008,11 +13780,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 3 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 3 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -11173,11 +13987,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 5 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 5 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -11338,11 +14194,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 11 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 11 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -11503,11 +14401,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 21 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 21 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -11668,11 +14608,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 101 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 101 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -11833,11 +14815,53 @@
    }
   },
   {
+   "name": "id/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Kirim ke 1000000 anggota grup ini; jumlah bisa diatur per orang."
+   }
+  },
+  {
+   "name": "id/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Kirim ke grup: kirim ke 1000000 anggota; jumlah bisa diatur per orang."
+   }
+  },
+  {
    "name": "id/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "id",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 anggota"
+   }
+  },
+  {
+   "name": "id/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -12011,11 +15035,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 0 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 0 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -12176,11 +15242,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 1 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 1 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -12341,11 +15449,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 2 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 2 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -12506,11 +15656,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 3 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 3 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -12671,11 +15863,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 5 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 5 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -12836,11 +16070,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 11 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 11 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -13001,11 +16277,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 21 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 21 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -13166,11 +16484,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 101 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 101 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -13331,11 +16691,53 @@
    }
   },
   {
+   "name": "tr/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Bu gruptaki 1000000 kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir."
+   }
+  },
+  {
+   "name": "tr/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Gruba gönder: bu gruptaki 1000000 kişiye; tutarlar ayrı ayarlanabilir."
+   }
+  },
+  {
    "name": "tr/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "tr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 üye"
+   }
+  },
+  {
+   "name": "tr/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -13509,11 +16911,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Envía a los 0 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 0 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -13674,6 +17118,34 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Envía a 1 integrante del grupo; el monto se puede fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a 1 integrante; monto por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13685,6 +17157,20 @@
    },
    "expect": {
     "value": "1 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 integrante"
    }
   },
   {
@@ -13839,11 +17325,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Envía a los 2 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 2 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -14004,11 +17532,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Envía a los 3 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 3 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -14169,11 +17739,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Envía a los 5 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 5 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -14334,11 +17946,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Envía a los 11 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 11 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -14499,11 +18153,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Envía a los 21 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 21 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -14664,11 +18360,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Envía a los 101 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 101 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -14829,11 +18567,53 @@
    }
   },
   {
+   "name": "es-MX/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Envía a los 1000000 integrantes del grupo; los montos se pueden fijar por separado."
+   }
+  },
+  {
+   "name": "es-MX/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Enviar al grupo: envía a los 1000000 integrantes; montos por separado."
+   }
+  },
+  {
    "name": "es-MX/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "es-MX",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 integrantes"
+   }
+  },
+  {
+   "name": "es-MX/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -15007,11 +18787,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Envie aos 0 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 0 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -15172,6 +18994,34 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Envie a 1 membro do grupo; o valor pode ser definido individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie a 1 membro; valor individual."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15183,6 +19033,20 @@
    },
    "expect": {
     "value": "1 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 membro"
    }
   },
   {
@@ -15337,11 +19201,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Envie aos 2 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 2 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -15502,11 +19408,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Envie aos 3 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 3 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -15667,11 +19615,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Envie aos 5 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 5 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -15832,11 +19822,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Envie aos 11 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 11 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -15997,11 +20029,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Envie aos 21 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 21 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -16162,11 +20236,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Envie aos 101 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 101 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -16327,11 +20443,53 @@
    }
   },
   {
+   "name": "pt-BR/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Envie aos 1000000 membros do grupo; os valores podem ser definidos individualmente."
+   }
+  },
+  {
+   "name": "pt-BR/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Enviar ao grupo: envie aos 1000000 membros; valores individuais."
+   }
+  },
+  {
    "name": "pt-BR/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "pt-BR",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 membros"
+   }
+  },
+  {
+   "name": "pt-BR/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -16505,11 +20663,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 0 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 0 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -16670,6 +20870,34 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Envoyez à 1 membre du groupe ; le montant peut être défini individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez à 1 membre ; montant individuel."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16681,6 +20909,20 @@
    },
    "expect": {
     "value": "1 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 membre"
    }
   },
   {
@@ -16835,11 +21077,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 2 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 2 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -17000,11 +21284,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 3 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 3 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -17165,11 +21491,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 5 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 5 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -17330,11 +21698,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 11 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 11 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -17495,11 +21905,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 21 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 21 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -17660,11 +22112,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 101 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 101 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -17825,11 +22319,53 @@
    }
   },
   {
+   "name": "fr/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Envoyez aux 1000000 membres du groupe ; les montants peuvent être définis individuellement."
+   }
+  },
+  {
+   "name": "fr/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Envoyer au groupe : envoyez aux 1000000 membres ; montants individuels."
+   }
+  },
+  {
    "name": "fr/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "fr",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 membres"
+   }
+  },
+  {
+   "name": "fr/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -18003,11 +22539,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "An alle 0 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 0 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -18168,6 +22746,34 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "An 1 Mitglied senden; der Betrag lässt sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an 1 Mitglied; Betrag einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18179,6 +22785,20 @@
    },
    "expect": {
     "value": "1 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 Mitglied"
    }
   },
   {
@@ -18333,11 +22953,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "An alle 2 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 2 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -18498,11 +23160,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "An alle 3 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 3 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -18663,11 +23367,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "An alle 5 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 5 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -18828,11 +23574,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "An alle 11 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 11 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -18993,11 +23781,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "An alle 21 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 21 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -19158,11 +23988,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "An alle 101 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 101 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -19323,11 +24195,53 @@
    }
   },
   {
+   "name": "de/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "An alle 1000000 Mitglieder senden; Beträge lassen sich einzeln festlegen."
+   }
+  },
+  {
+   "name": "de/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "An Gruppe senden: an alle 1000000 Mitglieder; Beträge einzeln festlegbar."
+   }
+  },
+  {
    "name": "de/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "de",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 Mitglieder"
+   }
+  },
+  {
+   "name": "de/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }
@@ -19501,6 +24415,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Перевод 0 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 0 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -19512,6 +24454,20 @@
    },
    "expect": {
     "value": "0 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 участника"
    }
   },
   {
@@ -19666,11 +24622,53 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Перевод 1 участнику; сумма задаётся отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 1 участнику; сумма задаётся отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "ru",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 участник"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1
     }
@@ -19831,6 +24829,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Перевод 2 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 2 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -19842,6 +24868,20 @@
    },
    "expect": {
     "value": "2 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 участника"
    }
   },
   {
@@ -19996,6 +25036,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Перевод 3 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 3 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20007,6 +25075,20 @@
    },
    "expect": {
     "value": "3 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 участника"
    }
   },
   {
@@ -20161,6 +25243,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Перевод 5 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 5 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20172,6 +25282,20 @@
    },
    "expect": {
     "value": "5 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 участника"
    }
   },
   {
@@ -20326,6 +25450,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Перевод 11 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 11 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20337,6 +25489,20 @@
    },
    "expect": {
     "value": "11 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 участника"
    }
   },
   {
@@ -20491,6 +25657,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Перевод 21 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 21 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20502,6 +25696,20 @@
    },
    "expect": {
     "value": "21 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 участника"
    }
   },
   {
@@ -20656,6 +25864,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Перевод 101 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 101 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20667,6 +25903,20 @@
    },
    "expect": {
     "value": "101 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 участника"
    }
   },
   {
@@ -20821,6 +26071,34 @@
    }
   },
   {
+   "name": "ru/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Перевод 1000000 участника; суммы задаются отдельно."
+   }
+  },
+  {
+   "name": "ru/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Отправить группе: перевод 1000000 участника; суммы задаются отдельно."
+   }
+  },
+  {
    "name": "ru/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20832,6 +26110,20 @@
    },
    "expect": {
     "value": "1000000 участников"
+   }
+  },
+  {
+   "name": "ru/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 участника"
    }
   },
   {
@@ -20999,11 +26291,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Invia ai 0 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 0 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 0
     }
@@ -21164,6 +26498,34 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Invia a 1 membro del gruppo; l’importo si imposta singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia a 1 membro; importo impostabile singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/1",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -21175,6 +26537,20 @@
    },
    "expect": {
     "value": "1 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 membro"
    }
   },
   {
@@ -21329,11 +26705,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Invia ai 2 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 2 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 2
     }
@@ -21494,11 +26912,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Invia ai 3 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 3 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/3",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 3
     }
@@ -21659,11 +27119,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Invia ai 5 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 5 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 5
     }
@@ -21824,11 +27326,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Invia ai 11 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 11 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/11",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 11
     }
@@ -21989,11 +27533,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Invia ai 21 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 21 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 21
     }
@@ -22154,11 +27740,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Invia ai 101 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 101 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 101
     }
@@ -22319,11 +27947,53 @@
    }
   },
   {
+   "name": "it/contacts.batchSendHintCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Invia ai 1000000 membri del gruppo; gli importi si impostano singolarmente."
+   }
+  },
+  {
+   "name": "it/contacts.batchSendHintTitledCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.batchSendHintTitledCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Invia al gruppo: invia ai 1000000 membri; importi impostabili singolarmente."
+   }
+  },
+  {
    "name": "it/contacts.groupMembers/1000000",
    "fn": "i18n_t_legacy_plural",
    "input": {
     "lng": "it",
     "key": "contacts.groupMembers",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 membri"
+   }
+  },
+  {
+   "name": "it/contacts.memberCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "contacts.memberCount",
     "opts": {
      "count": 1000000
     }

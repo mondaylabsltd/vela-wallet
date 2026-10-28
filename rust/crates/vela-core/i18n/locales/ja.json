@@ -332,6 +332,8 @@
     "wizardTestnet": "テストネット — 実際の価値なし",
     "wizardMainnet": "メインネット — 実際の価値あり",
     "headingMainnet": "メインネットスペース",
-    "headingTestnet": "テストネットスペース"
+    "headingTestnet": "テストネットスペース",
+    "addedTestnet": "{{name}} をテストネット空間に追加しました。",
+    "addedMainnet": "{{name}} をメインネット空間に追加しました。"
   }
 }

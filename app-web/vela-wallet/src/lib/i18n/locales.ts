@@ -138,3 +138,54 @@ export function negotiate(acceptLanguage: string | null | undefined): Locale {
 	}
 	return FALLBACK_LOCALE;
 }
+
+/**
+ * The browser's own language list (`navigator.languages`, most preferred
+ * first) → supported locale, by the same table as `negotiate`. What "Follow
+ * system" follows on the web: the language the browser asks for, not the
+ * locale of the page the person happens to be reading (set-13).
+ */
+export function negotiateLanguages(languages: readonly string[] | null | undefined): Locale {
+	for (const tag of languages ?? []) {
+		const match = matchTag(tag.trim());
+		if (match) return match;
+	}
+	return FALLBACK_LOCALE;
+}
+
+/**
+ * The cookie that carries a PINNED language to `/` (set-12).
+ *
+ * The pin itself lives in `localStorage` (`vela.language`, the Expo record
+ * format), which the Worker behind `/` cannot read — so a person who chose
+ * Deutsch in Settings landed on whatever their Accept-Language said. Pinning
+ * a language also writes this cookie and "Follow system" removes it; `/`
+ * honours it before negotiating. One supported tag or nothing: the Worker
+ * trusts no other value.
+ */
+export const LANGUAGE_COOKIE = 'vela_lang';
+
+/** One year — a pin is a standing choice, and every visit writes it again. */
+const LANGUAGE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+/**
+ * The `document.cookie` assignment that states `language` (`auto` or a tag):
+ * a supported tag pins, anything else clears.
+ */
+export function languageCookie(language: string, secure: boolean): string {
+	const locale = toLocale(language);
+	const flags = `Path=/; SameSite=Lax${secure ? '; Secure' : ''}`;
+	return locale === undefined
+		? `${LANGUAGE_COOKIE}=; Max-Age=0; ${flags}`
+		: `${LANGUAGE_COOKIE}=${locale}; Max-Age=${LANGUAGE_COOKIE_MAX_AGE}; ${flags}`;
+}
+
+/** The pinned locale a request's `Cookie` header carries, if any. */
+export function pinnedLocale(cookieHeader: string | null | undefined): Locale | undefined {
+	if (!cookieHeader) return undefined;
+	for (const part of cookieHeader.split(';')) {
+		const [name, ...rest] = part.trim().split('=');
+		if (name === LANGUAGE_COOKIE) return toLocale(rest.join('=').trim());
+	}
+	return undefined;
+}

@@ -4,7 +4,13 @@
  * the list must be rewritten once in the current spelling.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadAccounts, normaliseAccount, saveAccount, STORAGE_KEYS } from './storage';
+import {
+	loadAccounts,
+	loadAccountsForRestore,
+	normaliseAccount,
+	saveAccount,
+	STORAGE_KEYS
+} from './storage';
 
 class MemoryStorage implements Storage {
 	#map = new Map<string, string>();
@@ -119,6 +125,38 @@ describe('loadAccounts', () => {
 		};
 		saveAccount(again);
 		expect(loadAccounts()).toEqual([again]);
+	});
+});
+
+/**
+ * Settings set-21: the session's restore must tell an UNREADABLE list from an
+ * empty one — read as empty, it looked like a clean sign-out — and must leave
+ * it where it is.
+ */
+describe('loadAccountsForRestore', () => {
+	let storage: MemoryStorage;
+	beforeEach(() => {
+		storage = new MemoryStorage();
+		(globalThis as { localStorage?: Storage }).localStorage = storage;
+	});
+
+	it('reads nothing stored, and an empty list, as no accounts', () => {
+		expect(loadAccountsForRestore()).toEqual([]);
+		storage.setItem(STORAGE_KEYS.accounts, '[]');
+		expect(loadAccountsForRestore()).toEqual([]);
+	});
+
+	it('reads a good list as loadAccounts does', () => {
+		storage.setItem(STORAGE_KEYS.accounts, JSON.stringify([CURRENT]));
+		expect(loadAccountsForRestore()).toEqual([CURRENT]);
+	});
+
+	it('throws for a list that is there and cannot be read, and writes nothing', () => {
+		for (const damaged of ['{not json', 'null', '"a string"', '{"a":1}', '[{"name":"x"}]']) {
+			storage.setItem(STORAGE_KEYS.accounts, damaged);
+			expect(() => loadAccountsForRestore(), damaged).toThrow();
+			expect(storage.getItem(STORAGE_KEYS.accounts), damaged).toBe(damaged);
+		}
 	});
 });
 

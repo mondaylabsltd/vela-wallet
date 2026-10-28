@@ -132,7 +132,8 @@ const CONTACTS: ContactsView = {
 	import_failure: null,
 	import_failure_key: null,
 	export: null,
-	recipient: null
+	recipient: null,
+	save_failed: false
 };
 
 /**

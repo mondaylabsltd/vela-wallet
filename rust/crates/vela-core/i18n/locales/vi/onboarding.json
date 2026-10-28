@@ -223,9 +223,9 @@
       "successMessage_one": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
       "successMessage_other": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
       "successTitle": "Đã tạo ví",
-      "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
-      "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
-      "syncFailedTitle": "Đồng bộ thất bại",
+      "syncFailedHint": "Hãy giữ trang này mở: Vela sẽ tự thử lại khi có kết nối, hoặc chạm Tải lên lại. Rời đi hoặc tải lại trang lúc này sẽ bỏ ví này.",
+      "syncFailedMessage": "Passkey đã được tạo, nhưng ví chưa đăng ký được với chỉ mục passkey của Vela nên chưa được lưu trên thiết bị này.",
+      "syncFailedTitle": "Chưa được lưu",
       "taskDeriveAddress": "Suy ra địa chỉ tài khoản",
       "taskVerifyKey": "Kiểm tra khoá công khai của passkey",
       "taskWriteIndex": "Ghi chỉ mục khoá",
@@ -234,7 +234,12 @@
       "touchFingerprintBody": "{{product}} đang nhấp nháy. Đặt ngón tay lên cảm biến để xác nhận đúng là bạn.",
       "touchSelectBody": "Có nhiều khoá bảo mật đang cắm và tất cả đều nhấp nháy. Hãy chạm vào khoá bạn muốn dùng.",
       "touchTitle": "Chạm vào khoá bảo mật của bạn",
-      "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng."
+      "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Bạn đã có một ví tên “{{name}}” trên thiết bị này.",
+      "keyKeptTitle": "Đã giữ khóa, chưa xác nhận",
+      "keyKeptBodyNetwork": "Thiết bị đang ngoại tuyến nên chưa xác nhận được passkey mới. Passkey vẫn nằm trong danh sách: khi có mạng lại, hãy chạm Xác nhận bên cạnh.",
+      "keyKeptBodyIndex": "Chỉ mục passkey của Vela không phản hồi nên chưa xác nhận được passkey mới. Passkey vẫn nằm trong danh sách: lát nữa hãy chạm Xác nhận bên cạnh."
     },
     "login": {
       "alertNotSupportedTitle": "Không hỗ trợ",
@@ -267,7 +272,8 @@
       "switchDeviceBtn": "Đăng nhập trên thiết bị khác",
       "pickTitle": "Ví nào?",
       "pickBody": "{{product}} đang giữ nhiều hơn một ví Vela. Hãy chọn ví bạn muốn đăng nhập.",
-      "pickUnnamed": "Ví chưa đặt tên"
+      "pickUnnamed": "Ví chưa đặt tên",
+      "noPasskeyHint": "Nếu thiết bị này không có passkey Vela, hãy thử bằng điện thoại hoặc khóa bảo mật, hoặc tạo ví mới."
     },
     "storage": {
       "unreadableTitle": "Không đọc được dữ liệu ví trong trình duyệt này",

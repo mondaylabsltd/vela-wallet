@@ -332,7 +332,9 @@
   "wizardTestnet": "テストネット — 実際の価値なし",
   "wizardMainnet": "メインネット — 実際の価値あり",
   "headingMainnet": "メインネットスペース",
-  "headingTestnet": "テストネットスペース"
+  "headingTestnet": "テストネットスペース",
+  "addedTestnet": "{{name}} をテストネット空間に追加しました。",
+  "addedMainnet": "{{name}} をメインネット空間に追加しました。"
  },
  "home": {
   "totalBalance": "合計残高",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
    "successMessage_other": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
    "successTitle": "ウォレットを作成しました",
-   "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
-   "syncFailedMessage": "ウォレットは作成されましたが、公開鍵がサーバーに同期されませんでした。これが解決するまで、他の端末でサインインできません。",
-   "syncFailedTitle": "同期に失敗しました",
+   "syncFailedHint": "このページを開いたままにしてください。接続が戻ると Vela が自動で再試行します（「再アップロード」でもすぐに試せます）。今ページを離れたり再読み込みしたりすると、このウォレットは破棄されます。",
+   "syncFailedMessage": "パスキーは作成されましたが、ウォレットを Vela のパスキー索引に登録できなかったため、この端末にはまだ保存されていません。",
+   "syncFailedTitle": "まだ保存されていません",
    "taskDeriveAddress": "アカウントアドレスを導出",
    "taskVerifyKey": "パスキーの公開鍵を検証",
    "taskWriteIndex": "鍵インデックスを書き込み",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} が点滅しています。センサーに指を置いて本人確認を行ってください。",
    "touchSelectBody": "複数のセキュリティキーが接続されていて、すべて点滅しています。使いたいものにタッチしてください。",
    "touchTitle": "セキュリティキーにタッチ",
-   "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。"
+   "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "この端末にはすでに「{{name}}」という名前のウォレットがあります。",
+   "keyKeptTitle": "キーは保持されています（未確認）",
+   "keyKeptBodyNetwork": "この端末がオフラインのため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。オンラインに戻ったら横の「確認」をタップしてください。",
+   "keyKeptBodyIndex": "Vela のパスキー索引が応答しなかったため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。少し待ってから横の「確認」をタップしてください。"
   },
   "login": {
    "alertNotSupportedTitle": "非対応",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "別の端末でサインイン",
    "pickTitle": "どのウォレットにしますか？",
    "pickBody": "{{product}} には複数の Vela ウォレットが保存されています。サインインするものを選んでください。",
-   "pickUnnamed": "名称未設定のウォレット"
+   "pickUnnamed": "名称未設定のウォレット",
+   "noPasskeyHint": "この端末に Vela のパスキーがない場合は、スマートフォンやセキュリティキーを試すか、ウォレットを作成してください。"
   },
   "storage": {
    "unreadableTitle": "このブラウザのウォレットデータを読み取れません",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "オフライン",
    "httpsRequired": "HTTPS が必要です",
-   "invalid": "無効"
+   "invalid": "無効",
+   "urlRefused": "保存されていません。https:// のアドレスを使ってください（http:// はこのコンピューター上のみ可）。以前のアドレスが引き続き使われます。"
   },
   "backup": {
    "title": "ウォレットの記録を Ethereum にコピー",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "すべてのやり取りを見る",
   "deleteContact": "連絡先を削除",
   "edit": "編集",
-  "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。"
+  "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+  "duplicateAddress": "「{{name}}」としてすでに保存されています。保存するとその連絡先が更新されます。",
+  "updateExisting": "連絡先を更新",
+  "groupPickEmpty": "グループはまだありません。先にグループを作成してから、連絡先を移動してください。",
+  "saveFailed": "この端末に保存できませんでした。変更はここに表示されていますが、ページを閉じると消えます。",
+  "memberCount_other": "{{count}} 名のメンバー",
+  "batchSendHintCount_other": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "batchSendHintTitledCount_other": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "memberCount_one": "{{count}} 名のメンバー",
+  "batchSendHintCount_one": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "batchSendHintTitledCount_one": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。"
  },
  "explore": {
   "title": "探索",

@@ -31,7 +31,8 @@ const BOOTING: SessionView = {
 	active_index: 0,
 	accounts: [],
 	allowed_route: 'loading',
-	sign_out: null
+	sign_out: null,
+	accounts_unreadable: false
 };
 
 class Session {
@@ -60,6 +61,13 @@ class Session {
 				SessionShellResult
 			>(new SessionCore(), {
 				onView: (view) => {
+					// Settings set-21: the core says the stored list could not be
+					// read. The welcome page tells the person — the same storage
+					// prompt as a refused record — instead of looking signed out.
+					// Raised once, as it turns true: the prompt's answer clears it.
+					if (view.accounts_unreadable && !this.view.accounts_unreadable) {
+						this.fault = 'The stored account list could not be read';
+					}
 					this.view = view;
 					if (!view.loading) this.#release();
 				},

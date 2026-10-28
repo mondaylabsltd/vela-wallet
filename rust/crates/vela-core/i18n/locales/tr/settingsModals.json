@@ -91,7 +91,8 @@
     "health": {
       "offline": "Çevrimdışı",
       "httpsRequired": "HTTPS gerekli",
-      "invalid": "Geçersiz"
+      "invalid": "Geçersiz",
+      "urlRefused": "Kaydedilmedi — https:// adresi kullanın (düz http:// yalnızca bu bilgisayar için). Önceki adres kullanılmaya devam ediyor."
     },
     "backup": {
       "title": "Cüzdan kaydını Ethereum'a kopyala",

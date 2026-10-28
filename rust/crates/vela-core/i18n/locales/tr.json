@@ -332,6 +332,8 @@
     "wizardTestnet": "Test ağı — gerçek değer yok",
     "wizardMainnet": "Ana ağ — gerçek değer",
     "headingMainnet": "Ana ağ alanı",
-    "headingTestnet": "Test ağı alanı"
+    "headingTestnet": "Test ağı alanı",
+    "addedTestnet": "{{name}} test ağı alanına eklendi.",
+    "addedMainnet": "{{name}} ana ağ alanına eklendi."
   }
 }

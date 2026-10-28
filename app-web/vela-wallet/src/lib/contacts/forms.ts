@@ -14,6 +14,16 @@ export interface ContactFormCopy {
 	invalidAddress: string;
 	/** The address's mixed case is not its EIP-55 checksum (set-4). */
 	invalidChecksum: string;
+	/**
+	 * set-3: the name a SAVED contact already goes by at this address, or
+	 * null. Adding an address the book holds updates that contact — said
+	 * before the save, never a silent rename.
+	 */
+	existingName?: (address: string) => string | null;
+	/** Template with `{{name}}`: "Already saved as “{{name}}”…". */
+	duplicateAddress?: string;
+	/** The save button's words when it updates that contact. */
+	updateExisting?: string;
 }
 
 export interface GroupFormCopy {

@@ -26,7 +26,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { fiatSymbol, maskedAmount } from '$lib/core/client';
+import { currencyFractionDigits, fiatSymbol, maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
@@ -171,16 +171,25 @@ export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
  * `[whole, fraction]`; anything that is not a finite number reads 0.
  */
 export function fixedTwo(value: number): [string, string] {
-	if (!Number.isFinite(value)) return ['0', '00'];
+	return fixedPlaces(value, 2);
+}
+
+/**
+ * `fixedTwo` at `places` fraction digits — the currency's own count (a yen
+ * figure has none, so its fraction is `''`).
+ */
+export function fixedPlaces(value: number, places: number): [string, string] {
+	const zeros = '0'.repeat(places);
+	if (!Number.isFinite(value)) return ['0', zeros];
 	if (Math.abs(value) < 1e15) {
-		const [whole, frac] = value.toFixed(2).split('.');
-		return [whole, frac ?? '00'];
+		const [whole, frac] = value.toFixed(places).split('.');
+		return [whole, frac ?? zeros];
 	}
 	const [mantissa, exponent] = Math.abs(value).toExponential(14).split('e');
 	const digits = mantissa.replace('.', '');
-	const places = Number.parseInt(exponent, 10) + 1;
-	const whole = digits.length >= places ? digits.slice(0, places) : digits.padEnd(places, '0');
-	return [value < 0 ? `-${whole}` : whole, '00'];
+	const count = Number.parseInt(exponent, 10) + 1;
+	const whole = digits.length >= count ? digits.slice(0, count) : digits.padEnd(count, '0');
+	return [value < 0 ? `-${whole}` : whole, zeros];
 }
 
 /**
@@ -267,7 +276,9 @@ export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | nu
 	const convertible = currency.rate !== null;
 	const code = convertible ? currency.code : 'USD';
 	const amount = convertible ? usd * (currency.rate as number) : usd;
-	const [whole, frac] = fixedTwo(Math.abs(amount));
+	// The currency's own minor units (the core's table): "¥194,912", never
+	// "¥194,911.60" — the yen, the won and the rupiah have no cents to show.
+	const [whole, frac] = fixedPlaces(Math.abs(amount), currencyFractionDigits(code));
 	// The person's own number preset, not the platform's idea of one (spec 028
 	// D47). Money is where this stops being cosmetic: a wallet that groups one
 	// way here and another way on the next machine is a wallet whose totals a
@@ -283,6 +294,8 @@ export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | nu
 export function moneyText(usd: number, currency: CurrencyView): string {
 	const parts = moneyParts(usd, currency);
 	if (parts === null) return MONEY_PENDING;
+	// A zero-decimal currency has no fraction, and so no decimal mark.
+	if (parts.decimals === '') return parts.integer;
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
 

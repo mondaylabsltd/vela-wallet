@@ -80,19 +80,31 @@ const asOptionalString = (value: unknown): string | null =>
 	typeof value === 'string' ? value : null;
 
 /**
+ * A stored chain id the core can read (`u32`), or `null`. `Number.isFinite`
+ * let `-1` and `1.5` through, and serde then refused the WHOLE `StoreLoaded`
+ * over one record — the strand the codecs below exist to prevent.
+ */
+function decodeChainId(value: unknown): number | null {
+	const id = Number(value);
+	return Number.isInteger(id) && id > 0 && id <= MAX_CHAIN_ID ? id : null;
+}
+
+/**
  * Decode one stored `CustomNetwork`. A codec, not a policy: serde rejects a
  * record whose fields are missing or mistyped, and a rejected `StoreLoaded`
  * would strand the core unloaded forever (every write is then dropped), so
- * junk is coerced to the empty/zero value.
+ * junk is coerced to the empty value — and a record that names no chain is
+ * not a network at all, so it is dropped.
  */
 function decodeCustomNetwork(raw: unknown): NetCustomNetwork | null {
 	if (raw === null || typeof raw !== 'object') return null;
 	const r = raw as Record<string, unknown>;
-	const chainId = Number(r.chainId);
+	const chainId = decodeChainId(r.chainId);
+	if (chainId === null) return null;
 	return {
-		id: asString(r.id),
+		id: asString(r.id) || `custom-${chainId}`,
 		display_name: asString(r.displayName),
-		chain_id: Number.isFinite(chainId) ? chainId : 0,
+		chain_id: chainId,
 		icon_label: asString(r.iconLabel),
 		icon_color: asString(r.iconColor),
 		icon_bg: asString(r.iconBg),
@@ -130,9 +142,10 @@ function encodeCustomNetwork(n: NetCustomNetwork): Record<string, unknown> {
 function decodeNetworkConfig(raw: unknown): NetNetworkConfig | null {
 	if (raw === null || typeof raw !== 'object') return null;
 	const r = raw as Record<string, unknown>;
-	const chainId = Number(r.chainId);
+	const chainId = decodeChainId(r.chainId);
+	if (chainId === null) return null;
 	return {
-		chain_id: Number.isFinite(chainId) ? chainId : 0,
+		chain_id: chainId,
 		rpc_url: asString(r.rpcURL),
 		explorer_url: asString(r.explorerURL),
 		bundler_url: asString(r.bundlerURL)
@@ -420,6 +433,9 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 
 		case 'write_network_configs':
 			await setItem(KEYS.networkConfig, JSON.stringify(operation.configs.map(encodeNetworkConfig)));
+			// The same invalidation: the explorer links read the overrides from
+			// the snapshot, and an explorer set here was otherwise never used.
+			await refreshCustomNetworks();
 			return { type: 'written' };
 
 		case 'write_service_endpoints': {

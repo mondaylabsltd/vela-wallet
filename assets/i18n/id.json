@@ -332,7 +332,9 @@
   "wizardTestnet": "Testnet — tanpa nilai nyata",
   "wizardMainnet": "Mainnet — bernilai nyata",
   "headingMainnet": "Ruang mainnet",
-  "headingTestnet": "Ruang testnet"
+  "headingTestnet": "Ruang testnet",
+  "addedTestnet": "{{name}} ditambahkan ke ruang testnet.",
+  "addedMainnet": "{{name}} ditambahkan ke ruang mainnet."
  },
  "home": {
   "totalBalance": "Total saldo",
@@ -1197,9 +1199,9 @@
    "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successTitle": "Dompet dibuat",
-   "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
-   "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
-   "syncFailedTitle": "Sinkronisasi gagal",
+   "syncFailedHint": "Biarkan halaman ini terbuka: Vela mencoba lagi sendiri saat koneksi kembali, atau ketuk Coba Unggah Lagi. Keluar atau memuat ulang sekarang akan membuang dompet ini.",
+   "syncFailedMessage": "Passkey Anda sudah dibuat, tetapi dompet belum bisa didaftarkan ke indeks passkey Vela, jadi belum tersimpan di perangkat ini.",
+   "syncFailedTitle": "Belum tersimpan",
    "taskDeriveAddress": "Menurunkan alamat akun",
    "taskVerifyKey": "Memverifikasi kunci publik passkey",
    "taskWriteIndex": "Menulis indeks kunci",
@@ -1208,7 +1210,12 @@
    "touchFingerprintBody": "{{product}} berkedip. Letakkan jari Anda di sensornya untuk memastikan ini benar Anda.",
    "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
    "touchTitle": "Sentuh kunci keamanan Anda",
-   "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap."
+   "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Anda sudah punya dompet bernama “{{name}}” di perangkat ini.",
+   "keyKeptTitle": "Kunci disimpan, belum dikonfirmasi",
+   "keyKeptBodyNetwork": "Perangkat ini sedang offline, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: ketuk Konfirmasi di sebelahnya setelah kembali online.",
+   "keyKeptBodyIndex": "Indeks passkey Vela tidak merespons, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: sebentar lagi ketuk Konfirmasi di sebelahnya."
   },
   "login": {
    "alertNotSupportedTitle": "Tidak Didukung",
@@ -1241,7 +1248,8 @@
    "switchDeviceBtn": "Masuk di perangkat lain",
    "pickTitle": "Dompet yang mana?",
    "pickBody": "{{product}} menyimpan lebih dari satu dompet Vela. Pilih yang ingin Anda masuki.",
-   "pickUnnamed": "Dompet tanpa nama"
+   "pickUnnamed": "Dompet tanpa nama",
+   "noPasskeyHint": "Jika perangkat ini tidak punya passkey Vela, coba dengan ponsel atau kunci keamanan Anda, atau buat dompet."
   },
   "storage": {
    "unreadableTitle": "Data dompet di browser ini tidak dapat dibaca",
@@ -2128,7 +2136,8 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS diperlukan",
-   "invalid": "Tidak valid"
+   "invalid": "Tidak valid",
+   "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
   },
   "backup": {
    "title": "Salin catatan dompet ini ke Ethereum",
@@ -2228,7 +2237,17 @@
   "viewAllActivity": "Lihat semua aktivitas",
   "deleteContact": "Hapus kontak",
   "edit": "Edit",
-  "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang."
+  "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang.",
+  "duplicateAddress": "Sudah tersimpan sebagai “{{name}}”. Menyimpan akan memperbarui kontak itu.",
+  "updateExisting": "Perbarui kontak",
+  "groupPickEmpty": "Belum ada grup. Buat grup dulu, lalu pindahkan kontak ke dalamnya.",
+  "saveFailed": "Tidak bisa menyimpan ke perangkat ini. Perubahan Anda terlihat di sini, tetapi akan hilang saat halaman ditutup.",
+  "memberCount_other": "{{count}} anggota",
+  "batchSendHintCount_other": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+  "batchSendHintTitledCount_other": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang.",
+  "memberCount_one": "{{count}} anggota",
+  "batchSendHintCount_one": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+  "batchSendHintTitledCount_one": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang."
  },
  "explore": {
   "title": "Jelajahi",

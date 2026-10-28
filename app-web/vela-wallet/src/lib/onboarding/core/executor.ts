@@ -46,6 +46,11 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 		signal: AbortSignal
 	): Promise<ShellResult> {
 		const operation = effect.operation;
+		// ob-7: the core abandoned this ceremony (Cancel, or Back over its
+		// prompt) — close the browser's prompt rather than leave it standing.
+		if (operation.type === 'register_passkey' || operation.type === 'sign_member_proof') {
+			signal.addEventListener('abort', () => Passkey.cancelCeremony(), { once: true });
+		}
 		switch (operation.type) {
 			case 'check_passkey_support':
 				return { type: 'passkey_support', supported: Passkey.passkeySupported() };

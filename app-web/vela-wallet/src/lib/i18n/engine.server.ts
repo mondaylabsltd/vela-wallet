@@ -357,6 +357,14 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		copied: k('componentsUi.identiconViewer.copied'),
 		noActivity: k('history.emptyTitle'),
 		done: k('common.done'),
+		duplicateAddress: k('contacts.duplicateAddress'),
+		updateExisting: k('contacts.updateExisting'),
+		groupPickEmpty: k('contacts.groupPickEmpty'),
+		saveFailed: k('contacts.saveFailed'),
+		back: k('onboarding.common.back'),
+		memberCount: pluralCopy(locale, 'contacts.memberCount'),
+		batchSendHintCount: pluralCopy(locale, 'contacts.batchSendHintCount'),
+		batchSendHintTitledCount: pluralCopy(locale, 'contacts.batchSendHintTitledCount'),
 		activity: {
 			sent: k('history.labelSent'),
 			received: k('history.labelReceived'),
@@ -609,6 +617,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
 			mismatch: k('settingsModals.network.rpcChainMismatch'),
+			urlRefused: k('settingsModals.health.urlRefused'),
 			relayNotice: k('settingsModals.network.relayNotice')
 		},
 		addNetwork: {
@@ -657,6 +666,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			checkKey: k('settingsModals.rpcProviders.checkKey'),
 			notSet: k('settingsModals.rpcProviders.notSet'),
 			connected: k('activity.connected'),
+			checking: k('componentsUi.funding.checking'),
+			unavailable: k('settingsModals.rpcProviders.unavailable'),
 			supportsCount: k('settingsModals.rpcProviders.supportsCount'),
 			avgLatency: k('settingsModals.rpcProviders.avgLatency')
 		},
@@ -1018,6 +1029,8 @@ export function resolveNetworkSpaceMessages(locale: Locale): NetworkSpaceMessage
 		wizardMainnet: k('wizardMainnet'),
 		headingMainnet: k('headingMainnet'),
 		headingTestnet: k('headingTestnet'),
+		addedTestnet: k('addedTestnet'),
+		addedMainnet: k('addedMainnet'),
 		cancel: t(locale, 'common.cancel')
 	};
 }

@@ -698,6 +698,16 @@ pub fn fiat_symbol(code: &str, language: &str) -> String {
     vela_core::l10n::fiat_symbol(code, language)
 }
 
+/// How many fraction digits a fiat figure in `code` carries
+/// (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+/// and the other zero-decimal currencies, three for the dinars, two
+/// otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+#[wasm_bindgen(js_name = currencyFractionDigits)]
+#[must_use]
+pub fn currency_fraction_digits(code: &str) -> u32 {
+    u32::try_from(vela_core::l10n::currency_fraction_digits(code)).unwrap_or(2)
+}
+
 /// An exact token figure cut to the precision a person reads
 /// (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
 /// at its first significant digit. Dot-decimal in, dot-decimal out; text

@@ -31,4 +31,9 @@ import_failure_key: string | null,
 /**
  * The file an `ExportRequested` produced, until the shell takes it.
  */
-export: ContactExportFile | null, recipient: ContactRecipientView | null, };
+export: ContactExportFile | null, recipient: ContactRecipientView | null, 
+/**
+ * The storage refused the last write: what the book shows is not kept
+ * on this device (set-22). Clears with the next change.
+ */
+save_failed: boolean, };

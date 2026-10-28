@@ -61,6 +61,9 @@
 		onConfirmKey: (index: number) => void;
 		onRemoveKey: (index: number) => void;
 		onFinish: () => void;
+		/** The core's `can_cancel`: a passkey prompt is waiting (ob-7). */
+		canCancel?: boolean;
+		onCancel?: () => void;
 	}
 
 	let {
@@ -80,7 +83,9 @@
 		onAddKey,
 		onConfirmKey,
 		onRemoveKey,
-		onFinish
+		onFinish,
+		canCancel = false,
+		onCancel
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
@@ -233,8 +238,22 @@
 				<span>{strings(addHeadingKey)}</span>
 			</button>
 		{/if}
-		<AddMethodPicker open={pickerShown} allowed={addMethods} {strings} onPick={pick} />
+		<AddMethodPicker
+			open={pickerShown}
+			allowed={addMethods}
+			disabled={busy}
+			{strings}
+			onPick={pick}
+		/>
 	</div>
+
+	{#if canCancel}
+		<!-- ob-7: the prompt is up; the way out is said, not hidden behind it. -->
+		<p class="waiting" role="status">{strings('onboarding.common.confirmInPrompt')}</p>
+		<button class="cancel" type="button" onclick={() => onCancel?.()}>
+			{strings('common.cancel')}
+		</button>
+	{/if}
 
 	<div class="spacer"></div>
 
@@ -248,6 +267,26 @@
 </section>
 
 <style>
+	.waiting {
+		margin: 0;
+		color: var(--color-fg-muted);
+		font-size: var(--text-sm);
+		text-align: center;
+	}
+
+	/* The form's quiet "Start over", for the same kind of way out. */
+	.cancel {
+		align-self: center;
+		padding: var(--space-sm) var(--space-xl);
+		border: 0;
+		background: none;
+		color: var(--color-fg-muted);
+		font-family: var(--font-ui);
+		font-size: var(--text-base);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
 	.screen {
 		display: flex;
 		flex: 1;

@@ -58,7 +58,8 @@
 						onclick={() => toggle(row.id)}
 					>
 						{#if row.identiconSvg !== undefined}
-							<Identicon svg={row.identiconSvg} size="row" label={row.name} />
+							<!-- Decorative: the name beside it already names the row (S4). -->
+							<Identicon svg={row.identiconSvg} size="row" />
 						{:else}
 							<span class="tile" aria-hidden="true">
 								<Icon icon={UTILITY_ICONS['users-round']} size="md" />
@@ -81,11 +82,14 @@
 		</ul>
 	{/if}
 
-	<div class="actions">
-		<Button variant="primary" shape="rounded" onclick={() => onsave([...checked])}>
-			{model.save}
-		</Button>
-	</div>
+	<!-- set-15: nothing to tick, nothing to save — no dead button. -->
+	{#if model.rows.length > 0}
+		<div class="actions">
+			<Button variant="primary" shape="rounded" onclick={() => onsave([...checked])}>
+				{model.save}
+			</Button>
+		</div>
+	{/if}
 </div>
 
 <style>

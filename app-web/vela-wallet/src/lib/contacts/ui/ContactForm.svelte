@@ -15,6 +15,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { addressEntry } from '$lib/core/kernels';
 	import { cleanName, NAME_MAX_CHARS, type ContactDraft, type ContactFormCopy } from '../forms';
+	import { fill } from '$lib/wallet/messages';
 
 	interface Props {
 		copy: ContactFormCopy;
@@ -37,6 +38,10 @@
 	const entry = $derived(addressEntry(address.trim()));
 	const validAddress = $derived(entry === 'valid');
 	const canSave = $derived(validAddress && cleanName(name) !== '');
+	/** set-3: adding an address already saved updates that contact — said first. */
+	const existing = $derived(
+		!editing && validAddress ? (copy.existingName?.(address.trim()) ?? null) : null
+	);
 
 	function save() {
 		touched = true;
@@ -68,6 +73,9 @@
 				: entry === 'checksum'
 					? copy.invalidChecksum
 					: copy.invalidAddress}
+			hint={existing !== null && copy.duplicateAddress !== undefined
+				? fill(copy.duplicateAddress, { name: existing })
+				: undefined}
 			oninput={(next) => {
 				address = next;
 				touched = true;
@@ -76,7 +84,7 @@
 	{/if}
 	<div class="actions">
 		<Button variant="primary" shape="rounded" disabled={!canSave} onclick={save}>
-			{copy.save}
+			{existing !== null && copy.updateExisting !== undefined ? copy.updateExisting : copy.save}
 		</Button>
 	</div>
 </div>

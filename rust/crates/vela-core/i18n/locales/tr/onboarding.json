@@ -223,9 +223,9 @@
       "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
       "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
       "successTitle": "Cüzdan oluşturuldu",
-      "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
-      "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
-      "syncFailedTitle": "Eşitleme başarısız",
+      "syncFailedHint": "Bu sayfayı açık tutun: bağlantı geri geldiğinde Vela kendiliğinden yeniden dener ya da Yeniden Yükle’ye dokunun. Şimdi sayfadan çıkar veya yenilerseniz bu cüzdan silinir.",
+      "syncFailedMessage": "Passkey'leriniz oluşturuldu ancak cüzdan Vela'nın passkey dizinine kaydedilemedi, bu yüzden bu cihazda henüz kayıtlı değil.",
+      "syncFailedTitle": "Henüz kaydedilmedi",
       "taskDeriveAddress": "Hesap adresi türetiliyor",
       "taskVerifyKey": "Passkey'in açık anahtarı doğrulanıyor",
       "taskWriteIndex": "Anahtar dizini yazılıyor",
@@ -234,7 +234,12 @@
       "touchFingerprintBody": "{{product}} yanıp sönüyor. Siz olduğunuzu doğrulamak için parmağınızı sensörüne koyun.",
       "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
       "touchTitle": "Güvenlik anahtarınıza dokunun",
-      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır."
+      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Bu cihazda zaten “{{name}}” adlı bir cüzdanınız var.",
+      "keyKeptTitle": "Anahtar saklandı, henüz onaylanmadı",
+      "keyKeptBodyNetwork": "Bu cihaz çevrimdışı olduğu için yeni passkey'iniz onaylanamadı. Listede duruyor: yeniden çevrimiçi olduğunuzda yanındaki Onayla'ya dokunun.",
+      "keyKeptBodyIndex": "Vela'nın passkey dizini yanıt vermediği için yeni passkey'iniz onaylanamadı. Listede duruyor: birazdan yanındaki Onayla'ya dokunun."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",
@@ -267,7 +272,8 @@
       "switchDeviceBtn": "Başka bir cihazda giriş yap",
       "pickTitle": "Hangi cüzdan?",
       "pickBody": "{{product}} birden fazla Vela cüzdanı içeriyor. Giriş yapmak istediğinizi seçin.",
-      "pickUnnamed": "Adsız cüzdan"
+      "pickUnnamed": "Adsız cüzdan",
+      "noPasskeyHint": "Bu cihazda Vela passkey'i yoksa telefonunuzu veya bir güvenlik anahtarını deneyin ya da bir cüzdan oluşturun."
     },
     "storage": {
       "unreadableTitle": "Bu tarayıcıdaki cüzdan verileri okunamıyor",

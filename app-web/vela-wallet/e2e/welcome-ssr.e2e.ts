@@ -154,7 +154,18 @@ test('/ negotiates Accept-Language into a 307 with Vary', async ({ request }) =>
 	});
 	expect(response.status()).toBe(307);
 	expect(response.headers()['location']).toBe('/ja');
-	expect(response.headers()['vary']).toBe('Accept-Language');
+	expect(response.headers()['vary']).toBe('Accept-Language, Cookie');
+});
+
+test('/ honours a language pinned in Settings over Accept-Language (set-12)', async ({
+	request
+}) => {
+	const response = await request.get('/', {
+		headers: { 'accept-language': 'ja', cookie: 'vela_lang=de' },
+		maxRedirects: 0
+	});
+	expect(response.status()).toBe(307);
+	expect(response.headers()['location']).toBe('/de');
 });
 
 test('/ preserves the query string across the locale redirect', async ({ request }) => {

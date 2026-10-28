@@ -49,7 +49,8 @@ const VIEW: ContactsView = {
 	import_failure: null,
 	import_failure_key: null,
 	export: null,
-	recipient: null
+	recipient: null,
+	save_failed: false
 };
 
 describe('displayName', () => {
@@ -451,6 +452,27 @@ describe('the pickers', () => {
 		expect(model.rows[3].name).toMatch(/^0x/);
 	});
 
+	// S4: the picker reads in the book's A–Z order, not the core's recency
+	// order (which read as reversed).
+	it('memberPickModel follows the A–Z sections, not recency', () => {
+		const recentFirst: ContactsView = { ...VIEW, contacts: [UNNAMED, BOB, ANTON, ALICE] };
+		expect(memberPickModel(recentFirst, 'g1', m, identicon).rows.map((r) => r.id)).toEqual([
+			ALICE.address,
+			ANTON.address,
+			BOB.address,
+			UNNAMED.address
+		]);
+	});
+
+	// set-15: with no group, the sentence is about groups — not "save some
+	// contacts first" over a contact that is saved.
+	it('groupPickModel with no groups says there are none yet', () => {
+		const model = groupPickModel({ ...VIEW, groups: [] }, ANTON.address, m);
+		expect(model.rows).toEqual([]);
+		expect(model.empty).toBe(m.groupPickEmpty);
+		expect(model.empty).not.toBe(m.groupNoContacts);
+	});
+
 	it('groupPickModel lists the groups holding this contact ticked', () => {
 		expect(groupPickModel(VIEW, ANTON.address, m).rows).toEqual([
 			{ id: 'g1', name: 'Payroll', detail: expect.stringContaining('2'), checked: false }
@@ -489,7 +511,11 @@ describe('importReport', () => {
 		expect(m.importFailEncoding).toContain('UTF-8');
 		// Issue #430: the core names the sentence — an empty file holds no contacts.
 		const empty = importReport(
-			{ ...VIEW, import_failure: { type: 'empty' }, import_failure_key: 'contacts.importFailEmpty' },
+			{
+				...VIEW,
+				import_failure: { type: 'empty' },
+				import_failure_key: 'contacts.importFailEmpty'
+			},
 			m
 		);
 		expect(empty).toEqual({ title: m.importFailTitle, body: m.importFailEmpty });
@@ -515,5 +541,31 @@ describe('the group screen says why its button is dead', () => {
 		});
 		expect(filled.group?.ctaCaption).toContain('2');
 		expect(filled.group?.ctaCaption).not.toBe(m.batchSendNeedsMembers);
+	});
+
+	// set-16: one member is "1 member", never "1 members".
+	it('counts members in the form the count takes', () => {
+		const one = { id: 'g3', name: 'Solo', color: null, members: [ALICE] };
+		const view: ContactsView = { ...VIEW, groups: [one] };
+		const solo = buildContactsLive(view, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g3'
+		});
+		expect(solo.group?.group.countLabel).toBe('1 member');
+		expect(solo.group?.ctaCaption).toMatch(/^Send to 1 member /);
+		const pair = buildContactsLive(VIEW, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g1'
+		});
+		expect(pair.group?.group.countLabel).toBe('2 members');
+	});
+
+	// S4: a screen's way back says "Back"; the search box's clear keeps "Cancel".
+	it('labels the way back Back', () => {
+		const model = buildContactsLive(VIEW, m, identicon, { screen: 'list', query: '' });
+		expect(model.backLabel).toBe('Back');
+		expect(model.clearLabel).toBe(m.cancel);
 	});
 });

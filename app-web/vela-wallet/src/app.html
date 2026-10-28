@@ -114,7 +114,16 @@
 					: introParams.has('skipIntro')
 						? false
 						: localStorage.getItem('vela.intro.seen') === null;
-				if (introDue) {
+				/*
+				 * ob-6: a signed-in person on Welcome is on their way to the wallet
+				 * (`welcomeBelongsInWallet` in the same module) — hide the landing
+				 * page rather than flash it. ACCOUNTS_KEY = 'vela.accounts',
+				 * STAY_PARAM = 'stay'.
+				 */
+				var accounts = localStorage.getItem('vela.accounts');
+				var signedIn =
+					!introParams.has('stay') && !introParams.has('intro') && !!accounts && accounts !== '[]';
+				if (introDue || signedIn) {
 					document.documentElement.dataset.intro = 'pending';
 				}
 			} catch (e) {

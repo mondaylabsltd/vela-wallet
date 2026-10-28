@@ -332,6 +332,8 @@
     "wizardTestnet": "Testnet — nessun valore reale",
     "wizardMainnet": "Mainnet — valore reale",
     "headingMainnet": "Spazio mainnet",
-    "headingTestnet": "Spazio testnet"
+    "headingTestnet": "Spazio testnet",
+    "addedTestnet": "{{name}} è stata aggiunta allo spazio testnet.",
+    "addedMainnet": "{{name}} è stata aggiunta allo spazio mainnet."
   }
 }

@@ -133,6 +133,15 @@ export function deviceOnlyKeys(account: Account): WalletKeys | null {
 }
 
 /**
+ * Is this answer one the registry could still improve (ob-11)? Only the
+ * device's fallback after NO chain answered — not one still being asked, and
+ * not a registry's own answer ("registered" or "not registered").
+ */
+export function keysWorthAskingAgain(keys: WalletKeys | null): boolean {
+	return keys !== null && keys.source === 'device' && keys.asking !== true;
+}
+
+/**
  * The keys that control `account`, the one it signed in with marked. Never
  * throws; the worst answer is the device's own.
  */

@@ -37,7 +37,7 @@
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
+	import { markIntroSeen, shouldShowIntro, welcomeBelongsInWallet } from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '$lib/i18n/locales';
@@ -161,8 +161,18 @@
 		// The prompt a refusal raises is requested in the same step that goes
 		// idle; it reaches `prompt` before this timer fires, and closes the
 		// attempt first.
-		if (prev?.busy === true && !next.busy) setTimeout(() => signInEnded('cancelled'), 0);
+		if (prev?.busy === true && !next.busy)
+			setTimeout(() => {
+				// ob-13: still open means no prompt said anything — the passkey
+				// sheet was closed or refused, or this device had no passkey to
+				// offer. The person is told, not dropped back in silence.
+				if (signInOpen) signInCancelled = true;
+				signInEnded('cancelled');
+			}, 0);
 	}
+
+	/** The last sign-in ended at the passkey sheet with nothing said (ob-13). */
+	let signInCancelled = $state(false);
 
 	async function complete(mode: CompletionMode): Promise<void> {
 		if (signInOpen) {
@@ -184,6 +194,7 @@
 	async function signIn(method: KeyMethod) {
 		if (signingIn) return;
 		methodsOpen = false;
+		signInCancelled = false;
 		starting = true;
 		try {
 			if (!login) {
@@ -218,6 +229,18 @@
 	}
 
 	onMount(() => {
+		// ob-6: a signed-in person who opens `/`, `/en` or presses Back into
+		// Welcome is taken to the wallet. `app.html` already hid this page
+		// before paint on the same rule; the attribute goes once we have left.
+		if (welcomeBelongsInWallet()) {
+			void goto(walletHref, { replaceState: true }).finally(() => {
+				delete document.documentElement.dataset.intro;
+			});
+			return () => {
+				login?.dispose();
+				login = null;
+			};
+		}
 		if (shouldShowIntro()) intro = true;
 		// The inline script in app.html hid Welcome before paint on the same
 		// rule; whichever way the gate went, the decision is now this
@@ -299,6 +322,16 @@
 				</Button>
 			</div>
 
+			{#if signInCancelled && !signingIn}
+				<div class="signInNotice" role="status">
+					<p class="noticeTitle">{strings('onboarding.login.statusCancelledTitle')}</p>
+					<p class="noticeBody">
+						{strings('onboarding.login.statusCancelledBody')}
+						{strings('onboarding.login.noPasskeyHint')}
+					</p>
+				</div>
+			{/if}
+
 			{#if transportFailed}
 				<p class="endpointWarning" role="status">
 					{strings('onboarding.common.networkBody')}
@@ -341,7 +374,7 @@
 {#if pending}
 	<PromptSheet
 		copy={pending.copy}
-		dismissLabel={strings('onboarding.common.back')}
+		dismissLabel={strings('common.gotIt')}
 		onAnswer={(accepted) => {
 			pending?.resolve(accepted);
 			pending = null;
@@ -483,6 +516,28 @@
 		color: var(--color-fg-base);
 		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
+	}
+
+	.signInNotice {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.noticeTitle,
+	.noticeBody {
+		margin: 0;
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+	}
+
+	.noticeTitle {
+		color: var(--color-fg-base);
+		font-weight: var(--weight-semibold);
+	}
+
+	.noticeBody {
+		color: var(--color-fg-muted);
 	}
 
 	.endpointWarning {

@@ -119,8 +119,30 @@ describe('the landing watch, on the web (issue 409)', () => {
 		expect(sessionFailure(effect({ type: 'load_pending_uploads' })).type).toBe(
 			'pending_uploads_unavailable'
 		);
-		expect(
-			sessionFailure(effect({ type: 'await_registry_landing', task_id: 't1' })).type
-		).toBe('registry_landing_unconfirmed');
+		expect(sessionFailure(effect({ type: 'await_registry_landing', task_id: 't1' })).type).toBe(
+			'registry_landing_unconfirmed'
+		);
+	});
+});
+
+describe('the restore read (settings set-21)', () => {
+	let storage: MemoryStorage;
+	beforeEach(() => {
+		storage = new MemoryStorage();
+		vi.stubGlobal('localStorage', storage);
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('a damaged account list is a failed read — accounts_unavailable — not an empty one', async () => {
+		storage.setItem(STORAGE_KEYS.accounts, '{not json');
+		const effect = { id: 1, operation: { type: 'load_accounts' as const } };
+		await expect(executeSession(effect)).rejects.toThrow();
+		expect(sessionFailure(effect)).toEqual({ type: 'accounts_unavailable' });
+		expect(storage.getItem(STORAGE_KEYS.accounts)).toBe('{not json');
+	});
+
+	it('nothing stored is still an empty list', async () => {
+		const effect = { id: 1, operation: { type: 'load_accounts' as const } };
+		expect(await executeSession(effect)).toEqual({ type: 'accounts_loaded', accounts: [] });
 	});
 });

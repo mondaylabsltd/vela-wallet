@@ -16,4 +16,12 @@ address: string, active_index: number, accounts: Array<SessionAccountRow>, allow
 /**
  * `Some` ⇒ the sign-out confirmation dialog is open.
  */
-sign_out: SessionSignOutView | null, };
+sign_out: SessionSignOutView | null, 
+/**
+ * The stored account list could not be read (settings set-21). The
+ * route is onboarding as for any empty list, but the shell must say the
+ * accounts could not be read — and offer to rebuild or reset them —
+ * rather than look signed out. Nothing was written: the list is where it
+ * was. Clears once a wallet is established.
+ */
+accounts_unreadable: boolean, };

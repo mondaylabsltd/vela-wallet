@@ -225,9 +225,9 @@
       "successMessage_many": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
       "successMessage_other": "Ognuna delle tue {{count}} chiavi accede da sola. Il contratto viene distribuito alla prima transazione.",
       "successTitle": "Wallet creato",
-      "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
-      "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non riuscirai ad accedere su altri dispositivi finché il problema non viene risolto.",
-      "syncFailedTitle": "Sincronizzazione non riuscita",
+      "syncFailedHint": "Tieni aperta questa pagina: Vela riprova da solo quando torna la connessione, oppure tocca Riprova. Se esci o ricarichi ora, questo wallet viene scartato.",
+      "syncFailedMessage": "Le tue passkey sono state create, ma il wallet non è stato registrato nell'indice delle passkey di Vela, quindi non è ancora salvato su questo dispositivo.",
+      "syncFailedTitle": "Non ancora salvato",
       "taskDeriveAddress": "Derivazione dell'indirizzo dell'account",
       "taskVerifyKey": "Verifica della chiave pubblica della passkey",
       "taskWriteIndex": "Scrittura dell'indice delle chiavi",
@@ -236,7 +236,12 @@
       "touchFingerprintBody": "{{product}} sta lampeggiando. Appoggia il dito sul suo sensore per confermare che sei tu.",
       "touchSelectBody": "Sono collegate più chiavi di sicurezza e stanno lampeggiando tutte. Tocca quella che vuoi usare.",
       "touchTitle": "Tocca la tua chiave di sicurezza",
-      "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto."
+      "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Su questo dispositivo hai già un wallet chiamato “{{name}}”.",
+      "keyKeptTitle": "Chiave conservata, non ancora confermata",
+      "keyKeptBodyNetwork": "Questo dispositivo è offline, quindi la nuova passkey non è stata confermata. Resta nella lista: tocca Conferma accanto a essa quando torni online.",
+      "keyKeptBodyIndex": "L'indice delle passkey di Vela non ha risposto, quindi la nuova passkey non è stata confermata. Resta nella lista: tra poco tocca Conferma accanto a essa."
     },
     "login": {
       "alertNotSupportedTitle": "Non supportato",
@@ -269,7 +274,8 @@
       "switchDeviceBtn": "Accedi su un altro dispositivo",
       "pickTitle": "Quale portafoglio?",
       "pickBody": "{{product}} contiene più di un portafoglio Vela. Scegli quello in cui accedere.",
-      "pickUnnamed": "Portafoglio senza nome"
+      "pickUnnamed": "Portafoglio senza nome",
+      "noPasskeyHint": "Se questo dispositivo non ha una passkey di Vela, prova con il telefono o una chiave di sicurezza, oppure crea un wallet."
     },
     "storage": {
       "unreadableTitle": "I dati del wallet in questo browser non sono leggibili",

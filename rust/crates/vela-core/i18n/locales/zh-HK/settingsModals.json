@@ -91,7 +91,8 @@
     "health": {
       "offline": "離線",
       "httpsRequired": "需要 HTTPS",
-      "invalid": "無效"
+      "invalid": "無效",
+      "urlRefused": "未儲存——請用 https:// 地址（只有本機可以用普通 http://）。仍然使用之前嘅地址。"
     },
     "backup": {
       "title": "將錢包紀錄複製去以太坊",

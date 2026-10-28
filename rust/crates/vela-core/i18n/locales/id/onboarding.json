@@ -223,9 +223,9 @@
       "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
       "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
       "successTitle": "Dompet dibuat",
-      "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
-      "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
-      "syncFailedTitle": "Sinkronisasi gagal",
+      "syncFailedHint": "Biarkan halaman ini terbuka: Vela mencoba lagi sendiri saat koneksi kembali, atau ketuk Coba Unggah Lagi. Keluar atau memuat ulang sekarang akan membuang dompet ini.",
+      "syncFailedMessage": "Passkey Anda sudah dibuat, tetapi dompet belum bisa didaftarkan ke indeks passkey Vela, jadi belum tersimpan di perangkat ini.",
+      "syncFailedTitle": "Belum tersimpan",
       "taskDeriveAddress": "Menurunkan alamat akun",
       "taskVerifyKey": "Memverifikasi kunci publik passkey",
       "taskWriteIndex": "Menulis indeks kunci",
@@ -234,7 +234,12 @@
       "touchFingerprintBody": "{{product}} berkedip. Letakkan jari Anda di sensornya untuk memastikan ini benar Anda.",
       "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
       "touchTitle": "Sentuh kunci keamanan Anda",
-      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap."
+      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Anda sudah punya dompet bernama “{{name}}” di perangkat ini.",
+      "keyKeptTitle": "Kunci disimpan, belum dikonfirmasi",
+      "keyKeptBodyNetwork": "Perangkat ini sedang offline, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: ketuk Konfirmasi di sebelahnya setelah kembali online.",
+      "keyKeptBodyIndex": "Indeks passkey Vela tidak merespons, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: sebentar lagi ketuk Konfirmasi di sebelahnya."
     },
     "login": {
       "alertNotSupportedTitle": "Tidak Didukung",
@@ -267,7 +272,8 @@
       "switchDeviceBtn": "Masuk di perangkat lain",
       "pickTitle": "Dompet yang mana?",
       "pickBody": "{{product}} menyimpan lebih dari satu dompet Vela. Pilih yang ingin Anda masuki.",
-      "pickUnnamed": "Dompet tanpa nama"
+      "pickUnnamed": "Dompet tanpa nama",
+      "noPasskeyHint": "Jika perangkat ini tidak punya passkey Vela, coba dengan ponsel atau kunci keamanan Anda, atau buat dompet."
     },
     "storage": {
       "unreadableTitle": "Data dompet di browser ini tidak dapat dibaca",

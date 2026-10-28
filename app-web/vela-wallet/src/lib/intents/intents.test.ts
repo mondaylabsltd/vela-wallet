@@ -348,6 +348,8 @@ function net(
 		explorer_health: null,
 		rpc_chain_mismatch: null,
 		rpc_save_deferred: false,
+		rpc_url_refused: false,
+		explorer_url_refused: false,
 		is_testnet: false
 	};
 }

@@ -91,7 +91,8 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS obrigatório",
-      "invalid": "Inválido"
+      "invalid": "Inválido",
+      "urlRefused": "Não salvo — use um endereço https:// (http:// simples só para este computador). O endereço anterior continua em uso."
     },
     "backup": {
       "title": "Copiar o registro desta carteira para a Ethereum",

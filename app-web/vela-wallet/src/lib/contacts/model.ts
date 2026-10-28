@@ -191,6 +191,8 @@ export interface ContactsHomeModel {
 	editLabel: string;
 	menuLabel: string;
 	backLabel: string;
+	/** The search box's clear — "Cancel", where the screen's way back is "Back". */
+	clearLabel?: string;
 	/**
 	 * The search field for a book with nothing in it yet. The list carries its
 	 * own; an empty book used to draw no field at all, where Android and iOS

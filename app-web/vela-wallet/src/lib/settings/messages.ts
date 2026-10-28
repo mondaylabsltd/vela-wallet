@@ -253,6 +253,11 @@ export interface SettingsMessages {
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
+		/**
+		 * set-6/8: an address the URL rule refused — not saved, the previous one
+		 * still in use. Said under a network's RPC/explorer and a service field.
+		 */
+		urlRefused: string;
 		/** Spec 098 §5.1: the relay is sent this RPC, key and all. */
 		relayNotice: string;
 	};
@@ -319,7 +324,12 @@ export interface SettingsMessages {
 		getKey: string;
 		checkKey: string;
 		notSet: string;
+		/** set-9: only once a network has answered the key. */
 		connected: string;
+		/** The key is being tried on its networks. */
+		checking: string;
+		/** The key was tried and no network answered it. */
+		unavailable: string;
 		/** Template with `{{count}}` and `{{total}}`. */
 		supportsCount: string;
 		/** Template with `{{ms}}`. */
@@ -949,6 +959,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.relayNotice',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
+	'settingsModals.health.urlRefused',
 	'settingsModals.addNetwork.description',
 	'settingsModals.addNetwork.searchPlaceholder',
 	'settingsModals.addNetwork.compatible',
@@ -977,6 +988,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.rpcProviders.getKey',
 	'settingsModals.rpcProviders.checkKey',
 	'settingsModals.rpcProviders.notSet',
+	'settingsModals.rpcProviders.unavailable',
 	'activity.connected',
 	'settingsModals.rpcProviders.supportsCount',
 	'settingsModals.rpcProviders.avgLatency',

@@ -9,6 +9,8 @@
  * 最近往来 rows are literally the wallet's ActivityRow copy.
  */
 
+import type { PluralCopy } from '$lib/i18n/plural';
+
 export interface ContactsMessages {
 	title: string;
 	searchPlaceholder: string;
@@ -97,6 +99,21 @@ export interface ContactsMessages {
 	noActivity: string;
 	/** "Done" — the report's dismiss. */
 	done: string;
+	/** set-3: template with `{{name}}` — the address is already saved as that contact. */
+	duplicateAddress: string;
+	/** set-3: the form's save when it updates the contact already saved. */
+	updateExisting: string;
+	/** set-15: "Move to group" with no group to move into. */
+	groupPickEmpty: string;
+	/** set-22: the storage refused a change — it shows, but is not kept. */
+	saveFailed: string;
+	/** S4: a screen's way back is "Back", not "Cancel". */
+	back: string;
+	/** set-16: "{{count}} member(s)" by the core's plural rule. */
+	memberCount: PluralCopy;
+	/** set-16: the group send's caption, by count. */
+	batchSendHintCount: PluralCopy;
+	batchSendHintTitledCount: PluralCopy;
 	activity: { sent: string; received: string; today: string; yesterday: string; all: string };
 	shell: {
 		navWallet: string;
@@ -171,6 +188,11 @@ export const CONTACTS_KEYS = [
 	'contacts.groupDeleteBody',
 	'contacts.groupMembersLabel',
 	'contacts.groupNoContacts',
+	'contacts.duplicateAddress',
+	'contacts.updateExisting',
+	'contacts.groupPickEmpty',
+	'contacts.saveFailed',
+	'onboarding.common.back',
 	'componentsUi.identiconViewer.copied',
 	'componentsUi.dayGroup.today',
 	'history.emptyTitle',

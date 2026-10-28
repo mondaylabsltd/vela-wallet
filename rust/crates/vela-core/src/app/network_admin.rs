@@ -76,7 +76,7 @@
 //! - Provider key storage is plaintext AsyncStorage (storage.ts:289-297 says
 //!   so itself) — a recorded security debt, owned by the shell.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -1024,10 +1024,14 @@ impl NetServiceEndpoints {
     /// default" beside a cached URL, and one of them cached it for the life of
     /// the process — so a person could change their public-key index in
     /// Settings and still be registered against ours.
+    ///
+    /// An address the URL rule refuses ([`is_allowed_endpoint_url`]) is
+    /// treated as unset too: Settings no longer saves one, and one stored
+    /// before that (or by hand) must not be used.
     #[must_use]
     pub fn effective(&self, field: NetEndpointField) -> &str {
         let configured = self.get(field).trim();
-        if configured.is_empty() {
+        if configured.is_empty() || !is_allowed_endpoint_url(configured) {
             default_endpoint(field)
         } else {
             self.get(field)
@@ -1794,6 +1798,9 @@ pub struct Model {
     endpoints: NetServiceEndpoints,
     endpoint_drafts: NetServiceEndpoints,
     endpoint_health: BTreeMap<NetEndpointField, NetServiceHealth>,
+    /// Fields whose last blur was refused by the URL rule — nothing saved.
+    /// Cleared by the next edit of that field, or a reset.
+    endpoint_refused: BTreeSet<NetEndpointField>,
     provider_keys: NetProviderKeys,
     provider_drafts: BTreeMap<NetProviderId, String>,
     provider_tests: BTreeMap<NetProviderId, ProviderTest>,
@@ -1975,6 +1982,15 @@ pub struct NetNetworkRow {
     /// been written yet. The card's `rpc_health` is `Checking` for the same
     /// reason, so a shell that renders nothing extra is still honest.
     pub rpc_save_deferred: bool,
+    /// The RPC in the open card is not an address the wallet may use
+    /// ([`is_allowed_endpoint_url`]): it is not probed, and a blur writes
+    /// nothing — the previous endpoint keeps serving. The shell says why.
+    #[serde(default)]
+    pub rpc_url_refused: bool,
+    /// The same, for the explorer field: a `javascript:` explorer would have
+    /// become the `href` of every "View on explorer" link.
+    #[serde(default)]
+    pub explorer_url_refused: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1985,6 +2001,11 @@ pub struct NetEndpointView {
     /// The placeholder.
     pub default_value: String,
     pub health: NetServiceHealth,
+    /// The last blur was REFUSED by the URL rule ([`is_allowed_endpoint_url`]):
+    /// nothing was written and the service still uses the address it had.
+    /// The shell says so beside the field; the next edit clears it.
+    #[serde(default)]
+    pub refused: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2169,6 +2190,7 @@ impl App for NetworkAdmin {
             Event::EndpointsOpened | Event::EndpointsRefreshRequested => endpoint_probe_wave(model),
             Event::EndpointEdited { field, value } => {
                 model.endpoint_drafts.set(field, value);
+                model.endpoint_refused.remove(&field);
                 render()
             }
             Event::EndpointBlurred { field } => endpoint_blurred(model, field),
@@ -2216,6 +2238,7 @@ impl App for NetworkAdmin {
                         .get(&field)
                         .cloned()
                         .unwrap_or(NetServiceHealth::Checking),
+                    refused: model.endpoint_refused.contains(&field),
                 })
                 .collect(),
             providers: PROVIDER_ORDER
@@ -2381,7 +2404,14 @@ pub fn parse_chain_data(
         native_decimals: data.native_currency_decimals.unwrap_or(18),
         rpc_url: extract_rpc_url(&data.rpc),
         rpc_urls: extract_all_rpc_urls(&data.rpc),
-        explorer_url: data.explorers.first().cloned().unwrap_or_default(),
+        // The first explorer the URL rule allows: the catalog is data from
+        // the network, and whatever is saved here becomes a link's `href`.
+        explorer_url: data
+            .explorers
+            .iter()
+            .find(|url| is_allowed_endpoint_url(url))
+            .cloned()
+            .unwrap_or_default(),
         // The marks' one rule (`remote_mark::chain_logo_url`): the base trimmed
         // of spaces and trailing slashes, a blank one the built-in endpoint.
         // Formatted here it stored `…//chainlogos/…` for a base saved with a
@@ -3406,6 +3436,12 @@ fn override_probe_wave(model: &mut Model, chain_id: u32) -> Command<NetEffect, E
         // "unverifiable", which saves (verbatim: today an empty override is
         // storable, and `savedConfig?.rpcURL ?? ...` passes it through).
         card.rpc_chain_id = Some(None);
+    } else if !override_url_allowed(&card.rpc_draft) {
+        // Not an address the wallet may use: never fetched, never saved
+        // ([`NetNetworkRow::rpc_url_refused`]). The verdict is in, so a held
+        // save resolves (to a refusal) instead of waiting forever.
+        card.rpc_health = NetProbeHealth::Error;
+        card.rpc_chain_id = Some(None);
     } else {
         card.rpc_health = NetProbeHealth::Checking;
         card.rpc_chain_id = None;
@@ -3413,7 +3449,8 @@ fn override_probe_wave(model: &mut Model, chain_id: u32) -> Command<NetEffect, E
             url: card.rpc_draft.clone(),
         });
     }
-    if card.explorer_draft.is_empty() {
+    if card.explorer_draft.is_empty() || !override_url_allowed(&card.explorer_draft) {
+        // A `data:` URL "answers" a no-cors fetch; a refused one is not asked.
         card.explorer_health = NetProbeHealth::Error;
     } else {
         card.explorer_health = NetProbeHealth::Checking;
@@ -3447,6 +3484,10 @@ fn override_blurred(model: &mut Model, chain_id: u32) -> Command<NetEffect, Even
     let Some(card) = model.override_cards.get_mut(&chain_id) else {
         return Command::done();
     };
+    if card_refuses_a_url(card) {
+        // Refused by the URL rule — no probe verdict can change that.
+        return resolve_override_save(model, chain_id, None);
+    }
     match card.rpc_chain_id {
         // The verdict is in — decide now.
         Some(reported) => resolve_override_save(model, chain_id, reported),
@@ -3472,6 +3513,12 @@ fn resolve_override_save(
         return Command::done();
     };
     card.save_deferred = false;
+    // The URL rule first: an address the wallet may not use is never
+    // written, whatever it answered. The card already says which field
+    // (`rpc_url_refused` / `explorer_url_refused`).
+    if card_refuses_a_url(card) {
+        return render();
+    }
     match reported {
         Some(reported_chain_id) if reported_chain_id != chain_id => {
             card.mismatch = Some(NetChainMismatch {
@@ -3487,6 +3534,17 @@ fn resolve_override_save(
             commit_override(model, chain_id)
         }
     }
+}
+
+/// An override field's value passes the URL rule — blank counts as allowed
+/// (it is "no override", verbatim). Surrounding spaces are not the address.
+fn override_url_allowed(value: &str) -> bool {
+    let value = value.trim();
+    value.is_empty() || is_allowed_endpoint_url(value)
+}
+
+fn card_refuses_a_url(card: &OverrideCard) -> bool {
+    !override_url_allowed(&card.rpc_draft) || !override_url_allowed(&card.explorer_draft)
 }
 
 /// The write itself — the pre-gate `OverrideBlurred` body, unchanged.
@@ -3552,14 +3610,15 @@ pub fn effective_passkey_index_url(model: &Model) -> &str {
     model.endpoints.effective(NetEndpointField::PasskeyIndex)
 }
 
-/// The HTTPS exception: `/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/`
-/// (SettingsScreen.tsx:352). Anchored on the FULL host label —
-/// `http://127.0.0.1.evil.com` is NOT localhost.
+/// The HTTPS exception: `/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/`
+/// (SettingsScreen.tsx:352, plus the IPv6 loopback). Anchored on the FULL
+/// host label — `http://127.0.0.1.evil.com` is NOT localhost.
 pub fn is_localhost_http(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("http://") else {
         return false;
     };
-    let host = ["localhost", "127.0.0.1"]
+    let host = ["localhost", "127.0.0.1", "[::1]"]
         .iter()
         .find_map(|h| rest.strip_prefix(h));
     let Some(mut tail) = host else {
@@ -3573,6 +3632,54 @@ pub fn is_localhost_http(url: &str) -> bool {
         tail = &port[digits..];
     }
     tail.is_empty() || tail.starts_with('/')
+}
+
+/// The one rule for every address a person types into Settings — a network's
+/// RPC and explorer, the four service endpoints — and for an explorer a
+/// network record carries: `https://` and a real host, or plain `http://` to
+/// this computer ([`is_localhost_http`]). Nothing else is fetched, saved or
+/// drawn as a link. `javascript:`, `data:`, `ftp://`, a bare word or
+/// `https://` with no host were all saved before this, and an explorer saved
+/// as `javascript:…` became the `href` of "View on explorer".
+#[must_use]
+pub fn is_allowed_endpoint_url(url: &str) -> bool {
+    if url.chars().any(char::is_control) {
+        return false;
+    }
+    if is_localhost_http(url) {
+        return true;
+    }
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("https://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    // `user:pass@` is a private node's login, not part of the host.
+    let host_port = authority.rsplit('@').next().unwrap_or_default();
+    let (host, port) = if let Some(v6) = host_port.strip_prefix('[') {
+        let Some((inner, after)) = v6.split_once(']') else {
+            return false;
+        };
+        if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_hexdigit() || c == ':') {
+            return false;
+        }
+        if !after.is_empty() && !after.starts_with(':') {
+            return false;
+        }
+        (inner, after.strip_prefix(':'))
+    } else {
+        match host_port.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (host_port, None),
+        }
+    };
+    let host_ok = !host.is_empty()
+        && !host.starts_with('.')
+        && host
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ':'));
+    let port_ok = port.is_none_or(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    host_ok && port_ok
 }
 
 /// `value.trim().replace(/[\r\n]/g, '')` — the header-injection guard
@@ -3614,8 +3721,10 @@ fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
             continue;
         }
         // The HTTPS gate runs on the RAW value (a leading space fails it) —
-        // verbatim ordering of checkServiceEndpointHealth.
-        if !url.starts_with("https://") && !is_localhost_http(&url) {
+        // verbatim ordering of checkServiceEndpointHealth — and is the one
+        // URL rule ([`is_allowed_endpoint_url`]): `https://` alone, or
+        // `https://` followed by junk, is not an address either.
+        if !is_allowed_endpoint_url(url.trim_end()) {
             model
                 .endpoint_health
                 .insert(field, NetServiceHealth::NotHttps);
@@ -3649,6 +3758,16 @@ fn endpoint_blurred(model: &mut Model, field: NetEndpointField) -> Command<NetEf
     }
     let clean = clean_endpoint_value(model.endpoint_drafts.get(field));
     model.endpoint_drafts.set(field, clean.clone());
+    // An address the URL rule refuses is NOT saved: the service keeps the
+    // address it had, and the field says so ([`NetEndpointView::refused`])
+    // until it is edited. It used to be written and used — a
+    // `javascript:` passkey index went straight into storage. Blank stays
+    // savable: it means "the default" ([`NetServiceEndpoints::effective`]).
+    if !clean.is_empty() && !is_allowed_endpoint_url(&clean) {
+        model.endpoint_refused.insert(field);
+        return endpoint_probe_wave(model);
+    }
+    model.endpoint_refused.remove(&field);
     model.endpoints.set(field, clean);
     // `handleSave`: persist, flush EVERY pool (invariant ⑤ — endpoint
     // changes must not leave stale pool state), then re-probe.
@@ -3671,6 +3790,7 @@ fn reset_endpoints(model: &mut Model) -> Command<NetEffect, Event> {
     }
     model.endpoints = NetServiceEndpoints::default();
     model.endpoint_drafts = NetServiceEndpoints::default();
+    model.endpoint_refused.clear();
     // Quirk kept: reset persists and re-probes but does NOT flush the pools
     // (SettingsScreen.tsx:509 — no `invalidateAllPools()`), unlike a blur.
     let write = requests_with(
@@ -3907,7 +4027,9 @@ pub fn explorer_base_url(chain_id: u32, custom_networks: &[NetCustomNetwork]) ->
                 .find(|n| n.chain_id == chain_id)
                 .map(|n| n.explorer_url.clone())
         })?;
-    if url.is_empty() {
+    // An explorer the URL rule refuses is no explorer: no link, rather than a
+    // `javascript:` one.
+    if url.is_empty() || !is_allowed_endpoint_url(&url) {
         return None;
     }
     Some(url.strip_suffix('/').unwrap_or(&url).to_owned())
@@ -4207,6 +4329,8 @@ fn network_row(
         explorer_health: card.map(|c| c.explorer_health.clone()),
         rpc_chain_mismatch: card.and_then(|c| c.mismatch),
         rpc_save_deferred: card.is_some_and(|c| c.save_deferred),
+        rpc_url_refused: card.is_some_and(|c| !override_url_allowed(&c.rpc_draft)),
+        explorer_url_refused: card.is_some_and(|c| !override_url_allowed(&c.explorer_draft)),
     }
 }
 

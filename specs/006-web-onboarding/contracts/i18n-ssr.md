@@ -5,7 +5,7 @@
 | URL | Behavior |
 |---|---|
 | `/{locale}` for the 15 corpus tags | Prerendered Welcome page, fully localized HTML |
-| `/` | Runtime 307 → `/{negotiated}`; headers: `Location`, `Vary: Accept-Language`, `Cache-Control: private, no-store` |
+| `/` | Runtime 307 → `/{pinned}` when the `vela_lang` cookie names a supported tag (written by Settings when a language is pinned, removed by "Follow system"), else `/{negotiated}`; headers: `Location`, `Vary: Accept-Language, Cookie`, `Cache-Control: private, no-store` |
 | `/{locale}/create`, `/{locale}/import`, `/{locale}/settings/passkey-index` | Prerendered placeholder destinations (minimal, tokenized, localized titles) |
 | unknown `/{segment}` | 404 |
 

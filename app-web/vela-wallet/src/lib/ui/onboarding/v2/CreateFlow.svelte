@@ -11,7 +11,7 @@
 	 * exactly the moment a person committed to creating a wallet. The Welcome
 	 * page that hosts it never loads it.
 	 */
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount, untrack, type Snippet } from 'svelte';
 	import FlowShell from './FlowShell.svelte';
 	import { RAIL_STEPS, type RailSlot } from './rail';
 	import NameScreen from './NameScreen.svelte';
@@ -20,6 +20,7 @@
 	import DoneScreen from './DoneScreen.svelte';
 	import RetryScreen from './RetryScreen.svelte';
 	import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
+	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import {
 		createCreateWalletSession,
 		type CreateWalletSession
@@ -92,6 +93,20 @@
 		send({ type: 'add_key', name: '', method });
 	}
 
+	/**
+	 * The wallets already on this device, by name (ob-12): a second wallet
+	 * under a name already taken is allowed, and said, so the two can still
+	 * be told apart in the switcher. Read once — creating does not add one
+	 * until it is done.
+	 */
+	const takenNames: string[] = (() => {
+		try {
+			return loadAccounts().map((account) => account.name);
+		} catch {
+			return [];
+		}
+	})();
+
 	/** The founding-set cap, mirroring the core's `MAX_MULTI_KEYS`. */
 	const MAX_KEYS = 7;
 
@@ -127,6 +142,16 @@
 				// page" (it opens no page, owner 2026-09-23) — so every wallet made
 				// here is a `getvela.app` wallet whose ceremonies run in the app.
 				session.start({ type: 'start' });
+				// ob-9: a reload (or a return) mid-create finds the name and the
+				// agreements where they were — one step back from the key list,
+				// whose passkeys lived only in the page that minted them.
+				const kept = readForm();
+				if (kept) {
+					if (kept.name) send({ type: 'name_changed', name: kept.name });
+					kept.acks.forEach((checked, index) => {
+						if (checked) send({ type: 'ack_toggled', index });
+					});
+				}
 			})
 			.catch((error) => {
 				if (!disposed) fatal = error instanceof Error ? error.message : String(error);
@@ -186,11 +211,89 @@
 		view?.status && !progressFor(view.status) ? strings(statusKeyToI18n(view.status)) : undefined
 	);
 
+	/**
+	 * ob-9: the form, kept for this tab (sessionStorage — never the passkeys
+	 * or anything signed, only what the person typed and ticked). Cleared once
+	 * the wallet exists.
+	 */
+	const FORM_KEY = 'vela.create.form';
+
+	function readForm(): { name: string; acks: boolean[] } | null {
+		try {
+			const raw = sessionStorage.getItem(FORM_KEY);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw) as { name?: unknown; acks?: unknown };
+			return {
+				name: typeof parsed.name === 'string' ? parsed.name : '',
+				acks: Array.isArray(parsed.acks) ? parsed.acks.map((ack) => ack === true) : []
+			};
+		} catch {
+			return null;
+		}
+	}
+
+	$effect(() => {
+		if (!view) return;
+		try {
+			if (view.stage === 'created') sessionStorage.removeItem(FORM_KEY);
+			else sessionStorage.setItem(FORM_KEY, JSON.stringify({ name: view.name, acks: view.acks }));
+		} catch {
+			// Storage refused: a reload starts blank, as it always did.
+		}
+	});
+
+	/**
+	 * ob-9: the key list is a step in the browser's history too, so Back from
+	 * it returns to the name (kept) instead of leaving the flow. `pushState`
+	 * without a URL, as the wallet's own flows do (`flows/nav.svelte.ts`).
+	 * The entry is taken back once the list is left by other means — and
+	 * before the wallet replaces this page, so Back from the wallet never
+	 * lands on a blank form.
+	 */
+	let stepMarked = false;
+
+	/** ob-2: how often the retry screen has come back — its next wait is longer. */
+	let retryRound = $state(0);
+	let lastScreen: string | null = null;
+	$effect(() => {
+		const current = screen;
+		if (lastScreen === 'retry' && current === 'progress') untrack(() => (retryRound += 1));
+		lastScreen = current;
+	});
+	$effect(() => {
+		if (screen === 'keys' && !stepMarked) {
+			history.pushState({ velaCreate: 'keys' }, '');
+			stepMarked = true;
+		} else if ((screen === 'form' || screen === 'done') && stepMarked) {
+			stepMarked = false;
+			history.back();
+		}
+	});
+
+	function onPopState() {
+		if (!stepMarked) return;
+		stepMarked = false;
+		if (view?.can_go_back) send({ type: 'go_back' });
+	}
+
+	/**
+	 * Keys exist that only this page holds (the list, the publish, the retry
+	 * screen): a reload or a closed tab would drop them, so the browser asks
+	 * first (ob-2, ob-9).
+	 */
+	function onBeforeUnload(event: BeforeUnloadEvent) {
+		if (!view || view.keys.length === 0 || view.stage === 'created') return;
+		event.preventDefault();
+	}
+
 	function send(event: Parameters<CreateWalletSession['dispatch']>[0]) {
 		session?.dispatch(event);
 	}
 
 	function back() {
+		// ob-6: the wallet exists and is saved — Back from "Wallet created"
+		// goes where the person now lives, not to the landing page.
+		if (screen === 'done') return send({ type: 'enter_wallet' });
 		// The core owns whether there is anywhere to go back TO; leaving the
 		// flow entirely is the host's, because the core has no idea what
 		// contains it.
@@ -198,6 +301,8 @@
 		else onExit();
 	}
 </script>
+
+<svelte:window onpopstate={onPopState} onbeforeunload={onBeforeUnload} />
 
 <FlowShell
 	backLabel={strings('onboarding.common.back')}
@@ -214,6 +319,9 @@
 			name={view.name}
 			nameEditable={view.name_editable}
 			nameTooLong={view.name_too_long}
+			nameBytes={view.name_bytes}
+			nameLimit={view.name_limit}
+			{takenNames}
 			acks={view.acks}
 			canSubmit={view.can_submit}
 			busy={view.busy}
@@ -247,11 +355,14 @@
 			onConfirmKey={(index) => send({ type: 'confirm_key', index })}
 			onRemoveKey={(index) => send({ type: 'remove_key', index })}
 			onFinish={() => send({ type: 'finish_keys' })}
+			canCancel={view.can_cancel}
+			onCancel={() => send({ type: 'cancel_pending' })}
 		/>
 	{:else if screen === 'progress'}
 		<ProgressScreen position={progressFor(view.status)!} keyCount={view.keys.length} {strings} />
 	{:else if screen === 'retry'}
 		<RetryScreen
+			round={retryRound}
 			detail={view.sync_error_detail}
 			busy={view.busy}
 			{strings}
