@@ -118,3 +118,22 @@ describe('a receipt for what was never sent', () => {
 		expect(screen.container.querySelector('[data-testid="send-receipt-retry"]')).toBeNull();
 	});
 });
+
+describe('SendReceipt — a lost reply being checked (round 3, send-5)', () => {
+	it('counts the seconds it has been checking, never a silent spinner', () => {
+		const model = {
+			header: { title: 'Send XDAI', backLabel: 'Back' },
+			stage: 'submitted',
+			title: 'Submitting to network...',
+			captions: ['It may have been sent. Vela keeps checking — don’t send it again.'],
+			checking: {
+				sinceMs: Date.now() - 12_400,
+				template: 'Checking whether it went out… {{elapsed}}s'
+			},
+			cta: 'Close · keep running',
+			ctaAccent: false
+		} as SendReceiptModel;
+		const { container } = render(SendReceipt, { props: { model } });
+		expect(lastCaption(container)).toBe('Checking whether it went out… 12s');
+	});
+});

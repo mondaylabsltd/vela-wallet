@@ -178,6 +178,15 @@
     "batchBadChecksum": "校驗碼不符",
     "riskChecking": "正在檢查這個地址…",
     "riskUnfinished": "沒能完成檢查這個地址，請確認是你要轉帳的地址。",
-    "amountPasteRefused": "這不是金額，請貼上數字，例如 12.5。"
+    "amountPasteRefused": "這不是金額，請貼上數字，例如 12.5。",
+    "riskHistoryUnread": "沒能查到你以前是否轉帳過到這個地址，請確認是你要轉帳的地址。",
+    "riskRetry": "重新檢查",
+    "queuedBehindTab": "另一個分頁正在用這個帳戶送出，這一筆排在它之後。",
+    "txReviewAgain": "重新確認",
+    "txSendAgain": "重新送出",
+    "txCheckingElapsed": "正在查看是否已送出… {{elapsed}} 秒",
+    "txStillUnknownTitle": "狀態不明",
+    "txStillUnknownBody": "Vela 沒能確認這筆是否已從你的帳戶送出，會在背景繼續查看。重新送出前，請先在區塊瀏覽器上查看你的帳戶。",
+    "txViewAccountExplorer": "在區塊瀏覽器上查看帳戶"
   }
 }

@@ -110,7 +110,15 @@ async function post(
 			signal: controller.signal
 		});
 
-		if (!res.ok) return { outcome: { type: 'http_error', status: res.status } };
+		if (!res.ok) {
+			// The status is the core's to route on. A body that is a JSON-RPC
+			// `error` is the endpoint's own words, held beside it (round 3,
+			// send-5): a submit's refusal inside a 500 — what it proves is the
+			// core's (`user_op::refused_outright`), never this file's.
+			const refusal = await refusalBody(res);
+			const outcome: RpcTransportOutcome = { type: 'http_error', status: res.status };
+			return refusal ? { outcome, body: refusal } : { outcome };
+		}
 
 		const contentType = res.headers.get('content-type') ?? '';
 		if (!contentType.includes('json')) return { outcome: { type: 'non_json' } };
@@ -127,6 +135,23 @@ async function post(
 		return { outcome: { type: offline ? 'not_connected' : timedOut ? 'timeout' : 'network' } };
 	} finally {
 		clearTimeout(timer);
+	}
+}
+
+/**
+ * An HTTP error's body, when it is a JSON-RPC answer with an `error` object —
+ * else nothing (a gateway's page, plain text, an unreadable body). Read only
+ * for a server error: a 4xx is refused before any handler, and says nothing
+ * of an operation.
+ */
+async function refusalBody(res: Response): Promise<RPCResponse | undefined> {
+	if (res.status < 500 || res.status > 599) return undefined;
+	try {
+		const json: unknown = JSON.parse(await res.text());
+		const error = (json as { error?: unknown } | null)?.error;
+		return error !== null && typeof error === 'object' ? (json as RPCResponse) : undefined;
+	} catch {
+		return undefined;
 	}
 }
 

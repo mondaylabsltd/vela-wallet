@@ -16,6 +16,7 @@ vi.mock('$lib/services/storage', () => ({
 
 import {
 	loadTransactions,
+	readTransactionHistory,
 	saveTransaction,
 	saveTransactions,
 	updateTransaction,
@@ -91,6 +92,26 @@ describe('the writer', () => {
 	it('empty inputs touch nothing', async () => {
 		await saveTransactions([]);
 		await updateTransactions([], { status: 'failed' });
+		expect(await loadTransactions()).toEqual([]);
+	});
+});
+
+describe('the strict reader (round 3)', () => {
+	it('nothing stored is an empty history; what is stored is read as it is', async () => {
+		expect(await readTransactionHistory()).toEqual([]);
+		await saveTransactions([tx('a')]);
+		expect((await readTransactionHistory()).map((t) => t.id)).toEqual(['a']);
+	});
+
+	it('a store that cannot be read, or bytes that are no list, throw — never an empty history', async () => {
+		const { getItem } = await import('$lib/services/storage');
+		vi.mocked(getItem).mockRejectedValueOnce(new Error('IndexedDB blocked'));
+		await expect(readTransactionHistory()).rejects.toThrow('IndexedDB blocked');
+		kv.set('vela.transactionHistory', '{"not":"a list"}');
+		await expect(readTransactionHistory()).rejects.toThrow();
+		kv.set('vela.transactionHistory', '[{"id"');
+		await expect(readTransactionHistory()).rejects.toThrow();
+		// The lenient reader still reads both as empty.
 		expect(await loadTransactions()).toEqual([]);
 	});
 });

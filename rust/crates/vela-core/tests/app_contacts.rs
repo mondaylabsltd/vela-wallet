@@ -354,6 +354,31 @@ fn history_failure_yields_no_suggestions() {
     assert!(sut.view().contacts.is_empty());
 }
 
+/// Round 3: a history that could not be read is never "first interaction" —
+/// the poisoning tell is not built on a failed read. Read again, it tells.
+#[test]
+fn a_failed_history_read_is_never_a_first_interaction() {
+    let mut sut = booted(vec![], vec![], vec![], vec![send(A, 100.0)]);
+    sut.dispatch(Event::HistoryChanged);
+    sut.resolve(Res::HistoryFailed);
+    sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: B.to_owned(),
+    });
+    let recipient = sut.view().recipient.expect("recipient projected");
+    assert!(!recipient.first_interaction, "nothing was read");
+
+    sut.dispatch(Event::HistoryChanged);
+    sut.resolve_matching(
+        |op| matches!(op, Op::LoadSendHistory),
+        Res::HistoryLoaded {
+            txs: vec![send(A, 100.0)],
+        },
+    );
+    let recipient = sut.view().recipient.expect("recipient projected");
+    assert!(recipient.first_interaction, "read: B was never paid");
+}
+
 // ---------------------------------------------------------------------------
 // Derivation from send history — invariant ①
 // ---------------------------------------------------------------------------

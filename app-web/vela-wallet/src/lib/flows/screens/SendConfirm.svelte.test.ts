@@ -53,7 +53,8 @@ async function drawn(m: SendConfirmModel) {
 			ctaDisabled: true,
 			onretry: () => calls.push('retry'),
 			onfeeretry: () => calls.push('fee-retry'),
-			onfeecoins: () => calls.push('fee-coins')
+			onfeecoins: () => calls.push('fee-coins'),
+			onriskretry: () => calls.push('risk-retry')
 		}
 	});
 	await tick();
@@ -163,6 +164,29 @@ describe('SendConfirm — the failed fee line does what it says (PR 2 polish)', 
 		const { screen: own } = await drawn(model());
 		expect(own.container.querySelector('[data-testid="send-drafted-by-agent"]')).toBeNull();
 		own.unmount();
+	});
+
+	it('a recipient check it opened without is said in neutral ink, with Check again (round 3)', async () => {
+		const { screen, calls } = await drawn(
+			model({
+				recipientCheck: {
+					text: 'Couldn’t check your past sends to this address. Make sure it’s the one you mean.',
+					retry: 'Check again'
+				}
+			})
+		);
+		const check = screen.container.querySelector(
+			'[data-testid="send-confirm-risk-check"]'
+		) as HTMLElement;
+		expect(check.textContent).toContain('Couldn’t check your past sends');
+		expect(check.getAttribute('role')).toBe('status');
+		// Neutral — never the warning ink of the first-time tag.
+		expect(getComputedStyle(check).color).toBe(colourOf('--color-fg-subtle'));
+		expect(screen.container.querySelector('.tag')).toBeNull();
+		(check.querySelector('button') as HTMLButtonElement).click();
+		await tick();
+		expect(calls).toEqual(['risk-retry']);
+		screen.unmount();
 	});
 
 	it('a dash with nothing behind it — and every settled fee — is a fact, never pressable', async () => {

@@ -201,6 +201,37 @@ async function readTxReceipt(chainId: number, txHash: string): Promise<string | 
 	}
 }
 
+/** `getNonce(address,uint192)` — the EntryPoint's nonce read (ERC-4337). */
+const GET_NONCE_SELECTOR = '35567e1a';
+
+/**
+ * The account's EntryPoint nonce at the head (round 3, send-5): the head
+ * first, then `getNonce(sender, 0)` AT that block, so a nonce seen spent is
+ * spent at or below the head it names. Both as they came; a pool that
+ * reached nobody, or a node without that block, is no answer. What a figure
+ * means is the core's.
+ */
+export async function readAccountNonce(
+	operation: Extract<TrackEffect['operation'], { type: 'read_nonce' }>
+): Promise<{ nonce: string | null; head_block: number | null }> {
+	const head_block = await readHead(operation.chain_id);
+	if (head_block === null) return { nonce: null, head_block: null };
+	const sender = operation.sender.toLowerCase().replace(/^0x/, '');
+	if (!/^[0-9a-f]{40}$/.test(sender)) return { nonce: null, head_block: null };
+	const data = '0x' + GET_NONCE_SELECTOR + sender.padStart(64, '0') + '0'.repeat(64);
+	try {
+		const response = await rpcCall(
+			'eth_call',
+			[{ to: operation.entry_point, data }, '0x' + head_block.toString(16)],
+			operation.chain_id
+		);
+		const nonce = response.error ? null : response.result;
+		return typeof nonce === 'string' ? { nonce, head_block } : { nonce: null, head_block: null };
+	} catch {
+		return { nonce: null, head_block: null };
+	}
+}
+
 /** A hash as a log line names it: its first ten characters, never the whole. */
 function short(hash: string | null | undefined): string {
 	return hash ? hash.slice(0, 10) : '';
@@ -397,6 +428,17 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					receipt_json
 				};
 			}
+
+			case 'read_nonce': {
+				// Round 3 (send-5): after a relay error the chain is asked.
+				const read = await readAccountNonce(operation);
+				return {
+					type: 'nonce_read',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms: Date.now(),
+					...read
+				};
+			}
 		}
 	}
 
@@ -450,6 +492,15 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					user_op_hash: normalize(operation.user_op_hash),
 					now_ms,
 					receipt_json: null
+				};
+			case 'read_nonce':
+				// No answer: nothing is known, the core asks again.
+				return {
+					type: 'nonce_read',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms,
+					nonce: null,
+					head_block: null
 				};
 		}
 	}

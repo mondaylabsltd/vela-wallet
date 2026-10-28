@@ -22,6 +22,7 @@ const seams = vi.hoisted(() => ({
 	inBand: vi.fn(),
 	accountInfo: vi.fn(),
 	trackSubmitted: vi.fn(),
+	noteSubmitFacts: vi.fn(),
 	withdrawTracked: vi.fn(),
 	trackerView: vi.fn(() => ({ entries: [] as unknown[] })),
 	outcomeOf: vi.fn<(entry: unknown) => unknown>(() => null),
@@ -29,6 +30,9 @@ const seams = vi.hoisted(() => ({
 	deleteTransactions: vi.fn(),
 	saveTransactions: vi.fn()
 }));
+
+/** The tracker's subscribers — the send lock's hold listens there (round 3). */
+const trackerListeners = vi.hoisted(() => new Set<() => void>());
 
 vi.mock('$lib/core/kernels', () => ({
 	fromHex: vi.fn(),
@@ -38,6 +42,11 @@ vi.mock('$lib/core/kernels', () => ({
 }));
 vi.mock('$lib/wallet/core/tracker-resident', () => ({
 	trackSubmitted: seams.trackSubmitted,
+	noteSubmitFacts: seams.noteSubmitFacts,
+	subscribeTxTracker: (listener: () => void) => {
+		trackerListeners.add(listener);
+		return () => trackerListeners.delete(listener);
+	},
 	withdrawTracked: seams.withdrawTracked,
 	txTrackerView: seams.trackerView,
 	outcomeOf: seams.outcomeOf
@@ -676,6 +685,190 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			})
 		).toEqual({ type: 'track_handed_off' });
 		expect(seams.withdrawTracked).toHaveBeenCalledWith(OP, [`${OP}-0`]);
+	});
+});
+
+describe('round 3: reliable sending', () => {
+	const OP = '0x' + '7d'.repeat(32);
+	const submit = {
+		id: 1,
+		operation: {
+			type: 'submit_user_op' as const,
+			chain_id: 100,
+			account: ACCOUNT,
+			public_key_hex: '04' + '11'.repeat(64),
+			calls: [],
+			max_fee_per_gas: null,
+			gas_fee_token: null,
+			quoted_fee: null,
+			review: { chain_id: 100, account: ACCOUNT, transfers: [], fee: null }
+		}
+	};
+	const REFUSAL = '{"code":-32603,"message":"operation not accepted"}';
+
+	beforeEach(() => {
+		seams.noteSubmitFacts.mockReset();
+		seams.trackerView.mockReturnValue({ entries: [] });
+		trackerListeners.clear();
+	});
+
+	/** A submit that comes back as `result`, with no write-ahead gate. */
+	function relayAnswers(result: Partial<SubmitResult>, posted = vi.fn()) {
+		vi.mocked(sendBatchCalls).mockImplementation(async () => {
+			posted();
+			return {
+				userOpHash: OP,
+				maybeSent: false,
+				submitBlock: 9,
+				waitForTxHash: async () => '0x',
+				...result
+			} as SubmitResult;
+		});
+		return posted;
+	}
+
+	function trackMaybeSent(executor: ReturnType<typeof createSendExecutor>, maybeSent: boolean) {
+		return executor.execute({
+			id: 2,
+			operation: {
+				type: 'track_submitted',
+				user_op_hash: OP,
+				record_ids: [`${OP}-0`],
+				chain_id: 100,
+				maybe_sent: maybeSent,
+				submit_block: 9,
+				admitted: false,
+				sender: ACCOUNT
+			}
+		});
+	}
+
+	it('send-5: a lost reply hands the tracker its nonce and the relay’s refusal, after its records', async () => {
+		relayAnswers({ maybeSent: true, nonce: '0x5', relayRefusal: REFUSAL });
+		setSendTrackerSink(vi.fn());
+		try {
+			const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }));
+			await expect(executor.execute(submit)).resolves.toMatchObject({
+				type: 'submitted',
+				maybe_sent: true
+			});
+			expect(seams.noteSubmitFacts).not.toHaveBeenCalled();
+			await trackMaybeSent(executor, true);
+			expect(seams.noteSubmitFacts).toHaveBeenCalledWith(OP, '0x5', REFUSAL);
+		} finally {
+			setSendTrackerSink(null);
+		}
+	});
+
+	it('send-5: an accepted op tells the tracker nothing more', async () => {
+		relayAnswers({ maybeSent: false, nonce: '0x5', relayRefusal: null });
+		setSendTrackerSink(vi.fn());
+		try {
+			const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }));
+			await executor.execute(submit);
+			await trackMaybeSent(executor, false);
+			expect(seams.noteSubmitFacts).not.toHaveBeenCalled();
+		} finally {
+			setSendTrackerSink(null);
+		}
+	});
+
+	it('send-15: a second tab waits its turn, says so, and goes once the first op is settled', async () => {
+		// Two tabs of one browser: one LockManager, two executors.
+		const held = new Set<string>();
+		const waiters: Array<() => void> = [];
+		const locks = {
+			request(
+				name: string,
+				options: { ifAvailable?: boolean },
+				callback: (lock: unknown) => unknown
+			): Promise<unknown> {
+				const run = async () => {
+					held.add(name);
+					try {
+						return await callback({ name });
+					} finally {
+						held.delete(name);
+						waiters.shift()?.();
+					}
+				};
+				if (!held.has(name)) return run();
+				if (options.ifAvailable) return Promise.resolve(callback(null));
+				return new Promise((resolve) => waiters.push(() => resolve(run())));
+			}
+		};
+		vi.stubGlobal('navigator', { locks });
+		try {
+			const posted = relayAnswers({ maybeSent: false });
+			const first = createSendExecutor(ports({ credentialId: () => 'cred-1' }));
+			await first.execute(submit);
+			expect(posted).toHaveBeenCalledTimes(1);
+
+			const dispatched: SendEvent[] = [];
+			const second = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+				dispatch: (event) => dispatched.push(event)
+			});
+			const going = second.execute({ ...submit, id: 3 });
+			await vi.waitFor(() => expect(dispatched).toContainEqual({ type: 'send_queued' }));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(posted).toHaveBeenCalledTimes(1);
+
+			// The first op is final: the lock goes, and the second reads its nonce.
+			seams.trackerView.mockReturnValue({
+				entries: [{ user_op_hash: OP, polling: false, stalled: false }]
+			});
+			for (const listener of [...trackerListeners]) listener();
+			await expect(going).resolves.toMatchObject({ type: 'submitted' });
+			expect(posted).toHaveBeenCalledTimes(2);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('send-15: a submit that failed lets the lock go at once', async () => {
+		const requests: string[] = [];
+		let holding = 0;
+		vi.stubGlobal('navigator', {
+			locks: {
+				request: async (name: string, _o: unknown, callback: (lock: unknown) => unknown) => {
+					requests.push(name);
+					holding += 1;
+					try {
+						return await callback({ name });
+					} finally {
+						holding -= 1;
+					}
+				}
+			}
+		});
+		try {
+			vi.mocked(sendBatchCalls).mockRejectedValueOnce(new Error('boom'));
+			const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }));
+			await expect(executor.execute(submit)).resolves.toMatchObject({ type: 'submit_failed' });
+			expect(requests).toEqual([`vela.send:100:${ACCOUNT}`]);
+			await vi.waitFor(() => expect(holding).toBe(0));
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('a history that could not be read reaches the core as unread, never as a first transfer', async () => {
+		const { resolveRecipientRisk } = await import('$lib/services/recipient-risk');
+		vi.mocked(resolveRecipientRisk).mockResolvedValueOnce({
+			isContract: false,
+			firstInteraction: null,
+			historyUnread: true
+		});
+		const executor = createSendExecutor(ports());
+		await expect(
+			executor.execute({
+				id: 1,
+				operation: { type: 'resolve_risk', chain_id: 100, address: ACCOUNT }
+			})
+		).resolves.toEqual({
+			type: 'risk_resolved',
+			risk: { is_contract: false, first_time: null, history_unread: true }
+		});
 	});
 });
 

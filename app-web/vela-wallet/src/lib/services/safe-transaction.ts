@@ -131,6 +131,15 @@ export interface SubmitResult {
 	/** The chain head read once before the first POST; `null` = unknown (ruling 8). */
 	submitBlock: number | null;
 	/**
+	 * Round 3 (send-5): the nonce the op signed (a hex quantity, as on the
+	 * wire), and — for a may-have-been-sent submit — the relay's JSON-RPC
+	 * `error` from inside an HTTP server error, as JSON text, else `null`.
+	 * The tracker reads the account's nonce with them (`noteSubmitFacts`).
+	 * Optional: a result built elsewhere carries neither.
+	 */
+	nonce?: string;
+	relayRefusal?: string | null;
+	/**
 	 * Resolves to txHash once the receipt is available. `timeoutMs` is how long
 	 * the caller may still wait (a dApp's answer window, `dappReceiptWaitMs`);
 	 * omitted = the full 120 s. The window holds inside each poll, and `signal`
@@ -3277,6 +3286,9 @@ async function submitUserOp(
 	// alone decides accepted / retry / may-have-been-sent / not sent. The busy
 	// retry re-POSTs the IDENTICAL op, so the relay answers its hash again.
 	let maybeDelivered = false;
+	// Round 3 (send-5): a server error's JSON-RPC `error` from the relay, the
+	// last one heard — handed to the tracker beside the nonce, never judged here.
+	let relayRefusal: string | null = null;
 	for (let attempt = 0; ; attempt++) {
 		// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
 		// about speed (`vela-relay-core/src/wire.rs`, `docs/fees.md` §2a). The
@@ -3321,6 +3333,9 @@ async function submitUserOp(
 			// arrived is the pool's fact; anything else thrown is unknown — so
 			// it may have.
 			maybeDelivered ||= error instanceof PoolFailedError ? error.maybeDelivered : true;
+			if (error instanceof PoolFailedError && error.relayRefusal) {
+				relayRefusal = error.relayRefusal;
+			}
 			reply = 'no_answer';
 		}
 
@@ -3348,9 +3363,21 @@ async function submitUserOp(
 							`local=${localHash.slice(0, 12)} chain=${chainId}`
 					);
 				}
-				return { accepted: true, userOpHash: verdict.user_op_hash, submitBlock };
+				return {
+					accepted: true,
+					userOpHash: verdict.user_op_hash,
+					submitBlock,
+					nonce: dict.nonce,
+					relayRefusal: null
+				};
 			case 'maybe_sent':
-				return { accepted: false, userOpHash: verdict.user_op_hash, submitBlock };
+				return {
+					accepted: false,
+					userOpHash: verdict.user_op_hash,
+					submitBlock,
+					nonce: dict.nonce,
+					relayRefusal
+				};
 			case 'not_sent':
 				throw new UserOpNotSentError(
 					verdict.rejection,
@@ -3373,6 +3400,10 @@ interface SubmittedOp {
 	accepted: boolean;
 	userOpHash: string;
 	submitBlock: number | null;
+	/** The nonce the op signed, as on the wire (round 3). */
+	nonce: string;
+	/** A may-have-been-sent POST's server-error JSON-RPC `error`, as JSON text. */
+	relayRefusal: string | null;
 }
 
 /**
@@ -3401,6 +3432,8 @@ function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
 		userOpHash: submitted.userOpHash,
 		maybeSent: !submitted.accepted,
 		submitBlock: submitted.submitBlock,
+		nonce: submitted.nonce,
+		relayRefusal: submitted.relayRefusal,
 		waitForTxHash: (timeoutMs?: number, signal?: AbortSignal) =>
 			waitForReceipt(
 				submitted.userOpHash,

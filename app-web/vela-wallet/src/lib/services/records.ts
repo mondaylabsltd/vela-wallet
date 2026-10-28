@@ -152,6 +152,21 @@ export async function loadTransactions(): Promise<LocalTransaction[]> {
 }
 
 /**
+ * The same history, read strictly (round 3): nothing stored is an empty
+ * history, but a store that cannot be read, or bytes that are not a list,
+ * THROW — for the readers that must not build a warning on a read that
+ * failed (the recipient's "first time sending here", the address book's
+ * first-interaction tell). `loadTransactions` reads both as empty.
+ */
+export async function readTransactionHistory(): Promise<LocalTransaction[]> {
+	const raw = await getItem(TX_KEY);
+	if (!raw) return [];
+	const parsed: unknown = JSON.parse(raw);
+	if (!Array.isArray(parsed)) throw new Error('The stored transaction history is not a list');
+	return parsed as LocalTransaction[];
+}
+
+/**
  * Merge new records in: dedupe by id, newest first, capped. Answers how many
  * were actually new — the count the feed's celebration is built on.
  */

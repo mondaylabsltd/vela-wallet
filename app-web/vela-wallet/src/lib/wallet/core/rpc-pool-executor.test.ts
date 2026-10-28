@@ -140,6 +140,44 @@ describe('json_rpc_post outcomes are transport facts', () => {
 	});
 
 	/**
+	 * Round 3 (send-5): a server error whose body is a JSON-RPC `error` is
+	 * the endpoint's own words — kept beside the status for a submit to hand
+	 * on. The status is still what the core routes on; a gateway's page or
+	 * a 4xx keeps nothing.
+	 */
+	it('a 5xx carrying a JSON-RPC error keeps that body; other error bodies are not kept', async () => {
+		const post = effect({
+			type: 'json_rpc_post',
+			call_id: 'c1',
+			url: 'https://relay.example/1',
+			method: 'eth_sendUserOperation',
+			x_rpc_url: null,
+			timeout_ms: 1000
+		});
+		const refusal = { jsonrpc: '2.0', id: 1, error: { code: -32603, message: 'not accepted' } };
+		const answers = [
+			{ body: JSON.stringify(refusal), status: 500, kept: true },
+			{ body: 'internal error', status: 500, kept: false },
+			{ body: JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' }), status: 502, kept: false },
+			{ body: JSON.stringify(refusal), status: 400, kept: false }
+		];
+		for (const answer of answers) {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => new Response(answer.body, { status: answer.status }))
+			);
+			const bodies: unknown[] = [];
+			const registry = makeRegistry({
+				payload: () => ({ method: 'eth_sendUserOperation', params: [] }),
+				keepBody: (_callId, _url, body) => bodies.push(body)
+			});
+			const result = await createRpcPoolExecutor(registry).execute(post);
+			expect(result).toMatchObject({ outcome: { type: 'http_error', status: answer.status } });
+			expect(bodies).toEqual(answer.kept ? [refusal] : []);
+		}
+	});
+
+	/**
 	 * Spec 082 RA1: `fetch` cannot tell a refused connection from a reply lost
 	 * after the request went out, so a thrown fetch is `network` (it may have
 	 * arrived) — unless the browser is offline before the call: then nothing

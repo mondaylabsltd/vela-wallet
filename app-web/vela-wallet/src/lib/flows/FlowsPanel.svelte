@@ -107,8 +107,10 @@
 		confirmBusy?: boolean;
 		/** A failed submit's "Try again" — back to a confirm the core can open. */
 		retryAfterError?: () => void;
-		/** The never-sent receipt's "Try again" (send-5) — back to the confirm. */
+		/** The never-sent receipt's "Send again" (send-5) — back to the confirm. */
 		sendAgain?: () => void;
+		/** The confirm's "Check again" over the recipient's check (round 3). */
+		retryRiskCheck?: () => void;
 	}
 
 	interface BatchActions {
@@ -248,6 +250,7 @@
 			onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
 			onfeeretry={send?.refreshFee ? () => send.refreshFee?.() : undefined}
 			onfeecoins={send ? () => send.openFeeSheet() : undefined}
+			onriskretry={send?.retryRiskCheck ? () => send.retryRiskCheck?.() : undefined}
 		/>
 	{:else if body.kind === 'contact-pick'}
 		<ContactPick

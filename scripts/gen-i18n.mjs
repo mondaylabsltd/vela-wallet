@@ -947,8 +947,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
 //   cue to it, instead of a scroll that takes the person from where they
 //   were reading. 2207 + 2 = 2209 leaves, 119 branches.
-if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
+// 2337 (round 3, reliable sending, 2026-10-28): + `send.{riskHistoryUnread,
+//   riskRetry}` (a history that could not be read is said as that, with
+//   "Check again" — never a first-time tag), `send.queuedBehindTab` (send-15:
+//   another tab sends from the account first), `send.{txReviewAgain,
+//   txSendAgain}` (the ways on from "not sent"), and
+//   `send.{txCheckingElapsed, txStillUnknownTitle, txStillUnknownBody,
+//   txViewAccountExplorer}` (send-5: a lost reply is checked out loud and
+//   ends in an answer). 2209 + 9 = 2218 leaves, 119 branches.
+if (PATHS.length !== 2337) fail(`expected 2337 paths (2218 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2218) fail(`expected 2218 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

@@ -58,10 +58,20 @@
 	// arrive in the model; only the number is this screen's.
 	let now = $state(Date.now());
 	$effect(() => {
-		if (!model.eta) return;
+		if (!model.eta && !model.checking) return;
+		now = Date.now();
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
 	});
+	// Round 3 (send-5): a lost reply being checked counts its seconds.
+	const checkingLine = $derived(
+		model.checking
+			? model.checking.template.replace(
+					'{{elapsed}}',
+					String(Math.max(0, Math.floor((now - model.checking.sinceMs) / 1000)))
+				)
+			: undefined
+	);
 	// Spec 099 R6: when the relay put it on the network, as the tracker
 	// learned it — the countdown starts there, never at acceptance.
 	let sentAtMs = $state<number | null>(null);
@@ -105,7 +115,7 @@
 	<StatusHero
 		stage={model.stage}
 		title={model.title}
-		captions={[...model.captions, ...etaLines]}
+		captions={[...model.captions, ...etaLines, ...(checkingLine ? [checkingLine] : [])]}
 		{progress}
 	/>
 

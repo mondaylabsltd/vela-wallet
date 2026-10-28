@@ -257,6 +257,75 @@ describe('the relay’s reason for a refusal reaches the core', () => {
  * Spec 082 RJ4 (T230, G38): the relay named the bundle tx — the chain is
  * asked for its receipt, and the answer goes to the core as it came.
  */
+describe('read_nonce reads the account’s nonce at the head (round 3, send-5)', () => {
+	const SENDER = '0xAbCd' + 'ef'.repeat(18);
+	const readNonce: TrackEffect = {
+		id: 1,
+		operation: {
+			type: 'read_nonce',
+			chain_id: 100,
+			entry_point: ENTRY_POINT,
+			sender: SENDER,
+			user_op_hash: OP
+		}
+	};
+
+	it('the head, then getNonce(sender, 0) AT that block — both as they came', async () => {
+		const word = '0x' + '5'.padStart(64, '0');
+		rpc.impl = async (method) =>
+			method === 'eth_blockNumber'
+				? { jsonrpc: '2.0', id: 1, result: '0x2e3ba09' }
+				: { jsonrpc: '2.0', id: 1, result: word };
+		const answer = await createTxTrackerExecutor(ports()).execute(readNonce);
+		expect(answer).toMatchObject({
+			type: 'nonce_read',
+			user_op_hash: OP,
+			nonce: word,
+			head_block: 0x2e3ba09
+		});
+		expect(rpc.calls[0]).toEqual({ method: 'eth_blockNumber', params: [], chainId: 100 });
+		expect(rpc.calls[1]).toEqual({
+			method: 'eth_call',
+			params: [
+				{
+					to: ENTRY_POINT,
+					// getNonce(address,uint192): the sender, then key 0.
+					data: '0x35567e1a' + SENDER.slice(2).toLowerCase().padStart(64, '0') + '0'.repeat(64)
+				},
+				'0x2e3ba09'
+			],
+			chainId: 100
+		});
+	});
+
+	it('no head, an error or no node is no answer — never a figure', async () => {
+		rpc.impl = async () => ({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'x' } });
+		expect(await createTxTrackerExecutor(ports()).execute(readNonce)).toMatchObject({
+			nonce: null,
+			head_block: null
+		});
+		rpc.impl = async (method) =>
+			method === 'eth_blockNumber'
+				? { jsonrpc: '2.0', id: 1, result: '0x10' }
+				: { jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'header not found' } };
+		expect(await createTxTrackerExecutor(ports()).execute(readNonce)).toMatchObject({
+			nonce: null,
+			head_block: null
+		});
+		rpc.impl = async () => {
+			throw new Error('All RPC endpoints failed for chain 100');
+		};
+		expect(await createTxTrackerExecutor(ports()).execute(readNonce)).toMatchObject({
+			nonce: null
+		});
+		expect(createTxTrackerExecutor(ports()).toFailure(readNonce)).toMatchObject({
+			type: 'nonce_read',
+			nonce: null,
+			head_block: null
+		});
+	});
+});
+
 describe('tx_receipt reads the relay’s tx from the chain (RJ4)', () => {
 	const TX = '0x' + 'd4'.repeat(32);
 	const txReceipt: TrackEffect = {

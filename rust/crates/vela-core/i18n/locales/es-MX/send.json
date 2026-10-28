@@ -181,6 +181,15 @@
     "batchBadChecksum": "La suma de verificación no coincide",
     "riskChecking": "Revisando esta dirección…",
     "riskUnfinished": "No se pudo terminar de revisar esta dirección. Asegúrate de que sea la correcta.",
-    "amountPasteRefused": "Eso no es un monto. Pega un número, como 12.5."
+    "amountPasteRefused": "Eso no es un monto. Pega un número, como 12.5.",
+    "riskHistoryUnread": "No se pudieron revisar tus envíos anteriores a esta dirección. Asegúrate de que sea la correcta.",
+    "riskRetry": "Volver a revisar",
+    "queuedBehindTab": "Otra pestaña está enviando desde esta cuenta; esta va después.",
+    "txReviewAgain": "Revisar de nuevo",
+    "txSendAgain": "Enviar de nuevo",
+    "txCheckingElapsed": "Revisando si salió… {{elapsed}}s",
+    "txStillUnknownTitle": "Estado desconocido",
+    "txStillUnknownBody": "Vela no pudo confirmar si esto salió de tu cuenta y sigue revisando en segundo plano. Antes de enviarlo otra vez, revisa tu cuenta en el explorador.",
+    "txViewAccountExplorer": "Revisa tu cuenta en el explorador"
   }
 }

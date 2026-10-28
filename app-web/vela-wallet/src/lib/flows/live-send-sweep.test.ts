@@ -127,6 +127,8 @@ const BASE: SendView = {
 	passkey_note: null,
 	risk_checking: false,
 	risk_unfinished: false,
+	risk_history_unread: false,
+	queued_behind_tab: false,
 	tx_hash: null,
 	user_op_hash: null,
 	receipt: null,
