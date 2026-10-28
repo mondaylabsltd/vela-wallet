@@ -10,6 +10,8 @@
 //     stranger as "this account", and its send as safe;
 //   · the fee's coin — from this page's catalogue for the chain, not the
 //     requester's `nativeSymbol` ("0.0009 USDC" on Ethereum; "ETH" by default);
+//     on a chain the page does not know, the app's symbol marked as the app's
+//     ("coin named by the app") beside the chain id, and "?" when it gives none;
 //   · fiat — the requester's rate times a fact, so it is drawn as the
 //     requester's (`tag.rateByRequester`), and only in an ISO 4217 currency:
 //     free text there was a line of the requester's own words on the card;
@@ -132,6 +134,79 @@ const texts = (sheet, name) => sheet.find(name).map((n) => n.textContent);
   // The catalogue is the core's, testnets included (gen-catalog).
   check('Arc Testnet is a page fact now: named by the page, not "named by the app"',
     ns.registry.chainName(5042002) === 'Arc Testnet' && ns.registry.nativeSymbol(5042002) === 'USDC');
+}
+
+// --- 2b. a chain the page does not know: its coin is the app's word -------------
+//
+// Only for a chain missing from the page's table does the symbol come from the
+// requester's `nativeSymbol`, and then it is not a fact: "ETH" on a chain
+// whose coin is worth nothing reads as a price it does not have. The id (the
+// one thing about the chain that is signed) is on the network row, and the
+// symbol is marked wherever it names an amount; nobody naming it is "?".
+{
+  const UNKNOWN = 424242;
+  const coinTag = t('tag.coinByApp');
+  const claimedCoin = (sheet) => sheet.find('coin-claimed').map((n) => n.textContent);
+  const value = 10n ** 18n;
+  const send = { method: 'eth_sendTransaction', origin: 'https://x.y', params: [{ to: RECIPIENT, value: '0x' + value.toString(16) }] };
+  const sendOp = { userOp: userOpOf([{ to: RECIPIENT, value, data: '0x' }]) };
+
+  const app = sign({ chainId: UNKNOWN, chainName: 'Foochain', nativeSymbol: 'ETH', operation: sendOp }, send);
+  check('unknown chain, app says ETH: the hero says ETH, as the app\'s word',
+    app.view.hero.amount.symbol === 'ETH' && app.view.hero.amount.symbolClaimed === true &&
+    app.sheet.find('hero-amount')[0].textContent.includes(coinTag), app.sheet.find('hero-amount')[0].textContent);
+  const network = app.sheet.find('network-row')[0].textContent;
+  check('…the network row shows the chain id and that the coin is the app\'s',
+    network.includes(t('value.chainId', { id: String(UNKNOWN) })) && network.includes('ETH ' + coinTag) &&
+    network.includes(t('tag.nameByApp')), network);
+
+  const gas = { verificationGasLimit: '100000', callGasLimit: '100000', preVerificationGas: '105000', maxFeePerGas: '3000000000' };
+  const gasFee = sign({ chainId: UNKNOWN, nativeSymbol: 'ETH', operation: { userOp: userOpOf([{ to: RECIPIENT, value, data: '0x' }], gas) } }, send);
+  check('…the gas ceiling is in the app\'s ETH, and its note says so',
+    gasFee.view.fee.gas.symbol === 'ETH' && gasFee.view.fee.gas.symbolClaimed === true &&
+    texts(gasFee.sheet, 'fee-coin').join() === 'ETH ' + coinTag, texts(gasFee.sheet, 'fee-coin').join());
+  const nativeFee = { to: RELAYER, value: 10n ** 15n, data: '0x' };
+  const legFee = sign({ chainId: UNKNOWN, nativeSymbol: 'ETH', operation: { userOp: userOpOf([{ to: RECIPIENT, value, data: '0x' }, nativeFee]), feeLegIndex: 1 } }, send);
+  check('…a native fee leg, the same',
+    legFee.view.fee.leg.symbol === 'ETH' && legFee.view.fee.leg.symbolClaimed === true &&
+    texts(legFee.sheet, 'fee-coin').join() === 'ETH ' + coinTag, texts(legFee.sheet, 'fee-coin').join());
+
+  // Coin sent along with calldata: the native row carries the mark too.
+  const deposit = ns.encode.call('deposit()', []);
+  const withData = sign({ chainId: UNKNOWN, nativeSymbol: 'ETH', operation: { userOp: userOpOf([{ to: RECIPIENT, value, data: deposit }]) } },
+    { method: 'eth_sendTransaction', origin: 'https://x.y', params: [{ to: RECIPIENT, value: '0x' + value.toString(16), data: deposit }] });
+  const nativeRow = withData.view.fields.find((f) => f.role === 'native-out');
+  check('…coin attached to a call: its row is marked as the app\'s coin',
+    !!nativeRow && nativeRow.amount.symbolClaimed === true &&
+    // the network row's, and the native row's own
+    claimedCoin(withData.sheet).filter((s) => s === coinTag).length === 2,
+    JSON.stringify(claimedCoin(withData.sheet)));
+
+  // A chain the page knows: the page's own coin, no mark anywhere.
+  const known = sign({ chainId: 1, nativeSymbol: 'USDC', operation: sendOp }, send);
+  check('a known chain: the page\'s coin, nothing marked, no chain id line',
+    known.view.hero.amount.symbol === 'ETH' && !known.view.hero.amount.symbolClaimed &&
+    claimedCoin(known.sheet).length === 0 && known.view.chainId === null && known.sheet.find('network-id').length === 0);
+
+  // Nobody names the coin: "?", never a guessed ETH.
+  const nobody = sign({ chainId: UNKNOWN, operation: { userOp: userOpOf([{ to: RECIPIENT, value, data: '0x' }], gas) } }, send);
+  check('unknown chain, no symbol from the app: "?", not "ETH", and not marked as the app\'s',
+    nobody.view.hero.amount.symbol === '?' && nobody.view.fee.gas.symbol === '?' &&
+    !nobody.view.hero.amount.symbolClaimed && claimedCoin(nobody.sheet).length === 0,
+    nobody.view.hero.amount.symbol + ' / ' + nobody.view.fee.gas.symbol);
+  check('…and the network row is the chain id, in the page\'s words',
+    texts(nobody.sheet, 'network-name').join() === t('value.chainId', { id: String(UNKNOWN) }),
+    texts(nobody.sheet, 'network-name').join());
+
+  // The app's words are drawn as what they are: hidden characters shown, and cut short.
+  const hidden = sign({ chainId: UNKNOWN, chainName: 'Foo‮chain', nativeSymbol: 'E​TH', operation: sendOp }, send);
+  check('a symbol or chain name with hidden characters: shown as code points, with a caution',
+    hidden.view.hero.amount.symbol === 'E[U+200B]TH' && hidden.view.chain === 'Foo[U+202E]chain' &&
+    hidden.view.warnings.some((w) => w.key === 'warn.invisibleChars'), hidden.view.hero.amount.symbol);
+  const long = sign({ chainId: UNKNOWN, nativeSymbol: 'X'.repeat(80), operation: sendOp }, send);
+  check('a symbol of 80 characters is cut to 12', long.view.hero.amount.symbol === 'X'.repeat(12));
+  const planted = sign({ chainId: 1, coin: { symbol: 'FAKE', claimed: false }, operation: sendOp }, send);
+  check('a context.coin of the requester\'s is ignored', planted.view.hero.amount.symbol === 'ETH');
 }
 
 // --- 3. fiat is the requester's, in an ISO currency only -------------------------

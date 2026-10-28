@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('ru', {
   'ui.simClaimed': 'симуляция предоставлена отправителем запроса — эта страница её не запускала',
   'tag.feeByApp': 'по данным приложения',
   'tag.nameByApp': 'название от приложения',
+  'tag.coinByApp': 'название монеты от приложения',
+  'value.chainId': 'ID сети {id}',
 
   'intent.create': 'Добавить passkey',
   'intent.signIn': 'Вход',

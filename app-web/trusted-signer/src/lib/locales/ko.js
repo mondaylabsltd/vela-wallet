@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('ko', {
   'ui.simClaimed': '요청한 곳이 제공한 시뮬레이션입니다 — 이 페이지가 실행한 것이 아닙니다',
   'tag.feeByApp': '앱이 지정',
   'tag.nameByApp': '앱이 알려 준 이름',
+  'tag.coinByApp': '앱이 알려 준 코인 이름',
+  'value.chainId': '체인 ID {id}',
   'intent.create': '패스키 추가',
   'intent.signIn': '로그인',
   'intent.proofVerify': '키 확인',

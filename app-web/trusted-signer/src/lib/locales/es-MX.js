@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.simClaimed': 'simulación proporcionada por el solicitante — esta página no la ejecutó',
   'tag.feeByApp': 'según la app',
   'tag.nameByApp': 'nombre según la app',
+  'tag.coinByApp': 'nombre de la moneda según la app',
+  'value.chainId': 'ID de cadena {id}',
   'intent.create': 'Añadir passkey',
   'intent.signIn': 'Iniciar sesión',
   'intent.proofVerify': 'Confirmar tu llave',

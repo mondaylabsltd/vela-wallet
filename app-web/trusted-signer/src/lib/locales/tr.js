@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('tr', {
   'ui.simClaimed': 'simülasyonu isteyen taraf sağladı — bu sayfa çalıştırmadı',
   'tag.feeByApp': 'uygulamaya göre',
   'tag.nameByApp': 'adı uygulamadan',
+  'tag.coinByApp': 'coin adı uygulamadan',
+  'value.chainId': 'zincir kimliği {id}',
   'intent.create': 'Passkey ekle',
   'intent.signIn': 'Oturum aç',
   'intent.proofVerify': 'Anahtarınızı onaylayın',

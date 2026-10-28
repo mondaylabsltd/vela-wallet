@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('id', {
   'ui.simClaimed': 'simulasi diberikan oleh pihak peminta — tidak dijalankan oleh halaman ini',
   'tag.feeByApp': 'menurut aplikasi',
   'tag.nameByApp': 'nama dari aplikasi',
+  'tag.coinByApp': 'nama koin dari aplikasi',
+  'value.chainId': 'ID jaringan {id}',
   'intent.create': 'Tambah passkey',
   'intent.signIn': 'Masuk',
   'intent.proofVerify': 'Konfirmasi kunci Anda',

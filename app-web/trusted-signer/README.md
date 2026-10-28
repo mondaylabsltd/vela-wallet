@@ -44,7 +44,7 @@ scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，�
 bun samples/answer-test.mjs     # 31 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
 node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
-node samples/claims-test.mjs    # 51 项：谁的说法 —— 「本账户」、网络费的币种、法币与币种、看不见的字符、读不了的钥匙 id
+node samples/claims-test.mjs    # 62 项：谁的说法 —— 「本账户」、网络费的币种、本页不认识的链上 App 给的币名（标「币名由 App 提供」、显示链 ID）、法币与币种、看不见的字符、读不了的钥匙 id
 node samples/provenance-test.mjs # 96 项：意图的读法从哪来 —— 同一函数形状打在陌生合约上、换一条链、App 说的金库资产、App 的模拟、去向不是本账户、App 说的现有额度；五种来源行十五种语言
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）

@@ -191,6 +191,9 @@ window.VelaCS = window.VelaCS || {};
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
+    // The coin of a chain this page does not know is the app's word, said
+    // right under the figure it names (resolve.js `coinOf`).
+    if (hero.amount.symbolClaimed) box.appendChild(el('div', 'amount-fiat coin-claimed', t('tag.coinByApp')));
     if (hero.amount.fiat) box.appendChild(fiatLine('amount-fiat', hero.amount.fiat));
     return box;
   }
@@ -243,6 +246,7 @@ window.VelaCS = window.VelaCS || {};
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
+      if (field.amount.symbolClaimed) value.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
       if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
       value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
@@ -425,6 +429,9 @@ window.VelaCS = window.VelaCS || {};
       }
     }
     if (view.fee.gas) note.appendChild(el('div', null, t('ui.feeGas', { gas: view.fee.gas.gas })));
+    var feeCoin = view.fee.leg ? view.fee.leg.symbolClaimed && view.fee.leg.symbol
+      : view.fee.gas && view.fee.gas.symbolClaimed && view.fee.gas.symbol;
+    if (feeCoin) note.appendChild(coinClaim('fee-coin', feeCoin));
     var rate = (view.fee.leg && view.fee.leg.rate) || (view.fee.gas && view.fee.gas.rate);
     var rateSymbol = view.fee.leg ? view.fee.leg.symbol : view.fee.gas && view.fee.gas.symbol;
     note.appendChild(el('div', null, rate
@@ -564,16 +571,33 @@ window.VelaCS = window.VelaCS || {};
    * 网络 · Base. A chain this page does not know is named by the app — the
    * chain id is in the digest, the name is not — and the row says so
    * (「App 提供」 / "named by the app"), quietly, in the row's own muted type.
+   * Under it, the one thing about such a chain that is signed: its id; and,
+   * when the app named its coin, that the symbol is the app's word too.
    */
   function networkRow(view) {
-    if (!view.chain) return null;
+    if (!view.chain && !view.chainId) return null;
     var row = el('div', 'row network-row');
     row.appendChild(el('span', 'row-label', t('field.network')));
     var value = el('span', 'row-value');
-    value.appendChild(el('span', 'network-name', view.chain));
-    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    if (view.chain) {
+      value.appendChild(el('span', 'network-name', view.chain));
+      if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    }
+    if (view.chainId) {
+      var sub = el('div', view.chain ? 'row-sub network-id' : 'network-name network-id',
+        t('value.chainId', { id: view.chainId }));
+      value.appendChild(sub);
+      if (view.coin && view.coin.claimed) value.appendChild(coinClaim('row-sub network-coin', view.coin.symbol));
+    }
     row.appendChild(value);
     return row;
+  }
+
+  /** "FOO · coin named by the app" — a symbol this page took on the app's word. */
+  function coinClaim(className, symbol) {
+    var line = el('div', className, symbol + ' ');
+    line.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
+    return line;
   }
 
   // Refusals and dangers first, right under the title — a card that will not

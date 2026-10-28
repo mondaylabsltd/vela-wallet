@@ -212,14 +212,34 @@ window.VelaCS = window.VelaCS || {};
    * wallet's plain send card states it (vela-core `exact_native_amount`, 082
    * RC5). Without it the figure stops at six decimals.
    */
+  /**
+   * The chain's own coin, from the chain id we sign for (it is in the
+   * digest). Only for a chain this page does not know is the symbol the
+   * requester's `nativeSymbol` — and then it is the app's word, marked as
+   * such wherever it is drawn (`claimed`), exactly as the chain's name is.
+   * It is not a fact the page can check: "ETH" on a chain whose coin is
+   * worth nothing reads as a price it does not have. Nobody naming it is
+   * "?", the page's mark for a coin it cannot name, never a guessed "ETH".
+   * `resolve` puts the result on its own copy of the context (`ctx.coin`),
+   * so the hero, the rows and the fee (lib/fee.js) all say the same.
+   */
+  function coinOf(ctx) {
+    var known = reg.nativeSymbol(ctx.chainId);
+    if (known) return { symbol: known, claimed: false, hidden: false };
+    var given = typeof ctx.nativeSymbol === 'string' ? ctx.nativeSymbol.trim().slice(0, 12) : '';
+    if (!given) return { symbol: '?', claimed: false, hidden: false };
+    var shown = reveal(given);
+    return { symbol: shown.text, claimed: true, hidden: shown.hidden };
+  }
+
   function nativeAmount(value, ctx, exact) {
-    // The chain's own coin, from the chain id we sign for — the requester's
-    // word only for a chain this page does not know (as with its name).
-    var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
+    var coin = ctx.coin || coinOf(ctx);
+    var symbol = coin.symbol;
     return {
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
+      symbolClaimed: coin.claimed,
       text: formatUnits(value, 18, exact ? 18 : undefined),
       fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
@@ -291,7 +311,12 @@ window.VelaCS = window.VelaCS || {};
     var shown = vouched ? reveal(given) : null;
     var claimed = given && !vouched ? reveal(given.trim().slice(0, 64)) : null;
     var accountName = reveal((ctx.signer && typeof ctx.signer.name === 'string' && ctx.signer.name) || null);
-    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden) {
+    var chainKnown = !!reg.chainName(ctx.chainId);
+    var chainGiven = !chainKnown && typeof ctx.chainName === 'string' && ctx.chainName.trim()
+      ? reveal(ctx.chainName.trim().slice(0, 40)) : null;
+    var coin = ctx.coin || coinOf(ctx);
+    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden ||
+      (chainGiven && chainGiven.hidden) || coin.hidden) {
       warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
     }
     var name = shown ? shown.text : null;
@@ -324,10 +349,14 @@ window.VelaCS = window.VelaCS || {};
       },
       // Named from the chain id we are actually signing for (it is in the
       // digest's domain). The app's own label is only used for a chain this
-      // page does not know, and is marked as the app's. A chain neither knows
-      // is named by its id — the page's own words, so not marked.
-      chain: reg.chainName(ctx.chainId) || ctx.chainName || ('chain ' + (ctx.chainId || '?')),
-      chainClaimed: !reg.chainName(ctx.chainId) && !!ctx.chainName,
+      // page does not know, and is marked as the app's. A chain this page
+      // does not know always shows its id (`chainId`) — the one thing about
+      // it that is signed — and, when the app named its coin, that the
+      // symbol is the app's word too (`coin.claimed`).
+      chain: chainKnown ? reg.chainName(ctx.chainId) : chainGiven ? chainGiven.text : null,
+      chainClaimed: !!chainGiven,
+      chainId: chainKnown ? null : String(ctx.chainId || '?'),
+      coin: coin,
       chainLogos: ns.logos.chain(ctx, ctx.chainId),
       // The account whose key signs. For a transaction this is also inside
       // the digest (SafeOp.safe), so it is not merely a claim.
@@ -512,7 +541,10 @@ window.VelaCS = window.VelaCS || {};
     // A coin it carries is `nativeOut`'s row; none is said as 0, not left out.
     if (raw && value !== null && value === 0n) {
       var none = nativeAmount(0n, ctx, true);
-      facts.push({ label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw' });
+      facts.push({
+        label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw',
+        tagKey: none.symbolClaimed ? 'tag.coinByApp' : undefined,
+      });
     }
     if (raw) {
       facts.push({
@@ -707,7 +739,10 @@ window.VelaCS = window.VelaCS || {};
         });
       } else if (field.format === 'nativeAmount') {
         var na = nativeAmount(raw, ctx);
-        rows.push({ label: field.label, value: na.text + ' ' + na.symbol, format: 'raw' });
+        rows.push({
+          label: field.label, value: na.text + ' ' + na.symbol, format: 'raw',
+          tagKey: na.symbolClaimed ? 'tag.coinByApp' : undefined,
+        });
       }
     });
 
@@ -1923,6 +1958,7 @@ window.VelaCS = window.VelaCS || {};
     // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
     ctx = Object.assign({}, ctx || {});
     ctx.selfAccount = selfAccountOf(requested, ctx);
+    ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);

@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('ja', {
   'ui.simClaimed': '要求元が提供したシミュレーションです — このページが実行したものではありません',
   'tag.feeByApp': 'アプリ指定',
   'tag.nameByApp': '名前はアプリ提供',
+  'tag.coinByApp': '通貨名はアプリ提供',
+  'value.chainId': 'チェーン ID {id}',
   'intent.create': 'パスキーを追加',
   'intent.signIn': 'サインイン',
   'intent.proofVerify': 'キーを確認',

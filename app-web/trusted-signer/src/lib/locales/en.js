@@ -191,6 +191,11 @@ window.VelaCS.i18n.register('en', {
   // app's, for a chain this page's own table does not know.
   'tag.feeByApp': 'per the app',
   'tag.nameByApp': 'named by the app',
+  // For such a chain the coin's SYMBOL is the app's word too — beside the
+  // amount, the fee and the network — and the row shows the chain id, the
+  // one thing about the chain that is signed.
+  'tag.coinByApp': 'coin named by the app',
+  'value.chainId': 'chain ID {id}',
   // --- key ceremonies (spec 075): the page as a passkey route --------------
   'intent.create': 'Add a passkey',
   'intent.signIn': 'Sign in',

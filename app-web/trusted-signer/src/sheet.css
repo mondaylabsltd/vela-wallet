@@ -612,6 +612,10 @@ body {
    its name is. */
 .network-claimed::before { content: '· '; }
 
+/* A coin symbol the app named, for a chain this page does not know. */
+.network-coin .coin-claimed::before,
+.fee-coin .coin-claimed::before { content: '· '; }
+
 /* --- legs, balance (the app's detail card) ------------------------------- */
 
 .leg,

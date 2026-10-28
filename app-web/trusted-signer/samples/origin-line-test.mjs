@@ -199,12 +199,16 @@ ns.i18n.setLocale('zh');
   check('an unknown chain the app names: 「App 提供」 beside the name',
     named.view.chain === 'Taiko' && named.view.chainClaimed === true && tag === 'App 提供', tag);
   const bare = signing('', undefined, { chainId: 167000 });
-  check('an unknown chain nobody names: its id, unmarked',
-    bare.view.chain === 'chain 167000' && bare.view.chainClaimed === false &&
-    bare.sheet.find('.network-claimed').length === 0, bare.view.chain);
+  const bareRow = bare.sheet.find('.network-name').map((n) => n.textContent).join();
+  check('an unknown chain nobody names: its id, in the page\'s words, unmarked',
+    bare.view.chain === null && bare.view.chainId === '167000' && bareRow === '链 ID 167000' &&
+    bare.view.chainClaimed === false && bare.sheet.find('.network-claimed').length === 0, bareRow);
+  const namedId = named.sheet.find('.network-id').map((n) => n.textContent).join();
+  check('…and one the app names still shows its id under the name', namedId === '链 ID 167000', namedId);
   const known = signing('', undefined, { chainId: 8453, chainName: 'Not Base' });
-  check('a known chain: the page\'s own name, unmarked',
-    known.view.chain === 'Base' && known.view.chainClaimed === false, known.view.chain);
+  check('a known chain: the page\'s own name, unmarked, no id line',
+    known.view.chain === 'Base' && known.view.chainClaimed === false && known.view.chainId === null &&
+    known.sheet.find('.network-id').length === 0, known.view.chain);
   check('the fee and the network say different things, so they are two words',
     ns.i18n.t('tag.feeByApp') === 'App 标注' && ns.i18n.t('tag.nameByApp') === 'App 提供');
 }

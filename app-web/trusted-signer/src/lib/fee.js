@@ -62,12 +62,15 @@ window.VelaCS = window.VelaCS || {};
    * The chain's own coin, from this page's catalogue for the chain id that is
    * signed for — not the requester's `nativeSymbol`, which used to name the
    * fee on every chain ("0.0009 USDC" on Ethereum), with "ETH" when it said
-   * nothing. The hero's rule (resolve.js `nativeAmount`), so the card never
-   * names one coin two ways: only a chain the page does not know falls back
-   * to the app's word, and the network row then says the chain is the app's.
+   * nothing. The hero's rule (resolve.js `coinOf`, handed over as
+   * `context.coin`), so the card never names one coin two ways: only a chain
+   * the page does not know takes the app's word, and the fee then says the
+   * symbol is the app's (`claimed`); nobody naming it is "?".
    */
-  function nativeSymbolOf(context) {
-    return (ns.registry && ns.registry.nativeSymbol(context.chainId)) || context.nativeSymbol || 'ETH';
+  function coinOf(context) {
+    if (context.coin && typeof context.coin.symbol === 'string') return context.coin;
+    var known = ns.registry && ns.registry.nativeSymbol(context.chainId);
+    return { symbol: known || '?', claimed: false };
   }
 
   /** The 4337 gas ceiling. Zero on Vela, so it is only reported when it is not. */
@@ -77,10 +80,12 @@ window.VelaCS = window.VelaCS || {};
       BigInt(operation.preVerificationGas || 0);
     var maxWei = gas * BigInt(operation.maxFeePerGas || 0);
     if (maxWei === 0n) return null;
-    var symbol = nativeSymbolOf(context);
+    var coin = coinOf(context);
+    var symbol = coin.symbol;
     var fiat = fiatOf(context, symbol, maxWei, 18);
     return {
       symbol: symbol,
+      symbolClaimed: !!coin.claimed,
       gas: group(gas.toString()),
       max: formatUnits(maxWei, 18),
       fiat: fiat && fiat.text,
@@ -102,11 +107,13 @@ window.VelaCS = window.VelaCS || {};
 
     // Native coin: a bare value transfer with no calldata.
     if ((!leg.data || leg.data === '0x') && value > 0n) {
-      var symbol = nativeSymbolOf(context);
+      var coin = coinOf(context);
+      var symbol = coin.symbol;
       var nativeFiat = fiatOf(context, symbol, value, 18);
       return {
         index: index,
         symbol: symbol,
+        symbolClaimed: !!coin.claimed,
         amount: formatUnits(value, 18),
         to: leg.to,
         token: null,

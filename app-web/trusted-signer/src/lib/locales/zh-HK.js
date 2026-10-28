@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.simClaimed': '模擬結果由請求方提供——並非由這一頁執行',
   'tag.feeByApp': 'App 標註',
   'tag.nameByApp': 'App 提供',
+  'tag.coinByApp': '幣名由 App 提供',
+  'value.chainId': '鏈 ID {id}',
 
   'intent.create': '加通行密鑰',
   'intent.signIn': '登入',

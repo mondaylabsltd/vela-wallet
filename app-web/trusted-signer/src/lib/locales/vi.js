@@ -185,6 +185,8 @@ window.VelaCS.i18n.register('vi', {
   'ui.simClaimed': 'kết quả mô phỏng do bên yêu cầu cung cấp — không phải do trang này chạy',
   'tag.feeByApp': 'theo ứng dụng',
   'tag.nameByApp': 'tên theo ứng dụng',
+  'tag.coinByApp': 'tên coin theo ứng dụng',
+  'value.chainId': 'ID chuỗi {id}',
   'intent.create': 'Thêm passkey',
   'intent.signIn': 'Đăng nhập',
   'intent.proofVerify': 'Xác nhận khóa của bạn',

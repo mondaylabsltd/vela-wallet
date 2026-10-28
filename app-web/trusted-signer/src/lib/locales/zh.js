@@ -195,6 +195,8 @@ window.VelaCS.i18n.register('zh', {
   // 签名摘要里，只有本页自己的表里没有的链，它的「名字」是 App 给的。
   'tag.feeByApp': 'App 标注',
   'tag.nameByApp': 'App 提供',
+  'tag.coinByApp': '币名由 App 提供',
+  'value.chainId': '链 ID {id}',
   // --- 钥匙仪式（spec 075）：可信签名器作为一条 passkey 通道 --------------
   'intent.create': '添加通行密钥',
   'intent.signIn': '登录',
