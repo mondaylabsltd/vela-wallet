@@ -811,6 +811,114 @@ fn no_answer_is_unable_to_verify_and_retry_runs_it_again() {
     assert_eq!(settled(&ops), Some(DappAddOutcome::Declined));
 }
 
+/// dapp-13: chain 1337 — the catalog's only RPC is `http://127.0.0.1:8545`,
+/// which Vela never probes, so nothing was asked and the sheet said "RPC
+/// request failed" while the page's own node answered. The page's RPC is
+/// tried when the catalog lists none Vela may use; the catalog's words stay.
+const LOCAL_RPC: &str = "http://127.0.0.1:8941";
+
+fn local_catalog_entry() -> NetRawChainData {
+    NetRawChainData {
+        rpc: vec!["http://127.0.0.1:8545".to_owned()],
+        ..catalog_entry()
+    }
+}
+
+#[test]
+fn a_catalog_chain_with_no_rpc_vela_uses_is_checked_on_the_pages_rpc() {
+    let mut sut = admin();
+    requested(&mut sut, site_ask(NEW_CHAIN, &[LOCAL_RPC]));
+    let ops = catalog(&mut sut, Some(local_catalog_entry()));
+    assert_eq!(
+        ops,
+        vec![NOp::ProbeRpc {
+            url: LOCAL_RPC.to_owned()
+        }],
+        "the page's node, not nothing"
+    );
+    let sheet = sut.view().dapp_add.expect("the sheet");
+    assert!(!sheet.from_site, "the catalog's name and coin");
+    assert!(sheet.rpc_from_site, "and the sheet says whose RPC it is");
+    assert_eq!(sheet.name, "Catalog Chain");
+    assert_eq!(sheet.rpc_host.as_deref(), Some("127.0.0.1:8941"));
+    // A reachable, matching RPC is verified like any other.
+    let ops = probed(&mut sut, LOCAL_RPC, Some(NEW_CHAIN));
+    assert_eq!(ops.len(), REQUIRED_CONTRACTS.len() + 1);
+    contracts(&mut sut, LOCAL_RPC, true);
+    let ops = approve(&mut sut);
+    let network = writes(&ops)
+        .expect("saved")
+        .into_iter()
+        .find(|n| n.chain_id == NEW_CHAIN)
+        .unwrap();
+    assert_eq!(network.rpc_url, LOCAL_RPC);
+    assert_eq!(network.display_name, "Catalog Chain");
+}
+
+#[test]
+fn the_pages_rpc_answering_for_another_chain_refuses_even_for_a_catalog_chain() {
+    let mut sut = admin();
+    requested(&mut sut, site_ask(NEW_CHAIN, &[LOCAL_RPC]));
+    catalog(&mut sut, Some(local_catalog_entry()));
+    probed(&mut sut, LOCAL_RPC, Some(1));
+    let sheet = sut.view().dapp_add.expect("the sheet");
+    assert_eq!(sheet.phase, NetDappAddPhase::WrongRpc);
+    assert!(!sheet.can_add && !sheet.can_add_unverified);
+    // No unverified way round a mismatch.
+    let ops = sut.dispatch(NEvent::DappAddApprovedUnverified {
+        now_iso: NOW_ISO.to_owned(),
+    });
+    assert!(writes(&ops).is_none() && settled(&ops).is_none());
+}
+
+#[test]
+fn an_rpc_that_cannot_be_reached_may_be_added_unverified_on_confirmation() {
+    let mut sut = admin();
+    requested(&mut sut, site_ask(NEW_CHAIN, &[LOCAL_RPC]));
+    catalog(&mut sut, None);
+    // CORS, a node that is down, a timeout: no answer at all.
+    probed(&mut sut, LOCAL_RPC, None);
+    let sheet = sut.view().dapp_add.expect("the sheet");
+    assert_eq!(sheet.phase, NetDappAddPhase::CheckFailed);
+    assert!(!sheet.can_add, "never verified");
+    assert!(sheet.can_add_unverified, "not a dead end");
+    // "Add Network" does nothing here; only the unverified confirmation does.
+    assert!(approve(&mut sut).is_empty());
+    let mut ops = sut.dispatch(NEvent::DappAddApprovedUnverified {
+        now_iso: NOW_ISO.to_owned(),
+    });
+    assert!(settled(&ops).is_none(), "not before the store has it");
+    let network = writes(&ops)
+        .expect("saved")
+        .into_iter()
+        .find(|n| n.chain_id == NEW_CHAIN)
+        .unwrap();
+    assert_eq!(network.rpc_url, LOCAL_RPC);
+    assert_eq!(network.is_testnet, Some(true));
+    ops.extend(sut.resolve_matching(
+        |op| matches!(op, NOp::WriteCustomNetworks { .. }),
+        NRes::Written,
+    ));
+    assert_eq!(
+        settled(&ops),
+        Some(DappAddOutcome::Added {
+            chain_id: NEW_CHAIN
+        })
+    );
+    assert!(sut.view().dapp_add.is_none());
+}
+
+#[test]
+fn with_no_rpc_to_save_there_is_nothing_to_add_unverified() {
+    let mut sut = admin();
+    requested(&mut sut, site_ask(NEW_CHAIN, &[]));
+    // The catalog lists only an RPC Vela never uses, and the page none.
+    assert!(catalog(&mut sut, Some(local_catalog_entry())).is_empty());
+    let sheet = sut.view().dapp_add.expect("the sheet");
+    assert_eq!(sheet.phase, NetDappAddPhase::CheckFailed);
+    assert!(!sheet.can_add_unverified);
+}
+
 #[test]
 fn a_chain_the_wallet_already_has_settles_added_without_a_sheet() {
     let mut sut = admin_with(vec![NetCustomNetwork {

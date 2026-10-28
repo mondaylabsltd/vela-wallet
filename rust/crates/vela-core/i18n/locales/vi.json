@@ -224,6 +224,12 @@
         "fiatRates": "Tỷ giá fiat"
       }
     },
+    "sites": {
+      "title": "Trang web đã kết nối",
+      "subtitle": "Các trang web có thể thấy địa chỉ của bạn",
+      "listLabel": "Ngắt kết nối một trang web sẽ thu hồi những gì nó được xem; lần sau nó sẽ hỏi lại bạn.",
+      "empty": "Không có trang web nào được kết nối."
+    },
     "about": {
       "title": "Giới thiệu",
       "subtitle": "Vela Wallet v{{version}}"

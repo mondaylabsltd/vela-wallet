@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Este contrato no tiene descriptor ERC-7730 — los valores de arriba son una decodificación directa del ABI verificado en cadena. Revísalos.",
       "bestEffortSummary": "Llamando a {{fn}} — leído de la firma pública de la función, no de un descriptor verificado.",
       "simUnavailableWarning": "Vela no pudo comprobar qué hace esta transacción. Revísala antes de firmar.",
+      "simRecheck": "Revisar de nuevo",
+      "simRechecking": "Revisando de nuevo…",
       "drainSummary": "El sitio dice que es un reclamo gratuito, pero la simulación muestra activos saliendo de tu billetera.",
       "drainWarning": "Salen activos que el sitio nunca mencionó — se parece muchísimo a un vaciado. Recházalo.",
       "selectorNotListed": "No se puede decodificar — sin descriptor ERC-7730 y con un selector no registrado ({{bytes}} bytes)",

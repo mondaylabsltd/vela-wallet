@@ -38,4 +38,12 @@ notice_key: string | null,
  * [`KEY_NO_CHANGE`] when the answer was a check and nothing of the
  * person's moves: the quiet line the verdict's place says then.
  */
-no_change_key: string | null, };
+no_change_key: string | null, 
+/**
+ * No node answered (`unreachable`): the could-not-check line is about
+ * the network, not the transaction, so a sheet asks again once the
+ * chain answers — and on the person's "Check again" (dapp-15). A node
+ * that spoke and did not simulate (`not_offered`) is not asked again:
+ * it would say the same.
+ */
+recheck: boolean, };

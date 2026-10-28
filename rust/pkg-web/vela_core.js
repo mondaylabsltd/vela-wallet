@@ -6123,6 +6123,22 @@ export function simOutcome(user, reply_json) {
 }
 
 /**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`undefined`:
+ * none). The extension worker's twin is pinned to this.
+ * @param {Uint32Array} space_chain_ids
+ * @param {number | null} [last_used]
+ * @returns {number}
+ */
+export function siteStartChain(space_chain_ids, last_used) {
+    const ptr0 = passArray32ToWasm0(space_chain_ids, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.siteStartChain(ptr0, len0, isLikeNone(last_used) ? Number.MAX_SAFE_INTEGER : (last_used) >>> 0);
+    return ret >>> 0;
+}
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  * @param {number} bytes
@@ -7263,6 +7279,14 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
@@ -7282,6 +7306,13 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -7379,6 +7410,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

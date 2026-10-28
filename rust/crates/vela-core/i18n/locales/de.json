@@ -224,6 +224,12 @@
         "fiatRates": "Fiat-Kurse"
       }
     },
+    "sites": {
+      "title": "Verbundene Websites",
+      "subtitle": "Websites, die deine Adresse sehen können",
+      "listLabel": "Trennst du eine Website, verliert sie, was sie sehen darf; beim nächsten Mal fragt sie dich erneut.",
+      "empty": "Keine Website ist verbunden."
+    },
     "about": {
       "title": "Über",
       "subtitle": "Vela Wallet v{{version}}"

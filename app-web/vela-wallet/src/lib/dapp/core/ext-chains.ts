@@ -21,6 +21,7 @@ import {
 	nativeSymbol
 } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { CHAINS_KEY } from '../keys';
 
 /** One chain, as the worker needs it. */
@@ -38,6 +39,13 @@ export interface ExtChainEntry {
 export interface ExtChainCatalog {
 	version: 1;
 	chains: Record<string, ExtChainEntry>;
+	/**
+	 * dapp-17: the space these chains are (spec 105) and their ids in the
+	 * wallet's list order — where a new site starts
+	 * (`network_space::site_start_chain`, the worker's `startChainOf`).
+	 */
+	space: 'mainnet' | 'testnet';
+	order: number[];
 	updatedAtMs: number;
 }
 
@@ -110,7 +118,9 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	// using. A custom network keeps its own bundler, which is the one the
 	// person typed when they added it.
 	const builtinChainIds = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
+	const order: number[] = [];
 	for (const network of spaceNetworksSync()) {
+		order.push(network.chainId);
 		// dapp-5: the person's RPC override, as the wallet's own pool reads it.
 		const { rpc } = workerRpcList(network, networkConfigSync(network.chainId));
 		chains[String(network.chainId)] = {
@@ -126,7 +136,13 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 			explorer: explorerBaseURL(network.chainId) ?? ''
 		};
 	}
-	return { version: 1, chains, updatedAtMs: nowMs };
+	return {
+		version: 1,
+		chains,
+		space: networkSpace.testnet ? 'testnet' : 'mainnet',
+		order,
+		updatedAtMs: nowMs
+	};
 }
 
 interface StorageAreaLike {

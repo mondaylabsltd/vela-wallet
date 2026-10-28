@@ -224,6 +224,12 @@
         "fiatRates": "Fiat kurları"
       }
     },
+    "sites": {
+      "title": "Bağlı siteler",
+      "subtitle": "Adresinizi görebilen siteler",
+      "listLabel": "Bir sitenin bağlantısını kesmek, görebildiklerini geri alır; bir dahaki sefere yeniden sorar.",
+      "empty": "Bağlı site yok."
+    },
     "about": {
       "title": "Hakkında",
       "subtitle": "Vela Wallet v{{version}}"

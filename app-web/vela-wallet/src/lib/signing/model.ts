@@ -136,6 +136,13 @@ export interface WarningBlock {
 	 * note F2) and brings the line into sight (the device round).
 	 */
 	verdict?: true;
+	/**
+	 * dapp-15: a could-not-check line about the NETWORK (no node answered) is
+	 * asked again. `checking: false` — a "Check again" button (`label`);
+	 * `checking: true` — the line is stale, a new check is out, `label` says
+	 * so ("Checking again…").
+	 */
+	recheck?: { label: string; checking: boolean };
 }
 
 /**

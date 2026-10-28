@@ -1583,6 +1583,14 @@ export function signingVenueChoices(domain: string, active_json: string, saved_j
 export function simOutcome(user: string, reply_json: string): string;
 
 /**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`undefined`:
+ * none). The extension worker's twin is pinned to this.
+ */
+export function siteStartChain(space_chain_ids: Uint32Array, last_used?: number | null): number;
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  */
@@ -2119,6 +2127,7 @@ export interface InitOutput {
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
     readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly siteStartChain: (a: number, b: number, c: number) => number;
     readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;

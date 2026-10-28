@@ -224,6 +224,12 @@
         "fiatRates": "Tipos de cambio fiat"
       }
     },
+    "sites": {
+      "title": "Sitios conectados",
+      "subtitle": "Sitios que pueden ver tu dirección",
+      "listLabel": "Desconectar un sitio le quita lo que puede ver; la próxima vez te vuelve a preguntar.",
+      "empty": "No hay ningún sitio conectado."
+    },
     "about": {
       "title": "Acerca de",
       "subtitle": "Vela Wallet v{{version}}"

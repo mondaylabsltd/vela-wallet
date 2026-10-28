@@ -1544,6 +1544,14 @@ pub enum Event {
     DappAddApproved {
         now_iso: String,
     },
+    /// The sheet's "Add unverified network", confirmed: only from
+    /// `check_failed` with [`NetDappAddView::can_add_unverified`] — the RPC
+    /// could not be reached to check it, and never answered for another
+    /// chain (a mismatch refuses, EIP-3085). Saved as `DappAddApproved`
+    /// saves, with that RPC, then settled `added`.
+    DappAddApprovedUnverified {
+        now_iso: String,
+    },
     /// The sheet closed without adding: settled `declined`, or the verdict
     /// it showed (`not_compatible`, `bad_rpc`).
     DappAddDeclined,
@@ -1745,6 +1753,10 @@ struct DappAdd {
     info: Option<NetChainInfo>,
     /// `info` is the page's, not the catalog's.
     from_site: bool,
+    /// The RPCs tried are the page's although the catalog knows the chain: it
+    /// lists none Vela may use (dapp-13 — a local chain whose only listed RPC
+    /// is `http://127.0.0.1:8545`, which is not where the person's node is).
+    rpc_from_site: bool,
     /// The RPC the sheet names: the check's winner, else the first candidate.
     rpc_url: Option<String>,
     /// The shared check's own progress.
@@ -2120,6 +2132,14 @@ pub struct NetDappAddView {
     pub compat: Option<NetCompatibility>,
     /// "Add Network" acts.
     pub can_add: bool,
+    /// The RPC tried is the page's, though the catalog names the chain (it
+    /// lists no RPC Vela may use).
+    pub rpc_from_site: bool,
+    /// `check_failed` with an RPC to save that never answered for another
+    /// chain: the person may add it unverified, on an explicit confirmation
+    /// ([`Event::DappAddApprovedUnverified`]). A local node a probe cannot
+    /// reach is not a dead end.
+    pub can_add_unverified: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2177,6 +2197,9 @@ impl App for NetworkAdmin {
                 ask,
             } => dapp_add_requested(model, tab, id, origin, ask),
             Event::DappAddApproved { now_iso } => dapp_add_approved(model, now_iso),
+            Event::DappAddApprovedUnverified { now_iso } => {
+                dapp_add_approved_unverified(model, now_iso)
+            }
             Event::DappAddDeclined => dapp_add_declined(model),
             Event::DappAddRetried => {
                 if model
@@ -3104,6 +3127,7 @@ fn dapp_add_requested(
         ask,
         info: None,
         from_site: false,
+        rpc_from_site: false,
         rpc_url: None,
         check: WizardPhase::Idle,
         phase: NetDappAddPhase::Checking,
@@ -3139,6 +3163,7 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
     if let Some(add) = model.dapp_add.as_mut() {
         add.info = None;
         add.from_site = false;
+        add.rpc_from_site = false;
         add.rpc_url = None;
         add.compat = None;
         add.reported_other = None;
@@ -3152,7 +3177,9 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
 }
 
 /// The catalog's answer. Known: its name, coin, explorer and RPCs — the
-/// page's are not used. Unknown: the page's words and the page's RPCs (each
+/// page's are not used, unless the catalog lists no RPC Vela may use (then
+/// the page's are tried, each held to the chain id as below, and the sheet
+/// says whose they are). Unknown: the page's words and the page's RPCs (each
 /// must answer `eth_chainId` with the chain asked for).
 fn dapp_chain_info(
     model: &mut Model,
@@ -3166,7 +3193,7 @@ fn dapp_chain_info(
     if add.check != (WizardPhase::Resolving { chain_id }) {
         return Command::done();
     }
-    let (info, candidates, from_site) = match data {
+    let (info, candidates, from_site, rpc_from_site) = match data {
         Some(raw) => {
             let info = parse_chain_data(&raw, chain_id, &data_url);
             let rpcs = if info.rpc_urls.is_empty() && !info.rpc_url.is_empty() {
@@ -3175,17 +3202,26 @@ fn dapp_chain_info(
                 info.rpc_urls.clone()
             };
             let candidates = probe_candidates(rpcs, &info, "");
-            (info, candidates, false)
+            if candidates.is_empty() && !add.ask.rpc_urls.is_empty() {
+                // dapp-13: the catalog's only RPCs are ones Vela never uses
+                // (a dev chain's `http://127.0.0.1:8545`). The page's — read
+                // as Vela reads any page's (`usable_rpc_url`) — are tried.
+                (info, add.ask.rpc_urls.clone(), false, true)
+            } else {
+                (info, candidates, false, false)
+            }
         }
         None => (
             site_chain_info(&add.ask, &data_url),
             add.ask.rpc_urls.clone(),
             true,
+            false,
         ),
     };
     add.rpc_url = candidates.first().cloned();
     add.info = Some(info);
     add.from_site = from_site;
+    add.rpc_from_site = rpc_from_site;
     if from_site && candidates.is_empty() {
         add.check = WizardPhase::Checked;
         add.phase = NetDappAddPhase::NoRpc;
@@ -3259,7 +3295,7 @@ fn dapp_step(model: &mut Model, step: Step) -> Command<NetEffect, Event> {
                 } else {
                     NetDappAddPhase::NotCompatible
                 }
-            } else if add.from_site && add.reported_other.is_some() {
+            } else if (add.from_site || add.rpc_from_site) && add.reported_other.is_some() {
                 // Proof, not silence: the page's RPC serves another chain.
                 NetDappAddPhase::WrongRpc
             } else {
@@ -3317,6 +3353,49 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
     ))
 }
 
+/// May the sheet offer "Add unverified network"? Only after "unable to
+/// verify", with an RPC to save, and no RPC that answered for another chain.
+fn dapp_add_can_add_unverified(add: &DappAdd) -> bool {
+    add.phase == NetDappAddPhase::CheckFailed
+        && add.info.is_some()
+        && add.rpc_url.is_some()
+        && add.reported_other.is_none()
+}
+
+/// "Add unverified network", confirmed: the RPC is saved as the person was
+/// shown it, untested — then settled `added`, as a verified add is.
+fn dapp_add_approved_unverified(model: &mut Model, now_iso: String) -> Command<NetEffect, Event> {
+    if !model.loaded
+        || !model
+            .dapp_add
+            .as_ref()
+            .is_some_and(dapp_add_can_add_unverified)
+    {
+        return Command::done();
+    }
+    let Some(add) = model.dapp_add.take() else {
+        return Command::done();
+    };
+    let (Some(info), Some(rpc_url)) = (add.info, add.rpc_url) else {
+        return Command::done();
+    };
+    model.dapp_gen = next_gen(model);
+    let chain_id = info.chain_id;
+    let saved = if has_network(model, chain_id) {
+        Command::done()
+    } else {
+        // A page asked; nobody chose a space: the testnet one (spec 105).
+        let record = build_custom_network(model, &info, Some(&rpc_url), now_iso, true);
+        save_custom_network(model, record)
+    };
+    saved.then(settle_dapp_add(
+        model.dapp_gen,
+        add.tab,
+        add.id,
+        DappAddOutcome::Added { chain_id },
+    ))
+}
+
 /// The sheet closed without adding: the verdict it showed, else declined.
 fn dapp_add_declined(model: &mut Model) -> Command<NetEffect, Event> {
     let Some(add) = model.dapp_add.take() else {
@@ -3357,6 +3436,8 @@ fn dapp_add_view(add: &DappAdd) -> NetDappAddView {
             .flatten(),
         compat: add.compat.clone(),
         can_add: add.phase == NetDappAddPhase::Ready,
+        rpc_from_site: add.rpc_from_site,
+        can_add_unverified: dapp_add_can_add_unverified(add),
     }
 }
 

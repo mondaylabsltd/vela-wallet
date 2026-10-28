@@ -212,6 +212,8 @@
       "verifiedAbiWarning": "No ERC-7730 descriptor for this contract — the values above are a direct decode of the verified on-chain ABI. Check them.",
       "bestEffortSummary": "Calling {{fn}} — read from its public function signature, not a verified descriptor.",
       "simUnavailableWarning": "Vela couldn’t check what this transaction does. Review it before you sign.",
+      "simRecheck": "Check again",
+      "simRechecking": "Checking again…",
       "drainSummary": "The site calls this a free claim, but the simulation shows assets leaving your wallet.",
       "drainWarning": "Assets leave that the site’s stated intent never mentioned — this looks very much like a drain. Reject it.",
       "selectorNotListed": "Unable to decode — no ERC-7730 descriptor, selector not listed ({{bytes}} bytes)",

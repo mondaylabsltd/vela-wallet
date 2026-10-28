@@ -224,6 +224,12 @@
     "fiatRates": "Fiat kurları"
    }
   },
+  "sites": {
+   "title": "Bağlı siteler",
+   "subtitle": "Adresinizi görebilen siteler",
+   "listLabel": "Bir sitenin bağlantısını kesmek, görebildiklerini geri alır; bir dahaki sefere yeniden sorar.",
+   "empty": "Bağlı site yok."
+  },
   "about": {
    "title": "Hakkında",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "Bu multisig'in bekleyen işlemleri okunamadı, bu yüzden hiçbir şey önerilmedi. Biraz sonra yeniden deneyin.",
     "notSent": "Ağ bunu kabul etmedi, bu yüzden hiçbir şey gönderilmedi. Yeniden deneyin.",
     "siteAsks": "{{host}} bu işlemi istiyor.",
-    "siteWaits": "{{host}}, üyeler işlemi yürütene ya da reddedene kadar bekler. Bunu kapatırsanız siteye önerildiği bildirilir ve işlem Etkinlik içinde kalır.",
+    "siteWaits": "{{host}}, işlem yürütülür yürütülmez işlemi alır. Bu 5 dakikadan uzun sürerse ya da bunu kapatırsanız siteye işlemin önerildiği ve onay beklediği bildirilir; işlem Etkinlik içinde kalır.",
+    "stillNeeded": "Hâlâ gereken onay: {{missing}}",
+    "siteTold": "{{host}} sitesine işlemin önerildiği ve onay beklediği bildirildi; site işlem hash’ini almayacak. İşlem Etkinlik içinde kalır ve üyeler yine de yürütebilir.",
     "data": "Veri",
     "changesMembers": "#{{index}} numaralı çağrı bu çoklu imzanın kendisini değiştiriyor: {{change}}. Yalnızca tüm üyeler bunu bekliyorsa onayla.",
     "siteFollows": "{{host}} bu işlemin kimliğini aldı ve üyeler onu yürütene ya da reddedene kadar takip ediyor. İşlem Etkinlik’te kalır.",
@@ -1392,6 +1400,12 @@
    "a11yClose": "Tarayıcıyı kapat",
    "addLead": "{{host}} bir ağ eklemek istiyor",
    "addFromSite": "Vela'nın ağ listesinde yok — ad ve coin sitenin bildirdiği.",
+   "addRpcFromSite": "Vela’nın ağ listesinde bu ağ için kullanabileceği bir RPC yok; bu yüzden RPC sitenin verdiği.",
+   "addWhyNoRpc": "Vela bu ağı denetlemek için kullanabileceği bir RPC bulamadı: yalnızca https üzerinden denetler ve site kullanılabilir bir RPC vermedi.",
+   "addWhyUnreachable": "Vela, denetlemek için {{host}} adresine ulaşamadı. Düğüm kapalı ya da yavaş olabilir veya Vela’ya izin vermiyor olabilir; yerel düğümler çoğu zaman izin vermez.",
+   "addUnverified": "Doğrulamadan ekle",
+   "addUnverifiedWarning": "Vela bu ağı denetleyemedi. {{host}} zincir {{chainId}} değilse ya da Vela’nın sözleşmeleri orada yoksa, o ağdaki Vela adresinize gönderilen para takılıp kalabilir. Yalnızca kendiniz çalıştırıyorsanız veya güveniyorsanız ekleyin.",
+   "addUnverifiedConfirm": "Doğrulanmamış ağı ekle",
    "a11yBack": "Geri",
    "a11yReload": "Sayfayı yeniden yükle",
    "a11yOpenSystem": "Sistem tarayıcısında aç",
@@ -1741,6 +1755,8 @@
    "verifiedAbiWarning": "Bu sözleşmenin ERC-7730 tanımlayıcısı yok — yukarıdaki değerler doğrulanmış zincir üstü ABI’nin doğrudan çözümüdür. Değerleri kontrol edin.",
    "bestEffortSummary": "{{fn}} çağrılıyor — doğrulanmış bir tanımlayıcıdan değil, herkese açık fonksiyon imzasından okundu.",
    "simUnavailableWarning": "Vela bu işlemin ne yapacağını denetleyemedi. İmzalamadan önce gözden geçirin.",
+   "simRecheck": "Yeniden denetle",
+   "simRechecking": "Yeniden denetleniyor…",
    "drainSummary": "Site bunu ücretsiz bir talep olarak gösteriyor, ancak simülasyon varlıkların cüzdanınızdan çıktığını gösteriyor.",
    "drainWarning": "Sitenin belirttiği amaçta hiç geçmeyen varlıklar çıkıyor — bu büyük olasılıkla bir boşaltma. Reddedin.",
    "selectorNotListed": "Çözülemiyor — ERC-7730 tanımlayıcısı yok, seçici de kayıtlı değil ({{bytes}} bayt)",

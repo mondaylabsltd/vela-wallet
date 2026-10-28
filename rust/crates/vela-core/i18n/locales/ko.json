@@ -224,6 +224,12 @@
         "fiatRates": "법정화폐 환율"
       }
     },
+    "sites": {
+      "title": "연결된 사이트",
+      "subtitle": "내 주소를 볼 수 있는 사이트",
+      "listLabel": "연결을 끊으면 그 사이트는 더 이상 볼 수 없고, 다음에 다시 요청합니다.",
+      "empty": "연결된 사이트가 없습니다."
+    },
     "about": {
       "title": "정보",
       "subtitle": "Vela Wallet v{{version}}"

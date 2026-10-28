@@ -224,6 +224,12 @@
         "fiatRates": "法定通貨レート"
       }
     },
+    "sites": {
+      "title": "接続中のサイト",
+      "subtitle": "あなたのアドレスを見られるサイト",
+      "listLabel": "接続を解除すると、そのサイトは見られなくなります。次回はもう一度あなたに確認します。",
+      "empty": "接続中のサイトはありません。"
+    },
     "about": {
       "title": "このアプリについて",
       "subtitle": "Vela Wallet v{{version}}"

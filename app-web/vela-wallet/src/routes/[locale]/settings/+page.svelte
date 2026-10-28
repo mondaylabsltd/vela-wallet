@@ -73,7 +73,13 @@
 	import type { AgentMessages } from '$lib/agent/messages';
 	import { page } from '$app/state';
 	import { fill } from '$lib/wallet/messages';
-	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
+	import type {
+		AgentPanelModel,
+		SettingsRowModel,
+		SitesPanelModel,
+		StatusPillModel
+	} from '$lib/settings/model';
+	import { hostLabel } from '$lib/dapp/host';
 	import {
 		accountAmount,
 		accountLoading,
@@ -915,9 +921,45 @@
 		trailing: 'chevron'
 	});
 
+	/**
+	 * dapp-11: Settings › Connected sites — every site holding a grant, each
+	 * with Disconnect, beside the AI agent row (the other "who may use this
+	 * wallet" row). The extension only: nowhere else holds a grant. The
+	 * device-storage page keeps listing them under its connections group.
+	 */
+	const sitesShown = typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+	const sitesRow = $derived<SettingsRowModel>({
+		id: 'sites',
+		icon: 'globe',
+		title: m.sites.title,
+		subtitle: m.sites.subtitle,
+		value: String(grants.length),
+		trailing: 'chevron'
+	});
+	const sitesPanel = $derived<SitesPanelModel | undefined>(
+		sitesShown
+			? {
+					title: m.sites.title,
+					subtitle: m.sites.subtitle,
+					empty: m.sites.empty,
+					group: {
+						label: m.sites.listLabel,
+						items: grants.map((grant) => ({
+							id: grant.origin,
+							label: hostLabel(grant.origin),
+							meta: shortenAddress(grant.address),
+							action: m.storage.disconnectOne,
+							destructive: true
+						}))
+					}
+				}
+			: undefined
+	);
+
 	function withAgentRow(rows: SettingsRowModel[]): SettingsRowModel[] {
 		const at = rows.findIndex((row) => row.id === 'endpoints');
-		return at < 0 ? rows : [...rows.slice(0, at + 1), agentRow, ...rows.slice(at + 1)];
+		const added = sitesShown ? [agentRow, sitesRow] : [agentRow];
+		return at < 0 ? rows : [...rows.slice(0, at + 1), ...added, ...rows.slice(at + 1)];
 	}
 
 	/**
@@ -1056,7 +1098,9 @@
 			nav: model.nav.flatMap((item) => {
 				if (item.id === 'signing-pages') return [];
 				if (item.id !== 'endpoints') return [item];
-				return [item, { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title }];
+				const agentItem = { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title };
+				const sitesItem = { id: 'sites' as const, icon: 'globe' as const, label: m.sites.title };
+				return sitesShown ? [item, agentItem, sitesItem] : [item, agentItem];
 			})
 		};
 		model = withEraseFailure(model, m, eraseFailed);
@@ -1284,6 +1328,7 @@
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
 				agent={agentPanel}
+				sites={sitesPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
@@ -1316,6 +1361,7 @@
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
 				agent={agentPanel}
+				sites={sitesPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}

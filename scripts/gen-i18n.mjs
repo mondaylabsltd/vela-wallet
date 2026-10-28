@@ -962,10 +962,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.{txCheckingElapsed, txStillUnknownTitle, txStillUnknownBody,
 //   txViewAccountExplorer}` (send-5: a lost reply is checked out loud and
 //   ends in an answer). 2209 + 9 = 2218 leaves, 119 branches.
-// 2344 (r3, 2026-10-28): 2225 leaves, 119 branches.
-if (PATHS.length !== 2344) fail(`expected 2344 paths (2225 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2225) fail(`expected 2225 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
+// 2344 (round 3 merged: multisig + sending, 2026-10-28): 2216 + 9 = 2225 leaves, 119 branches.
+// 2343 (round 3, the dApp group, 2026-10-29): + `connect.browser.{addRpcFromSite,
+//   addWhyNoRpc, addWhyUnreachable, addUnverified, addUnverifiedWarning,
+//   addUnverifiedConfirm}` (dapp-13: why a network could not be verified, and
+//   adding it unverified on a confirmation), `componentsUi.signing.{simRecheck,
+//   simRechecking}` (dapp-15), `home.multisig.proposal.{stillNeeded, siteTold}`
+//   (a multisig's eth_sendTransaction before the request limit) and
+//   `settings.sites.{title, subtitle, listLabel, empty}` (dapp-11).
+//   2209 + 14 = 2223 leaves, 119 + 1 = 120 branches.
+// 2359 (round 3 merged: + the dApp group, 2026-10-29): 2225 + 14 = 2239 leaves, 120 branches.
+if (PATHS.length !== 2359) fail(`expected 2359 paths (2239 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2239) fail(`expected 2239 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

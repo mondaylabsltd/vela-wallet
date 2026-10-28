@@ -4,10 +4,11 @@
  *
  * `planAccountSwitch` seeds a throwaway `dapp_permissions` the way the popup
  * seeds it and asks what an account switch tells one granted origin. These
- * pin the three answers that matter: a re-pin to the new address for a site
- * whose account is still in the wallet, a removal for a site whose account
- * left, and silence when nothing changed — and that `followActiveAccount`
- * writes exactly those into the extension's storage.
+ * pin the answers that matter: a site whose account is still in the wallet
+ * keeps that account — never re-pinned to the new one (dapp-17, EIP-2255) —
+ * a site whose account left is removed, and nothing changes otherwise — and
+ * that `followActiveAccount` writes exactly those into the extension's
+ * storage.
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -31,7 +32,9 @@ const grantFor = (origin: string, address: string, chainId = 100): DAppGrant => 
 });
 
 describe('what the core says an account switch tells a site', () => {
-	it('re-pins a connected site to the new address, keeping the chain it connected on', () => {
+	// dapp-17: a switch re-pinned every site to the new account, so a site
+	// granted ALICE was handed BOB, whom nobody connected to it.
+	it('never hands a connected site the new account: its grant stays on its own', () => {
 		const plan = planAccountSwitch({
 			origin: 'https://app.example',
 			storedGrant: toWireGrant(grantFor('https://app.example', ALICE, 8453))!,
@@ -40,13 +43,7 @@ describe('what the core says an account switch tells a site', () => {
 			nowMs: NOW,
 			space: false
 		});
-		expect(plan.kind).toBe('repin');
-		if (plan.kind !== 'repin') return;
-		expect(plan.grant.origin).toBe('https://app.example');
-		// The core spells the re-pinned address EIP-55 (spec 082 RG10).
-		expect(plan.grant.address).toBe(checksumAddress(BOB));
-		expect(plan.grant.chain_id).toBe(8453);
-		expect(plan.grant.granted_at_ms).toBe(NOW);
+		expect(plan).toEqual({ kind: 'none' });
 	});
 
 	it('removes the grant of a site whose account left the wallet', () => {
@@ -65,8 +62,7 @@ describe('what the core says an account switch tells a site', () => {
 
 	it('says nothing on a cold read — never logs a site out on "not known yet"', () => {
 		// Invariant ②: an empty/unknown address set must not be read as "gone".
-		// The grant survives and the site still resolves to ALICE; but nothing
-		// can be re-pinned to an address the wallet has not confirmed either.
+		// The grant survives and the site still resolves to ALICE.
 		const plan = planAccountSwitch({
 			origin: 'https://app.example',
 			storedGrant: toWireGrant(grantFor('https://app.example', ALICE))!,
@@ -75,7 +71,7 @@ describe('what the core says an account switch tells a site', () => {
 			nowMs: NOW,
 			space: false
 		});
-		expect(plan.kind).not.toBe('remove');
+		expect(plan).toEqual({ kind: 'none' });
 	});
 });
 
@@ -108,16 +104,14 @@ describe('what the core says inside the parallel space', () => {
 		expect(planAccountSwitch({ ...question, space: false })).toEqual({ kind: 'remove' });
 	});
 
-	it('a grant made inside follows the space’s own accounts', () => {
+	it('a grant made inside stays on its own account too', () => {
 		const plan = planAccountSwitch({
 			...question,
 			storedGrant: toWireGrant(grantFor('https://app.example', BOB))!,
 			activeAddress: CAROL,
 			space: true
 		});
-		expect(plan.kind).toBe('repin');
-		if (plan.kind !== 'repin') return;
-		expect(plan.grant.address).toBe(checksumAddress(CAROL));
+		expect(plan).toEqual({ kind: 'none' });
 	});
 });
 
@@ -143,7 +137,7 @@ describe('followActiveAccount writes what the core authored', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('re-pins every granted site, removes the orphaned one, leaves the current one alone', async () => {
+	it('removes the orphaned site and leaves every other grant on its own account', async () => {
 		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
 		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
 		store.set(PERM_PREFIX + 'https://b.example', grantFor('https://b.example', CAROL, 1));
@@ -155,14 +149,12 @@ describe('followActiveAccount writes what the core authored', () => {
 			nowMs: NOW
 		});
 
-		expect(outcome.repinned).toEqual(['https://a.example']);
+		expect(outcome.repinned).toEqual([]);
 		expect(outcome.removed).toEqual(['https://b.example']);
-		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual({
-			origin: 'https://a.example',
-			address: checksumAddress(BOB),
-			chainId: 100,
-			grantedAt: NOW
-		});
+		// Still ALICE's: the site is answered nothing while BOB is signed in.
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
 		expect(store.has(PERM_PREFIX + 'https://b.example')).toBe(false);
 		// Already on BOB: untouched, so the worker announces nothing to it.
 		expect(store.get(PERM_PREFIX + 'https://c.example')).toEqual(
@@ -188,24 +180,23 @@ describe('followActiveAccount writes what the core authored', () => {
 		).toEqual({ repinned: [], removed: [] });
 		expect(JSON.stringify([...store])).toBe(before);
 
-		// A switch INSIDE the space: its own site follows, the person's stay.
+		// A switch INSIDE the space: every grant stays where it is.
 		const outcome = await followActiveAccount({
 			activeAddress: CAROL,
 			addresses: [BOB, CAROL],
 			nowMs: NOW,
 			space: true
 		});
-		expect(outcome).toEqual({ repinned: ['https://c.example'], removed: [] });
+		expect(outcome).toEqual({ repinned: [], removed: [] });
 		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
 			grantFor('https://a.example', ALICE)
 		);
 		expect(store.get(PERM_PREFIX + 'https://b.example')).toEqual(
 			grantFor('https://b.example', `0x${'d4'.repeat(20)}`)
 		);
-		expect(store.get(PERM_PREFIX + 'https://c.example')).toMatchObject({
-			address: checksumAddress(CAROL),
-			chainId: 1
-		});
+		expect(store.get(PERM_PREFIX + 'https://c.example')).toEqual(
+			grantFor('https://c.example', BOB, 1)
+		);
 	});
 
 	it('is a no-op off the extension', async () => {
@@ -294,7 +285,7 @@ describe('followActiveAccount writes what the core authored', () => {
 	 * module — so the switch is seen wherever it is made, and a screen that
 	 * mounts again is not followed twice.
 	 */
-	it('follows a switch made on any screen, once, in the core’s spelling', async () => {
+	it('follows a switch made on any screen, once — and never re-pins the site', async () => {
 		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
 		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
 		const log: string[] = [];
@@ -308,12 +299,13 @@ describe('followActiveAccount writes what the core authored', () => {
 			grantFor('https://a.example', ALICE)
 		);
 
-		// The switch, made in Settings: the site is re-pinned to BOB, EIP-55.
+		// The switch, made in Settings: published (the worker tells the site
+		// `[]`), and the site stays ALICE's — not handed BOB (dapp-17).
 		const outcome = await follower.note(view(BOB), { nowMs: NOW });
-		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
-		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
-			address: checksumAddress(BOB)
-		});
+		expect(outcome).toEqual({ repinned: [], removed: [] });
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
 		expect(log).toEqual([`snapshot:${ALICE}`, `snapshot:${BOB}`]);
 
 		// The wallet screen mounting again sees the same session: nothing to follow.
@@ -333,11 +325,13 @@ describe('followActiveAccount writes what the core authored', () => {
 		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
 		const follower = new SessionFollower(recording([]));
 
+		// Followed — the snapshot names BOB, so the site is answered nothing —
+		// and the grant stays ALICE's (dapp-17): never handed BOB unasked.
 		const outcome = await follower.note(view(BOB), { nowMs: NOW });
-		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
-		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
-			address: checksumAddress(BOB)
-		});
+		expect(outcome).toEqual({ repinned: [], removed: [] });
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
 	});
 
 	/**
@@ -395,7 +389,7 @@ describe('followActiveAccount writes what the core authored', () => {
 		expect(store.has(PERM_PREFIX + 'https://a.example')).toBe(false);
 	});
 
-	it('publishes who is signed in BEFORE it re-pins, so a told page reads the new account', async () => {
+	it('publishes who is signed in BEFORE it drops a grant, so a told page reads the new session', async () => {
 		const order: string[] = [];
 		const watching = {
 			...local,
@@ -403,6 +397,10 @@ describe('followActiveAccount writes what the core authored', () => {
 				for (const key of Object.keys(items))
 					order.push(key.startsWith(PERM_PREFIX) ? 'grant' : key);
 				await local.set(items);
+			},
+			remove: async (keys: string | string[]) => {
+				order.push('drop');
+				await local.remove(keys);
 			}
 		};
 		(globalThis as { chrome?: unknown }).chrome = { storage: { local: watching } };
@@ -410,8 +408,10 @@ describe('followActiveAccount writes what the core authored', () => {
 		const follower = new SessionFollower(async () => {
 			order.push('snapshot');
 		});
-		await follower.note(view(BOB), { nowMs: NOW });
-		expect(order).toEqual(['snapshot', 'grant']);
+		// ALICE left the device: her site's grant goes, after the snapshot.
+		await follower.note(view(BOB, [BOB]), { nowMs: NOW });
+		expect(order).toEqual(['snapshot', 'drop']);
+		expect(store.has(PERM_PREFIX + 'https://a.example')).toBe(false);
 	});
 
 	it('follows sessions one at a time, in the order they were seen', async () => {
@@ -425,9 +425,9 @@ describe('followActiveAccount writes what the core authored', () => {
 		const second = follower.note(view(ALICE), { nowMs: NOW + 1 });
 		await Promise.all([first, second]);
 		expect(log).toEqual([`snapshot:${BOB}`, `snapshot:${ALICE}`]);
-		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
-			address: checksumAddress(ALICE)
-		});
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
 	});
 
 	it('normalises nothing off the extension', async () => {

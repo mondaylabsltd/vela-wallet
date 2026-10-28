@@ -224,6 +224,12 @@
         "fiatRates": "Fiat rates"
       }
     },
+    "sites": {
+      "title": "Connected sites",
+      "subtitle": "Sites that can see your address",
+      "listLabel": "Disconnecting a site takes back what it may see; it asks you again next time.",
+      "empty": "No site is connected."
+    },
     "about": {
       "title": "About",
       "subtitle": "Vela Wallet v{{version}}"

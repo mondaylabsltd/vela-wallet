@@ -1132,6 +1132,24 @@ describe('a connect from a site that is already granted (089)', () => {
 		expect(env.chrome.sidePanel.open).not.toHaveBeenCalled();
 	});
 
+	// dapp-17 (b), EIP-2255: only an origin already granted is answered at
+	// once — one with no grant (or a grant for an account not signed in)
+	// asks the person, exactly as `eth_requestAccounts` does.
+	it('wallet_requestPermissions asks the person unless the site is already granted', async () => {
+		for (const seeded of ['https://other.example', null]) {
+			const env = makeEnv();
+			if (seeded) seedGrant(env, seeded);
+			await startWorker(env);
+			const page = env.openPage(7, 'doc-a');
+			const { reply } = await env.ask(page, 'c:1', 'wallet_requestPermissions', [
+				{ eth_accounts: {} }
+			]);
+			await settleAll();
+			expect(reply, String(seeded)).toEqual({ accepted: true });
+			expect(env.chrome.sidePanel.open, String(seeded)).toHaveBeenCalledWith({ tabId: 7 });
+		}
+	});
+
 	it('a site with no grant still opens the panel, synchronously, for a person to decide', async () => {
 		const env = makeEnv();
 		seedGrant(env, 'https://other.example');
@@ -1456,6 +1474,43 @@ describe('the page’s own deadline (RB11)', () => {
 		await settleAll();
 		expect(panel.received).toContainEqual({ type: 'withdrawn', rid: '7:a:1', cause: 'expired' });
 		expect(reqKeys(env.session)).toEqual([]);
+	});
+});
+
+describe('where a new site starts (dapp-17)', () => {
+	const catalog = {
+		version: 1,
+		space: 'testnet',
+		order: [11155111, 84532],
+		chains: {
+			'11155111': { chainId: 11155111, name: 'Sepolia', rpc: [], bundler: '' },
+			'84532': { chainId: 84532, name: 'Base Sepolia', rpc: [], bundler: '' }
+		}
+	};
+	const chainOfPage = async (env: Env, page: FakePage) =>
+		(await env.sendFromPage(page, { type: 'rpc', id: 'c', method: 'eth_chainId', params: [] }))
+			.result;
+
+	it('starts on the space’s network the person last used — never mainnet in the testnet space', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const first = env.openPage(7, 'doc-a');
+		expect(await chainOfPage(env, first)).toBe('0xaa36a7');
+
+		// The person puts that site on Base Sepolia…
+		const switched = await env.sendFromPage(first, {
+			type: 'rpc',
+			id: 's',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x14a34' }]
+		});
+		expect(switched).toEqual({ result: null });
+		expect(env.local.data['vela.ext.lastChain']).toEqual({ testnet: 84532 });
+
+		// …and the next new site starts there.
+		const second = env.openPage(8, 'doc-b', 'https://other.example');
+		expect(await chainOfPage(env, second)).toBe('0x14a34');
 	});
 });
 
@@ -1999,15 +2054,16 @@ describe('who is signed in (spec 086, issue #315)', () => {
 		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [ALICE] }]);
 	});
 
-	it('signed in to another account, the re-pin is what the site hears — never a `[]` first', async () => {
+	// dapp-17: the wallet no longer re-pins a grant to the account switched
+	// to (that handed the site an account nobody connected to it). The site is
+	// told it sees nothing now, and its own account again on the way back.
+	it('signed in to another account, the site hears `[]` — never the new account', async () => {
 		const env = makeEnv();
 		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
 		env.local.data['vela.ext.cache'] = snapshot(ALICE);
 		await startWorker(env);
 		env.openPage(7, 'doc-a');
 
-		// The wallet publishes BOB first: the site's answer is gone, but a `[]`
-		// now would end the connection the re-pin is about to carry over.
 		env.local.data['vela.ext.cache'] = snapshot(BOB);
 		env.emit(
 			'storageChanged',
@@ -2015,18 +2071,19 @@ describe('who is signed in (spec 086, issue #315)', () => {
 			'local'
 		);
 		await settleAll();
-		expect(env.events).toEqual([]);
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [] }]);
+		expect(await accountsOf(env, env.pages.get('doc-a')!)).toEqual([]);
 
-		// Then the core's re-pin.
-		env.local.data[`vela.perm.${ORIGIN}`] = grant(BOB);
+		// Back to ALICE: her site sees her again, without asking.
+		env.events.length = 0;
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
 		env.emit(
 			'storageChanged',
-			{ [`vela.perm.${ORIGIN}`]: { oldValue: grant(ALICE), newValue: grant(BOB) } },
+			{ 'vela.ext.cache': { oldValue: snapshot(BOB), newValue: snapshot(ALICE) } },
 			'local'
 		);
 		await settleAll();
-		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [BOB] }]);
-		expect(await accountsOf(env, env.pages.get('doc-a')!)).toEqual([BOB]);
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [ALICE] }]);
 	});
 
 	it('a republished snapshot for the same account tells nobody anything', async () => {

@@ -39,6 +39,8 @@ function view(over: Partial<NetDappAddView> = {}): NetDappAddView {
 			setup_url: null
 		},
 		can_add: true,
+		rpc_from_site: false,
+		can_add_unverified: false,
 		...over
 	};
 }
@@ -162,6 +164,47 @@ describe('the add-network card', () => {
 		);
 		expect(card.retry).toBe('Retry');
 		expect(card.rows[0].value).toBe('Chain 11155111');
+		// Nothing to save: no way to add it unverified.
+		expect(card.unverified).toBeNull();
+	});
+
+	// dapp-13: "Unable to verify" said WHY, and was a dead end for a node the
+	// probe cannot reach (a local one, CORS, a timeout).
+	it('unable to verify says why, and offers adding it unverified behind a warning', () => {
+		const failed = { ...COMPAT, compatible: false, rpc_failure: 'all_probes_failed' as const };
+		const card = addNetworkCard(
+			view({
+				phase: 'check_failed',
+				can_add: false,
+				can_add_unverified: true,
+				rpc_host: '127.0.0.1:8941',
+				compat: failed
+			}),
+			m
+		);
+		expect(card.add).toBeNull();
+		expect(card.retry).toBe('Retry');
+		expect(card.note).toContain('127.0.0.1:8941');
+		expect(card.unverified?.open).toBe(m.addUnverified);
+		expect(card.unverified?.confirm).toBe(m.addUnverifiedConfirm);
+		expect(card.unverified?.warning).toContain('11155111');
+		expect(card.unverified?.warning).toContain('127.0.0.1:8941');
+		const none = addNetworkCard(
+			view({
+				phase: 'check_failed',
+				can_add: false,
+				compat: { ...failed, rpc_failure: 'no_https_candidates' }
+			}),
+			m
+		);
+		expect(none.note).toBe(m.whyNoRpc);
+		expect(none.unverified).toBeNull();
+	});
+
+	it("a catalog chain checked on the site's RPC says whose RPC it is", () => {
+		const card = addNetworkCard(view({ rpc_from_site: true }), m);
+		expect(card.fromSite).toBe(m.rpcFromSite);
+		expect(m.rpcFromSite).not.toBe('');
 	});
 });
 

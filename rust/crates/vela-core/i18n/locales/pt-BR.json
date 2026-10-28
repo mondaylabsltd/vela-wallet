@@ -224,6 +224,12 @@
         "fiatRates": "Cotações fiat"
       }
     },
+    "sites": {
+      "title": "Sites conectados",
+      "subtitle": "Sites que podem ver seu endereço",
+      "listLabel": "Desconectar um site tira o que ele pode ver; na próxima vez ele pede de novo.",
+      "empty": "Nenhum site está conectado."
+    },
     "about": {
       "title": "Sobre",
       "subtitle": "Vela Wallet v{{version}}"

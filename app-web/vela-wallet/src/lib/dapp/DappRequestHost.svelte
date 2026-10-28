@@ -5,7 +5,12 @@
 	import { dappMultisigCalls, sendCallsResult } from '$lib/multisig/core/kernel';
 	import { findExecution } from '$lib/multisig/core/records';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import { openMultisigReview, multisigRefusal } from '$lib/multisig/core/dapp-request';
+	import {
+		leftProposed,
+		openMultisigReview,
+		multisigRefusal,
+		type DappAnswer
+	} from '$lib/multisig/core/dapp-request';
 
 	/** How often a multisig request asks whether its transaction was executed. */
 	const MULTISIG_POLL_MS = 5_000;
@@ -64,7 +69,7 @@
 	} from '$lib/dapp/transport';
 	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
 	import { addNetworkCard } from '$lib/dapp/add-network';
-	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
+	import { dappAddChainAsk, dappAddOutcomeError, signRequestTtlMs } from '$lib/core/kernels';
 	import { poolRpcCall } from '$lib/services/rpc-pool';
 	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
 	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
@@ -456,15 +461,18 @@
 	 * multisig's request — "proposed, waiting" once it is in the mailbox —
 	 * rather than the core's generic close (`settleOnClose`).
 	 */
-	let multisigClosing: (() => { error?: { code: number; message: string } }) | null = null;
+	let multisigClosing: (() => DappAnswer) | null = null;
 
 	/**
 	 * A request to a multisig (docs/multisig-vault-design.md §6): its review
 	 * opens first — what the site asks, read by the core, at the number it
 	 * would take — and nothing is signed until the person presses "Propose
 	 * and approve" (approved here with a member's passkey, or by a member's
-	 * own wallet). The request then waits — as long as the approvals take —
-	 * to be answered with the transaction that executed it. Every way out of
+	 * own wallet). The request then waits to be answered with the transaction
+	 * that executed it — at once when the proposer's approval is enough (the
+	 * sheet executes it), else as the members approve, but never past the
+	 * extension's limit: before it, the site is told it was proposed and is
+	 * waiting (`tellProposed`, -32000, never a fake hash). Every way out of
 	 * the sheet answers the site (`handOffToMultisig`): Decline or a close
 	 * before proposing is the person's 4001; a close after it says it was
 	 * proposed, and it stays in Activity. A `wallet_sendCalls` is one
@@ -475,15 +483,13 @@
 	 */
 	async function handOffToMultisig(incoming: ExtensionRequest, address: string): Promise<void> {
 		const rid = incoming.rid;
-		const settle = async (answer: {
-			result?: unknown;
-			error?: { code: number; message: string };
-		}) => {
+		const settle = async (answer: DappAnswer) => {
 			if (owing !== rid) return;
 			owing = null;
 			request = null;
 			multisigClosing = null;
-			multisigUi.closeDapp(rid);
+			// An executed transaction's sheet stays on it: the person's close takes it down.
+			if (answer.error) multisigUi.closeDapp(rid);
 			await answerRequest(rid, answer as Parameters<typeof answerRequest>[1]);
 			leave();
 		};
@@ -528,6 +534,9 @@
 			},
 			settle: (answer) => void settle(answer),
 			follow: (hash) => void followMultisig(rid, address, hash, settle),
+			// Never past the extension's limit: told it was proposed, before the page gives up.
+			tellProposed: (hash) => void tellProposed(rid, hash),
+			limitMs: signRequestTtlMs(),
 			answerBatch: (hash, nonce, fromBlock) =>
 				void answerBatch(incoming, address, hash, nonce, fromBlock)
 		});
@@ -563,6 +572,23 @@
 		leave();
 	}
 
+	/**
+	 * A multisig's `eth_sendTransaction` still waiting for approvals as the
+	 * request's limit nears: the site is told it was proposed and is waiting
+	 * (`leftProposed` — its safeTxHash, never as a transaction hash), rather
+	 * than the page timing out on nothing. The sheet stays on the proposal,
+	 * saying the site was told; the proposal goes on in the wallet.
+	 */
+	async function tellProposed(rid: string, safeTxHash: string): Promise<void> {
+		if (owing !== rid) return;
+		owing = null;
+		request = null;
+		multisigClosing = null;
+		multisigUi.told(rid);
+		await answerRequest(rid, { error: leftProposed(safeTxHash) });
+		leave();
+	}
+
 	/** The chain's head block now, or `undefined` when it does not answer within a moment. */
 	async function headBlock(chain: number): Promise<string | undefined> {
 		const read = poolRpcCall('eth_blockNumber', [], chain)
@@ -577,7 +603,7 @@
 		rid: string,
 		address: string,
 		safeTxHash: string,
-		settle: (answer: { result?: unknown; error?: { code: number; message: string } }) => unknown
+		settle: (answer: DappAnswer) => unknown
 	): Promise<void> {
 		while (owing === rid && !disposed) {
 			await new Promise((done) => setTimeout(done, MULTISIG_POLL_MS));
@@ -658,8 +684,12 @@
 		leave();
 	}
 
-	/** The sheet's Add Network: the request must still be live (RB5), then the core saves. */
-	async function onAddNetwork(): Promise<void> {
+	/**
+	 * The sheet's Add Network — or, after "unable to verify", its confirmed
+	 * "Add unverified network" (dapp-13): the request must still be live
+	 * (RB5), then the core saves (and refuses what it does not allow).
+	 */
+	async function onAddNetwork(unverified = false): Promise<void> {
 		if (!request || busy || addingChain === null) return;
 		busy = true;
 		const rid = request.rid;
@@ -668,7 +698,9 @@
 			withdraw(rid);
 			return;
 		}
-		networkAdmin.dispatch({ type: 'dapp_add_approved', now_iso: new Date().toISOString() });
+		const now_iso = new Date().toISOString();
+		if (unverified) networkAdmin.dispatch({ type: 'dapp_add_approved_unverified', now_iso });
+		else networkAdmin.dispatch({ type: 'dapp_add_approved', now_iso });
 	}
 
 	/** Any way out of the sheet — the core decides what it answers. */
@@ -913,7 +945,8 @@
 				<AddNetworkCard
 					card={addCard}
 					{busy}
-					onadd={onAddNetwork}
+					onadd={() => onAddNetwork()}
+					onaddunverified={() => onAddNetwork(true)}
 					onretry={onAddNetworkRetry}
 					ondismiss={onAddNetworkClosed}
 					onsetup={openChainSetup}
@@ -958,7 +991,8 @@
 				card={addCard}
 				{busy}
 				heading
-				onadd={onAddNetwork}
+				onadd={() => onAddNetwork()}
+				onaddunverified={() => onAddNetwork(true)}
 				onretry={onAddNetworkRetry}
 				ondismiss={onAddNetworkClosed}
 				onsetup={openChainSetup}

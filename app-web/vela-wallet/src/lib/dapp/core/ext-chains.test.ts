@@ -49,6 +49,22 @@ describe('the published network catalog', () => {
 		expect(catalog.updatedAtMs).toBe(1_800_000_000_000);
 	});
 
+	// dapp-17: where a new site starts is read from these two.
+	it('says its space and its chains in the wallet’s order', () => {
+		expect(catalog.space).toBe('mainnet');
+		expect(catalog.order).toEqual(MAINNETS.map((n) => n.chainId));
+		networkSpace.set('testnet');
+		try {
+			const testnet = buildExtChainCatalog();
+			expect(testnet.space).toBe('testnet');
+			expect(testnet.order).toEqual(
+				DEFAULT_NETWORKS.filter((n) => n.isTestnet).map((n) => n.chainId)
+			);
+		} finally {
+			networkSpace.set('mainnet');
+		}
+	});
+
 	it('in the testnet space, offers the testnets and no mainnet', () => {
 		networkSpace.set('testnet');
 		try {

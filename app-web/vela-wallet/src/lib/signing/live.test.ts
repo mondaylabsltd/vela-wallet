@@ -3432,7 +3432,6 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 		const unchecked: SimEnded[] = [
 			ended(UNREADABLE),
 			ended(NOT_OFFERED),
-			ended(UNREACHABLE),
 			// The simulation ended with no reply to read.
 			{ verdict: null, judged: null },
 			// A check nobody judged, and one whose judgment is not ready.
@@ -3449,6 +3448,44 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 		expect(m.warnSimUnavailable).toBe(
 			'Vela couldn’t check what this transaction does. Review it before you sign.'
 		);
+		// No node answered: the same caution, and the way to ask again (dapp-15).
+		const model = buildSigningModel(inputs({ sim: ended(UNREACHABLE) }))!;
+		expect(placeOf(model)!.inner).toEqual([
+			{ ...CAUTION, recheck: { label: m.simRecheck, checking: false } }
+		]);
+	});
+
+	// dapp-15: a could-not-check line about the NETWORK was never asked again
+	// when the node came back — it stood for the rest of the sheet.
+	it('only a node nobody reached is offered "Check again" — the core says which', () => {
+		expect(UNREACHABLE.recheck).toBe(true);
+		for (const sim of [NOT_OFFERED, UNREADABLE, REVERTS, NOTHING_MOVES]) {
+			expect(sim.recheck, sim.kind).toBe(false);
+			const model = buildSigningModel(inputs({ sim: ended(sim) }))!;
+			expect(JSON.stringify(placeOf(model)!.inner), sim.kind).not.toContain('recheck');
+		}
+		expect(m.simRecheck).not.toBe('');
+		expect(m.simRechecking).not.toBe('');
+	});
+
+	it('asked again: the old line stays, marked stale, until the new verdict lands', () => {
+		const rechecking = buildSigningModel(
+			inputs({
+				sim: ended(UNREACHABLE),
+				simRechecking: true,
+				// The core holds the confirm again for the new run's short wait.
+				sign: { ...OPEN_SIGN, sim_checking: true }
+			})
+		)!;
+		expect(placeOf(rechecking)!.inner).toEqual([
+			{ ...CAUTION, recheck: { label: m.simRechecking, checking: true } }
+		]);
+		expect(placeOf(rechecking)!.landed).toBe(true);
+		// It landed: the new verdict, and no stale line.
+		const back = buildSigningModel(inputs({ sim: ended(NOTHING_MOVES) }))!;
+		expect(placeOf(back)!.inner).toEqual([
+			{ kind: 'balances', title: m.balancesTitle, rows: [], note: LINE }
+		]);
 	});
 
 	it('"nothing moves" is the JUDGED view’s to say: without its key the place says it could not check', () => {
@@ -3535,9 +3572,15 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 			text: m.warnWillFail,
 			verdict: true
 		});
-		for (const sim of [ended(UNREADABLE), ended(NOT_OFFERED), ended(UNREACHABLE)]) {
+		for (const sim of [ended(UNREADABLE), ended(NOT_OFFERED)]) {
 			expect(said(sim)).toEqual({ ...CAUTION, verdict: true });
 		}
+		// No node answered: the same line, and the way to ask again (dapp-15).
+		expect(said(ended(UNREACHABLE))).toEqual({
+			...CAUTION,
+			verdict: true,
+			recheck: { label: m.simRecheck, checking: false }
+		});
 		expect(said(ended(SOMETHING_MOVES))).toEqual({
 			kind: 'balances',
 			title: m.balancesTitle,
@@ -3564,7 +3607,7 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 		).toMatchObject({ kind: 'balances', rows: [], note: LINE });
 		expect(
 			placeOf(buildSigningModel(inputs({ sign: batch, sim: ended(UNREACHABLE) }))!)!.inner
-		).toEqual([CAUTION]);
+		).toEqual([{ ...CAUTION, recheck: { label: m.simRecheck, checking: false } }]);
 
 		// Nobody simulates a message; a verdict handed beside one is not its.
 		const message: SignView = {
@@ -3783,13 +3826,15 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 			// Settled at once (the node said "not offered"): no wait was ever over.
 			const model = buildSigningModel(inputs({ sim: ended(sim) }))!;
 			expect(model.blocks.slice(0, -1), sim.kind).toEqual(ready.blocks.slice(0, -1));
-			expect(placeOf(model)!.inner, sim.kind).toEqual([CAUTION]);
+			// dapp-15: a node nobody reached is offered "Check again" on the line.
+			const again = sim.recheck ? { recheck: { label: m.simRecheck, checking: false } } : {};
+			expect(placeOf(model)!.inner, sim.kind).toEqual([{ ...CAUTION, ...again }]);
 			// The confirm is the core's and is open: a caution informs.
 			expect(model.confirm).toEqual(ready.confirm);
 			expect(model.tech.simResult).toBeUndefined();
 			// The wallet's own request the same — on the sheet.
 			const mine = buildSigningModel(inputs({ sign: own(OPEN_SIGN), sim: ended(sim) }))!;
-			expect(mine.blocks.at(-1), sim.kind).toEqual({ ...CAUTION, verdict: true });
+			expect(mine.blocks.at(-1), sim.kind).toEqual({ ...CAUTION, verdict: true, ...again });
 			expect(mine.tech.simResult).toBeUndefined();
 		}
 	});
@@ -3805,7 +3850,13 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		expect(placeOf(atDeadline)!.inner).toEqual([CAUTION]);
 		// Block for block the same sheet — so nothing lands anew, and nothing moves.
 		expect(JSON.stringify(between.blocks)).toBe(JSON.stringify(atDeadline.blocks));
-		expect(JSON.stringify(after.blocks)).toBe(JSON.stringify(atDeadline.blocks));
+		// Settled, the same line — now with the way to ask again (dapp-15).
+		expect(placeOf(after)!.inner).toEqual([
+			{ ...CAUTION, recheck: { label: m.simRecheck, checking: false } }
+		]);
+		expect(JSON.stringify(after.blocks.slice(0, -1))).toBe(
+			JSON.stringify(atDeadline.blocks.slice(0, -1))
+		);
 		expect(after.confirm).toEqual(atDeadline.confirm);
 	});
 

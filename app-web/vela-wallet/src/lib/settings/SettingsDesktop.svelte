@@ -19,6 +19,7 @@
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
 		AgentPanelModel,
+		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsDesktopModel,
@@ -53,6 +54,7 @@
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import SitesPanel from './ui/SitesPanel.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -76,6 +78,8 @@
 		 * route adds its nav entry. Absent in the gallery.
 		 */
 		agent?: AgentPanelModel;
+		/** dapp-11: Settings › Connected sites — the extension only. */
+		sites?: SitesPanelModel;
 		/** The sidebar's network filter was used. Absent in the gallery. */
 		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 		/**
@@ -121,6 +125,7 @@
 		onprefevent,
 		analytics,
 		agent,
+		sites,
 		onchainselect,
 		onaccountselect,
 		onaccountcreate,
@@ -191,6 +196,8 @@
 				return { title: model.about.title, description: undefined };
 			case 'agent':
 				return { title: agent?.title ?? model.title, description: undefined };
+			case 'sites':
+				return { title: sites?.title ?? model.title, description: sites?.subtitle };
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -231,6 +238,7 @@
 		'community',
 		'about',
 		'agent',
+		'sites',
 		'signing-pages'
 	]);
 
@@ -241,6 +249,7 @@
 	export function open(id: string): boolean {
 		const panel = id === 'signing-venue' ? 'account' : id;
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
+		if (panel === 'sites' && sites === undefined) return false;
 		closeOverlay();
 		openPage(panel as SettingsPageId);
 		return true;
@@ -515,6 +524,16 @@
 					layout="inline"
 					{analytics}
 					onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+				/>
+			{:else if page === 'sites' && sites !== undefined}
+				<SitesPanel
+					panel={sites}
+					ondisconnect={(id) =>
+						ask(
+							'clear-storage-item',
+							id,
+							storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
+						)}
 				/>
 			{:else if page === 'agent' && agent !== undefined}
 				<AgentPanel

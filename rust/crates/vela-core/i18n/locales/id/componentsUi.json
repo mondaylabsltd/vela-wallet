@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "Kontrak ini tidak punya deskriptor ERC-7730 — nilai di atas adalah hasil dekode langsung dari ABI on-chain yang terverifikasi. Periksa nilainya.",
       "bestEffortSummary": "Memanggil {{fn}} — dibaca dari tanda tangan fungsi publik, bukan deskriptor terverifikasi.",
       "simUnavailableWarning": "Vela tidak bisa memeriksa hasil transaksi ini. Periksa dulu sebelum menandatangani.",
+      "simRecheck": "Periksa lagi",
+      "simRechecking": "Memeriksa lagi…",
       "drainSummary": "Situs menyebut ini klaim gratis, tetapi simulasi menunjukkan aset keluar dari dompetmu.",
       "drainWarning": "Ada aset yang keluar padahal situs tidak pernah menyebutkannya — ini sangat mirip pengurasan dompet. Tolak.",
       "selectorNotListed": "Tidak bisa didekode — tidak ada deskriptor ERC-7730, selector tidak terdaftar ({{bytes}} byte)",

@@ -63,6 +63,8 @@
 		 * last line has (not) been in sight — for the core's gate.
 		 */
 		onmessageunread?: (unread: boolean) => void;
+		/** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+		onrecheck?: () => void;
 	}
 
 	let {
@@ -80,7 +82,8 @@
 		onclosestart,
 		onretry,
 		onopenpage,
-		onmessageunread
+		onmessageunread,
+		onrecheck
 	}: Props = $props();
 
 	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
@@ -129,13 +132,19 @@
 	const CONFIRM = '[data-testid="signing-confirm"]';
 	const VERDICT = '[data-verdict]';
 	const HEADER = '[data-signing-top]';
+	/**
+	 * What a verdict SAYS — not the "Check again" on it (dapp-15): that
+	 * affordance coming or going is not a verdict landing, and holds nothing.
+	 */
+	const saying = (value: unknown) =>
+		JSON.stringify(value, (key, inner) => (key === 'recheck' ? undefined : inner));
 	/** Each verdict on the sheet, as what it says: one that changes has landed again. */
 	const verdicts = $derived(
 		model.blocks.flatMap((block) => {
 			// The verdict's place, once something to read is in it.
-			if (block.kind === 'verdict') return block.landed ? [JSON.stringify(block.inner)] : [];
+			if (block.kind === 'verdict') return block.landed ? [saying(block.inner)] : [];
 			if ((block.kind === 'warning' || block.kind === 'balances') && block.verdict === true) {
-				return [JSON.stringify(block)];
+				return [saying(block)];
 			}
 			return [];
 		})
@@ -295,6 +304,7 @@
 			{onfeerefresh}
 			{onopenpage}
 			{onmessageunread}
+			{onrecheck}
 		/>
 	{/if}
 </BottomSheet>

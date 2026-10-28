@@ -108,6 +108,12 @@ export interface SigningLiveInputs {
 	 */
 	sim?: SimEnded | null;
 	/**
+	 * dapp-15: the simulation of THIS request is being asked again — its node
+	 * is back, or the person pressed "Check again". `sim` is the last
+	 * verdict, drawn stale until the new one lands.
+	 */
+	simRechecking?: boolean;
+	/**
 	 * cs-10: the message on the sheet runs past its window and its last line
 	 * has not been in sight yet — the sheet's observation (`CodeBlock`), for
 	 * the core's gate to hold the confirm on (`ConfirmBlock::MessageUnread`).
@@ -1432,9 +1438,49 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 type VerdictShown = { stage: 'none' } | { stage: 'out' } | { stage: 'landed'; said: VerdictSaid };
 
 function verdictShown(inputs: SigningLiveInputs): VerdictShown {
+	const shown = verdictNow(inputs);
+	return shown.stage === 'landed' ? { ...shown, said: withRecheck(shown.said, inputs) } : shown;
+}
+
+/**
+ * dapp-15: a could-not-check line whose node nobody reached
+ * (`SimVerdict.recheck`, the core's) offers "Check again" — and while a new
+ * check is out, the line it is about to replace stays, marked stale, rather
+ * than reading as the current verdict or vanishing.
+ */
+function withRecheck(said: VerdictSaid, inputs: SigningLiveInputs): VerdictSaid {
+	if (said.kind !== 'notice' || said.block.tone !== 'caution') return said;
+	const { m } = inputs;
+	if (inputs.simRechecking) {
+		return {
+			...said,
+			block: { ...said.block, recheck: { label: m.simRechecking, checking: true } }
+		};
+	}
+	// Not while the core still holds the confirm or says its wait ran out:
+	// the line the person reads is the one the core's step says.
+	const { sign } = inputs;
+	if (inputs.sim?.verdict?.recheck !== true || sign.sim_checking || sign.sim_waited_out_key) {
+		return said;
+	}
+	return { ...said, block: { ...said.block, recheck: { label: m.simRecheck, checking: false } } };
+}
+
+function verdictNow(inputs: SigningLiveInputs): VerdictShown {
 	const { sign, sim, m } = inputs;
 	const request = sign.request;
 	if (!request || sign.blocked) return { stage: 'none' };
+	// dapp-15: asked again — the last verdict, stale, until the new one lands.
+	if (inputs.simRechecking && sim && (request.kind === 'transaction' || request.kind === 'batch')) {
+		return {
+			stage: 'landed',
+			said: landedVerdict(sim, {
+				m,
+				nativeSymbol: nativeSymbol(request.chain_id),
+				preset: resolvedFormatKeys().number
+			})
+		};
+	}
 	// Whatever key the core names, what it means is this sentence — and the
 	// confirm is open beside it, so the place never goes on saying "Checking…".
 	if (sign.sim_waited_out_key) {

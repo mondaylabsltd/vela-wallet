@@ -224,6 +224,12 @@
     "fiatRates": "Kurs fiat"
    }
   },
+  "sites": {
+   "title": "Situs terhubung",
+   "subtitle": "Situs yang bisa melihat alamat Anda",
+   "listLabel": "Memutus situs mencabut apa yang boleh dilihatnya; lain kali situs akan meminta lagi.",
+   "empty": "Tidak ada situs yang terhubung."
+  },
   "about": {
    "title": "Tentang",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "Transaksi yang menunggu di multisig ini tidak bisa dibaca, jadi tidak ada yang diusulkan. Coba lagi sebentar lagi.",
     "notSent": "Jaringan tidak menerimanya, jadi tidak ada yang dikirim. Coba lagi.",
     "siteAsks": "{{host}} meminta transaksi ini.",
-    "siteWaits": "{{host}} menunggu sampai anggota mengeksekusi atau menolaknya. Jika Anda menutup ini, situs diberi tahu bahwa transaksi sudah diusulkan, dan transaksi tetap ada di Aktivitas.",
+    "siteWaits": "{{host}} menerima transaksi begitu dieksekusi. Jika itu lebih dari 5 menit, atau Anda menutup ini, situs diberi tahu bahwa transaksi sudah diusulkan dan menunggu persetujuan; transaksi tetap ada di Aktivitas.",
+    "stillNeeded": "Persetujuan yang masih dibutuhkan: {{missing}}",
+    "siteTold": "{{host}} sudah diberi tahu bahwa transaksi diusulkan dan menunggu persetujuan; situs tidak akan menerima hash transaksi. Transaksi tetap ada di Aktivitas, dan anggota masih bisa mengeksekusinya.",
     "data": "Data",
     "changesMembers": "Panggilan #{{index}} mengubah multisig ini sendiri: {{change}}. Setujui hanya jika semua anggota mengharapkannya.",
     "siteFollows": "{{host}} sudah menerima ID transaksi ini dan memantaunya sampai anggota mengeksekusi atau menolaknya. Transaksi tetap ada di Aktivitas.",
@@ -1392,6 +1400,12 @@
    "a11yClose": "Tutup browser",
    "addLead": "{{host}} meminta menambahkan jaringan",
    "addFromSite": "Tidak ada di daftar jaringan Vela — nama dan koinnya dari situs.",
+   "addRpcFromSite": "Daftar jaringan Vela tidak punya RPC yang bisa dipakai untuk jaringan ini, jadi RPC-nya berasal dari situs.",
+   "addWhyNoRpc": "Vela tidak menemukan RPC yang bisa dipakai untuk memeriksa jaringan ini: Vela hanya memeriksa lewat https, dan situs tidak memberi yang bisa dipakai.",
+   "addWhyUnreachable": "Vela tidak bisa menghubungi {{host}} untuk memeriksanya. Node mungkin mati atau lambat, atau tidak mengizinkan Vela — node lokal sering begitu.",
+   "addUnverified": "Tambahkan tanpa verifikasi",
+   "addUnverifiedWarning": "Vela tidak bisa memeriksa jaringan ini. Jika {{host}} bukan chain {{chainId}}, atau kontrak Vela tidak ada di sana, uang yang dikirim ke alamat Vela Anda di jaringan itu bisa tertahan. Tambahkan hanya jika Anda menjalankannya atau memercayainya.",
+   "addUnverifiedConfirm": "Tambahkan jaringan tanpa verifikasi",
    "a11yBack": "Kembali",
    "a11yReload": "Muat ulang halaman",
    "a11yOpenSystem": "Buka di browser sistem",
@@ -1741,6 +1755,8 @@
    "verifiedAbiWarning": "Kontrak ini tidak punya deskriptor ERC-7730 — nilai di atas adalah hasil dekode langsung dari ABI on-chain yang terverifikasi. Periksa nilainya.",
    "bestEffortSummary": "Memanggil {{fn}} — dibaca dari tanda tangan fungsi publik, bukan deskriptor terverifikasi.",
    "simUnavailableWarning": "Vela tidak bisa memeriksa hasil transaksi ini. Periksa dulu sebelum menandatangani.",
+   "simRecheck": "Periksa lagi",
+   "simRechecking": "Memeriksa lagi…",
    "drainSummary": "Situs menyebut ini klaim gratis, tetapi simulasi menunjukkan aset keluar dari dompetmu.",
    "drainWarning": "Ada aset yang keluar padahal situs tidak pernah menyebutkannya — ini sangat mirip pengurasan dompet. Tolak.",
    "selectorNotListed": "Tidak bisa didekode — tidak ada deskriptor ERC-7730, selector tidak terdaftar ({{bytes}} byte)",

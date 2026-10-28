@@ -224,6 +224,12 @@
     "fiatRates": "Fiat rates"
    }
   },
+  "sites": {
+   "title": "Connected sites",
+   "subtitle": "Sites that can see your address",
+   "listLabel": "Disconnecting a site takes back what it may see; it asks you again next time.",
+   "empty": "No site is connected."
+  },
   "about": {
    "title": "About",
    "subtitle": "Vela Wallet v{{version}}"
@@ -495,7 +501,9 @@
     "mailboxDown": "Couldn't read this multisig's waiting transactions, so nothing was proposed. Try again in a moment.",
     "notSent": "The network didn't take it, so nothing was sent. Try again.",
     "siteAsks": "{{host}} asks for this transaction.",
-    "siteWaits": "{{host}} waits until the members execute or reject it. If you close this, the site is told it was proposed, and it stays in Activity.",
+    "siteWaits": "{{host}} gets the transaction once it is executed. If that takes longer than 5 minutes, or you close this, the site is told it was proposed and is waiting for approvals; it stays in Activity.",
+    "stillNeeded": "Approvals still needed: {{missing}}",
+    "siteTold": "{{host}} was told it was proposed and is waiting for approvals; it won’t get the transaction hash. The transaction stays in Activity, and the members can still execute it.",
     "data": "Data",
     "changesMembers": "Call #{{index}} changes this multisig itself: {{change}}. Approve only if every member expects it.",
     "siteFollows": "{{host}} was given this transaction’s id and follows it until the members execute or reject it. It stays in Activity.",
@@ -1392,6 +1400,12 @@
    "a11yClose": "Close browser",
    "addLead": "{{host}} asks to add a network",
    "addFromSite": "Not in Vela’s network list — the name and coin are the site’s.",
+   "addRpcFromSite": "Vela’s network list has no RPC it can use for this network, so the RPC is the site’s.",
+   "addWhyNoRpc": "Vela found no RPC it can use to check this network: it checks only over https, and the site gave none it can use.",
+   "addWhyUnreachable": "Vela couldn’t reach {{host}} to check it. The node may be down or slow, or may not let Vela in — local nodes often don’t.",
+   "addUnverified": "Add without verifying",
+   "addUnverifiedWarning": "Vela couldn’t check this network. If {{host}} isn’t chain {{chainId}}, or Vela’s contracts aren’t on it, money sent to your Vela address there could be stuck. Add it only if you run it or trust it.",
+   "addUnverifiedConfirm": "Add unverified network",
    "a11yBack": "Go back",
    "a11yReload": "Reload page",
    "a11yOpenSystem": "Open in system browser",
@@ -1783,6 +1797,8 @@
    "verifiedAbiWarning": "No ERC-7730 descriptor for this contract — the values above are a direct decode of the verified on-chain ABI. Check them.",
    "bestEffortSummary": "Calling {{fn}} — read from its public function signature, not a verified descriptor.",
    "simUnavailableWarning": "Vela couldn’t check what this transaction does. Review it before you sign.",
+   "simRecheck": "Check again",
+   "simRechecking": "Checking again…",
    "drainSummary": "The site calls this a free claim, but the simulation shows assets leaving your wallet.",
    "drainWarning": "Assets leave that the site’s stated intent never mentioned — this looks very much like a drain. Reject it.",
    "selectorNotListed": "Unable to decode — no ERC-7730 descriptor, selector not listed ({{bytes}} bytes)",

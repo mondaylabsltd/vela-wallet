@@ -224,6 +224,12 @@
         "fiatRates": "Kurs fiat"
       }
     },
+    "sites": {
+      "title": "Situs terhubung",
+      "subtitle": "Situs yang bisa melihat alamat Anda",
+      "listLabel": "Memutus situs mencabut apa yang boleh dilihatnya; lain kali situs akan meminta lagi.",
+      "empty": "Tidak ada situs yang terhubung."
+    },
     "about": {
       "title": "Tentang",
       "subtitle": "Vela Wallet v{{version}}"

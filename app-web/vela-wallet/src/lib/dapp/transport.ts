@@ -103,7 +103,7 @@ export interface AnsweredOp {
  */
 export async function answerRequest(
 	rid: string,
-	answer: { result?: unknown; error?: { code: number; message: string } },
+	answer: { result?: unknown; error?: { code: number; message: string; data?: unknown } },
 	opHash?: AnsweredOp
 ): Promise<boolean> {
 	if (panelSurface.caller) {

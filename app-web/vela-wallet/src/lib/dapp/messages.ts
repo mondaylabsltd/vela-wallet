@@ -77,6 +77,18 @@ export interface AddNetworkMessages {
 	hints: Record<NetHintKey, string>;
 	singleKeyOnly: string;
 	unableToVerify: string;
+	/** dapp-13: the catalog knows the chain but lists no RPC Vela uses — the RPC is the site's. */
+	rpcFromSite: string;
+	/** Why it could not verify: no RPC Vela may use. */
+	whyNoRpc: string;
+	/** Template — why it could not verify: '{{host}}' did not answer. */
+	whyUnreachable: string;
+	/** The door to adding it unverified. */
+	addUnverified: string;
+	/** Template — what adding it unverified risks ('{{host}}', '{{chainId}}'). */
+	unverifiedWarning: string;
+	/** The explicit confirmation. */
+	addUnverifiedConfirm: string;
 	/** Template — '… (chain {{actual}}, expected {{expected}}).' */
 	wrongRpc: string;
 	noRpc: string;

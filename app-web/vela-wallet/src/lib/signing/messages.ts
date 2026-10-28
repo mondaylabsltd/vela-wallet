@@ -281,6 +281,14 @@ export interface SigningMessages {
 	 */
 	simChecking: string;
 	/**
+	 * dapp-15: the could-not-check line of a node nobody reached is asked
+	 * again — "Check again" on it (`componentsUi.signing.simRecheck`), and
+	 * "Checking again…" over it while the new check is out, the old line
+	 * marked stale (`componentsUi.signing.simRechecking`).
+	 */
+	simRecheck: string;
+	simRechecking: string;
+	/**
 	 * A balance row's label for a token nobody vouches for
 	 * (`componentsUi.signing.balanceUnverifiedToken`): the row says this and
 	 * which way it moves, and never a figure.

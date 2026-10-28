@@ -224,6 +224,12 @@
     "fiatRates": "Tassi fiat"
    }
   },
+  "sites": {
+   "title": "Siti collegati",
+   "subtitle": "I siti che possono vedere il tuo indirizzo",
+   "listLabel": "Scollegando un sito gli togli ciò che può vedere; la prossima volta te lo chiederà di nuovo.",
+   "empty": "Nessun sito è collegato."
+  },
   "about": {
    "title": "Informazioni",
    "subtitle": "Vela Wallet v{{version}}"
@@ -496,7 +502,9 @@
     "mailboxDown": "Non è stato possibile leggere le transazioni in attesa di questo multisig, quindi non è stato proposto nulla. Riprova tra poco.",
     "notSent": "La rete non l'ha accettata, quindi non è stato inviato nulla. Riprova.",
     "siteAsks": "{{host}} chiede questa transazione.",
-    "siteWaits": "{{host}} attende che i membri la eseguano o la rifiutino. Se chiudi qui, il sito viene informato che è stata proposta, e resta in Attività.",
+    "siteWaits": "{{host}} riceve la transazione appena viene eseguita. Se ci vogliono più di 5 minuti, o chiudi qui, il sito viene informato che è stata proposta e attende le approvazioni; resta in Attività.",
+    "stillNeeded": "Approvazioni ancora necessarie: {{missing}}",
+    "siteTold": "{{host}} è stato informato che è stata proposta e attende le approvazioni; non riceverà l’hash della transazione. La transazione resta in Attività e i membri possono ancora eseguirla.",
     "data": "Dati",
     "changesMembers": "La chiamata n. {{index}} modifica questo multisig: {{change}}. Approva solo se tutti i membri se lo aspettano.",
     "siteFollows": "{{host}} ha ricevuto l’identificativo di questa transazione e la segue finché i membri non la eseguono o la rifiutano. Resta in Attività.",
@@ -1399,6 +1407,12 @@
    "a11yClose": "Chiudi il browser",
    "addLead": "{{host}} chiede di aggiungere una rete",
    "addFromSite": "Non è nell'elenco delle reti di Vela: nome e moneta sono quelli del sito.",
+   "addRpcFromSite": "L’elenco delle reti di Vela non ha un RPC utilizzabile per questa rete, quindi l’RPC è quello del sito.",
+   "addWhyNoRpc": "Vela non ha trovato un RPC utilizzabile per verificare questa rete: verifica solo via https e il sito non ne ha dato nessuno utilizzabile.",
+   "addWhyUnreachable": "Vela non è riuscita a raggiungere {{host}} per verificarlo. Il nodo potrebbe essere spento o lento, o non lasciare entrare Vela: i nodi locali spesso non lo fanno.",
+   "addUnverified": "Aggiungi senza verificare",
+   "addUnverifiedWarning": "Vela non è riuscita a verificare questa rete. Se {{host}} non è la chain {{chainId}}, o i contratti di Vela non ci sono, il denaro inviato al tuo indirizzo Vela su questa rete potrebbe restare bloccato. Aggiungila solo se la gestisci tu o ti fidi.",
+   "addUnverifiedConfirm": "Aggiungi rete non verificata",
    "a11yBack": "Indietro",
    "a11yReload": "Ricarica la pagina",
    "a11yOpenSystem": "Apri nel browser di sistema",
@@ -1748,6 +1762,8 @@
    "verifiedAbiWarning": "Nessun descrittore ERC-7730 per questo contratto — i valori qui sopra sono una decodifica diretta dell’ABI verificata on-chain. Controllali.",
    "bestEffortSummary": "Chiamata a {{fn}} — letta dalla firma pubblica della funzione, non da un descrittore verificato.",
    "simUnavailableWarning": "Vela non ha potuto verificare cosa fa questa transazione. Controllala prima di firmare.",
+   "simRecheck": "Verifica di nuovo",
+   "simRechecking": "Nuova verifica in corso…",
    "drainSummary": "Il sito la presenta come una richiesta gratuita, ma la simulazione mostra asset che escono dal tuo portafoglio.",
    "drainWarning": "Escono asset che il sito non ha mai menzionato — assomiglia molto a uno svuotamento. Rifiuta.",
    "selectorNotListed": "Impossibile decodificare — nessun descrittore ERC-7730 e selettore non catalogato ({{bytes}} byte)",

@@ -224,6 +224,12 @@
         "fiatRates": "法定貨幣匯率"
       }
     },
+    "sites": {
+      "title": "已連接的網站",
+      "subtitle": "能看到你地址的網站",
+      "listLabel": "中斷連接後，網站便不能再看到這些；下次它會再次徵求你的同意。",
+      "empty": "沒有已連接的網站。"
+    },
     "about": {
       "title": "關於",
       "subtitle": "Vela Wallet v{{version}}"

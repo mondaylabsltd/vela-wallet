@@ -170,6 +170,8 @@
       "verifiedAbiWarning": "此合约无 ERC-7730 描述符 — 以上为链上验证 ABI 的直接解码，请核对参数。",
       "bestEffortSummary": "调用 {{fn}} — 按公开函数签名解析，非验证描述符。",
       "simUnavailableWarning": "Vela 未能检查这笔交易的结果，请核对后再签名。",
+      "simRecheck": "重新检查",
+      "simRechecking": "正在重新检查…",
       "drainSummary": "站点声称这是一次免费领取（claim），但模拟显示资产将离开你的钱包。",
       "drainWarning": "未在站点意图中声明的资产流出 — 高度疑似盗刷，请拒绝。",
       "selectorNotListed": "无法解码 — 无 ERC-7730 描述符，选择器未收录（{{bytes}} 字节）",

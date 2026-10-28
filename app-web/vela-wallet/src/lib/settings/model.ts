@@ -162,6 +162,11 @@ export type SettingsPageId =
 	 * its row and nav entry; the fixtures draw neither.
 	 */
 	| 'agent'
+	/**
+	 * dapp-11 — the sites that hold a grant, each with Disconnect. Extension
+	 * only (no grants elsewhere), so the route adds its row and nav entry.
+	 */
+	| 'sites'
 	| 'about';
 
 /**
@@ -540,6 +545,16 @@ export interface StorageGroupModel {
 	items: StorageItemModel[];
 	/** The 清除全部缓存 link under the cache group. */
 	action?: string;
+}
+
+/** dapp-11: Settings › Connected sites. */
+export interface SitesPanelModel {
+	title: string;
+	subtitle: string;
+	/** Said when no site holds a grant. */
+	empty: string;
+	/** One row per site (`id` = its origin), under the consequence of disconnecting one. */
+	group: StorageGroupModel;
 }
 
 export interface StorageModel {
