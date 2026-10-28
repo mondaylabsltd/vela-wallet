@@ -162,6 +162,7 @@
     "setContactFavorite": "Modifier un favori",
     "addNetwork": "Ajouter un réseau",
     "setNetworkEndpoint": "Modifier le RPC ou l'explorateur d'un réseau",
+    "setOnlyMyNode": "Modifier « N'utiliser que mon nœud »",
     "removeNetwork": "Retirer un réseau",
     "setProviderKey": "Modifier une clé de fournisseur RPC",
     "setServiceEndpoint": "Modifier un point d'accès de service",
@@ -2262,7 +2263,11 @@
    "checkSafe": "Contrats Safe L2",
    "checkSigner": "Précompilé P-256",
    "checkRemaining": "{{count}} autres contrats",
-   "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement."
+   "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement.",
+   "discardTitle": "Abandonner ce réseau ?",
+   "discardBody": "Ce que vous avez saisi ici sera perdu.",
+   "discardConfirm": "Abandonner",
+   "discardCancel": "Continuer"
   },
   "treasury": {
    "modalTitle": "Trésorerie",
@@ -2306,6 +2311,10 @@
   "searchPlaceholder": "Rechercher un nom, un ENS ou une adresse",
   "filterAll": "Tous",
   "sectionFavorites": "Favoris",
+  "favoriteAdd": "Ajouter aux favoris",
+  "favoriteRemove": "Retirer des favoris",
+  "noteLabel": "Note",
+  "notePlaceholder": "Facultatif — visible par vous seul",
   "sectionRecent": "Récents",
   "sectionSaved": "Enregistrés",
   "empty": "Aucun contact pour l'instant",

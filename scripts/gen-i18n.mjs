@@ -972,8 +972,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.sites.{title, subtitle, listLabel, empty}` (dapp-11).
 //   2209 + 14 = 2223 leaves, 119 + 1 = 120 branches.
 // 2359 (round 3 merged: + the dApp group, 2026-10-29): 2225 + 14 = 2239 leaves, 120 branches.
-if (PATHS.length !== 2359) fail(`expected 2359 paths (2239 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2239) fail(`expected 2239 leaf paths, got ${leafSet.size}`);
+// 2337 (round 3, home & settings, 2026-10-29): + 4
+//   `settingsModals.addNetwork.discard{Title,Body,Confirm,Cancel}` (set-5:
+//   leaving the wizard with something entered asks first), + 1
+//   `settings.agent.action.setOnlyMyNode` (the agent's "Only use my node",
+//   through the person's approval), + 4 `contacts.{favoriteAdd,
+//   favoriteRemove, noteLabel, notePlaceholder}` (the book's star and note).
+//   2209 + 9 = 2218 leaves, 119 branches.
+// 2368 (round 3 merged: + home & settings, 2026-10-29): 2239 + 9 = 2248 leaves, 120 branches.
+if (PATHS.length !== 2368) fail(`expected 2368 paths (2248 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2248) fail(`expected 2248 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -207,7 +207,8 @@ export async function perform(
 				input: {
 					address: action.address.trim(),
 					name: action.name.trim(),
-					note: null,
+					// Absent keeps the note; given (an empty one clears it), it is the note.
+					note: action.note === undefined ? null : action.note.trim(),
 					favorite: null,
 					kind: null,
 					resolved_name: null,
@@ -307,6 +308,8 @@ export async function perform(
 			return networks.addNetwork(action.chain_id, action.rpc_url);
 		case 'set_network_endpoint':
 			return networks.setNetworkEndpoint(action.chain_id, action.field, action.url);
+		case 'set_only_my_node':
+			return networks.setOnlyMyNode(action.chain_id, action.on);
 		case 'remove_network':
 			await networks.removeNetwork(action.chain_id);
 			return null;

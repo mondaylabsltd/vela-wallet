@@ -242,6 +242,35 @@ describe('liveNetworkDetail', () => {
 	});
 });
 
+// set-5: leaving the wizard with something entered asks before it goes.
+describe('leaving the add-network wizard', () => {
+	it('asks only while it holds what the person entered', () => {
+		expect(liveAddNetwork(WIZARD_IDLE, m).discard).toBeUndefined();
+		const asked = {
+			title: m.addNetwork.discard.title,
+			body: m.addNetwork.discard.body,
+			confirm: m.addNetwork.discard.confirm,
+			cancel: m.addNetwork.discard.cancel,
+			tone: 'danger'
+		};
+		expect(liveAddNetwork({ ...WIZARD_IDLE, phase: 'suggested', query: 'gno' }, m).discard).toEqual(
+			asked
+		);
+		expect(liveAddNetwork({ ...WIZARD_IDLE, phase: 'resolving' }, m).discard).toEqual(asked);
+		expect(
+			liveAddNetwork({ ...WIZARD_IDLE, custom_rpc: 'https://rpc.example' }, m).discard
+		).toEqual(asked);
+		// Spaces only are nothing entered.
+		expect(liveAddNetwork({ ...WIZARD_IDLE, query: '   ' }, m).discard).toBeUndefined();
+	});
+
+	it('words the question in the person’s language', () => {
+		expect(m.addNetwork.discard.title).not.toBe('settingsModals.addNetwork.discardTitle');
+		const zh = resolveSettingsMessages('zh');
+		expect(zh.addNetwork.discard.confirm).not.toBe(m.addNetwork.discard.confirm);
+	});
+});
+
 // set-5: an add empties the wizard; it now says what was added, and where.
 describe('the wizard after an add', () => {
 	const words = resolveNetworkSpaceMessages('en');

@@ -82,7 +82,11 @@
       "checkSafe": "Safe L2 コントラクト",
       "checkSigner": "P-256 プリコンパイル",
       "checkRemaining": "その他 {{count}} 件のコントラクト",
-      "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。"
+      "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。",
+      "discardTitle": "このネットワークの追加をやめますか？",
+      "discardBody": "ここで入力した内容は失われます。",
+      "discardConfirm": "破棄",
+      "discardCancel": "編集を続ける"
     },
     "treasury": {
       "modalTitle": "Treasury",

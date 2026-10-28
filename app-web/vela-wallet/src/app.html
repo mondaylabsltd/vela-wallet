@@ -54,6 +54,60 @@
 			}
 
 			/*
+			 * set-12: the language the person PINNED in Settings, before first
+			 * paint. Spec 006 keeps cookies out of the wallet, so `/` negotiates
+			 * Accept-Language alone and cannot see the pin (`localStorage`); this
+			 * page can. When the pin names another shipped locale, this page is
+			 * replaced by that locale's — one hop, hidden meanwhile so the wrong
+			 * language never shows. `auto`, nothing, or the same locale: stay.
+			 * Pages of the extension (not http) have their own doorways.
+			 *
+			 * `pinnedLocaleTarget` in `$lib/i18n/locales.ts`, duplicated because
+			 * nothing can be imported yet; `locales.test.ts` runs this block
+			 * against it. PREF key 'vela.language'.
+			 */
+			/* set-12:begin */
+			try {
+				if (location.protocol === 'https:' || location.protocol === 'http:') {
+					var shipped = [
+						'en',
+						'zh',
+						'zh-TW',
+						'zh-HK',
+						'ja',
+						'ko',
+						'vi',
+						'id',
+						'tr',
+						'es-MX',
+						'pt-BR',
+						'fr',
+						'de',
+						'ru',
+						'it'
+					];
+					var canonical = function (tag) {
+						for (var i = 0; i < shipped.length; i++) {
+							if (shipped[i].toLowerCase() === String(tag).toLowerCase()) return shipped[i];
+						}
+						return null;
+					};
+					var pin = localStorage.getItem('vela.language');
+					var wanted = pin && pin !== 'auto' ? canonical(pin) : null;
+					var segments = location.pathname.split('/');
+					var here = canonical(segments[1] || '');
+					if (wanted && here && wanted !== here) {
+						segments[1] = wanted;
+						document.documentElement.style.visibility = 'hidden';
+						location.replace(segments.join('/') + location.search + location.hash);
+					}
+				}
+			} catch (e) {
+				/* Blocked storage: the page `/` chose, as before there was a pin. */
+			}
+			/* set-12:end */
+
+			/*
 			 * Spec 012: decide BEFORE first paint whether the launch animation plays,
 			 * and if so hide the page in the same frame the document appears.
 			 *

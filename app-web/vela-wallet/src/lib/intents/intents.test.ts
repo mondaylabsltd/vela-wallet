@@ -388,6 +388,39 @@ describe('the rest of what the person can do (spec 103)', () => {
 		expect(h.performed).toEqual([show]);
 	});
 
+	it('turns "Only use my node" either way only with the person’s approval, where they have a node (round 3)', async () => {
+		const h = harness((action, now) => {
+			if (action.type !== 'set_only_my_node') return;
+			const row = { ...net(100, false, 'https://node.example'), own_rpc: true };
+			h.world = { ...now, networks: networks([{ ...row, only_mine: action.on }, net(1, false)]) };
+		});
+		const mine = { ...net(100, false, 'https://node.example'), own_rpc: true, only_mine: true };
+		h.world = { ...h.world, networks: networks([mine, net(1, false)]) };
+
+		// Off: public nodes would hear about the account — the person says so first.
+		const off: IntentAction = { type: 'set_only_my_node', chain_id: 100, on: false };
+		const asked = h.intents.invoke('agent', off);
+		await tick();
+		expect(h.performed, 'nothing before the approval').toEqual([]);
+		expect(h.intents.approvals[0]?.risk).toBe('manage');
+		h.intents.answer(h.intents.approvals[0].id, true);
+		expect(code(await asked)).toBe('completed');
+		expect(h.performed).toEqual([off]);
+
+		// On again: asked too.
+		const on: IntentAction = { type: 'set_only_my_node', chain_id: 100, on: true };
+		const again = h.intents.invoke('agent', on);
+		await tick();
+		expect(h.intents.approvals[0]?.risk).toBe('manage');
+		h.intents.answer(h.intents.approvals[0].id, false);
+		expect(code(await again)).toBe('denied');
+
+		// A network read through public nodes has no node of the person's to keep to.
+		expect(
+			code(await h.intents.invoke('agent', { type: 'set_only_my_node', chain_id: 1, on: true }))
+		).toBe('refused');
+	});
+
 	it('removes only a network the person added', async () => {
 		const h = harness();
 		h.world = { ...h.world, networks: networks([net(1, false), net(4242, true)]) };

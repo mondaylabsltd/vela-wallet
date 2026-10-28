@@ -48,6 +48,7 @@ fn one_of_each() -> Vec<Action> {
         Action::SaveContact {
             address: ALICE.to_owned(),
             name: "Alice".to_owned(),
+            note: None,
         },
         Action::DeleteContact {
             address: ALICE.to_owned(),
@@ -133,6 +134,10 @@ fn one_of_each() -> Vec<Action> {
             chain_id: 1,
             field: NetOverrideField::Rpc,
             url: "https://rpc.example".to_owned(),
+        },
+        Action::SetOnlyMyNode {
+            chain_id: 1,
+            on: true,
         },
         Action::RemoveNetwork { chain_id: 8453 },
         Action::SetProviderKey {
@@ -616,10 +621,12 @@ fn addresses_names_and_ids_must_be_real() {
         Action::SaveContact {
             address: "0x123".to_owned(),
             name: "Short".to_owned(),
+            note: None,
         },
         Action::SaveContact {
             address: ALICE.to_owned(),
             name: "   ".to_owned(),
+            note: None,
         },
         Action::SwitchAccount {
             address: "alice.eth".to_owned(),
@@ -1022,6 +1029,7 @@ fn network_changes_are_manage_level_and_need_real_urls() {
             action,
             Action::AddNetwork { .. }
                 | Action::SetNetworkEndpoint { .. }
+                | Action::SetOnlyMyNode { .. }
                 | Action::RemoveNetwork { .. }
                 | Action::SetProviderKey { .. }
                 | Action::SetServiceEndpoint { .. }
@@ -1285,6 +1293,42 @@ fn a_wallet_not_on_the_list_is_not_the_agents_to_remove_or_erase() {
     );
 }
 
+/// A contact's note (round 3, the book's note field): a line or two — line
+/// breaks are text there — and nothing that reorders it; empty clears it.
+#[test]
+fn a_note_is_short_and_reads_as_written() {
+    let note = |text: &str| Action::SaveContact {
+        address: ALICE.to_owned(),
+        name: "Alice".to_owned(),
+        note: Some(text.to_owned()),
+    };
+    assert_eq!(validate(&note("")), Ok(()), "empty clears it");
+    assert_eq!(validate(&note("Met at ETHCC\nPays in USDC")), Ok(()));
+    assert_eq!(validate(&note(&"名".repeat(280))), Ok(()));
+    for bad in [
+        "W".repeat(281),
+        "pay \u{202E}evil".to_owned(),
+        "a\u{0007}b".to_owned(),
+    ] {
+        let refusal = validate(&note(&bad)).expect_err("refused");
+        assert_eq!(refusal.code, ReasonCode::InvalidInput, "{bad:?}");
+        assert!(refusal.detail.contains("note"), "{}", refusal.detail);
+    }
+    // The wire: absent is "keep it", and an older agent's call still reads.
+    let old: Action = serde_json::from_value(serde_json::json!({
+        "type": "save_contact", "address": ALICE, "name": "Alice"
+    }))
+    .expect("an action without a note");
+    assert_eq!(
+        old,
+        Action::SaveContact {
+            address: ALICE.to_owned(),
+            name: "Alice".to_owned(),
+            note: None
+        }
+    );
+}
+
 /// A contact's or a group's name is a name: at most 64 characters, and no
 /// character that reorders the text around it ("Bob\u{202E}evil" would read
 /// as someone else) or is not text at all.
@@ -1293,6 +1337,7 @@ fn a_name_is_short_and_reads_as_written() {
     let contact = |name: &str| Action::SaveContact {
         address: ALICE.to_owned(),
         name: name.to_owned(),
+        note: None,
     };
     let group = |name: &str| Action::SaveGroup {
         id: None,
@@ -1367,6 +1412,7 @@ fn an_address_that_fails_its_checksum_is_refused() {
     let contact = Action::SaveContact {
         address: typo.to_owned(),
         name: "Bob".to_owned(),
+        note: None,
     };
     assert!(
         validate(&contact).is_err(),

@@ -54,3 +54,25 @@ describe('IdenticonViewer on the desktop', () => {
 		host.remove();
 	});
 });
+
+describe('IdenticonViewer copy', () => {
+	// home-19: copying an address moves nothing, so its button wears the
+	// neutral ink — the accent is only for the action that moves value.
+	it('draws Copy address in the neutral primary, never the accent', async () => {
+		const viewer = render(IdenticonViewer, {
+			props: { copy: COPY, address: ADDRESS, identiconSvg: '', onClose: () => {} }
+		});
+		await tick();
+		const copy = Array.from(viewer.container.querySelectorAll('button')).find(
+			(b) => b.textContent?.trim() === COPY.copyAddress
+		) as HTMLButtonElement;
+		expect(copy.classList.contains('primary')).toBe(true);
+		expect(copy.classList.contains('value')).toBe(false);
+		const fill = getComputedStyle(copy).backgroundColor;
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--color-accent-base)';
+		document.body.appendChild(probe);
+		expect(fill).not.toBe(getComputedStyle(probe).color);
+		probe.remove();
+	});
+});

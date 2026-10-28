@@ -104,6 +104,7 @@
 		type DeviceStorageReport
 	} from '$lib/services/device-storage';
 	import {
+		addNetworkEntered,
 		feedbackLabels,
 		themeFromSegment,
 		withEraseFailure,
@@ -1216,6 +1217,12 @@
 				return;
 			}
 			case 'open-add':
+				justAdded = null;
+				// set-5: what the person entered goes only when they say so
+				// (`discard-add`) — left another way, it is there on return.
+				if (!addNetworkEntered(net.wizard)) networkAdmin.dispatch({ type: 'wizard_reset' });
+				return;
+			case 'discard-add':
 				justAdded = null;
 				networkAdmin.dispatch({ type: 'wizard_reset' });
 				return;

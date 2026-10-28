@@ -142,6 +142,22 @@
 			<PageHeader
 				back={{ label: model.backLabel, onclick: () => onuievent?.({ kind: 'back' }) }}
 				trailing={[
+					// Round 3: the star — favourites come first in the book.
+					...(detail.favorite !== undefined && onuievent !== undefined
+						? [
+								{
+									icon: detail.favorite.on ? ('star-filled' as const) : ('star' as const),
+									label: detail.favorite.label,
+									pressed: detail.favorite.on,
+									onclick: () =>
+										onuievent?.({
+											kind: 'action',
+											id: 'favorite',
+											address: detail.contact.addressFull
+										})
+								}
+							]
+						: []),
 					{ icon: 'pencil', label: model.editLabel, onclick: () => onuievent?.({ kind: 'edit' }) }
 				]}
 			/>
@@ -192,6 +208,14 @@
 				oncopy={() =>
 					onuievent?.({ kind: 'action', id: 'copy', address: detail.contact.addressFull })}
 			/>
+
+			{#if detail.note !== undefined}
+				<!-- The person's own words about this contact (round 3). -->
+				<div class="note">
+					<p class="note-label">{detail.note.label}</p>
+					<p class="note-text">{detail.note.text}</p>
+				</div>
+			{/if}
 
 			<div class="activity">
 				<SectionHeader
@@ -352,6 +376,27 @@
 		text-align: center;
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
+		color: var(--color-fg-base);
+	}
+
+	.note {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding: var(--space-lg) var(--space-lg) 0;
+	}
+
+	.note-label {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.note-text {
+		margin: 0;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 	}
 

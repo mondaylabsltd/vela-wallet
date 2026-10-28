@@ -1554,6 +1554,7 @@ mod wizard_tests {
                             rpc: Vec::new(),
                             explorers: Vec::new(),
                             testnet: false,
+                            slip44: None,
                         }),
                     },
                 );

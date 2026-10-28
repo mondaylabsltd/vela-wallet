@@ -19,8 +19,12 @@
 
 	$effect(() => {
 		identiconViewer.openLabel = copy.a11yOpen;
+		identiconViewer.copyLabel = copy.copyAddress;
+		identiconViewer.copiedLabel = copy.copied;
 		return () => {
 			identiconViewer.openLabel = '';
+			identiconViewer.copyLabel = '';
+			identiconViewer.copiedLabel = '';
 			identiconViewer.close();
 		};
 	});

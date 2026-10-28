@@ -259,6 +259,18 @@
 		overlay = next;
 	}
 
+	/**
+	 * Back from a sub-page. The add-network wizard holding something the
+	 * person entered asks first (set-5): it used to go, and come back empty.
+	 */
+	function back() {
+		if (page === 'add-network' && model.addNetwork.discard !== undefined) {
+			ask('discard-add-network', 'add-network', model.addNetwork.discard);
+			return;
+		}
+		page = 'home';
+	}
+
 	function openAccounts() {
 		overlay = 'accounts';
 		onaccountsopen?.(true);
@@ -334,6 +346,7 @@
 			case 'clear-storage-item':
 			case 'remove-network':
 			case 'reset-endpoints':
+			case 'discard-add-network':
 				return pending?.sheet.title ?? '';
 			case 'erase-device':
 				return model.eraseSheet.title;
@@ -395,7 +408,7 @@
 					title={header.title}
 					subtitle={header.subtitle}
 					backLabel={model.closeLabel}
-					onback={() => (page = 'home')}
+					onback={back}
 				/>
 			{:else}
 				<h1 class="title">{model.title}</h1>
@@ -695,6 +708,16 @@
 							const id = pending?.id;
 							close();
 							if (id !== undefined) onnetevent?.({ kind: 'delete-network', id });
+						}}
+						oncancel={close}
+					/>
+				{:else if overlay === 'discard-add-network' && pending}
+					<ConfirmSheet
+						sheet={pending.sheet}
+						onconfirm={() => {
+							close();
+							page = 'home';
+							onnetevent?.({ kind: 'discard-add' });
 						}}
 						oncancel={close}
 					/>

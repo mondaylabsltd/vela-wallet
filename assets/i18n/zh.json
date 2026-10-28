@@ -162,6 +162,7 @@
     "setContactFavorite": "更改收藏",
     "addNetwork": "添加网络",
     "setNetworkEndpoint": "更改网络的 RPC 或浏览器",
+    "setOnlyMyNode": "更改“只使用我的节点”",
     "removeNetwork": "移除网络",
     "setProviderKey": "更改 RPC 服务商密钥",
     "setServiceEndpoint": "更改服务端点",
@@ -2255,7 +2256,11 @@
    "checkSafe": "Safe L2 合约",
    "checkSigner": "P-256 预编译",
    "checkRemaining": "其余 {{count}} 项合约",
-   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。"
+   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
+   "discardTitle": "放弃添加这个网络？",
+   "discardBody": "你在这里输入的内容将会丢失。",
+   "discardConfirm": "放弃",
+   "discardCancel": "继续编辑"
   },
   "treasury": {
    "modalTitle": "金库",
@@ -2299,6 +2304,10 @@
   "searchPlaceholder": "搜索名字、ENS 或地址",
   "filterAll": "全部",
   "sectionFavorites": "收藏",
+  "favoriteAdd": "加入收藏",
+  "favoriteRemove": "取消收藏",
+  "noteLabel": "备注",
+  "notePlaceholder": "选填，仅你自己可见",
   "sectionRecent": "最近",
   "sectionSaved": "已保存",
   "empty": "还没有联系人",

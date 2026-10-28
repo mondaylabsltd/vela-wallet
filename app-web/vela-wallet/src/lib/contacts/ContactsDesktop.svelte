@@ -297,6 +297,12 @@
 						{detail}
 						onedit={() => onuievent?.({ kind: 'edit' })}
 						ondelete={() => onuievent?.({ kind: 'delete', address: detail.contact.addressFull })}
+						onfavorite={() =>
+							onuievent?.({
+								kind: 'action',
+								id: 'favorite',
+								address: detail.contact.addressFull
+							})}
 						onaction={(id) =>
 							onuievent?.({ kind: 'action', id, address: detail.contact.addressFull })}
 						oncopy={() =>

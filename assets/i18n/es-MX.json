@@ -162,6 +162,7 @@
     "setContactFavorite": "Cambiar un favorito",
     "addNetwork": "Agregar una red",
     "setNetworkEndpoint": "Cambiar el RPC o explorador de una red",
+    "setOnlyMyNode": "Cambiar “Usar solo mi nodo”",
     "removeNetwork": "Quitar una red",
     "setProviderKey": "Cambiar la clave de un proveedor RPC",
     "setServiceEndpoint": "Cambiar un endpoint de servicio",
@@ -2262,7 +2263,11 @@
    "checkSafe": "Contratos Safe L2",
    "checkSigner": "Precompilado P-256",
    "checkRemaining": "otros {{count}} contratos",
-   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
+   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
+   "discardTitle": "¿Descartar esta red?",
+   "discardBody": "Se perderá lo que ingresaste aquí.",
+   "discardConfirm": "Descartar",
+   "discardCancel": "Seguir editando"
   },
   "treasury": {
    "modalTitle": "Tesorería",
@@ -2306,6 +2311,10 @@
   "searchPlaceholder": "Buscar nombre, ENS o dirección",
   "filterAll": "Todos",
   "sectionFavorites": "Favoritos",
+  "favoriteAdd": "Agregar a favoritos",
+  "favoriteRemove": "Quitar de favoritos",
+  "noteLabel": "Nota",
+  "notePlaceholder": "Opcional: solo tú la ves",
   "sectionRecent": "Recientes",
   "sectionSaved": "Guardados",
   "empty": "Aún no tienes contactos",

@@ -249,3 +249,43 @@ describe('Community and the report, on the desktop', () => {
 		expect(seen.at(-1)).toBe(false);
 	});
 });
+
+// set-5: closing the add-network dialog with something entered asks first.
+describe('closing the add-network dialog', () => {
+	const DISCARD = {
+		title: 'Discard this network?',
+		body: 'What you entered here will be lost.',
+		confirm: 'Discard',
+		cancel: 'Keep editing',
+		tone: 'danger' as const
+	};
+
+	it('asks; Keep editing brings the dialog back, Discard closes it and empties the wizard', async () => {
+		const base = buildDesktopState('dst4b', m, IDENTICON);
+		const view = await drawn({ ...base, addNetwork: { ...base.addNetwork, discard: DISCARD } });
+		// Dialogs fade out (`transition:…|global`): read the ones still coming in.
+		const dialogs = () => [...view.root.querySelectorAll<HTMLElement>('[role="dialog"]')];
+		const asking = () => dialogs().some((d) => d.textContent?.includes(DISCARD.body));
+		const close = () => dialogs().at(-1)?.querySelector<HTMLElement>('button.close');
+		await view.click(close());
+		await vi.waitFor(() => expect(asking()).toBe(true));
+		expect(view.net).toEqual([]);
+		await view.click(view.buttonIn(view.root, DISCARD.cancel));
+		await vi.waitFor(() => expect(asking()).toBe(false));
+		expect(dialogs().length).toBeGreaterThan(0);
+		expect(view.net).toEqual([]);
+
+		await view.click(close());
+		await vi.waitFor(() => expect(asking()).toBe(true));
+		await view.click(view.buttonIn(view.root, DISCARD.confirm));
+		expect(view.net).toEqual([{ kind: 'discard-add' }]);
+		await vi.waitFor(() => expect(dialogs()).toEqual([]));
+	});
+
+	it('with nothing entered, just closes', async () => {
+		const view = await drawn(buildDesktopState('dst4b', m, IDENTICON));
+		await view.click(view.root.querySelector<HTMLElement>('[role="dialog"] button.close'));
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
+		expect(view.net).toEqual([]);
+	});
+});

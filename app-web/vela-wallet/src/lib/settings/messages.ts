@@ -323,6 +323,8 @@ export interface SettingsMessages {
 		openChainSetupTool: string;
 		recheckWithRpc: string;
 		testnet: string;
+		/** set-5: leaving the wizard with something entered asks first. */
+		discard: { title: string; body: string; confirm: string; cancel: string };
 		/** Template with `{{latencyMs}}`. */
 		bestRpc: string;
 		checkEntryPoint: string;
@@ -1010,6 +1012,10 @@ export const SETTINGS_KEYS = [
 	'addToken.errorNotCompatible',
 	'settingsModals.addNetwork.noRpcEndpoint',
 	'settingsModals.addNetwork.singleKeyOnly',
+	'settingsModals.addNetwork.discardTitle',
+	'settingsModals.addNetwork.discardBody',
+	'settingsModals.addNetwork.discardConfirm',
+	'settingsModals.addNetwork.discardCancel',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',
 	'settingsModals.addNetwork.testnet',

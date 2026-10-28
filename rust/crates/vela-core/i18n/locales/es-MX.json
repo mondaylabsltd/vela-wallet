@@ -162,6 +162,7 @@
         "setContactFavorite": "Cambiar un favorito",
         "addNetwork": "Agregar una red",
         "setNetworkEndpoint": "Cambiar el RPC o explorador de una red",
+        "setOnlyMyNode": "Cambiar “Usar solo mi nodo”",
         "removeNetwork": "Quitar una red",
         "setProviderKey": "Cambiar la clave de un proveedor RPC",
         "setServiceEndpoint": "Cambiar un endpoint de servicio",

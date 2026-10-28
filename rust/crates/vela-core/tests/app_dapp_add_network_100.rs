@@ -198,6 +198,7 @@ fn catalog_entry() -> NetRawChainData {
         rpc: vec![CATALOG_RPC.to_owned()],
         explorers: vec!["https://scan.catalog.example".to_owned()],
         testnet: false,
+        slip44: None,
     }
 }
 

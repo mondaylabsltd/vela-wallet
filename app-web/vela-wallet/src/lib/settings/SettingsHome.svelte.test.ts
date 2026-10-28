@@ -50,6 +50,66 @@ async function drawn(state: MobileSettingsStateId) {
 	};
 }
 
+// set-5: back from the add-network wizard with something entered asks first.
+describe('leaving the add-network wizard', () => {
+	const DISCARD = {
+		title: 'Discard this network?',
+		body: 'What you entered here will be lost.',
+		confirm: 'Discard',
+		cancel: 'Keep editing',
+		tone: 'danger' as const
+	};
+
+	async function wizard(discard: typeof DISCARD | undefined) {
+		const net: SettingsNetEvent[] = [];
+		const base = buildMobileState('st10', m, IDENTICON);
+		const screen = render(SettingsHome, {
+			props: {
+				model: { ...base, addNetwork: { ...base.addNetwork, discard } },
+				onnetevent: (event: SettingsNetEvent) => net.push(event)
+			}
+		});
+		await tick();
+		const root = screen.container;
+		const back = () =>
+			root.querySelector<HTMLButtonElement>(`button[aria-label="${String(base.closeLabel)}"]`);
+		const title = () => root.querySelector('h1, h2')?.textContent?.trim();
+		const buttonIn = (text: string) =>
+			[...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+		return { net, root, back, title, buttonIn, addTitle: base.addNetwork.title };
+	}
+
+	it('with nothing entered, back just goes back', async () => {
+		const view = await wizard(undefined);
+		view.back()?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')).toBeNull();
+		expect(view.title()).not.toBe(String(view.addTitle));
+		expect(view.net).toEqual([]);
+	});
+
+	it('with something entered, asks — Keep editing stays, Discard empties and leaves', async () => {
+		const view = await wizard(DISCARD);
+		view.back()?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
+			DISCARD.title
+		);
+		view.buttonIn(DISCARD.cancel)?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')).toBeNull();
+		expect(view.title()).toBe(String(view.addTitle));
+		expect(view.net).toEqual([]);
+
+		view.back()?.click();
+		await tick();
+		view.buttonIn(DISCARD.confirm)?.click();
+		await tick();
+		expect(view.net).toEqual([{ kind: 'discard-add' }]);
+		expect(view.title()).not.toBe(String(view.addTitle));
+	});
+});
+
 describe('removing a custom network', () => {
 	it('asks first, titled with the network, and removes only on confirm', async () => {
 		const view = await drawn('st9');

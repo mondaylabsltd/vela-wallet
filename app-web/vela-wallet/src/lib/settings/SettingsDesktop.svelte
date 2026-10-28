@@ -266,6 +266,16 @@
 		pending = { id, sheet };
 		overlay = next;
 	}
+
+	/**
+	 * Closing the add-network dialog. With something the person entered in
+	 * it, that is asked first (set-5) — "Keep editing" brings the dialog back
+	 * as it was.
+	 */
+	function closeAddNetwork() {
+		if (model.addNetwork.discard === undefined) closeOverlay();
+		else ask('discard-add-network', 'add-network', model.addNetwork.discard);
+	}
 </script>
 
 <div class="desktop">
@@ -555,7 +565,7 @@
 			title={model.addNetwork.title}
 			subtitle={model.addNetwork.subtitle}
 			closeLabel={model.closeLabel}
-			onclose={closeOverlay}
+			onclose={closeAddNetwork}
 		>
 			<AddNetworkPanel
 				panel={model.addNetwork}
@@ -600,6 +610,21 @@
 					{model.clearCachesSheet.confirm}
 				</Button>
 			</div>
+		</Dialog>
+	{:else if overlay === 'discard-add-network' && pending}
+		<Dialog
+			title={pending.sheet.title}
+			closeLabel={model.closeLabel}
+			onclose={() => ((pending = null), (overlay = 'add-network'))}
+		>
+			<ConfirmSheet
+				sheet={pending.sheet}
+				onconfirm={() => {
+					closeOverlay();
+					onnetevent?.({ kind: 'discard-add' });
+				}}
+				oncancel={() => ((pending = null), (overlay = 'add-network'))}
+			/>
 		</Dialog>
 	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network' || overlay === 'reset-endpoints') && pending}
 		<!-- The phone's confirm sheet, in a dialog: titled with what goes. -->

@@ -189,19 +189,19 @@ describe('what is written', () => {
 		expect(preferences.theme).toBe('dark');
 	});
 
-	it('a pinned language rides in the cookie `/` reads; `auto` removes it (set-12)', () => {
-		// `/` runs on the Worker and cannot see localStorage: without the cookie
-		// a person who chose Deutsch landed on their Accept-Language instead.
+	it('a pinned language is kept in storage alone — never a cookie (spec 006, set-12)', () => {
+		// The locale page reads the pin before its first paint (`app.html`);
+		// nothing about the person's choice goes to a server.
 		const doc: ReturnType<typeof fakeDocument> & { cookie?: string } = fakeDocument();
-		vi.stubGlobal('localStorage', fakeLocalStorage({ [PREF_KEYS.language]: 'ja' }));
+		const store = fakeLocalStorage({ [PREF_KEYS.language]: 'ja' });
+		vi.stubGlobal('localStorage', store);
 		vi.stubGlobal('document', doc);
 		preferences.boot();
-		// A pin made before the cookie existed reaches `/` on the next visit.
-		expect(doc.cookie).toMatch(/^vela_lang=ja;/);
 		preferences.setLanguage('de');
-		expect(doc.cookie).toMatch(/^vela_lang=de;/);
+		expect(store.getItem(PREF_KEYS.language)).toBe('de');
 		preferences.setLanguage('auto');
-		expect(doc.cookie).toMatch(/^vela_lang=; Max-Age=0;/);
+		expect(store.getItem(PREF_KEYS.language)).toBe('auto');
+		expect(doc.cookie).toBeUndefined();
 	});
 
 	it('a theme chosen in another tab reaches this one', () => {

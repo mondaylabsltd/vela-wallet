@@ -152,6 +152,12 @@ export function approvalDetail(action: IntentAction, ctx: DetailContext): string
 			return network(action.chain_id, ctx);
 		case 'set_network_endpoint':
 			return `${network(action.chain_id, ctx)} · ${m.fields[action.field] ?? action.field}${to(action.url)}`;
+		case 'set_only_my_node':
+			// "Gnosis (100) · Only use my node: Off" — either way is the person's.
+			return `${network(action.chain_id, ctx)} · ${fill(m.pair, {
+				label: m.onlyMine,
+				value: action.on ? m.on : m.off
+			})}`;
 		case 'set_service_endpoint':
 			return `${m.services[action.field] ?? action.field}${to(action.url)}`;
 		case 'set_provider_key': {

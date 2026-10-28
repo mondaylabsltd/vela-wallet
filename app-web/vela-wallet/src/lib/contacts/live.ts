@@ -133,11 +133,17 @@ function toContactModel(contact: Contact, view: ContactsView, identicon: Identic
  * The core's A–Z directory, narrowed by the search box: each section keeps
  * the rows that match, in the core's order, and a letter the search empties
  * is dropped (an empty letter header is the shell's to avoid).
+ *
+ * Round 3: with `favoritesTitle`, the person's favourites come first, under
+ * that heading, in the book's order — and stay in their letters too, where a
+ * search or the A–Z rail finds them. Not while searching: the matches are
+ * the list then.
  */
 export function letterSections(
 	view: ContactsView,
 	identicon: Identicon,
-	query: string
+	query: string,
+	favoritesTitle?: string
 ): LetterSectionModel[] {
 	const q = query.trim().toLowerCase();
 	const matches = (c: Contact) =>
@@ -155,6 +161,12 @@ export function letterSections(
 				contacts.push(toContactModel(contact, view, identicon));
 		}
 		if (contacts.length > 0) out.push({ letter: section.letter, contacts });
+	}
+	if (favoritesTitle !== undefined && q === '') {
+		const favorites = view.contacts
+			.filter((c) => c.favorite)
+			.map((c) => toContactModel(c, view, identicon));
+		if (favorites.length > 0) out.unshift({ letter: favoritesTitle, contacts: favorites });
 	}
 	return out;
 }
@@ -263,7 +275,14 @@ export function liveContactDetail(
 		emptyActivity: items.length === 0 ? m.noActivity : undefined,
 		editLabel: m.edit,
 		deleteLabel: m.deleteContact,
-		nameAction: nameAction(contact, m)
+		nameAction: nameAction(contact, m),
+		favorite: {
+			on: contact.favorite,
+			label: contact.favorite ? m.favoriteRemove : m.favoriteAdd
+		},
+		...(contact.note !== null && contact.note.trim() !== ''
+			? { note: { label: m.noteLabel, text: contact.note.trim() } }
+			: {})
 	};
 }
 
@@ -330,7 +349,7 @@ export function buildContactsLive(
 		}
 	}
 
-	const sections = letterSections(view, identicon, ui.query);
+	const sections = letterSections(view, identicon, ui.query, m.sectionFavorites);
 	const list: ContactsListModel = {
 		pending: !view.loaded,
 		search: { placeholder: m.searchPlaceholder, query: ui.query === '' ? undefined : ui.query },
@@ -402,7 +421,9 @@ export function buildContactsDesktopLive(
 			newGroup: m.groupNew
 		},
 		sections:
-			selectedGroup === undefined && !empty ? letterSections(view, identicon, ui.query) : [],
+			selectedGroup === undefined && !empty
+				? letterSections(view, identicon, ui.query, m.sectionFavorites)
+				: [],
 		group,
 		empty: empty ? emptyModel(m) : undefined,
 		detail:

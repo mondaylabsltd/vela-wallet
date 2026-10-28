@@ -9,7 +9,8 @@
 	interface Props {
 		title?: string;
 		back?: { label: string; onclick?: () => void };
-		trailing?: { icon: UtilityIconId; label: string; onclick?: () => void }[];
+		/** `pressed`: a toggle (the contact's star), said as one (`aria-pressed`). */
+		trailing?: { icon: UtilityIconId; label: string; pressed?: boolean; onclick?: () => void }[];
 	}
 
 	let { title, back, trailing = [] }: Props = $props();
@@ -25,8 +26,16 @@
 		<h1>{title}</h1>
 	{/if}
 	<span class="spacer"></span>
-	{#each trailing as item (item.label)}
-		<button type="button" class="icon-button" aria-label={item.label} onclick={item.onclick}>
+	<!-- By position: a toggle's name changes with its state, and keyed by it
+	     the button would be redrawn — and lose the focus — on every press. -->
+	{#each trailing as item, i (i)}
+		<button
+			type="button"
+			class="icon-button"
+			aria-label={item.label}
+			aria-pressed={item.pressed}
+			onclick={item.onclick}
+		>
 			<Icon icon={UTILITY_ICONS[item.icon]} size="lg" />
 		</button>
 	{/each}

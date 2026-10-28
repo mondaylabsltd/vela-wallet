@@ -82,7 +82,11 @@
       "checkSafe": "Hợp đồng Safe L2",
       "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} hợp đồng còn lại",
-      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
+      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
+      "discardTitle": "Bỏ mạng này?",
+      "discardBody": "Những gì bạn đã nhập ở đây sẽ mất.",
+      "discardConfirm": "Bỏ",
+      "discardCancel": "Tiếp tục sửa"
     },
     "treasury": {
       "modalTitle": "Ngân quỹ",

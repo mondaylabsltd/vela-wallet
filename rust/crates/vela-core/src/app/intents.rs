@@ -171,10 +171,14 @@ pub enum Action {
     SetPreference {
         preference: Preference,
     },
-    /// Add a contact, or rename one.
+    /// Add a contact, or rename one — and, given, set its note (an empty
+    /// one clears it). Absent, the note stays as it is.
     SaveContact {
         address: String,
         name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        note: Option<String>,
     },
     DeleteContact {
         address: String,
@@ -297,6 +301,14 @@ pub enum Action {
         field: NetOverrideField,
         url: String,
     },
+    /// "Only use my node" on one network whose RPC is the person's own: on,
+    /// nothing about the account goes to public nodes there; off, public
+    /// nodes stand in when that node does not answer. Either way the person
+    /// approves it — which nodes may hear about the account is theirs.
+    SetOnlyMyNode {
+        chain_id: u32,
+        on: bool,
+    },
     /// Remove a network the person added (the built-in ones stay).
     RemoveNetwork {
         chain_id: u32,
@@ -404,7 +416,7 @@ const fn person_only(action: &'static str, description: &'static str) -> Entry {
 /// Every action, in one place: name, risk, and who may ask for it. The risk of
 /// an [`Action`] value is read from here, so a scale and its catalog cannot
 /// disagree.
-const CATALOG: [Entry; 42] = [
+const CATALOG: [Entry; 43] = [
     entry(
         "show",
         Risk::Operate,
@@ -533,6 +545,11 @@ const CATALOG: [Entry; 42] = [
         "set_network_endpoint",
         Risk::Manage,
         "Change one network's RPC or explorer URL. An RPC reporting another chain is refused; empty restores the default.",
+    ),
+    entry(
+        "set_only_my_node",
+        Risk::Manage,
+        "Turn \"Only use my node\" on or off for a network whose RPC is the person's own (networks[].own_node). On: nothing about the account goes to public nodes on that network, and it cannot be read while that node is down. Off: public nodes stand in when it does not answer. The person approves it first.",
     ),
     entry(
         "remove_network",
@@ -723,7 +740,15 @@ fn input_schema(kind: &str) -> serde_json::Value {
             object(json!({ "address": address }), &["address"])
         }
         "save_contact" => object(
-            json!({ "address": address, "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS } }),
+            json!({
+                "address": address,
+                "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS },
+                "note": {
+                    "type": "string",
+                    "maxLength": NOTE_MAX_CHARS,
+                    "description": "The contact's note. Absent: kept as it is; empty: cleared."
+                }
+            }),
             &["address", "name"],
         ),
         "save_group" => object(
@@ -825,6 +850,13 @@ fn input_schema(kind: &str) -> serde_json::Value {
             }),
             &["chain_id", "field", "url"],
         ),
+        "set_only_my_node" => object(
+            json!({
+                "chain_id": { "type": "integer", "minimum": 1 },
+                "on": { "type": "boolean" }
+            }),
+            &["chain_id", "on"],
+        ),
         "remove_network" => object(
             json!({ "chain_id": { "type": "integer", "minimum": 1 } }),
             &["chain_id"],
@@ -917,6 +949,7 @@ impl Action {
             Self::SetContactFavorite { .. } => "set_contact_favorite",
             Self::AddNetwork { .. } => "add_network",
             Self::SetNetworkEndpoint { .. } => "set_network_endpoint",
+            Self::SetOnlyMyNode { .. } => "set_only_my_node",
             Self::RemoveNetwork { .. } => "remove_network",
             Self::SetProviderKey { .. } => "set_provider_key",
             Self::SetServiceEndpoint { .. } => "set_service_endpoint",
@@ -1101,6 +1134,10 @@ fn named(value: &str, what: &str) -> Result<(), Reason> {
 /// a full name or a company's, not for a page of text.
 pub const NAME_MAX_CHARS: usize = 64;
 
+/// The longest note a contact may carry, in characters: a line or two
+/// about who this is, not a document.
+pub const NOTE_MAX_CHARS: usize = 280;
+
 /// The characters that reorder the text around them (Unicode's
 /// bidirectional controls): in a name they can make "Bob" read as someone
 /// else's, or run an address backwards.
@@ -1129,6 +1166,26 @@ fn person_name(value: &str, what: &str) -> Result<(), Reason> {
     }
     if name.chars().any(char::is_control) {
         return invalid(format!("{what} must not contain control characters"));
+    }
+    Ok(())
+}
+
+/// A contact's note: at most [`NOTE_MAX_CHARS`], line breaks allowed, and
+/// nothing that reorders the text around it or is not text. Empty clears it.
+fn contact_note(value: &str) -> Result<(), Reason> {
+    let note = value.trim();
+    if note.chars().count() > NOTE_MAX_CHARS {
+        return invalid(format!(
+            "a contact's note is too long: at most {NOTE_MAX_CHARS} characters"
+        ));
+    }
+    if note.chars().any(is_bidi_control) {
+        return invalid(
+            "a contact's note must not contain characters that reorder the text (bidirectional controls)",
+        );
+    }
+    if note.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+        return invalid("a contact's note must not contain control characters");
     }
     Ok(())
 }
@@ -1209,7 +1266,10 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         Action::SaveContact {
             address: value,
             name,
-        } => address(value).and_then(|()| person_name(name, "a contact's name")),
+            note,
+        } => address(value)
+            .and_then(|()| person_name(name, "a contact's name"))
+            .and_then(|()| note.as_deref().map_or(Ok(()), contact_note)),
         Action::SaveGroup { id, name } => {
             if let Some(id) = id {
                 named(id, "group id")?;
@@ -1294,7 +1354,9 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
                 web_url(url)
             }
         }
-        Action::RemoveNetwork { chain_id } => chain_named(*chain_id),
+        Action::RemoveNetwork { chain_id } | Action::SetOnlyMyNode { chain_id, .. } => {
+            chain_named(*chain_id)
+        }
         Action::SetProviderKey { key, .. } => {
             if key.chars().any(char::is_whitespace) && !key.trim().is_empty() {
                 invalid("a key has no spaces in it")
@@ -1629,6 +1691,7 @@ pub fn shows(action: &Action) -> Option<Screen> {
         Action::ClearStorageItem { .. } | Action::ClearCaches => settings("storage"),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
+        | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. } => settings("networks"),
         Action::SetProviderKey { .. } => settings("rpc-providers"),
         Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => settings("endpoints"),

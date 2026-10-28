@@ -192,6 +192,8 @@ export type SettingsOverlayId =
 	| 'remove-network'
 	/** Spec 072: resetting the service endpoints, asked before it happens. */
 	| 'reset-endpoints'
+	/** set-5: leaving the add-network wizard with something entered, asked first. */
+	| 'discard-add-network'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -478,10 +480,16 @@ export interface AddNetworkModel {
 	recheck?: string;
 	/**
 	 * Spec 105: the space the network goes to, the person's choice, shown
-	 * when the network may be added. Preselected to testnet unless the chain
-	 * registry calls it a mainnet.
+	 * when the network may be added. Preselected from what the chain registry
+	 * says the chain is (set-5, the core's rule); a testnet when it says nothing.
 	 */
 	space?: SegmentedModel;
+	/**
+	 * set-5: the question leaving asks while the wizard holds something the
+	 * person entered — a search, a chosen network, an RPC. Absent when there
+	 * is nothing to lose: leaving then just leaves.
+	 */
+	discard?: ConfirmSheetModel;
 }
 
 export interface ProviderCardModel {

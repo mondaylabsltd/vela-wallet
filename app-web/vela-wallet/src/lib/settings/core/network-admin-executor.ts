@@ -235,7 +235,12 @@ function decodeRawChainData(data: unknown): NetRawChainData | null {
 					e !== null && typeof e === 'object' ? asString((e as Record<string, unknown>).url) : ''
 				)
 			: [],
-		testnet: r.testnet === true
+		testnet: r.testnet === true,
+		// set-5: SLIP-44 coin type 1 marks a test network; what it means is the core's.
+		...(typeof r.slip44 === 'number' &&
+			Number.isInteger(r.slip44) &&
+			r.slip44 >= 0 &&
+			r.slip44 <= MAX_CHAIN_ID && { slip44: r.slip44 })
 	};
 }
 

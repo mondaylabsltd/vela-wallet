@@ -320,6 +320,11 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addTitle: k('contacts.addTitle'),
 		saveToContacts: k('contacts.saveToContacts'),
 		editTitle: k('contacts.editTitle'),
+		sectionFavorites: k('contacts.sectionFavorites'),
+		favoriteAdd: k('contacts.favoriteAdd'),
+		favoriteRemove: k('contacts.favoriteRemove'),
+		noteLabel: k('contacts.noteLabel'),
+		notePlaceholder: k('contacts.notePlaceholder'),
 		nameLabel: k('contacts.nameLabel'),
 		namePlaceholder: k('contacts.namePlaceholder'),
 		addressPlaceholder: k('contacts.addressPlaceholder'),
@@ -670,6 +675,12 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
 			testnet: k('settingsModals.addNetwork.testnet'),
+			discard: {
+				title: k('settingsModals.addNetwork.discardTitle'),
+				body: k('settingsModals.addNetwork.discardBody'),
+				confirm: k('settingsModals.addNetwork.discardConfirm'),
+				cancel: k('settingsModals.addNetwork.discardCancel')
+			},
 			bestRpc: k('settingsModals.addNetwork.bestRpc'),
 			// A product name, not prose — the corpus has no key for it and should
 			// not: translating "EntryPoint v0.7" would make the checklist lie.
@@ -1146,6 +1157,8 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			fiat_rates: detail('fiatRates')
 		},
 		fields: { rpc: detail('rpc'), explorer: detail('explorer') },
+		// The switch's own name on the network's page, so the two agree.
+		onlyMine: k('settingsModals.network.onlyMine'),
 		actions: {
 			show: action('show'),
 			switch_account: action('switchAccount'),
@@ -1173,6 +1186,7 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			set_contact_favorite: action('setContactFavorite'),
 			add_network: action('addNetwork'),
 			set_network_endpoint: action('setNetworkEndpoint'),
+			set_only_my_node: action('setOnlyMyNode'),
 			remove_network: action('removeNetwork'),
 			set_provider_key: action('setProviderKey'),
 			set_service_endpoint: action('setServiceEndpoint'),

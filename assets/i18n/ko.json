@@ -162,6 +162,7 @@
     "setContactFavorite": "즐겨찾기 변경",
     "addNetwork": "네트워크 추가",
     "setNetworkEndpoint": "네트워크 RPC 또는 탐색기 변경",
+    "setOnlyMyNode": "‘내 노드만 사용’ 변경",
     "removeNetwork": "네트워크 제거",
     "setProviderKey": "RPC 제공자 키 변경",
     "setServiceEndpoint": "서비스 엔드포인트 변경",
@@ -2255,7 +2256,11 @@
    "checkSafe": "Safe L2 컨트랙트",
    "checkSigner": "P-256 프리컴파일",
    "checkRemaining": "나머지 컨트랙트 {{count}}개",
-   "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다."
+   "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다.",
+   "discardTitle": "이 네트워크 추가를 취소할까요?",
+   "discardBody": "여기에 입력한 내용이 사라집니다.",
+   "discardConfirm": "취소하기",
+   "discardCancel": "계속 편집"
   },
   "treasury": {
    "modalTitle": "트레저리",
@@ -2299,6 +2304,10 @@
   "searchPlaceholder": "이름, ENS 또는 주소 검색",
   "filterAll": "전체",
   "sectionFavorites": "즐겨찾기",
+  "favoriteAdd": "즐겨찾기에 추가",
+  "favoriteRemove": "즐겨찾기에서 제거",
+  "noteLabel": "메모",
+  "notePlaceholder": "선택 사항 · 나만 볼 수 있어요",
   "sectionRecent": "최근",
   "sectionSaved": "저장됨",
   "empty": "아직 연락처가 없습니다",

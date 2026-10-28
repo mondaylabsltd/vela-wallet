@@ -162,6 +162,7 @@
     "setContactFavorite": "Favoriten ändern",
     "addNetwork": "Netzwerk hinzufügen",
     "setNetworkEndpoint": "RPC oder Explorer eines Netzwerks ändern",
+    "setOnlyMyNode": "„Nur meinen Knoten verwenden“ ändern",
     "removeNetwork": "Netzwerk entfernen",
     "setProviderKey": "RPC-Anbieter-Schlüssel ändern",
     "setServiceEndpoint": "Dienst-Endpunkt ändern",
@@ -2255,7 +2256,11 @@
    "checkSafe": "Safe-L2-Verträge",
    "checkSigner": "P-256-Precompile",
    "checkRemaining": "{{count}} weitere Verträge",
-   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal."
+   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
+   "discardTitle": "Dieses Netzwerk verwerfen?",
+   "discardBody": "Was du hier eingegeben hast, geht verloren.",
+   "discardConfirm": "Verwerfen",
+   "discardCancel": "Weiter bearbeiten"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -2299,6 +2304,10 @@
   "searchPlaceholder": "Name, ENS oder Adresse suchen",
   "filterAll": "Alle",
   "sectionFavorites": "Favoriten",
+  "favoriteAdd": "Zu Favoriten hinzufügen",
+  "favoriteRemove": "Aus Favoriten entfernen",
+  "noteLabel": "Notiz",
+  "notePlaceholder": "Optional – nur für dich sichtbar",
   "sectionRecent": "Kürzlich",
   "sectionSaved": "Gespeichert",
   "empty": "Noch keine Kontakte",

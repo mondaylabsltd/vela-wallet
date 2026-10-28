@@ -169,7 +169,39 @@ describe('buildContactsLive', () => {
 		expect(model.screen).toBe('list');
 		expect(model.list?.groups[0]).toMatchObject({ id: 'g1', name: 'Payroll', count: '2' });
 		expect(model.list?.indexLetters).toHaveLength(27);
-		expect(model.list?.sections.map((s) => s.letter)).toEqual(['A', 'B', '#']);
+		// Round 3: Alice is a favourite — first, under its heading, and in her letter too.
+		expect(model.list?.sections.map((s) => s.letter)).toEqual([m.sectionFavorites, 'A', 'B', '#']);
+		expect(model.list?.sections[0].contacts.map((c) => c.name)).toEqual(['Alice']);
+	});
+
+	it('favourites come first only while nobody searches (round 3)', () => {
+		const searching = buildContactsLive(VIEW, m, identicon, { screen: 'list', query: 'ali' });
+		expect(searching.list?.sections.map((s) => s.letter)).toEqual(['A']);
+		const none = buildContactsLive(
+			{ ...VIEW, contacts: VIEW.contacts.map((c) => ({ ...c, favorite: false })) },
+			m,
+			identicon,
+			{ screen: 'list', query: '' }
+		);
+		expect(none.list?.sections.map((s) => s.letter)).toEqual(['A', 'B', '#']);
+	});
+
+	it('the detail carries the star, both ways, and the note when there is one (round 3)', () => {
+		const detail = (patch: Partial<Contact>) =>
+			buildContactsLive(
+				{ ...VIEW, contacts: VIEW.contacts.map((c) => (c === ALICE ? { ...c, ...patch } : c)) },
+				m,
+				identicon,
+				{ screen: 'detail', query: '', selectedAddress: ALICE.address }
+			).detail;
+		expect(detail({})?.favorite).toEqual({ on: true, label: m.favoriteRemove });
+		expect(detail({ favorite: false })?.favorite).toEqual({ on: false, label: m.favoriteAdd });
+		expect(detail({})?.note).toBeUndefined();
+		expect(detail({ note: '  ' })?.note).toBeUndefined();
+		expect(detail({ note: ' Pays in USDC\nMonthly ' })?.note).toEqual({
+			label: m.noteLabel,
+			text: 'Pays in USDC\nMonthly'
+		});
 	});
 
 	it('detail shows the selected contact with its group chips', () => {

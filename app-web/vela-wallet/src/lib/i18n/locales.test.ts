@@ -1,12 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
 	FALLBACK_LOCALE,
 	SUPPORTED_LOCALES,
-	languageCookie,
 	localeOfPath,
 	negotiate,
 	negotiateLanguages,
-	pinnedLocale,
+	pinnedLocaleTarget,
 	toLocale,
 	usesCjkFont
 } from './locales';
@@ -134,24 +134,78 @@ describe('negotiateLanguages — what "Follow system" follows (set-13)', () => {
 	});
 });
 
-describe('the pinned-language cookie `/` reads (set-12)', () => {
-	it('pins a supported tag in its canonical case, and clears for anything else', () => {
-		expect(languageCookie('zh-tw', true)).toBe(
-			'vela_lang=zh-TW; Max-Age=31536000; Path=/; SameSite=Lax; Secure'
-		);
-		expect(languageCookie('de', false)).toBe(
-			'vela_lang=de; Max-Age=31536000; Path=/; SameSite=Lax'
-		);
-		expect(languageCookie('auto', false)).toBe('vela_lang=; Max-Age=0; Path=/; SameSite=Lax');
-		expect(languageCookie('xx', false)).toBe('vela_lang=; Max-Age=0; Path=/; SameSite=Lax');
+describe('a pinned language, honoured by the locale page (set-12)', () => {
+	it('moves to the pinned locale, keeping the rest of the path', () => {
+		expect(pinnedLocaleTarget('/ja', 'de')).toBe('/de');
+		expect(pinnedLocaleTarget('/ja/wallet', 'zh-tw')).toBe('/zh-TW/wallet');
+		expect(pinnedLocaleTarget('/en/settings/', 'pt-BR')).toBe('/pt-BR/settings/');
 	});
 
-	it('reads the pin out of a Cookie header, and trusts only a supported tag', () => {
-		expect(pinnedLocale('a=1; vela_lang=ja; b=2')).toBe('ja');
-		expect(pinnedLocale('vela_lang=pt-br')).toBe('pt-BR');
-		expect(pinnedLocale('vela_lang=')).toBeUndefined();
-		expect(pinnedLocale('vela_lang=<script>')).toBeUndefined();
-		expect(pinnedLocale('other=ja')).toBeUndefined();
-		expect(pinnedLocale(null)).toBeUndefined();
+	it('stays for no pin, `auto`, an unknown tag, the same locale, or a path with no locale', () => {
+		expect(pinnedLocaleTarget('/ja/wallet', null)).toBeNull();
+		expect(pinnedLocaleTarget('/ja/wallet', 'auto')).toBeNull();
+		expect(pinnedLocaleTarget('/ja/wallet', 'xx')).toBeNull();
+		expect(pinnedLocaleTarget('/ja/wallet', 'JA')).toBeNull();
+		expect(pinnedLocaleTarget('/clientmcp', 'de')).toBeNull();
+		expect(pinnedLocaleTarget('/', 'de')).toBeNull();
+	});
+
+	/** The copy in `app.html`, run with a page's location and storage. */
+	function inline(
+		href: string,
+		pinned: string | null
+	): { replaced: string | null; hidden: boolean } {
+		const html = readFileSync(new URL('../../app.html', import.meta.url), 'utf8');
+		const block = html.slice(html.indexOf('/* set-12:begin */'), html.indexOf('/* set-12:end */'));
+		const url = new URL(href);
+		let replaced: string | null = null;
+		const style: Record<string, string> = {};
+		const location = {
+			protocol: url.protocol,
+			pathname: url.pathname,
+			search: url.search,
+			hash: url.hash,
+			replace: (to: string) => (replaced = to)
+		};
+		const storage = { getItem: (key: string) => (key === 'vela.language' ? pinned : null) };
+		new Function('location', 'localStorage', 'document', block)(location, storage, {
+			documentElement: { style }
+		});
+		return { replaced, hidden: style.visibility === 'hidden' };
+	}
+
+	it('is what app.html does before the first paint — hidden while it hops', () => {
+		const cases: Array<[string, string | null]> = [
+			['https://getvela.app/ja', 'de'],
+			['https://getvela.app/ja/wallet', 'zh-tw'],
+			['https://getvela.app/en/settings/', 'pt-BR'],
+			['https://getvela.app/ja/wallet', null],
+			['https://getvela.app/ja/wallet', 'auto'],
+			['https://getvela.app/ja/wallet', 'xx'],
+			['https://getvela.app/ja/wallet', 'ja'],
+			['https://getvela.app/clientmcp', 'de']
+		];
+		for (const [href, pinned] of cases) {
+			const url = new URL(href);
+			const target = pinnedLocaleTarget(url.pathname, pinned);
+			const ran = inline(href, pinned);
+			expect(ran.replaced).toBe(target);
+			expect(ran.hidden).toBe(target !== null);
+		}
+		// The query and the fragment ride along (campaign links, deep links).
+		expect(inline('https://getvela.app/ja/wallet?utm_source=x#top', 'fr').replaced).toBe(
+			'/fr/wallet?utm_source=x#top'
+		);
+		// The extension's pages have their own language doorways.
+		expect(inline('chrome-extension://abc/ja/wallet.html', 'de').replaced).toBeNull();
+	});
+
+	it('knows exactly the locales this build ships', () => {
+		const html = readFileSync(new URL('../../app.html', import.meta.url), 'utf8');
+		const block = html.slice(html.indexOf('/* set-12:begin */'), html.indexOf('/* set-12:end */'));
+		const list = block.slice(block.indexOf('['), block.indexOf(']') + 1);
+		expect(JSON.parse(list.replace(/'/g, '"').replace(/,\s*]/, ']'))).toEqual([
+			...SUPPORTED_LOCALES
+		]);
 	});
 });

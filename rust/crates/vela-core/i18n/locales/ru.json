@@ -162,6 +162,7 @@
         "setContactFavorite": "Изменить избранное",
         "addNetwork": "Добавить сеть",
         "setNetworkEndpoint": "Изменить RPC или обозреватель сети",
+        "setOnlyMyNode": "Изменить «Только мой узел»",
         "removeNetwork": "Удалить сеть",
         "setProviderKey": "Изменить ключ RPC-провайдера",
         "setServiceEndpoint": "Изменить адрес сервиса",

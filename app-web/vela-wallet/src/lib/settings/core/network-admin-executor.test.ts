@@ -250,3 +250,29 @@ describe('fetch_search_index', () => {
 		});
 	});
 });
+
+describe('fetch_chain_info', () => {
+	it('hands the core the document’s slip44, whose meaning is the core’s (set-5)', async () => {
+		const { fetchRawChainData } = await import('$lib/services/chain-registry');
+		const doc = (extra: Record<string, unknown>) => ({
+			chainId: 10200,
+			name: 'Gnosis Chiado Testnet',
+			nativeCurrency: { name: 'Chiado xDAI', symbol: 'XDAI', decimals: 18 },
+			rpc: ['https://rpc.chiadochain.net'],
+			explorers: [{ url: 'https://blockscout.chiadochain.net' }],
+			...extra
+		});
+		const read = async (extra: Record<string, unknown>) => {
+			vi.mocked(fetchRawChainData).mockResolvedValueOnce(doc(extra));
+			const result = await executeNetworkAdminOperation(
+				effect({ type: 'fetch_chain_info', chain_id: 10200 })
+			);
+			if (result.type !== 'chain_info') throw new Error('unreachable');
+			return result.data;
+		};
+		expect((await read({ slip44: 1 }))?.slip44).toBe(1);
+		expect(await read({})).not.toHaveProperty('slip44');
+		expect(await read({ slip44: 'one' })).not.toHaveProperty('slip44');
+		expect(await read({ slip44: -1 })).not.toHaveProperty('slip44');
+	});
+});

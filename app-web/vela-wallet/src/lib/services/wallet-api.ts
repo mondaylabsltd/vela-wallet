@@ -211,6 +211,21 @@ type TokenCacheEntry = {
 	 * `internal`: the subset whose read never left the app (PR 2 note 11).
 	 */
 	inFlightFailed?: Promise<FailedChains>;
+	/**
+	 * home-20: the in-flight round's streaming, for every caller — its first
+	 * caller and every one that joined it. The home's balance round used to
+	 * join a round the activity scan had started without `onProgress` and
+	 * heard nothing until the slowest network answered: a new wallet showed
+	 * no figure for 10 s while Gnosis had answered in one.
+	 */
+	inFlightProgress?: ProgressFanout;
+};
+
+/** One round's partial snapshots, handed to everyone listening to it. */
+type ProgressFanout = {
+	listeners: Set<(tokens: APIToken[]) => void>;
+	/** The latest snapshot, for a caller that joins after it was sent. */
+	last: APIToken[] | null;
 };
 
 const tokenCache = new Map<string, TokenCacheEntry>();
@@ -255,7 +270,15 @@ export async function fetchTokens(
 	// includeZeroBalance bypasses cache (different result set)
 	if (!options.forceRefresh && !options.includeZeroBalance && cached) {
 		if (cached.inFlight) {
-			const tokens = await cached.inFlight;
+			const fanout = cached.inFlightProgress;
+			const listen = options.onProgress;
+			if (fanout && listen) {
+				if (fanout.last) listen(cloneTokens(fanout.last));
+				fanout.listeners.add(listen);
+			}
+			const tokens = await cached.inFlight.finally(() => {
+				if (listen) fanout?.listeners.delete(listen);
+			});
 			const none: FailedChains = { failed: [], internal: [], registry: [] };
 			const { failed, internal, registry } =
 				(await cached.inFlightFailed?.catch(() => none)) ?? none;
@@ -267,13 +290,20 @@ export async function fetchTokens(
 
 	let partial = false;
 	let failedIds: FailedChains = { failed: [], internal: [], registry: [] };
+	const fanout: ProgressFanout = {
+		listeners: new Set(options.onProgress ? [options.onProgress] : []),
+		last: null
+	};
 	const request = fetchAllChainTokens(
 		address,
 		// The snapshot a chain falls back to when it does not answer. The
 		// zero-balance superset is a different result set with its own
 		// (uncached) shape, so it carries nothing over.
 		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
-		options.onProgress,
+		(tokens) => {
+			fanout.last = tokens;
+			for (const listen of [...fanout.listeners]) listen(cloneTokens(tokens));
+		},
 		(ids, internal, registry) => {
 			partial = ids.length > 0;
 			failedIds = { failed: ids, internal, registry };
@@ -289,7 +319,8 @@ export async function fetchTokens(
 			fetchedAt: cached?.fetchedAt ?? 0,
 			tokens: cached?.tokens ?? [],
 			inFlight: request,
-			inFlightFailed: requestFailed
+			inFlightFailed: requestFailed,
+			inFlightProgress: fanout
 		});
 	}
 

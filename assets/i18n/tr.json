@@ -162,6 +162,7 @@
     "setContactFavorite": "Favoriyi değiştir",
     "addNetwork": "Ağ ekle",
     "setNetworkEndpoint": "Bir ağın RPC veya gezginini değiştir",
+    "setOnlyMyNode": "“Yalnızca kendi düğümümü kullan” ayarını değiştir",
     "removeNetwork": "Ağı kaldır",
     "setProviderKey": "RPC sağlayıcı anahtarını değiştir",
     "setServiceEndpoint": "Hizmet uç noktasını değiştir",
@@ -2255,7 +2256,11 @@
    "checkSafe": "Safe L2 sözleşmeleri",
    "checkSigner": "P-256 ön derlemesi",
    "checkRemaining": "diğer {{count}} sözleşme",
-   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır."
+   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
+   "discardTitle": "Bu ağdan vazgeçilsin mi?",
+   "discardBody": "Burada girdikleriniz kaybolacak.",
+   "discardConfirm": "Vazgeç",
+   "discardCancel": "Düzenlemeye devam et"
   },
   "treasury": {
    "modalTitle": "Hazine",
@@ -2299,6 +2304,10 @@
   "searchPlaceholder": "İsim, ENS veya adres ara",
   "filterAll": "Tümü",
   "sectionFavorites": "Favoriler",
+  "favoriteAdd": "Favorilere ekle",
+  "favoriteRemove": "Favorilerden çıkar",
+  "noteLabel": "Not",
+  "notePlaceholder": "İsteğe bağlı — yalnızca siz görürsünüz",
   "sectionRecent": "Son kullanılanlar",
   "sectionSaved": "Kayıtlı",
   "empty": "Henüz kişi yok",

@@ -58,4 +58,37 @@ describe('ContactForm', () => {
 		save.click();
 		expect(onsave).toHaveBeenCalledWith({ name: 'Bob', address: GOOD });
 	});
+
+	// Round 3: the note field, where the caller gives it words (live).
+	it('edits the note — kept, changed, or emptied to clear it', async () => {
+		const onsave = vi.fn();
+		const screen = render(ContactForm, {
+			props: {
+				copy: { ...COPY, noteLabel: 'Note', notePlaceholder: 'Optional' },
+				initial: { name: 'Bob', address: GOOD, note: 'old' },
+				onsave
+			}
+		});
+		const note = screen.container.querySelector('textarea') as HTMLTextAreaElement;
+		expect(note.value).toBe('old');
+		note.value = ' Pays in USDC\nmonthly ‮';
+		note.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		(screen.container.querySelector('button') as HTMLButtonElement).click();
+		expect(onsave).toHaveBeenLastCalledWith({
+			name: 'Bob',
+			address: GOOD,
+			note: 'Pays in USDC\nmonthly'
+		});
+		note.value = '';
+		note.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		(screen.container.querySelector('button') as HTMLButtonElement).click();
+		expect(onsave).toHaveBeenLastCalledWith({ name: 'Bob', address: GOOD, note: '' });
+	});
+
+	it('has no note field where the caller gave it none (the gallery)', () => {
+		const screen = render(ContactForm, { props: { copy: COPY, onsave: () => {} } });
+		expect(screen.container.querySelector('textarea')).toBeNull();
+	});
 });
