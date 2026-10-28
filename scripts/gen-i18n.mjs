@@ -951,8 +951,10 @@ for (let i = 1; i < PATHS.length; i++) {
 //   lose — ob-2, 2026-10-28): + `onboarding.create.syncFailedNext` (the retry
 //   screen's countdown) and `settings.eraseDevice.{unsynced, unsyncedAck}`.
 //   2209 + 3 = 2212 leaves, 119 branches.
-if (PATHS.length !== 2331) fail(`expected 2331 paths (2212 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2212) fail(`expected 2212 leaf paths, got ${leafSet.size}`);
+// 2333 (the home says a wallet is saved here and still syncing, ob-2): +
+//   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
+if (PATHS.length !== 2333) fail(`expected 2333 paths (2214 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2214) fail(`expected 2214 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

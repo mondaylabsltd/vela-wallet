@@ -966,6 +966,24 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.summary).toContain('120');
 	});
 
+	it('says on its row that a wallet saved here has not synced yet (ob-2)', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const sheet = liveAccountsSheet(
+			{
+				rows,
+				activeIndex: 0,
+				balances: new Map(),
+				hidden: false,
+				currency: usd,
+				identicon: () => '',
+				unsynced: [{ address: rows[1]!.account.address.toLowerCase() }]
+			},
+			m.accounts
+		);
+		expect(m.accounts.syncing).toBe('Saved on this device · syncing…');
+		expect(sheet.rows.map((r) => r.note)).toEqual([undefined, m.accounts.syncing]);
+	});
+
 	// A multisig is an account: counted and summed with the Vela accounts,
 	// and the live total is the shown one's — never pinned on the Vela
 	// account beneath a multisig.

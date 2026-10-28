@@ -330,6 +330,8 @@ export interface AccountsSheetModel {
 		identiconSvg: string;
 		amount: string;
 		selected: boolean;
+		/** ob-2: a quiet line under the address — "saved on this device · syncing…". */
+		note?: string;
 	}[];
 	primary: string;
 	secondary: string;

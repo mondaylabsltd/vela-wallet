@@ -288,6 +288,8 @@
     "balanceDetailStatusPublicNodes": "正在使用公共節點",
     "nodeFallbackNotice": "你的 {{name}} 節點沒有回應，暫時改用公共節點。",
     "nodeFallbackOpen": "網路設定",
+    "syncingLine": "已儲存在這台裝置上 · 同步中…",
+    "syncStalledLine": "已儲存在這台裝置上 · 尚未同步",
     "totalUnpriced": "暫無價格",
     "allUnpriced": "你的代幣都無法取得價格。",
     "currencyUnavailable": "暫時無法取得 {{code}} 匯率——金額以美元顯示。"

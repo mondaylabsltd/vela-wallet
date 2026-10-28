@@ -2913,6 +2913,9 @@ mod tests {
     fn a_due_read_is_hedged_down_the_cores_own_queue() {
         let now = now_ms();
         let mut view = RpcPoolView {
+            fallback_chains: Vec::new(),
+            own_node_unreached_chains: Vec::new(),
+            own_only_chains: Vec::new(),
             failed_chains: Vec::new(),
             rate_limited_chains: Vec::new(),
             banned: vec![RpcBanEntry {

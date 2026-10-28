@@ -747,6 +747,10 @@ pub struct WalletPage {
     /// telling somebody their machine is clean while their history is still on
     /// it is the one outcome this feature cannot have.
     erase_failed: Option<Vec<String>>,
+    /// ob-2: the person ticked that a wallet not yet synced may be lost for
+    /// good. The erase's confirm waits for it while one is; any close of the
+    /// dialog takes it back.
+    erase_ack: bool,
     /// Which network row DST4 has expanded in place, if any.
     ///
     /// A `SharedString` rather than a `&'static str` since spec 030: the ids
@@ -1908,6 +1912,7 @@ impl WalletPage {
             settings_page: SettingsPage::Account,
             settings_dialog: None,
             erase_failed: None,
+            erase_ack: false,
             settings_expanded_network: None,
             settings_open_dropdown: None,
             group: None,
@@ -3843,6 +3848,7 @@ impl WalletPage {
     fn close_settings_dialog(&mut self, cx: &mut Context<Self>) {
         let was_add = self.settings_dialog == Some(SettingsDialog::AddNetwork);
         self.settings_dialog = None;
+        self.erase_ack = false;
         if was_add && self.identity.is_some() {
             resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
                 resident.dispatch(NetEvent::WizardReset, cx);
@@ -14510,16 +14516,41 @@ impl WalletPage {
         let failed = self.erase_failed.as_ref().map(|left| {
             gpui::SharedString::from(format!("{} ({})", s.erase_failed, left.join(", ")))
         });
-        let mut body = div()
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .child(
-                div()
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .child(crate::ui::prose(desc)),
-            )
+        // ob-2: erasing means everything, the pending-upload outbox too — so a
+        // wallet not yet synced, which no other device can find, is named
+        // here, and the confirm waits for the person to tick that they know.
+        let unsynced: Vec<String> = session::view(cx)
+            .unsynced
+            .iter()
+            .map(|wallet| {
+                if wallet.name.trim().is_empty() {
+                    wallet.address.clone()
+                } else {
+                    wallet.name.clone()
+                }
+            })
+            .collect();
+        let warning = (!unsynced.is_empty()).then(|| {
+            gpui::SharedString::from(s.erase_unsynced.replace("{{names}}", &unsynced.join(", ")))
+        });
+        let ack_text = s.erase_unsynced_ack.clone();
+        let acked = self.erase_ack;
+        let blocked = warning.is_some() && !acked;
+        let mut body = div().flex().flex_col().gap(px(16.)).child(
+            div()
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_base)
+                .child(crate::ui::prose(desc)),
+        );
+        if let Some(warning) = warning.clone() {
+            body = body.child(callout(
+                theme,
+                &mut self.icons,
+                CalloutTone::Danger,
+                warning,
+            ));
+        }
+        body = body
             .child(
                 div()
                     .text_size(theme::text_row_sub())
@@ -14530,6 +14561,37 @@ impl WalletPage {
         if let Some(failed) = failed {
             body = body.child(callout(theme, &mut self.icons, CalloutTone::Danger, failed));
         }
+        if warning.is_some() {
+            // A box and its words, one target: the check is a selected
+            // state, so it is drawn in the neutral ink, never the accent.
+            body = body.child(
+                div()
+                    .id("settings-erase-ack")
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.erase_ack = !this.erase_ack;
+                        cx.notify();
+                    }))
+                    .child(
+                        div()
+                            .size(px(18.))
+                            .flex_none()
+                            .rounded(px(4.))
+                            .border_1()
+                            .border_color(theme.outline_strong)
+                            .when(acked, |this| this.bg(theme.fg_base)),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_base)
+                            .child(ack_text),
+                    ),
+            );
+        }
         body.child(
             div()
                 .id("settings-erase-confirm")
@@ -14538,12 +14600,18 @@ impl WalletPage {
                 .flex()
                 .items_center()
                 .justify_center()
-                .cursor_pointer()
+                .when(!blocked, |this| this.cursor_pointer())
+                .when(blocked, |this| this.opacity(0.5))
                 .bg(theme.error_base)
                 .text_size(theme::text_button())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_inverse)
-                .on_click(cx.listener(|_, _, _, cx| {
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    // ob-2: not before the person has ticked that an unsynced
+                    // wallet may be lost for good.
+                    if blocked {
+                        return;
+                    }
                     // Through the intents (spec 103): `agent_erase` runs the
                     // same sweep, and this dialog shows how it ended.
                     crate::agent::invoke_person(Action::EraseDevice, cx);

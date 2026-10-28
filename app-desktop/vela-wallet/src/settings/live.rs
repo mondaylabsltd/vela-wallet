@@ -729,6 +729,10 @@ mod tests {
         health: Option<NetProbeHealth>,
     ) -> NetNetworkRow {
         NetNetworkRow {
+            rpc_url_refused: false,
+            explorer_url_refused: false,
+            own_rpc: false,
+            only_mine: false,
             id: format!("chain-{chain_id}"),
             chain_id,
             display_name: name.to_owned(),
@@ -1463,6 +1467,10 @@ mod wizard_tests {
     fn row(mismatch: Option<(u32, u32)>, deferred: bool) -> NetNetworkRow {
         use vela_core::app::network_admin::NetChainMismatch;
         NetNetworkRow {
+            rpc_url_refused: false,
+            explorer_url_refused: false,
+            own_rpc: false,
+            only_mine: false,
             id: "chain-100".to_owned(),
             chain_id: 100,
             display_name: "Gnosis".to_owned(),

@@ -688,7 +688,8 @@
 			identicon: identiconSvgForClient,
 			others: multisig.accounts.map((a) => a.address),
 			// home-9: no figure for test coins in the testnet space.
-			noValue: networkSpace.testnet
+			noValue: networkSpace.testnet,
+			unsynced: view.unsynced
 		};
 	});
 

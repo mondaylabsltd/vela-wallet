@@ -329,6 +329,7 @@ mod tests {
 
     fn view(contacts: Vec<Contact>) -> ContactsView {
         ContactsView {
+            save_failed: false,
             loaded: true,
             sections: vela_core::app::contacts::section_contacts(&contacts),
             contacts,

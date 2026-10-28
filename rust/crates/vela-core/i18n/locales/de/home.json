@@ -288,6 +288,8 @@
     "balanceDetailStatusPublicNodes": "Öffentliche Knoten in Verwendung",
     "nodeFallbackNotice": "Dein Knoten für {{name}} antwortet nicht; vorerst werden öffentliche Knoten verwendet.",
     "nodeFallbackOpen": "Netzwerkeinstellungen",
+    "syncingLine": "Auf diesem Gerät gespeichert · wird synchronisiert…",
+    "syncStalledLine": "Auf diesem Gerät gespeichert · noch nicht synchronisiert",
     "totalUnpriced": "Noch kein Preis",
     "allUnpriced": "Für keinen deiner Token konnte ein Preis ermittelt werden.",
     "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar."

@@ -31,6 +31,7 @@ fn on() -> Grants {
         wallets: vec![MINE.to_owned(), ALICE.to_owned()],
         wallet: MINE.to_owned(),
         device_wallets: vec![MINE.to_owned(), ALICE.to_owned()],
+        unsynced_wallets: Vec::new(),
     }
 }
 
@@ -1283,6 +1284,49 @@ fn a_wallet_not_on_the_list_is_not_the_agents_to_remove_or_erase() {
         authorize(Actor::Person, &Action::EraseDevice, &signed_out),
         Decision::Allow
     );
+}
+
+/// ob-2: while a wallet on this device has not finished syncing, erasing may
+/// lose it for good — so the agent's erase is refused outright, never put to
+/// an approval tap, and the refusal names the wallet and where the person can
+/// do it themselves. The person's own erase stays theirs.
+#[test]
+fn an_agent_never_erases_a_wallet_not_yet_synced() {
+    let owed = Grants {
+        unsynced_wallets: vec!["Everyday".to_owned(), "  ".to_owned()],
+        ..on()
+    };
+    match authorize(Actor::Agent, &Action::EraseDevice, &owed) {
+        Decision::Deny { reason } => {
+            assert_eq!(reason.code, ReasonCode::UnsyncedWallets);
+            assert!(reason.detail.contains("Everyday"), "{}", reason.detail);
+            assert!(reason.detail.contains("Settings"), "{}", reason.detail);
+        }
+        other => panic!("refused, not approved: {other:?}"),
+    }
+    assert_eq!(
+        serde_json::to_value(ReasonCode::UnsyncedWallets).expect("serializes"),
+        serde_json::json!("unsynced_wallets")
+    );
+    // Only the erase: everything else is as it was.
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::ClearCaches, &owed),
+        Decision::Approve { .. }
+    ));
+    // The person's own erase is theirs: their sheet carries the warning.
+    assert_eq!(
+        authorize(Actor::Person, &Action::EraseDevice, &owed),
+        Decision::Allow
+    );
+    // A blank name is no wallet.
+    let blank = Grants {
+        unsynced_wallets: vec![String::new()],
+        ..on()
+    };
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::EraseDevice, &blank),
+        Decision::Approve { .. }
+    ));
 }
 
 /// A contact's or a group's name is a name: at most 64 characters, and no

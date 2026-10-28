@@ -441,6 +441,8 @@ export interface SettingsMessages {
 		removeBody: string;
 		/** That question's way out (ob-5: the button was drawn with no words). */
 		cancel: string;
+		/** ob-2: under a row saved here that has not synced yet — the home's line. */
+		syncing: string;
 	};
 	signOut: {
 		button: string;

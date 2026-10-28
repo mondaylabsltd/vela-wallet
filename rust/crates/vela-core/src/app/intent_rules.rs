@@ -85,6 +85,16 @@ pub struct SessionFacts {
     pub accounts: Vec<AccountRowFacts>,
     pub allowed_route: String,
     pub sign_out: Option<Value>,
+    /// ob-2: the wallets saved here whose registration has not landed.
+    pub unsynced: Vec<UnsyncedFacts>,
+}
+
+/// `SessionUnsynced`, as read here.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct UnsyncedFacts {
+    pub name: String,
+    pub address: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -502,6 +512,19 @@ pub fn grants(world: &World) -> super::intents::Grants {
                     .map(|row| row.account.address.clone())
             })
             .chain(world.multisigs.iter().map(|m| m.address.clone()))
+            .collect(),
+        // ob-2: what an erase may lose for good, by the name the person knows.
+        unsynced_wallets: world
+            .session
+            .iter()
+            .flat_map(|session| session.unsynced.iter())
+            .map(|wallet| {
+                if wallet.name.trim().is_empty() {
+                    wallet.address.clone()
+                } else {
+                    wallet.name.clone()
+                }
+            })
             .collect(),
     }
 }

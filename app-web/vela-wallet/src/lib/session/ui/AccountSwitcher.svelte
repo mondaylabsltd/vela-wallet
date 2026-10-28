@@ -70,7 +70,8 @@
 		identicon: identiconSvgForClient,
 		others: multisig.accounts.map((a) => a.address),
 		// home-9: the testnet space shows no figure for test coins, here too.
-		noValue: networkSpace.testnet
+		noValue: networkSpace.testnet,
+		unsynced: view.unsynced
 	}));
 
 	const sheet = $derived.by(() => {

@@ -29,6 +29,12 @@ export interface WalletHeaderModel {
 	 * that tells it from a Vela account, and the way to its settings.
 	 */
 	rule?: { label: string; title: string; href: string };
+	/**
+	 * ob-2: this wallet is saved on this device and its registration has not
+	 * landed — a quiet line under the address, and a retry once it has failed
+	 * a while (`retry`, absent while it is still trying on its own).
+	 */
+	sync?: { text: string; stalled: boolean; retry?: string };
 }
 
 /** `no-value`: the testnet space (spec 105) — nothing there has a fiat worth. */

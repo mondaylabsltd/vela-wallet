@@ -290,6 +290,8 @@
     "balanceDetailStatusPublicNodes": "In uso i nodi pubblici",
     "nodeFallbackNotice": "Il tuo nodo per {{name}} non risponde; per ora si usano i nodi pubblici.",
     "nodeFallbackOpen": "Impostazioni di rete",
+    "syncingLine": "Salvato su questo dispositivo · sincronizzazione…",
+    "syncStalledLine": "Salvato su questo dispositivo · non ancora sincronizzato",
     "totalUnpriced": "Ancora nessun prezzo",
     "allUnpriced": "Non è stato possibile ottenere il prezzo di nessuno dei tuoi token.",
     "currencyUnavailable": "Al momento non è possibile caricare i tassi in {{code}}: gli importi sono in dollari USA."

@@ -1483,6 +1483,9 @@ mod tests {
 
     fn view(stage: CreateStage, busy: bool, status: Option<StatusKey>) -> CreateView {
         CreateView {
+            can_cancel: false,
+            name_bytes: 0,
+            name_limit: u32::try_from(vela_core::app::MAX_USER_NAME_BYTES).unwrap_or(u32::MAX),
             stage,
             name: String::new(),
             name_editable: true,

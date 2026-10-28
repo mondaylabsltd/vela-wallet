@@ -408,6 +408,7 @@ mod tests {
 
     fn accepted_record(task_id: &str) -> vela_core::app::PendingUpload {
         vela_core::app::PendingUpload {
+            publish: None,
             id: "cred0".to_owned(),
             name: "Everyday wallet".to_owned(),
             public_key_hex: "04aa".to_owned(),

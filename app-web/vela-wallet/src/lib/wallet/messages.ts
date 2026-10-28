@@ -39,6 +39,14 @@ export interface WalletMessages {
 		 */
 		nodeFallback: string;
 		nodeFallbackOpen: string;
+		/**
+		 * ob-2: under the name of a wallet saved here whose registration has
+		 * not landed — "syncing…", then, once it has failed a while, "not
+		 * synced yet" with a retry.
+		 */
+		syncing: string;
+		syncStalled: string;
+		syncRetry: string;
 		/** Spec 038: nothing could be read and nothing is known. */
 		unreachable: string;
 		noPrice: string;
@@ -240,6 +248,9 @@ export const WALLET_KEYS = [
 	'home.currencyUnavailable',
 	'home.nodeFallbackNotice',
 	'home.nodeFallbackOpen',
+	'home.syncingLine',
+	'home.syncStalledLine',
+	'home.balanceDetailRetry',
 	'home.balanceDetailNoPrice',
 	'home.a11yHideBalance',
 	'home.a11yShowBalance',

@@ -86,7 +86,14 @@
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
+	import {
+		desktopWithIdentity,
+		desktopWithSync,
+		homeWithIdentity,
+		homeWithSync,
+		syncLine,
+		type WalletIdentity
+	} from '$lib/wallet/identity';
 	import { shownIdentity } from '$lib/multisig/core/shown';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
@@ -1880,24 +1887,36 @@
 				}
 			: model;
 	}
+	/** ob-2: the line under a wallet saved here that has not synced yet. */
+	const sync = $derived(
+		identity === null
+			? undefined
+			: syncLine(view.unsynced, identity.address, data.walletMessages.balance, session.syncRounds)
+	);
 	const liveHome = $derived(
 		identity === null
 			? data.home
-			: withWaiting(withLiveWallet(homeWithIdentity(data.home, identity), liveInputs))
+			: homeWithSync(
+					withWaiting(withLiveWallet(homeWithIdentity(data.home, identity), liveInputs)),
+					sync
+				)
 	);
 	const liveDesktop = $derived(
 		identity === null
 			? data.desktop
 			: withWaiting(
-					withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
-						customChainIds,
-						...liveInputs,
-						// Two things cannot occupy one column (founder, 2026-09-05: the
-						// token's detail and the picker were drawn side by side). While a
-						// flow holds the column the asset panel stays closed; the flow
-						// itself still reads `selectedToken` through `flowInputs`.
-						selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
-					})
+					withLiveWalletDesktop(
+						webNav(desktopWithSync(desktopWithIdentity(data.desktop, identity), sync)),
+						{
+							customChainIds,
+							...liveInputs,
+							// Two things cannot occupy one column (founder, 2026-09-05: the
+							// token's detail and the picker were drawn side by side). While a
+							// flow holds the column the asset panel stays closed; the flow
+							// itself still reads `selectedToken` through `flowInputs`.
+							selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
+						}
+					)
 				)
 	);
 

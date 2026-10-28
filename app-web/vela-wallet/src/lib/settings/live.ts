@@ -1328,6 +1328,8 @@ export interface LiveAccountsInput {
 	 * row and no total says a figure — the hero says none either.
 	 */
 	noValue?: boolean;
+	/** ob-2: the session's wallets saved here and not synced yet (`SessionView.unsynced`). */
+	unsynced?: readonly { address: string }[];
 }
 
 /** One account's total as its row draws it: the mask, the figure, or nothing yet. */
@@ -1362,9 +1364,12 @@ export function switcherBalances(
 	return balances;
 }
 
-function liveAccountRows(input: LiveAccountsInput) {
+function liveAccountRows(input: LiveAccountsInput, syncing: string) {
+	const unsynced = new Set((input.unsynced ?? []).map((wallet) => wallet.address.toLowerCase()));
 	return input.rows.map((row, position) => {
 		return {
+			// ob-2: saved here, not yet findable elsewhere — said on its row.
+			...(unsynced.has(row.account.address.toLowerCase()) ? { note: syncing } : {}),
 			name: row.account.name,
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
@@ -1414,7 +1419,7 @@ export function liveAccountsSheet(
 	return {
 		title: m.title,
 		summary: liveAccountsSummary(input, m),
-		rows: liveAccountRows(input),
+		rows: liveAccountRows(input, m.syncing),
 		primary: m.createNew,
 		secondary: m.signInExisting,
 		remove: m.remove,
@@ -1439,7 +1444,7 @@ export function withLiveAccounts(
 		accountsSheet: {
 			...model.accountsSheet,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input),
+			rows: liveAccountRows(input, m.accounts.syncing),
 			// ob-14: an account can be removed from Settings as from the
 			// header's switcher — the same ×, the same confirm.
 			remove: m.accounts.remove,
@@ -1460,7 +1465,7 @@ export function withLiveAccountsDesktop(
 		account: {
 			...model.account,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input),
+			rows: liveAccountRows(input, m.accounts.syncing),
 			remove: m.accounts.remove,
 			removeBody: m.accounts.removeBody,
 			removeCancel: m.accounts.cancel

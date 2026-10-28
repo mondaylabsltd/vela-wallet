@@ -186,6 +186,9 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			currencyUnavailable: k('home.currencyUnavailable'),
 			nodeFallback: k('home.nodeFallbackNotice'),
 			nodeFallbackOpen: k('home.nodeFallbackOpen'),
+			syncing: k('home.syncingLine'),
+			syncStalled: k('home.syncStalledLine'),
+			syncRetry: k('home.balanceDetailRetry'),
 			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
@@ -765,7 +768,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
 			removeBody: k('settings.account.removeBody'),
-			cancel: k('common.cancel')
+			cancel: k('common.cancel'),
+			syncing: k('home.syncingLine')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),

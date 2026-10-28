@@ -80,6 +80,9 @@
 				<span class="text">
 					<span class="name" class:active={row.selected}>{row.name}</span>
 					<span class="address">{row.addressDisplay}</span>
+					{#if row.note}
+						<span class="note">{row.note}</span>
+					{/if}
 				</span>
 				<span class="amount">{row.amount}</span>
 				{#if row.selected}
@@ -234,6 +237,11 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.note {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 	}
 

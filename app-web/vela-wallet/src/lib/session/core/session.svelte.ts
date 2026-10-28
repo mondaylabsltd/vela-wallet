@@ -53,7 +53,12 @@ class Session {
 	#waiting: (() => void)[] = [];
 	#watching = false;
 	#syncTimer: ReturnType<typeof setTimeout> | null = null;
-	#syncRound = 0;
+	/**
+	 * ob-2: how many of the widening retries have gone by while a wallet is
+	 * still owed — what the home's line reads to say "not synced yet" rather
+	 * than "syncing…" once it has failed a while. Back to 0 when none is owed.
+	 */
+	syncRounds = $state(0);
 
 	/**
 	 * Read storage and settle on a route. Idempotent — every screen that needs
@@ -135,14 +140,14 @@ class Session {
 		if (!view.unsynced.some((wallet) => wallet.retrying)) {
 			if (this.#syncTimer !== null) clearTimeout(this.#syncTimer);
 			this.#syncTimer = null;
-			this.#syncRound = 0;
+			this.syncRounds = 0;
 			return;
 		}
 		if (this.#syncTimer !== null) return;
-		const delay = SYNC_RETRY_MS[Math.min(this.#syncRound, SYNC_RETRY_MS.length - 1)];
-		this.#syncRound += 1;
+		const delay = SYNC_RETRY_MS[Math.min(this.syncRounds, SYNC_RETRY_MS.length - 1)];
 		this.#syncTimer = setTimeout(() => {
 			this.#syncTimer = null;
+			this.syncRounds += 1;
 			this.syncPending();
 			// The round may end without a new view; the chain must not.
 			this.#scheduleSync(this.view);
