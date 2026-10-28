@@ -1562,6 +1562,8 @@
    "cancel": "あとで"
   },
   "signing": {
+   "verdictBelow": "新しいチェック結果が下にあります ↓",
+   "verdictAbove": "新しいチェック結果が上にあります ↑",
    "loading": "読み込み中...",
    "signatureRequest": "署名リクエスト",
    "signing": "署名中...",

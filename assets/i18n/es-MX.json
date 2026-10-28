@@ -1569,6 +1569,8 @@
    "cancel": "Ahora no"
   },
   "signing": {
+   "verdictBelow": "Nuevo resultado de la verificación abajo ↓",
+   "verdictAbove": "Nuevo resultado de la verificación arriba ↑",
    "loading": "Cargando...",
    "signatureRequest": "Solicitud de firma",
    "signing": "Firmando...",

@@ -1562,6 +1562,8 @@
    "cancel": "다음에"
   },
   "signing": {
+   "verdictBelow": "아래에 새 확인 결과가 있어요 ↓",
+   "verdictAbove": "위에 새 확인 결과가 있어요 ↑",
    "loading": "불러오는 중...",
    "signatureRequest": "서명 요청",
    "signing": "서명 중...",

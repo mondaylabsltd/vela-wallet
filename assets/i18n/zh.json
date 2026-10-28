@@ -1562,6 +1562,8 @@
    "cancel": "暂不"
   },
   "signing": {
+   "verdictBelow": "下方有新的检查结果 ↓",
+   "verdictAbove": "上方有新的检查结果 ↑",
    "loading": "加载中...",
    "submitted": "已提交 — 等待链上确认",
    "historicalNote": "这是一条历史签名 — 与你当时确认的内容完全一致。",
