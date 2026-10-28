@@ -88,7 +88,8 @@
         "createAccountNote": "Una cuenta nueva, protegida por una passkey en este dispositivo.",
         "signInNote": "Una cuenta que ya tienes, con su passkey.",
         "createMultisigNote": "Una cuenta que comparten varios miembros: cada transferencia necesita suficientes aprobaciones.",
-        "addMultisigNote": "Con su dirección, o importa tus Safes desde Safe{Wallet}."
+        "addMultisigNote": "Con su dirección, o importa tus Safes desde Safe{Wallet}.",
+        "lastMember": "Es el único miembro de {{names}} en este dispositivo: sin él, aquí solo se podrán ver, no aprobar."
       },
       "panel": {
         "title": "Aprueban {{m}} de {{n}} miembros",
@@ -120,7 +121,8 @@
         "network": "Red",
         "number": "Transacción n.º",
         "call": "Llamada a contrato",
-        "callWithValue": "Llamada a contrato con {{amount}} {{symbol}}"
+        "callWithValue": "Llamada a contrato con {{amount}} {{symbol}}",
+        "batchCalls": "{{total}} llamadas en una transacción"
       },
       "proposal": {
         "title": "Transacción multifirma",
@@ -158,7 +160,14 @@
         "notSent": "La red no la aceptó, así que no se envió nada. Inténtalo de nuevo.",
         "siteAsks": "{{host}} pide esta transacción.",
         "siteWaits": "{{host}} espera hasta que los miembros la ejecuten o la rechacen. Si cierras esto, se le avisa al sitio que fue propuesta, y sigue en Actividad.",
-        "data": "Datos"
+        "data": "Datos",
+        "changesMembers": "La llamada #{{index}} cambia esta multifirma: {{change}}. Apruébala solo si todos los miembros lo esperan.",
+        "siteFollows": "{{host}} recibió el identificador de esta transacción y la sigue hasta que los miembros la ejecuten o la rechacen. Queda en Actividad.",
+        "voided": "Cancelada",
+        "voidedNote": "Cancelada: otra transacción usó el número #{{nonce}}, así que esta ya nunca podrá ejecutarse.",
+        "notInMailbox": "Esta transacción no está en el buzón de esta multifirma. Pide a quien te envió el enlace que lo revise.",
+        "unknownNetwork": "Este enlace es de una red que Vela no tiene (cadena {{chainId}}). Agrega la red en Ajustes y vuelve a abrir el enlace.",
+        "badLink": "Este enlace a una transacción multifirma está incompleto o dañado. Pídelo de nuevo."
       },
       "send": {
         "propose": "Proponer y aprobar",
@@ -198,7 +207,10 @@
         "name": "Nombre",
         "namePlaceholder": "p. ej. Fondo del equipo",
         "nameHint": "Todos los miembros ven este nombre. Se guarda con el multisig y no se puede cambiar después.",
-        "nameInvalid": "Usa un nombre más corto, sin caracteres de control ni invisibles, ni espacios al inicio o al final."
+        "nameInvalid": "Usa un nombre más corto, sin caracteres de control ni invisibles, ni espacios al inicio o al final.",
+        "fewer": "Menos aprobaciones",
+        "more": "Más aprobaciones",
+        "copyAddress": "Copiar dirección"
       },
       "add": {
         "title": "Agregar una multifirma",
@@ -244,7 +256,11 @@
         "signedBy": "Firmado por {{owner}}",
         "unpair": "Desvincular",
         "ownerWallet": "Wallet del miembro",
-        "retry": "Reintentar"
+        "retry": "Reintentar",
+        "pageAway": "La página de la billetera se cerró. Ábrela de nuevo donde está tu billetera: la solicitud sigue esperando.",
+        "connectDeclined": "La conexión se rechazó en la página de la billetera. Vuelve a intentarlo para preguntar otra vez.",
+        "declinedHere": "Rechazaste. Vela ya lo sabe; puedes cerrar esta página.",
+        "otherChain": "La billetera se quedó en otra red. Cámbiala a {{chain}} y vuelve a intentarlo."
       },
       "import": {
         "or": "O importa desde Safe{Wallet}",

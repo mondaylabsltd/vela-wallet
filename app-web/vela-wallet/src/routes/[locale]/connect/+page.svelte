@@ -51,7 +51,8 @@
 			const b = new Bridge(
 				detail.provider,
 				accounts.map((a) => a.toLowerCase()),
-				chain
+				chain,
+				detail.info.name
 			);
 			const refresh = () => {
 				sessions = b.sessions;
@@ -197,6 +198,9 @@
 					</p>
 				{/if}
 			</section>
+		{:else if sessions.some((s) => s.declined)}
+			<!-- ms-12: the person said no here; Vela says the same. -->
+			<p class="muted" data-testid="connect-declined">{m.declinedHere}</p>
 		{:else if sessions.length > 0}
 			<p class="muted">{m.waitingVela}</p>
 		{:else}

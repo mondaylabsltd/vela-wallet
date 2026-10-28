@@ -603,13 +603,10 @@ pub fn refused_before_any_block(answer: &super::tx_tracker::TrackStatusAnswer) -
 /// `wallet_getCapabilities` (EIP-5792): `[address, chainIds?]` → for each of
 /// the wallet's `chains` (only those the page names, when it names some), what
 /// Vela can do there — one capability, `atomic: supported`: `wallet_sendCalls`
-/// goes out as ONE user operation. Nothing else is claimed (a
+/// goes out as ONE user operation — or, from a multisig, as ONE proposal (a
+/// MultiSendCallOnly batch: its members approve it once, and it executes
+/// whole or not at all, [`multisig_calls`]). Nothing else is claimed (a
 /// `paymasterService` is refused at signing).
-///
-/// A multisig (one of `multisigs`) is `atomic: unsupported`: its transaction
-/// is a proposal its members approve one by one, and it proposes no batch of
-/// a page's calls — `wallet_sendCalls` is refused for it, so promising one
-/// would be a promise the wallet breaks.
 ///
 /// The address must be one the site was granted (EIP-5792: an error when the
 /// page is not connected to it) — `Err((4100, …))`; no address is `-32602`.
@@ -617,7 +614,6 @@ pub fn capabilities(
     params: &Value,
     granted: &[String],
     chains: &[u32],
-    multisigs: &[String],
 ) -> Result<Value, (i64, &'static str)> {
     let list = params.as_array();
     let address = list
@@ -638,11 +634,6 @@ pub fn capabilities(
                 .filter_map(|id| chain_param(&json!([{ "chainId": id }])))
                 .collect()
         });
-    let status = if multisigs.iter().any(|m| m.eq_ignore_ascii_case(address)) {
-        "unsupported"
-    } else {
-        "supported"
-    };
     let mut answer = serde_json::Map::new();
     for chain in chains {
         if asked.as_ref().is_some_and(|asked| !asked.contains(chain)) {
@@ -650,10 +641,140 @@ pub fn capabilities(
         }
         answer.insert(
             hex_chain_id(*chain),
-            json!({ "atomic": { "status": status } }),
+            json!({ "atomic": { "status": "supported" } }),
         );
     }
     Ok(Value::Object(answer))
+}
+
+// ---------------------------------------------------------------------------
+// A site's transaction from a multisig (docs/multisig-vault-design.md §6)
+// ---------------------------------------------------------------------------
+
+/// The calls a site's `eth_sendTransaction` (one) or `wallet_sendCalls`
+/// (EIP-5792: every one of `params[0].calls`) asks a multisig to make on
+/// `chain`. They become ONE proposal ([`crate::multisig::calls_tx`]): several
+/// are one MultiSendCallOnly batch, approved once by the members and executed
+/// whole or not at all — what `atomic: supported` promises. The refusals are
+/// the ones a Vela account's request gets at the same point (`sign_request`):
+/// a request naming another chain, a REQUIRED capability the wallet does not
+/// have, a batch with no calls. A multisig deploys no contract, so every call
+/// names its `to`. Whether a multisig signs what the calls do is the
+/// multisig review's to say (`crate::multisig::review`), after this.
+pub fn multisig_calls(
+    method: &str,
+    params: &Value,
+    chain: u32,
+) -> Result<Vec<crate::multisig::CallArg>, (i32, String)> {
+    use super::sign_request::{
+        request_names_other_chain, required_capabilities, CHAIN_MISMATCH_MESSAGE, CODE_INTERNAL,
+        CODE_INVALID_PARAMS, CODE_UNSUPPORTED_CAPABILITY,
+    };
+    let invalid = |words: &str| (CODE_INVALID_PARAMS, words.to_owned());
+    let first = params
+        .as_array()
+        .and_then(|list| list.first())
+        .filter(|first| first.is_object())
+        .ok_or_else(|| invalid("malformed params"))?;
+    if request_names_other_chain(method, params, chain) {
+        return Err(invalid(CHAIN_MISMATCH_MESSAGE));
+    }
+    let calls: Vec<&Value> = match method {
+        "eth_sendTransaction" => vec![first],
+        "wallet_sendCalls" => {
+            let required = required_capabilities(first);
+            if !required.is_empty() {
+                return Err((
+                    CODE_UNSUPPORTED_CAPABILITY,
+                    sign_error_words(
+                        SignErrorKind::UnsupportedCapability,
+                        Some(&required.join(", ")),
+                    ),
+                ));
+            }
+            match first.get("calls").and_then(Value::as_array) {
+                Some(calls) if !calls.is_empty() => calls.iter().collect(),
+                _ => return Err((CODE_INTERNAL, "no calls provided".to_owned())),
+            }
+        }
+        _ => return Err(invalid("not a transaction")),
+    };
+    // A field as text, the way the submit path reads it: absent or `null` is
+    // none; a number is its own digits.
+    let text = |call: &Value, key: &str| match call.get(key) {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(other) => Some(other.to_string()),
+    };
+    calls
+        .into_iter()
+        .map(|call| {
+            let to = text(call, "to")
+                .filter(|to| {
+                    to.len() == 42
+                        && to.starts_with("0x")
+                        && to[2..].bytes().all(|b| b.is_ascii_hexdigit())
+                })
+                .ok_or_else(|| invalid("every call from a multisig needs a `to` address"))?;
+            Ok(crate::multisig::CallArg {
+                to,
+                value: text(call, "value").unwrap_or_default(),
+                data: text(call, "data")
+                    .or_else(|| text(call, "input"))
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+/// `wallet_getCallsStatus` for a batch a MULTISIG answered with: its id is
+/// the proposal's safeTxHash, and the batch is that proposal — pending (`100`)
+/// while it waits for its approvals and its execution, however long that
+/// takes. Then:
+///
+/// - executed: `execution_receipt` is the receipt of the transaction whose
+///   `ExecutionSuccess` names the id → `200` with that one receipt (its
+///   status `0x0` — which `ExecutionSuccess` cannot have — would be `500`);
+/// - its number used by another transaction (`number_used`: the multisig's
+///   nonce is past the proposal's and no execution names it — a
+///   cancellation, or another proposal at that number, ran instead) → `400`:
+///   not included on chain, and it never will be.
+pub fn multisig_calls_status(
+    id: &str,
+    chain_id: u32,
+    execution_receipt: Option<&Value>,
+    number_used: bool,
+) -> Value {
+    let mut status = json!({
+        "version": CALLS_STATUS_VERSION,
+        "id": id,
+        "chainId": hex_chain_id(chain_id),
+        "status": 100,
+        "atomic": true,
+    });
+    let receipt = execution_receipt.filter(|receipt| {
+        receipt
+            .get("transactionHash")
+            .and_then(Value::as_str)
+            .is_some()
+    });
+    let Some(receipt) = receipt else {
+        if number_used {
+            status["status"] = json!(CALLS_STATUS_OFFCHAIN_FAILURE);
+        }
+        return status;
+    };
+    let succeeded = receipt.get("status").and_then(Value::as_str) != Some("0x0");
+    status["status"] = json!(if succeeded { 200 } else { 500 });
+    status["receipts"] = json!([{
+        "logs": receipt.get("logs").filter(|logs| logs.is_array()).cloned().unwrap_or_else(|| json!([])),
+        "status": if succeeded { "0x1" } else { "0x0" },
+        "blockHash": receipt.get("blockHash").cloned().unwrap_or(Value::Null),
+        "blockNumber": receipt.get("blockNumber").cloned().unwrap_or(Value::Null),
+        "gasUsed": receipt.get("gasUsed").cloned().unwrap_or(Value::Null),
+        "transactionHash": receipt.get("transactionHash").cloned().unwrap_or(Value::Null),
+    }]);
+    status
 }
 
 // ---------------------------------------------------------------------------
@@ -1644,7 +1765,7 @@ mod tests {
     #[test]
     fn capabilities_are_atomic_batches_on_every_chain_for_the_connected_account() {
         let granted = vec![ALICE.to_lowercase()];
-        let all = capabilities(&json!([ALICE]), &granted, &[1, 100], &[]);
+        let all = capabilities(&json!([ALICE]), &granted, &[1, 100]);
         assert_eq!(
             all,
             Ok(json!({
@@ -1653,35 +1774,118 @@ mod tests {
             }))
         );
         // Only the chains the page names, when it names some.
-        let some = capabilities(
-            &json!([ALICE, ["0x64", "0x2105"]]),
-            &granted,
-            &[1, 100],
-            &[],
-        );
+        let some = capabilities(&json!([ALICE, ["0x64", "0x2105"]]), &granted, &[1, 100]);
         assert_eq!(
             some,
             Ok(json!({ "0x64": { "atomic": { "status": "supported" } } }))
         );
     }
 
-    /// A multisig proposes no batch of a page's calls (`wallet_sendCalls` is
-    /// refused for it): it says so rather than promise one.
+    /// A multisig sends a page's calls as ONE proposal, executed whole: it
+    /// promises the atomic batch a Vela account does.
     #[test]
-    fn a_multisig_promises_no_atomic_batch() {
-        let granted = vec![ALICE.to_owned()];
-        let multisigs = vec![ALICE.to_lowercase()];
+    fn a_multisig_reads_a_pages_calls_as_one_proposal() {
+        let to = format!("0x{}", "c3".repeat(20));
+        let sent = |method: &str, params: Value| multisig_calls(method, &params, 100);
+        let calls = sent(
+            "wallet_sendCalls",
+            json!([{ "version": "2.0.0", "chainId": "0x64", "atomicRequired": true, "calls": [
+                { "to": to, "data": "0x095ea7b3" },
+                { "to": to, "value": "0x10", "data": null },
+            ] }]),
+        )
+        .unwrap_or_default();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].data, "0x095ea7b3");
+        assert_eq!(calls[0].value, "");
+        assert_eq!(calls[1].value, "0x10");
+        assert_eq!(calls[1].data, "");
+        // `input` stands for `data`, as the submit path reads it.
+        let one = sent(
+            "eth_sendTransaction",
+            json!([{ "to": to, "input": "0x1234", "value": "0x0" }]),
+        )
+        .unwrap_or_default();
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].data, "0x1234");
+
+        // Another chain, a capability the wallet lacks, no calls, no `to`.
         assert_eq!(
-            capabilities(&json!([ALICE]), &granted, &[1, 100], &multisigs),
-            Ok(json!({
-                "0x1": { "atomic": { "status": "unsupported" } },
-                "0x64": { "atomic": { "status": "unsupported" } }
-            }))
+            sent(
+                "wallet_sendCalls",
+                json!([{ "chainId": "0x1", "calls": [{ "to": to }] }])
+            ),
+            Err((
+                -32602,
+                super::super::sign_request::CHAIN_MISMATCH_MESSAGE.to_owned()
+            ))
         );
-        let other = format!("0x{}", "b2".repeat(20));
         assert_eq!(
-            capabilities(&json!([ALICE]), &granted, &[1], &[other]),
-            Ok(json!({ "0x1": { "atomic": { "status": "supported" } } }))
+            sent(
+                "wallet_sendCalls",
+                json!([{ "calls": [{ "to": to }], "capabilities": { "paymasterService": {} } }])
+            )
+            .map_err(|e| e.0),
+            Err(5700)
+        );
+        // An optional capability is no reason to refuse.
+        assert!(sent(
+            "wallet_sendCalls",
+            json!([{ "calls": [{ "to": to }], "capabilities": { "paymasterService": { "optional": true } } }])
+        )
+        .is_ok());
+        assert_eq!(
+            sent("wallet_sendCalls", json!([{ "calls": [] }])).map_err(|e| e.0),
+            Err(-32603)
+        );
+        assert_eq!(
+            sent("eth_sendTransaction", json!([{ "data": "0x60806040" }])).map_err(|e| e.0),
+            Err(-32602)
+        );
+        assert_eq!(
+            sent(
+                "wallet_sendCalls",
+                json!([{ "calls": [{ "to": to }, { "to": "0x12" }] }])
+            )
+            .map_err(|e| e.0),
+            Err(-32602)
+        );
+        assert_eq!(
+            sent("personal_sign", json!([{}])).map_err(|e| e.0),
+            Err(-32602)
+        );
+    }
+
+    #[test]
+    fn a_multisig_batch_is_pending_until_executed_and_failed_when_its_number_went_elsewhere() {
+        let id = format!("0x{}", "ab".repeat(32));
+        let pending = multisig_calls_status(&id, 100, None, false);
+        assert_eq!(pending["status"], 100);
+        assert_eq!(pending["chainId"], "0x64");
+        assert_eq!(pending["atomic"], true);
+        assert!(pending.get("receipts").is_none());
+        // Another transaction took its number: it will never run.
+        assert_eq!(multisig_calls_status(&id, 100, None, true)["status"], 400);
+        let receipt = json!({
+            "transactionHash": format!("0x{}", "cd".repeat(32)),
+            "blockHash": "0xbb",
+            "blockNumber": "0x10",
+            "gasUsed": "0x5208",
+            "status": "0x1",
+            "logs": [{ "address": "0x01", "topics": [], "data": "0x" }],
+        });
+        let done = multisig_calls_status(&id, 100, Some(&receipt), true);
+        assert_eq!(done["status"], 200);
+        assert_eq!(
+            done["receipts"][0]["transactionHash"],
+            receipt["transactionHash"]
+        );
+        assert_eq!(done["receipts"][0]["status"], "0x1");
+        assert_eq!(done["receipts"][0]["logs"], receipt["logs"]);
+        // A receipt with no hash is no receipt.
+        assert_eq!(
+            multisig_calls_status(&id, 100, Some(&json!({ "status": "0x1" })), false)["status"],
+            100
         );
     }
 
@@ -1689,15 +1893,15 @@ mod tests {
     fn capabilities_are_told_only_to_a_site_connected_to_that_address() {
         let other = format!("0x{}", "b2".repeat(20));
         assert_eq!(
-            capabilities(&json!([other]), &[ALICE.to_owned()], &[1], &[]).map_err(|e| e.0),
+            capabilities(&json!([other]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
             Err(4100)
         );
         assert_eq!(
-            capabilities(&json!([ALICE]), &[], &[1], &[]).map_err(|e| e.0),
+            capabilities(&json!([ALICE]), &[], &[1]).map_err(|e| e.0),
             Err(4100)
         );
         assert_eq!(
-            capabilities(&json!([]), &[ALICE.to_owned()], &[1], &[]).map_err(|e| e.0),
+            capabilities(&json!([]), &[ALICE.to_owned()], &[1]).map_err(|e| e.0),
             Err(-32602)
         );
     }

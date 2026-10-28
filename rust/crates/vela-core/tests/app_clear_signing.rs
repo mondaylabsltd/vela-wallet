@@ -2653,16 +2653,24 @@ fn blind_typed_projection_keeps_payload_order_and_truncates() {
     );
     assert_eq!(blind.fields[1].value, "5000000000000000000");
 
-    // Six fields → only the first five are shown.
+    // dapp-9: every field is a row (it was the first five), up to forty.
     let mut sut = Sut::new();
     start_typed(
         &mut sut,
         r#"{"message":{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6}}"#,
     );
     let blind = sut.view().blind_typed.expect("projected");
-    assert_eq!(blind.fields.len(), 5);
+    assert_eq!(blind.fields.len(), 6);
     assert_eq!(blind.fields[0].value, "1");
+    assert_eq!(blind.fields[5].key, "f");
     assert!(!blind.has_domain);
+    let many = (0..60)
+        .map(|i| format!("\"k{i}\":{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut sut = Sut::new();
+    start_typed(&mut sut, &format!(r#"{{"message":{{{many}}}}}"#));
+    assert_eq!(sut.view().blind_typed.expect("projected").fields.len(), 40);
 }
 
 /// ㉓ — a payload that isn't even an object projects to nothing rather than
@@ -2787,20 +2795,33 @@ fn blind_typed_numbers_print_as_javascript_does() {
     assert_eq!(values, vec!["100", "1e+21", "1e-7", "1.5"]);
 }
 
-/// ㉓ — a nested struct is rendered as JSON in the order the payload wrote it.
-/// Alphabetising it (which `serde_json::Map` would) changes a line the user
-/// reads on a security surface.
+/// ㉓ — a nested struct is opened into its fields, in the order the payload
+/// wrote them (dapp-9: it was one line of JSON). Alphabetising it (which
+/// `serde_json::Map` would) changes a line the user reads on a security
+/// surface.
 #[test]
 fn blind_typed_nested_struct_keeps_its_own_key_order() {
     let mut sut = Sut::new();
     start_typed(
         &mut sut,
-        r#"{"message":{"details":{"token":"0xAA","amount":"1000000000","expiration":1799999999}}}"#,
+        r#"{"message":{"details":{"token":"0xAA","amount":"1000000000","expiration":1799999999},"spenders":["0xBB",{"who":"0xCC"}],"none":{}}}"#,
     );
     let blind = sut.view().blind_typed.expect("projected");
+    let rows: Vec<(&str, &str)> = blind
+        .fields
+        .iter()
+        .map(|f| (f.key.as_str(), f.value.as_str()))
+        .collect();
     assert_eq!(
-        blind.fields[0].value,
-        r#"{"token":"0xAA","amount":"1000000000","expiration":179999999"#
+        rows,
+        vec![
+            ("details.token", "0xAA"),
+            ("details.amount", "1000000000"),
+            ("details.expiration", "1799999999"),
+            ("spenders[0]", "0xBB"),
+            ("spenders[1].who", "0xCC"),
+            ("none", "{}"),
+        ]
     );
 }
 

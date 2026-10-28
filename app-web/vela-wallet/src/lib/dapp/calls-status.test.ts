@@ -13,6 +13,7 @@ import {
 	dappRpcCallsStatus,
 	dappRpcCallsStatusId,
 	dappRpcCapabilities,
+	dappRpcMultisigCallsStatus,
 	dappRpcSendCallsResult,
 	signAnswered
 } from '../../../../../rust/pkg-web/vela_core.js';
@@ -23,6 +24,7 @@ import {
 	callsStatusResult,
 	capabilitiesResult,
 	catalogChainIds,
+	multisigCallsStatusResult,
 	sendCallsResult
 } from '../../../extension/lib/protocol.js';
 
@@ -183,42 +185,66 @@ describe('a batch’s status', () => {
 });
 
 describe('the capabilities', () => {
-	const cases: [string, unknown, string[], string[]][] = [
-		['the connected account', [ALICE], [ALICE], []],
-		['another case', [ALICE.toUpperCase().replace('0X', '0x')], [ALICE], []],
-		['named chains', [ALICE, ['0x64', '0x2105', '100', 1, 'zz', 1.5, -1]], [ALICE], []],
-		['an empty chain list', [ALICE, []], [ALICE], []],
-		['another account', [BOB], [ALICE], []],
-		['nobody connected', [ALICE], [], []],
-		['no address', [], [ALICE], []],
-		['not an address', ['0x12'], [ALICE], []],
-		// A multisig proposes no batch (wallet_sendCalls is refused for it).
-		['a multisig', [ALICE], [ALICE], [ALICE]],
-		['a multisig, named chains', [ALICE, ['0x64']], [ALICE], [ALICE.toUpperCase()]],
-		['another multisig', [ALICE], [ALICE], [BOB]]
+	const cases: [string, unknown, string[]][] = [
+		['the connected account', [ALICE], [ALICE]],
+		['another case', [ALICE.toUpperCase().replace('0X', '0x')], [ALICE]],
+		['named chains', [ALICE, ['0x64', '0x2105', '100', 1, 'zz', 1.5, -1]], [ALICE]],
+		['an empty chain list', [ALICE, []], [ALICE]],
+		['another account', [BOB], [ALICE]],
+		['nobody connected', [ALICE], []],
+		['no address', [], [ALICE]],
+		['not an address', ['0x12'], [ALICE]]
 	];
 	const chains = [1, 100, 8453];
-	for (const [name, params, granted, multisigs] of cases) {
+	for (const [name, params, granted] of cases) {
 		it(`agrees: ${name}`, () => {
 			const core = JSON.parse(
-				dappRpcCapabilities(
-					JSON.stringify(params),
-					JSON.stringify(granted),
-					JSON.stringify(chains),
-					JSON.stringify(multisigs)
-				)
+				dappRpcCapabilities(JSON.stringify(params), JSON.stringify(granted), JSON.stringify(chains))
 			);
-			const twin = capabilitiesResult(params, granted, chains, multisigs);
+			const twin = capabilitiesResult(params, granted, chains);
 			if (core.error) expect(twin.error?.code).toBe(core.error.code);
 			else expect(twin).toEqual(core);
 		});
 	}
 
-	it('promises a multisig no atomic batch', () => {
-		expect(capabilitiesResult([ALICE], [ALICE], [100], [ALICE]).result).toEqual({
-			'0x64': { atomic: { status: 'unsupported' } }
+	// Owner 2026-10-28: a multisig sends a batch as ONE proposal, executed whole.
+	it('promises every account an atomic batch, a multisig too', () => {
+		expect(capabilitiesResult([ALICE], [ALICE], [100]).result).toEqual({
+			'0x64': { atomic: { status: 'supported' } }
 		});
 	});
+});
+
+/**
+ * A multisig's batch: its id is the proposal's safeTxHash, pending while the
+ * members approve and execute it, then the execution's receipt — or 400 once
+ * another transaction took its number. The worker's twin is held to the
+ * core's `multisig_calls_status` over the same inputs.
+ */
+describe('a multisig batch’s status', () => {
+	const RECEIPT = { ...TX, gasUsed: '0x5208', status: '0x1', logs: [LOG] };
+	const cases: [string, unknown, boolean, number][] = [
+		['waiting for approvals', null, false, 100],
+		['its number used, no execution', null, true, 400],
+		['executed', RECEIPT, true, 200],
+		['a receipt with no hash', { status: '0x1' }, false, 100],
+		['a list', [RECEIPT], true, 400],
+		['reverted', { ...RECEIPT, status: '0x0' }, true, 500]
+	];
+	for (const [name, receipt, used, expected] of cases) {
+		it(`agrees: ${name}`, () => {
+			const core = JSON.parse(
+				dappRpcMultisigCallsStatus(
+					ID,
+					100,
+					receipt === null ? undefined : JSON.stringify(receipt),
+					used
+				)
+			);
+			expect(core.status).toBe(expected);
+			expect(multisigCallsStatusResult(ID, 100, receipt, used)).toEqual(core);
+		});
+	}
 });
 
 describe('the rest of the worker’s half', () => {

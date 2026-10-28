@@ -328,7 +328,7 @@ fn a_decoded_typed_data_string_is_display_safe_and_flagged() {
 }
 
 /// The blind rows are display-safe, and the flag reads the WHOLE payload —
-/// a hidden character in a key, or in a row past the fifth, still counts.
+/// a hidden character in a key, or in any row, still counts.
 #[test]
 fn the_blind_typed_projection_is_display_safe_and_reads_the_whole_payload() {
     let mut sut = Sut::new();
@@ -362,8 +362,10 @@ fn the_blind_typed_projection_is_display_safe_and_reads_the_whole_payload() {
         from: None,
     });
     let blind = sut.view().blind_typed.expect("projected");
-    assert_eq!(blind.fields.len(), 5, "the sixth row is not drawn");
-    assert!(blind.has_invisible_chars, "but it is signed");
+    // dapp-9: every row is drawn now, the sixth too, display-safe.
+    assert_eq!(blind.fields.len(), 6);
+    assert_eq!(blind.fields[5].value, "hidden⟨U+202E⟩");
+    assert!(blind.has_invisible_chars, "and it is signed");
 
     let mut sut = Sut::new();
     sut.dispatch(Event::ResolveTypedData {

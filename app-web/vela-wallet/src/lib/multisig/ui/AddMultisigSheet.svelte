@@ -185,6 +185,7 @@
 				autocomplete="off"
 				spellcheck="false"
 				bind:value={address}
+				oninput={() => (failure = null)}
 				aria-invalid={failure !== null}
 			/>
 			{#if failure}<p class="error" role="alert">{failure}</p>{/if}

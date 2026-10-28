@@ -1,14 +1,13 @@
 /**
- * A dApp's transaction from a multisig (dapp-1, dapp-2, dapp-4): its review
- * comes first and nothing is signed before "Propose and approve"; every way
- * out of the sheet answers the site, once and honestly; a batch is refused
- * as a batch.
+ * A dApp's transaction from a multisig (dapp-1, dapp-2): its review comes
+ * first and nothing is signed before "Propose and approve"; every way out of
+ * the sheet answers the site, once and honestly. A `wallet_sendCalls` is one
+ * proposal of every call, its site answered the batch's id once proposed.
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
 	DECLINED,
 	DappGoneError,
-	dappCallOf,
 	leftProposed,
 	multisigRefusal,
 	openMultisigReview,
@@ -27,13 +26,14 @@ function harness(overrides: Partial<HandOff> = {}) {
 	let sheet: DappProposal | null = null;
 	const propose = vi.fn(async () => {
 		events.push('passkey');
-		return { safeTxHash: HASH };
+		return { safeTxHash: HASH, nonce: '0x3', fromBlock: '0x10' };
 	});
 	const h: HandOff = {
 		rid: 'r1',
+		method: 'eth_sendTransaction',
 		address: SAFE,
 		chainId: 100,
-		call: CALL,
+		calls: [CALL],
 		origin: 'https://app.example',
 		open: (request) => {
 			events.push('review');
@@ -46,6 +46,8 @@ function harness(overrides: Partial<HandOff> = {}) {
 		propose,
 		settle: (answer) => answers.push(answer),
 		follow: () => events.push('following'),
+		answerBatch: (hash, nonce, fromBlock) =>
+			events.push(`batch ${hash.slice(0, 4)} ${nonce} ${fromBlock}`),
 		...overrides
 	};
 	const { closing } = openMultisigReview(h);
@@ -60,7 +62,7 @@ describe("a dApp's transaction from a multisig", () => {
 		expect(sheet().safeTxHash).toBeNull();
 		expect(sheet().origin).toBe('https://app.example');
 		await sheet().propose();
-		expect(propose).toHaveBeenCalledWith(SAFE, 100, CALL);
+		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL]);
 		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'following']);
 		// Proposed is not answered: the site waits for the execution.
 		expect(answers).toEqual([]);
@@ -108,32 +110,34 @@ describe("a dApp's transaction from a multisig", () => {
 		expect(answers).toEqual([]);
 		expect(sheet().safeTxHash).toBeNull();
 	});
+
+	it('a batch (wallet_sendCalls) is one proposal of every call, its id answered once proposed', async () => {
+		const SECOND = {
+			to: '0x000000000000000000000000000000000000bEEF',
+			value: '0x0',
+			data: '0x1234'
+		};
+		const { events, propose, sheet, answers } = harness({
+			method: 'wallet_sendCalls',
+			calls: [CALL, SECOND]
+		});
+		expect(sheet().calls).toEqual([CALL, SECOND]);
+		expect(sheet().method).toBe('wallet_sendCalls');
+		expect(propose).not.toHaveBeenCalled();
+		await sheet().propose();
+		// Every call in the one proposal; the site told its id and the number
+		// it took, never followed for an execution hash.
+		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL, SECOND]);
+		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'batch 0xab 0x3 0x10']);
+		expect(answers).toEqual([]);
+	});
 });
 
-describe('what a multisig refuses at once', () => {
-	it('refuses a batch as a batch, and a message as a message', () => {
+describe('what a multisig refuses', () => {
+	it('takes a transaction and a batch of them, and refuses a message as a message', () => {
 		expect(multisigRefusal('eth_sendTransaction')).toBeNull();
-		const batch = multisigRefusal('wallet_sendCalls');
-		expect(batch?.code).toBe(4200);
-		expect(batch?.message).toMatch(/batch/);
-		expect(batch?.message).not.toMatch(/message/);
+		expect(multisigRefusal('wallet_sendCalls')).toBeNull();
 		expect(multisigRefusal('personal_sign')?.message).toMatch(/signs no messages/);
 		expect(multisigRefusal('eth_signTypedData_v4')?.code).toBe(4200);
-	});
-
-	it("reads the call a site's eth_sendTransaction asks for", () => {
-		expect(dappCallOf([{ to: CALL.to, value: '0x5', data: '0xabcd' }])).toEqual({
-			to: CALL.to,
-			value: '0x5',
-			data: '0xabcd'
-		});
-		expect(dappCallOf([{ to: CALL.to, input: '0x12' }])).toEqual({
-			to: CALL.to,
-			value: '0x0',
-			data: '0x12'
-		});
-		expect(dappCallOf([{ value: '0x1' }])).toBeNull();
-		expect(dappCallOf([])).toBeNull();
-		expect(dappCallOf(null)).toBeNull();
 	});
 });

@@ -8,6 +8,13 @@
  * anything. Every way out answers the site, exactly once: declined before it
  * was proposed is the person's 4001; left after it was proposed says so, and
  * the proposal stays in the mailbox (and in Activity) for the members.
+ *
+ * A `wallet_sendCalls` (EIP-5792) is the same review of every call, and ONE
+ * proposal: the calls in one MultiSendCallOnly transaction, approved once by
+ * the members and executed whole or not at all. Its site is answered the
+ * batch's id — the proposal's safeTxHash — as soon as it is proposed, and
+ * follows it with `wallet_getCallsStatus` (pending while the members
+ * approve, then the execution's receipt).
  */
 import type { DappCall } from './proposals.svelte';
 import type { DappProposal } from './ui.svelte';
@@ -26,37 +33,15 @@ export interface DappAnswer {
 export const DECLINED: DappError = { code: 4001, message: 'User rejected the request' };
 
 /**
- * What a multisig answers a method it does not take, at once; `null` for
- * `eth_sendTransaction`, which becomes a proposal. A batch is not a
- * message: it is refused as a batch (`wallet_getCapabilities` says
- * `atomic: unsupported` for a multisig, so a site that asks is told first).
+ * What a multisig answers a method it does not take; `null` for a
+ * transaction (`eth_sendTransaction`) or a batch of them (`wallet_sendCalls`),
+ * which become a proposal. A message is refused: a multisig's signature is
+ * every approving member's, which Vela does not collect for messages yet
+ * (docs/multisig-vault-design.md §6) — the window says so before it answers.
  */
 export function multisigRefusal(method: string): DappError | null {
-	if (method === 'eth_sendTransaction') return null;
-	if (method === 'wallet_sendCalls') {
-		return {
-			code: 4200,
-			message: 'A multisig account does not send batches of calls yet: send each call on its own'
-		};
-	}
+	if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') return null;
 	return { code: 4200, message: 'A multisig account signs no messages yet' };
-}
-
-/** The call `eth_sendTransaction`'s params ask for, or `null` without a `to`. */
-export function dappCallOf(params: unknown): DappCall | null {
-	const tx = (Array.isArray(params) ? params[0] : null) as {
-		to?: unknown;
-		value?: unknown;
-		data?: unknown;
-		input?: unknown;
-	} | null;
-	if (!tx || typeof tx.to !== 'string' || !tx.to) return null;
-	const data = typeof tx.data === 'string' ? tx.data : typeof tx.input === 'string' ? tx.input : '';
-	return {
-		to: tx.to,
-		value: typeof tx.value === 'string' && tx.value ? tx.value : '0x0',
-		data: data || '0x'
-	};
 }
 
 /**
@@ -76,9 +61,12 @@ export function leftProposed(safeTxHash: string): DappError {
 
 export interface HandOff {
 	rid: string;
+	/** `eth_sendTransaction` (answered with the execution's hash) or `wallet_sendCalls` (its id). */
+	method: string;
 	address: string;
 	chainId: number;
-	call: DappCall;
+	/** What the core read the request as (`dappMultisigCalls`): one call, or a batch's every call. */
+	calls: DappCall[];
 	origin: string;
 	/** Draw the review (the multisig's sheet). */
 	open(request: DappProposal): void;
@@ -91,11 +79,20 @@ export interface HandOff {
 	/** The page left: the request is withdrawn, nothing answered. */
 	gone(): void;
 	/** Propose it (the one passkey prompt). */
-	propose(address: string, chainId: number, call: DappCall): Promise<{ safeTxHash: string }>;
+	propose(
+		address: string,
+		chainId: number,
+		calls: DappCall[]
+	): Promise<{ safeTxHash: string; nonce: string; fromBlock?: string }>;
 	/** Answer the site (the caller answers once). */
 	settle(answer: DappAnswer): void;
-	/** Follow the proposal until it is executed or voided. */
+	/** `eth_sendTransaction`: follow the proposal until it is executed or voided. */
 	follow(safeTxHash: string): void;
+	/**
+	 * `wallet_sendCalls`: answer the site the batch's id now — the proposal at
+	 * `nonce`, proposed around block `fromBlock` (when it was read).
+	 */
+	answerBatch(safeTxHash: string, nonce: string, fromBlock?: string): void;
 }
 
 /** Thrown by `propose` when the page left before the passkey: nothing was signed. */
@@ -118,7 +115,8 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 		rid: h.rid,
 		address: h.address,
 		chainId: h.chainId,
-		call: h.call,
+		method: h.method,
+		calls: h.calls,
 		origin: h.origin,
 		safeTxHash: null,
 		async propose() {
@@ -130,10 +128,11 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 					h.gone();
 					throw new DappGoneError();
 				}
-				const { safeTxHash } = await h.propose(h.address, h.chainId, h.call);
+				const { safeTxHash, nonce, fromBlock } = await h.propose(h.address, h.chainId, h.calls);
 				proposed = safeTxHash;
 				h.proposed(h.rid, safeTxHash);
-				h.follow(safeTxHash);
+				if (h.method === 'wallet_sendCalls') h.answerBatch(safeTxHash, nonce, fromBlock);
+				else h.follow(safeTxHash);
 				return safeTxHash;
 			} finally {
 				proposing = false;

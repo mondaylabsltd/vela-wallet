@@ -110,7 +110,12 @@
       "clearAll": "Clear all",
       "clearAllTitle": "Clear history?",
       "clearAllBody": "This removes all recently-opened dApps.",
-      "a11yDeleteHistory": "Remove from history"
+      "a11yDeleteHistory": "Remove from history",
+      "signedOut": "You’re not signed in to Vela. Sign in with your passkey, or create a wallet, to continue.",
+      "signInTitle": "Sign in to continue",
+      "multisigNoMessagesTitle": "A multisig can’t sign messages yet",
+      "multisigNoMessagesBody": "{{host}} asked this multisig to sign a message. A multisig’s signature needs its members’ approvals, which Vela doesn’t collect for messages yet, so the site will be told no. Transactions still work: they become proposals the members approve.",
+      "multisigConnectNote": "This is a multisig: the site can propose transactions for its members to approve, but it can’t ask it to sign messages."
     },
     "ext": {
       "installedNote": "Reload tabs that were already open so their sites can find Vela.",

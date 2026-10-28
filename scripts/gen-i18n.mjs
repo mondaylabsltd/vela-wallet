@@ -934,8 +934,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (signer-12: the fee's cause once it stops saying "retrying"). 2157 + 12 =
 //   2169 leaves, 119 branches.
 // 2305 (round 2: agent + rpc + send, 2026-10-28): 2186 leaves, 119 branches.
-if (PATHS.length !== 2305) fail(`expected 2305 paths (2186 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2186) fail(`expected 2186 leaf paths, got ${leafSet.size}`);
+// 2297 (round 2, multisig batches and the dApp window, 2026-10-28): + 16
+//   `home.multisig` words — a batch of calls, a call that changes the
+//   members, a site that follows its batch, a transaction voided or not in
+//   the mailbox, a link for a network Vela lacks or a damaged one, the
+//   stepper's labels, "Copy address", the last member here, an outside
+//   wallet's page gone, declined or on another network — and 5
+//   `connect.browser` words (signed out, a multisig asked for a message, a
+//   multisig's connect). 2157 + 21 = 2178 leaves, 119 branches.
+// 2326 (round 2: agent + rpc + send + multisig, 2026-10-28): 2207 leaves, 119 branches.
+if (PATHS.length !== 2326) fail(`expected 2326 paths (2207 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2207) fail(`expected 2207 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

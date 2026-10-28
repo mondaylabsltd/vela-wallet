@@ -81,7 +81,8 @@ export interface Transfer {
 /** What a SafeTx does, as the core reads it. Amounts are base units, decimal. */
 export type Action =
 	| { kind: 'transfer'; token: string | null; to: string; amount: string }
-	| { kind: 'batch'; transfers: Extract<Action, { kind: 'transfer' }>[] }
+	/** Several calls in ONE transaction (MultiSendCallOnly), every one a CALL. */
+	| { kind: 'batch'; calls: BatchCall[] }
 	| { kind: 'cancel' }
 	| { kind: 'addOwner'; owner: string; threshold: string }
 	| { kind: 'removeOwner'; owner: string; threshold: string }
@@ -89,6 +90,28 @@ export type Action =
 	| { kind: 'changeThreshold'; threshold: string }
 	/** A dApp's call to another contract; `value` in base units, decimal. */
 	| { kind: 'call'; to: string; value: string; data: string };
+
+/** The kinds of action that change a multisig's own members or threshold. */
+export const MEMBER_CHANGES = ['addOwner', 'removeOwner', 'swapOwner', 'changeThreshold'] as const;
+
+/**
+ * One call of a batch: as packed (`value` base units, decimal; `data` hex)
+ * and as the core reads it — a transfer, a call to another contract, or a
+ * member change (a call into the multisig itself).
+ */
+export interface BatchCall {
+	to: string;
+	value: string;
+	data: string;
+	action: Exclude<Action, { kind: 'batch' } | { kind: 'cancel' }>;
+}
+
+/** The transfers a transaction makes (one, or a batch's), as the activity records them. */
+export function transfersOf(action: Action | null): Extract<Action, { kind: 'transfer' }>[] {
+	if (action?.kind === 'transfer') return [action];
+	if (action?.kind !== 'batch') return [];
+	return action.calls.flatMap((c) => (c.action.kind === 'transfer' ? [c.action] : []));
+}
 
 export interface Review {
 	safeTxHash: string;
@@ -186,6 +209,39 @@ export const reviewTx = (chainId: number, multisig: string, tx: SafeTx) =>
 
 export const transfersTx = (transfers: Transfer[], nonce: string) =>
 	call<SafeTx>('transfersTx', { transfers, nonce });
+
+/** A site's call, as `eth_sendTransaction` or one of `wallet_sendCalls`' calls carries it. */
+export interface CallArg {
+	to: string;
+	value: string;
+	data: string;
+}
+
+/** A site's calls as ONE transaction: one is a plain CALL, several one MultiSendCallOnly batch. */
+export const callsTx = (calls: CallArg[], nonce: string) =>
+	call<SafeTx>('callsTx', { calls, nonce });
+
+/**
+ * The calls a site's `eth_sendTransaction` / `wallet_sendCalls` asks a
+ * multisig to make on `chainId` (`dapp_rpc::multisig_calls`), or the error the
+ * site is answered with (another chain, a required capability, no calls, a
+ * call with no `to`).
+ */
+export function dappMultisigCalls(
+	method: string,
+	params: unknown,
+	chainId: number
+): { calls: CallArg[] } | { error: { code: number; message: string } } {
+	const answer = JSON.parse(
+		wasm.dappRpcMultisigCalls(method, JSON.stringify(params ?? null), chainId)
+	) as { result?: CallArg[]; error?: { code: number; message: string } };
+	return answer.error ? { error: answer.error } : { calls: answer.result ?? [] };
+}
+
+/** `wallet_sendCalls`' answer for batch `id`, in the shape its request asked for (the core's rule). */
+export function sendCallsResult(params: unknown, id: string): unknown {
+	return JSON.parse(wasm.dappRpcSendCallsResult(JSON.stringify(params ?? null), id));
+}
 
 export const cancelTx = (multisig: string, nonce: string) =>
 	call<SafeTx>('cancelTx', { multisig, nonce });

@@ -8,6 +8,7 @@ import { loadTransactions, saveTransactions } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { tokenInfo } from './display';
+import { transfersOf } from './kernel';
 import { plainUnits } from './units';
 import type { ProposalItem } from './proposals.svelte';
 
@@ -19,9 +20,7 @@ export async function recordExecution(
 	/** Unix seconds of its block, when known; else now. */
 	at?: number
 ): Promise<void> {
-	const action = item.review.action;
-	const transfers =
-		action?.kind === 'transfer' ? [action] : action?.kind === 'batch' ? action.transfers : [];
+	const transfers = transfersOf(item.review.action);
 	const records: LocalTransaction[] = [];
 	for (const [i, t] of transfers.entries()) {
 		const info = await tokenInfo(item.chainId, t.token).catch(() => ({ symbol: '', decimals: 18 }));
@@ -57,11 +56,7 @@ export async function recordRemoteExecutions(
 	multisig: string,
 	items: ProposalItem[]
 ): Promise<boolean> {
-	const done = items.filter(
-		(i) =>
-			i.status === 'done' &&
-			(i.review.action?.kind === 'transfer' || i.review.action?.kind === 'batch')
-	);
+	const done = items.filter((i) => i.status === 'done' && transfersOf(i.review.action).length > 0);
 	if (done.length === 0) return false;
 	const known = new Set((await loadTransactions()).map((t) => t.id));
 	let wrote = false;
@@ -107,34 +102,50 @@ export async function recordRemoteExecutions(
 }
 
 /**
- * The transaction that executed `safeTxHash` (its `ExecutionSuccess`), or
- * `null` while the chain shows none — what a dApp that asked for it is
- * answered with.
+ * The transaction that executed `safeTxHash` (its `ExecutionSuccess`): its
+ * hash; `null` when the chain shows none (not executed — for a proposal whose
+ * number is used, voided by another transaction); `undefined` when the chain
+ * could not say. Never "none" for a read that failed: a dApp told its
+ * transaction was cancelled, or a member told it was voided, because a node
+ * did not answer, would be told something false.
+ */
+export async function findExecution(
+	multisig: string,
+	chainId: number,
+	safeTxHash: string
+): Promise<string | null | undefined> {
+	try {
+		const head = BigInt((await poolRpcCall('eth_blockNumber', [], chainId)).result as string);
+		const from = head > LOOKBACK ? head - LOOKBACK : 0n;
+		const answer = await poolRpcCall(
+			'eth_getLogs',
+			[
+				{
+					address: multisig,
+					topics: [EXECUTION_SUCCESS, safeTxHash],
+					fromBlock: `0x${from.toString(16)}`,
+					toBlock: 'latest'
+				}
+			],
+			chainId
+		);
+		if (answer.error || !Array.isArray(answer.result)) return undefined;
+		const logs = answer.result as { transactionHash?: unknown }[];
+		const hash = logs[0]?.transactionHash;
+		return typeof hash === 'string' ? hash : null;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The transaction that executed `safeTxHash`, or `null` while the chain
+ * shows none or cannot say — what a dApp that asked for it is answered with.
  */
 export async function executionTxHash(
 	multisig: string,
 	chainId: number,
 	safeTxHash: string
 ): Promise<string | null> {
-	try {
-		const head = BigInt((await poolRpcCall('eth_blockNumber', [], chainId)).result as string);
-		const from = head > LOOKBACK ? head - LOOKBACK : 0n;
-		const logs = (
-			await poolRpcCall(
-				'eth_getLogs',
-				[
-					{
-						address: multisig,
-						topics: [EXECUTION_SUCCESS, safeTxHash],
-						fromBlock: `0x${from.toString(16)}`,
-						toBlock: 'latest'
-					}
-				],
-				chainId
-			)
-		).result as { transactionHash: string }[] | undefined;
-		return logs?.[0]?.transactionHash ?? null;
-	} catch {
-		return null;
-	}
+	return (await findExecution(multisig, chainId, safeTxHash)) ?? null;
 }

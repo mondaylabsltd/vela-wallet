@@ -6385,10 +6385,14 @@ impl ClearBlindTyped {
     }
 }
 
-/// How many `message` rows the blind surface shows (`slice(0, 5)`).
-const BLIND_FIELD_LIMIT: usize = 5;
-/// `formatBlindValue`'s cap (`slice(0, 60)`).
-const BLIND_VALUE_LIMIT: usize = 60;
+/// How many `message` rows the blind surface shows. dapp-9 (2026-10-28): it
+/// was five, a nested struct one line of JSON — a message the person could
+/// not read. Every leaf of the message is a row now, up to this many.
+const BLIND_FIELD_LIMIT: usize = 40;
+/// One value's cap, in characters (a long hex word is mid-truncated instead).
+const BLIND_VALUE_LIMIT: usize = 200;
+/// How deep a nested struct is opened into rows; deeper is one JSON value.
+const BLIND_DEPTH_LIMIT: usize = 4;
 
 fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
     let Ok(raw) = serde_json::from_str::<TypedRaw>(typed_data_json) else {
@@ -6425,15 +6429,19 @@ fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
             .and_then(Value::as_str)
             .map(str::to_lowercase),
         fields: match raw.message {
-            Some(MessageRaw::Ordered(entries)) => entries
-                .0
-                .into_iter()
-                .take(BLIND_FIELD_LIMIT)
-                .map(|(key, value)| ClearBlindField {
-                    key: safe(key),
-                    value: safe(format_blind_value(&value)),
-                })
-                .collect(),
+            Some(MessageRaw::Ordered(entries)) => {
+                let mut rows = Vec::new();
+                for (key, value) in entries.0 {
+                    blind_rows(key, &value, 0, &mut rows);
+                }
+                rows.truncate(BLIND_FIELD_LIMIT);
+                rows.into_iter()
+                    .map(|(key, value)| ClearBlindField {
+                        key: safe(key),
+                        value: safe(value),
+                    })
+                    .collect()
+            }
             _ => Vec::new(),
         },
         has_invisible_chars,
@@ -6453,6 +6461,29 @@ fn is_truthy(value: &Value) -> bool {
 
 /// One raw typed-data value on a single line (`formatBlindValue`). A long hex
 /// blob is mid-truncated so it never wraps into a two-line hex wall.
+/// The message's leaves as `(path, value)` rows, in payload order: a nested
+/// struct's fields as `parent.child`, an array's items as `parent[i]` — the
+/// message as a person reads it, field by field, not one line of JSON. An
+/// empty container, or one past [`BLIND_DEPTH_LIMIT`], is its own JSON.
+fn blind_rows(path: String, value: &OrderedValue, depth: usize, out: &mut Vec<(String, String)>) {
+    if out.len() > BLIND_FIELD_LIMIT {
+        return;
+    }
+    match value {
+        OrderedValue::Object(entries) if !entries.is_empty() && depth < BLIND_DEPTH_LIMIT => {
+            for (key, inner) in entries {
+                blind_rows(format!("{path}.{key}"), inner, depth + 1, out);
+            }
+        }
+        OrderedValue::Array(items) if !items.is_empty() && depth < BLIND_DEPTH_LIMIT => {
+            for (i, inner) in items.iter().enumerate() {
+                blind_rows(format!("{path}[{i}]"), inner, depth + 1, out);
+            }
+        }
+        _ => out.push((path, format_blind_value(value))),
+    }
+}
+
 fn format_blind_value(value: &OrderedValue) -> String {
     if value.is_container() {
         return take_chars(&value.to_json(), 0, BLIND_VALUE_LIMIT);

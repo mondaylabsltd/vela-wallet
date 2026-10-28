@@ -28,8 +28,7 @@ import type { Account } from '$lib/core/generated/Account';
 import type { ExtCacheOperation } from '$lib/core/generated/ExtCacheOperation';
 import type { ExtCacheShellResult } from '$lib/core/generated/ExtCacheShellResult';
 import type { ExtSnapshot } from '$lib/core/generated/ExtSnapshot';
-import { EXT_CACHE_KEY, MULTISIGS_KEY } from '../keys';
-import { MULTISIG_ACCOUNT_PREFIX } from '$lib/multisig/core/ext';
+import { EXT_CACHE_KEY } from '../keys';
 
 interface DispatchResult {
 	effects: { id: number; operation: ExtCacheOperation }[];
@@ -76,7 +75,6 @@ export async function publishExtSnapshot(facts: SnapshotFacts): Promise<ExtSnaps
 			if (snapshot) written = snapshot;
 			queue.push(...resolve(id, result).effects);
 		}
-		await writeMultisigs(facts.accounts);
 		return written;
 	} finally {
 		core.free();
@@ -127,24 +125,6 @@ async function write(snapshot: ExtSnapshot): Promise<void> {
 		await area()?.set({ [EXT_CACHE_KEY]: snapshot });
 	} catch {
 		/* best-effort, as the App Group write is */
-	}
-}
-
-/**
- * Which of `accounts` are multisigs (`multisigAsAccount`'s ids), for the
- * worker's `wallet_getCapabilities`. Best-effort, as the snapshot is.
- */
-export function multisigAddresses(accounts: Account[]): string[] {
-	return accounts
-		.filter((a) => a.id.startsWith(MULTISIG_ACCOUNT_PREFIX))
-		.map((a) => a.address.toLowerCase());
-}
-
-async function writeMultisigs(accounts: Account[]): Promise<void> {
-	try {
-		await area()?.set({ [MULTISIGS_KEY]: multisigAddresses(accounts) });
-	} catch {
-		/* best-effort */
 	}
 }
 

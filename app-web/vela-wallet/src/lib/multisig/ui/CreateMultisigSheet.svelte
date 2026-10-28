@@ -109,10 +109,17 @@
 		typedError = null;
 	}
 
+	/** The member count the threshold was last set for: back and Next keep the person's pick. */
+	let thresholdFor = 0;
+
 	function toThreshold() {
 		if (!membersOk) return;
-		// A sensible start: all of two, else all but one — one lost passkey is survivable.
-		threshold = owners.length <= 2 ? owners.length : owners.length - 1;
+		// A sensible start: all of two, else all but one — one lost passkey is
+		// survivable. Only when the members changed; else it stays the person's.
+		if (thresholdFor !== owners.length) {
+			threshold = owners.length <= 2 ? owners.length : owners.length - 1;
+			thresholdFor = owners.length;
+		}
 		step = 'threshold';
 	}
 
@@ -231,9 +238,10 @@
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(o)}</span>
 						<span class="text"
-							><span class="name">{memberLabel(o)}</span><span class="address"
-								>{shortenAddress(o)}</span
-							></span
+							><span class="name">{memberLabel(o)}</span
+							>{#if memberLabel(o) !== shortenAddress(o)}<span class="address"
+									>{shortenAddress(o)}</span
+								>{/if}</span
 						>
 						<!-- vis-16: named for what it does, with whom (it read "Close"). -->
 						<button
@@ -262,14 +270,14 @@
 		<div class="stepper" role="group" aria-label={m.create.threshold}>
 			<button
 				type="button"
-				aria-label="−"
+				aria-label={m.create.fewer}
 				disabled={threshold <= 1}
 				onclick={() => (threshold -= 1)}>−</button
 			>
 			<output>{fillTemplate(m.create.thresholdValue, { m: threshold, n: owners.length })}</output>
 			<button
 				type="button"
-				aria-label="+"
+				aria-label={m.create.more}
 				disabled={threshold >= owners.length}
 				onclick={() => (threshold += 1)}>+</button
 			>
@@ -301,9 +309,10 @@
 			{#each owners as o, i (o)}
 				<li>
 					<span class="ordinal">{i + 1}</span><span class="text"
-						><span class="name">{memberLabel(o)}</span><span class="address"
-							>{shortenAddress(o)}</span
-						></span
+						><span class="name">{memberLabel(o)}</span
+						>{#if memberLabel(o) !== shortenAddress(o)}<span class="address"
+								>{shortenAddress(o)}</span
+							>{/if}</span
 					>
 				</li>
 			{/each}

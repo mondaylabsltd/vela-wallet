@@ -27,7 +27,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, callTitle } from '../core/call-review.svelte';
+	import { CallReading, callTitle, readableCalls } from '../core/call-review.svelte';
 	import { names } from '../core/names.svelte';
 	import {
 		actionRecipient,
@@ -36,17 +36,19 @@
 		explorerTxUrl,
 		formatUnits,
 		localName,
+		memberChanges,
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
-	import { sameAddress } from '../core/kernel';
+	import { findExecution } from '../core/records';
+	import { sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
 		approveExternally,
-		draftCall,
+		draftCalls,
 		execute,
 		MailboxUnreadableError,
 		proposals,
@@ -99,7 +101,7 @@
 		if (!draft) return;
 		draftFailure = null;
 		try {
-			drafted = await draftCall(draft.address, chainId, draft.call);
+			drafted = await draftCalls(draft.address, chainId, draft.calls);
 		} catch (error) {
 			draftFailure = reasonOf(error);
 		}
@@ -128,9 +130,11 @@
 		if (!current) return;
 		void actionTitle(m, chainId, current.review.action, current.nonce).then((t) => (title = t));
 		const action = current.review.action;
-		if (action?.kind === 'batch') {
+		// A batch of transfers alone keeps its lines; one with calls is read
+		// call by call below, as the signing sheet reads a batch.
+		if (action?.kind === 'batch' && readableCalls(action) === null) {
 			void Promise.all(
-				action.transfers.map(async (t) => {
+				transfersOf(action).map(async (t) => {
 					const info = await tokenInfo(chainId, t.token).catch(() => ({
 						symbol: '',
 						decimals: 18
@@ -147,9 +151,9 @@
 	 * call must not be read again (and flash "Loading…") each time.
 	 */
 	const callKey = $derived.by(() => {
-		const action = item?.review.action;
-		return action?.kind === 'call'
-			? `${chainId}:${account.address}:${action.to}:${action.value}:${action.data}`
+		const calls = readableCalls(item?.review.action ?? null);
+		return calls
+			? `${chainId}:${account.address}:${calls.map((c) => `${c.to}:${c.value}:${c.data}`).join(';')}`
 			: '';
 	});
 	let reading = $state<CallReading | null>(null);
@@ -160,8 +164,9 @@
 			chain: chainId,
 			address: account.address
 		}));
-		if (action?.kind !== 'call') return;
-		const next = new CallReading(chain, address, action);
+		const calls = readableCalls(action ?? null);
+		if (!calls) return;
+		const next = new CallReading(chain, address, calls);
 		reading = next;
 		void next.start();
 		return () => {
@@ -169,6 +174,8 @@
 			if (reading === next) reading = null;
 		};
 	});
+	/** A batch's calls into the multisig itself: each one changes who controls it, said loudly. */
+	const changes = $derived(memberChanges(m, item?.review.action ?? null));
 	/** The core's verb for a call it could read ("Approve"); else the multisig's line. */
 	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
 
@@ -308,13 +315,19 @@
 		}
 	}
 
-	/** Owners still to approve whose wallets are elsewhere: an outside wallet can sign for any. */
+	/**
+	 * Owners still to approve whose wallets are elsewhere: an outside wallet
+	 * can sign for any — a queued one too (its approval waits like any other).
+	 * Not a Vela account on another device (ms-11): its key is a passkey, and
+	 * it approves in Vela, from the link.
+	 */
 	const outside = $derived(
-		!item || item.status === 'done' || item.status === 'queued' || item.review.action === null
+		!item || item.status === 'done' || item.review.action === null
 			? []
 			: (members?.owners ?? []).filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
+						!names.isVela(o) &&
 						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
 	);
@@ -360,6 +373,28 @@
 		}
 	}
 
+	/*
+	 * A transaction whose number is used, finished here or anywhere: executed
+	 * (the transaction whose `ExecutionSuccess` names it), or voided by another
+	 * transaction at its number — read from the chain, never guessed. `null`
+	 * while it is being read or the chain cannot say.
+	 */
+	let finished = $state<{ txHash: string | null } | null>(null);
+	const doneKey = $derived(item?.status === 'done' ? item.safeTxHash : '');
+	$effect(() => {
+		const key = doneKey;
+		finished = null;
+		if (!key) return;
+		let live = true;
+		const address = untrack(() => account.address);
+		void findExecution(address, chainId, key).then((hash) => {
+			if (live && hash !== undefined) finished = { txHash: hash };
+		});
+		return () => {
+			live = false;
+		};
+	});
+
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 	const busy = $derived(phase.kind === 'busy');
 	const recipient = $derived(item ? actionRecipient(item.review.action) : null);
@@ -395,8 +430,13 @@
 			<p class="quiet" aria-busy="true">{m.proposal.opening}</p>
 		{/if}
 	{:else if !item}
-		<p class="quiet" aria-busy="true">
-			{proposals.loading ? m.proposal.opening : m.proposal.notFound}
+		<!-- Read from the mailbox and still not there: said as that (ms-22). -->
+		<p class="quiet" aria-busy={!proposals.chain(chainId)?.mailbox}>
+			{proposals.loading
+				? m.proposal.opening
+				: proposals.chain(chainId)?.mailbox
+					? m.proposal.notInMailbox
+					: m.proposal.notFound}
 		</p>
 	{:else}
 		{#if draft}
@@ -416,7 +456,7 @@
 				</p>
 			{/if}
 			{#if reading}
-				<CallReview {reading} m={signing} />
+				<CallReview {reading} m={signing} alerts={changes} />
 			{/if}
 			{#if lines.length > 0}
 				<ul class="lines">
@@ -447,6 +487,14 @@
 					<summary>{m.proposal.data}</summary>
 					<code>{item.review.action.data}</code>
 				</details>
+			{:else if item.review.action?.kind === 'batch' && reading}
+				<!-- Every call's own bytes, in the batch's order. -->
+				<details class="data">
+					<summary>{m.proposal.data}</summary>
+					{#each item.review.action.calls as call, i (i)}
+						<code>#{i + 1} {call.to} {call.data}</code>
+					{/each}
+				</details>
 			{/if}
 		</header>
 
@@ -461,16 +509,22 @@
 			<h3>
 				{m.proposal.approvals}
 				<span class="count"
-					>{fillTemplate(m.status.progress, {
-						approved: shownApproved,
-						threshold: item.threshold
-					})}</span
+					>{finished
+						? finished.txHash
+							? m.proposal.executed
+							: m.proposal.voided
+						: fillTemplate(m.status.progress, {
+								approved: shownApproved,
+								threshold: item.threshold
+							})}</span
 				>
 			</h3>
 			<div class="bar" aria-hidden="true">
 				<span
 					class="fill"
-					style:width="{Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"
+					style:width="{finished?.txHash
+						? 100
+						: Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"
 				></span>
 			</div>
 			<ul>
@@ -496,7 +550,7 @@
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
-							{:else}
+							{:else if item.status !== 'done'}
 								{m.proposal.waiting}
 							{/if}
 						</span>
@@ -506,7 +560,28 @@
 		</section>
 
 		{#if item.status === 'done' && phase.kind !== 'sent'}
-			<p class="quiet">{m.proposal.doneNote}</p>
+			<!-- Said once it is read from the chain: executed (where), or voided. -->
+			{#if finished?.txHash}
+				<p class="quiet">
+					{m.proposal.executed}
+					{#if explorerTxUrl(chainId, finished.txHash)}
+						·
+						<!-- eslint-disable svelte/no-navigation-without-resolve -- an external block explorer -->
+						<a
+							href={explorerTxUrl(chainId, finished.txHash)}
+							target="_blank"
+							rel="noopener noreferrer">{m.proposal.explorer}</a
+						>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
+					{/if}
+				</p>
+			{:else if finished}
+				<p class="quiet">
+					{fillTemplate(m.proposal.voidedNote, { nonce: item.nonce.toString() })}
+				</p>
+			{:else}
+				<p class="quiet">{m.proposal.doneNote}</p>
+			{/if}
 		{:else if item.status === 'queued'}
 			<p class="quiet">
 				{fillTemplate(m.proposal.queuedNote, {
@@ -514,7 +589,7 @@
 				})}
 			</p>
 		{/if}
-		{#if item.cancelledBy}
+		{#if item.cancelledBy && item.status !== 'done'}
 			<p class="quiet">{m.proposal.cancelPending}</p>
 		{/if}
 
@@ -616,7 +691,13 @@
 		{/if}
 
 		{#if draft && !drafting && item.status !== 'done'}
-			<p class="fine">{fillTemplate(m.proposal.siteWaits, { host: site })}</p>
+			<!-- A batch's site was given its id; a transaction's waits for its hash. -->
+			<p class="fine">
+				{fillTemplate(
+					draft.method === 'wallet_sendCalls' ? m.proposal.siteFollows : m.proposal.siteWaits,
+					{ host: site }
+				)}
+			</p>
 		{/if}
 
 		<!-- Only while approvals are missing: not once it is being executed. -->
@@ -664,7 +745,9 @@
 			</div>
 		{/if}
 
-		{#if !drafting}<p class="fine subtle">{m.proposal.noExpiry}</p>{/if}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent'}
+			<p class="fine subtle">{m.proposal.noExpiry}</p>
+		{/if}
 	{/if}
 </Sheet>
 

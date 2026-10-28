@@ -125,7 +125,12 @@ export async function actionTitle(
 			});
 		}
 		case 'batch':
-			return fillTemplate(m.action.batch, { total: action.transfers.length });
+			return fillTemplate(
+				action.calls.every((c) => c.action.kind === 'transfer')
+					? m.action.batch
+					: m.action.batchCalls,
+				{ total: action.calls.length }
+			);
 		case 'cancel':
 			return fillTemplate(m.action.cancel, { nonce: nonce.toString() });
 		case 'addOwner':
@@ -145,6 +150,38 @@ export async function actionTitle(
 			});
 		}
 	}
+}
+
+/**
+ * A batch's calls into the multisig itself, one line each: every one changes
+ * who controls it (a member added, removed or replaced, the approvals it
+ * needs), so a member reads it first and loudly — "Call #2 changes this
+ * multisig: Add a member 0x12…34, Require 2 approvals". Nothing for anything
+ * else (a transaction that is only a member change is titled as one).
+ */
+export function memberChanges(m: MultisigMessages, action: Action | null): string[] {
+	if (action?.kind !== 'batch') return [];
+	return action.calls.flatMap((call, i) => {
+		const a = call.action;
+		let change: string;
+		switch (a.kind) {
+			case 'addOwner':
+				change = `${m.action.addOwner} ${shortenAddress(a.owner)}, ${fillTemplate(m.action.changeThreshold, { threshold: a.threshold })}`;
+				break;
+			case 'removeOwner':
+				change = `${m.action.removeOwner} ${shortenAddress(a.owner)}, ${fillTemplate(m.action.changeThreshold, { threshold: a.threshold })}`;
+				break;
+			case 'swapOwner':
+				change = `${m.action.swapOwner} ${shortenAddress(a.oldOwner)} → ${shortenAddress(a.newOwner)}`;
+				break;
+			case 'changeThreshold':
+				change = fillTemplate(m.action.changeThreshold, { threshold: a.threshold });
+				break;
+			default:
+				return [];
+		}
+		return [fillTemplate(m.proposal.changesMembers, { index: i + 1, change })];
+	});
 }
 
 /** Who a transaction pays, when it pays one address. */

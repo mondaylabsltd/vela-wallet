@@ -47,7 +47,6 @@
 import {
 	CHAIN_PREFIX,
 	CHAINS_KEY,
-	MULTISIGS_KEY,
 	DOC_PORT,
 	ENDPOINTS_KEY,
 	ERR,
@@ -62,8 +61,11 @@ import {
 	BUNDLER_METHODS,
 	UNKNOWN_BUNDLE_ID,
 	USER_OP_STATUS_METHOD,
+	SAFE_EXECUTION_SUCCESS,
+	SAFE_NONCE_CALL,
 	callsStatusId,
 	callsStatusResult,
+	multisigCallsStatusResult,
 	capabilitiesResult,
 	catalogChainIds,
 	chainEndpoints,
@@ -89,6 +91,7 @@ import {
 	affectedBy,
 	callerOwns,
 	claimVerdict,
+	maybeSentHash,
 	newRecord,
 	nextForWindow,
 	nextQueued,
@@ -412,7 +415,20 @@ async function settle(rid, cause) {
 	const owner = ownerOf(record);
 	postTo(owner, { type: 'withdrawn', rid, cause });
 	void swlog.log('req.settled', { cause, tab: record.tabId });
-	void deliver(record, { error: settlement(cause) });
+	void deliver(record, { error: settlement(cause, record) });
+	// dapp-12: the page left after the transaction was claimed for submit —
+	// it may be landing. Its receipt reads are translated from now on (a
+	// page that reloads may still ask by the hash), and its window is left
+	// to the receipt: the surface closes it on Done.
+	const sent = maybeSentHash(record);
+	if (sent) void rememberOp(sent, { chainId: record.chainId });
+	if (sent && cause === 'page_left' && record.surface === 'window') {
+		const next = nextQueued([...records.values()], record.origin);
+		if (!next) {
+			if (owner.kind === 'panel') pushOwed(owner);
+			return true;
+		}
+	}
 	void releaseWindow(record, cause);
 	if (owner.kind === 'panel') pushOwed(owner);
 	return true;
@@ -1226,6 +1242,14 @@ async function forwardRead(method, params, origin) {
 	if (asked) {
 		const stored = await readLocal(opKey(asked));
 		const entry = liveOpEntry(stored[opKey(asked)], Date.now());
+		if (entry?.multisig) {
+			// A multisig's batch id is its safeTxHash: the transaction that
+			// executed it, once there is one.
+			const found = await multisigExecution(entry, asked, catalog);
+			return found.txHash
+				? readChain(method, [found.txHash], catalog, entry.chainId)
+				: { result: null };
+		}
 		if (entry) return translatedReceipt(method, entry.chainId, asked, catalog);
 	}
 	return readChain(method, params, catalog, chainOf(origin, all));
@@ -1237,16 +1261,86 @@ async function forwardRead(method, params, origin) {
 
 /**
  * `wallet_getCapabilities`: atomic batches on every chain the wallet has, for
- * the account the site may see — none for a multisig, which proposes no
- * batch (`capabilitiesResult`, the core's `dapp_rpc::capabilities`, twinned).
+ * the account the site may see — a multisig's too, sent as ONE proposal
+ * (`capabilitiesResult`, the core's `dapp_rpc::capabilities`, twinned).
  */
 async function capabilities(params, origin) {
-	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY, MULTISIGS_KEY]);
+	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
 	const granted = grantedAccounts(all[PERM_PREFIX + origin] ?? null, all[EXT_CACHE_KEY] ?? null);
-	const multisigs = Array.isArray(all[MULTISIGS_KEY]) ? all[MULTISIGS_KEY] : [];
-	return capabilitiesResult(params, granted, catalogChainIds(catalog), multisigs);
+	return capabilitiesResult(params, granted, catalogChainIds(catalog));
+}
+
+/** How far back an execution is looked for when the proposal's block is unknown. */
+const MULTISIG_LOOKBACK = 50_000n;
+
+/**
+ * Where a multisig's proposal `id` (its safeTxHash) stands, read from the
+ * multisig itself on its chain: `numberUsed` once its nonce is past the
+ * proposal's; then the transaction whose `ExecutionSuccess` names `id`, if
+ * one does. `unknown` when the chain could not say (the page polls on).
+ */
+async function multisigExecution(entry, id, catalog) {
+	const { safe, nonce, fromBlock } = entry.multisig;
+	const read = await readChain(
+		'eth_call',
+		[{ to: safe, data: SAFE_NONCE_CALL }, 'latest'],
+		catalog,
+		entry.chainId
+	);
+	if (read.error) return { unknown: true };
+	// No code yet (`0x`): never executed anything, its nonce is 0.
+	const current = typeof read.result === 'string' && read.result.length > 2 ? read.result : '0x0';
+	let numberUsed;
+	try {
+		numberUsed = BigInt(current) > BigInt(nonce);
+	} catch {
+		return { unknown: true };
+	}
+	if (!numberUsed) return { numberUsed: false };
+	let from = fromBlock;
+	if (!from) {
+		const head = await readChain('eth_blockNumber', [], catalog, entry.chainId);
+		if (head.error || typeof head.result !== 'string') return { unknown: true };
+		const n = BigInt(head.result);
+		from = `0x${(n > MULTISIG_LOOKBACK ? n - MULTISIG_LOOKBACK : 0n).toString(16)}`;
+	}
+	const logs = await readChain(
+		'eth_getLogs',
+		[{ address: safe, topics: [SAFE_EXECUTION_SUCCESS, id], fromBlock: from, toBlock: 'latest' }],
+		catalog,
+		entry.chainId
+	);
+	if (logs.error || !Array.isArray(logs.result)) return { unknown: true };
+	const txHash = logs.result[0]?.transactionHash;
+	return { numberUsed: true, txHash: typeof txHash === 'string' ? txHash : null };
+}
+
+/**
+ * `wallet_getCallsStatus` for a multisig's batch: pending while its proposal
+ * waits for approvals and execution, then the execution's receipt — or 400
+ * when another transaction took its number (`multisigCallsStatusResult`, the
+ * core's `dapp_rpc::multisig_calls_status`, twinned).
+ */
+async function multisigCallsStatus(id, entry, catalog) {
+	const found = await multisigExecution(entry, id, catalog);
+	if (found.unknown) return { result: multisigCallsStatusResult(id, entry.chainId, null, false) };
+	let receipt = null;
+	if (found.txHash) {
+		const read = await readChain(
+			'eth_getTransactionReceipt',
+			[found.txHash],
+			catalog,
+			entry.chainId
+		);
+		// Executed, its receipt not readable just now: still pending to the page.
+		if (read.error || !read.result) {
+			return { result: multisigCallsStatusResult(id, entry.chainId, null, false) };
+		}
+		receipt = read.result;
+	}
+	return { result: multisigCallsStatusResult(id, entry.chainId, receipt, found.numberUsed) };
 }
 
 /**
@@ -1266,6 +1360,7 @@ async function callsStatus(params) {
 	if (!entry) return { error: rpcError(UNKNOWN_BUNDLE_ID, 'Unknown bundle id') };
 	const catalog = stored[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
+	if (entry.multisig) return multisigCallsStatus(id, entry, catalog);
 	const found = await readChain('eth_getUserOperationReceipt', [id], catalog, entry.chainId);
 	const receipt = found.error ? null : found.result;
 	const landed = callsStatusResult(id, entry.chainId, receipt);

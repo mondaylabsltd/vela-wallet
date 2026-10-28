@@ -865,16 +865,31 @@ export function dappRpcCallsStatusId(params_json: string): string | undefined;
 
 /**
  * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
- * request's params, the site's granted addresses, the wallet's chains and
- * the multisig accounts among its addresses (all JSON). Answers
- * `{"result":…}` or `{"error":{"code","message"}}`.
+ * request's params, the site's granted addresses and the wallet's chains (all
+ * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
  */
-export function dappRpcCapabilities(params_json: string, granted_json: string, chains_json: string, multisigs_json: string): string;
+export function dappRpcCapabilities(params_json: string, granted_json: string, chains_json: string): string;
 
 /**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  */
 export function dappRpcClassify(method: string): string;
+
+/**
+ * The calls a site's `eth_sendTransaction` or `wallet_sendCalls` asks a
+ * multisig to make on `chain_id` (`dapp_rpc::multisig_calls`): answers
+ * `{"result":[{to,value,data}]}` or `{"error":{"code","message"}}`.
+ */
+export function dappRpcMultisigCalls(method: string, params_json: string, chain_id: number): string;
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` for a batch a MULTISIG answered with
+ * (its id is the proposal's safeTxHash): `dapp_rpc::multisig_calls_status`
+ * over the receipt of the transaction whose `ExecutionSuccess` names it
+ * (JSON; `undefined`/`null`: none found) and whether the multisig's nonce is
+ * past the proposal's — as JSON.
+ */
+export function dappRpcMultisigCallsStatus(id: string, chain_id: number, execution_receipt_json: string | null | undefined, number_used: boolean): string;
 
 /**
  * EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
@@ -1912,8 +1927,10 @@ export interface InitOutput {
     readonly dappRequestDisplay: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
-    readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
+    readonly dappRpcMultisigCalls: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly dappRpcMultisigCallsStatus: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcSendCallsResult: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;

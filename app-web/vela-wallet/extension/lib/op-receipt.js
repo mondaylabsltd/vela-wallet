@@ -20,10 +20,30 @@
 
 import { batchIdOf } from './protocol.js';
 
-/** `vela.ext.op.<lower-case hash>` → `{ chainId, at }`, in storage.local. */
+/**
+ * `vela.ext.op.<lower-case hash>` → `{ chainId, at }`, in storage.local — and,
+ * for a batch a MULTISIG answered with, `multisig: { safe, nonce, fromBlock? }`:
+ * the id is the proposal's safeTxHash, read from the multisig's own chain
+ * state (`multisigCallsStatusResult`), not from a bundler.
+ */
 export const OP_PREFIX = 'vela.ext.op.';
 /** How long a handed-out operation hash is translated. */
 export const OP_TTL_MS = 24 * 60 * 60 * 1000;
+/** How long a multisig's batch is known: its approvals take as long as its members do. */
+export const MULTISIG_OP_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const QUANTITY = /^(0x[0-9a-fA-F]+|[0-9]+)$/;
+
+/** `{ safe, nonce, fromBlock? }` when `value` is one, else `null`. */
+function multisigOf(value) {
+	if (!value || typeof value !== 'object') return null;
+	const { safe, nonce, fromBlock } = value;
+	if (typeof safe !== 'string' || !ADDRESS.test(safe)) return null;
+	if (typeof nonce !== 'string' || !QUANTITY.test(nonce)) return null;
+	const from = typeof fromBlock === 'string' && QUANTITY.test(fromBlock) ? fromBlock : null;
+	return from ? { safe, nonce, fromBlock: from } : { safe, nonce };
+}
 /** The page's receipt reads that are translated. */
 export const RECEIPT_METHODS = new Set(['eth_getTransactionReceipt', 'eth_getTransactionByHash']);
 
@@ -49,7 +69,11 @@ export function opRecord(result, opHash, now) {
 	if (!isHash32(hash)) return null;
 	const chainId = opHash && typeof opHash === 'object' ? Number(opHash.chainId) : NaN;
 	if (!Number.isInteger(chainId) || chainId <= 0) return null;
-	return { key: opKey(hash), value: { chainId, at: now } };
+	const multisig = multisigOf(opHash.multisig);
+	return {
+		key: opKey(hash),
+		value: multisig ? { chainId, at: now, multisig } : { chainId, at: now }
+	};
 }
 
 /**
@@ -62,13 +86,15 @@ export function receiptLookupHash(method, params) {
 	return isHash32(first) ? first : null;
 }
 
-/** The stored entry, when it is still inside its 24 hours; else `null`. */
+/** The stored entry, when it is still inside its 24 hours (a multisig's: 30 days); else `null`. */
 export function liveOpEntry(entry, now) {
 	if (!entry || typeof entry !== 'object') return null;
 	const chainId = Number(entry.chainId);
 	if (!Number.isInteger(chainId) || chainId <= 0) return null;
-	if (typeof entry.at !== 'number' || now - entry.at >= OP_TTL_MS) return null;
-	return { chainId, at: entry.at };
+	const multisig = multisigOf(entry.multisig);
+	const ttl = multisig ? MULTISIG_OP_TTL_MS : OP_TTL_MS;
+	if (typeof entry.at !== 'number' || now - entry.at >= ttl) return null;
+	return multisig ? { chainId, at: entry.at, multisig } : { chainId, at: entry.at };
 }
 
 /**

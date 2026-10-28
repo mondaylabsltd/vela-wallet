@@ -87,7 +87,8 @@
         "createAccountNote": "Tài khoản mới, được giữ bằng passkey trên thiết bị này.",
         "signInNote": "Tài khoản bạn đã có, đăng nhập bằng passkey của nó.",
         "createMultisigNote": "Tài khoản nhiều thành viên dùng chung: mỗi lần chuyển cần đủ phê duyệt.",
-        "addMultisigNote": "Bằng địa chỉ, hoặc nhập các Safe của bạn từ Safe{Wallet}."
+        "addMultisigNote": "Bằng địa chỉ, hoặc nhập các Safe của bạn từ Safe{Wallet}.",
+        "lastMember": "Đây là thành viên duy nhất của {{names}} trên thiết bị này: không có nó, ở đây chỉ xem được, không phê duyệt được."
       },
       "panel": {
         "title": "Cần {{m}} trong {{n}} thành viên duyệt",
@@ -119,7 +120,8 @@
         "network": "Mạng",
         "number": "Giao dịch #",
         "call": "Gọi hợp đồng",
-        "callWithValue": "Gọi hợp đồng kèm {{amount}} {{symbol}}"
+        "callWithValue": "Gọi hợp đồng kèm {{amount}} {{symbol}}",
+        "batchCalls": "{{total}} lệnh gọi trong một giao dịch"
       },
       "proposal": {
         "title": "Giao dịch đa chữ ký",
@@ -157,7 +159,14 @@
         "notSent": "Mạng không nhận giao dịch nên chưa có gì được gửi. Hãy thử lại.",
         "siteAsks": "{{host}} yêu cầu giao dịch này.",
         "siteWaits": "{{host}} chờ đến khi các thành viên thực hiện hoặc từ chối giao dịch. Nếu bạn đóng mục này, trang web được báo là giao dịch đã được đề xuất, và giao dịch vẫn nằm trong Hoạt động.",
-        "data": "Dữ liệu"
+        "data": "Dữ liệu",
+        "changesMembers": "Lệnh gọi #{{index}} thay đổi chính multisig này: {{change}}. Chỉ phê duyệt nếu mọi thành viên đều biết trước.",
+        "siteFollows": "{{host}} đã nhận mã của giao dịch này và theo dõi đến khi các thành viên thực thi hoặc từ chối. Giao dịch vẫn nằm trong Hoạt động.",
+        "voided": "Đã hủy",
+        "voidedNote": "Đã hủy: một giao dịch khác đã dùng số #{{nonce}}, nên giao dịch này sẽ không bao giờ chạy.",
+        "notInMailbox": "Giao dịch này không có trong hộp thư của multisig. Hãy nhờ người gửi liên kết kiểm tra lại.",
+        "unknownNetwork": "Liên kết này dành cho mạng Vela chưa có (chain {{chainId}}). Hãy thêm mạng trong Cài đặt rồi mở lại liên kết.",
+        "badLink": "Liên kết tới giao dịch multisig này bị thiếu hoặc hỏng. Hãy xin lại liên kết."
       },
       "send": {
         "propose": "Đề xuất và duyệt",
@@ -196,7 +205,10 @@
         "name": "Tên",
         "namePlaceholder": "vd: Quỹ nhóm",
         "nameHint": "Mọi thành viên đều thấy tên này. Tên được lưu cùng multisig và không thể đổi sau này.",
-        "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển, ký tự ẩn hay khoảng trắng ở đầu hoặc cuối."
+        "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển, ký tự ẩn hay khoảng trắng ở đầu hoặc cuối.",
+        "fewer": "Ít phê duyệt hơn",
+        "more": "Nhiều phê duyệt hơn",
+        "copyAddress": "Sao chép địa chỉ"
       },
       "add": {
         "title": "Thêm đa chữ ký",
@@ -242,7 +254,11 @@
         "signedBy": "Được ký bởi {{owner}}",
         "unpair": "Hủy ghép nối",
         "ownerWallet": "Ví của thành viên",
-        "retry": "Thử lại"
+        "retry": "Thử lại",
+        "pageAway": "Trang ví đã đóng. Hãy mở lại ở nơi có ví của bạn: yêu cầu vẫn đang chờ.",
+        "connectDeclined": "Kết nối đã bị từ chối trên trang ví. Thử lại để hỏi thêm lần nữa.",
+        "declinedHere": "Bạn đã từ chối. Vela đã được báo; bạn có thể đóng trang này.",
+        "otherChain": "Ví vẫn ở mạng khác. Hãy chuyển sang {{chain}} rồi thử lại."
       },
       "import": {
         "or": "Hoặc nhập từ Safe{Wallet}",

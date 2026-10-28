@@ -424,7 +424,8 @@
     "createAccountNote": "Ein neues Konto, gesichert durch einen Passkey auf diesem Gerät.",
     "signInNote": "Ein Konto, das du schon hast, mit seinem Passkey.",
     "createMultisigNote": "Ein Konto, das mehrere Mitglieder teilen: Überweisungen brauchen genug Genehmigungen.",
-    "addMultisigNote": "Über seine Adresse, oder importiere deine Safes aus Safe{Wallet}."
+    "addMultisigNote": "Über seine Adresse, oder importiere deine Safes aus Safe{Wallet}.",
+    "lastMember": "Es ist das einzige Mitglied von {{names}} auf diesem Gerät: Ohne es kann hier nur noch gelesen, nicht mehr genehmigt werden."
    },
    "panel": {
     "title": "{{m}} von {{n}} Mitgliedern genehmigen",
@@ -456,7 +457,8 @@
     "network": "Netzwerk",
     "number": "Transaktion #",
     "call": "Vertragsaufruf",
-    "callWithValue": "Vertragsaufruf mit {{amount}} {{symbol}}"
+    "callWithValue": "Vertragsaufruf mit {{amount}} {{symbol}}",
+    "batchCalls": "{{total}} Aufrufe in einer Transaktion"
    },
    "proposal": {
     "title": "Multisig-Transaktion",
@@ -494,7 +496,14 @@
     "notSent": "Das Netzwerk hat sie nicht angenommen, es wurde nichts gesendet. Versuche es erneut.",
     "siteAsks": "{{host}} möchte diese Transaktion.",
     "siteWaits": "{{host}} wartet, bis die Mitglieder sie ausführen oder ablehnen. Wenn du das hier schließt, erfährt die Seite, dass sie vorgeschlagen wurde; sie bleibt in den Aktivitäten.",
-    "data": "Daten"
+    "data": "Daten",
+    "changesMembers": "Aufruf #{{index}} ändert diesen Multisig selbst: {{change}}. Genehmige nur, wenn alle Mitglieder das erwarten.",
+    "siteFollows": "{{host}} hat die Kennung dieser Transaktion erhalten und verfolgt sie, bis die Mitglieder sie ausführen oder ablehnen. Sie bleibt in den Aktivitäten.",
+    "voided": "Storniert",
+    "voidedNote": "Storniert: Eine andere Transaktion hat die Nummer #{{nonce}} verwendet, diese kann nie mehr ausgeführt werden.",
+    "notInMailbox": "Diese Transaktion ist nicht im Postfach dieses Multisigs. Bitte die Person, die den Link geschickt hat, ihn zu prüfen.",
+    "unknownNetwork": "Dieser Link gehört zu einem Netzwerk, das Vela nicht hat (Chain {{chainId}}). Füge das Netzwerk in den Einstellungen hinzu und öffne den Link erneut.",
+    "badLink": "Dieser Link zu einer Multisig-Transaktion ist unvollständig oder beschädigt. Bitte um einen neuen."
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -533,7 +542,10 @@
     "name": "Name",
     "namePlaceholder": "z. B. Teamkasse",
     "nameHint": "Alle Mitglieder sehen diesen Namen. Er wird mit dem Multisig gespeichert und kann später nicht geändert werden.",
-    "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen oder unsichtbare Zeichen und ohne Leerzeichen am Anfang oder Ende."
+    "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen oder unsichtbare Zeichen und ohne Leerzeichen am Anfang oder Ende.",
+    "fewer": "Weniger Genehmigungen",
+    "more": "Mehr Genehmigungen",
+    "copyAddress": "Adresse kopieren"
    },
    "add": {
     "title": "Multisig hinzufügen",
@@ -579,7 +591,11 @@
     "signedBy": "Signiert von {{owner}}",
     "unpair": "Kopplung aufheben",
     "ownerWallet": "Wallet des Mitglieds",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "pageAway": "Die Wallet-Seite wurde geschlossen. Öffne sie dort erneut, wo deine Wallet ist: Die Anfrage wartet noch.",
+    "connectDeclined": "Die Verbindung wurde auf der Wallet-Seite abgelehnt. Versuche es erneut, um noch einmal zu fragen.",
+    "declinedHere": "Du hast abgelehnt. Vela weiß Bescheid; du kannst diese Seite schließen.",
+    "otherChain": "Die Wallet ist in einem anderen Netzwerk geblieben. Wechsle zu {{chain}} und versuche es erneut."
    },
    "import": {
     "or": "Oder aus Safe{Wallet} importieren",
@@ -1381,7 +1397,12 @@
    "clearAll": "Alle löschen",
    "clearAllTitle": "Verlauf löschen?",
    "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
-   "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+   "a11yDeleteHistory": "Aus dem Verlauf entfernen",
+   "signedOut": "Sie sind bei Vela nicht angemeldet. Melden Sie sich mit Ihrem Passkey an oder erstellen Sie eine Wallet, um fortzufahren.",
+   "signInTitle": "Zum Fortfahren anmelden",
+   "multisigNoMessagesTitle": "Ein Multisig kann noch keine Nachrichten signieren",
+   "multisigNoMessagesBody": "{{host}} hat diesen Multisig gebeten, eine Nachricht zu signieren. Die Signatur eines Multisigs braucht die Genehmigungen seiner Mitglieder, die Vela für Nachrichten noch nicht sammelt, daher erhält die Website eine Absage. Transaktionen funktionieren weiterhin: Sie werden zu Vorschlägen, die die Mitglieder genehmigen.",
+   "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen."
   },
   "ext": {
    "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",

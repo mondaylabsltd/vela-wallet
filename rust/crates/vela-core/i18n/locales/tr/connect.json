@@ -110,7 +110,12 @@
       "clearAll": "Tümünü temizle",
       "clearAllTitle": "Geçmiş temizlensin mi?",
       "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
-      "a11yDeleteHistory": "Geçmişten kaldır"
+      "a11yDeleteHistory": "Geçmişten kaldır",
+      "signedOut": "Vela’da oturum açmadın. Devam etmek için geçiş anahtarınla oturum aç ya da cüzdan oluştur.",
+      "signInTitle": "Devam etmek için oturum aç",
+      "multisigNoMessagesTitle": "Çoklu imza henüz mesaj imzalayamıyor",
+      "multisigNoMessagesBody": "{{host}} bu çoklu imzadan bir mesaj imzalamasını istedi. Çoklu imzanın imzası üyelerinin onayını gerektirir; Vela mesajlar için bunu henüz toplamıyor, bu yüzden siteye hayır denecek. İşlemler yine çalışır: üyelerin onayladığı tekliflere dönüşür.",
+      "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez."
     },
     "ext": {
       "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",

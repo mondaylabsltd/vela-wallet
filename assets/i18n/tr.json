@@ -424,7 +424,8 @@
     "createAccountNote": "Bu cihazdaki bir passkey ile korunan yeni bir hesap.",
     "signInNote": "Zaten sahip olduğunuz bir hesap, passkey'iyle.",
     "createMultisigNote": "Birkaç üyenin paylaştığı bir hesap: transferler yeterli onay gerektirir.",
-    "addMultisigNote": "Adresiyle ya da Safe'lerinizi Safe{Wallet}'tan içe aktararak."
+    "addMultisigNote": "Adresiyle ya da Safe'lerinizi Safe{Wallet}'tan içe aktararak.",
+    "lastMember": "Bu cihazda {{names}} için tek üye bu: o olmadan burada yalnızca görüntülenebilir, onaylanamaz."
    },
    "panel": {
     "title": "{{n}} üyeden {{m}} onayı gerekir",
@@ -456,7 +457,8 @@
     "network": "Ağ",
     "number": "İşlem #",
     "call": "Sözleşme çağrısı",
-    "callWithValue": "{{amount}} {{symbol}} ile sözleşme çağrısı"
+    "callWithValue": "{{amount}} {{symbol}} ile sözleşme çağrısı",
+    "batchCalls": "Tek işlemde {{total}} çağrı"
    },
    "proposal": {
     "title": "Çoklu imza işlemi",
@@ -494,7 +496,14 @@
     "notSent": "Ağ bunu kabul etmedi, bu yüzden hiçbir şey gönderilmedi. Yeniden deneyin.",
     "siteAsks": "{{host}} bu işlemi istiyor.",
     "siteWaits": "{{host}}, üyeler işlemi yürütene ya da reddedene kadar bekler. Bunu kapatırsanız siteye önerildiği bildirilir ve işlem Etkinlik içinde kalır.",
-    "data": "Veri"
+    "data": "Veri",
+    "changesMembers": "#{{index}} numaralı çağrı bu çoklu imzanın kendisini değiştiriyor: {{change}}. Yalnızca tüm üyeler bunu bekliyorsa onayla.",
+    "siteFollows": "{{host}} bu işlemin kimliğini aldı ve üyeler onu yürütene ya da reddedene kadar takip ediyor. İşlem Etkinlik’te kalır.",
+    "voided": "İptal edildi",
+    "voidedNote": "İptal edildi: #{{nonce}} numarasını başka bir işlem kullandı, bu işlem artık hiç çalışamaz.",
+    "notInMailbox": "Bu işlem bu çoklu imzanın posta kutusunda yok. Bağlantıyı gönderen kişiden kontrol etmesini iste.",
+    "unknownNetwork": "Bu bağlantı Vela’da olmayan bir ağ için (zincir {{chainId}}). Ağı Ayarlar’dan ekle, sonra bağlantıyı yeniden aç.",
+    "badLink": "Bu çoklu imza işlemi bağlantısı eksik ya da bozuk. Yeniden iste."
    },
    "send": {
     "propose": "Öner ve onayla",
@@ -533,7 +542,10 @@
     "name": "Ad",
     "namePlaceholder": "ör. Ekip fonu",
     "nameHint": "Tüm üyeler bu adı görür. Multisig ile birlikte kaydedilir ve sonradan değiştirilemez.",
-    "nameInvalid": "Daha kısa bir ad kullanın; kontrol ya da görünmez karakter, başta veya sonda boşluk olmasın."
+    "nameInvalid": "Daha kısa bir ad kullanın; kontrol ya da görünmez karakter, başta veya sonda boşluk olmasın.",
+    "fewer": "Daha az onay",
+    "more": "Daha fazla onay",
+    "copyAddress": "Adresi kopyala"
    },
    "add": {
     "title": "Çoklu imza ekle",
@@ -579,7 +591,11 @@
     "signedBy": "{{owner}} imzaladı",
     "unpair": "Eşlemeyi kaldır",
     "ownerWallet": "Üyenin cüzdanı",
-    "retry": "Tekrar dene"
+    "retry": "Tekrar dene",
+    "pageAway": "Cüzdan sayfası kapandı. Cüzdanının olduğu yerde yeniden aç: istek hâlâ bekliyor.",
+    "connectDeclined": "Bağlantı cüzdan sayfasında reddedildi. Yeniden sormak için tekrar dene.",
+    "declinedHere": "Reddettin. Vela’ya bildirildi; bu sayfayı kapatabilirsin.",
+    "otherChain": "Cüzdan başka bir ağda kaldı. {{chain}} ağına geçir ve tekrar dene."
    },
    "import": {
     "or": "Ya da Safe{Wallet}'tan içe aktarın",
@@ -1381,7 +1397,12 @@
    "clearAll": "Tümünü temizle",
    "clearAllTitle": "Geçmiş temizlensin mi?",
    "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
-   "a11yDeleteHistory": "Geçmişten kaldır"
+   "a11yDeleteHistory": "Geçmişten kaldır",
+   "signedOut": "Vela’da oturum açmadın. Devam etmek için geçiş anahtarınla oturum aç ya da cüzdan oluştur.",
+   "signInTitle": "Devam etmek için oturum aç",
+   "multisigNoMessagesTitle": "Çoklu imza henüz mesaj imzalayamıyor",
+   "multisigNoMessagesBody": "{{host}} bu çoklu imzadan bir mesaj imzalamasını istedi. Çoklu imzanın imzası üyelerinin onayını gerektirir; Vela mesajlar için bunu henüz toplamıyor, bu yüzden siteye hayır denecek. İşlemler yine çalışır: üyelerin onayladığı tekliflere dönüşür.",
+   "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez."
   },
   "ext": {
    "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",

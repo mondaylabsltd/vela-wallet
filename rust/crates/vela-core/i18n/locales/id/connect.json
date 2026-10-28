@@ -110,7 +110,12 @@
       "clearAll": "Hapus semua",
       "clearAllTitle": "Hapus riwayat?",
       "clearAllBody": "Ini menghapus semua dApp yang baru dibuka.",
-      "a11yDeleteHistory": "Hapus dari riwayat"
+      "a11yDeleteHistory": "Hapus dari riwayat",
+      "signedOut": "Kamu belum masuk ke Vela. Masuk dengan passkey, atau buat dompet, untuk melanjutkan.",
+      "signInTitle": "Masuk untuk melanjutkan",
+      "multisigNoMessagesTitle": "Multisig belum bisa menandatangani pesan",
+      "multisigNoMessagesBody": "{{host}} meminta multisig ini menandatangani pesan. Tanda tangan multisig butuh persetujuan anggotanya, yang belum dikumpulkan Vela untuk pesan, jadi situs akan menerima penolakan. Transaksi tetap bisa: menjadi usulan yang disetujui anggota.",
+      "multisigConnectNote": "Ini multisig: situs bisa mengusulkan transaksi untuk disetujui anggota, tetapi tidak bisa meminta tanda tangan pesan."
     },
     "ext": {
       "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",

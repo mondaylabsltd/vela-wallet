@@ -87,7 +87,8 @@
         "createAccountNote": "建立新帳戶，由此裝置上的通行密鑰保管。",
         "signInNote": "用通行密鑰登入你已有的帳戶。",
         "createMultisigNote": "幾位成員共用的帳戶：轉賬需要足夠多的成員批准。",
-        "addMultisigNote": "輸入多簽地址，或從 Safe{Wallet} 匯入你的 Safe。"
+        "addMultisigNote": "輸入多簽地址，或從 Safe{Wallet} 匯入你的 Safe。",
+        "lastMember": "這是本機上 {{names}} 唯一的成員：移除後，在這裡只能查看，不能批准。"
       },
       "panel": {
         "title": "{{n}} 位成員中需 {{m}} 位批准",
@@ -119,7 +120,8 @@
         "network": "網絡",
         "number": "交易序號",
         "call": "合約調用",
-        "callWithValue": "合約調用，附帶 {{amount}} {{symbol}}"
+        "callWithValue": "合約調用，附帶 {{amount}} {{symbol}}",
+        "batchCalls": "一筆交易中的 {{total}} 個調用"
       },
       "proposal": {
         "title": "多簽交易",
@@ -157,7 +159,14 @@
         "notSent": "網絡未接受這筆交易，因此沒有發出任何內容。請重試。",
         "siteAsks": "{{host}} 請求這筆交易。",
         "siteWaits": "{{host}} 會一直等到成員執行或拒絕它。關閉後，網站會被告知交易已發起，交易仍保留在活動中。",
-        "data": "數據"
+        "data": "數據",
+        "changesMembers": "第 {{index}} 個調用會修改這個多簽本身：{{change}}。只有在所有成員都知情時才批准。",
+        "siteFollows": "{{host}} 已收到這筆交易的 ID，會一直跟蹤到成員執行或拒絕它。交易仍留在活動中。",
+        "voided": "已作廢",
+        "voidedNote": "已作廢：另一筆交易用掉了序號 #{{nonce}}，這筆交易永遠不會執行。",
+        "notInMailbox": "這筆交易不在這個多簽的信箱裡。請讓發連結的人核對一下。",
+        "unknownNetwork": "這個連結對應的網絡 Vela 裡沒有（鏈 {{chainId}}）。請先在設定中加入該網絡，再重新打開連結。",
+        "badLink": "這個多簽交易連結不完整或已損壞。請重新索取。"
       },
       "send": {
         "propose": "發起並批准",
@@ -196,7 +205,10 @@
         "name": "名稱",
         "namePlaceholder": "例如：團隊資金",
         "nameHint": "所有成員都會看到這個名稱。它會和多簽一起儲存，之後不能修改。",
-        "nameInvalid": "請用較短的名稱，不能包含控制字元或不可見字元，首尾不能有空格。"
+        "nameInvalid": "請用較短的名稱，不能包含控制字元或不可見字元，首尾不能有空格。",
+        "fewer": "減少所需批准",
+        "more": "增加所需批准",
+        "copyAddress": "複製地址"
       },
       "add": {
         "title": "新增多簽帳戶",
@@ -242,7 +254,11 @@
         "signedBy": "由 {{owner}} 簽署",
         "unpair": "取消配對",
         "ownerWallet": "成員的錢包",
-        "retry": "重試"
+        "retry": "重試",
+        "pageAway": "錢包頁面已關閉。請在錢包所在的地方重新打開：請求仍在等待。",
+        "connectDeclined": "錢包頁面拒絕了連接。按重試可以再請求一次。",
+        "declinedHere": "你已拒絕，Vela 已收到通知；可以關閉此頁面。",
+        "otherChain": "錢包仍停留在其他網絡。請切換到 {{chain}} 後重試。"
       },
       "import": {
         "or": "或從 Safe{Wallet} 匯入",

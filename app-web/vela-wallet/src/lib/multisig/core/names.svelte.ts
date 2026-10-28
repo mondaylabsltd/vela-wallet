@@ -9,7 +9,19 @@ import { localName, shortenAddress } from './display';
 
 class Names {
 	#registered = $state<Record<string, string>>({});
+	/** Addresses the passkey index holds: Vela accounts, whose key is a passkey. */
+	#vela = $state<Record<string, true>>({});
 	#asked = new Set<string>();
+
+	/**
+	 * Whether `address` is a Vela account somewhere (the passkey index holds
+	 * it): such a member approves in Vela with its passkey, never through an
+	 * outside wallet (ms-11). `false` until (unless) the index says so.
+	 */
+	isVela(address: string): boolean {
+		void this.label(address);
+		return this.#vela[address.toLowerCase()] === true;
+	}
 
 	/** The name to show for `address`. Starts the lookup the first time it is asked. */
 	label(address: string): string {
@@ -21,6 +33,7 @@ class Names {
 		if (!this.#asked.has(key)) {
 			this.#asked.add(key);
 			void queryWalletName(address).then((hit) => {
+				if (hit) this.#vela = { ...this.#vela, [key]: true };
 				if (hit?.name) this.#registered = { ...this.#registered, [key]: hit.name };
 			});
 		}

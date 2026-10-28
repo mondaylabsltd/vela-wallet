@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigAccountsForExt, multisigAsAccount } from '$lib/multisig/core/ext';
-	import { proposals, proposeCall } from '$lib/multisig/core/proposals.svelte';
-	import { executionTxHash } from '$lib/multisig/core/records';
+	import { proposals, proposeCalls } from '$lib/multisig/core/proposals.svelte';
+	import { dappMultisigCalls, sendCallsResult } from '$lib/multisig/core/kernel';
+	import { findExecution } from '$lib/multisig/core/records';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import { dappCallOf, openMultisigReview, multisigRefusal } from '$lib/multisig/core/dapp-request';
+	import { openMultisigReview, multisigRefusal } from '$lib/multisig/core/dapp-request';
 
 	/** How often a multisig request asks whether its transaction was executed. */
 	const MULTISIG_POLL_MS = 5_000;
@@ -64,8 +65,10 @@
 	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
 	import { addNetworkCard } from '$lib/dapp/add-network';
 	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
+	import { poolRpcCall } from '$lib/services/rpc-pool';
 	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
 	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
+	import { isSigningMethod } from '$lib/services/dapp-submit';
 	import { track } from '$lib/analytics';
 	import { dappRequestKind } from '$lib/analytics/dapp';
 
@@ -158,8 +161,27 @@
 	 * answers the page by that hash — never 4900 — if this surface goes first.
 	 */
 	function claimFor(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
-		return panelSurface.caller ? panelSurface.claim(rid, phase, submit) : Promise.resolve(true);
+		const live = panelSurface.caller
+			? panelSurface.claim(rid, phase, submit)
+			: Promise.resolve(true);
+		if (phase === 'submit') {
+			void live.then((yes) => {
+				if (yes) submittedRid = rid;
+			});
+		}
+		return live;
 	}
+
+	/**
+	 * dapp-12: the request whose transaction was claimed for submit — signed,
+	 * its bytes on their way. If its page leaves now (a reload right after
+	 * Confirm), the transaction goes on regardless: the window stays for its
+	 * receipt, so the person sees what happened, instead of closing on a
+	 * transfer that is landing.
+	 */
+	let submittedRid: string | null = null;
+	/** How long a window whose page left after submit waits for a landing before it goes. */
+	const ORPHAN_LANDING_WAIT_MS = 90_000;
 
 	/**
 	 * Take the request this surface is here for, and carry it to an answer.
@@ -234,20 +256,58 @@
 				return;
 			}
 
-			stage = await evaluate(incoming, facts);
-			if (stage.kind === 'done' || stage.kind === 'refused') {
-				owing = null;
-				request = null;
-				leave();
-			} else if (stage.kind === 'signing') {
-				const shared = multisig.find(stage.grantedAddress);
-				if (shared) await handOffToMultisig(incoming, shared.address);
-				else await handOffToSigning(incoming, stage.grantedAddress);
+			// dapp-8: nobody is signed in, and the site asks for a signature. Its
+			// grant is for an account, and no account is here to sign — which is
+			// not "connect first": the window says sign in, and asks the core
+			// once somebody has.
+			if (mode === 'window' && signedOut() && isSigningMethod(incoming.method)) {
+				awaitingSignIn = true;
+				stage = {
+					kind: 'consent',
+					origin: incoming.origin,
+					method: incoming.method,
+					address: null
+				};
+				return;
 			}
+			await proceed(incoming);
 		} finally {
 			taking = false;
 		}
 	}
+
+	/** Ask the core about `incoming` and carry out what it says. */
+	async function proceed(incoming: ExtensionRequest): Promise<void> {
+		stage = await evaluate(incoming, facts);
+		if (stage.kind === 'done' || stage.kind === 'refused') {
+			owing = null;
+			request = null;
+			leave();
+		} else if (stage.kind === 'signing') {
+			const shared = multisig.find(stage.grantedAddress);
+			if (shared) await handOffToMultisig(incoming, shared.address);
+			else await handOffToSigning(incoming, stage.grantedAddress);
+		}
+	}
+
+	/** Nobody is signed in to this wallet (settled). */
+	function signedOut(): boolean {
+		return !session.view.loading && session.view.allowed_route !== 'wallet';
+	}
+
+	/** dapp-8: a signing request waiting for somebody to sign in, in the window. */
+	let awaitingSignIn = $state(false);
+
+	/**
+	 * dapp-7: a multisig was asked for a message signature, which it cannot
+	 * give yet. The window says why before the site is told no; its button
+	 * (or any way out) sends the refusal.
+	 */
+	let multisigNo = $state<{
+		rid: string;
+		host: string;
+		error: { code: number; message: string };
+	} | null>(null);
 
 	/**
 	 * The worker withdrew `rid` — its page left, its surface closed, or its
@@ -255,8 +315,13 @@
 	 * with the signing machine is dropped there, which also stops a pipeline
 	 * still short of the passkey (RB2).
 	 */
-	function withdraw(rid: string): void {
+	function withdraw(rid: string, cause = ''): void {
 		if (owing !== rid && request?.rid !== rid) return;
+		// dapp-12: the page left with the transaction already on its way. The
+		// pipeline goes on (the core keeps one past the passkey); this window
+		// stays for its receipt, whose Done closes it — or, with no landing
+		// after a while, it goes.
+		const orphaned = cause === 'page_left' && submittedRid === rid && mode === 'window';
 		if (addingChain !== null && request) {
 			// The sheet is the settings machine's: close it, settling nothing.
 			networkAdmin.dispatch({ type: 'dapp_add_cancelled', tab: String(request.tabId), id: rid });
@@ -270,16 +335,24 @@
 		// mailbox for the members.
 		multisigUi.closeDapp(rid);
 		multisigClosing = null;
+		multisigNo = null;
+		awaitingSignIn = false;
 		owing = null;
 		request = null;
 		busy = false;
+		if (orphaned) {
+			setTimeout(() => {
+				if (!landing) leave(true);
+			}, ORPHAN_LANDING_WAIT_MS);
+			return;
+		}
 		stage = { kind: 'loading' };
 		leave();
 	}
 
 	onMount(() => {
 		if (mode === 'window' && windowRid) void panelSurface.start({ kind: 'window', rid: windowRid });
-		const stopWithdrawn = panelSurface.onWithdrawn((rid) => withdraw(rid));
+		const stopWithdrawn = panelSurface.onWithdrawn((rid, cause) => withdraw(rid, cause));
 		const stopAdding = onDappAddSettled((_tab, id, outcome) => void addSettled(id, outcome));
 		if (mode === 'window') void take();
 
@@ -394,8 +467,11 @@
 	 * to be answered with the transaction that executed it. Every way out of
 	 * the sheet answers the site (`handOffToMultisig`): Decline or a close
 	 * before proposing is the person's 4001; a close after it says it was
-	 * proposed, and it stays in Activity. A multisig signs no messages yet
-	 * (that needs every approving member's signature), and proposes no batch.
+	 * proposed, and it stays in Activity. A `wallet_sendCalls` is one
+	 * proposal of every call, reviewed call by call, and its site is answered
+	 * the batch's id once it is proposed (`wallet_getCallsStatus` follows it
+	 * from there). A multisig signs no messages yet (that needs every
+	 * approving member's signature).
 	 */
 	async function handOffToMultisig(incoming: ExtensionRequest, address: string): Promise<void> {
 		const rid = incoming.rid;
@@ -413,19 +489,30 @@
 		};
 		const refusal = multisigRefusal(incoming.method);
 		if (refusal) {
-			await settle({ error: refusal });
+			// dapp-7: said in the window first; the site hears it when the person
+			// has read it (or leaves).
+			multisigNo = { rid, host: hostLabel(incoming.origin), error: refusal };
+			multisigClosing = () => ({ error: refusal });
 			return;
 		}
-		const call = dappCallOf(incoming.params);
-		if (!call || chainId <= 0) {
-			await settle({ error: { code: -32602, message: 'A transaction needs `to` and a chain' } });
+		if (chainId <= 0) {
+			await settle({ error: { code: -32602, message: 'A transaction needs a chain' } });
+			return;
+		}
+		// The core reads what the site asks: one call, or a batch's every call,
+		// refused as a Vela account's would be (another chain, a capability the
+		// wallet lacks, no calls, a call with no `to`).
+		const read = dappMultisigCalls(incoming.method, incoming.params, chainId);
+		if ('error' in read) {
+			await settle({ error: read.error });
 			return;
 		}
 		const { closing } = openMultisigReview({
 			rid,
+			method: incoming.method,
 			address,
 			chainId,
-			call,
+			calls: read.calls,
 			origin: incoming.origin,
 			open: (sheet) => multisigUi.open({ kind: 'dapp', request: sheet }),
 			proposed: (id, hash) => multisigUi.proposed(id, hash),
@@ -433,11 +520,56 @@
 			// RB5: a page that is gone gets nothing signed.
 			claim: () => claimFor(rid, 'approve'),
 			gone: () => withdraw(rid),
-			propose: proposeCall,
+			propose: async (safe, chain, calls) => {
+				// Where its execution is looked for later: read while the passkey is up.
+				const head = headBlock(chain);
+				const proposed = await proposeCalls(safe, chain, calls);
+				return { ...proposed, fromBlock: await head };
+			},
 			settle: (answer) => void settle(answer),
-			follow: (hash) => void followMultisig(rid, address, hash, settle)
+			follow: (hash) => void followMultisig(rid, address, hash, settle),
+			answerBatch: (hash, nonce, fromBlock) =>
+				void answerBatch(incoming, address, hash, nonce, fromBlock)
 		});
 		multisigClosing = closing;
+	}
+
+	/**
+	 * A multisig's `wallet_sendCalls`, proposed: the site is answered the
+	 * batch's id — the proposal's safeTxHash, in the shape its request asked
+	 * for (the core's) — and the worker is told where to read it from (the
+	 * multisig, the proposal's number, the block it was proposed at), so
+	 * `wallet_getCallsStatus` says pending until the members execute it. The
+	 * sheet stays up on the proposal: the person still asks the members.
+	 */
+	async function answerBatch(
+		incoming: ExtensionRequest,
+		address: string,
+		safeTxHash: string,
+		nonce: string,
+		fromBlock: string | undefined
+	): Promise<void> {
+		if (owing !== incoming.rid) return;
+		owing = null;
+		request = null;
+		multisigClosing = null;
+		const result = sendCallsResult(incoming.params, safeTxHash);
+		await answerRequest(
+			incoming.rid,
+			{ result },
+			{ chainId, multisig: { safe: address, nonce, ...(fromBlock ? { fromBlock } : {}) } }
+		);
+		track('dapp_request_approved', { kind: dappRequestKind(incoming.method), chain: chainId });
+		leave();
+	}
+
+	/** The chain's head block now, or `undefined` when it does not answer within a moment. */
+	async function headBlock(chain: number): Promise<string | undefined> {
+		const read = poolRpcCall('eth_blockNumber', [], chain)
+			.then((answer) => (typeof answer.result === 'string' ? answer.result : undefined))
+			.catch(() => undefined);
+		const late = new Promise<undefined>((done) => setTimeout(() => done(undefined), 4_000));
+		return Promise.race([read, late]);
 	}
 
 	/** Pending until it is executed — here, or by another member anywhere — or voided. */
@@ -456,7 +588,9 @@
 				.chain(chainId)
 				?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase());
 			if (item?.status !== 'done') continue;
-			const hash = await executionTxHash(address, chainId, safeTxHash);
+			const hash = await findExecution(address, chainId, safeTxHash);
+			// The chain could not say: asked again, never read as cancelled.
+			if (hash === undefined) continue;
 			// Done at its nonce but not by this transaction: another one (a
 			// cancellation) took its place.
 			await settle(
@@ -587,6 +721,8 @@
 		setTimeout(
 			() => {
 				if (mode === 'window') {
+					// A receipt on screen is the person's to dismiss (its Done).
+					if (landing) return;
 					window.close();
 					return;
 				}
@@ -666,8 +802,26 @@
 		else if (wasWaitingForWallet) {
 			wasWaitingForWallet = false;
 			void focusOwnWindow();
+			// dapp-8: the signature it waited for is the core's to rule on now.
+			if (awaitingSignIn && request && owing === request.rid) {
+				awaitingSignIn = false;
+				const waiting = request;
+				void proceed(waiting);
+			}
 		}
 	});
+
+	/** dapp-7: the person read why a multisig cannot sign it; the site hears the refusal. */
+	async function closeMultisigNo(): Promise<void> {
+		const no = multisigNo;
+		if (!no || owing !== no.rid) return;
+		owing = null;
+		request = null;
+		multisigClosing = null;
+		multisigNo = null;
+		await answerRequest(no.rid, { error: no.error });
+		leave();
+	}
 
 	function openOnboarding(create: boolean): void {
 		void openInBrowserTab(create ? `${locale}/create.html` : `${locale}.html`);
@@ -697,8 +851,14 @@
 		};
 	});
 	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
+	/** dapp-7: a connect for a multisig says what a multisig cannot be asked. */
+	const consentMultisig = $derived(
+		stage.kind === 'consent' && !!stage.address && !!multisig.find(stage.address)
+	);
 	/** Unused by the panel; the window draws its own preparing line. */
-	const showWindowChrome = $derived(mode === 'window' && stage.kind !== 'signing' && !landing);
+	const showWindowChrome = $derived(
+		mode === 'window' && (stage.kind !== 'signing' || !!multisigNo) && !landing
+	);
 </script>
 
 {#snippet consentFacts()}
@@ -760,6 +920,20 @@
 				/>
 			</BottomSheet>
 		</div>
+	{:else if multisigNo}
+		<div class="layer">
+			<BottomSheet
+				title={m.multisigNoMessagesTitle}
+				closeLabel={m.gotIt}
+				dismissible="explicit"
+				onclose={closeMultisigNo}
+			>
+				<div class="card">
+					<p class="body">{m.multisigNoMessagesBody.replace('{{host}}', multisigNo.host)}</p>
+					<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
+				</div>
+			</BottomSheet>
+		</div>
 	{:else if stage.kind === 'consent' && request}
 		<div class="layer">
 			<BottomSheet
@@ -771,6 +945,7 @@
 				<div class="card">
 					{@render consentFacts()}
 					<p class="body">{m.body}</p>
+					{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
 					{@render actions()}
 				</div>
 			</BottomSheet>
@@ -788,8 +963,14 @@
 				ondismiss={onAddNetworkClosed}
 				onsetup={openChainSetup}
 			/>
+		{:else if multisigNo}
+			<h1>{m.multisigNoMessagesTitle}</h1>
+			<p class="body">{m.multisigNoMessagesBody.replace('{{host}}', multisigNo.host)}</p>
+			<div class="stack">
+				<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
+			</div>
 		{:else if stage.kind === 'consent' && request && needsWallet}
-			<h1>{cardTitle}</h1>
+			<h1>{awaitingSignIn ? m.signInTitle : cardTitle}</h1>
 			<p class="body">{m.noWallet}</p>
 			<div class="stack">
 				<Button variant="primary" shape="rounded" onclick={() => openOnboarding(true)}>
@@ -806,6 +987,7 @@
 			<h1>{cardTitle}</h1>
 			{@render consentFacts()}
 			<p class="body">{m.body}</p>
+			{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
 			{@render actions()}
 		{:else if stage.kind === 'refused'}
 			<p class="body">{stage.message}</p>

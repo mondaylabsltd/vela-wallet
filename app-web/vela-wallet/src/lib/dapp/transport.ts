@@ -81,6 +81,18 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
 }
 
 /**
+ * What an answer that names an operation rides with, for the worker
+ * (`extension/lib/op-receipt.js`): the chain it went to — and, for a batch a
+ * multisig answered with (its id the proposal's safeTxHash), the multisig,
+ * the proposal's number and the block it was proposed at, which is where
+ * `wallet_getCallsStatus` reads it from.
+ */
+export interface AnsweredOp {
+	chainId: number;
+	multisig?: { safe: string; nonce: string; fromBlock?: string };
+}
+
+/**
  * Hand the answer back — through the surface's port when it is up (spec 082
  * contract §14), else the worker's message fallback.
  *
@@ -92,7 +104,7 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
 export async function answerRequest(
 	rid: string,
 	answer: { result?: unknown; error?: { code: number; message: string } },
-	opHash?: { chainId: number }
+	opHash?: AnsweredOp
 ): Promise<boolean> {
 	if (panelSurface.caller) {
 		const delivered = await panelSurface.answer(rid, answer, opHash);

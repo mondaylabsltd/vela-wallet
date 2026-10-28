@@ -65,7 +65,7 @@
 				><Icon
 					icon={copied === 'address' ? UTILITY_ICONS.check : UTILITY_ICONS.copy}
 					size="sm"
-				/>{copied === 'address' ? m.proposal.copied : m.create.address}</span
+				/>{copied === 'address' ? m.proposal.copied : m.create.copyAddress}</span
 			>
 		</Button>
 		<Button variant="secondary" shape="rounded" onclick={() => copy('link')}>

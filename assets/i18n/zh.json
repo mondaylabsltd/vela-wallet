@@ -424,7 +424,8 @@
     "createAccountNote": "新建一个账户，由本设备上的通行密钥保管。",
     "signInNote": "用通行密钥登录你已有的账户。",
     "createMultisigNote": "几位成员共用的账户：转账需要足够多的成员批准。",
-    "addMultisigNote": "输入多签地址，或从 Safe{Wallet} 导入你的 Safe。"
+    "addMultisigNote": "输入多签地址，或从 Safe{Wallet} 导入你的 Safe。",
+    "lastMember": "这是本机上 {{names}} 唯一的成员：移除后，在这里只能查看，不能批准。"
    },
    "panel": {
     "title": "{{n}} 位成员中需 {{m}} 位批准",
@@ -456,7 +457,8 @@
     "network": "网络",
     "number": "交易序号",
     "call": "合约调用",
-    "callWithValue": "合约调用，附带 {{amount}} {{symbol}}"
+    "callWithValue": "合约调用，附带 {{amount}} {{symbol}}",
+    "batchCalls": "一笔交易中的 {{total}} 个调用"
    },
    "proposal": {
     "title": "多签交易",
@@ -494,7 +496,14 @@
     "notSent": "网络未接受这笔交易，没有发出任何内容。请重试。",
     "siteAsks": "{{host}} 请求这笔交易。",
     "siteWaits": "{{host}} 会一直等到成员执行或拒绝它。关闭后，网站会被告知交易已发起，交易仍保留在活动中。",
-    "data": "数据"
+    "data": "数据",
+    "changesMembers": "第 {{index}} 个调用会修改这个多签本身：{{change}}。只有在所有成员都知情时才批准。",
+    "siteFollows": "{{host}} 已收到这笔交易的 ID，会一直跟踪到成员执行或拒绝它。交易仍留在活动中。",
+    "voided": "已作废",
+    "voidedNote": "已作废：另一笔交易用掉了序号 #{{nonce}}，这笔交易永远不会执行。",
+    "notInMailbox": "这笔交易不在这个多签的信箱里。请让发链接的人核对一下。",
+    "unknownNetwork": "这个链接对应的网络 Vela 里没有（链 {{chainId}}）。请先在设置中添加该网络，再重新打开链接。",
+    "badLink": "这个多签交易链接不完整或已损坏。请重新索要。"
    },
    "send": {
     "propose": "发起并批准",
@@ -533,7 +542,10 @@
     "name": "名称",
     "namePlaceholder": "例如：团队资金",
     "nameHint": "所有成员都会看到这个名字。它和多签一起保存，之后不能修改。",
-    "nameInvalid": "请用更短的名称，不能包含控制字符或不可见字符，首尾不能有空格。"
+    "nameInvalid": "请用更短的名称，不能包含控制字符或不可见字符，首尾不能有空格。",
+    "fewer": "减少所需批准",
+    "more": "增加所需批准",
+    "copyAddress": "复制地址"
    },
    "add": {
     "title": "添加多签账户",
@@ -579,7 +591,11 @@
     "signedBy": "由 {{owner}} 签名",
     "unpair": "取消配对",
     "ownerWallet": "成员的钱包",
-    "retry": "重试"
+    "retry": "重试",
+    "pageAway": "钱包页面已关闭。请在钱包所在的地方重新打开：请求还在等待。",
+    "connectDeclined": "钱包页面拒绝了连接。点击重试可以再请求一次。",
+    "declinedHere": "你已拒绝，Vela 已收到通知；可以关闭此页面。",
+    "otherChain": "钱包仍停留在其他网络。请切换到 {{chain}} 后重试。"
    },
    "import": {
     "or": "或者从 Safe{Wallet} 导入",
@@ -1381,7 +1397,12 @@
    "clearAll": "清空",
    "clearAllTitle": "清空记录？",
    "clearAllBody": "这会移除所有最近打开的 dApp。",
-   "a11yDeleteHistory": "从记录中移除"
+   "a11yDeleteHistory": "从记录中移除",
+   "signedOut": "你还没有登录 Vela。请用通行密钥登录，或创建钱包后继续。",
+   "signInTitle": "登录后继续",
+   "multisigNoMessagesTitle": "多签暂时还不能签名消息",
+   "multisigNoMessagesBody": "{{host}} 请求这个多签签名一条消息。多签的签名需要成员批准，而 Vela 目前还不为消息收集批准，所以网站会收到拒绝。交易仍然可用：它们会变成由成员批准的提案。",
+   "multisigConnectNote": "这是一个多签：网站可以发起交易供成员批准，但不能请求它签名消息。"
   },
   "ext": {
    "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",

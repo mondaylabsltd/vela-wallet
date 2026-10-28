@@ -95,6 +95,20 @@ export const SETTLE = {
 	updated: { code: 4900, message: 'Vela was updated — reload this page and try again' }
 };
 
+/**
+ * dapp-6 (owner, 2026-10-28): the person closed the request's window or panel
+ * before anything happened — the request was never claimed, or claimed only
+ * to show the passkey prompt (`sign`), so nothing was granted, proposed,
+ * signed for the page or sent. That is the person declining: 4001, the code a
+ * Cancel answers. Once a grant, a proposal or a network may have been written
+ * (`approve`) or the bytes may be on their way (`submit`), a close stays
+ * "it may have happened" (4900, or the may-have-been-sent answer).
+ */
+export const CLOSED_UNDECIDED = {
+	code: 4001,
+	message: 'The person closed the request without approving it'
+};
+
 /** A read whose channel dropped twice: plain words, never Chrome's (G19). */
 export const READ_DROPPED_MESSAGE = 'Vela could not finish this read — try again';
 
@@ -257,12 +271,6 @@ export const CHAINS_KEY = 'vela.ext.chains';
  * drive a window and cannot drive a side panel.
  */
 export const SURFACE_KEY = 'vela.ext.surface';
-/**
- * The multisig accounts among the wallet's addresses — `vela.ext.multisigs`,
- * lowercase. Published with the snapshot; read for `wallet_getCapabilities`,
- * since a multisig proposes no batch of a page's calls.
- */
-export const MULTISIGS_KEY = 'vela.ext.multisigs';
 
 // ---- EIP-1193 / EIP-1474 error codes ----------------------------------------
 export const ERR = {
@@ -560,13 +568,61 @@ function relayRefused(answer) {
 }
 
 /**
+ * The EIP-5792 status of a batch a MULTISIG answered with — its id is the
+ * proposal's safeTxHash (`dapp_rpc::multisig_calls_status`, twinned): `100`
+ * while it waits for approvals and execution; `200` with the receipt of the
+ * transaction whose `ExecutionSuccess` names it (`executionReceipt`); `400`
+ * once the multisig's number is past it and no execution names it
+ * (`numberUsed`: another transaction, a cancellation, ran at its number).
+ */
+export function multisigCallsStatusResult(id, chainId, executionReceipt, numberUsed) {
+	const status = {
+		version: '2.0.0',
+		id,
+		chainId: toHexChainId(chainId),
+		status: 100,
+		atomic: true
+	};
+	const receipt =
+		executionReceipt &&
+		typeof executionReceipt === 'object' &&
+		!Array.isArray(executionReceipt) &&
+		typeof executionReceipt.transactionHash === 'string'
+			? executionReceipt
+			: null;
+	if (!receipt) {
+		if (numberUsed === true) status.status = 400;
+		return status;
+	}
+	const succeeded = receipt.status !== '0x0';
+	status.status = succeeded ? 200 : 500;
+	status.receipts = [
+		{
+			logs: Array.isArray(receipt.logs) ? receipt.logs : [],
+			status: succeeded ? '0x1' : '0x0',
+			blockHash: receipt.blockHash ?? null,
+			blockNumber: receipt.blockNumber ?? null,
+			gasUsed: receipt.gasUsed ?? null,
+			transactionHash: receipt.transactionHash
+		}
+	];
+	return status;
+}
+
+/** `keccak256("ExecutionSuccess(bytes32,uint256)")`: a Safe's, its first topic the safeTxHash. */
+export const SAFE_EXECUTION_SUCCESS =
+	'0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e';
+/** A Safe's `nonce()` call. */
+export const SAFE_NONCE_CALL = '0xaffed0e0';
+
+/**
  * `wallet_getCapabilities` `[address, chainIds?]`: `atomic: supported` on each
  * of the wallet's `chainIds` (those the page names, when it names some), for
  * an address the site was granted — else `{ error }` (4100; no address -32602).
- * A multisig (one of `multisigs`) is `atomic: unsupported`: it proposes no
- * batch of a page's calls (`dapp_rpc::capabilities`, twinned).
+ * A multisig sends a batch as ONE proposal, executed whole, so it is atomic
+ * too (`dapp_rpc::capabilities`, twinned).
  */
-export function capabilitiesResult(params, granted, chainIds, multisigs = []) {
+export function capabilitiesResult(params, granted, chainIds) {
 	const list = Array.isArray(params) ? params : [];
 	const address = list[0];
 	if (!isAddressLike(address)) {
@@ -579,14 +635,10 @@ export function capabilitiesResult(params, granted, chainIds, multisigs = []) {
 	const asked = Array.isArray(list[1])
 		? list[1].map((id) => strictChainId(id)).filter((id) => id > 0)
 		: null;
-	const multisig = (Array.isArray(multisigs) ? multisigs : []).some(
-		(m) => typeof m === 'string' && m.toLowerCase() === lower
-	);
-	const status = multisig ? 'unsupported' : 'supported';
 	const result = {};
 	for (const chain of chainIds) {
 		if (asked && !asked.includes(chain)) continue;
-		result[toHexChainId(chain)] = { atomic: { status } };
+		result[toHexChainId(chain)] = { atomic: { status: 'supported' } };
 	}
 	return { result };
 }

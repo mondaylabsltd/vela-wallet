@@ -4,6 +4,7 @@
  * find things. Who may approve, from which nonce, decides what the wallet
  * signs, so it is read from the chain itself.
  */
+import { checksumAddress } from '$lib/core/kernels';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { genesisMembers, type Genesis } from './kernel';
 
@@ -46,7 +47,17 @@ function decodeAddresses(hex: string): string[] {
 	const offset = parseInt(word(hex, 0), 16) / 32;
 	const count = parseInt(word(hex, offset), 16);
 	const out: string[] = [];
-	for (let i = 0; i < count && i < 64; i += 1) out.push(`0x${word(hex, offset + 1 + i).slice(24)}`);
+	for (let i = 0; i < count && i < 64; i += 1) {
+		// Checksummed, as every other address the wallet shows (ms-26).
+		const raw = `0x${word(hex, offset + 1 + i).slice(24)}`;
+		let shown = raw;
+		try {
+			shown = checksumAddress(raw);
+		} catch {
+			// the core not loaded: the address as the chain gave it
+		}
+		out.push(shown);
+	}
 	return out;
 }
 

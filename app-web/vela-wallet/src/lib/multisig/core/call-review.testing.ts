@@ -14,7 +14,7 @@ import { toClearLocale, type ClearEffect } from '$lib/signing/core/clear-types';
 import { guardOperationFailure } from '$lib/signing/core/guard-executor';
 import type { GuardEffect } from '$lib/signing/core/guard-types';
 import { txKickoff } from '$lib/signing/core/tx-params';
-import { callParamsJson, type InnerCall } from './call-review.svelte';
+import { batchParamsJson, callParamsJson, type InnerCall } from './call-review.svelte';
 
 export const CHAIN = 100;
 export const MULTISIG = '0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe';
@@ -64,13 +64,16 @@ function drive<View, Effect extends { id: number }, Result>(
 	}
 }
 
-/** What both machines say about `call` from MULTISIG on CHAIN. */
-export function read(call: InnerCall) {
-	const paramsJson = callParamsJson(call);
+/** What both machines say about `call` (or a batch of calls) from MULTISIG on CHAIN. */
+export function read(calls: InnerCall | InnerCall[]) {
+	const list = Array.isArray(calls) ? calls : [calls];
+	const method = list.length > 1 ? 'wallet_sendCalls' : 'eth_sendTransaction';
+	const paramsJson =
+		list.length > 1 ? batchParamsJson(list, CHAIN, MULTISIG) : callParamsJson(list[0]);
 	const clear = drive<ClearSigningView, ClearEffect, ClearShellResult>(
 		new ClearSigningCore(),
 		txKickoff(
-			'eth_sendTransaction',
+			method,
 			paramsJson,
 			CHAIN,
 			toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
@@ -96,7 +99,7 @@ export function read(call: InnerCall) {
 		new ApprovalGuardCore(),
 		{
 			type: 'approval_detected',
-			method: 'eth_sendTransaction',
+			method,
 			params_json: paramsJson,
 			chain_id: CHAIN,
 			wallet_address: MULTISIG,
@@ -111,5 +114,5 @@ export function read(call: InnerCall) {
 					}
 				: guardOperationFailure(effect)
 	);
-	return { chainId: CHAIN, multisig: MULTISIG, paramsJson, clear, guard };
+	return { chainId: CHAIN, multisig: MULTISIG, method, paramsJson, clear, guard };
 }

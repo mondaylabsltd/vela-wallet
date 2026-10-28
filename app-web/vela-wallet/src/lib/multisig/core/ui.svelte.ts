@@ -16,7 +16,10 @@ export interface DappProposal {
 	rid: string;
 	address: string;
 	chainId: number;
-	call: DappCall;
+	/** `eth_sendTransaction` (one call) or `wallet_sendCalls` (a batch, one proposal). */
+	method: string;
+	/** The call, or the batch's every call: one transaction either way. */
+	calls: DappCall[];
 	/** The site, as the browser names it (never the page's own claim). */
 	origin: string;
 	/** Set once it is in the mailbox. */
@@ -34,6 +37,8 @@ export type MultisigSheet =
 	| { kind: 'add' }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	| { kind: 'invite' }
+	/** ms-22: what a link could not open, said (a damaged link, a network Vela lacks). */
+	| { kind: 'notice'; text: string }
 	| { kind: 'dapp'; request: DappProposal };
 
 class MultisigUi {

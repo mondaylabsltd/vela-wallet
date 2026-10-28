@@ -425,7 +425,8 @@
     "createAccountNote": "Un nouveau compte, protégé par une passkey sur cet appareil.",
     "signInNote": "Un compte que vous avez déjà, avec sa passkey.",
     "createMultisigNote": "Un compte partagé par plusieurs membres : un transfert demande assez d'approbations.",
-    "addMultisigNote": "Par son adresse, ou importez vos Safes depuis Safe{Wallet}."
+    "addMultisigNote": "Par son adresse, ou importez vos Safes depuis Safe{Wallet}.",
+    "lastMember": "C’est le seul membre de {{names}} sur cet appareil : sans lui, on ne pourra plus que les consulter ici, pas approuver."
    },
    "panel": {
     "title": "{{m}} membres sur {{n}} approuvent",
@@ -457,7 +458,8 @@
     "network": "Réseau",
     "number": "Transaction n°",
     "call": "Appel de contrat",
-    "callWithValue": "Appel de contrat avec {{amount}} {{symbol}}"
+    "callWithValue": "Appel de contrat avec {{amount}} {{symbol}}",
+    "batchCalls": "{{total}} appels en une transaction"
    },
    "proposal": {
     "title": "Transaction multisig",
@@ -495,7 +497,14 @@
     "notSent": "Le réseau ne l'a pas acceptée : rien n'a été envoyé. Réessayez.",
     "siteAsks": "{{host}} demande cette transaction.",
     "siteWaits": "{{host}} attend que les membres l'exécutent ou la rejettent. Si vous fermez ceci, le site apprend qu'elle a été proposée ; elle reste dans l'activité.",
-    "data": "Données"
+    "data": "Données",
+    "changesMembers": "L’appel n° {{index}} modifie ce multisig lui-même : {{change}}. N’approuvez que si chaque membre s’y attend.",
+    "siteFollows": "{{host}} a reçu l’identifiant de cette transaction et la suit jusqu’à ce que les membres l’exécutent ou la rejettent. Elle reste dans l’activité.",
+    "voided": "Annulée",
+    "voidedNote": "Annulée : une autre transaction a utilisé le numéro {{nonce}}, celle-ci ne pourra donc jamais s’exécuter.",
+    "notInMailbox": "Cette transaction n’est pas dans la boîte de ce multisig. Demandez à la personne qui a envoyé le lien de le vérifier.",
+    "unknownNetwork": "Ce lien concerne un réseau que Vela n’a pas (chaîne {{chainId}}). Ajoutez le réseau dans les réglages, puis rouvrez le lien.",
+    "badLink": "Ce lien vers une transaction multisig est incomplet ou abîmé. Redemandez-le."
    },
    "send": {
     "propose": "Proposer et approuver",
@@ -535,7 +544,10 @@
     "name": "Nom",
     "namePlaceholder": "p. ex. Caisse de l'équipe",
     "nameHint": "Tous les membres voient ce nom. Il est enregistré avec le multisig et ne pourra plus être modifié.",
-    "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni invisibles, ni espace au début ou à la fin."
+    "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni invisibles, ni espace au début ou à la fin.",
+    "fewer": "Moins d’approbations",
+    "more": "Plus d’approbations",
+    "copyAddress": "Copier l’adresse"
    },
    "add": {
     "title": "Ajouter un multisig",
@@ -581,7 +593,11 @@
     "signedBy": "Signé par {{owner}}",
     "unpair": "Dissocier",
     "ownerWallet": "Wallet du membre",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "pageAway": "La page du portefeuille s’est fermée. Rouvrez-la là où se trouve votre portefeuille : la demande attend toujours.",
+    "connectDeclined": "La connexion a été refusée sur la page du portefeuille. Réessayez pour la redemander.",
+    "declinedHere": "Vous avez refusé. Vela a été prévenu ; vous pouvez fermer cette page.",
+    "otherChain": "Le portefeuille est resté sur un autre réseau. Passez-le sur {{chain}} et réessayez."
    },
    "import": {
     "or": "Ou importer depuis Safe{Wallet}",
@@ -1388,7 +1404,12 @@
    "clearAll": "Tout effacer",
    "clearAllTitle": "Effacer l'historique ?",
    "clearAllBody": "Cela supprime toutes les dApps récemment ouvertes.",
-   "a11yDeleteHistory": "Retirer de l'historique"
+   "a11yDeleteHistory": "Retirer de l'historique",
+   "signedOut": "Vous n’êtes pas connecté à Vela. Connectez-vous avec votre passkey ou créez un portefeuille pour continuer.",
+   "signInTitle": "Connectez-vous pour continuer",
+   "multisigNoMessagesTitle": "Un multisig ne peut pas encore signer de messages",
+   "multisigNoMessagesBody": "{{host}} a demandé à ce multisig de signer un message. La signature d’un multisig exige l’approbation de ses membres, que Vela ne recueille pas encore pour les messages : le site recevra donc un refus. Les transactions fonctionnent toujours : elles deviennent des propositions que les membres approuvent.",
+   "multisigConnectNote": "C’est un multisig : le site peut proposer des transactions que ses membres approuvent, mais pas lui demander de signer des messages."
   },
   "ext": {
    "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",

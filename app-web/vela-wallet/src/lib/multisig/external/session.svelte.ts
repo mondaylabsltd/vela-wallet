@@ -74,6 +74,14 @@ export class WalletDeclinedError extends Error {
 	}
 }
 
+/** The wallet did not move to the transaction's network (ms-26). */
+export class WalletOtherChainError extends Error {
+	constructor() {
+		super('The wallet stayed on another network');
+		this.name = 'WalletOtherChainError';
+	}
+}
+
 export class ExternalWallet {
 	phase = $state<Phase>('waiting');
 	/** Lowercase accounts the page reports, once connected. */
@@ -81,32 +89,47 @@ export class ExternalWallet {
 	/** `eip155:<id>` of the wallet's active network. */
 	chain = $state<string | null>(null);
 	wallet = $state<string | null>(null);
-	/** The page to open: with the invite while unpaired, plain once paired. */
+	/**
+	 * The page to open: with the invite for a new room, plain for one paired
+	 * before. Fixed for the session (ms-13): the sheet's words and code do not
+	 * change under the person once the page has paired.
+	 */
 	link = $state('');
+	/** A room paired before: the page only needs reopening. */
+	readonly resumed: boolean;
+	/**
+	 * ms-15: the page went away while Vela waited on it (closed, reloaded, the
+	 * phone asleep) — the request is not "in your wallet" any more.
+	 */
+	away = $state(false);
 
 	readonly #connection: ReturnType<typeof connectRoom>;
 	readonly #client: WalletPairClient;
 	readonly #saved: Saved;
-	readonly #page: string;
 
 	private constructor(saved: Saved, page: string, fresh: boolean) {
 		this.#saved = saved;
-		this.#page = page;
 		const room = Room.parse(saved.record);
 		this.#connection = connectRoom(room);
 		this.#client = new WalletPairClient(this.#connection, namespaceRules);
 		this.link = fresh && room.invite ? `${page}#${encodeURIComponent(room.invite)}` : page;
+		this.resumed = this.link === page;
 		this.accounts = saved.accounts;
-		this.wallet = saved.wallet ?? null;
+		// A name this page once gave itself is no wallet's (ms-13).
+		this.wallet = saved.wallet && saved.wallet !== 'Vela connect' ? saved.wallet : null;
 		this.#connection.addEventListener('paired', () => {
 			// Paired: the invite is spent; the page resumes by its own record.
-			this.link = page;
 			this.#save();
 		});
 		this.#connection.addEventListener('state', () => {
-			if (this.#connection.state === 'connected' && this.phase === 'waiting') {
+			const connected = this.#connection.state === 'connected';
+			if (connected && this.phase === 'waiting') {
 				this.phase = 'connecting';
 			}
+			// The page left mid-request: said, until it is back.
+			this.away =
+				!connected &&
+				(this.phase === 'switching' || this.phase === 'confirming' || this.phase === 'connecting');
 			// Left from here keeps the pairing; ended by either side forgets it.
 			if (this.#connection.state === 'closed' && this.#connection.reason !== 'left') {
 				this.#forget();
@@ -140,11 +163,6 @@ export class ExternalWallet {
 			savedMs: Date.now()
 		};
 		return new ExternalWallet(saved, page, true);
-	}
-
-	/** Whether this is a room paired before (the page only needs reopening). */
-	get resumed(): boolean {
-		return this.link === this.#page;
 	}
 
 	/** The accounts the wallet reports, among `owners`. */
@@ -265,7 +283,7 @@ export class ExternalWallet {
 			signal
 		);
 		this.#stateChanged();
-		if (this.chain !== `eip155:${chainId}`) throw new Error('The wallet stayed on another network');
+		if (this.chain !== `eip155:${chainId}`) throw new WalletOtherChainError();
 	}
 
 	/** A call's answer, withdrawn (`walletpair_cancel`) if the person cancels here. */
@@ -294,7 +312,8 @@ export class ExternalWallet {
 		const evm = this.#client.state.eip155;
 		this.accounts = evm?.accounts ?? [];
 		this.chain = evm?.chain ?? null;
-		this.wallet = this.#client.wallet?.name ?? this.wallet;
+		const named = this.#client.wallet?.name;
+		this.wallet = named && named !== 'Vela connect' ? named : this.wallet;
 		if (this.#client.approved && (this.phase === 'waiting' || this.phase === 'connecting')) {
 			this.phase = 'connecting';
 		}

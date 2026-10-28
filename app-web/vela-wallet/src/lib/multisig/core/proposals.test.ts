@@ -9,7 +9,15 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const OWNER = '0x00000000000000000000000000000000000000aa';
 const TO = '0x000000000000000000000000000000000000dEaD';
 
-const mailbox = { down: false, slowMs: 0, proposals: [] as unknown[] };
+const mailbox = { down: false, slowMs: 0, proposals: [] as unknown[], postDown: false };
+
+// ms-19: the outbox lives in localStorage, which the server project lacks.
+const storage = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+	getItem: (k: string) => storage.get(k) ?? null,
+	setItem: (k: string, v: string) => void storage.set(k, v),
+	removeItem: (k: string) => void storage.delete(k)
+});
 const signed: string[] = [];
 const submitted: unknown[] = [];
 
@@ -24,6 +32,7 @@ vi.mock('./service', () => ({
 		return { members: {}, proposals: mailbox.proposals };
 	},
 	submitApproval: async (req: { safeTx: unknown }) => {
+		if (mailbox.postDown) throw new Error('mailbox down');
 		submitted.push(req.safeTx);
 		return { ok: true, status: 'created', proposal: {} };
 	}
@@ -42,6 +51,18 @@ vi.mock('./kernel', () => ({
 		value: `0x${BigInt(t[0].amount).toString(16)}`,
 		data: '0x',
 		operation: 0,
+		safeTxGas: '0x0',
+		baseGas: '0x0',
+		gasPrice: '0x0',
+		gasToken: '0x0000000000000000000000000000000000000000',
+		refundReceiver: '0x0000000000000000000000000000000000000000',
+		nonce
+	}),
+	callsTx: (calls: { to: string; value: string; data: string }[], nonce: string) => ({
+		to: calls.length > 1 ? '0x9641d764fc13c8B624c04430C7356C1C7C8102e2' : calls[0].to,
+		value: calls.length > 1 ? '0x0' : calls[0].value,
+		data: calls.length > 1 ? '0x8d80ff0a' : calls[0].data,
+		operation: calls.length > 1 ? 1 : 0,
 		safeTxGas: '0x0',
 		baseGas: '0x0',
 		gasPrice: '0x0',
@@ -83,8 +104,15 @@ vi.mock('./store.svelte', () => ({
 	multisig: { find: () => account, useChain: () => {} }
 }));
 
-const { proposals, proposeTransfers, draftCall, MailboxUnreadableError, SLOW_REFRESH_MS } =
-	await import('./proposals.svelte');
+const {
+	proposals,
+	proposeTransfers,
+	proposeCalls,
+	draftCalls,
+	flushOutbox,
+	MailboxUnreadableError,
+	SLOW_REFRESH_MS
+} = await import('./proposals.svelte');
 
 function stored(nonce: number) {
 	const tx = {
@@ -115,6 +143,8 @@ beforeEach(() => {
 	mailbox.down = false;
 	mailbox.slowMs = 0;
 	mailbox.proposals = [];
+	mailbox.postDown = false;
+	storage.clear();
 	signed.length = 0;
 	submitted.length = 0;
 	proposals.follow(null, []);
@@ -128,9 +158,9 @@ describe('a mailbox that cannot be read', () => {
 		).rejects.toBeInstanceOf(MailboxUnreadableError);
 		expect(signed).toEqual([]);
 		expect(submitted).toEqual([]);
-		await expect(draftCall(SAFE, 100, { to: TO, value: '0x1', data: '0x' })).rejects.toBeInstanceOf(
-			MailboxUnreadableError
-		);
+		await expect(
+			draftCalls(SAFE, 100, [{ to: TO, value: '0x1', data: '0x' }])
+		).rejects.toBeInstanceOf(MailboxUnreadableError);
 	});
 
 	it('takes the number after every open proposal once the list is read', async () => {
@@ -138,7 +168,7 @@ describe('a mailbox that cannot be read', () => {
 		await proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }]);
 		expect(submitted).toHaveLength(1);
 		expect((submitted[0] as { nonce: string }).nonce).toBe('0x5');
-		const draft = await draftCall(SAFE, 100, { to: TO, value: '0x1', data: '0x' });
+		const draft = await draftCalls(SAFE, 100, [{ to: TO, value: '0x1', data: '0x' }]);
 		expect(draft.item.nonce).toBe(5n);
 		expect(draft.item.approvals).toEqual([]);
 	});
@@ -178,5 +208,51 @@ describe('a mailbox that cannot be read', () => {
 			proposals.follow(null, []);
 			vi.useRealTimers();
 		}
+	});
+});
+
+describe("a dApp's calls, proposed", () => {
+	it('several are ONE transaction (a MultiSendCallOnly batch), at the next number', async () => {
+		mailbox.proposals = [stored(3)];
+		const calls = [
+			{ to: TO, value: '0x1', data: '0x' },
+			{ to: OWNER, value: '0x0', data: '0x1234' }
+		];
+		const draft = await draftCalls(SAFE, 100, calls);
+		expect(draft.item.tx.operation).toBe(1);
+		expect(draft.item.nonce).toBe(4n);
+		const { nonce } = await proposeCalls(SAFE, 100, calls);
+		expect(nonce).toBe('0x4');
+		expect(submitted).toHaveLength(1);
+		expect(signed).toHaveLength(1);
+	});
+});
+
+describe('a signed approval the mailbox has not taken (ms-19)', () => {
+	it('is kept, and sent again when a page comes up', async () => {
+		mailbox.postDown = true;
+		await expect(
+			proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }])
+		).rejects.toThrow();
+		// Signed, not in the mailbox: kept, not lost with the page.
+		expect(signed).toHaveLength(1);
+		expect(submitted).toEqual([]);
+		expect([...storage.keys()]).toEqual(['vela.multisigOutbox']);
+
+		// Still out of reach: kept for the next page.
+		expect(await flushOutbox()).toEqual([]);
+		expect(storage.size).toBe(1);
+
+		mailbox.postDown = false;
+		expect(await flushOutbox()).toEqual([SAFE]);
+		expect(submitted).toHaveLength(1);
+		expect(storage.size).toBe(0);
+		// Once: nothing left to send.
+		expect(await flushOutbox()).toEqual([]);
+	});
+
+	it('leaves nothing behind once the mailbox has it', async () => {
+		await proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }]);
+		expect(storage.size).toBe(0);
 	});
 });

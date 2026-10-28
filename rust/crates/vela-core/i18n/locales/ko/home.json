@@ -87,7 +87,8 @@
         "createAccountNote": "이 기기의 패스키로 관리하는 새 계정.",
         "signInNote": "이미 있는 계정에 그 패스키로 로그인.",
         "createMultisigNote": "여러 멤버가 함께 쓰는 계정: 송금에는 충분한 승인이 필요합니다.",
-        "addMultisigNote": "주소를 입력하거나 Safe{Wallet}에서 Safe를 가져옵니다."
+        "addMultisigNote": "주소를 입력하거나 Safe{Wallet}에서 Safe를 가져옵니다.",
+        "lastMember": "이 기기에 있는 {{names}}의 유일한 멤버입니다. 제거하면 여기서는 보기만 할 수 있고 승인할 수 없습니다."
       },
       "panel": {
         "title": "{{n}}명 중 {{m}}명 승인 필요",
@@ -119,7 +120,8 @@
         "network": "네트워크",
         "number": "거래 번호",
         "call": "컨트랙트 호출",
-        "callWithValue": "{{amount}} {{symbol}}을(를) 보내는 컨트랙트 호출"
+        "callWithValue": "{{amount}} {{symbol}}을(를) 보내는 컨트랙트 호출",
+        "batchCalls": "한 거래에 {{total}}개의 호출"
       },
       "proposal": {
         "title": "멀티시그 거래",
@@ -157,7 +159,14 @@
         "notSent": "네트워크가 받아들이지 않아 아무것도 전송되지 않았습니다. 다시 시도하세요.",
         "siteAsks": "{{host}}에서 이 거래를 요청합니다.",
         "siteWaits": "{{host}}은(는) 멤버가 실행하거나 거부할 때까지 기다립니다. 이 창을 닫으면 제안되었다는 사실이 사이트에 전달되고, 거래는 활동에 남습니다.",
-        "data": "데이터"
+        "data": "데이터",
+        "changesMembers": "호출 #{{index}}은(는) 이 멀티시그 자체를 변경합니다: {{change}}. 모든 멤버가 예상한 경우에만 승인하세요.",
+        "siteFollows": "{{host}}에 이 거래의 ID가 전달되었고, 멤버들이 실행하거나 거절할 때까지 추적합니다. 거래는 활동에 남습니다.",
+        "voided": "취소됨",
+        "voidedNote": "취소됨: 다른 거래가 #{{nonce}}번을 사용했으므로 이 거래는 실행될 수 없습니다.",
+        "notInMailbox": "이 거래는 이 멀티시그의 메일함에 없습니다. 링크를 보낸 사람에게 확인을 요청하세요.",
+        "unknownNetwork": "이 링크는 Vela에 없는 네트워크(체인 {{chainId}})용입니다. 설정에서 네트워크를 추가한 뒤 링크를 다시 여세요.",
+        "badLink": "이 멀티시그 거래 링크가 불완전하거나 손상되었습니다. 다시 요청하세요."
       },
       "send": {
         "propose": "제안하고 승인",
@@ -196,7 +205,10 @@
         "name": "이름",
         "namePlaceholder": "예: 팀 자금",
         "nameHint": "모든 멤버에게 이 이름이 보입니다. 멀티시그와 함께 저장되며 나중에 바꿀 수 없습니다.",
-        "nameInvalid": "더 짧은 이름을 사용하세요. 제어 문자, 보이지 않는 문자, 앞뒤 공백은 쓸 수 없습니다."
+        "nameInvalid": "더 짧은 이름을 사용하세요. 제어 문자, 보이지 않는 문자, 앞뒤 공백은 쓸 수 없습니다.",
+        "fewer": "승인 수 줄이기",
+        "more": "승인 수 늘리기",
+        "copyAddress": "주소 복사"
       },
       "add": {
         "title": "멀티시그 추가",
@@ -242,7 +254,11 @@
         "signedBy": "{{owner}} 서명",
         "unpair": "페어링 해제",
         "ownerWallet": "멤버의 지갑",
-        "retry": "다시 시도"
+        "retry": "다시 시도",
+        "pageAway": "지갑 페이지가 닫혔습니다. 지갑이 있는 곳에서 다시 여세요. 요청은 아직 대기 중입니다.",
+        "connectDeclined": "지갑 페이지에서 연결이 거절되었습니다. 다시 요청하려면 다시 시도하세요.",
+        "declinedHere": "거절했습니다. Vela에 전달되었으니 이 페이지를 닫아도 됩니다.",
+        "otherChain": "지갑이 다른 네트워크에 머물러 있습니다. {{chain}}(으)로 전환한 뒤 다시 시도하세요."
       },
       "import": {
         "or": "또는 Safe{Wallet}에서 가져오기",

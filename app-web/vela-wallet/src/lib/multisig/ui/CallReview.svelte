@@ -13,11 +13,16 @@
 	interface Props {
 		reading: CallReading;
 		m: SigningMessages;
+		/** The multisig's own alarms, said first and in red (a batch call that changes its members). */
+		alerts?: string[];
 	}
 
-	let { reading, m }: Props = $props();
+	let { reading, m, alerts = [] }: Props = $props();
 
-	const blocks = $derived(callReviewBlocks(reading, m, currency.view));
+	const blocks = $derived([
+		...alerts.map((text) => ({ kind: 'warning' as const, tone: 'danger' as const, text })),
+		...callReviewBlocks(reading, m, currency.view)
+	]);
 </script>
 
 <div class="review" data-testid="multisig-call-review">

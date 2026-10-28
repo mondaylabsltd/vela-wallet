@@ -110,7 +110,12 @@
       "clearAll": "Borrar todo",
       "clearAllTitle": "¿Borrar el historial?",
       "clearAllBody": "Esto elimina todas las dApps abiertas recientemente.",
-      "a11yDeleteHistory": "Quitar del historial"
+      "a11yDeleteHistory": "Quitar del historial",
+      "signedOut": "No has iniciado sesión en Vela. Inicia sesión con tu passkey o crea una billetera para continuar.",
+      "signInTitle": "Inicia sesión para continuar",
+      "multisigNoMessagesTitle": "Una multifirma aún no puede firmar mensajes",
+      "multisigNoMessagesBody": "{{host}} pidió a esta multifirma firmar un mensaje. La firma de una multifirma necesita la aprobación de sus miembros, que Vela aún no reúne para mensajes, así que el sitio recibirá un no. Las transacciones siguen funcionando: se convierten en propuestas que aprueban los miembros.",
+      "multisigConnectNote": "Es una multifirma: el sitio puede proponer transacciones para que las aprueben sus miembros, pero no puede pedirle que firme mensajes."
     },
     "ext": {
       "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",

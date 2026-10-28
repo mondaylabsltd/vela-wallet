@@ -85,7 +85,10 @@
 				<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
 				<span class="text">
 					<span class="name">{names.label(owner)}</span>
-					<span class="address">{shortenAddress(owner)}</span>
+					<!-- A member with no name reads its address once, not twice (ms-26). -->
+					{#if names.label(owner) !== shortenAddress(owner)}
+						<span class="address">{shortenAddress(owner)}</span>
+					{/if}
 				</span>
 				{#if mine}<span class="here">{m.panel.thisDevice}</span>{/if}
 			</li>

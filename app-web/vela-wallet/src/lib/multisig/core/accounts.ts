@@ -13,6 +13,7 @@
  * genesis for the same address would take a 160-bit preimage, so the service
  * cannot hand over a wrong one.
  */
+import { poolRpcCall } from '$lib/services/rpc-pool';
 import { hasCode } from './chain';
 import { creationGenesis, hasTransactionService } from './safe-service';
 import {
@@ -213,12 +214,32 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 		multisig.activate(existing.address);
 		return { ok: true, account: existing };
 	}
+	// What the address is on chain, read beside the registry (ms-16): the
+	// wait for a record on its way is only for an address with no code and no
+	// transactions anywhere — a multisig created moments ago.
+	const onChain = Promise.all([
+		deployedChains(address, chainIds),
+		sentFrom(address, chainIds)
+	]).then(([deployed, sent]) => ({ deployed, sent }));
 	let answer;
 	try {
 		answer = await fetchGenesis(address);
+		if (!answer.found) {
+			const { deployed, sent } = await onChain;
+			// Code that is no Safe (a token, any contract), or an account that
+			// sends its own transactions: no multisig, said at once.
+			if (deployed.length > 0 && !(await isSafe(deployed[0], address))) {
+				return { ok: false, reason: 'notMultisig' };
+			}
+			if (deployed.length === 0 && sent) return { ok: false, reason: 'notMultisig' };
+		}
 		// A multisig created moments ago: its record may still be on its way
 		// to the registry. Ask again for a little while before giving up.
-		for (let wait = 0; !answer.found && wait < 4; wait += 1) {
+		for (
+			let wait = 0;
+			!answer.found && wait < 4 && (await onChain).deployed.length === 0;
+			wait += 1
+		) {
 			await new Promise((r) => setTimeout(r, 5000));
 			answer = await fetchGenesis(address);
 		}
@@ -226,7 +247,7 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 		return { ok: false, reason: 'unavailable' };
 	}
 	if (!answer.found) {
-		const deployedOn = await firstDeployed(address, chainIds);
+		const deployedOn = (await onChain).deployed[0] ?? null;
 		if (deployedOn === null) return { ok: false, reason: 'notFound' };
 		try {
 			const imported = await importGenesis({ chainId: deployedOn, safe: address });
@@ -260,10 +281,37 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
 	return { ok: true, account };
 }
 
-async function firstDeployed(address: string, chainIds: number[]): Promise<number | null> {
-	const found = await deployedChains(address, chainIds);
-	return found[0] ?? null;
+/** `address` has sent a transaction of its own on one of `chainIds`: an account, no undeployed Safe. */
+async function sentFrom(address: string, chainIds: number[]): Promise<boolean> {
+	const counts = await Promise.all(
+		chainIds.map((id) =>
+			poolRpcCall('eth_getTransactionCount', [address, 'latest'], id)
+				.then((r) => (typeof r.result === 'string' ? BigInt(r.result) : 0n))
+				.catch(() => 0n)
+		)
+	);
+	return counts.some((n) => n > 0n);
 }
+
+/** The contract at `address` on `chainId` answers as a Safe (`getThreshold` is a number ≥ 1). */
+async function isSafe(chainId: number, address: string): Promise<boolean> {
+	try {
+		const read = await poolRpcCall(
+			'eth_call',
+			[{ to: address, data: GET_THRESHOLD_CALL }, 'latest'],
+			chainId
+		);
+		// A node's error is no answer; a revert or nothing back is no Safe.
+		if (read.error && !/revert/i.test(String(read.error.message ?? ''))) return true;
+		return typeof read.result === 'string' && read.result.length === 66 && BigInt(read.result) > 0n;
+	} catch {
+		// The chain did not say: not called a non-multisig on no evidence.
+		return true;
+	}
+}
+
+/** A Safe's `getThreshold()`. */
+const GET_THRESHOLD_CALL = '0xe75235b8';
 
 async function deployedChains(address: string, chainIds: number[]): Promise<number[]> {
 	const results = await Promise.all(

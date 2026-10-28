@@ -21,9 +21,14 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading } from '../core/call-review.svelte';
+	import { CallReading, readableCalls } from '../core/call-review.svelte';
+	import { memberChanges } from '../core/display';
 	import { reviewTx } from '../core/kernel';
-	import { ExternalWallet, WalletDeclinedError } from '../external/session.svelte';
+	import {
+		ExternalWallet,
+		WalletDeclinedError,
+		WalletOtherChainError
+	} from '../external/session.svelte';
 	import { checked, typedDataOf, type ExternalRequest } from '../external/signing.svelte';
 	import { shareOrigin } from '../core/link';
 	import CallReview from './CallReview.svelte';
@@ -58,6 +63,8 @@
 
 	const status = $derived.by(() => {
 		if (!wallet) return '';
+		// ms-15: the page went away mid-request — reopen it, it resumes.
+		if (wallet.away) return w.pageAway;
 		switch (wallet.phase) {
 			case 'waiting':
 				return w.waiting;
@@ -78,6 +85,8 @@
 
 	/** The call this SafeTx makes, when it is one to another contract (the core's reading). */
 	let reading = $state<CallReading | null>(null);
+	/** A batch's calls that change the multisig's own members, said first. */
+	let changes = $state<string[]>([]);
 
 	onMount(() => {
 		let action = null;
@@ -86,8 +95,10 @@
 		} catch {
 			// Nothing the core can read: the wallet's own prompt is all there is.
 		}
-		if (action?.kind === 'call') {
-			reading = new CallReading(request.chainId, request.safe, action);
+		changes = memberChanges(m, action);
+		const calls = readableCalls(action);
+		if (calls) {
+			reading = new CallReading(request.chainId, request.safe, calls);
 			void reading.start();
 		}
 		// The connect page opens where the owner's wallet is: the wallet's web
@@ -124,8 +135,17 @@
 			request.resolve(approval);
 		} catch (error) {
 			if (error instanceof DOMException && error.name === 'AbortError') return;
+			// ms-12: a connection declined on the page is said as that, not as a
+			// signature the wallet refused.
+			const connecting = wallet.phase === 'waiting' || wallet.phase === 'connecting';
 			failure =
-				error instanceof WalletDeclinedError ? w.declined : String((error as Error).message);
+				error instanceof WalletDeclinedError
+					? connecting
+						? w.connectDeclined
+						: w.declined
+					: error instanceof WalletOtherChainError
+						? fillTemplate(w.otherChain, { chain: chainName(request.chainId) })
+						: String((error as Error).message);
 		}
 	}
 
@@ -154,7 +174,7 @@
 
 <Sheet title={w.sheetTitle} {closeLabel} {wide} onclose={close}>
 	{#if reading}
-		<CallReview {reading} m={signing} />
+		<CallReview {reading} m={signing} alerts={changes} />
 	{/if}
 	{#if wallet}
 		{#if wallet.resumed}

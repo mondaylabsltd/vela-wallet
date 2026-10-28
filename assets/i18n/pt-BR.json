@@ -425,7 +425,8 @@
     "createAccountNote": "Uma conta nova, protegida por uma passkey neste dispositivo.",
     "signInNote": "Uma conta que você já tem, com a passkey dela.",
     "createMultisigNote": "Uma conta compartilhada por vários membros: transferências precisam de aprovações suficientes.",
-    "addMultisigNote": "Pelo endereço, ou importe seus Safes do Safe{Wallet}."
+    "addMultisigNote": "Pelo endereço, ou importe seus Safes do Safe{Wallet}.",
+    "lastMember": "É o único membro de {{names}} neste dispositivo: sem ele, aqui só será possível ver, não aprovar."
    },
    "panel": {
     "title": "{{m}} de {{n}} membros aprovam",
@@ -457,7 +458,8 @@
     "network": "Rede",
     "number": "Transação nº",
     "call": "Chamada de contrato",
-    "callWithValue": "Chamada de contrato com {{amount}} {{symbol}}"
+    "callWithValue": "Chamada de contrato com {{amount}} {{symbol}}",
+    "batchCalls": "{{total}} chamadas em uma transação"
    },
    "proposal": {
     "title": "Transação multisig",
@@ -495,7 +497,14 @@
     "notSent": "A rede não a aceitou, então nada foi enviado. Tente de novo.",
     "siteAsks": "{{host}} pede esta transação.",
     "siteWaits": "{{host}} espera até que os membros a executem ou rejeitem. Se você fechar isto, o site fica sabendo que ela foi proposta, e ela continua em Atividade.",
-    "data": "Dados"
+    "data": "Dados",
+    "changesMembers": "A chamada nº {{index}} altera este multisig: {{change}}. Aprove só se todos os membros esperam isso.",
+    "siteFollows": "{{host}} recebeu o identificador desta transação e a acompanha até os membros a executarem ou rejeitarem. Ela fica em Atividade.",
+    "voided": "Cancelada",
+    "voidedNote": "Cancelada: outra transação usou o número #{{nonce}}, então esta nunca poderá ser executada.",
+    "notInMailbox": "Esta transação não está na caixa deste multisig. Peça a quem enviou o link para conferir.",
+    "unknownNetwork": "Este link é de uma rede que a Vela não tem (chain {{chainId}}). Adicione a rede nos Ajustes e abra o link de novo.",
+    "badLink": "Este link para uma transação multisig está incompleto ou danificado. Peça de novo."
    },
    "send": {
     "propose": "Propor e aprovar",
@@ -535,7 +544,10 @@
     "name": "Nome",
     "namePlaceholder": "ex.: Fundo da equipe",
     "nameHint": "Todos os membros veem este nome. Ele é salvo com o multisig e não pode ser alterado depois.",
-    "nameInvalid": "Use um nome mais curto, sem caracteres de controle ou invisíveis nem espaços no início ou no fim."
+    "nameInvalid": "Use um nome mais curto, sem caracteres de controle ou invisíveis nem espaços no início ou no fim.",
+    "fewer": "Menos aprovações",
+    "more": "Mais aprovações",
+    "copyAddress": "Copiar endereço"
    },
    "add": {
     "title": "Adicionar uma multisig",
@@ -581,7 +593,11 @@
     "signedBy": "Assinado por {{owner}}",
     "unpair": "Desparear",
     "ownerWallet": "Carteira do membro",
-    "retry": "Tentar de novo"
+    "retry": "Tentar de novo",
+    "pageAway": "A página da carteira foi fechada. Abra de novo onde está sua carteira: o pedido ainda está esperando.",
+    "connectDeclined": "A conexão foi recusada na página da carteira. Tente de novo para pedir outra vez.",
+    "declinedHere": "Você recusou. A Vela foi avisada; pode fechar esta página.",
+    "otherChain": "A carteira ficou em outra rede. Mude para {{chain}} e tente de novo."
    },
    "import": {
     "or": "Ou importe do Safe{Wallet}",
@@ -1388,7 +1404,12 @@
    "clearAll": "Limpar tudo",
    "clearAllTitle": "Limpar o histórico?",
    "clearAllBody": "Isso remove todas as dApps abertas recentemente.",
-   "a11yDeleteHistory": "Remover do histórico"
+   "a11yDeleteHistory": "Remover do histórico",
+   "signedOut": "Você não entrou na Vela. Entre com sua passkey ou crie uma carteira para continuar.",
+   "signInTitle": "Entre para continuar",
+   "multisigNoMessagesTitle": "Um multisig ainda não assina mensagens",
+   "multisigNoMessagesBody": "{{host}} pediu a este multisig que assine uma mensagem. A assinatura de um multisig precisa das aprovações dos membros, que a Vela ainda não reúne para mensagens, então o site vai receber um não. Transações continuam funcionando: viram propostas que os membros aprovam.",
+   "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens."
   },
   "ext": {
    "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",

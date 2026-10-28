@@ -1335,6 +1335,28 @@ fn transfer_call(t: &Transfer) -> Result<(Address, U256, Vec<u8>), CoreError> {
     }
 }
 
+/// The MultiSendCallOnly transaction carrying `calls` (every leg a CALL).
+fn multi_send_tx(calls: &[(Address, U256, Vec<u8>)], nonce: U256) -> Result<SafeTx, CoreError> {
+    let mut packed = Vec::new();
+    for (to, value, data) in calls {
+        packed.push(0u8);
+        packed.extend_from_slice(to.as_slice());
+        packed.extend_from_slice(&word_u256(*value));
+        packed.extend_from_slice(&word_usize(data.len()));
+        packed.extend_from_slice(data);
+    }
+    let mut d = selector("multiSend(bytes)").to_vec();
+    d.extend_from_slice(&word_usize(0x20));
+    d.extend(bytes_tail(&packed));
+    Ok(plain_tx(
+        addr(MULTI_SEND_CALL_ONLY)?,
+        U256::ZERO,
+        d,
+        1,
+        nonce,
+    ))
+}
+
 /// A SafeTx for one or more transfers; several go through MultiSendCallOnly.
 pub fn transfers_tx(transfers: &[Transfer], nonce: &str) -> Result<SafeTx, CoreError> {
     let nonce = quantity(nonce)?;
@@ -1344,27 +1366,54 @@ pub fn transfers_tx(transfers: &[Transfer], nonce: &str) -> Result<SafeTx, CoreE
             let (to, value, data) = transfer_call(one)?;
             Ok(plain_tx(to, value, data, 0, nonce))
         }
-        many => {
-            let mut packed = Vec::new();
-            for t in many {
-                let (to, value, data) = transfer_call(t)?;
-                packed.push(0u8);
-                packed.extend_from_slice(to.as_slice());
-                packed.extend_from_slice(&word_u256(value));
-                packed.extend_from_slice(&word_usize(data.len()));
-                packed.extend_from_slice(&data);
-            }
-            let mut d = selector("multiSend(bytes)").to_vec();
-            d.extend_from_slice(&word_usize(0x20));
-            d.extend(bytes_tail(&packed));
-            Ok(plain_tx(
-                addr(MULTI_SEND_CALL_ONLY)?,
-                U256::ZERO,
-                d,
-                1,
-                nonce,
-            ))
-        }
+        many => multi_send_tx(
+            &many
+                .iter()
+                .map(transfer_call)
+                .collect::<Result<Vec<_>, _>>()?,
+            nonce,
+        ),
+    }
+}
+
+/// One call a site asks a multisig to make (`eth_sendTransaction`, or one
+/// of a `wallet_sendCalls`' calls): `value` a quantity (hex or decimal,
+/// empty = 0), `data` hex (empty = none).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallArg {
+    pub to: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub data: String,
+}
+
+fn call_arg(c: &CallArg) -> Result<(Address, U256, Vec<u8>), CoreError> {
+    let value = if c.value.trim().is_empty() {
+        U256::ZERO
+    } else {
+        quantity(&c.value)?
+    };
+    let data = if c.data.is_empty() || c.data == "0x" {
+        Vec::new()
+    } else {
+        unhex(&c.data)?
+    };
+    Ok((addr(&c.to)?, value, data))
+}
+
+/// A SafeTx for a site's calls: one is a plain CALL; several are ONE
+/// transaction through MultiSendCallOnly, every leg a CALL, so they run
+/// together or not at all (EIP-5792 `atomic`). Whether a multisig signs it
+/// is still [`review`]'s to say.
+pub fn calls_tx(calls: &[CallArg], nonce: &str) -> Result<SafeTx, CoreError> {
+    let nonce = quantity(nonce)?;
+    let legs = calls.iter().map(call_arg).collect::<Result<Vec<_>, _>>()?;
+    match legs.as_slice() {
+        [] => Err(err("nothing to call")),
+        [(to, value, data)] => Ok(plain_tx(*to, *value, data.clone(), 0, nonce)),
+        many => multi_send_tx(many, nonce),
     }
 }
 
@@ -1394,9 +1443,10 @@ pub enum Action {
         to: String,
         amount: String,
     },
-    /// Several of the above, through MultiSendCallOnly.
+    /// Several calls in ONE transaction, through MultiSendCallOnly, every one
+    /// a CALL (a delegatecall leg is refused), each read on its own.
     Batch {
-        transfers: Vec<Action>,
+        calls: Vec<BatchCall>,
     },
     /// Nothing, to the multisig itself: voids its nonce.
     Cancel,
@@ -1423,6 +1473,34 @@ pub enum Action {
         value: String,
         data: String,
     },
+}
+
+/// One call of a batch: what it sends, as packed (`value` in base units,
+/// decimal; `data` hex), and what the core reads it as — a
+/// [`Action::Transfer`], a [`Action::Call`] to another contract, or, for a
+/// call to the multisig itself, one of the four member changes (each one
+/// changes who controls the multisig: a shell says so loudly). Never a
+/// batch, a cancellation or any other call into the multisig.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchCall {
+    pub to: String,
+    pub value: String,
+    pub data: String,
+    pub action: Action,
+}
+
+impl BatchCall {
+    /// This call changes the multisig's own members or threshold.
+    pub fn changes_members(&self) -> bool {
+        matches!(
+            self.action,
+            Action::AddOwner { .. }
+                | Action::RemoveOwner { .. }
+                | Action::SwapOwner { .. }
+                | Action::ChangeThreshold { .. }
+        )
+    }
 }
 
 /// The core's reading of a SafeTx and whether Vela signs it.
@@ -1493,42 +1571,79 @@ fn read_owner_management(data: &[u8]) -> Option<Action> {
     None
 }
 
-fn read_batch(data: &[u8]) -> Option<Vec<Action>> {
-    if data.get(..4)? != selector("multiSend(bytes)")
-        || U256::from_be_slice(data.get(4..36)?) != U256::from(0x20)
-    {
-        return None;
-    }
-    let len: usize = U256::from_be_slice(data.get(36..68)?).try_into().ok()?;
-    let packed = data.get(68..68 + len)?;
+/// The calls of a MultiSendCallOnly batch, or why it is not one Vela signs.
+fn read_batch(data: &[u8], me: Address) -> Result<Vec<BatchCall>, &'static str> {
+    const UNREADABLE: &str = "a batch Vela cannot read in full";
+    let header = || -> Option<usize> {
+        if data.get(..4)? != selector("multiSend(bytes)")
+            || U256::from_be_slice(data.get(4..36)?) != U256::from(0x20)
+        {
+            return None;
+        }
+        U256::from_be_slice(data.get(36..68)?).try_into().ok()
+    };
+    let len = header().ok_or(UNREADABLE)?;
+    let packed = data.get(68..68 + len).ok_or(UNREADABLE)?;
     // Canonical encoding only: nothing may hide in padding or trailing bytes.
     if data.len() != 68 + len + pad32(len) || data[68 + len..].iter().any(|b| *b != 0) {
-        return None;
+        return Err(UNREADABLE);
     }
     let mut out = Vec::new();
     let mut i = 0;
     while i < packed.len() {
-        let leg = packed.get(i..i + 85)?;
+        let leg = packed.get(i..i + 85).ok_or(UNREADABLE)?;
+        // A delegatecall leg runs another contract's code AS the multisig: it
+        // could rewrite it (MultiSendCallOnly refuses one anyway).
         if leg[0] != 0 {
-            return None;
+            return Err("a call in the batch is a delegatecall");
         }
         let to = Address::from_slice(&leg[1..21]);
         let value = U256::from_be_slice(&leg[21..53]);
-        let n: usize = U256::from_be_slice(&leg[53..85]).try_into().ok()?;
-        let d = packed.get(i + 85..i + 85 + n)?;
+        let n: usize = U256::from_be_slice(&leg[53..85])
+            .try_into()
+            .map_err(|_| UNREADABLE)?;
+        let d = packed.get(i + 85..i + 85 + n).ok_or(UNREADABLE)?;
+        // MultiSend reads the zero address as the multisig itself: a call
+        // that hides where it goes.
         if to == Address::ZERO {
-            return None;
+            return Err("a call in the batch goes to the zero address");
         }
-        out.push(read_transfer(to, value, d)?);
+        let action = if to == me {
+            // Into the multisig itself: only the four member changes, with no
+            // coin. Modules, a guard, a fallback handler, a new singleton —
+            // what can bypass every owner — stay refused, as they are alone.
+            let members = if value.is_zero() {
+                read_owner_management(d)
+            } else {
+                None
+            };
+            members.ok_or("a call in the batch changes the multisig in a way Vela does not sign")?
+        } else {
+            read_transfer(to, value, d).unwrap_or_else(|| Action::Call {
+                to: to.to_checksum(None),
+                value: value.to_string(),
+                data: hex(d),
+            })
+        };
+        out.push(BatchCall {
+            to: to.to_checksum(None),
+            value: value.to_string(),
+            data: hex(d),
+            action,
+        });
         i += 85 + n;
     }
-    (out.len() >= 2).then_some(out)
+    if out.is_empty() {
+        return Err(UNREADABLE);
+    }
+    Ok(out)
 }
 
-/// Read `tx` for `multisig` on `chain_id`. Vela signs only: transfers (one, or
-/// a batch through MultiSendCallOnly), owner management and cancellation sent
-/// to the multisig itself — with every gas field zero, so execution can never
-/// pay a refund out of the multisig.
+/// Read `tx` for `multisig` on `chain_id`. Vela signs only: transfers and
+/// calls to other contracts — one, or a batch of them through
+/// MultiSendCallOnly, whose calls may also change the members — and owner
+/// management and cancellation sent to the multisig itself; with every gas
+/// field zero, so execution can never pay a refund out of the multisig.
 pub fn review(chain_id: u64, multisig: &str, tx: &SafeTx) -> Result<Review, CoreError> {
     let t = parse_tx(tx)?;
     let me = addr(multisig)?;
@@ -1547,7 +1662,10 @@ pub fn review(chain_id: u64, multisig: &str, tx: &SafeTx) -> Result<Review, Core
     }
     let action = match t.operation {
         1 if t.to == addr(MULTI_SEND_CALL_ONLY)? && t.value.is_zero() => {
-            read_batch(&t.data).map(|transfers| Action::Batch { transfers })
+            match read_batch(&t.data, me) {
+                Ok(calls) => Some(Action::Batch { calls }),
+                Err(why) => return Ok(refuse(why)),
+            }
         }
         1 => return Ok(refuse("delegatecall to a contract Vela does not sign for")),
         0 if t.to == me => {
@@ -1696,6 +1814,10 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         )?)),
         "transfersTx" => out(json(&transfers_tx(
             &arg::<Vec<Transfer>>(&args, "transfers")?,
+            &arg::<String>(&args, "nonce")?,
+        )?)),
+        "callsTx" => out(json(&calls_tx(
+            &arg::<Vec<CallArg>>(&args, "calls")?,
             &arg::<String>(&args, "nonce")?,
         )?)),
         "cancelTx" => out(json(&cancel_tx(
@@ -1853,6 +1975,135 @@ mod tests {
         tail.data
             .push_str("00000000000000000000000000000000000000000000000000000000000000ff");
         assert!(review(100, &ms, &tail).unwrap().refusal.is_some());
+    }
+
+    /// A packed MultiSendCallOnly batch, each leg `(operation, to, value, data)`.
+    fn packed_batch(legs: &[(u8, Address, U256, Vec<u8>)]) -> SafeTx {
+        let mut packed = Vec::new();
+        for (op, to, value, data) in legs {
+            packed.push(*op);
+            packed.extend_from_slice(to.as_slice());
+            packed.extend_from_slice(&word_u256(*value));
+            packed.extend_from_slice(&word_usize(data.len()));
+            packed.extend_from_slice(data);
+        }
+        let mut d = selector("multiSend(bytes)").to_vec();
+        d.extend_from_slice(&word_usize(0x20));
+        d.extend(bytes_tail(&packed));
+        plain_tx(
+            addr(MULTI_SEND_CALL_ONLY).unwrap(),
+            U256::ZERO,
+            d,
+            1,
+            U256::ZERO,
+        )
+    }
+
+    #[test]
+    fn a_batch_of_a_sites_calls_is_read_call_by_call() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        // An approve, then a swap with coin: ONE transaction, two CALLs.
+        let approve = format!("0x095ea7b3{}{}", "0".repeat(24) + &B[2..], "f".repeat(64));
+        let tx = calls_tx(
+            &[
+                CallArg {
+                    to: A.into(),
+                    value: String::new(),
+                    data: approve.clone(),
+                },
+                CallArg {
+                    to: B.into(),
+                    value: "0x10".into(),
+                    data: "0x12345678".into(),
+                },
+            ],
+            "0x2",
+        )
+        .unwrap();
+        assert_eq!(tx.operation, 1);
+        assert_eq!(tx.to, MULTI_SEND_CALL_ONLY);
+        assert_eq!(tx.nonce, "0x2");
+        let Some(Action::Batch { calls }) = review(100, &ms, &tx).unwrap().action else {
+            panic!("a batch of calls is read");
+        };
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].data, approve);
+        assert!(matches!(calls[0].action, Action::Call { .. }));
+        assert_eq!(calls[1].value, "16");
+        assert!(matches!(
+            calls[1].action,
+            Action::Call { ref value, .. } if value == "16"
+        ));
+        assert!(!calls.iter().any(BatchCall::changes_members));
+
+        // One call is a plain CALL, the same transaction `eth_sendTransaction` gives.
+        let one = calls_tx(
+            &[CallArg {
+                to: B.into(),
+                value: "0x0".into(),
+                data: "0x12345678".into(),
+            }],
+            "0",
+        )
+        .unwrap();
+        assert_eq!(one.operation, 0);
+        assert!(matches!(
+            review(100, &ms, &one).unwrap().action,
+            Some(Action::Call { .. })
+        ));
+        assert!(calls_tx(&[], "0").is_err());
+    }
+
+    #[test]
+    fn a_batch_that_could_rewrite_the_multisig_is_refused_and_a_member_change_is_marked() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        let me = addr(&ms).unwrap();
+        let a = addr(A).unwrap();
+        let send = (0u8, a, U256::from(1), Vec::new());
+        let refusal = |tx: &SafeTx| review(100, &ms, tx).unwrap().refusal;
+
+        // A delegatecall leg.
+        let delegate = packed_batch(&[send.clone(), (1, a, U256::ZERO, vec![1, 2, 3, 4])]);
+        assert_eq!(
+            refusal(&delegate).as_deref(),
+            Some("a call in the batch is a delegatecall")
+        );
+        // A leg to the zero address runs as the multisig itself.
+        let zero = packed_batch(&[send.clone(), (0, Address::ZERO, U256::ZERO, vec![])]);
+        assert!(refusal(&zero).is_some());
+        // A module, a guard or a fallback handler, set from inside a batch.
+        for signature in [
+            "enableModule(address)",
+            "setGuard(address)",
+            "setFallbackHandler(address)",
+        ] {
+            let data = [&selector(signature)[..], &word_addr(a)[..]].concat();
+            let tx = packed_batch(&[send.clone(), (0, me, U256::ZERO, data)]);
+            assert!(refusal(&tx).is_some(), "{signature}");
+        }
+        // Coin sent into the multisig with data.
+        let threshold = [
+            &selector("changeThreshold(uint256)")[..],
+            &word_u256(U256::from(1))[..],
+        ]
+        .concat();
+        let paid = packed_batch(&[send.clone(), (0, me, U256::from(1), threshold.clone())]);
+        assert!(refusal(&paid).is_some());
+
+        // A member change is read, and marked as one.
+        let change = packed_batch(&[send, (0, me, U256::ZERO, threshold)]);
+        let Some(Action::Batch { calls }) = review(100, &ms, &change).unwrap().action else {
+            panic!("a member change in a batch is read");
+        };
+        assert!(matches!(
+            calls[0].action,
+            Action::Transfer { token: None, .. }
+        ));
+        assert!(matches!(
+            calls[1].action,
+            Action::ChangeThreshold { ref threshold } if threshold == "1"
+        ));
+        assert!(calls[1].changes_members());
     }
 
     #[test]

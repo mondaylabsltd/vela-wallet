@@ -110,7 +110,12 @@
       "clearAll": "Alle löschen",
       "clearAllTitle": "Verlauf löschen?",
       "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
-      "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+      "a11yDeleteHistory": "Aus dem Verlauf entfernen",
+      "signedOut": "Sie sind bei Vela nicht angemeldet. Melden Sie sich mit Ihrem Passkey an oder erstellen Sie eine Wallet, um fortzufahren.",
+      "signInTitle": "Zum Fortfahren anmelden",
+      "multisigNoMessagesTitle": "Ein Multisig kann noch keine Nachrichten signieren",
+      "multisigNoMessagesBody": "{{host}} hat diesen Multisig gebeten, eine Nachricht zu signieren. Die Signatur eines Multisigs braucht die Genehmigungen seiner Mitglieder, die Vela für Nachrichten noch nicht sammelt, daher erhält die Website eine Absage. Transaktionen funktionieren weiterhin: Sie werden zu Vorschlägen, die die Mitglieder genehmigen.",
+      "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen."
     },
     "ext": {
       "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",

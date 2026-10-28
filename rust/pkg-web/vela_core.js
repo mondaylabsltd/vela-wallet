@@ -3677,18 +3677,16 @@ export function dappRpcCallsStatusId(params_json) {
 
 /**
  * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
- * request's params, the site's granted addresses, the wallet's chains and
- * the multisig accounts among its addresses (all JSON). Answers
- * `{"result":…}` or `{"error":{"code","message"}}`.
+ * request's params, the site's granted addresses and the wallet's chains (all
+ * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
  * @param {string} params_json
  * @param {string} granted_json
  * @param {string} chains_json
- * @param {string} multisigs_json
  * @returns {string}
  */
-export function dappRpcCapabilities(params_json, granted_json, chains_json, multisigs_json) {
-    let deferred5_0;
-    let deferred5_1;
+export function dappRpcCapabilities(params_json, granted_json, chains_json) {
+    let deferred4_0;
+    let deferred4_1;
     try {
         const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -3696,14 +3694,12 @@ export function dappRpcCapabilities(params_json, granted_json, chains_json, mult
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(chains_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(multisigs_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ret = wasm.dappRpcCapabilities(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        deferred5_0 = ret[0];
-        deferred5_1 = ret[1];
+        const ret = wasm.dappRpcCapabilities(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -3724,6 +3720,61 @@ export function dappRpcClassify(method) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The calls a site's `eth_sendTransaction` or `wallet_sendCalls` asks a
+ * multisig to make on `chain_id` (`dapp_rpc::multisig_calls`): answers
+ * `{"result":[{to,value,data}]}` or `{"error":{"code","message"}}`.
+ * @param {string} method
+ * @param {string} params_json
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function dappRpcMultisigCalls(method, params_json, chain_id) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcMultisigCalls(ptr0, len0, ptr1, len1, chain_id);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` for a batch a MULTISIG answered with
+ * (its id is the proposal's safeTxHash): `dapp_rpc::multisig_calls_status`
+ * over the receipt of the transaction whose `ExecutionSuccess` names it
+ * (JSON; `undefined`/`null`: none found) and whether the multisig's nonce is
+ * past the proposal's — as JSON.
+ * @param {string} id
+ * @param {number} chain_id
+ * @param {string | null | undefined} execution_receipt_json
+ * @param {boolean} number_used
+ * @returns {string}
+ */
+export function dappRpcMultisigCallsStatus(id, chain_id, execution_receipt_json, number_used) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(execution_receipt_json) ? 0 : passStringToWasm0(execution_receipt_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcMultisigCallsStatus(ptr0, len0, chain_id, ptr1, len1, number_used);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
 

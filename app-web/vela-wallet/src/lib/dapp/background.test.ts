@@ -548,9 +548,10 @@ describe('a worker restart (G19, EX8 — resume, don’t settle)', () => {
 			code: 4900,
 			message: 'Vela did not answer in time — check its activity'
 		});
+		// dapp-6: its panel gone with nothing claimed — nothing happened.
 		expect(orphan.answers[0].error).toEqual({
-			code: 4900,
-			message: 'The browser closed before the request finished'
+			code: 4001,
+			message: 'The person closed the request without approving it'
 		});
 		expect(String(env.session.data['vela.sw.log'])).toMatch(/req\.settled cause=page_left/);
 	});
@@ -566,11 +567,12 @@ describe('Chrome’s panel ✕ (EX6)', () => {
 		await settleAll();
 		panel.close();
 		await settleAll();
+		// dapp-6: closed before anything happened — the person declined (4001).
 		expect(a.answers).toEqual([
 			{
 				id: 'a:1',
 				result: undefined,
-				error: { code: 4900, message: 'The browser closed before the request finished' }
+				error: { code: 4001, message: 'The person closed the request without approving it' }
 			}
 		]);
 		expect(reqKeys(env.session)).toEqual([]);
@@ -671,7 +673,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(page.answers).toHaveLength(1);
 	});
 
-	it('claimed only for sign (nothing signed yet has a hash): still 4900', async () => {
+	it('claimed only for sign (nothing signed or sent): the person declined, 4001 (dapp-6)', async () => {
 		const env = makeEnv();
 		await startWorker(env);
 		const panel = env.panel();
@@ -686,7 +688,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 			{
 				id: 'tx:1',
 				result: undefined,
-				error: { code: 4900, message: 'The browser closed before the request finished' }
+				error: { code: 4001, message: 'The person closed the request without approving it' }
 			}
 		]);
 	});
@@ -767,7 +769,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 	});
 
-	it('a worker restart with the panel gone: the hash for the claimed submit, 4900 for the rest', async () => {
+	it('a worker restart with the panel gone: the hash for the claimed submit, 4001 for one only at its passkey', async () => {
 		const env = makeEnv();
 		const a = env.openPage(7, 'doc-a');
 		a.owed.add('tx:1');
@@ -810,8 +812,8 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		await settleAll();
 		expect(a.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 		expect(b.answers[0].error).toEqual({
-			code: 4900,
-			message: 'The browser closed before the request finished'
+			code: 4001,
+			message: 'The person closed the request without approving it'
 		});
 		expect(reqKeys(env.session)).toEqual([]);
 		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
@@ -1310,7 +1312,7 @@ describe('one request window per site (094)', () => {
 		expect(reqKeys(env.session)).toEqual([]);
 	});
 
-	it('a window the person closed takes its site’s queue with it — 4900 each', async () => {
+	it('a window the person closed takes its site’s queue with it — declined each (4001, dapp-6)', async () => {
 		const env = makeEnv();
 		env.local.data['vela.ext.surface'] = 'window';
 		await startWorker(env);
@@ -1320,9 +1322,9 @@ describe('one request window per site (094)', () => {
 		env.emit('windowRemoved', 101);
 		await settleAll();
 		expect(page.answers.map((a) => [a.id, a.error?.code])).toEqual([
-			['q:1', 4900],
-			['q:2', 4900],
-			['q:3', 4900]
+			['q:1', 4001],
+			['q:2', 4001],
+			['q:3', 4001]
 		]);
 		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
 		expect(reqKeys(env.session)).toEqual([]);
@@ -1768,22 +1770,82 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 		});
 	});
 
-	it('promises a multisig no atomic batch: it proposes none (dapp-4)', async () => {
+	/**
+	 * Owner 2026-10-28: a multisig's `wallet_sendCalls` is ONE proposal. Its id
+	 * is the safeTxHash; the worker reads it from the multisig itself — pending
+	 * while its nonce has not passed the proposal's, then the receipt of the
+	 * transaction whose `ExecutionSuccess` names it, or 400 when another
+	 * transaction took its number.
+	 */
+	it('reads a multisig batch from the multisig: pending, then its execution', async () => {
+		const SAFE = `0x${'5a'.repeat(20)}`;
 		const env = makeEnv();
 		env.local.data['vela.ext.chains'] = catalog;
-		env.local.data['vela.ext.cache'] = { address: ALICE, accounts: [{ address: ALICE }] };
-		env.local.data['vela.ext.multisigs'] = [ALICE.toLowerCase()];
-		env.local.data['vela.perm.https://a.example'] = {
-			origin: 'https://a.example',
-			address: ALICE,
-			chainId: 100,
-			grantedAt: 1
-		};
+		const chain = { nonce: 3n, executed: null as string | null };
+		const asked: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string, init: { body: string }) => {
+				const body = JSON.parse(init.body);
+				asked.push(`${new URL(url).host} ${body.method}`);
+				const result =
+					body.method === 'eth_call'
+						? `0x${chain.nonce.toString(16).padStart(64, '0')}`
+						: body.method === 'eth_getLogs'
+							? chain.executed
+								? [{ transactionHash: chain.executed, blockNumber: '0x20' }]
+								: []
+							: body.method === 'eth_getTransactionReceipt'
+								? {
+										transactionHash: TX,
+										blockHash: '0xbb',
+										blockNumber: '0x20',
+										status: '0x1',
+										logs: []
+									}
+								: null;
+				return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), { status: 200 });
+			})
+		);
 		await startWorker(env);
-		const granted = env.openPage(7, 'doc-a', 'https://a.example');
-		expect((await rpc(env, granted, 'wallet_getCapabilities', [ALICE, ['0x64']])).result).toEqual({
-			'0x64': { atomic: { status: 'unsupported' } }
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'b:1', 'wallet_sendCalls');
+		await settleAll();
+		panel.post({
+			type: 'answer',
+			rid: '7:b:1',
+			result: { id: ID },
+			opHash: { chainId: 100, multisig: { safe: SAFE, nonce: '0x3', fromBlock: '0x10' } }
 		});
+		await settleAll();
+
+		// Waiting for approvals: the multisig's nonce is still the proposal's.
+		const waiting = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(waiting.result).toMatchObject({ id: ID, chainId: '0x64', status: 100, atomic: true });
+		expect(asked).toEqual(['node.example eth_call']);
+
+		// Executed by a member anywhere: its receipt.
+		chain.nonce = 4n;
+		chain.executed = TX;
+		const done = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(done.result).toMatchObject({
+			status: 200,
+			receipts: [{ transactionHash: TX, status: '0x1' }]
+		});
+		expect(asked.slice(1)).toEqual([
+			'node.example eth_call',
+			'node.example eth_getLogs',
+			'node.example eth_getTransactionReceipt'
+		]);
+
+		// Its number taken by another transaction (a cancellation): 400.
+		chain.executed = null;
+		const voided = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(voided.result).toMatchObject({ status: 400 });
+		expect(voided.result).not.toHaveProperty('receipts');
+		// Never asked of a bundler: it is no user operation.
+		expect(asked.some((a) => a.startsWith('relay.example'))).toBe(false);
 	});
 });
 

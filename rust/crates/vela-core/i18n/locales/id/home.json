@@ -87,7 +87,8 @@
         "createAccountNote": "Akun baru, dijaga passkey di perangkat ini.",
         "signInNote": "Akun yang sudah Anda miliki, dengan passkey-nya.",
         "createMultisigNote": "Akun yang dipakai bersama beberapa anggota: transfer perlu cukup persetujuan.",
-        "addMultisigNote": "Lewat alamatnya, atau impor Safe Anda dari Safe{Wallet}."
+        "addMultisigNote": "Lewat alamatnya, atau impor Safe Anda dari Safe{Wallet}.",
+        "lastMember": "Ini satu-satunya anggota {{names}} di perangkat ini: tanpanya, di sini hanya bisa dilihat, tidak bisa disetujui."
       },
       "panel": {
         "title": "{{m}} dari {{n}} anggota menyetujui",
@@ -119,7 +120,8 @@
         "network": "Jaringan",
         "number": "Transaksi #",
         "call": "Panggilan kontrak",
-        "callWithValue": "Panggilan kontrak dengan {{amount}} {{symbol}}"
+        "callWithValue": "Panggilan kontrak dengan {{amount}} {{symbol}}",
+        "batchCalls": "{{total}} panggilan dalam satu transaksi"
       },
       "proposal": {
         "title": "Transaksi multisig",
@@ -157,7 +159,14 @@
         "notSent": "Jaringan tidak menerimanya, jadi tidak ada yang dikirim. Coba lagi.",
         "siteAsks": "{{host}} meminta transaksi ini.",
         "siteWaits": "{{host}} menunggu sampai anggota mengeksekusi atau menolaknya. Jika Anda menutup ini, situs diberi tahu bahwa transaksi sudah diusulkan, dan transaksi tetap ada di Aktivitas.",
-        "data": "Data"
+        "data": "Data",
+        "changesMembers": "Panggilan #{{index}} mengubah multisig ini sendiri: {{change}}. Setujui hanya jika semua anggota mengharapkannya.",
+        "siteFollows": "{{host}} sudah menerima ID transaksi ini dan memantaunya sampai anggota mengeksekusi atau menolaknya. Transaksi tetap ada di Aktivitas.",
+        "voided": "Dibatalkan",
+        "voidedNote": "Dibatalkan: transaksi lain memakai nomor #{{nonce}}, jadi transaksi ini tidak akan pernah bisa dijalankan.",
+        "notInMailbox": "Transaksi ini tidak ada di kotak surat multisig ini. Minta pengirim tautan untuk memeriksanya.",
+        "unknownNetwork": "Tautan ini untuk jaringan yang tidak dimiliki Vela (chain {{chainId}}). Tambahkan jaringannya di Pengaturan, lalu buka tautan lagi.",
+        "badLink": "Tautan ke transaksi multisig ini tidak lengkap atau rusak. Minta lagi tautannya."
       },
       "send": {
         "propose": "Usulkan dan setujui",
@@ -196,7 +205,10 @@
         "name": "Nama",
         "namePlaceholder": "mis. Dana tim",
         "nameHint": "Semua anggota melihat nama ini. Nama disimpan bersama multisig dan tidak bisa diubah nanti.",
-        "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau karakter tak terlihat, dan tanpa spasi di awal maupun akhir."
+        "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau karakter tak terlihat, dan tanpa spasi di awal maupun akhir.",
+        "fewer": "Lebih sedikit persetujuan",
+        "more": "Lebih banyak persetujuan",
+        "copyAddress": "Salin alamat"
       },
       "add": {
         "title": "Tambah multisig",
@@ -242,7 +254,11 @@
         "signedBy": "Ditandatangani oleh {{owner}}",
         "unpair": "Lepas pasangan",
         "ownerWallet": "Dompet anggota",
-        "retry": "Coba lagi"
+        "retry": "Coba lagi",
+        "pageAway": "Halaman dompet tertutup. Buka lagi di tempat dompetmu berada: permintaannya masih menunggu.",
+        "connectDeclined": "Koneksi ditolak di halaman dompet. Coba lagi untuk meminta sekali lagi.",
+        "declinedHere": "Kamu menolak. Vela sudah diberi tahu; kamu bisa menutup halaman ini.",
+        "otherChain": "Dompet tetap di jaringan lain. Pindahkan ke {{chain}} lalu coba lagi."
       },
       "import": {
         "or": "Atau impor dari Safe{Wallet}",

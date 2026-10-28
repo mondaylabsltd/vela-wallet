@@ -110,7 +110,12 @@
       "clearAll": "Tout effacer",
       "clearAllTitle": "Effacer l'historique ?",
       "clearAllBody": "Cela supprime toutes les dApps récemment ouvertes.",
-      "a11yDeleteHistory": "Retirer de l'historique"
+      "a11yDeleteHistory": "Retirer de l'historique",
+      "signedOut": "Vous n’êtes pas connecté à Vela. Connectez-vous avec votre passkey ou créez un portefeuille pour continuer.",
+      "signInTitle": "Connectez-vous pour continuer",
+      "multisigNoMessagesTitle": "Un multisig ne peut pas encore signer de messages",
+      "multisigNoMessagesBody": "{{host}} a demandé à ce multisig de signer un message. La signature d’un multisig exige l’approbation de ses membres, que Vela ne recueille pas encore pour les messages : le site recevra donc un refus. Les transactions fonctionnent toujours : elles deviennent des propositions que les membres approuvent.",
+      "multisigConnectNote": "C’est un multisig : le site peut proposer des transactions que ses membres approuvent, mais pas lui demander de signer des messages."
     },
     "ext": {
       "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",

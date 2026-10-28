@@ -31,6 +31,8 @@ export interface SessionView {
 	state: string;
 	dapp?: { name: string; origin?: string; icon?: string };
 	approved: boolean;
+	/** ms-12: the person declined its connection here; Vela was told so. */
+	declined: boolean;
 	created: number;
 }
 
@@ -77,8 +79,14 @@ export class Bridge extends EventTarget {
 		{ connection: ReturnType<typeof connectRoom>; wallet: ReferenceWallet; store: WalletStore }
 	>();
 
-	constructor(provider: Eip1193Provider, accounts: string[], chain: string) {
+	/** Sessions whose connection the person declined on this page (ms-12). */
+	#declined = new Set<string>();
+	/** The wallet's own name (its EIP-6963 announcement): what Vela calls it (ms-13). */
+	readonly walletName: string;
+
+	constructor(provider: Eip1193Provider, accounts: string[], chain: string, walletName = '') {
 		super();
+		this.walletName = walletName;
 		this.signer = injectedSigner(provider, accounts, chain);
 		provider.on?.('accountsChanged', (list) => this.#accountsChanged(list as string[]));
 		provider.on?.('chainChanged', (id) => this.#chainChanged(chainOf(id as string)));
@@ -90,6 +98,7 @@ export class Bridge extends EventTarget {
 			state: this.#live.get(s.id)?.connection.state ?? 'offline',
 			dapp: s.dapp,
 			approved: s.store.approved.length > 0,
+			declined: this.#declined.has(s.id),
 			created: s.created
 		}));
 	}
@@ -144,7 +153,9 @@ export class Bridge extends EventTarget {
 		};
 
 		const wallet = new ReferenceWallet(connection, {
-			name: 'Vela connect',
+			// The wallet the owner signs with, as it names itself — never this
+			// page's own name, which Vela would then call the wallet (ms-13).
+			name: this.walletName,
 			signers: [this.signer],
 			store,
 			save,
@@ -189,7 +200,13 @@ export class Bridge extends EventTarget {
 		});
 		this.prompt = undefined;
 		this.dispatchEvent(new Event('prompt'));
-		if (!approved) return [];
+		if (!approved) {
+			// ms-12: said on this page as declined, not "Waiting for Vela…".
+			this.#declined.add(saved.id);
+			this.#changed();
+			return [];
+		}
+		this.#declined.delete(saved.id);
 		// The wallet app's own connection prompt, if it has not connected this page yet.
 		try {
 			const accounts = (await this.signer.provider.request({

@@ -44,6 +44,18 @@ export function parseProposalLink(hash: string): ProposalLink | null {
 	return { chainId, multisig, safeTxHash };
 }
 
+/**
+ * ms-22: a hash that is meant as one of these links (`#ms=` / `#msa=`) but
+ * does not read as one — cut short, or damaged on the way. Said, never
+ * ignored.
+ */
+export function brokenLink(hash: string): 'proposal' | 'add' | null {
+	const body = hash.startsWith('#') ? hash.slice(1) : hash;
+	if (body.startsWith(PREFIX) && !parseProposalLink(hash)) return 'proposal';
+	if (body.startsWith(ADD_PREFIX) && !parseAddLink(hash)) return 'add';
+	return null;
+}
+
 const ADD_PREFIX = 'msa=';
 
 /** The link that adds a multisig by its address: `…/wallet#msa=<multisig>`. */

@@ -88,7 +88,8 @@
         "createAccountNote": "Un nuovo account, protetto da una passkey su questo dispositivo.",
         "signInNote": "Un account che hai già, con la sua passkey.",
         "createMultisigNote": "Un account condiviso da più membri: i trasferimenti richiedono abbastanza approvazioni.",
-        "addMultisigNote": "Con il suo indirizzo, oppure importa i tuoi Safe da Safe{Wallet}."
+        "addMultisigNote": "Con il suo indirizzo, oppure importa i tuoi Safe da Safe{Wallet}.",
+        "lastMember": "È l’unico membro di {{names}} su questo dispositivo: senza, qui si potrà solo consultarli, non approvare."
       },
       "panel": {
         "title": "Approvano {{m}} membri su {{n}}",
@@ -120,7 +121,8 @@
         "network": "Rete",
         "number": "Transazione n.",
         "call": "Chiamata a contratto",
-        "callWithValue": "Chiamata a contratto con {{amount}} {{symbol}}"
+        "callWithValue": "Chiamata a contratto con {{amount}} {{symbol}}",
+        "batchCalls": "{{total}} chiamate in una transazione"
       },
       "proposal": {
         "title": "Transazione multisig",
@@ -158,7 +160,14 @@
         "notSent": "La rete non l'ha accettata, quindi non è stato inviato nulla. Riprova.",
         "siteAsks": "{{host}} chiede questa transazione.",
         "siteWaits": "{{host}} attende che i membri la eseguano o la rifiutino. Se chiudi qui, il sito viene informato che è stata proposta, e resta in Attività.",
-        "data": "Dati"
+        "data": "Dati",
+        "changesMembers": "La chiamata n. {{index}} modifica questo multisig: {{change}}. Approva solo se tutti i membri se lo aspettano.",
+        "siteFollows": "{{host}} ha ricevuto l’identificativo di questa transazione e la segue finché i membri non la eseguono o la rifiutano. Resta in Attività.",
+        "voided": "Annullata",
+        "voidedNote": "Annullata: un’altra transazione ha usato il numero {{nonce}}, quindi questa non potrà mai essere eseguita.",
+        "notInMailbox": "Questa transazione non è nella casella di questo multisig. Chiedi a chi ha inviato il link di controllarlo.",
+        "unknownNetwork": "Questo link è per una rete che Vela non ha (chain {{chainId}}). Aggiungi la rete nelle Impostazioni, poi riapri il link.",
+        "badLink": "Questo link a una transazione multisig è incompleto o danneggiato. Chiedilo di nuovo."
       },
       "send": {
         "propose": "Proponi e approva",
@@ -198,7 +207,10 @@
         "name": "Nome",
         "namePlaceholder": "es. Cassa del team",
         "nameHint": "Tutti i membri vedono questo nome. Viene salvato con il multisig e non potrà essere cambiato in seguito.",
-        "nameInvalid": "Usa un nome più corto, senza caratteri di controllo o invisibili né spazi all'inizio o alla fine."
+        "nameInvalid": "Usa un nome più corto, senza caratteri di controllo o invisibili né spazi all'inizio o alla fine.",
+        "fewer": "Meno approvazioni",
+        "more": "Più approvazioni",
+        "copyAddress": "Copia indirizzo"
       },
       "add": {
         "title": "Aggiungi un multisig",
@@ -244,7 +256,11 @@
         "signedBy": "Firmato da {{owner}}",
         "unpair": "Dissocia",
         "ownerWallet": "Wallet del membro",
-        "retry": "Riprova"
+        "retry": "Riprova",
+        "pageAway": "La pagina del wallet si è chiusa. Riaprila dove si trova il tuo wallet: la richiesta è ancora in attesa.",
+        "connectDeclined": "La connessione è stata rifiutata nella pagina del wallet. Riprova per chiederla di nuovo.",
+        "declinedHere": "Hai rifiutato. Vela è stato avvisato; puoi chiudere questa pagina.",
+        "otherChain": "Il wallet è rimasto su un’altra rete. Passa a {{chain}} e riprova."
       },
       "import": {
         "or": "Oppure importa da Safe{Wallet}",

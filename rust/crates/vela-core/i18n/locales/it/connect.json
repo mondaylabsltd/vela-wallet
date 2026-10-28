@@ -110,7 +110,12 @@
       "clearAll": "Cancella tutto",
       "clearAllTitle": "Cancellare la cronologia?",
       "clearAllBody": "Questo rimuove tutte le dApp aperte di recente.",
-      "a11yDeleteHistory": "Rimuovi dalla cronologia"
+      "a11yDeleteHistory": "Rimuovi dalla cronologia",
+      "signedOut": "Non hai effettuato l’accesso a Vela. Accedi con la tua passkey o crea un wallet per continuare.",
+      "signInTitle": "Accedi per continuare",
+      "multisigNoMessagesTitle": "Un multisig non può ancora firmare messaggi",
+      "multisigNoMessagesBody": "{{host}} ha chiesto a questo multisig di firmare un messaggio. La firma di un multisig richiede le approvazioni dei membri, che Vela non raccoglie ancora per i messaggi, quindi il sito riceverà un rifiuto. Le transazioni funzionano comunque: diventano proposte che i membri approvano.",
+      "multisigConnectNote": "È un multisig: il sito può proporre transazioni da far approvare ai membri, ma non può chiedergli di firmare messaggi."
     },
     "ext": {
       "installedNote": "Ricarica le schede già aperte perché i loro siti trovino Vela.",

@@ -28,6 +28,11 @@
 		 * affordance, which is what a fixture board wants.
 		 */
 		onremove?: (index: number) => void;
+		/**
+		 * ms-20: what removing row `index` also costs, said in its confirm — the
+		 * multisigs it is this device's only member of. `null`: nothing more.
+		 */
+		removeNote?: (index: number) => string | null;
 		/** More rows in the same list (a multisig is an account too): `<li>`s. */
 		more?: Snippet;
 		/** In place of the two buttons (the switcher's single "Add account"). */
@@ -41,6 +46,7 @@
 		oncreate,
 		onsignin,
 		onremove,
+		removeNote,
 		more,
 		actions
 	}: Props = $props();
@@ -97,6 +103,7 @@
 			     meant to land on. -->
 			<li class="confirm">
 				<p>{sheet.removeBody}</p>
+				{#if removeNote?.(i)}<p class="note" role="alert">{removeNote(i)}</p>{/if}
 				<div class="confirm-actions">
 					<Button
 						variant="danger"
@@ -153,6 +160,11 @@
 		margin: 0 0 var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.confirm p.note {
+		color: var(--color-fg-base);
+		font-weight: var(--weight-medium);
 	}
 
 	.confirm-actions {

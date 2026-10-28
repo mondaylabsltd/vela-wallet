@@ -34,6 +34,7 @@
 	import { multisig, type MultisigAccount } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
+	import { multisigAsAccount } from '$lib/multisig/core/ext';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -151,6 +152,26 @@
 		return [...base, ...more];
 	});
 
+	/**
+	 * ms-20: the multisigs whose only member on this device is the account at
+	 * `position` — removing it leaves them read-only here, said before it goes.
+	 */
+	function lastMemberNote(position: number): string | null {
+		const row = view.accounts[position];
+		if (!row || !multisigCopy) return null;
+		const address = row.account.address.toLowerCase();
+		const local = new Set(view.accounts.map((r) => r.account.address.toLowerCase()));
+		const alone = multisig.accounts.filter((a) => {
+			const here = a.owners.filter((o) => local.has(o.toLowerCase()));
+			return here.length === 1 && here[0].toLowerCase() === address;
+		});
+		if (alone.length === 0) return null;
+		return multisigCopy.switcher.lastMember.replace(
+			'{{names}}',
+			alone.map((a) => multisigAsAccount(a).name).join(', ')
+		);
+	}
+
 	function remove(position: number): void {
 		const row = view.accounts[position];
 		if (row !== undefined)
@@ -195,7 +216,14 @@
 			{/each}
 		</ul>
 	{:else}
-		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin}>
+		<AccountsSheetBody
+			{sheet}
+			onselect={select}
+			onremove={remove}
+			removeNote={lastMemberNote}
+			{oncreate}
+			{onsignin}
+		>
 			{#snippet more()}
 				{#if multisigCopy}
 					<MultisigRows

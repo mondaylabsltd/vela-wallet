@@ -15,6 +15,7 @@
 import { hasCode, readMembers, type ChainMembers } from './chain';
 import { submitExecution } from './execute';
 import {
+	callsTx,
 	cancelTx,
 	reviewTx,
 	transfersTx,
@@ -339,6 +340,70 @@ export async function propose(
 	return submitProposal(account, chainId, tx, approval);
 }
 
+/**
+ * Signed approvals not yet in the mailbox (ms-19): written before the POST,
+ * removed once the mailbox answered (took it or refused it), and sent again
+ * when a page comes up — so a reload or a closed window between the passkey
+ * and the mailbox never loses what the person signed. The mailbox merges, so
+ * sending one twice is harmless.
+ */
+const OUTBOX_KEY = 'vela.multisigOutbox';
+
+type Submission = Parameters<typeof submitApproval>[0];
+
+function readOutbox(): Record<string, Submission> {
+	try {
+		return JSON.parse(localStorage.getItem(OUTBOX_KEY) ?? '{}') as Record<string, Submission>;
+	} catch {
+		return {};
+	}
+}
+
+function writeOutbox(outbox: Record<string, Submission>): void {
+	try {
+		if (Object.keys(outbox).length === 0) localStorage.removeItem(OUTBOX_KEY);
+		else localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
+	} catch {
+		// best effort: the submission still goes now
+	}
+}
+
+function outboxKey(req: Submission): string {
+	return `${req.chainId}:${req.safe.toLowerCase()}:${safeTxHash(req.chainId, req.safe, req.safeTx)}:${req.approval.owner.toLowerCase()}`;
+}
+
+/** Hand one owner's signed approval to the mailbox, kept in the outbox until it answers. */
+async function submitKept(req: Submission) {
+	const key = outboxKey(req);
+	writeOutbox({ ...readOutbox(), [key]: req });
+	const answer = await submitApproval(req);
+	const { [key]: _sent, ...rest } = readOutbox();
+	void _sent;
+	writeOutbox(rest);
+	return answer;
+}
+
+/**
+ * Send again what a page signed and never saw reach the mailbox (ms-19).
+ * Quiet: a submission that still cannot go stays for the next page.
+ * Resolves the multisigs whose mailbox took something.
+ */
+export async function flushOutbox(): Promise<string[]> {
+	const sent: string[] = [];
+	for (const [key, req] of Object.entries(readOutbox())) {
+		try {
+			const answer = await submitApproval(req);
+			const { [key]: _done, ...rest } = readOutbox();
+			void _done;
+			writeOutbox(rest);
+			if (answer.ok) sent.push(req.safe);
+		} catch {
+			// the mailbox is still out of reach: kept for the next page
+		}
+	}
+	return sent;
+}
+
 /** Hand `tx` and one owner's approval of it to the mailbox. */
 export async function submitProposal(
 	account: MultisigAccount,
@@ -346,7 +411,7 @@ export async function submitProposal(
 	tx: SafeTx,
 	approval: Approval
 ) {
-	const answer = await submitApproval({
+	const answer = await submitKept({
 		chainId,
 		safe: account.address,
 		safeTx: tx,
@@ -399,42 +464,40 @@ export async function proposeTransfers(
 	);
 }
 
-/** A dApp's call (`eth_sendTransaction`'s `to`, `value`, `data`). */
+/**
+ * A dApp's call (`eth_sendTransaction`'s `to`, `value`, `data`, or one of
+ * `wallet_sendCalls`' calls): `value` a quantity, `data` hex.
+ */
 export interface DappCall {
 	to: string;
 	value: string;
 	data: string;
 }
 
-/** `call` as a plain SafeTx at `nonce`: a call, no gas paid from the multisig. */
-function callTx(call: DappCall, nonce: bigint): SafeTx {
-	const zero = '0x0';
-	const none = '0x0000000000000000000000000000000000000000';
-	return {
-		to: call.to,
-		value: call.value || zero,
-		data: call.data || '0x',
-		operation: 0,
-		safeTxGas: zero,
-		baseGas: zero,
-		gasPrice: zero,
-		gasToken: none,
-		refundReceiver: none,
-		nonce: `0x${nonce.toString(16)}`
-	};
+/**
+ * A dApp's calls as ONE transaction at `nonce` (the core's `callsTx`): one is
+ * a plain CALL, several a MultiSendCallOnly batch, executed together or not
+ * at all. No gas is ever paid from the multisig.
+ */
+function dappTx(calls: DappCall[], nonce: bigint): SafeTx {
+	return callsTx(
+		calls.map((c) => ({ to: c.to, value: c.value || '0x0', data: c.data || '0x' })),
+		`0x${nonce.toString(16)}`
+	);
 }
 
 /**
- * A dApp's call as it would be proposed now, before anything is signed: the
- * transaction at the next free nonce, read by the core (`reviewTx`) as every
- * member will read it, with no approval yet — the review the person confirms
- * with "Propose and approve". Throws `MailboxUnreadableError` when the list
- * of waiting transactions cannot be read (there is no number to give it).
+ * A dApp's calls as they would be proposed now, before anything is signed:
+ * the transaction at the next free nonce, read by the core (`reviewTx`) as
+ * every member will read it, with no approval yet — the review the person
+ * confirms with "Propose and approve". Throws `MailboxUnreadableError` when
+ * the list of waiting transactions cannot be read (there is no number to
+ * give it).
  */
-export async function draftCall(
+export async function draftCalls(
 	address: string,
 	chainId: number,
-	call: DappCall
+	calls: DappCall[]
 ): Promise<{ chain: ChainState; item: ProposalItem }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
@@ -446,7 +509,7 @@ export async function draftCall(
 		items: read.items,
 		mailbox: true
 	};
-	const tx = callTx(call, nextNonceOf(chain));
+	const tx = dappTx(calls, nextNonceOf(chain));
 	const now = Date.now();
 	const item = readProposal(account, chain.members, {
 		chainId,
@@ -463,16 +526,22 @@ export async function draftCall(
 }
 
 /**
- * A dApp's `eth_sendTransaction` from a multisig: the call, proposed on
- * `chainId` at the next free nonce and approved at once, as a transfer is —
- * only after the person confirmed its review (`draftCall`).
+ * A dApp's `eth_sendTransaction` or `wallet_sendCalls` from a multisig: the
+ * calls, proposed as ONE transaction on `chainId` at the next free nonce and
+ * approved at once, as a transfer is — only after the person confirmed its
+ * review (`draftCalls`). Resolves the proposal's safeTxHash and number.
  */
-export async function proposeCall(
+export async function proposeCalls(
 	address: string,
 	chainId: number,
-	call: DappCall
-): Promise<{ safeTxHash: string }> {
-	return proposeBuilt(address, chainId, (nonce) => callTx(call, nonce));
+	calls: DappCall[]
+): Promise<{ safeTxHash: string; nonce: string }> {
+	let nonce = '0x0';
+	const { safeTxHash } = await proposeBuilt(address, chainId, (n) => {
+		nonce = `0x${n.toString(16)}`;
+		return dappTx(calls, n);
+	});
+	return { safeTxHash, nonce };
 }
 
 /**
@@ -510,7 +579,7 @@ async function proposeBuilt(
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
 	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash);
-	const answer = await submitApproval({
+	const answer = await submitKept({
 		chainId: item.chainId,
 		safe: account.address,
 		safeTx: item.tx,

@@ -30,7 +30,11 @@ const fake = vi.hoisted(() => ({
 	draft: null as any,
 	calls: [] as string[],
 	execution: null as any,
-	refused: false
+	refused: false,
+	/** Owners the passkey index knows: Vela accounts elsewhere (ms-11). */
+	vela: [] as string[],
+	/** What the chain says executed a done proposal (ms-9, ms-10). */
+	executed: undefined as string | null | undefined
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -46,7 +50,7 @@ vi.mock('../core/proposals.svelte', () => ({
 		return fake.execution;
 	},
 	proposeCancel: async () => void fake.calls.push('reject'),
-	draftCall: async () => fake.draft,
+	draftCalls: async () => fake.draft,
 	MailboxUnreadableError: class extends Error {}
 }));
 vi.mock('../core/execute', () => ({
@@ -59,7 +63,10 @@ vi.mock('../core/owners', () => ({
 			.filter((o) => o.toLowerCase() === ME)
 			.map((address) => ({ address, name: 'Mine', account: { address } }))
 }));
-vi.mock('../core/names.svelte', () => ({ names: { label: (a: string) => a.slice(0, 6) } }));
+vi.mock('../core/names.svelte', () => ({
+	names: { label: (a: string) => a.slice(0, 6), isVela: (a: string) => fake.vela.includes(a) }
+}));
+vi.mock('../core/records', () => ({ findExecution: async () => fake.executed }));
 vi.mock('../core/display', () => ({
 	actionRecipient: (a: any) => a?.to ?? null,
 	actionTitle: async () => 'Contract call',
@@ -67,12 +74,19 @@ vi.mock('../core/display', () => ({
 	explorerTxUrl: () => null,
 	formatUnits: (v: bigint) => String(v),
 	localName: () => null,
+	memberChanges: (_m: unknown, action: any) =>
+		action?.kind === 'batch'
+			? action.calls.flatMap((c: any, i: number) =>
+					c.action.kind === 'changeThreshold' ? [`changes #${i + 1}`] : []
+				)
+			: [],
 	shortenAddress: (a: string) => a.slice(0, 8),
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 18 })
 }));
 vi.mock('../core/kernel', () => ({
 	sameAddress: (a?: string | null, b?: string | null) =>
-		!!a && !!b && a.toLowerCase() === b.toLowerCase()
+		!!a && !!b && a.toLowerCase() === b.toLowerCase(),
+	transfersOf: () => []
 }));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
@@ -158,6 +172,8 @@ const settle = async () => {
 beforeEach(() => {
 	fake.calls = [];
 	fake.refused = false;
+	fake.vela = [];
+	fake.executed = undefined;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -170,7 +186,8 @@ describe("a dApp's transaction from a multisig (dapp-1)", () => {
 			rid: 'r1',
 			address: SAFE,
 			chainId: 100,
-			call: { to: TO, value: '0x0', data: '0x095ea7b3' },
+			method: 'eth_sendTransaction',
+			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
 			origin: 'https://app.example',
 			safeTxHash: null,
 			propose,
@@ -182,6 +199,9 @@ describe("a dApp's transaction from a multisig (dapp-1)", () => {
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('app.example asks for this transaction.');
 		expect(text).toContain('proposal.data');
+		// Owner 2026-10-28: the proposer reads the call decoded, as every member
+		// will — before "Propose and approve", before any passkey.
+		expect(document.querySelector('[data-testid="multisig-call-review"]')).not.toBeNull();
 		expect(buttons()).toContain('send.propose');
 		expect(buttons()).toContain('external.decline');
 		// No approval, invite or withdrawal of a transaction that does not exist yet.
@@ -263,6 +283,93 @@ describe('an execution the relay refused (ms-3)', () => {
 		expect(text).not.toContain('proposal.executed');
 		// The way to try again is still there.
 		expect(buttons()).toContain('proposal.approveAndExecute');
+		await screen.unmount();
+	});
+});
+
+describe('a batch of calls (owner, 2026-10-28)', () => {
+	it('reads every call, and says first, in red, a call that changes the multisig', async () => {
+		const batch = {
+			kind: 'batch',
+			calls: [
+				{
+					to: TO,
+					value: '0',
+					data: '0x095ea7b3',
+					action: { kind: 'call', to: TO, value: '0', data: '0x095ea7b3' }
+				},
+				{
+					to: SAFE,
+					value: '0',
+					data: '0x694e80c3',
+					action: { kind: 'changeThreshold', threshold: '1' }
+				}
+			]
+		};
+		fake.chain.items = [item({ review: { action: batch, refusal: null } })];
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="multisig-call-review"]')).not.toBeNull();
+		expect(document.body.textContent).toContain('changes #2');
+		// Every call's own bytes, in order.
+		expect(document.body.textContent).toContain(`#2 ${SAFE} 0x694e80c3`);
+		await screen.unmount();
+	});
+});
+
+describe('a transaction whose number is used (ms-9, ms-10)', () => {
+	const done = () => item({ status: 'done', canApprove: [], cancelledBy: `0x${'cd'.repeat(32)}` });
+
+	it('executed anywhere: "Executed", never "1/2 approved", "Waiting" or a pending cancellation', async () => {
+		fake.chain.items = [done()];
+		fake.executed = `0x${'ee'.repeat(32)}`;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.executed');
+		expect(text).not.toContain('status.progress');
+		expect(text).not.toContain('proposal.waiting');
+		expect(text).not.toContain('proposal.cancelPending');
+		expect(text).not.toContain('proposal.noExpiry');
+		await screen.unmount();
+	});
+
+	it('voided by another transaction: said as cancelled', async () => {
+		fake.chain.items = [done()];
+		fake.executed = null;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.voided');
+		expect(text).toContain('proposal.voidedNote');
+		await screen.unmount();
+	});
+
+	it('the chain cannot say: neither executed nor cancelled is claimed', async () => {
+		fake.chain.items = [done()];
+		fake.executed = undefined;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.doneNote');
+		expect(text).not.toContain('proposal.voided');
+		await screen.unmount();
+	});
+});
+
+describe('an owner whose wallet is elsewhere (ms-11, ms-23)', () => {
+	it('is offered an outside wallet — a queued transaction too — but a Vela member is not', async () => {
+		fake.chain.items = [item({ status: 'queued' })];
+		let screen = show();
+		await settle();
+		expect(buttons()).toContain('external.signWithWallet');
+		await screen.unmount();
+
+		// The same member, known to the passkey index: it approves in Vela.
+		fake.vela = [OTHER];
+		screen = show();
+		await settle();
+		expect(buttons()).not.toContain('external.signWithWallet');
 		await screen.unmount();
 	});
 });

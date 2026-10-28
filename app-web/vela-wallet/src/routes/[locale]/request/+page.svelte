@@ -20,7 +20,10 @@
 	 * The window does not get a landing. `background.js`'s `settle()` calls
 	 * `chrome.windows.remove` the moment the answer goes out, and a page has no
 	 * say in that (spec 077 FR-003, measured 2026-09-23: the receipt drew, and
-	 * the window vanished around it).
+	 * the window vanished around it). One exception (dapp-12): when the PAGE
+	 * leaves after its transaction was claimed for submit — a reload right
+	 * after Confirm — nobody is answered, and the worker leaves the window to
+	 * the receipt, whose Done closes it.
 	 */
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
@@ -84,3 +87,22 @@
 	closeLabel={data.signingMessages.receipt.done ?? ''}
 	current={session.view.address || null}
 />
+
+<style>
+	/*
+	 * dapp-14: this window has nothing behind its sheets — no wallet to dim —
+	 * so a sheet is the window, top to bottom, instead of its lower part over
+	 * an empty scrim. Only here: the panel keeps the wallet under its sheets.
+	 */
+	:global(html .root.signing > .sheet),
+	:global(html .root.wallet > .sheet) {
+		top: 0;
+		max-height: none;
+		border-radius: 0;
+	}
+
+	:global(html .root.signing > .scrim),
+	:global(html .root.wallet > .scrim) {
+		background: var(--color-bg-base);
+	}
+</style>

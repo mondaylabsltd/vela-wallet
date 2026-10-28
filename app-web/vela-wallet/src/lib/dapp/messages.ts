@@ -28,6 +28,17 @@ export interface RequestMessages {
 	noWallet: string;
 	createWallet: string;
 	haveWallet: string;
+	/** dapp-8: the window's title while a signature waits for somebody to sign in. */
+	signInTitle: string;
+	/**
+	 * dapp-7: a multisig asked for a message signature — what it cannot give
+	 * yet, and why (template — '{{host}}'), said before the site is told no;
+	 * and the line a connect for a multisig adds.
+	 */
+	multisigNoMessagesTitle: string;
+	multisigNoMessagesBody: string;
+	multisigConnectNote: string;
+	gotIt: string;
 	/**
 	 * Spec 096 F11: the consent names what a Connect shares — the account and
 	 * the network — under the labels the in-app browsers' consent uses

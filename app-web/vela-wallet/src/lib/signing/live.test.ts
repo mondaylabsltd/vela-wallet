@@ -3866,3 +3866,73 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		}
 	});
 });
+
+describe('typed data nobody describes reads as a structured message (dapp-9)', () => {
+	const TYPED_REQUEST = {
+		...REQUEST,
+		method: 'eth_signTypedData_v4',
+		kind: 'typed_data' as const,
+		params_json: '[]'
+	};
+	const typed: ClearSigningView = {
+		...INITIAL_CLEAR_VIEW,
+		resolved: true,
+		surface: 'blind_typed_data',
+		blind_typed: {
+			primary_type: 'Order',
+			has_domain: true,
+			domain_name: 'CoolProtocol',
+			verifying_contract: '0x1234567890abcdef1234567890abcdef12345678',
+			fields: [
+				{ key: 'maker', value: '0x14fB1f…D1eA5c' },
+				{ key: 'details.amount', value: '1000000000' }
+			],
+			has_invisible_chars: false
+		}
+	};
+
+	it('its domain, type, site, contract and every field — never "0 bytes"', () => {
+		const model = buildSigningModel(
+			inputs({ sign: { ...OPEN_SIGN, request: TYPED_REQUEST }, clear: typed })
+		)!;
+		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.intentTypedData, tone: 'caution' });
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'caution',
+			text: m.warnBlindTyped
+		});
+		expect(model.blocks).toContainEqual({
+			kind: 'rows',
+			rows: [
+				{ label: m.labelTypedDomain, value: 'CoolProtocol' },
+				{ label: m.labelType, value: 'Order' },
+				{ label: m.labelSigningFor, value: 'app.example' }
+			]
+		});
+		expect(model.blocks).toContainEqual({
+			kind: 'rows',
+			rows: [
+				{ label: 'maker', value: '0x14fB1f…D1eA5c', mono: true },
+				{ label: 'details.amount', value: '1000000000', mono: false }
+			]
+		});
+		expect(model.blocks.some((b) => b.kind === 'source')).toBe(true);
+		const text = JSON.stringify(model.blocks);
+		expect(text).not.toContain(m.intentBlind);
+		expect(text).not.toContain('0 bytes');
+	});
+
+	it('a hidden character anywhere in it is said', () => {
+		const model = buildSigningModel(
+			inputs({
+				sign: { ...OPEN_SIGN, request: TYPED_REQUEST },
+				clear: { ...typed, blind_typed: { ...typed.blind_typed!, has_invisible_chars: true } }
+			})
+		)!;
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnHiddenChars
+		});
+	});
+});

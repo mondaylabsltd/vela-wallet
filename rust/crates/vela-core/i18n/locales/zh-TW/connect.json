@@ -110,7 +110,12 @@
       "clearAll": "清除",
       "clearAllTitle": "清除記錄？",
       "clearAllBody": "這會移除所有最近開啟的 dApp。",
-      "a11yDeleteHistory": "從記錄中移除"
+      "a11yDeleteHistory": "從記錄中移除",
+      "signedOut": "你尚未登入 Vela。請用通行金鑰登入，或建立錢包後繼續。",
+      "signInTitle": "登入後繼續",
+      "multisigNoMessagesTitle": "多簽暫時還不能簽署訊息",
+      "multisigNoMessagesBody": "{{host}} 請求這個多簽簽署一則訊息。多簽的簽章需要成員核准，而 Vela 目前還不為訊息收集核准，所以網站會收到拒絕。交易仍然可用：它們會變成由成員核准的提案。",
+      "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員核准，但不能請求它簽署訊息。"
     },
     "ext": {
       "installedNote": "重新載入先前已開啟的分頁，網站才能找到 Vela。",

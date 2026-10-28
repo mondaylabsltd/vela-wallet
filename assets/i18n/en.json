@@ -424,7 +424,8 @@
     "createAccountNote": "A new account, kept by a passkey on this device.",
     "signInNote": "An account you already have, with its passkey.",
     "createMultisigNote": "An account several members share: transfers need enough of their approvals.",
-    "addMultisigNote": "By its address, or import your Safes from Safe{Wallet}."
+    "addMultisigNote": "By its address, or import your Safes from Safe{Wallet}.",
+    "lastMember": "It is this device’s only member of {{names}}: without it, those can only be read here, not approved."
    },
    "panel": {
     "title": "{{m}} of {{n}} members approve",
@@ -456,7 +457,8 @@
     "network": "Network",
     "number": "Transaction #",
     "call": "Contract call",
-    "callWithValue": "Contract call with {{amount}} {{symbol}}"
+    "callWithValue": "Contract call with {{amount}} {{symbol}}",
+    "batchCalls": "{{total}} calls in one transaction"
    },
    "proposal": {
     "title": "Multisig transaction",
@@ -494,7 +496,14 @@
     "notSent": "The network didn't take it, so nothing was sent. Try again.",
     "siteAsks": "{{host}} asks for this transaction.",
     "siteWaits": "{{host}} waits until the members execute or reject it. If you close this, the site is told it was proposed, and it stays in Activity.",
-    "data": "Data"
+    "data": "Data",
+    "changesMembers": "Call #{{index}} changes this multisig itself: {{change}}. Approve only if every member expects it.",
+    "siteFollows": "{{host}} was given this transaction’s id and follows it until the members execute or reject it. It stays in Activity.",
+    "voided": "Cancelled",
+    "voidedNote": "Cancelled: another transaction used number #{{nonce}}, so this one can never run.",
+    "notInMailbox": "This transaction isn’t in this multisig’s mailbox. Ask whoever sent the link to check it.",
+    "unknownNetwork": "This link is for a network Vela doesn’t have (chain {{chainId}}). Add the network in Settings, then open the link again.",
+    "badLink": "This link to a multisig transaction is incomplete or damaged. Ask for it again."
    },
    "send": {
     "propose": "Propose and approve",
@@ -533,7 +542,10 @@
     "name": "Name",
     "namePlaceholder": "e.g. Team fund",
     "nameHint": "Every member sees this name. It's saved with the multisig and can't be changed later.",
-    "nameInvalid": "Use a shorter name, without control or invisible characters or spaces at either end."
+    "nameInvalid": "Use a shorter name, without control or invisible characters or spaces at either end.",
+    "fewer": "Fewer approvals",
+    "more": "More approvals",
+    "copyAddress": "Copy address"
    },
    "add": {
     "title": "Add a multisig",
@@ -579,7 +591,11 @@
     "signedBy": "Signed by {{owner}}",
     "unpair": "Unpair",
     "ownerWallet": "Member's wallet",
-    "retry": "Try again"
+    "retry": "Try again",
+    "pageAway": "The wallet page closed. Open it again where your wallet is: the request is still waiting.",
+    "connectDeclined": "The connection was declined on the wallet page. Try again to ask once more.",
+    "declinedHere": "You declined. Vela has been told; you can close this page.",
+    "otherChain": "The wallet stayed on another network. Switch it to {{chain}} and try again."
    },
    "import": {
     "or": "Or import from Safe{Wallet}",
@@ -1381,7 +1397,12 @@
    "clearAll": "Clear all",
    "clearAllTitle": "Clear history?",
    "clearAllBody": "This removes all recently-opened dApps.",
-   "a11yDeleteHistory": "Remove from history"
+   "a11yDeleteHistory": "Remove from history",
+   "signedOut": "You’re not signed in to Vela. Sign in with your passkey, or create a wallet, to continue.",
+   "signInTitle": "Sign in to continue",
+   "multisigNoMessagesTitle": "A multisig can’t sign messages yet",
+   "multisigNoMessagesBody": "{{host}} asked this multisig to sign a message. A multisig’s signature needs its members’ approvals, which Vela doesn’t collect for messages yet, so the site will be told no. Transactions still work: they become proposals the members approve.",
+   "multisigConnectNote": "This is a multisig: the site can propose transactions for its members to approve, but it can’t ask it to sign messages."
   },
   "ext": {
    "installedNote": "Reload tabs that were already open so their sites can find Vela.",

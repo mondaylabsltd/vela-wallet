@@ -19,6 +19,7 @@ export interface MultisigMessages {
 		signInNote: string;
 		createMultisigNote: string;
 		addMultisigNote: string;
+		lastMember: string;
 	};
 	panel: {
 		title: string;
@@ -51,6 +52,7 @@ export interface MultisigMessages {
 		number: string;
 		call: string;
 		callWithValue: string;
+		batchCalls: string;
 	};
 	proposal: {
 		title: string;
@@ -90,6 +92,13 @@ export interface MultisigMessages {
 		data: string;
 		notFound: string;
 		opening: string;
+		changesMembers: string;
+		siteFollows: string;
+		voided: string;
+		voidedNote: string;
+		notInMailbox: string;
+		unknownNetwork: string;
+		badLink: string;
 	};
 	send: {
 		propose: string;
@@ -130,6 +139,9 @@ export interface MultisigMessages {
 		namePlaceholder: string;
 		nameHint: string;
 		nameInvalid: string;
+		fewer: string;
+		more: string;
+		copyAddress: string;
 	};
 	external: {
 		pageTitle: string;
@@ -166,6 +178,10 @@ export interface MultisigMessages {
 		unpair: string;
 		ownerWallet: string;
 		retry: string;
+		pageAway: string;
+		connectDeclined: string;
+		declinedHere: string;
+		otherChain: string;
 	};
 	import: {
 		or: string;
@@ -216,7 +232,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		createAccountNote: '',
 		signInNote: '',
 		createMultisigNote: '',
-		addMultisigNote: ''
+		addMultisigNote: '',
+		lastMember: ''
 	},
 	panel: {
 		title: '',
@@ -248,7 +265,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		network: '',
 		number: '',
 		call: '',
-		callWithValue: ''
+		callWithValue: '',
+		batchCalls: ''
 	},
 	proposal: {
 		title: '',
@@ -286,7 +304,14 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		siteWaits: '',
 		data: '',
 		notFound: '',
-		opening: ''
+		opening: '',
+		changesMembers: '',
+		siteFollows: '',
+		voided: '',
+		voidedNote: '',
+		notInMailbox: '',
+		unknownNetwork: '',
+		badLink: ''
 	},
 	send: {
 		propose: '',
@@ -324,7 +349,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		name: '',
 		namePlaceholder: '',
 		nameHint: '',
-		nameInvalid: ''
+		nameInvalid: '',
+		fewer: '',
+		more: '',
+		copyAddress: ''
 	},
 	external: {
 		pageTitle: '',
@@ -360,7 +388,11 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		signedBy: '',
 		unpair: '',
 		ownerWallet: '',
-		retry: ''
+		retry: '',
+		pageAway: '',
+		connectDeclined: '',
+		declinedHere: '',
+		otherChain: ''
 	},
 	import: {
 		or: '',

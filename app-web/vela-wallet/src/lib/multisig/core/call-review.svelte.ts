@@ -1,6 +1,7 @@
 /**
- * A multisig transaction's call to another contract (a dApp's), read the way
- * the signing sheet reads the same call sent by a site (cs-12): the
+ * A multisig transaction's call to another contract (a dApp's) — or a batch
+ * of calls, every one of them — read the way the signing sheet reads the
+ * same call or `wallet_sendCalls` sent by a site (cs-12): the
  * `clear_signing` machine says what it means, the `approval_guard` machine
  * what it grants, and the sheet's own block builder (`requestBlocks`) draws
  * both. Every member who opens the proposal sees that one review — never only
@@ -34,6 +35,7 @@ import { txKickoff } from '$lib/signing/core/tx-params';
 import { localizedTerms, readBy, requestBlocks } from '$lib/signing/live';
 import type { SigningMessages } from '$lib/signing/messages';
 import type { Block } from '$lib/signing/model';
+import type { Action } from './kernel';
 
 /** The call a SafeTx makes: `value` in base units, decimal (the core's `Action::Call`). */
 export interface InnerCall {
@@ -43,18 +45,50 @@ export interface InnerCall {
 }
 
 /**
+ * The calls of `action` the signing sheet's machines read: a call to another
+ * contract, or every call of a batch that is more than transfers (one of
+ * transfers alone keeps its own lines). `null`: nothing for them to read.
+ */
+export function readableCalls(action: Action | null): InnerCall[] | null {
+	if (action?.kind === 'call') return [action];
+	if (action?.kind !== 'batch' || action.calls.every((c) => c.action.kind === 'transfer')) {
+		return null;
+	}
+	return action.calls.map((c) => ({ to: c.to, value: c.value, data: c.data }));
+}
+
+/** A value as a site sends one: a hex quantity (the core reads one that is not hex as unreadable, RC4). */
+function hexValue(value: string): string {
+	try {
+		return `0x${BigInt(value || '0').toString(16)}`;
+	} catch {
+		return value;
+	}
+}
+
+/**
  * The call as a site's `eth_sendTransaction` would carry it — the params both
- * machines read. The value goes as a hex quantity, the way a site sends it
- * (the core reads a value that is not hex as unreadable, RC4).
+ * machines read.
  */
 export function callParamsJson(call: InnerCall): string {
-	let value: string;
-	try {
-		value = `0x${BigInt(call.value || '0').toString(16)}`;
-	} catch {
-		value = call.value;
-	}
-	return JSON.stringify([{ to: call.to, data: call.data || '0x', value }]);
+	return JSON.stringify([{ to: call.to, data: call.data || '0x', value: hexValue(call.value) }]);
+}
+
+/**
+ * The calls as a site's `wallet_sendCalls` (EIP-5792) would carry them, from
+ * the multisig on `chainId`, atomically: the params both machines read for a
+ * batch, every call of it.
+ */
+export function batchParamsJson(calls: InnerCall[], chainId: number, multisig: string): string {
+	return JSON.stringify([
+		{
+			version: '2.0.0',
+			chainId: `0x${chainId.toString(16)}`,
+			from: multisig,
+			atomicRequired: true,
+			calls: calls.map((c) => ({ to: c.to, data: c.data || '0x', value: hexValue(c.value) }))
+		}
+	]);
 }
 
 /** No fee belongs to a member's review: the executor pays, on its own sheet. */
@@ -77,13 +111,18 @@ const NO_FEE: FeeView = {
  * transaction to `call.to`, nothing refused (the core's multisig review has
  * already ruled on what a multisig signs), no site.
  */
-function requestOf(chainId: number, multisig: string, paramsJson: string): SignView {
+function requestOf(
+	chainId: number,
+	multisig: string,
+	method: string,
+	paramsJson: string
+): SignView {
 	return {
 		surface: 'sheet',
 		request: {
 			id: `multisig:${chainId}:${multisig}`,
-			method: 'eth_sendTransaction',
-			kind: 'transaction',
+			method,
+			kind: method === 'wallet_sendCalls' ? 'batch' : 'transaction',
 			params_json: paramsJson,
 			origin: '',
 			dapp: null,
@@ -117,10 +156,12 @@ function requestOf(chainId: number, multisig: string, paramsJson: string): SignV
 	};
 }
 
-/** One call, read by both machines; one per proposal shown, disposed with it. */
+/** One call (or one batch), read by both machines; one per proposal shown, disposed with it. */
 export class CallReading {
 	clear = $state<ClearSigningView>(INITIAL_CLEAR_VIEW);
 	guard = $state<GuardView>(INITIAL_GUARD_VIEW);
+	/** `eth_sendTransaction` for one call, `wallet_sendCalls` for a batch. */
+	readonly method: string;
 	readonly paramsJson: string;
 
 	#clear: ClearSigningSession | null = null;
@@ -130,9 +171,14 @@ export class CallReading {
 	constructor(
 		readonly chainId: number,
 		readonly multisig: string,
-		readonly call: InnerCall
+		calls: InnerCall | InnerCall[]
 	) {
-		this.paramsJson = callParamsJson(call);
+		const list = Array.isArray(calls) ? calls : [calls];
+		const batch = list.length > 1;
+		this.method = batch ? 'wallet_sendCalls' : 'eth_sendTransaction';
+		this.paramsJson = batch
+			? batchParamsJson(list, chainId, multisig)
+			: callParamsJson(list[0] ?? { to: '', value: '0', data: '0x' });
 	}
 
 	/** Read it. Browser-only (loads the core); a reading disposed meanwhile stays quiet. */
@@ -148,7 +194,7 @@ export class CallReading {
 			onView: (view) => (this.guard = view),
 			onError: (error) => console.error('[approval_guard] core fault:', error)
 		});
-		const method = 'eth_sendTransaction';
+		const method = this.method;
 		this.#clear.start(
 			txKickoff(method, this.paramsJson, this.chainId, toClearLocale(resolvedFormatKeys()))
 		);
@@ -179,7 +225,7 @@ export class CallReading {
  * its notes — a member has no cap to choose.
  */
 export function callReviewBlocks(
-	reading: Pick<CallReading, 'chainId' | 'multisig' | 'paramsJson' | 'clear' | 'guard'>,
+	reading: Pick<CallReading, 'chainId' | 'multisig' | 'method' | 'paramsJson' | 'clear' | 'guard'>,
 	m: SigningMessages,
 	shown: CurrencyView
 ): Block[] {
@@ -189,7 +235,7 @@ export function callReviewBlocks(
 		return [{ kind: 'sentence', text: m.loading, tone: 'neutral' }];
 	}
 	const blocks = requestBlocks({
-		sign: requestOf(reading.chainId, reading.multisig, reading.paramsJson),
+		sign: requestOf(reading.chainId, reading.multisig, reading.method, reading.paramsJson),
 		clear: reading.clear,
 		guard: reading.guard,
 		fee: NO_FEE,

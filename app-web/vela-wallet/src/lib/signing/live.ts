@@ -989,6 +989,46 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
+	/*
+	 * dapp-9: typed data no description reads. It is no blind signature of "0
+	 * bytes": the message is structured, so it is drawn as one — what it is
+	 * signed for (the domain, its type, the site), the contract it names, and
+	 * every field with its value as the payload wrote them (the core's
+	 * `blind_typed`, display-safe) — under the caution that nobody described
+	 * what it means.
+	 */
+	if (clear.surface === 'blind_typed_data' && clear.blind_typed) {
+		const typed = clear.blind_typed;
+		blocks.push({ kind: 'intent', text: m.intentTypedData, tone: 'caution' });
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBlindTyped });
+		const facts: KeyValueRow[] = [
+			...(typed.domain_name ? [{ label: m.labelTypedDomain, value: typed.domain_name }] : []),
+			...(typed.primary_type ? [{ label: m.labelType, value: typed.primary_type }] : []),
+			...(sign.request ? [{ label: m.labelSigningFor, value: hostOf(sign.request.origin) }] : [])
+		];
+		if (facts.length > 0) blocks.push({ kind: 'rows', rows: facts });
+		const target = contractBlock(typed.verifying_contract, null, null, false, inputs);
+		if (target) blocks.push(target);
+		if (typed.fields.length > 0) {
+			blocks.push({
+				kind: 'rows',
+				rows: typed.fields.map((field) => ({
+					label: field.key,
+					value: field.value,
+					mono: /^0x[0-9a-fA-F…]+$/.test(field.value)
+				}))
+			});
+		}
+		if (typed.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+		}
+		// A permit nobody described still gets its cap and its warning.
+		const allowance = guardBlock(guard, m);
+		if (allowance) blocks.push(allowance);
+		blocks.push(...guardWarnings(guard, m));
+		return blocks;
+	}
+
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });

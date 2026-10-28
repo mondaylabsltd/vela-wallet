@@ -1045,7 +1045,8 @@
 			account: {
 				...model.account,
 				keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
-				venue: liveVenue
+				// A multisig signs no messages: no venue row for it, as on the phone.
+				venue: shownMultisig ? undefined : liveVenue
 			},
 			// Spec 102: the web opens no signing page — see the phone model above.
 			signingPages: undefined,
