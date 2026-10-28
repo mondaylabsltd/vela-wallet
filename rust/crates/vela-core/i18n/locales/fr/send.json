@@ -181,6 +181,15 @@
     "batchBadChecksum": "Somme de contrôle incorrecte",
     "riskChecking": "Vérification de cette adresse…",
     "riskUnfinished": "La vérification de cette adresse n'a pas pu aboutir. Assurez-vous que c'est la bonne.",
-    "amountPasteRefused": "Ce n'est pas un montant. Collez un nombre, par exemple 12,5."
+    "amountPasteRefused": "Ce n'est pas un montant. Collez un nombre, par exemple 12,5.",
+    "riskHistoryUnread": "Impossible de vérifier vos envois précédents à cette adresse. Assurez-vous que c’est la bonne.",
+    "riskRetry": "Vérifier à nouveau",
+    "queuedBehindTab": "Un autre onglet envoie depuis ce compte — celui-ci passe ensuite.",
+    "txReviewAgain": "Revoir",
+    "txSendAgain": "Renvoyer",
+    "txCheckingElapsed": "Vérification de son envoi… {{elapsed}} s",
+    "txStillUnknownTitle": "Statut inconnu",
+    "txStillUnknownBody": "Vela n’a pas pu confirmer si cela a quitté votre compte et continue de vérifier en arrière-plan. Avant de renvoyer, consultez votre compte dans l’explorateur.",
+    "txViewAccountExplorer": "Voir votre compte dans l’explorateur"
   }
 }

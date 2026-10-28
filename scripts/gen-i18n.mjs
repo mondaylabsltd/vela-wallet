@@ -954,9 +954,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `home.multisig.external.{connectingAs, expectedMember, notExpectedMember}`
 //   (ms-14: the connect page names who connects, and refuses a stranger).
 //   2209 + 7 = 2216 leaves, 119 branches.
-if (PATHS.length !== 2335) fail(`expected 2335 paths (2216 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2216) fail(`expected 2216 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
+// 2337 (round 3, reliable sending, 2026-10-28): + `send.{riskHistoryUnread,
+//   riskRetry}` (a history that could not be read is said as that, with
+//   "Check again" — never a first-time tag), `send.queuedBehindTab` (send-15:
+//   another tab sends from the account first), `send.{txReviewAgain,
+//   txSendAgain}` (the ways on from "not sent"), and
+//   `send.{txCheckingElapsed, txStillUnknownTitle, txStillUnknownBody,
+//   txViewAccountExplorer}` (send-5: a lost reply is checked out loud and
+//   ends in an answer). 2209 + 9 = 2218 leaves, 119 branches.
+// 2344 (r3, 2026-10-28): 2225 leaves, 119 branches.
+if (PATHS.length !== 2344) fail(`expected 2344 paths (2225 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2225) fail(`expected 2225 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

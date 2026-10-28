@@ -815,7 +815,16 @@
   "batchBadChecksum": "체크섬 불일치",
   "riskChecking": "이 주소를 확인하는 중…",
   "riskUnfinished": "이 주소 확인을 마치지 못했습니다. 의도한 주소가 맞는지 확인하세요.",
-  "amountPasteRefused": "금액이 아닙니다. 12.5 같은 숫자를 붙여 넣으세요."
+  "amountPasteRefused": "금액이 아닙니다. 12.5 같은 숫자를 붙여 넣으세요.",
+  "riskHistoryUnread": "이 주소로 보낸 기록을 확인하지 못했습니다. 의도한 주소가 맞는지 확인하세요.",
+  "riskRetry": "다시 확인",
+  "queuedBehindTab": "다른 탭에서 이 계정으로 보내는 중입니다 — 이 탭은 그다음에 보냅니다.",
+  "txReviewAgain": "다시 검토",
+  "txSendAgain": "다시 보내기",
+  "txCheckingElapsed": "전송되었는지 확인하는 중… {{elapsed}}초",
+  "txStillUnknownTitle": "상태 알 수 없음",
+  "txStillUnknownBody": "Vela가 이 거래가 계정에서 나갔는지 확인하지 못했으며, 백그라운드에서 계속 확인합니다. 다시 보내기 전에 익스플로러에서 계정을 확인하세요.",
+  "txViewAccountExplorer": "익스플로러에서 계정 확인"
  },
  "receive": {
   "title": "받기",

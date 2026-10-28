@@ -820,7 +820,16 @@
   "batchBadChecksum": "Checksum não confere",
   "riskChecking": "Verificando este endereço…",
   "riskUnfinished": "Não foi possível terminar de verificar este endereço. Confirme que é o endereço certo.",
-  "amountPasteRefused": "Isso não é um valor. Cole um número, como 12,5."
+  "amountPasteRefused": "Isso não é um valor. Cole um número, como 12,5.",
+  "riskHistoryUnread": "Não foi possível verificar seus envios anteriores para este endereço. Confirme que é o endereço certo.",
+  "riskRetry": "Verificar de novo",
+  "queuedBehindTab": "Outra aba está enviando desta conta — esta vai em seguida.",
+  "txReviewAgain": "Revisar de novo",
+  "txSendAgain": "Enviar de novo",
+  "txCheckingElapsed": "Verificando se saiu… {{elapsed}}s",
+  "txStillUnknownTitle": "Status desconhecido",
+  "txStillUnknownBody": "O Vela não conseguiu confirmar se isto saiu da sua conta e continua verificando em segundo plano. Antes de enviar de novo, confira sua conta no explorador.",
+  "txViewAccountExplorer": "Conferir sua conta no explorador"
  },
  "receive": {
   "title": "Receber",

@@ -4335,6 +4335,7 @@ fn answer_the_risk_check(sut: &mut Sut) {
                 risk: Some(SendRecipientRisk {
                     is_contract: Some(false),
                     first_time: Some(false),
+                    history_unread: false,
                 }),
             },
         );
@@ -4346,6 +4347,7 @@ fn first_time() -> SendRecipientRisk {
     SendRecipientRisk {
         is_contract: Some(false),
         first_time: Some(true),
+        history_unread: false,
     }
 }
 
@@ -5269,6 +5271,138 @@ fn the_confirm_waits_a_bounded_while_for_the_recipient_check() {
     assert!(!sut.view().risk_unfinished);
 }
 
+/// Round 3: a history that could not be read is never "first time sending
+/// here" — whatever the shell put beside it. The confirm says the history
+/// could not be checked, and "Check again" asks the check alone again, with
+/// its bounded wait; an answer that reads the history clears the line.
+#[test]
+fn a_history_that_could_not_be_read_is_never_a_first_transfer() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve(fee_ok(native_fee(1, 1_000)));
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve(covered());
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    // Nothing to retry while the check is still out.
+    assert!(sut.dispatch(Event::RetryRiskCheck).is_empty());
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(SendRecipientRisk {
+                is_contract: Some(false),
+                first_time: Some(true),
+                history_unread: true,
+            }),
+        },
+    );
+    let view = sut.view();
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), None);
+    assert!(view.risk_unfinished && view.risk_history_unread);
+    assert!(view.can_confirm, "a neutral line, never a block");
+
+    let ops = sut.dispatch(Event::RetryRiskCheck);
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::ResolveRisk { .. })),
+        "{ops:?}"
+    );
+    assert!(ops.contains(&Op::StartTimer {
+        ms: RISK_WAIT_MS,
+        tag: SendTimerTag::RiskWait
+    }));
+    let view = sut.view();
+    assert!(view.risk_checking && !view.risk_history_unread);
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_unfinished && !view.risk_history_unread);
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), Some(true));
+    // Answered: nothing to check again.
+    assert!(sut.dispatch(Event::RetryRiskCheck).is_empty());
+}
+
+/// Round 3 (send-15): a submit waiting for another tab sending from the same
+/// account says so, until its passkey sheet opens; outside a submit the
+/// word is dropped.
+#[test]
+fn a_submit_waiting_for_another_tab_says_it_goes_next() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.dispatch(Event::SendQueued).is_empty(), "no submit out");
+    assert!(!sut.view().queued_behind_tab);
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SendQueued);
+    assert!(sut.view().queued_behind_tab);
+    sut.dispatch(Event::SigningStarted);
+    assert!(!sut.view().queued_behind_tab);
+}
+
+/// Round 3 (send-5): a may-have-been-sent receipt is checked for
+/// `MAYBE_SENT_ANSWER_MS`, then says it is still unknown — never a spinner
+/// for ever. A definite answer that comes later still replaces it, and Try
+/// again starts from nothing.
+#[test]
+fn a_maybe_sent_receipt_says_when_it_is_still_unknown() {
+    use vela_core::app::send::MAYBE_SENT_ANSWER_MS;
+    let cap = |op: &Op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::MaybeSentCap,
+                ..
+            }
+        )
+    };
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(submitted_maybe(HASH));
+    assert!(
+        ops.contains(&Op::StartTimer {
+            ms: MAYBE_SENT_ANSWER_MS,
+            tag: SendTimerTag::MaybeSentCap
+        }),
+        "{ops:?}"
+    );
+    assert!(!sut.view().receipt.expect("receipt").still_unknown);
+    sut.resolve_matching(
+        cap,
+        Res::TimerElapsed {
+            tag: SendTimerTag::MaybeSentCap,
+        },
+    );
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::MaybeSent);
+    assert!(receipt.still_unknown);
+    assert!(!receipt.can_send_again, "unknown is never 'send again'");
+    // Landed after all.
+    sut.dispatch(Event::ReceiptUpdate {
+        user_op_hash: HASH.to_owned(),
+        outcome: SendReceiptOutcome::Confirmed {
+            tx_hash: "0xtx".to_owned(),
+        },
+    });
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::Confirmed);
+    assert!(!receipt.still_unknown);
+
+    // An accepted send starts no such clock.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(submitted(HASH));
+    assert!(!ops.iter().any(cap), "{ops:?}");
+}
+
 /// send-20: a split's confirm asks about each address it pays, once, and
 /// tells a first transfer per row; the confirm waits for all of them.
 #[test]
@@ -5309,6 +5443,7 @@ fn a_split_tells_each_first_time_recipient() {
         risk: Some(SendRecipientRisk {
             is_contract: Some(false),
             first_time: Some(first),
+            history_unread: false,
         }),
     };
     sut.resolve_matching(|op| matches!(op, Op::ResolveRisk { .. }), answer(false));

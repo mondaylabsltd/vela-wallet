@@ -78,6 +78,8 @@ const DISPATCHED: Record<string, Place> = {
 	'sendSession.retry_after_error': { view: 'the review’s own retry' },
 	// send-5: back to the review from a receipt proven never sent.
 	'sendSession.send_again': { view: 'the review’s own retry' },
+	// Round 3: the recipient's check asked again on the review.
+	'sendSession.retry_risk_check': { view: 'the review’s own retry' },
 	'sendSession.retry_relay_unreachable': { view: 'the review’s own retry' },
 	'sendSession.dismiss_relay_unreachable': { view: 'a notice dismissed' },
 	'sendSession.dismiss_treasury_sheet': { view: 'a notice dismissed' },

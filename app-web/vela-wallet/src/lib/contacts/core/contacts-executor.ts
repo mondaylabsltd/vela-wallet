@@ -27,7 +27,7 @@
 
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import { poolRpcCall } from '$lib/services/rpc-pool';
-import { loadTransactions } from '$lib/services/records';
+import { readTransactionHistory } from '$lib/services/records';
 import { getItem, setItem } from '$lib/services/storage';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 
@@ -249,8 +249,10 @@ export async function executeContactOperation(effect: ContactEffect): Promise<Co
 			// The local tx store 025 built and 026 writes to (spec 028 US5): the
 			// core derives recent recipients from its `send` rows and judges
 			// first-interaction risk by every outgoing one. Shape only — which
-			// rows count is `contacts.rs`'s `derive_from_history`.
-			return { type: 'history_loaded', txs: (await loadTransactions()).map(toHistoryTx) };
+			// rows count is `contacts.rs`'s `derive_from_history`. Read strictly
+			// (round 3): a store that cannot be read throws into `history_failed`,
+			// never an empty history that would make every address a first one.
+			return { type: 'history_loaded', txs: (await readTransactionHistory()).map(toHistoryTx) };
 		case 'resolve_identity': {
 			// `null` = no identity anywhere; only `Some` is ever cached by the core.
 			const identity = await resolveRecipientIdentity(operation.address);

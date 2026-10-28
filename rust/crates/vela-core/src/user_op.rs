@@ -2242,6 +2242,35 @@ pub fn submit_step(
     }
 }
 
+/// Is `error_json` — the body of an HTTP error the relay answered a submit
+/// POST with — the relay's own word that it did not take the operation
+/// (round 3, send-5)? A JSON-RPC `error` member with a code or a message,
+/// read with the readers a refusal on a 200 goes through, that is neither
+/// "busy, retry later" nor "another operation holds this nonce" (whose holder
+/// may be this operation's twin). A body that is not one — a gateway's page,
+/// plain text, `null` — says nothing.
+///
+/// Not a verdict alone: the POST is "may have been sent" all the same
+/// ([`submit_step`]); the tracker ends it "not sent" only with the account's
+/// nonce read unchanged next to it (`tx_tracker::Event::SubmitFacts`).
+#[must_use]
+pub fn refused_outright(error_json: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(error_json) else {
+        return false;
+    };
+    let error = value.get("error").unwrap_or(&value);
+    if !error.is_object() || (error.get("message").is_none() && error.get("code").is_none()) {
+        return false;
+    }
+    let text = error.to_string();
+    let sentence = relay_error_message(&text);
+    !is_busy_wording(&text)
+        && !is_busy_wording(&sentence)
+        && nonce_in_flight_hash(&text).is_none()
+        && existing_op(&text, "").is_none()
+        && existing_op(&sentence, "").is_none()
+}
+
 #[cfg(test)]
 mod submit_spine_tests {
     use super::*;

@@ -1069,6 +1069,13 @@ export interface SendConfirmModel {
 	 * so the form never has it to show. Absent on a split.
 	 */
 	recipientTag?: string;
+	/**
+	 * The recipient's check the confirm opened without (`SendView.
+	 * risk_unfinished`, send-18) — it did not finish, or the history could not
+	 * be read (`risk_history_unread`, round 3) — in neutral ink, with the
+	 * "Check again" that asks it again (`retry_risk_check`).
+	 */
+	recipientCheck?: { text: string; retry: string };
 	/** The core's last refusal, worded — see `SendFormModel.alert`. */
 	alert?: string;
 	/**
@@ -1181,11 +1188,17 @@ export interface SendReceiptModel {
 		/** Past twice the typical time. */
 		slowLine: string;
 	};
+	/**
+	 * Round 3 (send-5) — a may-have-been-sent receipt while it is checked:
+	 * "Checking whether it went out… {{elapsed}}s", counted by the screen from
+	 * the submit's clock. Never a silent spinner.
+	 */
+	checking?: { sinceMs: number; template: string };
 	/** Spec 038 #D2 — a split: "N recipients", then every one of them. */
 	breakdownTitle?: string;
 	breakdown?: BreakdownRowModel[];
 	/**
-	 * "Try again" over a payment proven never sent (send-5,
+	 * "Send again" / "Review again" over a payment proven never sent (send-5,
 	 * `SendReceiptView.can_send_again`): back to the confirm, every value as
 	 * it was. Absent everywhere else — never over one that may have left.
 	 */

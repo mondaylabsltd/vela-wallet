@@ -1212,7 +1212,10 @@
 					sendAgain: () => {
 						sendSession?.dispatch({ type: 'send_again' });
 						feeQuote.requote();
-					}
+					},
+					// Round 3: the recipient's check, asked again — its history read
+					// failed, or it did not finish in its wait.
+					retryRiskCheck: () => sendSession?.dispatch({ type: 'retry_risk_check' })
 				}
 	);
 

@@ -65,11 +65,14 @@ import {
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
 import { deleteTransactions, saveTransactions, updateTransactions } from '$lib/services/records';
 import {
+	noteSubmitFacts,
 	outcomeOf,
+	subscribeTxTracker,
 	trackSubmitted,
 	txTrackerView,
 	withdrawTracked
 } from '$lib/wallet/core/tracker-resident';
+import { acquireSendLock, releaseWhen, sendLockName, type SendLockRelease } from './send-lock';
 import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { resolveTokenMetadata } from '$lib/services/token-metadata';
@@ -154,7 +157,7 @@ export interface SendExecutorSelf {
  * `parseBundlerUnderfunded` is.
  */
 export function isNonceSpent(message: string): boolean {
-	return /nonce mismatch|invalid account nonce|\bAA25\b/i.test(message);
+	return /nonce mismatch|invalid account nonce|nonce too low|\bAA25\b/i.test(message);
 }
 
 let trackerSink: ((handoff: SendTrackerHandoff) => void) | null = null;
@@ -285,6 +288,21 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			const outcome = entry ? outcomeOf(entry) : null;
 			if (outcome) dispatch({ type: 'receipt_update', user_op_hash: userOpHash, outcome });
 		}, 0);
+	}
+
+	/**
+	 * Round 3 (send-15): the send lock stays with an operation that went out
+	 * until the tracker no longer has it in flight — a verdict, or its stall
+	 * line — at most `SEND_LOCK_HOLD_MS`: the tab that goes next must read
+	 * the nonce after this one, not beside it.
+	 */
+	function holdLockWhileInFlight(release: SendLockRelease, userOpHash: string): void {
+		const key = userOpHash.toLowerCase();
+		const settled = () => {
+			const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === key);
+			return entry !== undefined && (!entry.polling || entry.stalled === true);
+		};
+		releaseWhen(release, settled, (listener) => subscribeTxTracker(listener));
 	}
 
 	/**
@@ -478,6 +496,20 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'submit_user_op': {
+				// Round 3 (send-15): one send at a time from this account on this
+				// network across the browser's tabs — around nonce read → sign →
+				// submit, and on until that operation is no longer in flight, so
+				// the next one reads a fresh nonce. Waiting is said ("this one goes
+				// next"); no Web Locks, no lock — today's behaviour.
+				let release: SendLockRelease | null;
+				try {
+					release = await acquireSendLock(sendLockName(operation.chain_id, operation.account), {
+						onQueued: () => self?.dispatch({ type: 'send_queued' }),
+						signal
+					});
+				} catch (error) {
+					return { type: 'submit_failed', failure: classifySubmit(error) };
+				}
 				try {
 					const credentialId = ports.credentialId(operation.account);
 					if (!credentialId) {
@@ -564,6 +596,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					submitted.set(result.userOpHash, result);
 					// What the tracker learned while the reply was out (RJ1, RJ4).
 					if (dispatch) catchUpReceipt(dispatch, result.userOpHash);
+					if (release) holdLockWhileInFlight(release, result.userOpHash);
+					release = null;
 					// A lost reply is not a failure (spec 082 RA4): the payment may be
 					// on its way, so it is recorded and followed under the local hash.
 					return {
@@ -575,6 +609,9 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					};
 				} catch (error) {
 					return { type: 'submit_failed', failure: classifySubmit(error) };
+				} finally {
+					// Nothing went out (or the hold above took it): the next tab goes.
+					release?.();
 				}
 			}
 
@@ -660,6 +697,14 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				submitted.delete(operation.user_op_hash);
 				if (trackerSink) trackerSink(handoff);
 				else waitForReceipt(handoff);
+				// Round 3 (send-5): a lost reply's nonce, and the relay's refusal
+				// inside an HTTP error if one came — the tracker asks the chain
+				// with them instead of waiting the relay's grace out. After the
+				// hand-off that named the records, so the entry is there.
+				const result = handoff.submitted;
+				if (operation.maybe_sent && operation.record_ids.length > 0 && result?.nonce) {
+					noteSubmitFacts(operation.user_op_hash, result.nonce, result.relayRefusal ?? null);
+				}
 				return { type: 'track_handed_off' };
 			}
 
@@ -714,7 +759,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				const risk = await resolveRecipientRisk(operation.chain_id, operation.address);
 				return {
 					type: 'risk_resolved',
-					risk: { is_contract: risk.isContract, first_time: risk.firstInteraction }
+					risk: {
+						is_contract: risk.isContract,
+						first_time: risk.firstInteraction,
+						history_unread: risk.historyUnread
+					}
 				};
 			}
 

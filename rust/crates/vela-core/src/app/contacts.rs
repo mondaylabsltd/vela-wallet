@@ -500,6 +500,10 @@ pub struct Model {
     tombstones: Vec<ContactTombstone>,
     groups: Vec<ContactGroup>,
     history: Vec<ContactHistoryTx>,
+    /// The history was read (round 3): until it is, or when the read failed,
+    /// nothing is "first interaction" — a warning is never built on a read
+    /// that did not happen.
+    history_read: bool,
     /// Positive-only identity cache (recipient-identity.ts caches only
     /// resolutions; a `None` is re-asked next time — invariant ⑦).
     identities: BTreeMap<String, ContactIdentity>,
@@ -574,7 +578,8 @@ pub struct ContactRecipientView {
     /// alarm (invariant ⑦).
     pub is_contract: Option<bool>,
     /// No prior outgoing send/dapp-tx to this address in local history — the
-    /// address-poisoning tell (recipient-risk.ts:59-69).
+    /// address-poisoning tell (recipient-risk.ts:59-69). `false` while the
+    /// history is unread or could not be read (round 3): never a false alarm.
     pub first_interaction: bool,
 }
 
@@ -900,12 +905,15 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
                     tx
                 })
                 .collect();
+            model.history_read = true;
             let ops = name_the_unnamed(model);
             requests(model, ops)
         }
         ContactShellResult::HistoryFailed => {
-            // `loadTransactions` threw → no suggestions (contacts.ts:286-290).
+            // `loadTransactions` threw → no suggestions (contacts.ts:286-290),
+            // and no first-interaction tell built on the failed read.
             model.history = Vec::new();
+            model.history_read = false;
             render()
         }
         ContactShellResult::IdentityResolved { address, identity } => {
@@ -1846,7 +1854,9 @@ fn project_recipient(model: &Model, target: &Inspected) -> ContactRecipientView 
             .or_else(|| saved.map(|c| c.kind))
             .unwrap_or_default(),
         is_contract: verdict.map(|v| v.is_contract),
-        first_interaction: valid && !has_prior_interaction(&model.history, addr),
+        first_interaction: valid
+            && model.history_read
+            && !has_prior_interaction(&model.history, addr),
     }
 }
 

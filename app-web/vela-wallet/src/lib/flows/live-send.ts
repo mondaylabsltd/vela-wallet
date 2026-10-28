@@ -25,7 +25,7 @@ import type { SendPayee } from '$lib/core/generated/SendPayee';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
-import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
+import { chainName, explorerAddressURL, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
@@ -1298,6 +1298,20 @@ function recipientLine(send: SendView, m: WalletFlowMessages): string | undefine
 }
 
 /**
+ * The recipient's check that the confirm opened without (send-18) — it did
+ * not finish in its wait, or the account's history could not be read (round
+ * 3): said neutrally, with "Check again". Never a first-time tag built on a
+ * failed read; the core withholds `first_time` then.
+ */
+function riskCheckLine(send: SendView, m: WalletFlowMessages): SendConfirmModel['recipientCheck'] {
+	if (!send.risk_unfinished) return undefined;
+	return {
+		text: send.risk_history_unread ? m['send.riskHistoryUnread'] : m['send.riskUnfinished'],
+		retry: m['send.riskRetry']
+	};
+}
+
+/**
  * The confirm's two states the core holds it in, worded (correctness batch
  * item 3): a submit that did not go — why, and Try again — and, otherwise,
  * the account's previous transaction on this network still in flight, as its
@@ -1338,12 +1352,12 @@ function confirmHolds(
 			case 'nonce_used':
 				// send-15: another transaction of this account (another tab's)
 				// spent the nonce first. Nothing was sent: "Not sent", calmly,
-				// and Try again signs anew.
+				// and Review again — a fresh quote, nonce and signature.
 				return {
 					error: {
 						title: m['componentsTx.receipt.statusNotSent'],
 						text: m['componentsUi.signing.wentFirst'],
-						retry: m['send.txRetryBtn'],
+						retry: m['send.txReviewAgain'],
 						calm: true
 					}
 				};
@@ -1360,6 +1374,9 @@ function confirmHolds(
 				? m['componentsUi.signing.passkeyClosed']
 				: undefined;
 	const note = passkey === undefined ? {} : { error: { text: passkey, calm: true } };
+	// Round 3 (send-15): another tab is sending from this account on this
+	// network; this one goes next, by itself, with a nonce read after it.
+	if (send.queued_behind_tab) return { ...note, held: m['send.queuedBehindTab'] };
 	const held = send.previous_pending;
 	if (held === null || held === undefined) {
 		// PR 2 note 1: else the fee's failure, in the line the signing sheet
@@ -1432,16 +1449,13 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 	// The core's own verdict, resolved on this page only (`confirm_probes`) —
 	// the form's note never sees it. One recipient only: a split's rows have
 	// no per-row verdict.
-	// send-18: a check that could not finish says so — the confirm opened
-	// without its answer.
 	const recipientTag = send.recipient_is_token_contract
 		? m['send.recipientTokenContract']
 		: (recipientCaution(send, m) ??
 			(!send.split_mode && send.recipient_risk?.first_time === true
 				? m['componentsUi.signing.firstTimeTag']
-				: send.risk_unfinished
-					? m['send.riskUnfinished']
-					: undefined));
+				: undefined));
+	const recipientCheck = riskCheckLine(send, m);
 
 	// A sweep moves several coins; one mark would name the wrong one.
 	const heroMark =
@@ -1529,6 +1543,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			facts,
 			breakdown,
 			recipientTag,
+			recipientCheck,
 			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
@@ -1576,7 +1591,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
-			recipientTag: send.risk_unfinished ? m['send.riskUnfinished'] : undefined,
+			recipientCheck,
 			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
@@ -1595,6 +1610,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		facts,
 		breakdown: undefined,
 		recipientTag,
+		recipientCheck,
 		// The fee the review measured, when the account cannot pay it: the
 		// confirm stays shut, and this says why (the form's own sentences).
 		alert:
@@ -1650,6 +1666,32 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	 * the core plays none for it.
 	 */
 	if (status === 'maybe_sent') {
+		const hash = send.user_op_hash
+			? {
+					label: m['componentsTx.receipt.userOpHash'],
+					value: send.user_op_hash,
+					copyLabel: m['componentsTx.receipt.copyHash']
+				}
+			: undefined;
+		// Round 3 (send-5): checked for the core's while with nothing definite
+		// — said so, with how to check: the account on the explorer. Vela goes
+		// on checking, and a later answer replaces this.
+		if (send.receipt?.still_unknown === true) {
+			const account = inputs.identity.address;
+			return {
+				...model,
+				header,
+				...parts,
+				stage: 'submitted',
+				title: m['send.txStillUnknownTitle'],
+				captions: [m['send.txStillUnknownBody']],
+				hash,
+				viewOnExplorer: account ? m['send.txViewAccountExplorer'] : undefined,
+				explorerUrl: account ? explorerAddressURL(chainId, account) : undefined,
+				cta: m['componentsTx.receipt.done'],
+				ctaAccent: false
+			};
+		}
 		return {
 			...model,
 			header,
@@ -1657,21 +1699,26 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			stage: 'submitted',
 			title: m['send.txSubmitting'],
 			captions: [m['componentsUi.signing.maybeSent']],
-			hash: send.user_op_hash
-				? {
-						label: m['componentsTx.receipt.userOpHash'],
-						value: send.user_op_hash,
-						copyLabel: m['componentsTx.receipt.copyHash']
-					}
-				: undefined,
+			// It is being checked, out loud: the seconds count (round 3).
+			checking:
+				send.receipt?.submitted_at_ms != null
+					? { sinceMs: send.receipt.submitted_at_ms, template: m['send.txCheckingElapsed'] }
+					: undefined,
+			hash,
 			cta: m['send.txCloseBackground'],
 			ctaAccent: false
 		};
 	}
 
-	// The receipt's Try again (send-5): offered by the core only over a
-	// payment proven never sent — back to the confirm, as the person left it.
-	const retry = send.receipt?.can_send_again === true ? m['send.txRetryBtn'] : undefined;
+	// The receipt's way on (send-5): offered by the core only over a payment
+	// proven never sent — back to the confirm, as the person left it. "Send
+	// again"; "Review again" when another send used the nonce (send-15).
+	const retry =
+		send.receipt?.can_send_again === true
+			? send.receipt.refusal_key === 'componentsUi.signing.wentFirst'
+				? m['send.txReviewAgain']
+				: m['send.txSendAgain']
+			: undefined;
 
 	// RA4/RA10: provably not sent (the relay never admitted it) — said
 	// plainly as "Not sent" (send-5), never "Failed": nothing left the

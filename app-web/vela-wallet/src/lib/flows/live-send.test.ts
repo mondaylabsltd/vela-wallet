@@ -122,6 +122,8 @@ const EMPTY_SEND: SendView = {
 	passkey_note: null,
 	risk_checking: false,
 	risk_unfinished: false,
+	risk_history_unread: false,
+	queued_behind_tab: false,
 	tx_hash: null,
 	user_op_hash: null,
 	receipt: null,
@@ -348,7 +350,7 @@ describe('the form', () => {
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
 		const firstTime = liveSendForm(
 			formModel(),
-			inputs({ recipient_risk: { is_contract: false, first_time: true } })
+			inputs({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
@@ -373,7 +375,7 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true }
+				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
 			})
 		);
 		expect(token.recipient?.note).toBe(m['send.recipientTokenContract']);
@@ -714,6 +716,7 @@ describe('one figure for one balance (spec 078)', () => {
 					hold_reason: null,
 					refusal_key: null,
 					can_send_again: false,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -794,12 +797,18 @@ describe('the confirm screen', () => {
 		expect(liveSendConfirm(confirmModel(), inputs(single)).recipientTag).toBeUndefined();
 		const first = liveSendConfirm(
 			confirmModel(),
-			inputs({ ...single, recipient_risk: { is_contract: false, first_time: true } })
+			inputs({
+				...single,
+				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
+			})
 		);
 		expect(first.recipientTag).toBe(m['componentsUi.signing.firstTimeTag']);
 		const known = liveSendConfirm(
 			confirmModel(),
-			inputs({ ...single, recipient_risk: { is_contract: false, first_time: false } })
+			inputs({
+				...single,
+				recipient_risk: { is_contract: false, first_time: false, history_unread: false }
+			})
 		);
 		expect(known.recipientTag).toBeUndefined();
 		// A split has no single recipient for the verdict to be about.
@@ -809,7 +818,7 @@ describe('the confirm screen', () => {
 				...single,
 				split_mode: true,
 				recipients: [{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.5', name: null }],
-				recipient_risk: { is_contract: false, first_time: true }
+				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
 			})
 		);
 		expect(split.recipientTag).toBeUndefined();
@@ -828,7 +837,7 @@ describe('the confirm screen', () => {
 			inputs({
 				...single,
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true }
+				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
 			})
 		);
 		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
@@ -1413,6 +1422,7 @@ describe('the receipt', () => {
 		hold_reason: null,
 		refusal_key: null,
 		can_send_again: false,
+		still_unknown: false,
 		kind: null,
 		transfers: [],
 		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
@@ -1560,7 +1570,7 @@ describe('the receipt', () => {
 		expect(model.stage).not.toBe('failed');
 	});
 
-	it('provably not sent says "Not sent", plainly, with Try again (RA4, send-5)', () => {
+	it('provably not sent says "Not sent", plainly, with Send again (RA4, send-5)', () => {
 		const model = liveSendReceipt(
 			receiptModel(),
 			inputs({
@@ -1572,8 +1582,38 @@ describe('the receipt', () => {
 		expect(model.stage).toBe('failed');
 		expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
 		expect(model.captions).toEqual([m['componentsTx.receipt.notSentBody']]);
-		expect(model.retry).toBe(m['send.txRetryBtn']);
+		expect(model.retry).toBe(m['send.txSendAgain']);
 		expect(model.cta).toBe(m['componentsTx.receipt.done']);
+	});
+
+	it('round 3 (send-5): a lost reply counts its checking, then says it is still unknown and how to check', () => {
+		const maybe = { ...receipt('maybe_sent'), submitted_at_ms: 1_000 };
+		const checking = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', user_op_hash: '0xlocal', receipt: maybe })
+		);
+		expect(checking.checking).toEqual({
+			sinceMs: 1_000,
+			template: m['send.txCheckingElapsed']
+		});
+		expect(checking.retry).toBeUndefined();
+
+		const unknown = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xlocal',
+				receipt: { ...maybe, still_unknown: true }
+			})
+		);
+		expect(unknown.title).toBe(m['send.txStillUnknownTitle']);
+		expect(unknown.captions).toEqual([m['send.txStillUnknownBody']]);
+		expect(unknown.checking).toBeUndefined();
+		// How to check: the account on the explorer — never only "Done".
+		expect(unknown.viewOnExplorer).toBe(m['send.txViewAccountExplorer']);
+		expect(unknown.explorerUrl).toContain(`/address/${identity.address}`);
+		expect(unknown.retry).toBeUndefined();
+		expect(unknown.hash?.value).toBe('0xlocal');
 	});
 
 	it('Try again is offered only where the core offers it (send-5)', () => {
@@ -2907,6 +2947,7 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 					hold_reason: null,
 					refusal_key,
 					can_send_again: true,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [],
@@ -2933,9 +2974,12 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 		]) {
 			const model = refused(key);
 			expect(model.stage).toBe('failed');
-			// Refused before any block: nothing was sent (send-5).
+			// Refused before any block: nothing was sent (send-5). Another send
+			// used the nonce: Review again, with a fresh one (send-15).
 			expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
-			expect(model.retry).toBe(m['send.txRetryBtn']);
+			expect(model.retry).toBe(
+				key === 'componentsUi.signing.wentFirst' ? m['send.txReviewAgain'] : m['send.txSendAgain']
+			);
 			// Nothing was sent: never "please try again" over a refusal.
 			expect(model.captions.join(' ')).not.toContain(m['send.txErrorGeneric']);
 		}
@@ -3414,6 +3458,7 @@ describe('an amount sent reads the same everywhere, never rounded up', () => {
 					hold_reason: null,
 					refusal_key: null,
 					can_send_again: false,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -3437,14 +3482,36 @@ describe('the send flow’s round-2 findings', () => {
 	const confirm = (send: Partial<SendView>) =>
 		liveSendConfirm(confirmModel(), inputs({ stage: 'confirm', selected_token: ETH, ...send }));
 
-	it('send-15: a nonce another transaction spent is "Not sent", calmly, with Try again', () => {
+	it('send-15: a nonce another transaction spent is "Not sent", calmly, with Review again', () => {
 		const model = confirm({ tx_status: 'error', tx_error: 'nonce_used' });
 		expect(model.error).toEqual({
 			title: m['componentsTx.receipt.statusNotSent'],
 			text: m['componentsUi.signing.wentFirst'],
-			retry: m['send.txRetryBtn'],
+			retry: m['send.txReviewAgain'],
 			calm: true
 		});
+	});
+
+	it('round 3 (send-15): a submit waiting for another tab says this one goes next', () => {
+		expect(confirm({ queued_behind_tab: true, sending: true }).held).toBe(
+			m['send.queuedBehindTab']
+		);
+		expect(confirm({ sending: true }).held).toBeUndefined();
+	});
+
+	it('round 3: a history that could not be read is said neutrally, with Check again — never a first-time tag', () => {
+		const model = confirm({
+			risk_unfinished: true,
+			risk_history_unread: true,
+			recipient_risk: { is_contract: false, first_time: null, history_unread: true }
+		});
+		expect(model.recipientTag).toBeUndefined();
+		expect(model.recipientCheck).toEqual({
+			text: m['send.riskHistoryUnread'],
+			retry: m['send.riskRetry']
+		});
+		// Answered: nothing to check again.
+		expect(confirm({}).recipientCheck).toBeUndefined();
 	});
 
 	it('send-11: a passkey prompt that signed nothing says so — closed, or out of time', () => {
@@ -3461,11 +3528,17 @@ describe('the send flow’s round-2 findings', () => {
 	it('send-18: the shut confirm says it is checking; a check that could not finish says so', () => {
 		expect(confirm({ risk_checking: true }).held).toBe(m['send.riskChecking']);
 		expect(confirm({}).held).toBeUndefined();
-		expect(confirm({ risk_unfinished: true }).recipientTag).toBe(m['send.riskUnfinished']);
+		// Said neutrally, with Check again (round 3), not as a warning tag.
+		expect(confirm({ risk_unfinished: true }).recipientTag).toBeUndefined();
+		expect(confirm({ risk_unfinished: true }).recipientCheck).toEqual({
+			text: m['send.riskUnfinished'],
+			retry: m['send.riskRetry']
+		});
 		// A first transfer, known, is said as that.
-		expect(confirm({ recipient_risk: { is_contract: false, first_time: true } }).recipientTag).toBe(
-			m['componentsUi.signing.firstTimeTag']
-		);
+		expect(
+			confirm({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
+				.recipientTag
+		).toBe(m['componentsUi.signing.firstTimeTag']);
 	});
 
 	it('send-20: a split tells each first-time recipient on its own row', () => {
@@ -3512,6 +3585,7 @@ describe('the send flow’s round-2 findings', () => {
 					hold_reason: null,
 					refusal_key: null,
 					can_send_again: false,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [],

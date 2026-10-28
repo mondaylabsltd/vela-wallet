@@ -35,6 +35,8 @@
 		 */
 		onfeeretry?: () => void;
 		onfeecoins?: () => void;
+		/** The recipient check's "Check again" (`retry_risk_check`, round 3). */
+		onriskretry?: () => void;
 	}
 
 	let {
@@ -44,7 +46,8 @@
 		ctaBusy = false,
 		onretry,
 		onfeeretry,
-		onfeecoins
+		onfeecoins,
+		onriskretry
 	}: Props = $props();
 
 	/** The action a pressable fact's tap names, if this screen was given it. */
@@ -95,6 +98,19 @@
 
 	{#if model.recipientTag !== undefined}
 		<p class="tag">{model.recipientTag}</p>
+	{/if}
+
+	<!-- The check the confirm opened without, in neutral ink: it says what
+	     is not known, never a warning built on it, and asks again on a tap. -->
+	{#if model.recipientCheck !== undefined}
+		<div class="check" role="status" data-testid="send-confirm-risk-check">
+			<p>{model.recipientCheck.text}</p>
+			{#if onriskretry !== undefined}
+				<button type="button" class="check-retry" onclick={onriskretry}>
+					{model.recipientCheck.retry}
+				</button>
+			{/if}
+		</div>
 	{/if}
 
 	{#if model.breakdown !== undefined}
@@ -294,5 +310,30 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
+	}
+	/* What the recipient's check could not say (round 3): neutral, where the
+	   first-time tell would stand, with its "Check again" as a quiet link. */
+	.check {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-xs) var(--space-sm);
+		padding-inline: var(--space-lg);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
+	}
+	.check p {
+		margin: 0;
+	}
+	.check-retry {
+		padding: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		font-weight: var(--weight-medium);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		cursor: pointer;
 	}
 </style>

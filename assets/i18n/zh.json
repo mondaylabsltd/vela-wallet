@@ -815,7 +815,16 @@
   "batchBadChecksum": "校验和不符",
   "riskChecking": "正在检查这个地址…",
   "riskUnfinished": "没能完成对这个地址的检查，请确认是你要转账的地址。",
-  "amountPasteRefused": "这不是金额，请粘贴数字，例如 12.5。"
+  "amountPasteRefused": "这不是金额，请粘贴数字，例如 12.5。",
+  "riskHistoryUnread": "没能查到你以前是否给这个地址转过账，请确认是你要转账的地址。",
+  "riskRetry": "重新检查",
+  "queuedBehindTab": "另一个标签页正在用这个账户发送，这一笔排在它之后。",
+  "txReviewAgain": "重新确认",
+  "txSendAgain": "重新发送",
+  "txCheckingElapsed": "正在查看是否已发出… {{elapsed}} 秒",
+  "txStillUnknownTitle": "状态未知",
+  "txStillUnknownBody": "Vela 没能确认这笔是否已从你的账户发出，会在后台继续查看。重新发送前，请先在区块浏览器上查看你的账户。",
+  "txViewAccountExplorer": "在区块浏览器上查看账户"
  },
  "receive": {
   "title": "收款",

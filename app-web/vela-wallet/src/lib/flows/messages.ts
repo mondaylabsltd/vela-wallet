@@ -302,6 +302,18 @@ export const WALLET_FLOW_KEYS = [
 	// send-18: the confirm waits for the recipient's check, a bounded while.
 	'send.riskChecking',
 	'send.riskUnfinished',
+	// Round 3: a history that could not be read, said as that, and the check
+	// asked again; another tab sending first (send-15); the ways on from "not
+	// sent"; a lost reply checked out loud, ending in an answer (send-5).
+	'send.riskHistoryUnread',
+	'send.riskRetry',
+	'send.queuedBehindTab',
+	'send.txReviewAgain',
+	'send.txSendAgain',
+	'send.txCheckingElapsed',
+	'send.txStillUnknownTitle',
+	'send.txStillUnknownBody',
+	'send.txViewAccountExplorer',
 	// send-20: a paste that is not an amount.
 	'send.amountPasteRefused',
 	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).

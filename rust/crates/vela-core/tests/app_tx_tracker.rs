@@ -3469,3 +3469,238 @@ fn the_sender_and_reason_default_on_the_wire() {
     let entry: vela_core::app::tx_tracker::TrackEntryView = serde_json::from_value(wire).unwrap();
     assert!(!entry.stalled);
 }
+
+// ---------------------------------------------------------------------------
+// Round 3 (send-5): after a relay error the chain is asked — the account's
+// nonce, beside the relay's view of the op — instead of waiting it out
+// ---------------------------------------------------------------------------
+
+/// The nonce the op signed, as the submit tells it.
+const SIGNED_NONCE: &str = "0x5";
+/// A relay's refusal inside an HTTP 500, as the pool held it.
+const REFUSAL: &str = r#"{"code":-32603,"message":"operation not accepted"}"#;
+
+fn read_nonce() -> Op {
+    Op::ReadNonce {
+        chain_id: CHAIN,
+        entry_point: ENTRY_POINT.to_owned(),
+        sender: SENDER.to_lowercase(),
+        user_op_hash: HASH.to_owned(),
+    }
+}
+
+fn is_nonce(op: &Op) -> bool {
+    matches!(op, Op::ReadNonce { .. })
+}
+
+/// `getNonce` at `head`, as the `eth_call` answers it (a 32-byte word).
+fn nonce_read(now_ms: f64, nonce: Option<u64>, head: Option<u64>) -> Res {
+    Res::NonceRead {
+        user_op_hash: HASH.to_owned(),
+        now_ms,
+        nonce: nonce.map(|n| format!("0x{n:064x}")),
+        head_block: head,
+    }
+}
+
+/// A may-have-been-sent op of `SENDER` (the head before its POST known),
+/// then what its submit knew. Returns what the facts asked for.
+fn submitted_with_facts(sut: &mut Sut, refusal: Option<&str>) -> Vec<Op> {
+    let _ = sut.dispatch(Event::Submitted {
+        sender: Some(SENDER.to_owned()),
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+        admitted: false,
+    });
+    let _ = sut.resolve(Res::Clock { now_ms: T0 });
+    let _ = sut.resolve(receipt_pending(T0 + 300.0));
+    sut.dispatch(Event::SubmitFacts {
+        user_op_hash: HASH.to_owned(),
+        nonce: Some(SIGNED_NONCE.to_owned()),
+        relay_refusal: refusal.map(str::to_owned),
+    })
+}
+
+/// The relay refused it outright inside an HTTP error, and the first read of
+/// the account's nonce finds it unchanged: nothing left the account — "not
+/// sent" at once, not after the relay's grace.
+#[test]
+fn a_refusal_outright_with_the_nonce_unchanged_is_not_sent_at_once() {
+    let mut sut = Sut::new();
+    let ops = submitted_with_facts(&mut sut, Some(REFUSAL));
+    assert_eq!(ops, vec![read_nonce()], "asked at once");
+    let ops = sut.resolve_matching(
+        is_nonce,
+        nonce_read(T0 + 700.0, Some(5), Some(SUBMIT_BLOCK)),
+    );
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::NotSent)],
+        "no HoldingsMoved: nothing landed"
+    );
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::NotSent);
+    assert_eq!(view.entries[0].outcome, TrackOutcome::Final);
+}
+
+/// "The first read" is the first that answers with a figure: a read the pool
+/// could not make says nothing, and the next one decides.
+#[test]
+fn an_unanswered_nonce_read_waits_for_the_next() {
+    let mut sut = Sut::new();
+    let _ = submitted_with_facts(&mut sut, Some(REFUSAL));
+    assert!(sut
+        .resolve_matching(is_nonce, nonce_read(T0 + 700.0, None, None))
+        .is_empty());
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+    let ops = tick(&mut sut, T0 + 3_800.0);
+    assert!(ops.contains(&read_nonce()), "{ops:?}");
+    let ops = sut.resolve_matching(
+        is_nonce,
+        nonce_read(T0 + 4_000.0, Some(5), Some(SUBMIT_BLOCK)),
+    );
+    assert_eq!(ops, vec![fail_patch(TrackFailure::NotSent)]);
+}
+
+/// A lost reply with no refusal: an unchanged nonce proves nothing (the relay
+/// may still be sending it). It stays "may have been sent", and the nonce is
+/// asked again every few seconds.
+#[test]
+fn an_ambiguous_failure_with_the_nonce_unchanged_stays_maybe_sent() {
+    let mut sut = Sut::new();
+    let ops = submitted_with_facts(&mut sut, None);
+    assert_eq!(ops, vec![read_nonce()]);
+    assert!(sut
+        .resolve_matching(
+            is_nonce,
+            nonce_read(T0 + 700.0, Some(5), Some(SUBMIT_BLOCK))
+        )
+        .is_empty());
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
+    let ops = tick(&mut sut, T0 + 3_800.0);
+    assert!(ops.contains(&read_nonce()), "{ops:?}");
+    // …and a later unchanged nonce never turns into "not sent" by itself.
+    assert!(sut
+        .resolve_matching(
+            is_nonce,
+            nonce_read(T0 + 4_000.0, Some(5), Some(SUBMIT_BLOCK + 1))
+        )
+        .is_empty());
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+}
+
+/// The nonce moved past the op's and the chain, read from its submit through
+/// the head it moved at, holds no event of this op: another transaction used
+/// the slot (another tab's, send-15) — said as that, nothing was sent. A
+/// refusal outright is not "not sent" on a moved nonce.
+#[test]
+fn a_nonce_another_transaction_spent_ends_it_as_went_first() {
+    let mut sut = Sut::new();
+    let _ = submitted_with_facts(&mut sut, Some(REFUSAL));
+    let spent_at = SUBMIT_BLOCK + 4;
+    let ops = sut.resolve_matching(is_nonce, nonce_read(T0 + 700.0, Some(6), Some(spent_at)));
+    assert_eq!(ops, vec![head_only()], "the chain is read past it now");
+    let ops = sut.resolve_matching(is_find, op_event(T0 + 800.0, None, None, Some(spent_at)));
+    assert_eq!(ops, vec![window(SUBMIT_BLOCK, spent_at)]);
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 900.0, Some("[]"), None, Some(spent_at)),
+    );
+    assert_eq!(ops, vec![fail_patch(TrackFailure::Refused)]);
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Rejected);
+    assert_eq!(
+        view.entries[0].refusal,
+        Some(vela_core::app::tx_tracker::RefusalReason::NonceUsed)
+    );
+    assert_eq!(
+        view.entries[0].refusal_key.as_deref(),
+        Some("componentsUi.signing.wentFirst")
+    );
+}
+
+/// The nonce moved because THIS op landed: its event says so — confirmed,
+/// never "went first".
+#[test]
+fn a_moved_nonce_with_the_op_s_own_event_is_landed() {
+    let mut sut = Sut::new();
+    let _ = submitted_with_facts(&mut sut, None);
+    let spent_at = SUBMIT_BLOCK + 4;
+    let _ = sut.resolve_matching(is_nonce, nonce_read(T0 + 700.0, Some(6), Some(spent_at)));
+    let _ = sut.resolve_matching(is_find, op_event(T0 + 800.0, None, None, Some(spent_at)));
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 900.0, Some(&event_logs(true)), None, Some(spent_at)),
+    );
+    assert_eq!(ops, event_confirmed());
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+}
+
+/// A chain read that stops short of the head the nonce moved at proves
+/// nothing yet: the op may be in the blocks not read.
+#[test]
+fn a_moved_nonce_waits_for_the_read_to_reach_its_head() {
+    let mut sut = Sut::new();
+    let _ = submitted_with_facts(&mut sut, None);
+    let spent_at = SUBMIT_BLOCK + 4;
+    let _ = sut.resolve_matching(is_nonce, nonce_read(T0 + 700.0, Some(6), Some(spent_at)));
+    // A lagging node answers the head as two blocks lower.
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 800.0, None, None, Some(SUBMIT_BLOCK + 2)),
+    );
+    assert_eq!(ops, vec![window(SUBMIT_BLOCK, SUBMIT_BLOCK + 2)]);
+    assert!(sut
+        .resolve_matching(
+            is_find,
+            op_event(T0 + 900.0, Some("[]"), None, Some(SUBMIT_BLOCK + 2))
+        )
+        .is_empty());
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+}
+
+/// Once the relay shows it holds the op, it is an ordinary one: no nonce is
+/// read for it, and no refusal ends it.
+#[test]
+fn an_op_the_relay_holds_reads_no_nonce() {
+    let mut sut = Sut::new();
+    let _ = submitted_with_facts(&mut sut, Some(REFUSAL));
+    // The relay acknowledges it before the nonce answers.
+    let _ = tick(&mut sut, T0 + 3_400.0);
+    settle_polls(&mut sut, T0 + 3_500.0, TrackLifecycle::Queued);
+    assert_eq!(outcome_of(&sut), TrackOutcome::Landing);
+    assert!(sut
+        .resolve_matching(
+            is_nonce,
+            nonce_read(T0 + 3_600.0, Some(5), Some(SUBMIT_BLOCK))
+        )
+        .is_empty());
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
+    let ops = tick(&mut sut, T0 + 7_000.0);
+    assert!(!ops.iter().any(is_nonce), "{ops:?}");
+}
+
+/// No facts, no nonce reads: a shell that says nothing of the nonce (the
+/// dApp sheet, an older shell) is tracked exactly as before.
+#[test]
+fn an_op_without_submit_facts_reads_no_nonce() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), true);
+    for at in [T0 + 3_400.0, T0 + 12_400.0] {
+        let ops = tick(&mut sut, at);
+        assert!(!ops.iter().any(is_nonce), "{ops:?}");
+    }
+    // Facts for an op the tracker does not know are dropped.
+    let mut sut = Sut::new();
+    assert!(sut
+        .dispatch(Event::SubmitFacts {
+            user_op_hash: HASH.to_owned(),
+            nonce: Some(SIGNED_NONCE.to_owned()),
+            relay_refusal: None,
+        })
+        .is_empty());
+}

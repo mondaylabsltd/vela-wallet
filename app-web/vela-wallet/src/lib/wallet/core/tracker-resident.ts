@@ -417,6 +417,28 @@ export function trackSubmitted(
 }
 
 /**
+ * What a may-have-been-sent submit knew of its op beyond the hand-off (round
+ * 3, send-5): the nonce it signed and, when an endpoint answered its POST
+ * with an HTTP error carrying a JSON-RPC `error` member, that member as JSON
+ * text. With them the core reads the account's nonce while the op is in
+ * doubt — what they prove is the core's (`tx_tracker::Event::SubmitFacts`).
+ * Sent after the `trackSubmitted` that named the op's records.
+ */
+export function noteSubmitFacts(
+	userOpHash: string,
+	nonce: string | null,
+	relayRefusal: string | null
+): void {
+	if (!userOpHash || !nonce) return;
+	dispatchTxTracker({
+		type: 'submit_facts',
+		user_op_hash: normalize(userOpHash),
+		nonce,
+		...(relayRefusal ? { relay_refusal: relayRefusal } : {})
+	});
+}
+
+/**
  * A write-ahead op proven never sent (spec 082 RJ1): the tracker drops those
  * records (and the entry, when none is left) without patching anything, and
  * whoever watched it stops hearing about it.

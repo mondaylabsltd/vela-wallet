@@ -94,6 +94,11 @@ pub const ESTIMATE_TIMEOUT_MS: u32 = 15_000;
 /// transfer, a contract (send-18): the warning is read before a tap can land.
 /// Past it the confirm opens, and says the check could not finish.
 pub const RISK_WAIT_MS: u32 = 4_000;
+/// How long a may-have-been-sent receipt counts its checking (round 3,
+/// send-5) before it says the outcome is still unknown, with how to check:
+/// the tracker's wait window. The checking goes on in the background, and a
+/// definite answer that comes later still lands on the receipt.
+pub const MAYBE_SENT_ANSWER_MS: u32 = 120_000;
 
 /// How long a complete form sits still before it asks for a quote (spec 028
 /// Phase 9, T490). Long enough that a person typing an amount is not quoted on
@@ -825,6 +830,12 @@ pub struct SendRecipientRisk {
     /// confirm's 「第一次给这个地址转账」. `None` (unknown, or the person's
     /// own address, which is never a first transfer) draws nothing.
     pub first_time: Option<bool>,
+    /// The account's history could not be read (round 3): `first_time` is
+    /// then `None` — a failed read is never "never sent here" — and the
+    /// confirm says the history could not be checked, with a retry
+    /// ([`SendView::risk_history_unread`]).
+    #[serde(default)]
+    pub history_unread: bool,
 }
 
 /// The fee the submit path signs — EXACTLY what the confirm screen displayed
@@ -1108,6 +1119,9 @@ pub enum SendTimerTag {
     /// The confirm's bounded wait for the recipient's check ([`RISK_WAIT_MS`],
     /// send-18).
     RiskWait,
+    /// How long a may-have-been-sent receipt says "checking" before it says
+    /// the outcome is still unknown ([`MAYBE_SENT_ANSWER_MS`], round 3).
+    MaybeSentCap,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1680,6 +1694,15 @@ pub enum Event {
     },
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
+    /// Inside `SubmitUserOp`, before the nonce is read (round 3, send-15):
+    /// another tab of this browser is sending from the same account on the
+    /// same network, and this submit waits its turn
+    /// ([`SendView::queued_behind_tab`]). Cleared when its passkey sheet
+    /// opens ([`Event::SigningStarted`]) or the submit ends.
+    SendQueued,
+    /// The confirm's "Check again" over a recipient check that could not
+    /// finish, or could not read the history (round 3).
+    RetryRiskCheck,
     /// Inside `SubmitUserOp`: the op is signed and its hash computed, and
     /// nothing has been POSTed (spec 082 RJ1). The core writes the records
     /// ahead and answers [`SendOperation::ClearToPost`] once they are on disk
@@ -2119,6 +2142,8 @@ pub struct Model {
     risk_wait: Option<u64>,
     /// The check did not finish in that wait, or could not be made.
     risk_unfinished: bool,
+    /// …because the account's history could not be read (round 3).
+    risk_history_unread: bool,
     /// A split's per-row check (send-20): each distinct address on the
     /// confirm, lowercased, with its check's flight while out and its
     /// answer — `Some(true)` a first transfer — once in.
@@ -2152,6 +2177,13 @@ pub struct Model {
     receipt_not_sent: bool,
     /// The submit's reply was lost; cleared when the relay acknowledges.
     receipt_maybe_sent: bool,
+    /// The [`MAYBE_SENT_ANSWER_MS`] timer of a may-have-been-sent receipt.
+    maybe_sent_cap: Option<u64>,
+    /// …elapsed with nothing definite: the receipt says it is still unknown
+    /// (round 3, send-5).
+    receipt_still_unknown: bool,
+    /// [`SendView::queued_behind_tab`].
+    queued_behind_tab: bool,
     fee_held: bool,
     /// The relay is topping up its gas before it sends (098 follow-up). Not
     /// sticky: the next outcome clears it.
@@ -2372,6 +2404,13 @@ pub struct SendReceiptView {
     /// doubt.
     #[serde(default)]
     pub can_send_again: bool,
+    /// `MaybeSent` only: it has been checked for [`MAYBE_SENT_ANSWER_MS`]
+    /// with nothing definite (round 3, send-5). The receipt says the outcome
+    /// is still unknown and how to check it — the account on the explorer —
+    /// instead of "checking" for ever. Vela goes on checking; a definite
+    /// answer that comes later replaces it.
+    #[serde(default)]
+    pub still_unknown: bool,
     pub kind: Option<SendReceiptKind>,
     pub transfers: Vec<SendReceiptTransfer>,
     /// Every coin the operation sent, in the order signed (spec 097 F, S3).
@@ -2635,9 +2674,22 @@ pub struct SendView {
     #[serde(default)]
     pub risk_checking: bool,
     /// The check did not finish in that wait, or could not be made: the
-    /// confirm opened, and says so.
+    /// confirm opened, and says so, with "Check again"
+    /// ([`Event::RetryRiskCheck`]).
     #[serde(default)]
     pub risk_unfinished: bool,
+    /// The check could not be made because the account's history could not
+    /// be read (round 3): the recipient line says the history could not be
+    /// checked — neutral, with "Check again" — and never a first-time tag
+    /// built on the failed read. Implies `risk_unfinished`.
+    #[serde(default)]
+    pub risk_history_unread: bool,
+    /// The submit waits for another tab of this browser sending from the
+    /// same account on the same network (round 3, send-15): the confirm says
+    /// this one goes next ([`Event::SendQueued`]). It goes on by itself,
+    /// with a nonce read after that one.
+    #[serde(default)]
+    pub queued_behind_tab: bool,
     /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
     /// account cannot sign here — drawn as `VenueBlock::key()` with its
     /// domains. `None` otherwise.
@@ -2884,6 +2936,8 @@ impl Send {
                 _ => slide_confirm(model),
             },
             Event::SigningStarted => {
+                // Its turn came: no longer waiting for another tab.
+                let was_queued = std::mem::take(&mut model.queued_behind_tab);
                 // Order is preparing → submitting → signing, as today
                 // (`setTxStatus('submitting')` precedes `signFn`).
                 if model.tx == SendTxStatus::Submitting
@@ -2892,8 +2946,20 @@ impl Send {
                     model.tx = SendTxStatus::Signing;
                     return render();
                 }
+                if was_queued {
+                    return render();
+                }
                 Command::done()
             }
+            Event::SendQueued => {
+                // Only a submit that is out can be waiting its turn.
+                if !matches!(model.pipeline, Pipeline::Submitting { .. }) {
+                    return Command::done();
+                }
+                model.queued_behind_tab = true;
+                render()
+            }
+            Event::RetryRiskCheck => retry_risk_check(model),
             Event::OpSigned {
                 user_op_hash,
                 submit_block,
@@ -3189,6 +3255,9 @@ impl Send {
             passkey_note: model.passkey_note,
             risk_checking: risk_pending(model),
             risk_unfinished: model.risk_unfinished,
+            risk_history_unread: model.risk_unfinished && model.risk_history_unread,
+            queued_behind_tab: model.queued_behind_tab
+                && matches!(model.pipeline, Pipeline::Submitting { .. }),
             tx_venue_block: model
                 .venue_block
                 .clone()
@@ -4990,19 +5059,51 @@ fn confirm_probes(model: &mut Model) -> Cmd {
     model.sim_json = None;
     model.flights.sim = None;
     model.sim_input = None;
+    let mut cmds = risk_probes(model);
+    if model.step != SendStep::Confirm || model.selected_token.is_none() || model.account.is_none()
+    {
+        return Command::done();
+    }
+    if let Some(input) = sim_input(model) {
+        cmds.push(simulate(model, input));
+    }
+    Command::all(cmds)
+}
+
+/// The confirm's "Check again" over a recipient check that could not finish
+/// or could not read the history (round 3): the check alone is asked again,
+/// with its bounded wait — never while one is out or the send is going.
+fn retry_risk_check(model: &mut Model) -> Cmd {
+    let out = model.flights.risk.is_some() || model.split_risks.iter().any(|r| r.flight.is_some());
+    if model.step != SendStep::Confirm
+        || out
+        || model.lock.busy()
+        || !(model.risk_unfinished || model.risk_history_unread)
+    {
+        return Command::done();
+    }
+    let cmds = risk_probes(model);
+    Command::all(cmds.into_iter().chain([render()]))
+}
+
+/// The recipient's check on the confirm, from nothing: what an earlier one
+/// said goes, and each address is asked again with the confirm's bounded wait
+/// for it (send-18).
+fn risk_probes(model: &mut Model) -> Vec<Cmd> {
     model.recipient_risk = None;
     model.flights.risk = None;
     model.risk_wait = None;
     model.risk_unfinished = false;
+    model.risk_history_unread = false;
     model.split_risks.clear();
     if model.step != SendStep::Confirm {
-        return Command::done();
+        return Vec::new();
     }
     let Some(token) = model.selected_token.clone() else {
-        return Command::done();
+        return Vec::new();
     };
     if model.account.is_none() {
-        return Command::done();
+        return Vec::new();
     }
 
     let mut cmds: Vec<Cmd> = Vec::new();
@@ -5065,11 +5166,7 @@ fn confirm_probes(model: &mut Model) -> Cmd {
             },
         ));
     }
-
-    if let Some(input) = sim_input(model) {
-        cmds.push(simulate(model, input));
-    }
-    Command::all(cmds)
+    cmds
 }
 
 /// What the confirm's simulation is asked about. The shell simulates exactly
@@ -5958,6 +6055,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.receipt_failed = false;
     model.receipt_not_sent = false;
     model.receipt_maybe_sent = false;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
@@ -6553,6 +6652,8 @@ fn send_again(model: &mut Model) -> Cmd {
     model.receipt_failed = false;
     model.receipt_not_sent = false;
     model.receipt_maybe_sent = false;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.receipt_lines = None;
@@ -6668,6 +6769,7 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             maybe_sent,
             submit_block,
         } => {
+            model.queued_behind_tab = false;
             if model.withdrawn_submit == Some(id) {
                 // Never cleared, yet it went out (a shell that POSTs without
                 // the write-ahead): sent is sent — recorded as any other.
@@ -6676,6 +6778,7 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block))
         }
         R::SubmitFailed { failure } => {
+            model.queued_behind_tab = false;
             if model.withdrawn_submit == Some(id) {
                 // The submit the person cancelled ended, and nothing was
                 // sent: no error, no haptic — the form, as they left it.
@@ -6761,7 +6864,14 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
                 .find(|row| row.flight == Some(id))
             {
                 row.flight = None;
-                row.first_time = risk.as_ref().and_then(|risk| risk.first_time);
+                // A history that could not be read says nothing of a first
+                // transfer (round 3): never a tag built on a failed read.
+                let unread = risk.as_ref().is_some_and(|risk| risk.history_unread);
+                row.first_time = risk
+                    .as_ref()
+                    .and_then(|risk| risk.first_time)
+                    .filter(|_| !unread);
+                model.risk_history_unread |= unread;
                 if !model.split_risks.iter().any(|row| row.flight.is_some()) {
                     model.risk_wait = None;
                     model.risk_unfinished =
@@ -6774,6 +6884,15 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             }
             model.flights.risk = None;
             model.risk_wait = None;
+            // A history that could not be read says nothing of a first
+            // transfer (round 3): never a tag built on a failed read.
+            let risk = risk.map(|mut risk| {
+                if risk.history_unread {
+                    risk.first_time = None;
+                }
+                risk
+            });
+            model.risk_history_unread = risk.as_ref().is_some_and(|r| r.history_unread);
             // An aborted or failed check answers nothing: the confirm says
             // the check could not finish rather than nothing at all.
             model.risk_unfinished = risk.as_ref().is_none_or(|r| r.first_time.is_none());
@@ -6995,6 +7114,14 @@ fn accept_timer(model: &mut Model, id: u64) -> Cmd {
         // A late answer still lands (the flight stays).
         model.risk_wait = None;
         model.risk_unfinished = true;
+        return render();
+    }
+    if model.maybe_sent_cap == Some(id) {
+        // Checked this long with nothing definite (round 3, send-5): the
+        // receipt says it is still unknown, and how to check — never a
+        // silent spinner, never only "Done". The tracker goes on asking.
+        model.maybe_sent_cap = None;
+        model.receipt_still_unknown = true;
         return render();
     }
     if model
@@ -7652,8 +7779,24 @@ fn accept_submitted(
     model.user_op_hash = Some(user_op_hash.clone());
     model.submitted_at_ms = Some(now_ms);
     model.receipt_maybe_sent = maybe_sent;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
+    // Round 3 (send-5): a may-have-been-sent receipt counts its checking, and
+    // past this says the outcome is still unknown rather than spin on. Asked
+    // last, after the records and the tracker.
+    let cap_timer = maybe_sent.then(|| {
+        let cap = next(model);
+        model.maybe_sent_cap = Some(cap);
+        issue(
+            cap,
+            SendOperation::StartTimer {
+                ms: MAYBE_SENT_ANSWER_MS,
+                tag: SendTimerTag::MaybeSentCap,
+            },
+        )
+    });
 
     let from = model
         .account
@@ -7708,6 +7851,7 @@ fn accept_submitted(
                     .map(|account| account.address.clone()),
             },
         ));
+        commands.extend(cap_timer);
         commands.push(render());
         return Command::all(commands);
     }
@@ -7739,6 +7883,7 @@ fn accept_submitted(
         persist_id,
         SendOperation::PersistTxRecords { records },
     ));
+    commands.extend(cap_timer);
     commands.push(render());
     Command::all(commands)
 }
@@ -7973,18 +8118,20 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
             usd_value: parse_float_or_zero(&ln.amount) * ln.price_usd,
         })
         .collect();
+    let status = if model.receipt_failed && model.receipt_not_sent {
+        SendReceiptStatus::NotSent
+    } else if model.receipt_failed {
+        SendReceiptStatus::Failed
+    } else if model.tx_hash.is_some() {
+        SendReceiptStatus::Confirmed
+    } else if model.receipt_maybe_sent {
+        SendReceiptStatus::MaybeSent
+    } else {
+        SendReceiptStatus::Submitted
+    };
     Some(SendReceiptView {
-        status: if model.receipt_failed && model.receipt_not_sent {
-            SendReceiptStatus::NotSent
-        } else if model.receipt_failed {
-            SendReceiptStatus::Failed
-        } else if model.tx_hash.is_some() {
-            SendReceiptStatus::Confirmed
-        } else if model.receipt_maybe_sent {
-            SendReceiptStatus::MaybeSent
-        } else {
-            SendReceiptStatus::Submitted
-        },
+        status,
+        still_unknown: model.receipt_still_unknown && status == SendReceiptStatus::MaybeSent,
         refusal_key: model
             .refused
             .then(|| super::tx_tracker::refusal_key(model.refusal).to_owned()),

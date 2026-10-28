@@ -54,15 +54,28 @@ export class PoolFailedError extends Error {
 	 * told as "can't reach the chain".
 	 */
 	readonly internal: boolean;
+	/**
+	 * Round 3 (send-5): an endpoint answered with an HTTP server error whose
+	 * body is a JSON-RPC `error` object — that object, as JSON text. A submit
+	 * hands it to the tracker, which judges whether it was a refusal; `null`
+	 * when no endpoint said anything of the kind.
+	 */
+	readonly relayRefusal: string | null;
 	constructor(
 		message: string,
-		facts: { maybeDelivered: boolean; rateLimited: boolean; internal?: boolean }
+		facts: {
+			maybeDelivered: boolean;
+			rateLimited: boolean;
+			internal?: boolean;
+			relayRefusal?: string | null;
+		}
 	) {
 		super(message);
 		this.name = 'PoolFailedError';
 		this.maybeDelivered = facts.maybeDelivered;
 		this.rateLimited = facts.rateLimited;
 		this.internal = facts.internal ?? false;
+		this.relayRefusal = facts.relayRefusal ?? null;
 	}
 }
 
@@ -166,6 +179,16 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 
 	const call = pendingCalls.get(callId);
 	const held = verdict.type === 'failed' ? undefined : bodies.get(callId)?.get(verdict.url);
+	// A failed call's JSON-RPC `error` answers — an HTTP error's body
+	// (`refusalBody`) or an error the core routed on — the last one, for a
+	// submit to hand on (round 3, send-5). What it proves is the core's.
+	const refusal =
+		verdict.type === 'failed'
+			? [...(bodies.get(callId)?.values() ?? [])]
+					.reverse()
+					.map((body) => body.error)
+					.find((error) => error != null)
+			: undefined;
 	forget(callId);
 	if (!call) return;
 
@@ -179,7 +202,11 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 				call.kind === 'bundler'
 					? `All bundler endpoints failed for chain ${call.chainId}`
 					: `All RPC endpoints failed for chain ${call.chainId}`,
-				{ maybeDelivered: verdict.maybe_delivered, rateLimited: verdict.rate_limited }
+				{
+					maybeDelivered: verdict.maybe_delivered,
+					rateLimited: verdict.rate_limited,
+					relayRefusal: refusal ? JSON.stringify(refusal) : null
+				}
 			)
 		);
 		return;

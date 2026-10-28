@@ -178,6 +178,15 @@
     "batchBadChecksum": "Mã kiểm tra không khớp",
     "riskChecking": "Đang kiểm tra địa chỉ này…",
     "riskUnfinished": "Không kiểm tra xong địa chỉ này. Hãy chắc chắn đây là địa chỉ bạn muốn.",
-    "amountPasteRefused": "Đó không phải là số tiền. Hãy dán một con số, ví dụ 12,5."
+    "amountPasteRefused": "Đó không phải là số tiền. Hãy dán một con số, ví dụ 12,5.",
+    "riskHistoryUnread": "Không kiểm tra được các lần gửi trước của bạn tới địa chỉ này. Hãy chắc chắn đây là địa chỉ bạn muốn.",
+    "riskRetry": "Kiểm tra lại",
+    "queuedBehindTab": "Một tab khác đang gửi từ tài khoản này — tab này sẽ gửi tiếp theo.",
+    "txReviewAgain": "Xem lại",
+    "txSendAgain": "Gửi lại",
+    "txCheckingElapsed": "Đang kiểm tra xem đã gửi đi chưa… {{elapsed}}s",
+    "txStillUnknownTitle": "Chưa rõ trạng thái",
+    "txStillUnknownBody": "Vela chưa xác nhận được giao dịch này đã rời tài khoản của bạn hay chưa, và vẫn đang kiểm tra ở chế độ nền. Trước khi gửi lại, hãy xem tài khoản của bạn trên trình khám phá.",
+    "txViewAccountExplorer": "Xem tài khoản trên trình khám phá"
   }
 }

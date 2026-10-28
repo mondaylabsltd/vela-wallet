@@ -295,9 +295,24 @@ passkey_note: SendPasskeyNote | null,
 risk_checking: boolean, 
 /**
  * The check did not finish in that wait, or could not be made: the
- * confirm opened, and says so.
+ * confirm opened, and says so, with "Check again"
+ * ([`Event::RetryRiskCheck`]).
  */
 risk_unfinished: boolean, 
+/**
+ * The check could not be made because the account's history could not
+ * be read (round 3): the recipient line says the history could not be
+ * checked — neutral, with "Check again" — and never a first-time tag
+ * built on the failed read. Implies `risk_unfinished`.
+ */
+risk_history_unread: boolean, 
+/**
+ * The submit waits for another tab of this browser sending from the
+ * same account on the same network (round 3, send-15): the confirm says
+ * this one goes next ([`Event::SendQueued`]). It goes on by itself,
+ * with a nonce read after that one.
+ */
+queued_behind_tab: boolean, 
 /**
  * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
  * account cannot sign here — drawn as `VenueBlock::key()` with its

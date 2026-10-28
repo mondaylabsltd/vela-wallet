@@ -278,6 +278,7 @@ describe('S3 — the success screen lists every coin the operation sent', () => 
 		hold_reason: null,
 		refusal_key: null,
 		can_send_again: false,
+		still_unknown: false,
 		kind: null,
 		transfers: [],
 		coins: [],

@@ -815,7 +815,16 @@
   "batchBadChecksum": "Sağlama toplamı eşleşmiyor",
   "riskChecking": "Bu adres kontrol ediliyor…",
   "riskUnfinished": "Bu adresin kontrolü tamamlanamadı. Doğru adres olduğundan emin olun.",
-  "amountPasteRefused": "Bu bir tutar değil. 12,5 gibi bir sayı yapıştırın."
+  "amountPasteRefused": "Bu bir tutar değil. 12,5 gibi bir sayı yapıştırın.",
+  "riskHistoryUnread": "Bu adrese daha önceki gönderimleriniz kontrol edilemedi. Doğru adres olduğundan emin olun.",
+  "riskRetry": "Tekrar kontrol et",
+  "queuedBehindTab": "Başka bir sekme bu hesaptan gönderiyor — bu sekme sıradaki.",
+  "txReviewAgain": "Tekrar incele",
+  "txSendAgain": "Tekrar gönder",
+  "txCheckingElapsed": "Gidip gitmediği kontrol ediliyor… {{elapsed}} sn",
+  "txStillUnknownTitle": "Durum bilinmiyor",
+  "txStillUnknownBody": "Vela bunun hesabınızdan çıkıp çıkmadığını doğrulayamadı ve arka planda kontrol etmeye devam ediyor. Tekrar göndermeden önce hesabınızı gezginde kontrol edin.",
+  "txViewAccountExplorer": "Hesabınızı gezginde kontrol edin"
  },
  "receive": {
   "title": "Al",

@@ -178,6 +178,15 @@
     "batchBadChecksum": "Prüfsumme passt nicht",
     "riskChecking": "Diese Adresse wird geprüft …",
     "riskUnfinished": "Die Prüfung dieser Adresse wurde nicht fertig. Stelle sicher, dass es die richtige ist.",
-    "amountPasteRefused": "Das ist kein Betrag. Füge eine Zahl ein, etwa 12,5."
+    "amountPasteRefused": "Das ist kein Betrag. Füge eine Zahl ein, etwa 12,5.",
+    "riskHistoryUnread": "Deine bisherigen Überweisungen an diese Adresse konnten nicht geprüft werden. Stelle sicher, dass es die richtige ist.",
+    "riskRetry": "Nochmals prüfen",
+    "queuedBehindTab": "Ein anderer Tab sendet gerade von diesem Konto – dieser ist als Nächstes dran.",
+    "txReviewAgain": "Erneut überprüfen",
+    "txSendAgain": "Erneut senden",
+    "txCheckingElapsed": "Es wird geprüft, ob sie rausging … {{elapsed}} s",
+    "txStillUnknownTitle": "Status unbekannt",
+    "txStillUnknownBody": "Vela konnte nicht bestätigen, ob dies dein Konto verlassen hat, und prüft im Hintergrund weiter. Bevor du erneut sendest, sieh dir dein Konto im Explorer an.",
+    "txViewAccountExplorer": "Konto im Explorer ansehen"
   }
 }
