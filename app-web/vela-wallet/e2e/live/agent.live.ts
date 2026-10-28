@@ -185,7 +185,8 @@ test('an AI agent over ClientMCP: a Vela account, then a multisig', async ({ bro
 		await page.getByText('Agent Alice', { exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
-		await page.getByRole('combobox').first().selectOption({ label: 'Arc Testnet' });
+		await page.getByRole('button', { name: 'First network' }).click();
+		await page.getByRole('option', { name: 'Arc Testnet' }).click();
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible({ timeout: 120_000 });
 		await page.getByRole('button', { name: 'Done' }).click();

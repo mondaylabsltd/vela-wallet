@@ -130,7 +130,8 @@ test('a multisig on Arc Testnet: two passkey members, propose, approve, execute'
 		await page.getByRole('button', { name: 'Next' }).click();
 		await expect(page.getByText('2 of 2')).toBeVisible();
 		await page.getByRole('button', { name: 'Next' }).click();
-		await page.getByRole('combobox').first().selectOption({ label: 'Arc Testnet' });
+		await page.getByRole('button', { name: 'First network' }).click();
+		await page.getByRole('option', { name: 'Arc Testnet' }).click();
 		await shot(page, 'm1-review');
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible({ timeout: 120_000 });
@@ -188,7 +189,8 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
-		await page.getByRole('combobox').first().selectOption({ label: 'Arc Testnet' });
+		await page.getByRole('button', { name: 'First network' }).click();
+		await page.getByRole('option', { name: 'Arc Testnet' }).click();
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible({ timeout: 120_000 });
 		await page.getByRole('button', { name: 'Done' }).click();
