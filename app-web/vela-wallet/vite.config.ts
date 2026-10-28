@@ -6,6 +6,7 @@ import { playwright } from '@vitest/browser-playwright';
 import cloudflareAdapter from '@sveltejs/adapter-cloudflare';
 import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { withBrotliCoreAdapter } from './scripts/wasm-brotli.mjs';
 
 /**
  * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
@@ -156,7 +157,8 @@ export default defineConfig({
 						// never opens is worse than saying so here.
 						strict: false
 					})
-				: cloudflareAdapter()
+				: // The core's wasm at brotli 11, and the Worker that serves it (perf-4).
+					withBrotliCoreAdapter(cloudflareAdapter())
 		})
 	],
 	test: {

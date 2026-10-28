@@ -6,7 +6,11 @@
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"assets": {
 		"binding": "ASSETS",
-		"directory": ".svelte-kit/cloudflare"
+		"directory": ".svelte-kit/cloudflare",
+		// The core's wasm is answered by the Worker, from its brotli-11 copy
+		// (perf-4: `src/lib/core/wasm-brotli.ts`, `scripts/wasm-brotli.mjs`).
+		// Every other static file is served by the assets as before.
+		"run_worker_first": ["/vela_core_bg.*"]
 	},
 	"workers_dev": true,
 	"preview_urls": true
