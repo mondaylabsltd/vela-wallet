@@ -468,6 +468,73 @@ describe('hedged reads (perf-6)', () => {
 		}
 	});
 
+	it('home-20: a hedge answered with a node error passes to the endpoint after it, one at a time', async () => {
+		vi.useFakeTimers();
+		try {
+			const THIRD = 'https://third.example';
+			let releaseNext: (r: Response) => void = () => {};
+			const fetchSpy = vi.fn((url: string) => {
+				if (url === SLOW) return new Promise<Response>(() => {});
+				if (url === NEXT) return new Promise<Response>((resolve) => (releaseNext = resolve));
+				return Promise.resolve(
+					new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x5' }), {
+						headers: { 'content-type': 'application/json' }
+					})
+				);
+			});
+			vi.stubGlobal('fetch', fetchSpy);
+			const early: Array<{ callId: string; url: string }> = [];
+			const registry = makeRegistry({
+				payload: () => ({ method: 'eth_getBalance', params: [], kind: 'rpc' as const }),
+				view: () => ({
+					failed_chains: [],
+					rate_limited_chains: [],
+					banned: [],
+					unreached_chains: [],
+					fallback_chains: [],
+					own_only_chains: [],
+					own_node_unreached_chains: [],
+					pending_urls: { c1: [NEXT, THIRD] }
+				}),
+				answerEarly: (callId, url) => early.push({ callId, url })
+			});
+			// Only a result is an early answer here; a node's error is not.
+			const strict = {
+				...policy,
+				early: (
+					_kind: string,
+					_method: string,
+					url: string,
+					outcome: { type: string; error?: unknown }
+				) =>
+					outcome.type === 'response' && !outcome.error
+						? ({ type: 'respond', url, maybe_delivered: false } as const)
+						: null
+			};
+			const executor = createRpcPoolExecutor(registry, strict);
+
+			void executor.execute(post(SLOW));
+			await vi.advanceTimersByTimeAsync(1500);
+			expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([SLOW, NEXT]);
+			// NEXT still out: nobody else is asked, however long SLOW stays silent.
+			await vi.advanceTimersByTimeAsync(3000);
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+			releaseNext(
+				new Response(
+					JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'busy' } }),
+					{ headers: { 'content-type': 'application/json' } }
+				)
+			);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([SLOW, NEXT, THIRD]);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(early).toEqual([{ callId: 'c1', url: THIRD }]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('an answer inside the delay asks nobody else', async () => {
 		vi.useFakeTimers();
 		try {

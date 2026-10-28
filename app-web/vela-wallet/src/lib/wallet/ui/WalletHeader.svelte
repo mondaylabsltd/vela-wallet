@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import { identiconViewer } from '../identicon-viewer.svelte';
 	import type { WalletHeaderModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
@@ -16,6 +17,30 @@
 	}
 
 	let { header, onclick }: Props = $props();
+
+	/*
+	 * home-19: the address copies; the name opens the switcher. A short
+	 * address that opened a list of accounts was a surprise to everyone who
+	 * tapped it to copy it — which is what every other wallet's does.
+	 */
+	let copied = $state(false);
+	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => () => clearTimeout(copiedTimer));
+
+	async function copyAddress(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(header.addressFull);
+		} catch {
+			// A refused clipboard is never a silent tap: the viewer shows the
+			// address whole, with its own Copy, for the person to take by hand.
+			identiconViewer.open({ address: header.addressFull, identiconSvg: header.identiconSvg });
+			return;
+		}
+		copied = true;
+		clearTimeout(copiedTimer);
+		copiedTimer = setTimeout(() => (copied = false), 1500);
+	}
 </script>
 
 <div class="header">
@@ -47,11 +72,34 @@
 			<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-down']} size="sm" /></span>
 		</button>
 		<span class="facts">
-			<!-- vis-16: reachable by keyboard, as the name above it is; it opens
-			     the same switcher. -->
-			<button type="button" class="address" data-tap aria-haspopup="dialog" {onclick}
-				>{header.addressDisplay}</button
-			>
+			{#if onclick && header.addressFull !== ''}
+				<!-- home-19: the address copies itself (the glyph says so) and
+				     confirms it in words; the name above opens the switcher. -->
+				<button
+					type="button"
+					class="address copy"
+					data-tap
+					data-testid="header-address"
+					aria-label={identiconViewer.copyLabel
+						? `${identiconViewer.copyLabel} ${header.addressDisplay}`
+						: undefined}
+					onclick={copyAddress}
+				>
+					<span>{header.addressDisplay}</span>
+					<span class="glyph" aria-hidden="true"
+						><Icon icon={UTILITY_ICONS[copied ? 'check' : 'copy']} size="xs" /></span
+					>
+					{#if copied && identiconViewer.copiedLabel}
+						<span class="copied" aria-hidden="true">{identiconViewer.copiedLabel}</span>
+					{/if}
+				</button>
+				<!-- Read, not seen: the same word, for whoever cannot see it land. -->
+				<span class="visually-hidden" role="status"
+					>{copied ? identiconViewer.copiedLabel : ''}</span
+				>
+			{:else}
+				<span class="address">{header.addressDisplay}</span>
+			{/if}
 			<!-- The space in front (spec 105), beside the account it shows: tapping it
 			     offers the other space. Live headers only — the gallery's is a picture. -->
 			{#if onclick && networkSpace.words}
@@ -157,7 +205,26 @@
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.copy {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-xs);
 		cursor: pointer;
+	}
+
+	.glyph {
+		display: flex;
+		color: var(--color-fg-muted);
+	}
+
+	/* The confirmation, in words, beside the address — neutral ink: copying
+	   moves nothing. */
+	.copied {
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	.avatar {

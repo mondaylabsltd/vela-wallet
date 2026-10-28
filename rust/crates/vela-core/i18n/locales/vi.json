@@ -162,6 +162,7 @@
         "setContactFavorite": "Đổi mục yêu thích",
         "addNetwork": "Thêm mạng",
         "setNetworkEndpoint": "Đổi RPC hoặc trình khám phá của mạng",
+        "setOnlyMyNode": "Đổi “Chỉ dùng node của tôi”",
         "removeNetwork": "Gỡ mạng",
         "setProviderKey": "Đổi khoá nhà cung cấp RPC",
         "setServiceEndpoint": "Đổi endpoint dịch vụ",

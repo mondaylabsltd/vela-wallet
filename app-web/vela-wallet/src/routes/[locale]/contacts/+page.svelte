@@ -31,7 +31,7 @@
 	import GroupForm from '$lib/contacts/ui/GroupForm.svelte';
 	import PickList from '$lib/contacts/ui/PickList.svelte';
 	import SheetOrDialog from '$lib/contacts/ui/SheetOrDialog.svelte';
-	import type { ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
+	import type { ContactDraft, ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { screenDesk } from '$lib/flows/screen-desk.svelte';
@@ -147,7 +147,7 @@
 		| { kind: 'none' }
 		| { kind: 'add-menu' }
 		| { kind: 'add' }
-		| { kind: 'edit'; name: string; address: string; unsaved: boolean }
+		| { kind: 'edit'; name: string; address: string; note: string; unsaved: boolean }
 		| { kind: 'group-new' }
 		| { kind: 'group-rename'; id: string; name: string }
 		| { kind: 'group-menu'; id: string }
@@ -388,6 +388,7 @@
 				kind: 'edit',
 				name: contact.name ?? '',
 				address: contact.address,
+				note: contact.note ?? '',
 				unsaved: contact.source === 'auto'
 			};
 	}
@@ -563,6 +564,16 @@
 					case 'move-group':
 						sheet = { kind: 'group-pick', address: event.address };
 						return;
+					case 'favorite': {
+						// Round 3: the star — favourites come first in the book.
+						const contact = view?.contacts.find((c) => c.address === event.address.toLowerCase());
+						void intents.invoke('person', {
+							type: 'set_contact_favorite',
+							address: event.address,
+							favorite: !(contact?.favorite ?? false)
+						});
+						return;
+					}
 				}
 				return;
 			case 'activity-all':
@@ -581,13 +592,15 @@
 		}
 	}
 
-	function saveContact(draft: { name: string; address: string }): void {
+	function saveContact(draft: ContactDraft): void {
 		// A new entry — the add form, or a recent payee saved for the first time.
 		if (sheet.kind === 'add' || (sheet.kind === 'edit' && sheet.unsaved)) track('contact_added');
 		void intents.invoke('person', {
 			type: 'save_contact',
 			address: draft.address,
-			name: draft.name
+			name: draft.name,
+			// Round 3: the form's note — an emptied one clears it.
+			...(draft.note !== undefined ? { note: draft.note } : {})
 		});
 		sheet = { kind: 'none' };
 		// On the desktop the column that held the form shows what it made —
@@ -656,7 +669,9 @@
 			invalidChecksum: m.invalidChecksum,
 			existingName: savedNameAt,
 			duplicateAddress: m.duplicateAddress,
-			updateExisting: m.updateExisting
+			updateExisting: m.updateExisting,
+			noteLabel: m.noteLabel,
+			notePlaceholder: m.notePlaceholder
 		};
 	}
 
@@ -724,7 +739,9 @@
 					? {
 							copy: contactCopy(sheet),
 							initial:
-								sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined,
+								sheet.kind === 'edit'
+									? { name: sheet.name, address: sheet.address, note: sheet.note }
+									: undefined,
 							onsave: saveContact,
 							onclose: closeSheet
 						}
@@ -764,7 +781,9 @@
 		{#if sheet.kind === 'add' || sheet.kind === 'edit'}
 			<ContactEditSheet
 				copy={contactCopy(sheet)}
-				initial={sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined}
+				initial={sheet.kind === 'edit'
+					? { name: sheet.name, address: sheet.address, note: sheet.note }
+					: undefined}
 				onsave={saveContact}
 				onclose={closeSheet}
 			/>

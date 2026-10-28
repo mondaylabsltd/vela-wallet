@@ -14,7 +14,14 @@
 	import NameField from '$lib/ui/onboarding/NameField.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { addressEntry } from '$lib/core/kernels';
-	import { cleanName, NAME_MAX_CHARS, type ContactDraft, type ContactFormCopy } from '../forms';
+	import {
+		cleanName,
+		cleanNote,
+		NAME_MAX_CHARS,
+		NOTE_MAX_CHARS,
+		type ContactDraft,
+		type ContactFormCopy
+	} from '../forms';
 	import { fill } from '$lib/wallet/messages';
 
 	interface Props {
@@ -31,6 +38,10 @@
 	let name = $state(initial?.name ?? '');
 	// svelte-ignore state_referenced_locally
 	let address = $state(initial?.address ?? '');
+	// svelte-ignore state_referenced_locally
+	let note = $state(initial?.note ?? '');
+	/** Round 3: the note field is drawn where the caller gave it words (live). */
+	const noted = $derived(copy.noteLabel !== undefined);
 	let touched = $state(false);
 
 	// svelte-ignore state_referenced_locally
@@ -46,7 +57,11 @@
 	function save() {
 		touched = true;
 		if (!canSave) return;
-		onsave({ name: cleanName(name), address: address.trim() });
+		onsave({
+			name: cleanName(name),
+			address: address.trim(),
+			...(noted ? { note: cleanNote(note) } : {})
+		});
 	}
 </script>
 
@@ -81,6 +96,17 @@
 				touched = true;
 			}}
 		/>
+	{/if}
+	{#if noted}
+		<label class="note">
+			<span class="label">{copy.noteLabel}</span>
+			<textarea
+				rows="3"
+				maxlength={NOTE_MAX_CHARS}
+				placeholder={copy.notePlaceholder}
+				value={note}
+				oninput={(event) => (note = event.currentTarget.value)}></textarea>
+		</label>
 	{/if}
 	<div class="actions">
 		<Button variant="primary" shape="rounded" disabled={!canSave} onclick={save}>
@@ -117,5 +143,28 @@
 
 	.actions {
 		margin-block-start: var(--space-md);
+	}
+
+	.note {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.note .label {
+		color: var(--color-fg-muted);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.note textarea {
+		resize: vertical;
+		padding: var(--space-md) var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-raised);
+		color: var(--color-fg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 	}
 </style>

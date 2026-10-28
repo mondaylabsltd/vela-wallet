@@ -25,6 +25,8 @@ export type SettingsNetEvent =
 	| { kind: 'only-mine'; on: boolean }
 	// Add-network wizard
 	| { kind: 'open-add' }
+	/** set-5: the person left the wizard and chose to discard what they entered. */
+	| { kind: 'discard-add' }
 	| { kind: 'search'; query: string }
 	| { kind: 'pick-suggestion'; chainId: number }
 	| { kind: 'custom-rpc'; value: string }

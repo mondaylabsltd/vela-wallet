@@ -82,7 +82,11 @@
       "checkSafe": "Contrats Safe L2",
       "checkSigner": "Précompilé P-256",
       "checkRemaining": "{{count}} autres contrats",
-      "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement."
+      "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement.",
+      "discardTitle": "Abandonner ce réseau ?",
+      "discardBody": "Ce que vous avez saisi ici sera perdu.",
+      "discardConfirm": "Abandonner",
+      "discardCancel": "Continuer"
     },
     "treasury": {
       "modalTitle": "Trésorerie",

@@ -132,6 +132,18 @@ export async function setNetworkEndpoint(
 	}
 }
 
+/**
+ * "Only use my node" on one network, as its switch in Settings sends it
+ * (round 3: the agent's change waits for the person's approval first — the
+ * core's `Risk::Manage`). The core offers it only where the RPC is the
+ * person's own; the rules refused anything else before this is reached.
+ */
+export async function setOnlyMyNode(chainId: number, on: boolean): Promise<null> {
+	await ready();
+	networkAdmin.dispatch({ type: 'only_mine_changed', chain_id: chainId, on });
+	return null;
+}
+
 /** The network's own row is what its delete names. */
 export async function removeNetwork(chainId: number): Promise<void> {
 	await ready();

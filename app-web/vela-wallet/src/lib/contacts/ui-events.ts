@@ -33,7 +33,7 @@ export type ContactsUiEvent =
 	 * right-clicked row's — so the route never has to guess from its own
 	 * selection state.
 	 */
-	| { kind: 'action'; id: 'send' | 'copy' | 'move-group'; address: string }
+	| { kind: 'action'; id: 'send' | 'copy' | 'move-group' | 'favorite'; address: string }
 	/** 最近往来's "全部 ›" / 查看全部往来. */
 	| { kind: 'activity-all' }
 	/** 群发转账 for the open group. */

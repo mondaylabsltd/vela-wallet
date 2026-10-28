@@ -162,6 +162,7 @@
         "setContactFavorite": "Favoriyi değiştir",
         "addNetwork": "Ağ ekle",
         "setNetworkEndpoint": "Bir ağın RPC veya gezginini değiştir",
+        "setOnlyMyNode": "“Yalnızca kendi düğümümü kullan” ayarını değiştir",
         "removeNetwork": "Ağı kaldır",
         "setProviderKey": "RPC sağlayıcı anahtarını değiştir",
         "setServiceEndpoint": "Hizmet uç noktasını değiştir",

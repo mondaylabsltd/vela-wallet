@@ -39,13 +39,6 @@ const SHOWN = 'how the screen shows it';
  */
 const SPACE_OF = 'which space a network belongs to is the person’s word on what has value';
 
-/**
- * Owner decision 2026-10-28: whether account reads may ever reach a public
- * node is the person's privacy choice. An agent that could turn it off could
- * send the account's reads to nodes the person chose to keep them from.
- */
-const ONLY_MINE = 'which nodes may hear about the account is the person’s privacy choice';
-
 const DISPATCHED: Record<string, Place> = {
 	// The send form: drafting is the intents' prepare, confirming their submit.
 	'sendSession.select_token': { step: 'prepare_transfer' },
@@ -112,7 +105,7 @@ const DISPATCHED: Record<string, Place> = {
 	// was typed. The intents' input check is an agent's (a blank service URL,
 	// a key with spaces), so these stay the core's events.
 	'networkAdmin.override_blurred': { intent: 'set_network_endpoint' },
-	'networkAdmin.only_mine_changed': { none: ONLY_MINE },
+	'networkAdmin.only_mine_changed': { intent: 'set_only_my_node' },
 	'networkAdmin.providers_opened': { step: 'set_provider_key' },
 	'networkAdmin.provider_key_edited': { step: 'set_provider_key' },
 	'networkAdmin.provider_key_blurred': { intent: 'set_provider_key' },
@@ -273,6 +266,7 @@ const CALLED: Record<string, Place> = {
 /** Settings' own vocabularies, which its route turns into the calls above. */
 const SETTINGS: Record<string, Place> = {
 	'net.open-add': { step: 'add_network' },
+	'net.discard-add': { step: 'add_network' },
 	'net.search': { step: 'add_network' },
 	'net.pick-suggestion': { step: 'add_network' },
 	'net.custom-rpc': { step: 'add_network' },
@@ -285,7 +279,7 @@ const SETTINGS: Record<string, Place> = {
 	'net.select-network': { view: 'one network’s page shown' },
 	'net.detail-field': { step: 'set_network_endpoint' },
 	'net.detail-blur': { intent: 'set_network_endpoint' },
-	'net.only-mine': { none: ONLY_MINE },
+	'net.only-mine': { intent: 'set_only_my_node' },
 	'net.providers-open': { step: 'set_provider_key' },
 	'net.provider-key': { step: 'set_provider_key' },
 	'net.provider-blur': { intent: 'set_provider_key' },
@@ -341,6 +335,8 @@ const PERSON = [
 	'save_contact',
 	'save_group',
 	'set_balance_privacy',
+	// Round 3: the contact's star.
+	'set_contact_favorite',
 	'set_contact_groups',
 	'set_group_members',
 	'set_network_space',

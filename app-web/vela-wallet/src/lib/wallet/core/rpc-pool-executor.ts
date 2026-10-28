@@ -278,6 +278,12 @@ type Posted = { outcome: RpcTransportOutcome; latencyMs: number };
  * endpoint a hedge already asked, that answer is its answer — in hand or
  * still on the wire — never a second request. At most one hedge the core has
  * not reached yet is on the wire per read: one extra request, never a fan-out.
+ *
+ * home-20: a hedge that comes BACK with an answer no caller may take early (a
+ * node error the core would fail over on) is no longer on the wire, so the
+ * endpoint after it is asked at once. It used to be the read's only hedge: on
+ * a cold load a black-holed Soneium node and a refusing second one held the
+ * whole home at "Checking…" for the first node's 8 s timeout.
  */
 type Hedge = {
 	method: string;
@@ -288,6 +294,8 @@ type Hedge = {
 	current: { url: string; timer: ReturnType<typeof setTimeout> } | null;
 	/** Hedges asked and not yet reached by the core, by URL. */
 	asked: Map<string, Promise<Posted>>;
+	/** The hedge still waiting for its answer, if any: one at a time. */
+	wire: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -344,24 +352,30 @@ export function createRpcPoolExecutor(
 		const hedge = hedges.get(callId);
 		if (!hedge || hedge.current?.url !== waitingOn) return;
 		// One unreached hedge on the wire at a time.
-		if (hedge.asked.size > 0) return;
+		if (hedge.wire !== null) return;
 		const view = registry.view?.() ?? null;
 		// Banned since the pass was drawn up: not asked. An expired entry the
 		// core has not pruned yet is passed over too — a hedge is an
 		// optimisation, and the core's own sweep still reaches it.
 		const banned = new Set((view?.banned ?? []).map((ban) => ban.url));
 		const target = (view?.pending_urls[callId] ?? []).find(
-			(url) => !banned.has(url) && !skipper.skips(url, hedge.method)
+			(url) => !banned.has(url) && !hedge.asked.has(url) && !skipper.skips(url, hedge.method)
 		);
 		if (target === undefined) return;
 		const asked = ask(callId, target, hedge.method, hedge.params, undefined, hedge.timeoutMs);
 		hedge.asked.set(target, asked);
+		hedge.wire = target;
 		void asked.then(({ outcome }) => {
+			if (hedge.wire === target) hedge.wire = null;
 			// The core concluded meanwhile: a late hedge is dropped.
 			if (hedges.get(callId) !== hedge || !hedge.asked.has(target)) return;
 			if (hedgePolicy.early('rpc', hedge.method, target, outcome)?.type === 'respond') {
 				registry.answerEarly?.(callId, target);
+				return;
 			}
+			// Answered, but not with what a caller may take: the endpoint the
+			// core is waiting on is still silent, so the next one is asked now.
+			if (hedge.current !== null) fire(callId, hedge.current.url);
 		});
 	}
 
@@ -408,6 +422,8 @@ export function createRpcPoolExecutor(
 				const early = hedge?.asked.get(url);
 				if (hedge && early) {
 					hedge.asked.delete(url);
+					// The core's own ask now, not a hedge: the next may be hedged.
+					if (hedge.wire === url) hedge.wire = null;
 					arm(callId, hedge, url, hedgePolicy.afterMs());
 					const posted = await early;
 					if (hedge.current?.url === url) stopTimer(hedge);
@@ -426,7 +442,8 @@ export function createRpcPoolExecutor(
 						params: held.params,
 						timeoutMs: operation.timeout_ms,
 						current: null,
-						asked: new Map()
+						asked: new Map(),
+						wire: null
 					};
 					hedges.set(callId, hedge);
 				}

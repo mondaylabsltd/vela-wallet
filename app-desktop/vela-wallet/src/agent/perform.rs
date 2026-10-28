@@ -141,14 +141,18 @@ pub async fn perform(
             Performed::Done
         }
         Action::SetPreference { preference } => set_preference(preference, cx),
-        Action::SaveContact { address, name } => {
+        Action::SaveContact {
+            address,
+            name,
+            note,
+        } => {
             contacts(
                 cx,
                 ContactEvent::Save {
                     input: ContactSaveInput {
                         address: address.trim().to_owned(),
                         name: Some(name.trim().to_owned()),
-                        note: None,
+                        note: note.as_ref().map(|note| note.trim().to_owned()),
                         favorite: None,
                         kind: None,
                         resolved_name: None,
@@ -311,6 +315,19 @@ pub async fn perform(
             field,
             url,
         } => set_network_endpoint(*chain_id, *field, url, cx).await,
+        // Round 3 (web first): "Only use my node", as the network's switch sends it.
+        Action::SetOnlyMyNode { chain_id, on } => {
+            cx.update(|cx| {
+                net(
+                    cx,
+                    NetEvent::OnlyMineChanged {
+                        chain_id: *chain_id,
+                        on: *on,
+                    },
+                );
+            });
+            Performed::Done
+        }
         Action::RemoveNetwork { chain_id } => {
             cx.update(|cx| {
                 let view = networks(cx);

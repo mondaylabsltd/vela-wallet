@@ -947,8 +947,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
 //   cue to it, instead of a scroll that takes the person from where they
 //   were reading. 2207 + 2 = 2209 leaves, 119 branches.
-if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
+// 2337 (round 3, home & settings, 2026-10-29): + 4
+//   `settingsModals.addNetwork.discard{Title,Body,Confirm,Cancel}` (set-5:
+//   leaving the wizard with something entered asks first), + 1
+//   `settings.agent.action.setOnlyMyNode` (the agent's "Only use my node",
+//   through the person's approval), + 4 `contacts.{favoriteAdd,
+//   favoriteRemove, noteLabel, notePlaceholder}` (the book's star and note).
+//   2209 + 9 = 2218 leaves, 119 branches.
+if (PATHS.length !== 2337) fail(`expected 2337 paths (2218 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2218) fail(`expected 2218 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

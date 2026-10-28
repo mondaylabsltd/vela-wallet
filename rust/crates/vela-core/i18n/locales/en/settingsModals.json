@@ -82,7 +82,11 @@
       "checkSafe": "Safe L2 contracts",
       "checkSigner": "P-256 precompile",
       "checkRemaining": "{{count}} more contracts",
-      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally."
+      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally.",
+      "discardTitle": "Discard this network?",
+      "discardBody": "What you entered here will be lost.",
+      "discardConfirm": "Discard",
+      "discardCancel": "Keep editing"
     },
     "treasury": {
       "modalTitle": "Treasury",

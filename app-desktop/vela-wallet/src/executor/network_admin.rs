@@ -274,6 +274,11 @@ fn decode_raw_chain_data(value: &Value) -> Option<NetRawChainData> {
             })
             .unwrap_or_default(),
         testnet: object.get("testnet") == Some(&Value::Bool(true)),
+        // set-5: SLIP-44 coin type 1 marks a test network; the core reads it.
+        slip44: object
+            .get("slip44")
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok()),
     })
 }
 

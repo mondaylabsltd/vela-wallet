@@ -22,7 +22,7 @@ use vela_core::app::network_admin::{
     build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
     explorer_base_url, is_allowed_endpoint_url, is_builtin_chain, is_code_deployed,
     is_localhost_http, net_blocker, p256_call_indicates_support, parse_chain_data,
-    provider_chain_ids, public_rpc_urls, rank_search, Event, NetBlocker, NetChainIndexEntry,
+    provider_chain_ids, public_rpc_urls, rank_search, registry_says_testnet, Event, NetBlocker, NetChainIndexEntry,
     NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op,
     NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData,
     NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth, NetShellResult as Res,
@@ -97,6 +97,7 @@ fn raw_chain() -> NetRawChainData {
         rpc: vec![RPC_SLOW.to_owned(), RPC_FAST.to_owned()],
         explorers: vec!["https://scan.example".to_owned()],
         testnet: false,
+        slip44: None,
     }
 }
 
@@ -841,7 +842,9 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
                 bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/{NEW_CHAIN}"),
                 native_symbol: "TST".to_owned(),
                 added_at_iso: NOW_ISO.to_owned(),
-                is_testnet: Some(true),
+                // Nobody chose a space: the registry's word (set-5), and
+                // "Testland" carries no test network's mark — a mainnet.
+                is_testnet: Some(false),
             }]
         }]
     );
@@ -852,16 +855,19 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
     assert!(view.networks[BUILTIN_CHAINS.len()].is_custom);
 }
 
-/// Spec 105: the wizard says which space a network goes to — a testnet
-/// unless the person says mainnet — and keeps it with the record; the person
-/// can move it later, and each network's row says its space.
+/// Spec 105: the wizard says which space a network goes to — what the
+/// registry says the chain is (set-5) unless the person says otherwise — and
+/// keeps it with the record; the person can move it later, and each
+/// network's row says its space.
 #[test]
 fn an_added_network_keeps_the_space_the_person_chose() {
     let mut sut = checked_compatible();
     assert!(
-        sut.view().wizard.testnet,
-        "a testnet unless the person says otherwise"
+        !sut.view().wizard.testnet,
+        "the registry describes a mainnet: the mainnet space is preselected"
     );
+    sut.dispatch(Event::WizardTestnetChosen { testnet: true });
+    assert!(sut.view().wizard.testnet, "the person's word wins");
     sut.dispatch(Event::WizardTestnetChosen { testnet: false });
     assert!(!sut.view().wizard.testnet);
     let ops = sut.dispatch(Event::AddConfirmed {
@@ -3167,4 +3173,80 @@ fn an_rpc_edit_keeps_only_mine() {
     };
     assert_eq!(configs[0].rpc_url, "https://my-other-node.example");
     assert!(configs[0].only_mine);
+}
+
+/// set-5: the wizard preselects the space from what the chain registry says
+/// the chain is — SLIP-44's testnet coin type, or a test network's word in
+/// its name — and the person's choice still wins.
+#[test]
+fn the_wizard_preselects_the_space_the_registry_names() {
+    let space = |data: NetRawChainData| {
+        let mut sut = started();
+        select_and_resolve(&mut sut, data);
+        sut.view().wizard.testnet
+    };
+    assert!(!space(raw_chain()), "a mainnet");
+    assert!(space(NetRawChainData {
+        slip44: Some(1),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Unichain Sepolia Testnet".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Tempo Testnet Moderato".to_owned()),
+        short_name: Some("tempo-moderato".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Amoy".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        testnet: true,
+        ..raw_chain()
+    }));
+    // A word inside another is not the word: "Contestnetwork" is no testnet.
+    assert!(!space(NetRawChainData {
+        name: Some("Contestnetwork".to_owned()),
+        slip44: Some(60),
+        ..raw_chain()
+    }));
+
+    // The person's choice wins over the registry's word…
+    let mut sut = started();
+    select_and_resolve(
+        &mut sut,
+        NetRawChainData {
+            slip44: Some(1),
+            ..raw_chain()
+        },
+    );
+    assert!(sut.view().wizard.testnet);
+    sut.dispatch(Event::WizardTestnetChosen { testnet: false });
+    assert!(!sut.view().wizard.testnet);
+    // …for that pick: picking a chain again asks the registry again.
+    select_and_resolve(
+        &mut sut,
+        NetRawChainData {
+            slip44: Some(1),
+            ..raw_chain()
+        },
+    );
+    assert!(sut.view().wizard.testnet);
+}
+
+#[test]
+fn registry_says_testnet_reads_the_document() {
+    assert!(!registry_says_testnet(&raw_chain()));
+    assert!(registry_says_testnet(&NetRawChainData {
+        slip44: Some(1),
+        ..raw_chain()
+    }));
+    assert!(registry_says_testnet(&NetRawChainData {
+        short_name: Some("arb-sepolia".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(!registry_says_testnet(&NetRawChainData::default()));
 }

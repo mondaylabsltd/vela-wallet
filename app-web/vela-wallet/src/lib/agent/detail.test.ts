@@ -87,6 +87,22 @@ describe('an approval’s detail, in the person’s words', () => {
 		).toBe(`Gnosis · ${en.fields.rpc} → https://rpc.example`);
 	});
 
+	it('says "Only use my node" either way, as the network’s switch names it (round 3)', () => {
+		const en = resolveAgentMessages('en');
+		expect(detail({ type: 'set_only_my_node', chain_id: 100, on: false })).toBe(
+			`Gnosis · ${en.onlyMine}: ${en.off}`
+		);
+		expect(detail({ type: 'set_only_my_node', chain_id: 100, on: true })).toBe(
+			`Gnosis · ${en.onlyMine}: ${en.on}`
+		);
+		expect(en.actions.set_only_my_node).toBeTruthy();
+		expect(en.actions.set_only_my_node).not.toContain('settings.agent');
+		const zh = resolveAgentMessages('zh');
+		expect(detail({ type: 'set_only_my_node', chain_id: 100, on: true }, context('zh'))).toBe(
+			`Gnosis · ${zh.onlyMine}：${zh.on}`
+		);
+	});
+
 	it('names a network by its name, or as "Network 59144" — never "chain 59144"', () => {
 		expect(detail({ type: 'remove_network', chain_id: 100 })).toBe('Gnosis');
 		expect(detail({ type: 'add_network', chain_id: 59144, rpc_url: null })).toBe('Network 59144');

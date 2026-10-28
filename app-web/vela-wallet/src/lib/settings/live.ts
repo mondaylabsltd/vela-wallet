@@ -326,7 +326,29 @@ function suggestionRow(entry: NetChainIndexEntry, m: SettingsMessages): NetworkR
 	};
 }
 
+/**
+ * set-5: whether the wizard holds something the person entered — a search, a
+ * chosen network on its way through the check, an RPC typed for it. An
+ * emptied wizard (after an add, or never used) holds nothing.
+ */
+export function addNetworkEntered(wizard: NetWizardView): boolean {
+	return wizard.phase !== 'idle' || wizard.query.trim() !== '' || wizard.custom_rpc.trim() !== '';
+}
+
 export function liveAddNetwork(
+	wizard: NetWizardView,
+	m: SettingsMessages,
+	space?: NetworkSpaceMessages,
+	added?: NetNetworkRow
+): AddNetworkModel {
+	const model = addNetworkBody(wizard, m, space, added);
+	// set-5: leaving with something entered asks before it is thrown away.
+	if (!addNetworkEntered(wizard)) return model;
+	const { title, body, confirm, cancel } = m.addNetwork.discard;
+	return { ...model, discard: { title, body, confirm, cancel, tone: 'danger' } };
+}
+
+function addNetworkBody(
 	wizard: NetWizardView,
 	m: SettingsMessages,
 	space?: NetworkSpaceMessages,

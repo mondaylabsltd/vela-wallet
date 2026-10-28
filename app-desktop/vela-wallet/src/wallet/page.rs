@@ -2900,6 +2900,7 @@ impl WalletPage {
                     Action::SaveContact {
                         address: form.address,
                         name: form.name.trim().to_owned(),
+                        note: None,
                     },
                     cx,
                     move |_, cx| {

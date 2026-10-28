@@ -24,6 +24,9 @@ export interface ContactFormCopy {
 	duplicateAddress?: string;
 	/** The save button's words when it updates that contact. */
 	updateExisting?: string;
+	/** Round 3: the note field (live only — the gallery's form has two fields). */
+	noteLabel?: string;
+	notePlaceholder?: string;
 }
 
 export interface GroupFormCopy {
@@ -37,6 +40,24 @@ export interface GroupFormCopy {
 export interface ContactDraft {
 	name: string;
 	address: string;
+	/** The note as typed, `''` for none; absent where the form has no note field. */
+	note?: string;
+}
+
+/**
+ * The longest note a contact may carry — the core's
+ * (`intents::NOTE_MAX_CHARS`), which refuses a longer one.
+ */
+export const NOTE_MAX_CHARS = 280;
+
+/** Control characters other than a line break or a tab, and bidi controls. */
+const UNSEEN_IN_NOTE =
+	// eslint-disable-next-line no-control-regex -- control characters are what it removes
+	/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+
+/** A typed note as it is saved: lines kept, what the core refuses left out, trimmed. */
+export function cleanNote(note: string): string {
+	return note.replace(UNSEEN_IN_NOTE, '').trim();
 }
 
 /**

@@ -50,6 +50,35 @@ fn examine_tells_missing_from_already_from_go() {
     assert_eq!(code(&examine(&delete, &unread)), Some(ReasonCode::NotReady));
 }
 
+/// A save that carries a note holds once the note is there too; one that
+/// carries none leaves the note alone (round 3, the book's note field).
+#[test]
+fn a_contacts_note_is_part_of_its_save() {
+    let w = world(book(
+        json!([{ "address": ALICE, "name": "Alice", "note": "pays in USDC" }]),
+        json!([]),
+    ));
+    let save = |note: Option<&str>| {
+        let mut asked = json!({ "type": "save_contact", "address": ALICE, "name": "Alice" });
+        if let Some(note) = note {
+            asked["note"] = json!(note);
+        }
+        action(asked)
+    };
+    assert_eq!(examine(&save(None), &w), Examined::Already);
+    assert_eq!(examine(&save(Some("pays in USDC")), &w), Examined::Already);
+    assert_eq!(examine(&save(Some("pays in DAI")), &w), Examined::Go);
+    assert_eq!(examine(&save(Some("")), &w), Examined::Go, "clearing it");
+
+    let mut base = baseline(&save(Some("")), &w);
+    assert_eq!(verdict(&save(Some("")), &w, &mut base), Verdict::NotYet);
+    let cleared = world(book(
+        json!([{ "address": ALICE, "name": "Alice", "note": "" }]),
+        json!([]),
+    ));
+    assert_eq!(verdict(&save(Some("")), &cleared, &mut base), Verdict::Held);
+}
+
 #[test]
 fn a_new_groups_change_is_told_from_one_already_named_so() {
     let save = action(json!({ "type": "save_group", "id": null, "name": "Work" }));
@@ -121,6 +150,54 @@ fn an_rpc_for_another_chain_is_refused_and_one_being_checked_is_not_yet() {
     assert_eq!(
         code(&examine(&remove, &row(json!({})))),
         Some(ReasonCode::Refused)
+    );
+}
+
+/// "Only use my node", for the agent (round 3): it reads the switch, and a
+/// change either way is the person's to approve (`Risk::Manage`), on a
+/// network whose RPC is the person's own — nowhere else is there a node to
+/// keep to.
+#[test]
+fn only_my_node_is_read_and_changed_only_where_the_person_has_a_node() {
+    let row = |own_rpc: bool, only_mine: bool| {
+        world(json!({
+            "agent_wallets": [ALICE],
+            "networks": { "networks": [{
+                "chain_id": 100, "display_name": "Gnosis", "rpc_url": "https://node.example/k",
+                "explorer_url": "", "own_rpc": own_rpc, "only_mine": only_mine
+            }] }
+        }))
+    };
+    let on = action(json!({ "type": "set_only_my_node", "chain_id": 100, "on": true }));
+    let off = action(json!({ "type": "set_only_my_node", "chain_id": 100, "on": false }));
+
+    // Read: whose node, and whether it is the only one.
+    let state = agent_state(&row(true, true), "settings", &json!([]), &json!([]));
+    assert_eq!(state["networks"]["chains"][0]["own_node"], true);
+    assert_eq!(state["networks"]["chains"][0]["only_my_node"], true);
+    let state = agent_state(&row(false, true), "settings", &json!([]), &json!([]));
+    assert_eq!(
+        state["networks"]["chains"][0]["only_my_node"], false,
+        "a saved switch binds nothing without the person's node"
+    );
+
+    // Changed: either way, where there is a node of the person's own.
+    assert_eq!(examine(&on, &row(true, false)), Examined::Go);
+    assert_eq!(examine(&off, &row(true, true)), Examined::Go);
+    assert_eq!(examine(&on, &row(true, true)), Examined::Already);
+    assert_eq!(code(&examine(&on, &row(false, false))), Some(ReasonCode::Refused));
+    let elsewhere = action(json!({ "type": "set_only_my_node", "chain_id": 1, "on": true }));
+    assert_eq!(code(&examine(&elsewhere, &row(true, false))), Some(ReasonCode::NotFound));
+    assert_eq!(world_needs(&on), &["networks"]);
+
+    let mut base = baseline(&on, &row(true, false));
+    assert_eq!(verdict(&on, &row(true, false), &mut base), Verdict::NotYet);
+    assert_eq!(verdict(&on, &row(true, true), &mut base), Verdict::Held);
+
+    // The approval names the network and the way it goes.
+    assert_eq!(
+        approval_detail(&off).as_deref(),
+        Some("chain 100 · public nodes too")
     );
 }
 

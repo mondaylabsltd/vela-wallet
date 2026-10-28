@@ -162,6 +162,7 @@
         "setContactFavorite": "お気に入りを変更",
         "addNetwork": "ネットワークを追加",
         "setNetworkEndpoint": "ネットワークのRPC・エクスプローラーを変更",
+        "setOnlyMyNode": "「自分のノードだけを使う」を変更",
         "removeNetwork": "ネットワークを削除",
         "setProviderKey": "RPCプロバイダーのキーを変更",
         "setServiceEndpoint": "サービスのエンドポイントを変更",

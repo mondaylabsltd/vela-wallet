@@ -36,6 +36,13 @@ export interface ContactsMessages {
 	saveToContacts: string;
 	/** The add/edit form (live wiring, spec 024) — corpus keys from 018. */
 	editTitle: string;
+	/** The book's favourites, first (round 3) — and the detail's star, both ways. */
+	sectionFavorites: string;
+	favoriteAdd: string;
+	favoriteRemove: string;
+	/** The contact's note: the form's field and the detail's line. */
+	noteLabel: string;
+	notePlaceholder: string;
 	nameLabel: string;
 	namePlaceholder: string;
 	addressPlaceholder: string;
@@ -156,6 +163,11 @@ export const CONTACTS_KEYS = [
 	'contacts.addTitle',
 	'contacts.saveToContacts',
 	'contacts.edit',
+	'contacts.sectionFavorites',
+	'contacts.favoriteAdd',
+	'contacts.favoriteRemove',
+	'contacts.noteLabel',
+	'contacts.notePlaceholder',
 	'contacts.empty',
 	'contacts.emptyHint',
 	'contacts.noResults',

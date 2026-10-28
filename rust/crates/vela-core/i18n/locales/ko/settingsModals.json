@@ -82,7 +82,11 @@
       "checkSafe": "Safe L2 컨트랙트",
       "checkSigner": "P-256 프리컴파일",
       "checkRemaining": "나머지 컨트랙트 {{count}}개",
-      "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다."
+      "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다.",
+      "discardTitle": "이 네트워크 추가를 취소할까요?",
+      "discardBody": "여기에 입력한 내용이 사라집니다.",
+      "discardConfirm": "취소하기",
+      "discardCancel": "계속 편집"
     },
     "treasury": {
       "modalTitle": "트레저리",

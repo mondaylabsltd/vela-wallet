@@ -162,6 +162,7 @@
         "setContactFavorite": "즐겨찾기 변경",
         "addNetwork": "네트워크 추가",
         "setNetworkEndpoint": "네트워크 RPC 또는 탐색기 변경",
+        "setOnlyMyNode": "‘내 노드만 사용’ 변경",
         "removeNetwork": "네트워크 제거",
         "setProviderKey": "RPC 제공자 키 변경",
         "setServiceEndpoint": "서비스 엔드포인트 변경",

@@ -162,6 +162,7 @@
         "setContactFavorite": "Ubah favorit",
         "addNetwork": "Tambah jaringan",
         "setNetworkEndpoint": "Ubah RPC atau explorer jaringan",
+        "setOnlyMyNode": "Ubah “Hanya pakai node saya”",
         "removeNetwork": "Hapus jaringan",
         "setProviderKey": "Ubah kunci penyedia RPC",
         "setServiceEndpoint": "Ubah endpoint layanan",

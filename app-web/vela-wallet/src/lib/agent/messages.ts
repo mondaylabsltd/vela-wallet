@@ -46,4 +46,6 @@ export interface AgentMessages {
 	services: Record<string, string>;
 	/** A network's two addresses by their field (`rpc`, `explorer`). */
 	fields: Record<string, string>;
+	/** "Only use my node", as the network's switch in Settings names it. */
+	onlyMine: string;
 }

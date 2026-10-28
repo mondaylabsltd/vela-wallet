@@ -1150,6 +1150,34 @@ pub struct NetRawChainData {
     pub explorers: Vec<String>,
     #[serde(default)]
     pub testnet: bool,
+    /// The document's `slip44`, verbatim. `1` is SLIP-44's "Testnet (all
+    /// coins)", the registry's mark on nearly every test network (set-5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub slip44: Option<u32>,
+}
+
+/// The words a test network's name carries in the chain registry when its
+/// `slip44` does not say so (Tempo's "Moderato", Unichain Sepolia): a
+/// testnet, a Sepolia, Goerli, Holesky or Hoodi child, a devnet, Polygon's
+/// Amoy. Matched as whole words, case-insensitively.
+const TESTNET_NAME_WORDS: [&str; 8] = [
+    "testnet", "sepolia", "goerli", "holesky", "hoodi", "devnet", "amoy", "moderato",
+];
+
+/// Whether the registry describes a test network (set-5): its own `testnet`
+/// flag, SLIP-44 coin type 1, or a test network's word in its name or short
+/// name. What the Add Network wizard preselects — the person still chooses.
+#[must_use]
+pub fn registry_says_testnet(data: &NetRawChainData) -> bool {
+    let named = |text: &Option<String>| {
+        text.as_deref().is_some_and(|text| {
+            text.to_lowercase()
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|word| TESTNET_NAME_WORDS.contains(&word))
+        })
+    };
+    data.testnet || data.slip44 == Some(1) || named(&data.name) || named(&data.short_name)
 }
 
 /// Parsed chain metadata — mirror of `ChainInfo` (chain-registry.ts:17-32).
@@ -1729,7 +1757,7 @@ struct Wizard {
     /// The scan path's `added_at_iso` stamp, carried on its request event.
     auto_now_iso: String,
     /// The person's choice of space for the network (spec 105); `None` until
-    /// they make one, read as a testnet.
+    /// they make one, read as what the registry says the chain is (set-5).
     testnet: Option<bool>,
 }
 
@@ -1960,8 +1988,9 @@ pub struct NetWizardView {
     pub rpc_field_label_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
-    /// The space the network goes to (spec 105): a testnet, unless the
-    /// person chose mainnet ([`Event::WizardTestnetChosen`]).
+    /// The space the network goes to (spec 105): the person's choice
+    /// ([`Event::WizardTestnetChosen`]), else what the chain registry says the
+    /// chain is (set-5), else a testnet.
     #[serde(default)]
     pub testnet: bool,
 }
@@ -2380,6 +2409,10 @@ fn select_chain(
     }
     if !keep_custom_rpc {
         model.wizard.custom_rpc.clear();
+        // A space chosen for another chain is not this one's (set-5): the
+        // registry's word on the new pick is preselected again. A re-check of
+        // the same pick (`keep_custom_rpc`) keeps the person's choice.
+        model.wizard.testnet = None;
     }
     model.wizard.suggestions.clear();
     model.wizard.chain_info = None;
@@ -2445,7 +2478,7 @@ pub fn parse_chain_data(
         // trailing slash, a URL no other network mark used.
         logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, requested_chain_id)
             .unwrap_or_default(),
-        is_testnet: data.testnet,
+        is_testnet: registry_says_testnet(data),
     }
 }
 
@@ -2979,11 +3012,19 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
 /// The `CustomNetwork` record both entry points build (SettingsScreen.tsx:
 /// 653-667 and `chainInfoToCustomNetwork` — identical given the parser's
 /// defaults).
-/// The space the wizard's network goes to: the person's choice, else a
-/// testnet — the registry does not say (its `testnet` is unset on every
-/// chain document), and a network nobody vouched for never counts as value.
+/// The space the wizard's network goes to: the person's choice; else what
+/// the chain registry says the chain is (set-5: a mainnet preselected as a
+/// testnet read as the wallet not knowing Gnosis from Chiado); else, with no
+/// registry document to go by, a testnet — a network nobody vouched for
+/// never counts as value (owner, 2026-10-27).
 fn wizard_testnet(model: &Model) -> bool {
-    model.wizard.testnet.unwrap_or(true)
+    model.wizard.testnet.unwrap_or_else(|| {
+        model
+            .wizard
+            .chain_info
+            .as_ref()
+            .is_none_or(|info| info.is_testnet)
+    })
 }
 
 fn build_custom_network(

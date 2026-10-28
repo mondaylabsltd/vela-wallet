@@ -82,7 +82,11 @@
       "checkSafe": "Safe L2 合約",
       "checkSigner": "P-256 預編譯合約",
       "checkRemaining": "其餘 {{count}} 項合約",
-      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
+      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
+      "discardTitle": "放棄新增這個網路？",
+      "discardBody": "你在這裡輸入的內容將會遺失。",
+      "discardConfirm": "放棄",
+      "discardCancel": "繼續編輯"
     },
     "treasury": {
       "modalTitle": "金庫",

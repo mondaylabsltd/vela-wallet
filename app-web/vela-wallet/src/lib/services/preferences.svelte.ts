@@ -34,7 +34,6 @@
  */
 import { browser } from '$app/environment';
 import { loadCore, prefsMigrations, prefsRead } from '$lib/core/client';
-import { languageCookie } from '$lib/i18n/locales';
 
 /** What a person picks in 外观. `system` pins nothing and follows the OS. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -120,21 +119,6 @@ function remove(key: string): void {
 		localStorage.removeItem(key);
 	} catch {
 		/* as above */
-	}
-}
-
-/**
- * Tell `/` about the language (set-12): the Worker there cannot read
- * localStorage, so a pin also rides in a cookie (`languageCookie`), and
- * `auto` removes it.
- */
-function stateLanguageCookie(language: string): void {
-	if (!browser) return;
-	const secure = typeof location !== 'undefined' && location.protocol === 'https:';
-	try {
-		document.cookie = languageCookie(language, secure);
-	} catch {
-		/* No cookies here: `/` negotiates, as it did before there was a pin. */
 	}
 }
 
@@ -287,9 +271,6 @@ class Preferences {
 	#adopt(record: PrefsRecord): void {
 		this.theme = record.theme;
 		this.language = record.language;
-		// Every read restates the pin for `/`, so a language pinned before the
-		// cookie existed reaches it on the next visit.
-		stateLanguageCookie(record.language);
 		this.textScale = record.textScale;
 		this.numberFormat = record.numberFormat;
 		this.dateFormat = record.dateFormat;
@@ -336,7 +317,6 @@ class Preferences {
 		this.language = value;
 		this.#chosen = true;
 		write(PREF_KEYS.language, value);
-		stateLanguageCookie(value);
 	}
 
 	setTextScale(value: TextScaleLevel): void {

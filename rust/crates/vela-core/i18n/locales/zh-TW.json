@@ -162,6 +162,7 @@
         "setContactFavorite": "更改收藏",
         "addNetwork": "新增網路",
         "setNetworkEndpoint": "更改網路的 RPC 或瀏覽器",
+        "setOnlyMyNode": "更改「只使用我的節點」",
         "removeNetwork": "移除網路",
         "setProviderKey": "更改 RPC 服務商金鑰",
         "setServiceEndpoint": "更改服務端點",

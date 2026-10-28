@@ -82,7 +82,11 @@
       "checkSafe": "Kontrak Safe L2",
       "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} kontrak lainnya",
-      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
+      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
+      "discardTitle": "Buang jaringan ini?",
+      "discardBody": "Yang Anda masukkan di sini akan hilang.",
+      "discardConfirm": "Buang",
+      "discardCancel": "Lanjut mengedit"
     },
     "treasury": {
       "modalTitle": "Treasury",

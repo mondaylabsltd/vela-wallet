@@ -82,7 +82,11 @@
       "checkSafe": "Contratos Safe L2",
       "checkSigner": "Precompilado P-256",
       "checkRemaining": "otros {{count}} contratos",
-      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
+      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
+      "discardTitle": "¿Descartar esta red?",
+      "discardBody": "Se perderá lo que ingresaste aquí.",
+      "discardConfirm": "Descartar",
+      "discardCancel": "Seguir editando"
     },
     "treasury": {
       "modalTitle": "Tesorería",

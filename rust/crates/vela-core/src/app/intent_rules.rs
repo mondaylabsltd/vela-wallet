@@ -93,6 +93,8 @@ pub struct ContactFacts {
     pub address: String,
     pub name: Option<String>,
     pub favorite: bool,
+    /// The person's note; an empty one is no note.
+    pub note: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -172,6 +174,10 @@ pub struct NetworkFacts {
     pub rpc_save_deferred: bool,
     /// Its space (spec 105).
     pub is_testnet: bool,
+    /// Its saved RPC is the person's own node (`NetNetworkRow::own_rpc`).
+    pub own_rpc: bool,
+    /// "Only use my node" (`NetNetworkRow::only_mine`).
+    pub only_mine: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
@@ -630,6 +636,12 @@ fn contact<'a>(book: &'a ContactsFacts, address: &str) -> Option<&'a ContactFact
         .find(|entry| same(&entry.address, address))
 }
 
+/// Whether a contact's note is what a save asked for: nothing asked, it
+/// stands as it is; asked, the same text — an empty note and none are one.
+fn note_holds(stored: Option<&str>, asked: Option<&str>) -> bool {
+    asked.is_none_or(|asked| stored.unwrap_or("").trim() == asked.trim())
+}
+
 fn group<'a>(book: &'a ContactsFacts, id: &str) -> Option<&'a GroupFacts> {
     book.groups.iter().find(|entry| entry.id == id)
 }
@@ -977,9 +989,13 @@ fn verdict_explore(action: &Action, explore: Option<&ExploreFacts>) -> Verdict {
 
 fn examine_book(action: &Action, book: &ContactsFacts) -> Examined {
     match action {
-        Action::SaveContact { address, name } => {
-            go_unless(contact(book, address).and_then(|c| c.name.as_deref()) == Some(name.trim()))
-        }
+        Action::SaveContact {
+            address,
+            name,
+            note,
+        } => go_unless(contact(book, address).is_some_and(|c| {
+            c.name.as_deref() == Some(name.trim()) && note_holds(c.note.as_deref(), note.as_deref())
+        })),
         Action::DeleteContact { address } => match contact(book, address) {
             Some(_) => Examined::Go,
             None => refused(ReasonCode::NotFound, "no contact has that address"),
@@ -1041,6 +1057,19 @@ fn examine_networks(action: &Action, networks: &NetworksFacts) -> Examined {
                 "the wallet has no network with that chain id",
             ),
             Some(now) => go_unless(now == url.trim()),
+        },
+        Action::SetOnlyMyNode { chain_id, on } => match network(networks, *chain_id) {
+            None => refused(
+                ReasonCode::NotFound,
+                "the wallet has no network with that chain id",
+            ),
+            // Only a network read through the person's own node has one to keep
+            // to; the switch is not offered anywhere else.
+            Some(row) if !row.own_rpc => refused(
+                ReasonCode::Refused,
+                "this network's RPC is not the person's own node: set one first (set_network_endpoint)",
+            ),
+            Some(row) => go_unless(row.only_mine == *on),
         },
         Action::RemoveNetwork { chain_id } => match network(networks, *chain_id) {
             None => refused(
@@ -1165,6 +1194,7 @@ pub fn examine(action: &Action, world: &World) -> Examined {
         Action::SetNetworkSpace { space } => go_unless(world.network_space == *space),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
+        | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. } => match &world.networks {
             None => not_ready("the network list"),
             Some(networks) => examine_networks(action, networks),
@@ -1219,9 +1249,13 @@ fn verdict_book(action: &Action, book: Option<&ContactsFacts>, baseline: &Baseli
         return Verdict::NotYet;
     };
     match action {
-        Action::SaveContact { address, name } => {
-            held(contact(book, address).and_then(|c| c.name.as_deref()) == Some(name.trim()))
-        }
+        Action::SaveContact {
+            address,
+            name,
+            note,
+        } => held(contact(book, address).is_some_and(|c| {
+            c.name.as_deref() == Some(name.trim()) && note_holds(c.note.as_deref(), note.as_deref())
+        })),
         Action::DeleteContact { address } => held(contact(book, address).is_none()),
         Action::SaveGroup { id, name } => {
             let name = name.trim();
@@ -1284,6 +1318,9 @@ fn verdict_networks(action: &Action, networks: Option<&NetworksFacts>) -> Verdic
                 return Verdict::NotYet;
             }
             held(network_field(networks, *chain_id, *field) == Some(url.trim()))
+        }
+        Action::SetOnlyMyNode { chain_id, on } => {
+            held(network(networks, *chain_id).is_some_and(|row| row.only_mine == *on))
         }
         Action::RemoveNetwork { chain_id } => {
             held(!network(networks, *chain_id).is_some_and(|row| row.is_custom))
@@ -1382,6 +1419,7 @@ pub fn verdict(action: &Action, world: &World, baseline: &mut Baseline) -> Verdi
         Action::SetNetworkSpace { space } => held(world.network_space == *space),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
+        | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. }
         | Action::SetProviderKey { .. }
         | Action::SetServiceEndpoint { .. }
@@ -1436,6 +1474,7 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         Action::SetNetworkSpace { .. } => &["network_space"],
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
+        | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. }
         | Action::SetProviderKey { .. }
         | Action::SetServiceEndpoint { .. }
@@ -1755,6 +1794,12 @@ struct ChainOut<'a> {
     added_by_person: bool,
     rpc_url: String,
     explorer_url: String,
+    /// The RPC is the person's own node — the one "Only use my node" keeps to.
+    own_node: bool,
+    /// "Only use my node": nothing about the account goes to public nodes
+    /// here. Readable; changed only with the person's approval
+    /// (`set_only_my_node`).
+    only_my_node: bool,
 }
 
 #[derive(Serialize)]
@@ -1836,6 +1881,10 @@ pub fn approval_detail(action: &Action) -> Option<String> {
             url,
         } => Some(format!("chain {chain_id} · {}{}", word(field), to(url))),
         Action::RemoveNetwork { chain_id } => Some(format!("chain {chain_id}")),
+        Action::SetOnlyMyNode { chain_id, on } => Some(format!(
+            "chain {chain_id} · {}",
+            if *on { "only my node" } else { "public nodes too" }
+        )),
         Action::SetProviderKey { provider, key } => {
             let key = key.trim();
             let tail: String = key
@@ -2139,6 +2188,8 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     added_by_person: row.is_custom,
                     rpc_url: redact_url(&row.rpc_url),
                     explorer_url: redact_url(&row.explorer_url),
+                    own_node: row.own_rpc,
+                    only_my_node: row.own_rpc && row.only_mine,
                 })
                 .collect(),
             providers: n
