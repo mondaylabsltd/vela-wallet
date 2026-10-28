@@ -250,7 +250,8 @@
         "feeRetrying": "아직 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중…",
         "feeWouldFail": "이대로 보내면 실패합니다.",
         "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…",
-        "simChecking": "이 거래의 결과를 확인 중…"
+        "simChecking": "이 거래의 결과를 확인 중…",
+        "messageUnread": "메시지가 이어집니다. 끝까지 스크롤해 읽어 주세요"
       },
       "labelAddsToAllowance": "허용 한도에 추가",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "먼저 ‘모두 허용’ 또는 ‘취소’를 선택하세요",
         "labelSource": "해석 출처",
         "byVela": "Vela (거래 자체에서)"
-      }
+      },
+      "hiddenChars": "이 요청에는 보이지 않거나 글자 방향을 바꾸는 문자가 있습니다. ⟨U+…⟩로 표시했습니다.",
+      "blankLines": "⋯ 빈 줄: {{lines}} ⋯"
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

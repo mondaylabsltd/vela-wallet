@@ -5490,16 +5490,18 @@ export function signAnswered(payload_json) {
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
- * every client reads: the four views' JSON, the speed in force, a
+ * every client reads: the four views' JSON, the speed in force, whether the
+ * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
  * @param {string} sign_json
  * @param {string} guard_json
  * @param {string} clear_json
  * @param {string | null} [fee_json]
  * @param {string | null} [speed_tier]
+ * @param {boolean | null} [message_unread]
  * @returns {string | undefined}
  */
-export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier) {
+export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier, message_unread) {
     const ptr0 = passStringToWasm0(sign_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(guard_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -5510,7 +5512,7 @@ export function signConfirmState(sign_json, guard_json, clear_json, fee_json, sp
     var len3 = WASM_VECTOR_LEN;
     var ptr4 = isLikeNone(speed_tier) ? 0 : passStringToWasm0(speed_tier, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len4 = WASM_VECTOR_LEN;
-    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, isLikeNone(message_unread) ? 0xFFFFFF : message_unread ? 1 : 0);
     let v6;
     if (ret[0] !== 0) {
         v6 = getStringFromWasm0(ret[0], ret[1]).slice();

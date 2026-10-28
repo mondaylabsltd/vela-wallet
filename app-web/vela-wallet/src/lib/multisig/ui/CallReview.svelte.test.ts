@@ -17,7 +17,10 @@ import { APPROVE_MAX, BLIND, CHAIN, MULTISIG, read } from '../core/call-review.t
 import CallReview from './CallReview.svelte';
 
 /** Every message is its own name: `m.warnUnlimited` reads "warnUnlimited". */
-const m = new Proxy({} as SigningMessages, { get: (_, key) => String(key) });
+const names = { get: (_: object, key: string | symbol) => String(key) };
+const m = new Proxy({} as SigningMessages, {
+	get: (_, key) => (key === 'certain' ? new Proxy({}, names) : String(key))
+});
 
 function shown(call: typeof APPROVE_MAX) {
 	const reading = new CallReading(CHAIN, MULTISIG, call);

@@ -3567,6 +3567,8 @@ mod tests {
             siwe: None,
             binding: None,
             danger_class: danger,
+            display_lines: Vec::new(),
+            has_invisible_chars: false,
         }
     }
 
@@ -3618,6 +3620,7 @@ mod tests {
                             key: "spender".to_owned(),
                             value: "0xdddd".to_owned(),
                         }],
+                        has_invisible_chars: false,
                     }),
                     ..pristine()
                 },

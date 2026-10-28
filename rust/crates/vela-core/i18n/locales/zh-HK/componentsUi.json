@@ -250,7 +250,8 @@
         "feeRetrying": "暫時計唔到費用，正在自動重試…",
         "feeWouldFail": "照而家咁發出會失敗。",
         "previousPending": "正在等這個網絡上的上一筆交易完成…",
-        "simChecking": "正在查呢筆交易會做乜…"
+        "simChecking": "正在查呢筆交易會做乜…",
+        "messageUnread": "訊息未完 — 請捲動閱讀全文"
       },
       "labelAddsToAllowance": "增加授權額度",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "請先選擇「全部允許」或「撤銷」",
         "labelSource": "解讀來源",
         "byVela": "Vela，從交易本身"
-      }
+      },
+      "hiddenChars": "此請求含有隱藏或會改變文字方向的字元 — 已顯示為 ⟨U+…⟩。",
+      "blankLines": "⋯ 空白行：{{lines}} ⋯"
     },
     "currency": {
       "title": "顯示貨幣",

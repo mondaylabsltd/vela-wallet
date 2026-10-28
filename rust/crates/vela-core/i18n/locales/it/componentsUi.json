@@ -250,7 +250,8 @@
         "feeRetrying": "Non è ancora stato possibile calcolare la commissione. Nuovo tentativo automatico…",
         "feeWouldFail": "Così com'è, fallirebbe.",
         "previousPending": "In attesa della tua transazione precedente su questa rete…",
-        "simChecking": "Verifica di cosa fa questa transazione…"
+        "simChecking": "Verifica di cosa fa questa transazione…",
+        "messageUnread": "Il messaggio continua: scorri per leggerlo tutto"
       },
       "labelAddsToAllowance": "Si aggiunge all'autorizzazione",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "Scegli prima Consenti tutto o Revoca",
         "labelSource": "Letto da",
         "byVela": "Vela, dalla transazione"
-      }
+      },
+      "hiddenChars": "Questa richiesta contiene caratteri nascosti o che cambiano la direzione del testo: sono mostrati come ⟨U+…⟩.",
+      "blankLines": "⋯ righe vuote: {{lines}} ⋯"
     },
     "signingApprove": {
       "resultingTotal": "Nuovo limite totale",

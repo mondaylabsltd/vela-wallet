@@ -17,9 +17,9 @@ use serde_json::json;
 use support::DomainDriver;
 use vela_core::abi::compute_selector;
 use vela_core::app::clear_signing::{
-    ClearConfirm, ClearFieldRole, ClearLineSource, ClearLocale, ClearOperation as Op,
-    ClearProbe, ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignResult,
-    ClearSigning, ClearSigningView, ClearSurface, ClearTerm, Event,
+    ClearConfirm, ClearFieldRole, ClearLineSource, ClearLocale, ClearOperation as Op, ClearProbe,
+    ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignResult, ClearSigning,
+    ClearSigningView, ClearSurface, ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -86,11 +86,13 @@ impl Shell {
                 probe: ClearProbe::Code,
                 chain_id: *chain_id,
                 to: address.clone(),
-                result: Some(if self.empty.iter().any(|a| a.eq_ignore_ascii_case(address)) {
-                    "0x".to_owned()
-                } else {
-                    "0x6080604052".to_owned()
-                }),
+                result: Some(
+                    if self.empty.iter().any(|a| a.eq_ignore_ascii_case(address)) {
+                        "0x".to_owned()
+                    } else {
+                        "0x6080604052".to_owned()
+                    },
+                ),
                 rpc_error: false,
             },
             Op::RpcEthCall {
@@ -99,7 +101,10 @@ impl Shell {
                 probe,
                 ..
             } => {
-                let token = self.tokens.iter().find(|(a, _, _)| a.eq_ignore_ascii_case(to));
+                let token = self
+                    .tokens
+                    .iter()
+                    .find(|(a, _, _)| a.eq_ignore_ascii_case(to));
                 let result = match (probe, token) {
                     (ClearProbe::Decimals, Some((_, decimals, _))) => {
                         Some(format!("0x{}", num(u128::from(*decimals))))
@@ -217,9 +222,15 @@ fn a_description_cannot_rename_an_approval() {
         tokens: vec![(FAKE_USDC, 6, "USDC")],
         ..Shell::default()
     };
-    let view = read(&shell, tx(100, FAKE_USDC, &approve_data(SWEEPER, MAX), "0x0", true));
+    let view = read(
+        &shell,
+        tx(100, FAKE_USDC, &approve_data(SWEEPER, MAX), "0x0", true),
+    );
     let r = result(&view);
-    assert_eq!(r.intent, "Approve", "the bytes' action, not the description's");
+    assert_eq!(
+        r.intent, "Approve",
+        "the bytes' action, not the description's"
+    );
     assert_eq!(r.provenance, ClearProvenance::Standard);
     assert_eq!(r.reading.source, ClearLineSource::Vela);
     assert_eq!(
@@ -233,7 +244,10 @@ fn a_description_cannot_rename_an_approval() {
         .iter()
         .find(|f| f.role == ClearFieldRole::Spender)
         .expect("the spender is drawn");
-    assert_eq!(spender.label, "Spender", "the description cannot relabel a spender");
+    assert_eq!(
+        spender.label, "Spender",
+        "the description cannot relabel a spender"
+    );
     assert_eq!(spender.address.as_deref(), Some(SWEEPER));
     assert!(
         r.fields.iter().any(|f| f.warning && f.value == "Unlimited"),
@@ -275,11 +289,24 @@ fn a_description_that_agrees_raises_nothing() {
     };
     let r = result(&read(
         &shell,
-        tx(100, GNOSIS_USDC, &approve_data(REWARDS, &num(100_000_000)), "0x0", false),
+        tx(
+            100,
+            GNOSIS_USDC,
+            &approve_data(REWARDS, &num(100_000_000)),
+            "0x0",
+            false,
+        ),
     ));
     assert!(r.reading.contradictions.is_empty());
-    assert_eq!(r.risk, ClearRisk::Caution, "an approval is caution, no more");
-    assert_eq!(r.fields[0].value, "100 USDC", "the registry's token, priced");
+    assert_eq!(
+        r.risk,
+        ClearRisk::Caution,
+        "an approval is caution, no more"
+    );
+    assert_eq!(
+        r.fields[0].value, "100 USDC",
+        "the registry's token, priced"
+    );
     assert_eq!(r.fields[0].usd_value, Some(100.0));
 }
 
@@ -288,7 +315,12 @@ fn a_description_that_agrees_raises_nothing() {
 #[test]
 fn a_description_cannot_borrow_the_wallets_words() {
     let sig = "sweepTokens_1y1r(address token,uint256 amount)";
-    let data = format!("{}{}{}", sel(sig), word(GNOSIS_USDC), num(5_000_000_000_000));
+    let data = format!(
+        "{}{}{}",
+        sel(sig),
+        word(GNOSIS_USDC),
+        num(5_000_000_000_000)
+    );
     let shell = Shell {
         descriptors: vec![(
             path_for(100, SWEEPER),
@@ -307,7 +339,10 @@ fn a_description_cannot_borrow_the_wallets_words() {
     let view = read(&shell, tx(100, SWEEPER, &data, "0x0", true));
     let r = result(&view);
     assert_eq!(r.reading.source, ClearLineSource::Fetched);
-    assert_eq!(r.reading.contradictions, vec!["Network fee paid to".to_owned()]);
+    assert_eq!(
+        r.reading.contradictions,
+        vec!["Network fee paid to".to_owned()]
+    );
     assert_eq!(r.fields[0].label, "Address");
     assert_eq!(r.fields[0].address.as_deref(), Some(GNOSIS_USDC));
     assert_eq!(r.fields[0].source, ClearLineSource::Fetched);
@@ -343,7 +378,10 @@ fn a_token_that_calls_itself_usdc_is_not_usdc() {
     assert_eq!(amount.token_address.as_deref(), Some(FAKE_USDC));
     // The registry's USDC on the same chain is USDC.
     let data = format!("0xa9059cbb{}{}", word(THIEF), num(250_000_000));
-    let r = result(&read(&Shell::default(), tx(100, GNOSIS_USDC, &data, "0x0", true)));
+    let r = result(&read(
+        &Shell::default(),
+        tx(100, GNOSIS_USDC, &data, "0x0", true),
+    ));
     assert_eq!(r.fields[0].value, "250 USDC");
     assert!(!r.fields[0].token_named_by_contract);
     assert_eq!(r.fields[0].usd_value, Some(250.0));
@@ -376,7 +414,10 @@ const USDC_MAINNET: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 #[test]
 fn a_swap_paying_a_stranger_says_so() {
     let data = exact_input_single(USDC_MAINNET, WETH_MAINNET, THIEF, 1);
-    let r = result(&read(&Shell::default(), tx(1, V3_ROUTER_2, &data, "0x0", true)));
+    let r = result(&read(
+        &Shell::default(),
+        tx(1, V3_ROUTER_2, &data, "0x0", true),
+    ));
     assert_eq!(r.reading.source, ClearLineSource::BuiltIn);
     assert!(r.reading.goes_elsewhere);
     assert!(r.reading.dust_minimum);
@@ -393,7 +434,10 @@ fn a_swap_paying_a_stranger_says_so() {
 #[test]
 fn a_swap_paying_this_account_says_this_account() {
     let data = exact_input_single(USDC_MAINNET, WETH_MAINNET, ME, 1_000_000_000_000_000);
-    let r = result(&read(&Shell::default(), tx(1, V3_ROUTER_2, &data, "0x0", true)));
+    let r = result(&read(
+        &Shell::default(),
+        tx(1, V3_ROUTER_2, &data, "0x0", true),
+    ));
     let recipient = r
         .fields
         .iter()
@@ -409,7 +453,10 @@ fn a_swap_paying_this_account_says_this_account() {
 #[test]
 fn a_send_to_someone_else_is_not_elsewhere() {
     let data = format!("0xa9059cbb{}{}", word(THIEF), num(1_000_000));
-    let r = result(&read(&Shell::default(), tx(100, GNOSIS_USDC, &data, "0x0", true)));
+    let r = result(&read(
+        &Shell::default(),
+        tx(100, GNOSIS_USDC, &data, "0x0", true),
+    ));
     assert!(!r.reading.goes_elsewhere);
 }
 
@@ -426,8 +473,14 @@ fn a_known_name_needs_code_on_this_chain() {
         ..Shell::default()
     };
     let deposit = sel("deposit()");
-    let view = read(&shell, tx(100, WETH_MAINNET, &deposit, "0xde0b6b3a7640000", true));
-    assert!(view.result.is_none(), "nothing reads code that is not there");
+    let view = read(
+        &shell,
+        tx(100, WETH_MAINNET, &deposit, "0xde0b6b3a7640000", true),
+    );
+    assert!(
+        view.result.is_none(),
+        "nothing reads code that is not there"
+    );
     assert_eq!(view.surface, ClearSurface::BlindTransaction);
     assert!(view.no_code);
     assert!(view.sign_anyway);
@@ -452,7 +505,10 @@ fn a_known_contract_is_named_on_its_own_chains_only() {
         "no Wrap ETH on Gnosis"
     );
     // On Ethereum it is WETH.
-    let view = read(&Shell::default(), tx(1, WETH_MAINNET, &deposit, "0xde0b6b3a7640000", true));
+    let view = read(
+        &Shell::default(),
+        tx(1, WETH_MAINNET, &deposit, "0xde0b6b3a7640000", true),
+    );
     let r = result(&view);
     assert_eq!(r.intent, "Wrap ETH");
     assert_eq!(r.reading.contract_named_by, Some(ClearLineSource::BuiltIn));
@@ -490,7 +546,12 @@ fn a_database_name_is_no_headline() {
 #[test]
 fn a_multicall_says_what_each_call_is() {
     let inner_transfer = format!("a9059cbb{}{}", word(THIEF), num(5));
-    let claim = format!("{}{}{}", &sel("claimRewards(address,uint256)")[2..], word(GNOSIS_USDC), num(1));
+    let claim = format!(
+        "{}{}{}",
+        &sel("claimRewards(address,uint256)")[2..],
+        word(GNOSIS_USDC),
+        num(1)
+    );
     let sig = "multicall(bytes[])";
     let selector = sel(sig);
     // bytes[] with two elements.
@@ -523,7 +584,11 @@ fn a_multicall_says_what_each_call_is() {
         .map(|f| f.value.as_str())
         .collect();
     assert_eq!(calls.len(), 2, "{:?}", r.fields);
-    assert!(calls[0].starts_with("0x9a99b4f0 · 68 bytes"), "{}", calls[0]);
+    assert!(
+        calls[0].starts_with("0x9a99b4f0 · 68 bytes"),
+        "{}",
+        calls[0]
+    );
     assert_eq!(calls[1], format!("transfer · to {THIEF} · amount 5"));
 }
 
@@ -569,8 +634,14 @@ fn a_vault_shape_is_a_shape() {
 #[test]
 fn an_increase_reads_as_an_increase() {
     let data = format!("0x39509351{}{}", word(REWARDS), num(50_000_000));
-    let r = result(&read(&Shell::default(), tx(100, GNOSIS_USDC, &data, "0x0", true)));
-    assert_eq!(r.fields[0].label_term, Some(ClearTerm::LabelAddsToAllowance));
+    let r = result(&read(
+        &Shell::default(),
+        tx(100, GNOSIS_USDC, &data, "0x0", true),
+    ));
+    assert_eq!(
+        r.fields[0].label_term,
+        Some(ClearTerm::LabelAddsToAllowance)
+    );
     assert_eq!(r.fields[0].value, "50 USDC");
     assert!(r.reading.allowance);
     assert!(r.reading.allowance_adds);
@@ -609,7 +680,11 @@ fn approve_all_has_no_raw_flag_and_false_revokes() {
     }
     let r = result(&sut.view());
     assert_eq!(r.intent, "Approve all NFTs");
-    assert!(r.fields.iter().all(|f| f.label != "Approved"), "{:?}", r.fields);
+    assert!(
+        r.fields.iter().all(|f| f.label != "Approved"),
+        "{:?}",
+        r.fields
+    );
     let revoke = format!("0xa22cb465{}{}", word(REWARDS), num(0));
     let r = result(&read(&shell, tx(100, NFT, &revoke, "0x0", false)));
     assert_eq!(r.intent, "Revoke");

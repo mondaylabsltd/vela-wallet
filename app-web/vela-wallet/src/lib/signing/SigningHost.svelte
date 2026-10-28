@@ -548,6 +548,13 @@
 		feeOpen = false;
 	});
 
+	/**
+	 * cs-10: the request whose message runs past the sheet and has not been
+	 * read to its end — the sheet's observation, handed to the core's gate.
+	 * Kept by request id, so it never holds another request's confirm.
+	 */
+	let unreadFor = $state<string | null>(null);
+
 	const model = $derived.by(() => {
 		if (!identity) return null;
 		return buildSigningModel({
@@ -558,6 +565,7 @@
 			progress: signRequest.progress,
 			// This request's own simulation, and no other's.
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
+			messageUnread: unreadFor !== null && unreadFor === signView.request?.id,
 			feeOpen,
 			speed: {
 				view: speedControl.view,
@@ -665,6 +673,7 @@
 		onclose={closeSheet}
 		onretry={() => signRequest.dispatch({ type: 'retry_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
+		onmessageunread={(unread) => (unreadFor = unread ? (signView.request?.id ?? null) : null)}
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {

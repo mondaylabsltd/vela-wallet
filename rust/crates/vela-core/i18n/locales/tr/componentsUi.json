@@ -250,7 +250,8 @@
         "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
         "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
-        "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
+        "simChecking": "Bu işlemin ne yapacağı denetleniyor…",
+        "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın"
       },
       "labelAddsToAllowance": "İzne eklenir",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "Önce Tümüne izin ver veya İptal et seçin",
         "labelSource": "Okuyan",
         "byVela": "Vela, işlemin kendisinden"
-      }
+      },
+      "hiddenChars": "Bu istek gizli ya da metnin yönünü değiştiren karakterler içeriyor — bunlar ⟨U+…⟩ olarak gösteriliyor.",
+      "blankLines": "⋯ boş satır: {{lines}} ⋯"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

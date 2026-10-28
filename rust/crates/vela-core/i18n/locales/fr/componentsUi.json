@@ -250,7 +250,8 @@
         "feeRetrying": "Frais pas encore calculés. Nouvelle tentative automatique…",
         "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
         "previousPending": "En attente de votre transaction précédente sur ce réseau…",
-        "simChecking": "Vérification de ce que fait cette transaction…"
+        "simChecking": "Vérification de ce que fait cette transaction…",
+        "messageUnread": "Le message continue — faites défiler pour le lire en entier"
       },
       "labelAddsToAllowance": "S'ajoute à l'autorisation",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "Choisissez d’abord Tout autoriser ou Révoquer",
         "labelSource": "Lu par",
         "byVela": "Vela, depuis la transaction"
-      }
+      },
+      "hiddenChars": "Cette demande contient des caractères cachés ou qui changent le sens du texte — ils sont affichés sous la forme ⟨U+…⟩.",
+      "blankLines": "⋯ lignes vides : {{lines}} ⋯"
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

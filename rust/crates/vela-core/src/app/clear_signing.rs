@@ -1309,7 +1309,46 @@ pub struct ClearMessageView {
     pub siwe: Option<ClearSiweFields>,
     pub binding: Option<ClearSiweBinding>,
     pub danger_class: ClearDangerClass,
+    /// What the sheet DRAWS for the message (cs-10, cs-11): the readable
+    /// text — else the binary preview, else the payload — one entry a line,
+    /// every hidden or direction-changing character a visible marker
+    /// ([`super::invisible_chars`]), and each run of
+    /// [`MESSAGE_BLANK_FOLD`] or more empty lines folded into one
+    /// [`ClearMessageLine::Blank`] that counts them, so nothing can sit
+    /// unseen below a screenful of nothing. `payload` is what is signed,
+    /// untouched.
+    #[serde(default)]
+    pub display_lines: Vec<ClearMessageLine>,
+    /// The message carries a hidden or direction-changing character: the
+    /// sheet says so, and `display_lines` shows each as `⟨U+…⟩`.
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
+
+/// One drawn line of a message ([`ClearMessageView::display_lines`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearMessageLine"))]
+pub enum ClearMessageLine {
+    /// A line of text, as runs; empty for an empty line.
+    Text { runs: Vec<ClearTextRun> },
+    /// `count` empty lines in a row, drawn as one marker line that says how
+    /// many (`componentsUi.signing.blankLines`).
+    Blank { count: u32 },
+}
+
+/// A stretch of a drawn line: text as written, or a hidden character's
+/// visible marker (`⟨U+202E⟩`, `marker: true`), which a shell draws muted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearTextRun"))]
+pub struct ClearTextRun {
+    pub text: String,
+    pub marker: bool,
+}
+
+/// Empty lines in a row from which a message's run is folded into one
+/// [`ClearMessageLine::Blank`]: a paragraph break or two stays as written.
+pub const MESSAGE_BLANK_FOLD: u32 = 3;
 
 // ---------------------------------------------------------------------------
 // Wire value types — blind typed data (EIP-712 with no descriptor)
@@ -1340,8 +1379,14 @@ pub struct ClearBlindTyped {
     pub domain_name: Option<String>,
     /// `domain.verifyingContract`, lowercased.
     pub verifying_contract: Option<String>,
-    /// The first five `message` entries, in payload order.
+    /// The first five `message` entries, in payload order. Keys, values and
+    /// the two names above are display-safe: a hidden or direction-changing
+    /// character is its `⟨U+…⟩` marker ([`super::invisible_chars`]).
     pub fields: Vec<ClearBlindField>,
+    /// Any string of the payload — a key or a value, at any depth, drawn or
+    /// not — carries a hidden or direction-changing character (cs-11).
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2008,6 +2053,17 @@ pub struct ClearSigningView {
     /// (cs-8). True on the blind surfaces.
     #[serde(default)]
     pub sign_anyway: bool,
+    /// What the sheet draws for this request carries a hidden or
+    /// direction-changing character (cs-11): the message on
+    /// [`ClearSurface::MessageSign`] / [`ClearSurface::EthSign`], a reading's
+    /// fields on [`ClearSurface::ClearSign`] (typed data or a call), any
+    /// call's on [`ClearSurface::Batch`]. Each is drawn as its `⟨U+…⟩` marker
+    /// already; every shell also says so in one line
+    /// (`componentsUi.signing.hiddenChars`). The blind typed-data rows carry
+    /// their own flag ([`ClearBlindTyped::has_invisible_chars`]) for the
+    /// shells that draw them.
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2078,8 +2134,6 @@ impl App for ClearSigning {
                 model.value_shown = false;
                 model.no_code = false;
                 model.claims = Claims::default();
-    model.no_code = false;
-    model.claims = Claims::default();
                 model.kind = match method {
                     ClearSignMethod::PersonalSign => ReqKind::PersonalSign,
                     ClearSignMethod::EthSign => ReqKind::EthSign,
@@ -2109,8 +2163,6 @@ impl App for ClearSigning {
                 model.value_shown = false;
                 model.no_code = false;
                 model.claims = Claims::default();
-    model.no_code = false;
-    model.claims = Claims::default();
                 model.kind = ReqKind::None;
                 render()
             }
@@ -2163,8 +2215,39 @@ impl App for ClearSigning {
                 surface,
                 ClearSurface::BlindTransaction | ClearSurface::BlindTypedData
             ),
+            has_invisible_chars: has_invisible_of(model, surface),
         }
     }
+}
+
+/// [`ClearSigningView::has_invisible_chars`] for the surface the sheet draws,
+/// read on the readings as they were written — the view's own copies are
+/// display-safe already ([`project_result`]).
+fn has_invisible_of(model: &Model, surface: ClearSurface) -> bool {
+    match surface {
+        ClearSurface::MessageSign | ClearSurface::EthSign => model
+            .message
+            .as_ref()
+            .is_some_and(|message| message.has_invisible_chars),
+        ClearSurface::ClearSign => model.result.as_ref().is_some_and(result_has_invisible),
+        ClearSurface::Batch => model.batch.as_ref().is_some_and(|batch| {
+            batch
+                .done
+                .iter()
+                .filter_map(|call| call.result.as_ref())
+                .any(result_has_invisible)
+        }),
+        _ => false,
+    }
+}
+
+/// A reading whose drawn words — a field's label or value — carry a hidden or
+/// direction-changing character (cs-11).
+fn result_has_invisible(result: &ClearSignResult) -> bool {
+    result.fields.iter().any(|field| {
+        super::invisible_chars::has_invisible(&field.label)
+            || super::invisible_chars::has_invisible(&field.value)
+    })
 }
 
 /// [`ClearSigningView::native_value`] for the surface the sheet draws.
@@ -2276,6 +2359,30 @@ pub(crate) fn batch_headline(calls: &[ClearBatchCall]) -> Option<String> {
 fn project_result(mut r: ClearSignResult) -> ClearSignResult {
     r.to_own_token = to_own_token(&r);
     r.verified = r.provenance.is_verified();
+    // cs-11: a typed-data string (or a call's) is drawn with every hidden or
+    // direction-changing character as its visible marker — "Bob <U+202E>gpj.exe"
+    // must not read "Bob exe.jpg". Graded before the words below, so a
+    // marked label is never mistaken for a word the shell translates.
+    for field in &mut r.fields {
+        field.label = super::invisible_chars::display_safe(&field.label);
+        field.value = super::invisible_chars::display_safe(&field.value);
+    }
+    // The same for every other word a requester can put on the sheet: an
+    // intent, a contract's or an owner's name, a description's contrary
+    // words, a public-database function name.
+    let safe = |text: &mut String| *text = super::invisible_chars::display_safe(text);
+    safe(&mut r.intent);
+    for text in r
+        .contract_name
+        .iter_mut()
+        .chain(r.owner.iter_mut())
+        .chain(r.reading.descriptor_owner.iter_mut())
+        .chain(r.reading.selector_name.iter_mut())
+        .chain(r.reading.shape_intent.iter_mut())
+        .chain(r.reading.contradictions.iter_mut())
+    {
+        safe(text);
+    }
     // The words the shells can translate, graded here for the same reason:
     // one rule over every builder's output. A detail field is the raw decode
     // (parameter names, type words) and stays as decoded rather than
@@ -3615,7 +3722,11 @@ fn try_calldata(
         && matches!(next, TxNext::AfterContract)
         && TOKEN_STD_SELECTORS.contains(&selector.as_str())
     {
-        model.claims = claims_of(&descriptor, &matched_sig, contract_descriptor_path(&run.req));
+        model.claims = claims_of(
+            &descriptor,
+            &matched_sig,
+            contract_descriptor_path(&run.req),
+        );
         return tx_continue(model, run, TxNext::AfterContract);
     }
 
@@ -3878,8 +3989,13 @@ fn finish_calldata(
             intent = "Revoke".to_owned();
         }
         reading.allowance_adds = matched_sig.starts_with("increaseAllowance(");
-        reading.contradictions =
-            contradicted_claims(&model.claims, &intent, matched_sig, &field_defs, &definitions);
+        reading.contradictions = contradicted_claims(
+            &model.claims,
+            &intent,
+            matched_sig,
+            &field_defs,
+            &definitions,
+        );
     }
     if source.line == ClearLineSource::Shape {
         reading.shape_intent = Some(intent.clone());
@@ -3916,7 +4032,10 @@ fn finish_calldata(
     if source.line == ClearLineSource::Fetched {
         reading.descriptor_path = Some(contract_descriptor_path(&run.req));
     }
-    if matches!(source.line, ClearLineSource::Fetched | ClearLineSource::BuiltIn) {
+    if matches!(
+        source.line,
+        ClearLineSource::Fetched | ClearLineSource::BuiltIn
+    ) {
         reading.descriptor_owner = owner.clone();
     }
     // The name a superseded descriptor gave the contract stays — as ITS word.
@@ -4012,7 +4131,12 @@ fn finish_eip712(
     if source.line == ClearLineSource::Fetched {
         reading.descriptor_path = Some(contract_descriptor_path(&run.req));
     }
-    if source.specific && matches!(source.line, ClearLineSource::Fetched | ClearLineSource::BuiltIn) {
+    if source.specific
+        && matches!(
+            source.line,
+            ClearLineSource::Fetched | ClearLineSource::BuiltIn
+        )
+    {
         reading.descriptor_owner = metadata
             .get("owner")
             .and_then(Value::as_str)
@@ -4132,7 +4256,14 @@ fn sig_param_names(sig: &str) -> Vec<String> {
     }
     names
         .iter()
-        .map(|param| param.trim().rsplit(' ').next().unwrap_or_default().to_owned())
+        .map(|param| {
+            param
+                .trim()
+                .rsplit(' ')
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        })
         .collect()
 }
 
@@ -4202,7 +4333,13 @@ fn agreeing_words(ours: &str) -> Option<&'static [&'static str]> {
         "transfer nft" | "transfer nfts" => &["transfer", "send", "move"],
         "approve nft" | "approve all nfts" => &["approv", "allow", "operator", "authori"],
         "spender" => &[
-            "spender", "operator", "approv", "allowance", "delegate", "address", "contract",
+            "spender",
+            "operator",
+            "approv",
+            "allowance",
+            "delegate",
+            "address",
+            "contract",
         ],
         "operator" => &["operator", "spender", "approv", "delegate", "address"],
         "to" => &[
@@ -4216,8 +4353,23 @@ fn agreeing_words(ours: &str) -> Option<&'static [&'static str]> {
         ],
         "from" => &["from", "sender", "owner", "source", "address"],
         "amount" | "adds to allowance" => &[
-            "amount", "value", "quantity", "allowance", "cap", "limit", "token", "wad", "sum",
-            "unit", "spend", "max", "send", "transfer", "add", "increase", "decrease",
+            "amount",
+            "value",
+            "quantity",
+            "allowance",
+            "cap",
+            "limit",
+            "token",
+            "wad",
+            "sum",
+            "unit",
+            "spend",
+            "max",
+            "send",
+            "transfer",
+            "add",
+            "increase",
+            "decrease",
         ],
         "approved" => &["approv", "allow", "status", "enable", "grant"],
         "token id" | "token ids" => &["token", "id", "nft", "item"],
@@ -4342,9 +4494,10 @@ fn finalize(model: &Model, mut result: ClearSignResult) -> ClearSignResult {
         );
     result.reading.goes_elsewhere = from.is_some()
         && !sends
-        && result.fields.iter().any(|f| {
-            f.role == ClearFieldRole::Recipient && f.address.is_some() && !f.this_account
-        });
+        && result
+            .fields
+            .iter()
+            .any(|f| f.role == ClearFieldRole::Recipient && f.address.is_some() && !f.this_account);
     result.reading.dust_minimum = result.fields.iter().any(|f| {
         f.role == ClearFieldRole::ReceiveAmount && f.bound == Some(ClearAmountBound::Min) && f.dust
     });
@@ -5543,8 +5696,7 @@ fn format_token_amount(
     };
     // The $1 peg is the registry's word about a token it lists, never a
     // symbol's: a stranger's "USDC" is worth whatever it is worth.
-    let usd_value = if verified && !named_by_contract && STABLE_SYMBOLS.contains(&symbol.as_str())
-    {
+    let usd_value = if verified && !named_by_contract && STABLE_SYMBOLS.contains(&symbol.as_str()) {
         usd_magnitude(&amount, decimals)
     } else {
         None
@@ -6083,6 +6235,7 @@ impl ClearBlindTyped {
             domain_name: None,
             verifying_contract: None,
             fields: Vec::new(),
+            has_invisible_chars: false,
         }
     }
 }
@@ -6098,19 +6251,27 @@ fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
         // `data?.primaryType` / `data?.domain` read `undefined`.
         return ClearBlindTyped::empty();
     };
+    // cs-11: every drawn string is display-safe, and the flag reads the whole
+    // payload — a hidden character past the fifth row or the 60th character
+    // is still in what is signed.
+    let safe = |text: String| super::invisible_chars::display_safe(&text);
+    let has_invisible_chars = serde_json::from_str::<Value>(typed_data_json)
+        .is_ok_and(|value| super::invisible_chars::json_has_invisible(&value));
     let domain = raw.domain.filter(is_truthy);
     ClearBlindTyped {
         primary_type: raw
             .primary_type
             .filter(is_truthy)
             .as_ref()
-            .map(js_scalar_string),
+            .map(js_scalar_string)
+            .map(safe),
         has_domain: domain.is_some(),
         domain_name: domain
             .as_ref()
             .and_then(|d| d.get("name"))
             .filter(|v| is_truthy(v))
-            .map(js_scalar_string),
+            .map(js_scalar_string)
+            .map(safe),
         // `.toLowerCase()` is only reachable on a string; anything else is no
         // address at all rather than a coerced one.
         verifying_contract: domain
@@ -6124,12 +6285,13 @@ fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
                 .into_iter()
                 .take(BLIND_FIELD_LIMIT)
                 .map(|(key, value)| ClearBlindField {
-                    key,
-                    value: format_blind_value(&value),
+                    key: safe(key),
+                    value: safe(format_blind_value(&value)),
                 })
                 .collect(),
             _ => Vec::new(),
         },
+        has_invisible_chars,
     }
 }
 
@@ -6243,6 +6405,14 @@ pub(crate) fn analyze_message(
         Decoded::Text(text) => (Some(text.clone()), None, false),
         Decoded::Binary(preview) => (None, Some(preview.clone()), true),
     };
+    // cs-10/cs-11: what is drawn, decided here — the text the sheet shows,
+    // never the bytes that are signed.
+    let drawn = decoded_text
+        .as_deref()
+        .or(binary_preview.as_deref())
+        .unwrap_or(payload);
+    let display_lines = message_display_lines(drawn);
+    let has_invisible_chars = super::invisible_chars::has_invisible(drawn);
 
     if method == ClearSignMethod::EthSign {
         // The classic blind-sign trap — hard warning, no message analysis.
@@ -6255,6 +6425,8 @@ pub(crate) fn analyze_message(
             siwe: None,
             binding: None,
             danger_class: ClearDangerClass::EthSign,
+            display_lines,
+            has_invisible_chars,
         };
     }
 
@@ -6278,6 +6450,56 @@ pub(crate) fn analyze_message(
         siwe,
         binding,
         danger_class,
+        display_lines,
+        has_invisible_chars,
+    }
+}
+
+/// [`ClearMessageView::display_lines`] for the text the sheet draws: CRLF and
+/// CR read as line breaks (as [`parse_siwe`] reads them), each line
+/// display-safe, and a run of [`MESSAGE_BLANK_FOLD`] or more empty lines —
+/// nothing but white space on them — folded into one counted marker line
+/// (cs-10: "Click to sign in." + sixty blank lines + "I authorise transfer of
+/// all my assets" read as a sign-in whose rest was a screen away).
+pub(crate) fn message_display_lines(text: &str) -> Vec<ClearMessageLine> {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let mut out = Vec::new();
+    let mut blank: Vec<&str> = Vec::new();
+    let flush = |blank: &mut Vec<&str>, out: &mut Vec<ClearMessageLine>| {
+        let count = u32::try_from(blank.len()).unwrap_or(u32::MAX);
+        if count >= MESSAGE_BLANK_FOLD {
+            out.push(ClearMessageLine::Blank { count });
+        } else {
+            out.extend(blank.iter().map(|line| message_text_line(line)));
+        }
+        blank.clear();
+    };
+    for line in normalized.split('\n') {
+        // A line of hidden characters is not empty: its markers are drawn
+        // (U+2028 and U+000B are white space, and hidden).
+        if line
+            .chars()
+            .all(|c| c.is_whitespace() && !super::invisible_chars::is_invisible(c))
+        {
+            blank.push(line);
+            continue;
+        }
+        flush(&mut blank, &mut out);
+        out.push(message_text_line(line));
+    }
+    flush(&mut blank, &mut out);
+    out
+}
+
+fn message_text_line(line: &str) -> ClearMessageLine {
+    ClearMessageLine::Text {
+        runs: super::invisible_chars::display_runs(line)
+            .into_iter()
+            .map(|run| ClearTextRun {
+                text: run.text,
+                marker: run.marker,
+            })
+            .collect(),
     }
 }
 

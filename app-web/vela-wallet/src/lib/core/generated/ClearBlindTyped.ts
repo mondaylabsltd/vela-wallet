@@ -20,6 +20,13 @@ has_domain: boolean, domain_name: string | null,
  */
 verifying_contract: string | null, 
 /**
- * The first five `message` entries, in payload order.
+ * The first five `message` entries, in payload order. Keys, values and
+ * the two names above are display-safe: a hidden or direction-changing
+ * character is its `⟨U+…⟩` marker ([`super::invisible_chars`]).
  */
-fields: Array<ClearBlindField>, };
+fields: Array<ClearBlindField>, 
+/**
+ * Any string of the payload — a key or a value, at any depth, drawn or
+ * not — carries a hidden or direction-changing character (cs-11).
+ */
+has_invisible_chars: boolean, };

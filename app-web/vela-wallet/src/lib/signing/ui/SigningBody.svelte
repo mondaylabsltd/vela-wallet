@@ -40,6 +40,8 @@
 		onclose?: () => void;
 		/** Spec 102 (D4): Open on the hand-off card — the apps' only; absent on the web. */
 		onopenpage?: () => void;
+		/** cs-10: the message has, or has not, been read to its end. */
+		onmessageunread?: (unread: boolean) => void;
 		/**
 		 * The host draws the action (`SigningAction`) in its own pinned foot:
 		 * nothing is drawn after the signing account here.
@@ -59,7 +61,8 @@
 		onspeed,
 		onspeedpick,
 		onfeerefresh,
-		onopenpage
+		onopenpage,
+		onmessageunread
 	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
@@ -88,7 +91,7 @@
 	<HandoffCard handoff={model.handoff} onopen={onopenpage} />
 {:else}
 	<div class="blocks">
-		<BlockList blocks={model.blocks} {onchip} {oncustom} />
+		<BlockList blocks={model.blocks} {onchip} {oncustom} {onmessageunread} />
 	</div>
 
 	<div class="footer">

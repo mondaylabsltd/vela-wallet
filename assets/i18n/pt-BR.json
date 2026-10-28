@@ -1718,7 +1718,8 @@
     "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
     "feeWouldFail": "Falharia se fosse enviada assim.",
     "previousPending": "Aguardando sua transação anterior nesta rede terminar…",
-    "simChecking": "Verificando o que esta transação faz…"
+    "simChecking": "Verificando o que esta transação faz…",
+    "messageUnread": "A mensagem continua — role para ler tudo"
    },
    "labelAddsToAllowance": "Soma à autorização",
    "certain": {
@@ -1754,7 +1755,9 @@
     "chooseGrant": "Escolha primeiro Permitir tudo ou Revogar",
     "labelSource": "Lido por",
     "byVela": "Vela, da transação"
-   }
+   },
+   "hiddenChars": "Esta solicitação contém caracteres ocultos ou que mudam a direção do texto — eles aparecem como ⟨U+…⟩.",
+   "blankLines": "⋯ linhas vazias: {{lines}} ⋯"
   },
   "signingApprove": {
    "resultingTotal": "Novo limite total",

@@ -251,7 +251,11 @@ describe('a description cannot rename what Vela reads (cs-3, adversarial)', () =
 describe('certain facts on the face', () => {
 	it('a token that calls itself USDC is USDC?, unpriced, with its address (cs-1)', () => {
 		const data = `0xa9059cbb${word(THIEF)}${num(250_000_000)}`;
-		const model = sheet(read(tx(FAKE_USDC, data), { symbols: { [FAKE_USDC]: 'USDC' } }), FAKE_USDC, data);
+		const model = sheet(
+			read(tx(FAKE_USDC, data), { symbols: { [FAKE_USDC]: 'USDC' } }),
+			FAKE_USDC,
+			data
+		);
 		const amount = model.blocks.find((b) => b.kind === 'amount');
 		expect(amount).toMatchObject({ line: { value: '250 USDC?' } });
 		expect(amount && amount.kind === 'amount' ? amount.line.fiat : 'x').toBeUndefined();
@@ -272,9 +276,7 @@ describe('certain facts on the face', () => {
 		expect(view.no_code).toBe(true);
 		const model = sheet(view, WETH_MAINNET, data);
 		expect(intentOf(model)).toBe(m.intentBlind);
-		expect(warnings(model.blocks, 'danger')).toContain(
-			fill(m.certain.noCode, { chain: 'Gnosis' })
-		);
+		expect(warnings(model.blocks, 'danger')).toContain(fill(m.certain.noCode, { chain: 'Gnosis' }));
 		expect(model.confirm).toMatchObject({ action: m.certain.signAnyway, danger: true });
 		expect(texts(model.blocks).some((t) => t.includes('Wrap'))).toBe(false);
 	});
@@ -358,7 +360,10 @@ describe('certain facts on the face', () => {
 					metadata: { owner: 'Lodge', contractName: 'Lodge' },
 					display: {
 						formats: {
-							[sig]: { intent: 'Lodge', fields: [{ path: 'amount', label: 'Units', format: 'raw' }] }
+							[sig]: {
+								intent: 'Lodge',
+								fields: [{ path: 'amount', label: 'Units', format: 'raw' }]
+							}
 						}
 					}
 				}

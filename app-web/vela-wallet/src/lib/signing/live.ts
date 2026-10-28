@@ -25,6 +25,7 @@ import type { ClearBatchView } from '$lib/core/generated/ClearBatchView';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSignResult } from '$lib/core/generated/ClearSignResult';
 import type { ClearLineSource } from '$lib/core/generated/ClearLineSource';
+import type { ClearMessageLine } from '$lib/core/generated/ClearMessageLine';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -64,6 +65,7 @@ import type {
 	AllowanceChip,
 	AmountLine,
 	Block,
+	CodeLine,
 	FeeModel,
 	FeeTokenOption,
 	KeyValueRow,
@@ -105,6 +107,13 @@ export interface SigningLiveInputs {
 	 * it was run for.
 	 */
 	sim?: SimEnded | null;
+	/**
+	 * cs-10: the message on the sheet runs past its window and its last line
+	 * has not been in sight yet — the sheet's observation (`CodeBlock`), for
+	 * the core's gate to hold the confirm on (`ConfirmBlock::MessageUnread`).
+	 * Absent: nothing observed, nothing held.
+	 */
+	messageUnread?: boolean;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -188,9 +197,24 @@ function descriptorHostOf(inputs: SigningLiveInputs): string {
 }
 
 /** Who a line's label is from, in the words a row's marker says it. */
-function sourceName(source: ClearLineSource, inputs: SigningLiveInputs): string | null {
+/** What a reading says when nothing graded it (`ClearReading::default`). */
+const UNGRADED_READING: ClearSignResult['reading'] = {
+	source: 'vela',
+	descriptor_owner: null,
+	descriptor_path: null,
+	contract_named_by: null,
+	contradictions: [],
+	selector_name: null,
+	goes_elsewhere: false,
+	dust_minimum: false,
+	allowance: false,
+	allowance_adds: false,
+	shape_intent: null
+};
+
+function sourceName(source: ClearLineSource | undefined, inputs: SigningLiveInputs): string | null {
 	const c = inputs.m.certain;
-	switch (source) {
+	switch (source ?? 'vela') {
 		case 'vela':
 			return null;
 		case 'built_in':
@@ -205,7 +229,10 @@ function sourceName(source: ClearLineSource, inputs: SigningLiveInputs): string 
 }
 
 /** "Label from …" — the faint marker on a row a description labelled (cs-14). */
-function labelSource(source: ClearLineSource, inputs: SigningLiveInputs): string | undefined {
+function labelSource(
+	source: ClearLineSource | undefined,
+	inputs: SigningLiveInputs
+): string | undefined {
 	const name = sourceName(source, inputs);
 	return name === null ? undefined : fill(inputs.m.certain.labelFrom, { source: name });
 }
@@ -731,6 +758,9 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	if (results.some((r) => r.fields.some((f) => f.unverified))) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
 	}
+	if (inputs.clear.has_invisible_chars) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+	}
 	return blocks;
 }
 
@@ -863,6 +893,12 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.to_own_token) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 		}
+		// cs-11: a value (a typed-data string, a call's) carried characters
+		// that draw as nothing or turn the text around; the core drew each as
+		// its ⟨U+…⟩ marker, and the sheet says why those are there.
+		if (clear.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+		}
 		/*
 		 * Spec 081 FR-008: where the description came from, in the one case
 		 * the person can act on. This used to read "no ERC-7730 descriptor,
@@ -982,16 +1018,58 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push({ kind: 'intent', text: m.intentMessage, tone: 'neutral' });
 		blocks.push({
 			kind: 'code',
-			lines: (message.decoded_text ?? message.binary_preview ?? message.payload).split('\n'),
-			note: message.non_printable ? m.warnHexMessage : undefined
+			// cs-10/cs-11: the lines the core decided to draw — hidden
+			// characters as markers, long runs of empty lines folded — and
+			// all of them read before the confirm opens.
+			lines: message.display_lines.map((line) => messageLine(line, m)),
+			note: message.non_printable ? m.warnHexMessage : undefined,
+			readToEnd: true
 		});
+		if (message.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+		}
 		if (message.binding === 'mismatch') {
-			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnSiweMismatch });
+			// cs-9: both names in the sentence — the host the sign-in names, as
+			// the core compared it, and the host that asked.
+			const siwe = message.siwe;
+			const origin = sign.request ? hostOf(sign.request.origin) : '';
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnSiweMismatch, {
+					domain: siwe?.domain_host ?? siwe?.domain ?? '',
+					origin
+				})
+			});
 		}
 		return blocks;
 	}
 
 	return blocks;
+}
+
+/**
+ * One line of a message as the core drew it (`ClearMessageView.display_lines`):
+ * its text, with each hidden character's ⟨U+…⟩ marker muted; a folded run of
+ * empty lines as one muted line that counts them.
+ */
+function messageLine(line: ClearMessageLine, m: SigningMessages): CodeLine {
+	if (line.type === 'blank') {
+		return [{ text: fill(m.messageBlankLines, { lines: String(line.count) }), muted: true }];
+	}
+	if (!line.runs.some((run) => run.marker)) return line.runs.map((run) => run.text).join('');
+	return line.runs.map((run) =>
+		run.marker ? { text: run.text, muted: true } : { text: run.text }
+	);
+}
+
+/** The host of a request's origin, or the origin itself when it is not a URL. */
+function hostOf(origin: string): string {
+	try {
+		return new URL(origin).host;
+	} catch {
+		return origin;
+	}
 }
 
 /**
@@ -1420,6 +1498,9 @@ export function localizedTerms(clear: ClearSigningView, m: SigningMessages): Cle
 		(term ? m.terms[term] : undefined) || text;
 	const localize = (result: ClearSignResult): ClearSignResult => ({
 		...result,
+		// A reading from a core (or a record) that predates cs-14 grades
+		// nothing: Vela's own, nothing raised.
+		reading: result.reading ?? UNGRADED_READING,
 		intent: word(result.intent_term, result.intent),
 		fields: result.fields.map((field) => ({
 			...field,
@@ -1752,7 +1833,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// PR 3: and, last, the sheet's own simulation — while its verdict is out
 	// (`sign.sim_checking`) the core holds the confirm and names the line
 	// ("Checking what this transaction does…"). Nothing is ANDed on here.
-	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
+	const confirmState = signConfirmState(
+		sign,
+		guard,
+		clear,
+		fee,
+		inputs.speed?.view.tier ?? null,
+		inputs.messageUnread === true
+	);
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 

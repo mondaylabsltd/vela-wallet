@@ -1723,7 +1723,8 @@
     "feeRetrying": "暂时没能算出费用，正在自动重试…",
     "feeWouldFail": "按现在的方式发送会失败。",
     "previousPending": "正在等待这个网络上的上一笔交易完成…",
-    "simChecking": "正在检查这笔交易的结果…"
+    "simChecking": "正在检查这笔交易的结果…",
+    "messageUnread": "消息尚未结束 — 请滚动读完全文"
    },
    "labelAddsToAllowance": "增加授权额度",
    "certain": {
@@ -1759,7 +1760,9 @@
     "chooseGrant": "请先选择“全部允许”或“撤销”",
     "labelSource": "解读来源",
     "byVela": "Vela，从交易本身"
-   }
+   },
+   "hiddenChars": "此请求含有隐藏或会改变文字方向的字符 — 已显示为 ⟨U+…⟩。",
+   "blankLines": "⋯ 空行：{{lines}} ⋯"
   },
   "currency": {
    "title": "显示货币",

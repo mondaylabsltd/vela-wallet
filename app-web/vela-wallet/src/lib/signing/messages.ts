@@ -230,6 +230,13 @@ export interface SigningMessages {
 	warnEthSign: string;
 	bodyEthSign: string;
 	warnSiweMismatch: string;
+	/**
+	 * cs-11: what is drawn carries hidden or direction-changing characters,
+	 * each shown as its `⟨U+…⟩` marker (`ClearSigningView.has_invisible_chars`).
+	 */
+	warnHiddenChars: string;
+	/** cs-10: a folded run of empty lines in a message (`{{lines}}`, how many). */
+	messageBlankLines: string;
 	okSiwe: string;
 	warnTokenToContract: string;
 	warnUnverifiedAmount: string;

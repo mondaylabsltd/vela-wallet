@@ -162,6 +162,7 @@ const READY_CLEAR = {
 	record_intent: null,
 	native_value: null,
 	record_reading: null,
+	has_invisible_chars: false,
 	result: {
 		intent: 'Approve USDC',
 		intent_term: null,
@@ -261,6 +262,8 @@ const WORDS = new Proxy(
 		warnWillFail: WILL_FAIL,
 		simChecking: PLACE_CHECKING,
 		balancesTitle: 'Balance changes',
+		// cs-14: every provenance word reads as its own name.
+		certain: new Proxy({}, { get: (_, key) => String(key) }),
 		terms: {},
 		feeReasons: {},
 		signerReasons: {},

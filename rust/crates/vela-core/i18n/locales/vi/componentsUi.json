@@ -250,7 +250,8 @@
         "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
         "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
         "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
-        "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…"
+        "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…",
+        "messageUnread": "Tin nhắn vẫn còn tiếp — hãy cuộn để đọc hết"
       },
       "labelAddsToAllowance": "Cộng thêm vào hạn mức",
       "certain": {
@@ -286,7 +287,9 @@
         "chooseGrant": "Hãy chọn Cho phép tất cả hoặc Thu hồi trước",
         "labelSource": "Nguồn đọc",
         "byVela": "Vela, từ chính giao dịch"
-      }
+      },
+      "hiddenChars": "Yêu cầu này chứa ký tự ẩn hoặc ký tự đổi hướng văn bản — chúng được hiển thị dưới dạng ⟨U+…⟩.",
+      "blankLines": "⋯ dòng trống: {{lines}} ⋯"
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",

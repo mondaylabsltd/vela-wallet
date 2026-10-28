@@ -951,7 +951,8 @@ pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
 /// May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
-/// every client reads: the four views' JSON, the speed in force, a
+/// every client reads: the four views' JSON, the speed in force, whether the
+/// message on the sheet has not been read to its end yet (cs-10), a
 /// `ConfirmState` JSON back (`undefined` when a view does not read).
 #[wasm_bindgen(js_name = signConfirmState)]
 #[must_use]
@@ -961,6 +962,7 @@ pub fn sign_confirm_state(
     clear_json: &str,
     fee_json: Option<String>,
     speed_tier: Option<String>,
+    message_unread: Option<bool>,
 ) -> Option<String> {
     vela_core::app::sign_confirm::confirm_state_json(
         sign_json,
@@ -968,6 +970,7 @@ pub fn sign_confirm_state(
         clear_json,
         fee_json.as_deref(),
         speed_tier.as_deref(),
+        message_unread.unwrap_or(false),
     )
 }
 

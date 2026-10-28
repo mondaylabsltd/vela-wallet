@@ -655,7 +655,10 @@ fn a_registry_name_holds_on_its_own_chain_only() {
         .result
         .expect("read");
     let token = field(&on_bnb, "Token");
-    assert_eq!(token.value, "USDC? (0xa0b869...06eb48)", "the chain's own answer, marked as its word (cs-1)");
+    assert_eq!(
+        token.value, "USDC? (0xa0b869...06eb48)",
+        "the chain's own answer, marked as its word (cs-1)"
+    );
     assert_eq!(token.address.as_deref(), Some(USDC_ETHEREUM));
 
     let silent = resolve(approve(56, "11b340"), true).result.expect("read");

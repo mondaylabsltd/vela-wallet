@@ -872,12 +872,16 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2162 (a multisig's executor who cannot pay, an execution that has not
 //   landed, 2026-10-28): + 2 `home.multisig.proposal` words. 2044 + 2 =
 //   2046 leaves, 116 branches.
-// 2196 (what is certain and what is interpreted, clear-signing audit
+// 2165 (a message read whole, its hidden characters shown, clear-signing
+//   audit cs-10/cs-11, 2026-10-28): + `componentsUi.signing.hiddenChars`,
+//   `blankLines` and `confirmBlock.messageUnread`. 2046 + 3 = 2049 leaves,
+//   116 branches.
+// 2199 (what is certain and what is interpreted, clear-signing audit
 //   cs-1…cs-19, 2026-10-28): + `componentsUi.signing.labelAddsToAllowance`
-//   and `componentsUi.signing.certain`, 32 words. 2046 + 33 = 2079 leaves,
+//   and `componentsUi.signing.certain`, 32 words. 2049 + 33 = 2082 leaves,
 //   116 + 1 = 117 branches.
-if (PATHS.length !== 2196) fail(`expected 2196 paths (2079 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2079) fail(`expected 2079 leaf paths, got ${leafSet.size}`);
+if (PATHS.length !== 2199) fail(`expected 2199 paths (2082 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2082) fail(`expected 2082 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

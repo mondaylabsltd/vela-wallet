@@ -158,6 +158,18 @@ export interface BalancesBlock {
 /** What can stand in the verdict's place: the balance card, or the core's notice. */
 export type VerdictBlock = BalancesBlock | WarningBlock;
 
+/**
+ * A stretch of a code line. `muted`: what the core put there for the eye, not
+ * the text itself — a hidden character's `⟨U+202E⟩` marker, a folded run of
+ * empty lines (cs-10, cs-11).
+ */
+export interface CodeRun {
+	text: string;
+	muted?: boolean;
+}
+
+export type CodeLine = string | CodeRun[];
+
 export type Block =
 	/** The eyebrow above the hero — "发送", "授权", "盲签". */
 	| { kind: 'intent'; text: string; tone: Tone }
@@ -207,7 +219,20 @@ export type Block =
 	| WarningBlock
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
-	| { kind: 'code'; lines: string[]; note?: string }
+	| {
+			kind: 'code';
+			/** A line is its text, or its runs when part of it is drawn muted. */
+			lines: CodeLine[];
+			note?: string;
+			/**
+			 * cs-10: a message the person must be able to read to its end
+			 * before the confirm opens. The sheet reports whether its last line
+			 * has been in sight (`onunread`), and the core's gate holds the
+			 * confirm until it has (`ConfirmBlock::MessageUnread`). Nothing is
+			 * held when it fits.
+			 */
+			readToEnd?: boolean;
+	  }
 	/** A batch step or a Safe inner call. */
 	| { kind: 'card'; title?: string; rows: KeyValueRow[]; tone: Tone }
 	| BalancesBlock

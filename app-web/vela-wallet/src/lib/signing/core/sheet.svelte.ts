@@ -39,7 +39,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	native_value: null,
 	record_reading: null,
 	no_code: false,
-	sign_anyway: false
+	sign_anyway: false,
+	has_invisible_chars: false
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
