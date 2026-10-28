@@ -496,7 +496,8 @@
    },
    "send": {
     "propose": "Propose and approve",
-    "invalidAddress": "Enter a valid address."
+    "invalidAddress": "Enter a valid address.",
+    "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again."
    },
    "create": {
     "title": "New multisig",
@@ -772,7 +773,14 @@
   "txSubmittedTitle": "Submitted to the network",
   "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
   "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered.",
-  "draftedByAgent": "Drafted by your AI agent"
+  "draftedByAgent": "Drafted by your AI agent",
+  "recipientChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again.",
+  "recipientZeroAddress": "This is the zero address. Nobody holds its key — anything sent here is gone for good.",
+  "recipientSelf": "This is your own address.",
+  "warnTooManyDecimals": "{{symbol}} has at most {{decimals}} decimal places — shorten the amount.",
+  "warnAmountTooLarge": "This amount is too large.",
+  "warnAmountUnreadable": "Enter one amount: one decimal mark, no thousands separators.",
+  "batchBadChecksum": "Checksum doesn't match"
  },
  "receive": {
   "title": "Receive",
@@ -2219,7 +2227,8 @@
   "recentActivity": "Recent activity",
   "viewAllActivity": "View all activity",
   "deleteContact": "Delete contact",
-  "edit": "Edit"
+  "edit": "Edit",
+  "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again."
  },
  "explore": {
   "title": "Explore",

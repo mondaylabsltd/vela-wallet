@@ -17,7 +17,9 @@ use std::collections::VecDeque;
 
 use crux_core::{Core, Request};
 use support::DomainDriver;
-use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, FeeTier};
+use vela_core::app::fee_policy::{
+    to_base_units, AmountIssue, FeeAssetView, FeeEstimateView, FeeTier,
+};
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
@@ -4411,6 +4413,40 @@ fn fee_busy_or_estimating_disables_the_confirm_slide() {
     assert!(!sut.view().can_confirm, "re-quoting must disable confirm");
     sut.dispatch(Event::FeeBusyChanged { busy: false });
     assert!(sut.view().can_confirm);
+}
+
+/// send-4: offline on the confirm, the fee card fails and this machine drops
+/// its figure. Back online the card settled on the very quote it had before,
+/// so the mirror told nothing — and the confirm opened on "no longer failing"
+/// alone, with no quote in hand. The submit then built a fee leg the review
+/// never showed and was refused before a byte left, on every Try again.
+#[test]
+fn a_confirm_never_opens_without_a_quote_in_hand() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+    sut.dispatch(Event::FeeFailedChanged { failed: true });
+    assert!(sut.view().fee.is_none(), "the failure drops the figure");
+    sut.dispatch(Event::FeeFailedChanged { failed: false });
+    assert!(
+        !sut.view().can_confirm,
+        "recovered, but no quote is in hand: nothing to sign the fee from"
+    );
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
+    assert!(
+        !ops.iter().any(|op| matches!(
+            op,
+            Op::LoadAccountCredential { .. } | Op::ProbeTreasury { .. } | Op::SubmitUserOp { .. }
+        )),
+        "a stale frame's confirm does not start a submit: {ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_000),
+    });
+    assert!(
+        sut.view().can_confirm,
+        "the same quote, told again, opens it"
+    );
 }
 
 #[test]
@@ -9322,4 +9358,193 @@ mod multisig {
         );
         assert!(sut.view().multisig.is_none());
     }
+}
+
+// ===========================================================================
+// Entered addresses and amounts, read exactly (send-1, send-2, send-3,
+// send-13, send-20, agent-1)
+// ===========================================================================
+
+/// EIP-55's own test vector, and the same address with one letter's case
+/// flipped — the typo (or the tampered copy) only the checksum can see.
+const EIP55: &str = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const EIP55_TYPO: &str = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+
+#[test]
+fn a_mixed_case_address_must_be_its_own_checksum() {
+    assert!(is_valid_address(EIP55));
+    // One case carries no checksum, and passes.
+    assert!(is_valid_address(&EIP55.to_lowercase()));
+    assert!(is_valid_address(&format!(
+        "0x{}",
+        EIP55[2..].to_uppercase()
+    )));
+    assert!(!is_valid_address(EIP55_TYPO));
+
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, EIP55_TYPO);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    let view = sut.view();
+    assert!(view.recipient_checksum_mismatch, "said, on the form");
+    assert!(view.payees.is_empty(), "never drawn as a payee");
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InvalidAddress
+        }],
+        "and refused at Continue"
+    );
+    set_recipient(&mut sut, EIP55);
+    assert!(!sut.view().recipient_checksum_mismatch);
+}
+
+#[test]
+fn a_split_row_with_a_bad_checksum_is_named_as_that() {
+    let issues = split_row_issues(&[draft("a", EIP55_TYPO, "1"), draft("b", EIP55, "1")], 18);
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].id, "a");
+    assert_eq!(issues[0].address, SendRowFieldState::Invalid);
+    assert!(issues[0].address_checksum);
+}
+
+/// send-13: a pasted address with spaces around it is the address.
+#[test]
+fn spaces_around_a_pasted_recipient_go() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, &format!("  {RECIPIENT}\n"));
+    let view = sut.view();
+    assert_eq!(view.recipient, RECIPIENT);
+    assert_eq!(view.payees.len(), 1);
+}
+
+/// send-13: the zero address and one's own are warned, never refused.
+#[test]
+fn the_zero_address_and_ones_own_are_warned_not_refused() {
+    use vela_core::app::send::SendRecipientWarning;
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    set_recipient(&mut sut, "0x0000000000000000000000000000000000000000");
+    let view = sut.view();
+    assert_eq!(
+        view.recipient_warning,
+        Some(SendRecipientWarning::ZeroAddress)
+    );
+    assert!(view.can_continue, "a warning, not a refusal");
+    set_recipient(&mut sut, ACCOUNT);
+    assert_eq!(
+        sut.view().recipient_warning,
+        Some(SendRecipientWarning::OwnAddress)
+    );
+    set_recipient(&mut sut, RECIPIENT);
+    assert_eq!(sut.view().recipient_warning, None);
+}
+
+fn issue_for(amount: &str) -> (Option<AmountIssue>, bool) {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: amount.to_owned(),
+    });
+    let view = sut.view();
+    (view.amount_issue, view.can_continue)
+}
+
+/// agent-1: 19 places of an 18-decimal coin were cut to 0 wei, shown as sent,
+/// and a fee was charged. The figure is refused, naming the places allowed.
+#[test]
+fn more_places_than_the_token_has_are_refused_never_cut() {
+    assert_eq!(
+        issue_for("0.0000000000000000001"),
+        (Some(AmountIssue::TooManyDecimals { decimals: 18 }), false)
+    );
+    assert_eq!(
+        issue_for("1.0000000000000000001"),
+        (Some(AmountIssue::TooManyDecimals { decimals: 18 }), false)
+    );
+    // Trailing zeros change nothing, and are not refused.
+    assert_eq!(issue_for("1.000000000000000000000"), (None, true));
+    assert_eq!(issue_for("0.000000000000000001"), (None, true));
+}
+
+/// send-1: a figure past what an amount can hold read as 0 and passed every
+/// check; Confirm then did nothing.
+#[test]
+fn an_amount_too_large_to_count_is_refused_on_the_form() {
+    let (issue, can_continue) = issue_for("999999999999999999999999999999");
+    assert_eq!(issue, Some(AmountIssue::TooLarge));
+    assert!(!can_continue);
+}
+
+/// send-3, send-20: text that is not one figure is refused, never read by
+/// its leading digits.
+#[test]
+fn text_that_is_not_one_figure_is_refused() {
+    for typed in ["1.2.3", "1.234.56", "1.234,56", "1e3", "1,5"] {
+        let (issue, can_continue) = issue_for(typed);
+        assert_eq!(issue, Some(AmountIssue::Unreadable), "{typed}");
+        assert!(!can_continue, "{typed}");
+    }
+    assert_eq!(issue_for("1.5"), (None, true));
+    assert_eq!(issue_for(".5"), (None, true));
+}
+
+#[test]
+fn a_stale_continue_over_a_refused_figure_alerts_and_goes_nowhere() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.0000000000000000001".to_owned(),
+    });
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InvalidAmount
+        }]
+    );
+}
+
+#[test]
+fn a_split_share_with_too_many_places_is_refused_and_says_how_many() {
+    let issues = split_row_issues(
+        &[
+            draft("a", RECIPIENT, "1.0000000000000000001"),
+            draft("b", RECIPIENT_B, "1.2.3"),
+        ],
+        18,
+    );
+    let seen: Vec<_> = issues
+        .iter()
+        .map(|i| (i.id.as_str(), i.amount, i.amount_issue.clone()))
+        .collect();
+    assert_eq!(
+        seen,
+        vec![
+            (
+                "a",
+                SendRowFieldState::Invalid,
+                Some(AmountIssue::TooManyDecimals { decimals: 18 })
+            ),
+            (
+                "b",
+                SendRowFieldState::Invalid,
+                Some(AmountIssue::Unreadable)
+            ),
+        ]
+    );
+    // …and the batch is never built from a cut figure.
+    assert_eq!(
+        build_split_calls(None, 18, &[draft("a", RECIPIENT, "1.0000000000000000001")]),
+        None
+    );
 }

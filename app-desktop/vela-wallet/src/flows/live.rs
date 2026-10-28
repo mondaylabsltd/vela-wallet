@@ -9178,12 +9178,16 @@ mod parity_tests {
                         ordinal: 3,
                         address: SendRowFieldState::Invalid,
                         amount: SendRowFieldState::Invalid,
+                        address_checksum: false,
+                        amount_issue: None,
                     },
                     SendSplitRowIssue {
                         id: "rcpt_4".to_owned(),
                         ordinal: 4,
                         address: SendRowFieldState::Empty,
                         amount: SendRowFieldState::Empty,
+                        address_checksum: false,
+                        amount_issue: None,
                     },
                 ],
                 confirm_amount: String::new(),
@@ -9244,6 +9248,8 @@ mod parity_tests {
                 ordinal,
                 address: SendRowFieldState::Ok,
                 amount: SendRowFieldState::Empty,
+                address_checksum: false,
+                amount_issue: None,
             };
             let view = SendView {
                 split_mode: true,
@@ -9507,6 +9513,8 @@ mod parity_tests {
             dup: false,
             raw_amount: raw.to_owned(),
             token_amount: token.to_owned(),
+            checksum: false,
+            amount_issue: None,
             ok: true,
         }
     }

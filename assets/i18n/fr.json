@@ -497,7 +497,8 @@
    },
    "send": {
     "propose": "Proposer et approuver",
-    "invalidAddress": "Saisissez une adresse valide."
+    "invalidAddress": "Saisissez une adresse valide.",
+    "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau."
    },
    "create": {
     "title": "Nouveau multisig",
@@ -777,7 +778,14 @@
   "txSubmittedTitle": "Envoyée au réseau",
   "txConfirmedTitle": "{{amount}} {{symbol}} envoyés",
   "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu.",
-  "draftedByAgent": "Préparé par votre agent IA"
+  "draftedByAgent": "Préparé par votre agent IA",
+  "recipientChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau.",
+  "recipientZeroAddress": "C'est l'adresse zéro. Personne n'en détient la clé — tout ce qui y est envoyé est perdu pour de bon.",
+  "recipientSelf": "C'est votre propre adresse.",
+  "warnTooManyDecimals": "{{symbol}} accepte au plus {{decimals}} décimales — raccourcissez le montant.",
+  "warnAmountTooLarge": "Ce montant est trop élevé.",
+  "warnAmountUnreadable": "Saisissez un seul montant : un séparateur décimal, sans séparateur de milliers.",
+  "batchBadChecksum": "Somme de contrôle incorrecte"
  },
  "receive": {
   "title": "Recevoir",
@@ -2227,7 +2235,8 @@
   "recentActivity": "Activité récente",
   "viewAllActivity": "Voir toute l'activité",
   "deleteContact": "Supprimer le contact",
-  "edit": "Modifier"
+  "edit": "Modifier",
+  "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau."
  },
  "explore": {
   "title": "Explorer",

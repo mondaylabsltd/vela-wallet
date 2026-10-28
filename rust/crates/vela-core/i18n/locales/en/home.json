@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "Propose and approve",
-        "invalidAddress": "Enter a valid address."
+        "invalidAddress": "Enter a valid address.",
+        "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again."
       },
       "create": {
         "title": "New multisig",

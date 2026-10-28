@@ -2777,6 +2777,28 @@ export function abiEncodeUint256(value_hex) {
 }
 
 /**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+ * every field that takes an address refuses by (send-2, set-4).
+ * @param {string} address
+ * @returns {string}
+ */
+export function addressEntry(address) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.addressEntry(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
  * (UTF-16 units, as `selectionStart` counts).
  * @param {string} raw

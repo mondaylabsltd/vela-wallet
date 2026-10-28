@@ -74,6 +74,7 @@
     "recentActivity": "최근 거래",
     "viewAllActivity": "전체 거래 보기",
     "deleteContact": "연락처 삭제",
-    "edit": "편집"
+    "edit": "편집",
+    "invalidChecksum": "이 주소의 대소문자가 체크섬과 맞지 않습니다. 오타이거나 변조된 복사본입니다. 확인한 뒤 다시 복사하세요."
   }
 }

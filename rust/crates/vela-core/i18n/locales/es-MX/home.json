@@ -162,7 +162,8 @@
       },
       "send": {
         "propose": "Proponer y aprobar",
-        "invalidAddress": "Ingresa una dirección válida."
+        "invalidAddress": "Ingresa una dirección válida.",
+        "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla."
       },
       "create": {
         "title": "Nueva multifirma",

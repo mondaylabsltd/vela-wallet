@@ -316,6 +316,7 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addressPlaceholder: k('contacts.addressPlaceholder'),
 		save: k('contacts.save'),
 		invalidAddress: k('contacts.invalidAddress'),
+		invalidChecksum: k('contacts.invalidChecksum'),
 		groupNameLabel: k('contacts.groupNameLabel'),
 		groupNamePlaceholder: k('contacts.groupNamePlaceholder'),
 		edit: k('contacts.edit'),

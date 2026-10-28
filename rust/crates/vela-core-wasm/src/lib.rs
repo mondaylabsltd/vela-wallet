@@ -151,6 +151,20 @@ pub fn checksum_address(address_hex: &str) -> JsResult<String> {
     vela_core::primitives::checksum_address(address_hex).map_err(err)
 }
 
+/// What an entered address reads as — `"valid"`, `"malformed"` or
+/// `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+/// every field that takes an address refuses by (send-2, set-4).
+#[wasm_bindgen(js_name = addressEntry)]
+pub fn address_entry(address: &str) -> String {
+    use vela_core::primitives::AddressEntry;
+    match vela_core::primitives::address_entry(address) {
+        AddressEntry::Valid => "valid",
+        AddressEntry::Malformed => "malformed",
+        AddressEntry::BadChecksum => "checksum",
+    }
+    .to_owned()
+}
+
 #[wasm_bindgen(js_name = functionSelector)]
 pub fn function_selector(signature: &str) -> JsResult<Vec<u8>> {
     vela_core::primitives::function_selector(signature).map_err(err)

@@ -10,6 +10,7 @@
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { addressEntry } from '$lib/core/kernels';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { shortenAddress } from '$lib/wallet/identity';
@@ -36,11 +37,13 @@
 	let address = $state(untrack(() => prefill));
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
-	const valid = $derived(/^0x[0-9a-fA-F]{40}$/.test(address.trim()));
+	// The core's one address rule (send-2), checksum included.
+	const entry = $derived(addressEntry(address.trim()));
+	const valid = $derived(entry === 'valid');
 
 	async function add() {
 		if (!valid) {
-			failure = m.send.invalidAddress;
+			failure = entry === 'checksum' ? m.send.invalidChecksum : m.send.invalidAddress;
 			return;
 		}
 		busy = true;

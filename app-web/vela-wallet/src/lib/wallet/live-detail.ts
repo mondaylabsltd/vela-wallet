@@ -40,7 +40,14 @@ import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
+import {
+	allowanceFigure,
+	changeFigure,
+	dappTitle,
+	dayLabel,
+	moneyText,
+	sentAmountText
+} from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -411,7 +418,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 		// Hidden: the mask, and the coin kept (the core's `maskedAmount`).
 		amount = hidden
 			? maskedAmount(item.symbol)
-			: `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
+			: `${about}${sign}${sentAmountText(item.value)} ${item.symbol}`.trim();
 		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
@@ -503,7 +510,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// These were drawn in full under a masked hero — who got how much of a
 	// split, with the balance hidden — until the unit rule was looked at.
 	const partValue = (transfer: { value: string; symbol: string }) =>
-		hidden ? maskedAmount(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
+		hidden ? maskedAmount(transfer.symbol) : `${sentAmountText(transfer.value)} ${transfer.symbol}`;
 	const parts: BreakdownRowModel[] =
 		batch === null
 			? []
@@ -535,7 +542,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// breakdown below names each one. Never a lone "−" over the list.
 	const figure =
 		item.value !== null
-			? `${received ? '+' : '−'}${trimBalance(item.value)} ${item.symbol}`.trim()
+			? `${received ? '+' : '−'}${sentAmountText(item.value)} ${item.symbol}`.trim()
 			: !dappTx && batch !== null && parts.length > 0
 				? fill(m['componentsTx.receipt.assetsCount'], { n: parts.length })
 				: '';

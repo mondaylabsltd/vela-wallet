@@ -74,6 +74,7 @@
     "recentActivity": "最近往来",
     "viewAllActivity": "查看全部往来",
     "deleteContact": "删除联系人",
-    "edit": "编辑"
+    "edit": "编辑",
+    "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
   }
 }

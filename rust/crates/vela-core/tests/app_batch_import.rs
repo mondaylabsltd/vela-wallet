@@ -1540,3 +1540,35 @@ fn apply_hands_over_capped_converted_recipients() {
         "the shell seeds send and closes the sheet"
     );
 }
+
+/// send-2 in a sheet: a mixed-case address that is not its EIP-55 checksum
+/// is a typo or a changed copy, and is not paid — said as that.
+#[test]
+fn a_sheet_address_that_fails_its_checksum_is_not_paid() {
+    let mut sut = rated(unpriced("10"), 7.2);
+    let good = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    paste(&mut sut, format!("{typo},0.5\n{good},1.5"));
+    let view = sut.view();
+    assert!(!view.preview[0].valid && !view.preview[0].ok);
+    assert!(view.preview[0].checksum);
+    assert!(view.preview[1].ok && !view.preview[1].checksum);
+    assert_eq!(view.total_token, "1.5");
+}
+
+/// agent-1 in a sheet: a token figure with more places than the token has
+/// was cut to fit. It is refused, naming the places, and never totalled.
+#[test]
+fn a_sheet_figure_with_more_places_than_the_token_is_not_paid() {
+    use vela_core::app::fee_policy::AmountIssue;
+    let mut sut = rated(unpriced("10"), 7.2);
+    paste(&mut sut, format!("{},0.0000001\n{},1.5", a(), b()));
+    let view = sut.view();
+    assert!(!view.preview[0].ok);
+    assert_eq!(
+        view.preview[0].amount_issue,
+        Some(AmountIssue::TooManyDecimals { decimals: 6 })
+    );
+    assert!(view.preview[1].ok);
+    assert_eq!(view.total_token, "1.5");
+}

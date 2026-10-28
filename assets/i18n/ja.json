@@ -496,7 +496,8 @@
    },
    "send": {
     "propose": "提案して承認",
-    "invalidAddress": "有効なアドレスを入力してください。"
+    "invalidAddress": "有効なアドレスを入力してください。",
+    "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。"
    },
    "create": {
     "title": "新しいマルチシグ",
@@ -772,7 +773,14 @@
   "txSubmittedTitle": "ネットワークに送信しました",
   "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
   "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。",
-  "draftedByAgent": "AIエージェントが作成"
+  "draftedByAgent": "AIエージェントが作成",
+  "recipientChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+  "recipientZeroAddress": "これはゼロアドレスです。誰も鍵を持っていないため、ここに送ったものは二度と戻りません。",
+  "recipientSelf": "これはあなた自身のアドレスです。",
+  "warnTooManyDecimals": "{{symbol}} の小数点以下は最大 {{decimals}} 桁です。金額を短くしてください。",
+  "warnAmountTooLarge": "金額が大きすぎます。",
+  "warnAmountUnreadable": "金額は小数点を 1 つだけ使い、桁区切りを付けずに入力してください。",
+  "batchBadChecksum": "チェックサムが一致しません"
  },
  "receive": {
   "title": "受け取る",
@@ -2219,7 +2227,8 @@
   "recentActivity": "最近のやり取り",
   "viewAllActivity": "すべてのやり取りを見る",
   "deleteContact": "連絡先を削除",
-  "edit": "編集"
+  "edit": "編集",
+  "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。"
  },
  "explore": {
   "title": "探索",

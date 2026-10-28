@@ -168,6 +168,13 @@
     "txSubmittedTitle": "交易已經交咗上網絡",
     "txConfirmedTitle": "發咗 {{amount}} {{symbol}}",
     "recipientTokenContract": "呢個係代幣合約地址，轉咗去呢度嘅資產通常攞唔返。",
-    "draftedByAgent": "由你嘅 AI 代理草擬"
+    "draftedByAgent": "由你嘅 AI 代理草擬",
+    "recipientChecksum": "呢個地址嘅大小寫同校驗和唔對得上——可能打錯字，或者複製嘅地址俾人改過。請核對後重新複製。",
+    "recipientZeroAddress": "呢個係零地址，冇人持有佢嘅私鑰——轉去呢度嘅資產會永久冇咗。",
+    "recipientSelf": "呢個係你自己嘅地址。",
+    "warnTooManyDecimals": "{{symbol}} 最多支援 {{decimals}} 位小數，請縮短金額。",
+    "warnAmountTooLarge": "金額太大。",
+    "warnAmountUnreadable": "請輸入一個金額：只用一個小數點，唔好加千位分隔符。",
+    "batchBadChecksum": "校驗和唔對"
   }
 }

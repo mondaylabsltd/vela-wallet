@@ -47,9 +47,20 @@
 //! A PASTE that cannot be read as one figure is refused whole (`None`), and
 //! the field keeps what it had: "1.5e-7" — how many screens print a tiny
 //! balance — salvaged digit by digit is 1.57, ten million times the figure
-//! copied; so is "0x10", and "4.5.6" has no reading at all. While TYPING the
-//! same stray character is simply dropped, because there the figure on screen
+//! copied; so is "0x10", and "4.5.6" has no reading at all. While TYPING a
+//! stray character is simply dropped, because there the figure on screen
 //! does not change and the person sees their key do nothing.
+//!
+//! Except a SECOND decimal mark, or an exponent (send-3, send-20). Dropped,
+//! the key did nothing visible — and the person went on typing what came
+//! after it: "1,234.56" typed key by key became "1.234" (the first comma a
+//! decimal mark), the "." vanished, and the "56" made it 1.23456; a
+//! decimal-comma "1.234,56" did the same; "1.2.3" read 1.23 and "1e3" read
+//! 13. Neither preset can say which mark was meant, so neither guesses: the
+//! text is kept as typed — no longer one figure — and the send machine
+//! refuses it with a sentence (`AmountIssue::Unreadable`) until it is one.
+//! The one comma that is still grouping is a comma LEFT of the point under a
+//! decimal-point preset ("1,234.5"): it changes nothing, and is dropped.
 //!
 //! A figure has ONE spelling (issue #421). "08" was kept as typed, shown as
 //! "08 POL", read as 8 — and a person who meant 0.8 and missed the point
@@ -146,6 +157,17 @@ pub fn clean(
         }
     }
 
+    // A second decimal mark, or an exponent, typed: kept, not dropped — see
+    // the module note. There is no one figure here, and no guess is safe.
+    if !pasted && (second_mark(&text, preset_comma) || exponent(raw)) {
+        return Some(
+            raw.chars()
+                .map(plain)
+                .filter(|c| c.is_ascii_digit() || matches!(c, '.' | ',' | 'e' | 'E'))
+                .collect(),
+        );
+    }
+
     let keystroke = previous.is_some_and(|before| {
         text.chars().count() == before.chars().count() + 1 && text.replacen(',', "", 1) == before
     });
@@ -186,6 +208,28 @@ pub fn clean(
     } else {
         format!("{}.{}", one_spelling(whole, true), rest.concat())
     })
+}
+
+/// More than one decimal mark in typed text. Under a decimal-comma preset any
+/// two marks are (a typed `.` is a decimal mark there too); under a
+/// decimal-point preset two points are, and so is a comma to the RIGHT of the
+/// point — commas left of it are grouping, and with no point at all the
+/// commas are read below (grouping, or refused).
+fn second_mark(text: &str, preset_comma: bool) -> bool {
+    let points = text.matches('.').count();
+    let commas = text.matches(',').count();
+    if preset_comma {
+        return points + commas > 1;
+    }
+    points > 1 || (points == 1 && text.rfind(',') > text.find('.'))
+}
+
+/// A digit followed by `e`/`E` — the start of an exponent ("1e3").
+fn exponent(raw: &str) -> bool {
+    let chars: Vec<char> = raw.chars().map(plain).collect();
+    chars
+        .windows(2)
+        .any(|pair| pair[0].is_ascii_digit() && matches!(pair[1], 'e' | 'E'))
 }
 
 /// A whole part as it is written once (issue #421): no zero leading another
@@ -397,10 +441,13 @@ mod tests {
 
     #[test]
     fn a_second_mark_is_dropped_rather_than_re_reading_the_figure() {
-        assert_eq!(typed("4.5,", COMMA), s("4.5"));
-        assert_eq!(typed("4,5,6", COMMA), s("4.56"));
-        // Typed into the middle of 1.23456 — NOT one thousand two hundred.
-        assert_eq!(typed("1.234,56", COMMA), s("1.23456"));
+        // Kept as typed — the machine refuses it, saying why (send-3): dropped,
+        // the person typed on and "1.234,56" became 1.23456.
+        assert_eq!(typed("4.5,", COMMA), s("4.5,"));
+        assert_eq!(typed("4,5,6", COMMA), s("4,5,6"));
+        // Typed into the middle of 1.23456 — NOT one thousand two hundred,
+        // and not 1.23456 either: no one figure.
+        assert_eq!(typed("1.234,56", COMMA), s("1.234,56"));
     }
 
     #[test]
@@ -422,9 +469,35 @@ mod tests {
     }
 
     #[test]
-    fn a_decimal_point_preset_keeps_the_first_point() {
-        assert_eq!(typed("4.5.", DOT), s("4.5"));
-        assert_eq!(typed("1.5.2", DOT), s("1.52"));
+    fn a_second_point_is_kept_for_the_machine_to_refuse() {
+        // send-20: "1.2.3" read 1.23.
+        assert_eq!(typed("4.5.", DOT), s("4.5."));
+        assert_eq!(typed("1.5.2", DOT), s("1.5.2"));
+        // A comma right of the point is no grouping either.
+        assert_eq!(typed("1.234,5", DOT), s("1.234,5"));
+    }
+
+    /// send-3, key by key, as the tester typed it: never 1.23456.
+    #[test]
+    fn a_grouped_figure_typed_key_by_key_is_never_read_a_thousandth() {
+        fn keys(figure: &str, preset: NumberPreset) -> String {
+            let mut field = String::new();
+            for key in figure.chars() {
+                let raw = format!("{field}{key}");
+                field = clean(&raw, preset, Entry::Typed, Some(&field)).unwrap_or(field);
+            }
+            field
+        }
+        // The first comma is a decimal mark when it is typed (the comma-pad
+        // rule); the "." after it makes the text two marks, and it stays so.
+        assert_eq!(keys("1,234.56", DOT), "1.234.56");
+        assert_eq!(keys("1.234,56", COMMA), "1.234,56");
+        assert_eq!(keys("1,234,567", DOT), "1.234,567");
+        // One mark, one figure, as before.
+        assert_eq!(keys("1234.56", DOT), "1234.56");
+        assert_eq!(keys("1234,56", COMMA), "1234.56");
+        // send-20: an exponent is not dropped into "13".
+        assert_eq!(keys("1e3", DOT), "1e3");
     }
 
     #[test]
@@ -583,7 +656,8 @@ mod tests {
     #[test]
     fn only_what_an_amount_is_written_with_is_kept() {
         assert_eq!(typed("-4", DOT), s("4"));
-        assert_eq!(typed("1e5", DOT), s("15"));
+        // An exponent is kept for the machine to refuse (send-20), never 15.
+        assert_eq!(typed("1e5", DOT), s("1e5"));
         assert_eq!(typed("$4.00 ", DOT), s("4.00"));
         assert_eq!(typed("1'234.5", DOT), s("1234.5"));
     }
@@ -615,10 +689,11 @@ mod tests {
             s("1234.56")
         );
         // A key typed into a figure: "1.23456" → "1.234,56" is one key, and a
-        // key never moves a figure a thousandfold.
+        // key never moves a figure a thousandfold — nor is it quietly
+        // dropped: there is no one figure, and the machine says so.
         assert_eq!(
             clean("1.234,56", DOT, Entry::Unknown, Some("1.23456")),
-            s("1.23456")
+            s("1.234,56")
         );
         // No previous text known: nothing is a keystroke.
         assert_eq!(clean("1.5e-7", DOT, Entry::Unknown, None), None);

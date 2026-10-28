@@ -30,6 +30,7 @@ import {
 	tokenAmountText
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
+import { amountIssueWords } from './live-send';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';
 
@@ -125,7 +126,18 @@ function previewRow(row: BatchPreviewRow, inputs: BatchLiveInputs): BatchRowMode
 		// The figure exactly as the sheet wrote it, so it can be read back
 		// against the sheet — beside the unit the importer took it to be in.
 		source: fiat ? `${sheetFigure(row.raw_amount)} ${saidCode(inputs)}` : undefined,
-		note: row.dup ? m['send.batchDup'] : !row.valid ? m['send.batchBadAddress'] : undefined
+		// Why it is not paid: a repeat, an address that is none — or whose
+		// mixed case fails its checksum (send-2) — or a figure the token has
+		// no places for, or that is not one figure (agent-1, send-20).
+		note: row.dup
+			? m['send.batchDup']
+			: !row.valid
+				? row.checksum
+					? m['send.batchBadChecksum']
+					: m['send.batchBadAddress']
+				: row.amount_issue
+					? amountIssueWords(row.amount_issue, m, symbol)
+					: undefined
 	};
 }
 

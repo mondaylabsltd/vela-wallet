@@ -325,6 +325,17 @@ export function checksumAddress(address: string): string {
 	return translated(() => wasm.checksumAddress(address));
 }
 
+/**
+ * What an entered address reads as (send-2, set-4): `valid`, `malformed`, or
+ * `checksum` — mixed case that is not its EIP-55 checksum, a typo or an
+ * altered copy. The core's one rule for every field that takes an address.
+ */
+export type AddressEntry = 'valid' | 'malformed' | 'checksum';
+
+export function addressEntry(address: string): AddressEntry {
+	return wasm.addressEntry(address) as AddressEntry;
+}
+
 export function functionSelector(signature: string): Uint8Array {
 	return translated(() => wasm.functionSelector(signature));
 }

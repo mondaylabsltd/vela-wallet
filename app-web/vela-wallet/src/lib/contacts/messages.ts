@@ -39,6 +39,7 @@ export interface ContactsMessages {
 	addressPlaceholder: string;
 	save: string;
 	invalidAddress: string;
+	invalidChecksum: string;
 	groupNameLabel: string;
 	groupNamePlaceholder: string;
 	edit: string;
@@ -132,6 +133,7 @@ export const CONTACTS_KEYS = [
 	'contacts.addressPlaceholder',
 	'contacts.save',
 	'contacts.invalidAddress',
+	'contacts.invalidChecksum',
 	'contacts.groupNameLabel',
 	'contacts.groupNamePlaceholder',
 	'contacts.addTitle',

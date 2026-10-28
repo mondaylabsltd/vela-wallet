@@ -496,7 +496,8 @@
    },
    "send": {
     "propose": "发起并批准",
-    "invalidAddress": "请输入有效的地址。"
+    "invalidAddress": "请输入有效的地址。",
+    "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
    },
    "create": {
     "title": "新建多签账户",
@@ -772,7 +773,14 @@
   "txSubmittedTitle": "交易已提交至网络",
   "txConfirmedTitle": "已发送 {{amount}} {{symbol}}",
   "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。",
-  "draftedByAgent": "由你的 AI 智能体起草"
+  "draftedByAgent": "由你的 AI 智能体起草",
+  "recipientChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+  "recipientZeroAddress": "这是零地址，没有人持有它的私钥——转到这里的资产将永久丢失。",
+  "recipientSelf": "这是你自己的地址。",
+  "warnTooManyDecimals": "{{symbol}} 最多支持 {{decimals}} 位小数，请缩短金额。",
+  "warnAmountTooLarge": "金额过大。",
+  "warnAmountUnreadable": "请输入一个金额：只用一个小数点，不要千位分隔符。",
+  "batchBadChecksum": "校验和不符"
  },
  "receive": {
   "title": "收款",
@@ -2219,7 +2227,8 @@
   "recentActivity": "最近往来",
   "viewAllActivity": "查看全部往来",
   "deleteContact": "删除联系人",
-  "edit": "编辑"
+  "edit": "编辑",
+  "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
  },
  "explore": {
   "title": "探索",

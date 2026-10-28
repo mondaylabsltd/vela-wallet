@@ -6925,3 +6925,49 @@ fn the_machine_s_own_re_ask_is_bounded_by_the_re_quote_timeout() {
     let ops = sut.dispatch(Event::Requote);
     assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
 }
+
+/// An ENTERED amount is read exactly or refused, saying why (send-1, send-3,
+/// send-20, agent-1). `to_base_units` stays lenient for the wallet's own
+/// figures; this is the reading every entry point refuses by.
+#[test]
+fn an_entered_amount_is_read_exactly_or_refused() {
+    use vela_core::app::fee_policy::{parse_amount_units, AmountIssue};
+    assert_eq!(parse_amount_units("1", 18), Ok(1_000_000_000_000_000_000));
+    assert_eq!(parse_amount_units("1.5", 6), Ok(1_500_000));
+    assert_eq!(parse_amount_units(".5", 6), Ok(500_000));
+    assert_eq!(parse_amount_units("1.", 6), Ok(1_000_000));
+    assert_eq!(parse_amount_units(" 0.000001 ", 6), Ok(1));
+    // Trailing zeros past the token's places change nothing.
+    assert_eq!(parse_amount_units("1.50000000", 6), Ok(1_500_000));
+    assert_eq!(parse_amount_units("0", 6), Ok(0));
+    // agent-1: the 19th place of an 18-decimal coin is not cut to 0 wei.
+    assert_eq!(
+        parse_amount_units("0.0000000000000000001", 18),
+        Err(AmountIssue::TooManyDecimals { decimals: 18 })
+    );
+    assert_eq!(
+        parse_amount_units("1.0000001", 6),
+        Err(AmountIssue::TooManyDecimals { decimals: 6 })
+    );
+    assert_eq!(
+        parse_amount_units("1.5", 0),
+        Err(AmountIssue::TooManyDecimals { decimals: 0 })
+    );
+    // send-20: never "1.2" out of "1.2.3", never "13" out of "1e3".
+    for text in ["", ".", "1.2.3", "1e3", "1,5", "-1", "0x10", "1 000", "abc"] {
+        assert_eq!(
+            parse_amount_units(text, 18),
+            Err(AmountIssue::Unreadable),
+            "{text:?}"
+        );
+    }
+    // send-1: past what an amount can hold is refused, never read as 0.
+    assert_eq!(
+        parse_amount_units("340282366920938463464", 18),
+        Err(AmountIssue::TooLarge)
+    );
+    assert_eq!(
+        parse_amount_units("340282366920938463463.374607431768211455", 18),
+        Ok(u128::MAX)
+    );
+}

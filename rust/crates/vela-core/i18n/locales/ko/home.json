@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "제안하고 승인",
-        "invalidAddress": "올바른 주소를 입력하세요."
+        "invalidAddress": "올바른 주소를 입력하세요.",
+        "invalidChecksum": "이 주소의 대소문자가 체크섬과 맞지 않습니다. 오타이거나 변조된 복사본입니다. 확인한 뒤 다시 복사하세요."
       },
       "create": {
         "title": "새 멀티시그",

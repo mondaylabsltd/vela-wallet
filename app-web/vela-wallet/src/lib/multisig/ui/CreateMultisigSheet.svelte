@@ -94,6 +94,7 @@
 		if (problem) {
 			typedError = {
 				invalidAddress: m.send.invalidAddress,
+				checksum: m.send.invalidChecksum,
 				notMember: m.create.notMember,
 				duplicate: m.create.duplicate
 			}[problem];

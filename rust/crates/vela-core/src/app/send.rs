@@ -65,10 +65,10 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
 use super::fee_policy::{
-    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
-    reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, FeeFailure, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
-    TEMPO_FEE_TOKEN_DECIMALS,
+    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable,
+    parse_amount_units, reserve_fee_token, reserve_native_gas, same_asset_fee_limit, to_base_units,
+    AmountIssue, FeeAsset, FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView, FeeFailure,
+    FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
@@ -172,11 +172,24 @@ fn parse_float_or_zero(s: &str) -> f64 {
 // both platforms ([`model_token_amount`] here, `useSendController`'s
 // `tokenUnitsFor` there).
 
-/// `isValidAddress` (`send-utils.ts:8-10`).
+/// `isValidAddress` (`send-utils.ts:8-10`), and the EIP-55 checksum it never
+/// read (send-2): a mixed-case address whose case is not its checksum is a
+/// typo or a tampered copy, and is refused like any other non-address
+/// ([`crate::primitives::address_entry`], the one rule every entry point
+/// shares). One case throughout carries no checksum and passes.
 pub fn is_valid_address(addr: &str) -> bool {
-    addr.len() == 42
-        && addr.starts_with("0x")
-        && addr.as_bytes()[2..].iter().all(|b| b.is_ascii_hexdigit())
+    crate::primitives::address_entry(addr) == crate::primitives::AddressEntry::Valid
+}
+
+/// `0x` and 40 hex digits, case unread — for the addresses the wallet itself
+/// holds (a token's contract from its lists), never for one somebody entered.
+fn is_address_shape(addr: &str) -> bool {
+    crate::primitives::address_entry(addr) != crate::primitives::AddressEntry::Malformed
+}
+
+/// A typed or pasted address whose mixed case is not its EIP-55 checksum.
+fn fails_checksum(addr: &str) -> bool {
+    crate::primitives::address_entry(addr) == crate::primitives::AddressEntry::BadChecksum
 }
 
 /// `recipientsAreValid` (`MultiRecipientEditor.tsx:56-60`): at least one row,
@@ -216,14 +229,13 @@ pub fn split_row_issues(
                 SendRowFieldState::Invalid
             };
             let amount = row.amount.trim();
-            let amount_state = if amount.is_empty() {
-                SendRowFieldState::Empty
-            } else if js_parse_float(amount) > 0.0
-                && to_base_units(amount, decimals).is_some_and(|units| units > 0)
-            {
-                SendRowFieldState::Ok
-            } else {
-                SendRowFieldState::Invalid
+            // Read exactly or not at all (agent-1, send-20): a share with more
+            // places than the token has was cut to fit, and "1.2.3" read 1.2.
+            let parsed = (!amount.is_empty()).then(|| parse_amount_units(amount, decimals));
+            let amount_state = match &parsed {
+                None => SendRowFieldState::Empty,
+                Some(Ok(units)) if *units > 0 => SendRowFieldState::Ok,
+                Some(_) => SendRowFieldState::Invalid,
             };
             (address_state != SendRowFieldState::Ok || amount_state != SendRowFieldState::Ok).then(
                 || SendSplitRowIssue {
@@ -231,6 +243,8 @@ pub fn split_row_issues(
                     ordinal: index as u32 + 1,
                     address: address_state,
                     amount: amount_state,
+                    address_checksum: fails_checksum(address),
+                    amount_issue: parsed.and_then(Result::err),
                 },
             )
         })
@@ -307,7 +321,7 @@ fn build_transfer_call(token_address: Option<&str>, to: &str, amount: u128) -> O
             data: "0x".to_owned(),
         }),
         Some(token) => {
-            if !is_valid_address(token) {
+            if !is_address_shape(token) {
                 return None;
             }
             Some(FeeCall {
@@ -335,7 +349,9 @@ pub fn build_split_calls(
             build_transfer_call(
                 token_address,
                 r.address.trim(),
-                to_base_units(&r.amount, decimals)?,
+                // Exactly the figure on the row, or no batch: a share with
+                // more places than the token has is refused, never cut.
+                parse_amount_units(&r.amount, decimals).ok()?,
             )
         })
         .collect()
@@ -2175,6 +2191,20 @@ pub enum SendRowFieldState {
     Invalid,
 }
 
+/// A recipient that is an address, and still probably not the one meant
+/// (send-13). Said beside it on the form and the confirm; nothing is refused:
+/// moving money to one's own address is a real thing to want, and the zero
+/// address is where some people burn tokens on purpose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendRecipientWarning {
+    /// `0x000…000`: nobody holds its key; what is sent there is gone.
+    ZeroAddress,
+    /// The account sending is the account receiving.
+    OwnAddress,
+}
+
 /// One split row that `Continue` will not take, and which of its fields is
 /// why ([`split_row_issues`]). Rows that are fine are not listed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2185,6 +2215,14 @@ pub struct SendSplitRowIssue {
     pub ordinal: u32,
     pub address: SendRowFieldState,
     pub amount: SendRowFieldState,
+    /// The address is `Invalid` because its mixed case is not its EIP-55
+    /// checksum (send-2) — a typo or a tampered copy, said as that.
+    #[serde(default)]
+    pub address_checksum: bool,
+    /// Why an `Invalid` amount is: unreadable, more places than the token
+    /// has (the sentence names how many), or too large. `None` for a zero.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
 }
 
 /// One receipt line for batch sends (`ReceiptTransfer`).
@@ -2464,6 +2502,22 @@ pub struct SendView {
     #[serde(default)]
     pub fee_coin: Option<SendFeeCoin>,
     pub amount_warning: Option<SendAmountWarning>,
+    /// Why the single figure cannot be sent as it stands, before any balance
+    /// is asked: not one figure ("1.2.3", "1.234,56" typed), more decimal
+    /// places than the token has, or more than an amount can hold. `Continue`
+    /// is held while it stands; it IS the reason, so the shell re-derives
+    /// nothing (send-1, send-3, agent-1). `None` with nothing typed.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
+    /// The single (or sweep) recipient's mixed case is not its EIP-55
+    /// checksum (send-2): `Continue` refuses it as not an address, and this
+    /// says which way it is not one — a typo, or a copy that was changed.
+    #[serde(default)]
+    pub recipient_checksum_mismatch: bool,
+    /// A valid recipient that is probably not what was meant (send-13):
+    /// warned on the form and the confirm, never refused.
+    #[serde(default)]
+    pub recipient_warning: Option<SendRecipientWarning>,
     pub same_asset_fee_issue: Option<SendFeeIssueView>,
     /// The form's button gate — the whole of it. While a relay stop is up the
     /// button is that stop's retry, and pressing it sends [`Event::Continue`]
@@ -2611,6 +2665,10 @@ impl Send {
                     // would be a dead button.)
                     return Command::done();
                 }
+                // An address has no spaces in it: the ones a paste brings
+                // around it go (send-13), so a correct address copied with a
+                // trailing space is not "invalid".
+                let recipient = recipient.trim().to_owned();
                 // Typed over, a handed-in recipient is the person's own: Back
                 // clears it like any other typing. An echo of the same value
                 // changes nothing.
@@ -2818,6 +2876,7 @@ impl Send {
             }
         };
 
+        let amount_issue = derive_amount_issue(model);
         let warning = derive_amount_warning(model);
         let issue = derive_same_asset_issue(model);
         let picked = picked_tokens(model);
@@ -2880,7 +2939,10 @@ impl Send {
             } else if model.multi_select_mode {
                 is_valid_address(&model.recipient) && !picked.is_empty()
             } else {
-                !model.recipient.is_empty() && !model.amount.is_empty() && amount_resolves
+                !model.recipient.is_empty()
+                    && !model.amount.is_empty()
+                    && amount_resolves
+                    && amount_issue.is_none()
             };
 
         let (denom_toggle_shown, denom_toggle_enabled) = denom_toggle(model);
@@ -2932,7 +2994,9 @@ impl Send {
         // with no warning anywhere. The batch modes carry their money in
         // `recipients`/`multi_specs`, not in `model.amount`, so they are asked
         // the same question `can_continue` asks them.
-        let confirm_amount_ok = model.split_mode || model.multi_select_mode || amount_resolves;
+        let confirm_amount_ok = model.split_mode
+            || model.multi_select_mode
+            || (amount_resolves && amount_issue.is_none());
         // The whole gate, here and only here (issue #424): the shells used to
         // AND their own reasons onto it — a relay stop, a signature under way,
         // a refused submit — and did not all AND the same ones, so one client
@@ -3015,6 +3079,10 @@ impl Send {
             gas_fee_token: quoted_fee_token(model, selected_fee(model)),
             fee_coin: fee_coin(model),
             amount_warning: warning,
+            amount_issue,
+            recipient_checksum_mismatch: !model.split_mode
+                && fails_checksum(model.recipient.trim()),
+            recipient_warning: recipient_warning(model),
             same_asset_fee_issue: issue,
             can_continue,
             can_confirm,
@@ -4942,7 +5010,7 @@ fn build_sim_calls(model: &Model, token: &SendToken) -> Option<Vec<FeeCall>> {
         )
     } else {
         let amount = model_token_amount(model, token);
-        let units = to_base_units(&amount, token.decimals)?;
+        let units = parse_amount_units(&amount, token.decimals).ok()?;
         Some(vec![match token.token_address.as_deref() {
             None => FeeCall {
                 to: model.recipient.clone(),
@@ -5098,6 +5166,46 @@ fn fee_over_balance(model: &Model, token: &SendToken) -> Option<SendAmountWarnin
     Some(SendAmountWarning::InsufficientGas { symbol })
 }
 
+/// [`SendView::amount_issue`]: the single figure, read exactly or refused.
+///
+/// The figure as typed is asked first — whatever its unit, "1.2.3" is not a
+/// number — then the token units the signature is built from: in token mode
+/// that is the typed figure itself, whose places the token must have room
+/// for; in fiat mode it is the conversion, cut to the token's places by
+/// construction, which can still be too large.
+fn derive_amount_issue(model: &Model) -> Option<AmountIssue> {
+    if model.split_mode || model.multi_select_mode {
+        return None;
+    }
+    let token = model.selected_token.as_ref()?;
+    let typed = model.amount.value().trim();
+    if typed.is_empty() {
+        return None;
+    }
+    if model.amount.is_fiat() {
+        // A currency's places are its own business; only "is it ONE figure,
+        // and a countable one" is asked of what was typed.
+        if let Err(issue @ (AmountIssue::Unreadable | AmountIssue::TooLarge)) =
+            parse_amount_units(typed, 0)
+        {
+            return Some(issue);
+        }
+    }
+    parse_amount_units(&model_token_amount(model, token), token.decimals).err()
+}
+
+/// [`SendView::recipient_warning`].
+fn recipient_warning(model: &Model) -> Option<SendRecipientWarning> {
+    let to = model.recipient.trim();
+    if model.split_mode || !is_valid_address(to) {
+        return None;
+    }
+    if to.bytes().skip(2).all(|byte| byte == b'0') {
+        return Some(SendRecipientWarning::ZeroAddress);
+    }
+    sends_to_self(model).then_some(SendRecipientWarning::OwnAddress)
+}
+
 /// The live amount warning (`useSendController.ts:326-398`), as a pure
 /// derivation instead of a `useEffect` + `useState` pair.
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN is an unresolved amount, not a valid one
@@ -5112,6 +5220,11 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     }
     let token = model.selected_token.as_ref()?;
     if model.amount.is_empty() {
+        return None;
+    }
+    // A figure that cannot be read exactly has no balance to be measured
+    // against: `amount_issue` says what is wrong with it instead.
+    if derive_amount_issue(model).is_some() {
         return None;
     }
     let token_amount = model_token_amount(model, token);
@@ -5384,6 +5497,13 @@ fn handle_continue(model: &mut Model) -> Cmd {
         if !recipients_are_valid(&model.recipients) {
             return alert(model, SendAlertKind::InvalidAddress);
         }
+        if let Some(token) = model.selected_token.as_ref() {
+            // The gate's own reasons, asked again for a stale frame: a share
+            // the token has no places for is refused, never cut.
+            if !split_row_issues(&model.recipients, token.decimals).is_empty() {
+                return alert(model, SendAlertKind::InvalidAmount);
+            }
+        }
         if let Some(token) = model.selected_token.clone() {
             let Some(total) = sum_split_base_units(&model.recipients, token.decimals) else {
                 // TS `toBaseUnits` would throw out of the handler — no state
@@ -5398,6 +5518,9 @@ fn handle_continue(model: &mut Model) -> Cmd {
     } else {
         if !is_valid_address(&model.recipient) {
             return alert(model, SendAlertKind::InvalidAddress);
+        }
+        if derive_amount_issue(model).is_some() {
+            return alert(model, SendAlertKind::InvalidAmount);
         }
         let token = model.selected_token.clone();
         let amount_num = token
@@ -5648,10 +5771,11 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     // one the same-asset breach already gets: back to the amount field.
     let unresolved = !model.split_mode
         && !model.multi_select_mode
-        && model
-            .selected_token
-            .as_ref()
-            .is_some_and(|token| !(js_parse_float(&model_token_amount(model, token)) > 0.0));
+        && (derive_amount_issue(model).is_some()
+            || model
+                .selected_token
+                .as_ref()
+                .is_some_and(|token| !(js_parse_float(&model_token_amount(model, token)) > 0.0)));
     if unresolved {
         return edit_amount(model);
     }
@@ -5933,34 +6057,38 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
         })
     } else {
         let amount = model_token_amount(model, &token);
-        to_base_units(&amount, token.decimals).and_then(|units| {
-            let call = match token.token_address.as_deref() {
-                None => FeeCall {
+        // What is signed is the figure exactly, or nothing (agent-1): a cut
+        // figure would be shown as sent while a different sum moved.
+        parse_amount_units(&amount, token.decimals)
+            .ok()
+            .and_then(|units| {
+                let call = match token.token_address.as_deref() {
+                    None => FeeCall {
+                        to: model.recipient.clone(),
+                        value: units.to_string(),
+                        data: "0x".to_owned(),
+                    },
+                    Some(addr) => FeeCall {
+                        to: addr.to_owned(),
+                        value: "0".to_owned(),
+                        data: encode_erc20_transfer(&model.recipient, units)?,
+                    },
+                };
+                let line = SendLine {
                     to: model.recipient.clone(),
-                    value: units.to_string(),
-                    data: "0x".to_owned(),
-                },
-                Some(addr) => FeeCall {
-                    to: addr.to_owned(),
-                    value: "0".to_owned(),
-                    data: encode_erc20_transfer(&model.recipient, units)?,
-                },
-            };
-            let line = SendLine {
-                to: model.recipient.clone(),
-                to_name: model
-                    .recipient_identity
-                    .as_ref()
-                    .and_then(|i| i.name.clone()),
-                amount,
-                symbol: token.symbol.clone(),
-                token_address: token.token_address.clone(),
-                decimals: token.decimals,
-                price_usd: token.price_usd.unwrap_or(0.0),
-                logo_urls: token.logo_urls.clone(),
-            };
-            Some((vec![call], vec![line]))
-        })
+                    to_name: model
+                        .recipient_identity
+                        .as_ref()
+                        .and_then(|i| i.name.clone()),
+                    amount,
+                    symbol: token.symbol.clone(),
+                    token_address: token.token_address.clone(),
+                    decimals: token.decimals,
+                    price_usd: token.price_usd.unwrap_or(0.0),
+                    logo_urls: token.logo_urls.clone(),
+                };
+                Some((vec![call], vec![line]))
+            })
     };
 
     let (calls, lines) = built?;
@@ -6972,8 +7100,26 @@ fn confirm_gate_open(model: &Model) -> bool {
         && !model.estimating_gas
         && !model.fee_busy
         && !model.fee_failed
+        && fee_in_hand(model)
         && !relay_stopped(model)
         && previous_in_flight(model).is_none()
+}
+
+/// A quote for the form's own chain is in hand — the one the submit signs
+/// (invariant ①: displayed = signed).
+///
+/// A failed fee on the confirm drops it (`FeeFailedChanged`), and the gate
+/// used to open again on "no longer failing" alone: when the card recovered
+/// with the very quote it had before, nothing told this machine a figure, the
+/// confirm opened over none, and the submit built a fee leg the review never
+/// showed — refused as "not the one on the review", on every Try again
+/// (send-4). No quote, no confirm.
+fn fee_in_hand(model: &Model) -> bool {
+    let chain = form_chain(model);
+    model
+        .fee_estimate
+        .as_ref()
+        .is_some_and(|fee| Some(fee.chain_id) == chain)
 }
 
 /// The operation this send must wait for: the account's previous one on the

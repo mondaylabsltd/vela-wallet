@@ -168,6 +168,13 @@
     "txSubmittedTitle": "ネットワークに送信しました",
     "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
     "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。",
-    "draftedByAgent": "AIエージェントが作成"
+    "draftedByAgent": "AIエージェントが作成",
+    "recipientChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+    "recipientZeroAddress": "これはゼロアドレスです。誰も鍵を持っていないため、ここに送ったものは二度と戻りません。",
+    "recipientSelf": "これはあなた自身のアドレスです。",
+    "warnTooManyDecimals": "{{symbol}} の小数点以下は最大 {{decimals}} 桁です。金額を短くしてください。",
+    "warnAmountTooLarge": "金額が大きすぎます。",
+    "warnAmountUnreadable": "金額は小数点を 1 つだけ使い、桁区切りを付けずに入力してください。",
+    "batchBadChecksum": "チェックサムが一致しません"
   }
 }

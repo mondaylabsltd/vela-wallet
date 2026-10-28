@@ -168,6 +168,13 @@
     "txSubmittedTitle": "An das Netzwerk gesendet",
     "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
     "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen.",
-    "draftedByAgent": "Von Ihrem KI-Agenten vorbereitet"
+    "draftedByAgent": "Von Ihrem KI-Agenten vorbereitet",
+    "recipientChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut.",
+    "recipientZeroAddress": "Das ist die Null-Adresse. Niemand besitzt ihren Schlüssel – alles, was hierhin geht, ist endgültig weg.",
+    "recipientSelf": "Das ist deine eigene Adresse.",
+    "warnTooManyDecimals": "{{symbol}} hat höchstens {{decimals}} Nachkommastellen – kürze den Betrag.",
+    "warnAmountTooLarge": "Dieser Betrag ist zu groß.",
+    "warnAmountUnreadable": "Gib einen Betrag ein: ein Dezimalzeichen, keine Tausendertrennzeichen.",
+    "batchBadChecksum": "Prüfsumme passt nicht"
   }
 }

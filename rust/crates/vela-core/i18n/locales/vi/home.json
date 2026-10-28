@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "Đề xuất và duyệt",
-        "invalidAddress": "Nhập một địa chỉ hợp lệ."
+        "invalidAddress": "Nhập một địa chỉ hợp lệ.",
+        "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại."
       },
       "create": {
         "title": "Đa chữ ký mới",

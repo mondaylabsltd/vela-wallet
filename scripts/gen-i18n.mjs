@@ -891,10 +891,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (`settings.agent.detail`, a new branch), the last action's outcome — and
 //   `send.draftedByAgent`, the review's marker. 2046 + 17 = 2063 leaves,
 //   116 + 1 = 117 branches.
-// 2196 (all three of the above, 2026-10-28): 2046 + 7 + 9 + 17 = 2079 leaves,
-//   117 branches.
-if (PATHS.length !== 2196) fail(`expected 2196 paths (2079 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2079) fail(`expected 2079 leaf paths, got ${leafSet.size}`);
+// 2171 (send amounts and addresses read exactly, 2026-10-28): + 7 `send`
+//   words (a checksum that fails, the zero and one's own address, too many
+//   places, too large, not one figure, a sheet row's checksum) + 1
+//   `contacts.invalidChecksum` + 1 `home.multisig.send.invalidChecksum`.
+//   2046 + 9 = 2055 leaves, 116 branches.
+// 2205 (all four of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 = 2088
+//   leaves, 117 branches.
+if (PATHS.length !== 2205) fail(`expected 2205 paths (2088 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2088) fail(`expected 2088 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

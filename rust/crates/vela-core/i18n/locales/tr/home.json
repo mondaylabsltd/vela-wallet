@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "Öner ve onayla",
-        "invalidAddress": "Geçerli bir adres gir."
+        "invalidAddress": "Geçerli bir adres gir.",
+        "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın."
       },
       "create": {
         "title": "Yeni çoklu imza",

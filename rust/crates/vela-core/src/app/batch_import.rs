@@ -60,9 +60,11 @@
 //! old rate cannot outlive the switch, and a late answer for the abandoned
 //! currency cannot relabel itself as the new one.
 //!
-//! Quirks ported verbatim (see inventory open questions):
-//! - In token mode a pasted amount with more decimals than the token is
-//!   silently truncated by `to_base_units` (eip681.ts `toBaseUnits` slice).
+//! A quirk once ported verbatim is gone (agent-1, send-20): in token mode a
+//! pasted amount with more decimals than the token was silently truncated by
+//! `to_base_units` (eip681.ts `toBaseUnits` slice), and "1.2.3" read as 1.2.
+//! A token figure is now read exactly ([`parse_amount_units`]) or its row is
+//! refused, saying why ([`BatchPreviewRow::amount_issue`]).
 //!
 //! The shell owns the file picker, SheetJS (`.xlsx` → cell matrix — the text
 //! path is parsed entirely in core), the rate source (`resolveRate` — NOT the
@@ -78,6 +80,8 @@ use crux_core::capability::Operation;
 use crux_core::macros::effect;
 use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
+
+use super::fee_policy::{parse_amount_units, AmountIssue};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -1204,6 +1208,14 @@ pub struct BatchPreviewRow {
     /// The converted token amount; empty when no positive rate is set in
     /// fiat mode.
     pub token_amount: String,
+    /// Not `valid` because the address's mixed case is not its EIP-55
+    /// checksum (send-2).
+    #[serde(default)]
+    pub checksum: bool,
+    /// Why a token figure cannot be paid as written: not one figure, more
+    /// places than the token has, or too large. The row is not `ok`.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
     pub ok: bool,
 }
 
@@ -1607,7 +1619,10 @@ fn derived(model: &Model, token: &BatchToken) -> Derived {
     let mut preview: Vec<BatchPreviewRow> = Vec::new();
     for row in &parsed.rows {
         let address = row.address.trim().to_owned();
-        let valid = is_address(&address);
+        // The send's own rule (send-2): a mixed case that is not the EIP-55
+        // checksum is a typo or a changed copy, not an address.
+        let entry = crate::primitives::address_entry(&address);
+        let valid = entry == crate::primitives::AddressEntry::Valid;
         let low = address.to_lowercase();
         let dup = valid && seen.contains(&low);
         if valid {
@@ -1624,15 +1639,25 @@ fn derived(model: &Model, token: &BatchToken) -> Derived {
             }
             BatchUnit::Token => row.raw_amount.clone(),
         };
-        let ok = valid && !dup && parse_float_prefix(&token_amount) > 0.0;
+        // A token figure the sheet wrote is read exactly or not at all. A
+        // converted fiat figure is cut to the token's places by construction.
+        let amount_issue = match model.unit {
+            BatchUnit::Token if !token_amount.trim().is_empty() => {
+                parse_amount_units(&token_amount, token.decimals).err()
+            }
+            _ => None,
+        };
+        let ok = valid && !dup && amount_issue.is_none() && parse_float_prefix(&token_amount) > 0.0;
         preview.push(BatchPreviewRow {
             line: row.line,
             name: row.name.clone(),
+            checksum: entry == crate::primitives::AddressEntry::BadChecksum,
             address,
             valid,
             dup,
             raw_amount: row.raw_amount.clone(),
             token_amount,
+            amount_issue,
             ok,
         });
     }

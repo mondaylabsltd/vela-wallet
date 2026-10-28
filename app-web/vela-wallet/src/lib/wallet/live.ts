@@ -413,6 +413,18 @@ export function tokenAmountText(amount: string, rounding: 'half-up' | 'down' = '
 }
 
 /**
+ * An amount that moved, or is about to: ONE rule for the confirm's headline,
+ * the receipt, the activity row and its detail (send-12) — the ladder of
+ * {@link tokenAmountText}, cut, never rounded up. The receipt rounded half
+ * up while the activity row truncated at six places, so one transfer of
+ * 1.23456789 read "1.2346" on one screen and "1.234567" on the next; and a
+ * figure rounded up says more left the account than did.
+ */
+export function sentAmountText(amount: string): string {
+	return tokenAmountText(amount, 'down');
+}
+
+/**
  * A token figure that is about to be SENT: the person's decimal mark, and
  * every digit the core gave it. `trimBalance`'s six places are for a balance
  * being glanced at — a share of 0.00022989 printed as 0.000229 is not what
@@ -872,7 +884,7 @@ function rowFigure(
 	if (item.value !== null) {
 		const about = item.dapp?.estimated ? '≈ ' : '';
 		return {
-			amount: `${about}${received ? '+' : '−'}${trimBalance(item.value)}`,
+			amount: `${about}${received ? '+' : '−'}${sentAmountText(item.value)}`,
 			unit: item.symbol,
 			danger: false
 		};

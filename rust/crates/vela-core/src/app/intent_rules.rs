@@ -121,6 +121,8 @@ pub struct TokenFacts {
     pub balance: String,
     pub price_usd: Option<f64>,
     pub spam: bool,
+    /// The token's places; `None` from a shell that does not say.
+    pub decimals: Option<u32>,
 }
 
 /// `BalanceView`, as read here.
@@ -674,6 +676,58 @@ fn other_space(world: &World, chain_id: u32) -> bool {
         .is_some_and(|row| row.is_testnet != testnets)
 }
 
+/// A drafted amount with more decimal places than the token has (agent-1).
+/// The send would have cut it to fit — 19 places of an 18-decimal coin moved
+/// 0 wei, was shown as sent, and cost a fee — so it is refused here, before
+/// any form opens, saying how many places the token allows. A token the
+/// wallet does not hold, or whose places it does not know, is left to the
+/// send form, which refuses the same figure by the same rule.
+fn more_places_than_the_token(action: &Action, world: &World) -> Option<String> {
+    let (chain_id, contract, amounts): (u32, Option<&str>, Vec<&str>) = match action {
+        Action::PrepareTransfer {
+            chain_id,
+            token,
+            amount,
+            ..
+        } => (*chain_id, token.as_deref(), vec![amount.as_str()]),
+        Action::PrepareBatchTransfer {
+            chain_id,
+            token,
+            recipients,
+        } => (
+            *chain_id,
+            token.as_deref(),
+            recipients.iter().map(|row| row.amount.as_str()).collect(),
+        ),
+        _ => return None,
+    };
+    let held = world.balance.as_ref()?.tokens.iter().find(|held| {
+        held.chain_id == chain_id
+            && match (contract, held.token_address.as_deref()) {
+                (None, None) => true,
+                (Some(want), Some(have)) => want.trim().eq_ignore_ascii_case(have.trim()),
+                _ => false,
+            }
+    })?;
+    let decimals = held.decimals?;
+    amounts
+        .into_iter()
+        .map(str::trim)
+        .filter(|amount| !amount.eq_ignore_ascii_case("max"))
+        .find(|amount| {
+            matches!(
+                super::fee_policy::parse_amount_units(amount, decimals),
+                Err(super::fee_policy::AmountIssue::TooManyDecimals { .. })
+            )
+        })
+        .map(|amount| {
+            format!(
+                "amount {amount} has more decimal places than {} allows ({decimals}): it cannot be sent as written — round it to at most {decimals} places",
+                held.symbol
+            )
+        })
+}
+
 fn signed_in(world: &World) -> Examined {
     match ready_session(world) {
         None => not_ready("the session"),
@@ -1088,10 +1142,13 @@ pub fn examine(action: &Action, world: &World) -> Examined {
                 ),
             )
         }
-        Action::PrepareTransfer { .. }
-        | Action::PrepareBatchTransfer { .. }
-        | Action::AddToken { .. }
-        | Action::RefreshBalances => signed_in(world),
+        Action::PrepareTransfer { .. } | Action::PrepareBatchTransfer { .. } => {
+            match more_places_than_the_token(action, world) {
+                Some(why) => refused(ReasonCode::InvalidInput, why),
+                None => signed_in(world),
+            }
+        }
+        Action::AddToken { .. } | Action::RefreshBalances => signed_in(world),
         Action::SubmitTransfer { operation: id, .. } | Action::CancelTransfer { operation: id } => {
             examine_transfer(action, world, id)
         }
@@ -1368,7 +1425,9 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         | Action::SetContactGroups { .. }
         | Action::SetContactFavorite { .. } => &["contacts"],
         Action::PrepareTransfer { .. } => &["session", "balance", "networks", "network_space"],
-        Action::PrepareBatchTransfer { .. } => &["session", "networks", "network_space"],
+        // The balance names the token's places: a share it has no room for
+        // is refused before any form opens (agent-1).
+        Action::PrepareBatchTransfer { .. } => &["session", "balance", "networks", "network_space"],
         Action::AddToken { .. } | Action::RefreshBalances => &["session"],
         Action::SubmitTransfer { .. } | Action::CancelTransfer { .. } => &["operations"],
         Action::DeleteActivity { .. } => &["feed"],

@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "發起並核准",
-        "invalidAddress": "請輸入有效的地址。"
+        "invalidAddress": "請輸入有效的地址。",
+        "invalidChecksum": "此地址的大小寫與校驗碼不符——可能是輸入錯誤，或複製的地址遭到竄改。請核對後重新複製。"
       },
       "create": {
         "title": "新建多簽帳戶",

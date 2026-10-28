@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "Usulkan dan setujui",
-        "invalidAddress": "Masukkan alamat yang valid."
+        "invalidAddress": "Masukkan alamat yang valid.",
+        "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang."
       },
       "create": {
         "title": "Multisig baru",

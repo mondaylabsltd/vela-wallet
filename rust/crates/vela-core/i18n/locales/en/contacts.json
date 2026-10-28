@@ -74,6 +74,7 @@
     "recentActivity": "Recent activity",
     "viewAllActivity": "View all activity",
     "deleteContact": "Delete contact",
-    "edit": "Edit"
+    "edit": "Edit",
+    "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again."
   }
 }

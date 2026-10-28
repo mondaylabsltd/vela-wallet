@@ -2693,3 +2693,23 @@ fn each_refusal_names_its_own_sentence_430() {
         }
     }
 }
+
+/// set-4: a mixed-case address that is not its EIP-55 checksum is a typo or
+/// a changed copy. Lowercased on save it would have become "valid"; it is
+/// not saved at all. Its correct spelling, and one case, still are.
+#[test]
+fn an_address_that_fails_its_checksum_is_not_saved() {
+    let mut sut = booted_empty();
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    let ops = sut.dispatch(Event::Save {
+        input: save_input(typo, Some("Bob")),
+        now_ms: 1_000.0,
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    assert!(sut.view().contacts.is_empty());
+    let ops = sut.dispatch(Event::Save {
+        input: save_input("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", Some("Bob")),
+        now_ms: 1_000.0,
+    });
+    assert!(matches!(&ops[0], Op::WriteContacts { .. }));
+}

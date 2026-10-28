@@ -137,7 +137,7 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
+	import { dropsToldFee, feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
@@ -1255,7 +1255,15 @@
 		// and drops the figure it kept on the confirm page when the card fails.
 		// Only a failure for the form's own chain counts (PR 2 polish): right
 		// after a token switch the old chain's is not this form's.
-		for (const event of feeStateWord.news(view, formChain)) sendSession.dispatch(event);
+		for (const event of feeStateWord.news(view, formChain)) {
+			sendSession.dispatch(event);
+			// The machine let go of the figure it was told: the next quote is
+			// news to it, even the same one (send-4).
+			if (dropsToldFee(event)) {
+				lastFeeStamp = null;
+				resyncedFee = null;
+			}
+		}
 		const coinNews = feeTokenWord.news(view.fee_token, feeQuote.pricingChainId, formChain);
 		if (coinNews !== null) sendSession.dispatch(coinNews);
 		const estimate = view.fee;

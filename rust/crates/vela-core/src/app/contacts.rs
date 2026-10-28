@@ -640,6 +640,14 @@ impl App for Contacts {
                 if !model.loaded {
                     return Command::done();
                 }
+                // A mixed case that is not the EIP-55 checksum is a typo or
+                // a changed copy (set-4): it is not saved as somebody's
+                // address — lowercased here, it would have become "valid".
+                if crate::primitives::address_entry(input.address.trim())
+                    == crate::primitives::AddressEntry::BadChecksum
+                {
+                    return Command::done();
+                }
                 let outcome = apply_save(model, input, now_ms);
                 let mut ops = vec![ContactOperation::WriteContacts {
                     contacts: model.saved.clone(),

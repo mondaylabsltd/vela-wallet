@@ -74,6 +74,7 @@
     "recentActivity": "最近のやり取り",
     "viewAllActivity": "すべてのやり取りを見る",
     "deleteContact": "連絡先を削除",
-    "edit": "編集"
+    "edit": "編集",
+    "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。"
   }
 }

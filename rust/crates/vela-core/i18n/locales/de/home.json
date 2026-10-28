@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "Vorschlagen und genehmigen",
-        "invalidAddress": "Gib eine gültige Adresse ein."
+        "invalidAddress": "Gib eine gültige Adresse ein.",
+        "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut."
       },
       "create": {
         "title": "Neues Multisig",

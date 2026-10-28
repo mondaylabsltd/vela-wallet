@@ -161,7 +161,8 @@
       },
       "send": {
         "propose": "发起并批准",
-        "invalidAddress": "请输入有效的地址。"
+        "invalidAddress": "请输入有效的地址。",
+        "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
       },
       "create": {
         "title": "新建多签账户",

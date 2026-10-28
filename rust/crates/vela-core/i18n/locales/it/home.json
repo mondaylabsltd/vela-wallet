@@ -162,7 +162,8 @@
       },
       "send": {
         "propose": "Proponi e approva",
-        "invalidAddress": "Inserisci un indirizzo valido."
+        "invalidAddress": "Inserisci un indirizzo valido.",
+        "invalidChecksum": "Le maiuscole di questo indirizzo non corrispondono al suo checksum: un errore di battitura o una copia alterata. Controllalo e copialo di nuovo."
       },
       "create": {
         "title": "Nuovo multisig",

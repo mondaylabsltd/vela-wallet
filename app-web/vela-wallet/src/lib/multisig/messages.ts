@@ -94,6 +94,8 @@ export interface MultisigMessages {
 	send: {
 		propose: string;
 		invalidAddress: string;
+		/** A member's mixed case is not its EIP-55 checksum (send-2). */
+		invalidChecksum: string;
 	};
 	create: {
 		title: string;
@@ -288,7 +290,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	},
 	send: {
 		propose: '',
-		invalidAddress: ''
+		invalidAddress: '',
+		invalidChecksum: ''
 	},
 	create: {
 		title: '',

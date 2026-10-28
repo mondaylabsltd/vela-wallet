@@ -1548,6 +1548,65 @@ pub fn to_base_units(amount: &str, decimals: u32) -> Option<u128> {
     }
 }
 
+/// Why an amount someone ENTERED for a token cannot be sent as it stands.
+///
+/// [`to_base_units`] is lenient on purpose — it reads balances and figures
+/// the wallet wrote itself — and cut a person's or an agent's figure to fit:
+/// a 19th decimal of an 18-decimal coin vanished (so "0.0000000000000000001"
+/// moved 0 wei and was shown as sent, fee charged), "1.2.3" read as 1.2, and
+/// a figure past `u128` read as nothing at all while Continue stayed lit.
+/// Every place that takes an amount refuses by [`parse_amount_units`]
+/// instead, and says which of these it is.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum AmountIssue {
+    /// Not one figure: digits and at most one `.` ("1.2.3", "1e3", "1,5").
+    Unreadable,
+    /// More decimal places than the token has. Trailing zeros do not count:
+    /// they change nothing.
+    TooManyDecimals { decimals: u32 },
+    /// More base units than an amount can hold.
+    TooLarge,
+}
+
+/// An ENTERED amount → base units, exactly, or why not ([`AmountIssue`]).
+/// Dot-decimal: `"1"`, `"1.5"`, `".5"`, `"1."`. Blank is unreadable — the
+/// callers say "no amount" before they ask.
+pub fn parse_amount_units(amount: &str, decimals: u32) -> Result<u128, AmountIssue> {
+    let amount = amount.trim();
+    let (whole, fraction) = amount.split_once('.').unwrap_or((amount, ""));
+    let digits = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    if (whole.is_empty() && fraction.is_empty()) || !digits(whole) || !digits(fraction) {
+        return Err(AmountIssue::Unreadable);
+    }
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.len() > decimals as usize {
+        return Err(AmountIssue::TooManyDecimals { decimals });
+    }
+    let scale = 10u128.checked_pow(decimals).ok_or(AmountIssue::TooLarge)?;
+    let whole_units = match whole.trim_start_matches('0') {
+        "" => 0,
+        digits => digits
+            .parse::<u128>()
+            .ok()
+            .and_then(|w| w.checked_mul(scale))
+            .ok_or(AmountIssue::TooLarge)?,
+    };
+    let fraction_units = if fraction.is_empty() {
+        0
+    } else {
+        let pad = 10u128.pow(decimals - fraction.len() as u32);
+        fraction
+            .parse::<u128>()
+            .map_err(|_| AmountIssue::TooLarge)?
+            * pad
+    };
+    whole_units
+        .checked_add(fraction_units)
+        .ok_or(AmountIssue::TooLarge)
+}
+
 /// Integer base units → trimmed human decimal string (`fromBaseUnits`).
 pub fn from_base_units(value: u128, decimals: u32) -> String {
     let s = value.to_string();

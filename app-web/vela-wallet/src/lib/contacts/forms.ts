@@ -12,6 +12,8 @@ export interface ContactFormCopy {
 	save: string;
 	cancel: string;
 	invalidAddress: string;
+	/** The address's mixed case is not its EIP-55 checksum (set-4). */
+	invalidChecksum: string;
 }
 
 export interface GroupFormCopy {

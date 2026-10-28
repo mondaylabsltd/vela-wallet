@@ -74,6 +74,7 @@
     "recentActivity": "Aktivitas terakhir",
     "viewAllActivity": "Lihat semua aktivitas",
     "deleteContact": "Hapus kontak",
-    "edit": "Edit"
+    "edit": "Edit",
+    "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang."
   }
 }

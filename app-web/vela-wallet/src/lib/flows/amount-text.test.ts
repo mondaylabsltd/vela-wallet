@@ -34,11 +34,15 @@ describe('a decimal-comma preset', () => {
 		expect(clean('0.000751')).toBe('0.000751');
 	});
 
-	it('drops a second mark rather than re-reading the figure around it', () => {
-		expect(clean('4.5,')).toBe('4.5');
-		expect(clean('4,5,6')).toBe('4.56');
-		// Typed into the middle of 1.23456 — NOT one thousand two hundred.
-		expect(clean('1.234,56')).toBe('1.23456');
+	// send-3: dropped, the second mark vanished while the person typed on, and
+	// "1.234,56" became 1.23456. Kept, it is no figure — the core refuses it
+	// with a sentence (`amount_issue`) until there is one mark.
+	it('keeps a second mark for the core to refuse, never re-reading the figure', () => {
+		expect(clean('4.5,')).toBe('4.5,');
+		expect(clean('4,5,6')).toBe('4,5,6');
+		// Typed into the middle of 1.23456 — NOT one thousand two hundred,
+		// and not 1.23456 either.
+		expect(clean('1.234,56')).toBe('1.234,56');
 	});
 
 	it('reads a pasted grouped figure for what it is', () => {
@@ -61,9 +65,19 @@ describe('a decimal-point preset', () => {
 		expect(clean('1,234,567', true)).toBe('1234567');
 	});
 
-	it('keeps one decimal point, the first', () => {
-		expect(clean('4.5.')).toBe('4.5');
-		expect(clean('1.5.2')).toBe('1.52');
+	// send-20: "1.2.3" read 1.23.
+	it('keeps a second point for the core to refuse', () => {
+		expect(clean('4.5.')).toBe('4.5.');
+		expect(clean('1.5.2')).toBe('1.5.2');
+	});
+
+	// send-3, key by key as a person types it: never 1.23456.
+	it('a grouped figure typed key by key is never read a thousandth', () => {
+		let field = '';
+		for (const key of '1,234.56') {
+			field = cleanAmountText(field + key, '.', false, field) ?? field;
+		}
+		expect(field).toBe('1.234.56');
 	});
 });
 
@@ -120,7 +134,8 @@ describe('under any preset', () => {
 
 	it('keeps only what an amount is written with', () => {
 		expect(cleanAmountText('-4', '.')).toBe('4');
-		expect(cleanAmountText('1e5', '.')).toBe('15');
+		// An exponent is kept for the core to refuse (send-20), never 15.
+		expect(cleanAmountText('1e5', '.')).toBe('1e5');
 		expect(cleanAmountText('$4.00 ', '.')).toBe('4.00');
 		expect(cleanAmountText("1'234.5", '.')).toBe('1234.5');
 	});

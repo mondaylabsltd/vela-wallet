@@ -171,6 +171,13 @@
     "txSubmittedTitle": "Enviada para a rede",
     "txConfirmedTitle": "Enviou {{amount}} {{symbol}}",
     "recipientTokenContract": "Este é o endereço de um contrato de token. O que você enviar para cá geralmente não pode ser recuperado.",
-    "draftedByAgent": "Preparado pelo seu agente de IA"
+    "draftedByAgent": "Preparado pelo seu agente de IA",
+    "recipientChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo.",
+    "recipientZeroAddress": "Este é o endereço zero. Ninguém tem a chave dele — tudo o que for enviado para cá se perde para sempre.",
+    "recipientSelf": "Este é o seu próprio endereço.",
+    "warnTooManyDecimals": "{{symbol}} aceita no máximo {{decimals}} casas decimais — encurte o valor.",
+    "warnAmountTooLarge": "Este valor é grande demais.",
+    "warnAmountUnreadable": "Digite um único valor: um separador decimal, sem separador de milhar.",
+    "batchBadChecksum": "Checksum não confere"
   }
 }

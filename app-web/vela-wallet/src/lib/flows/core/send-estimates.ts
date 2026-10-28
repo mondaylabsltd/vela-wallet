@@ -201,6 +201,18 @@ export class FeeStateWord {
 }
 
 /**
+ * Whether `event` makes the send machine let go of the quote it was told: a
+ * failure on the confirm drops it (`FeeFailedChanged`). The mirror must then
+ * tell the next quote again, even when it is byte for byte the one it told
+ * before — remembered as "told", it was never said again, the machine held no
+ * figure, and its confirm opened over none (send-4: every Try again after a
+ * spell offline was refused before a byte left).
+ */
+export function dropsToldFee(event: SendEvent): boolean {
+	return event.type === 'fee_failed_changed' && event.failed;
+}
+
+/**
  * The estimates this process actually produced, by structural key.
  *
  * The shell is the ONLY producer of a `FeeEstimateView` (the executor's

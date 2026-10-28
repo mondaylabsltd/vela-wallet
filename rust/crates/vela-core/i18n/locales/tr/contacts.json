@@ -74,6 +74,7 @@
     "recentActivity": "Son işlemler",
     "viewAllActivity": "Tüm işlemleri gör",
     "deleteContact": "Kişiyi sil",
-    "edit": "Düzenle"
+    "edit": "Düzenle",
+    "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın."
   }
 }

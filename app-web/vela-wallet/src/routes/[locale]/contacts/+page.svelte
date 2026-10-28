@@ -638,7 +638,8 @@
 			addressPlaceholder: m.addressPlaceholder,
 			save: m.save,
 			cancel: m.cancel,
-			invalidAddress: m.invalidAddress
+			invalidAddress: m.invalidAddress,
+			invalidChecksum: m.invalidChecksum
 		};
 	}
 

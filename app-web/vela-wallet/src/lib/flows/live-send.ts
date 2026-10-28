@@ -18,6 +18,7 @@ import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
+import type { AmountIssue } from '$lib/core/generated/AmountIssue';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
 import type { SendFeeCoin } from '$lib/core/generated/SendFeeCoin';
 import type { SendPayee } from '$lib/core/generated/SendPayee';
@@ -34,6 +35,7 @@ import {
 	cutFigureText,
 	exactAmount,
 	moneyText,
+	sentAmountText,
 	tokenAmountText,
 	trimBalance,
 	unitAdornment
@@ -740,8 +742,12 @@ function sweepAmount(send: SendView, token: SendToken): string {
 export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): SendFormModel {
 	const { send, m, currency, identicon } = inputs;
 	const token = send.selected_token;
+	// A figure the core cannot read exactly has no worth to state: "1.2.3"
+	// priced by its leading digits read "≈ $1.20" beside the refusal.
 	const usd =
-		token?.price_usd != null ? (parseFloat(send.token_amount) || 0) * token.price_usd : null;
+		token?.price_usd != null && (send.amount_issue ?? null) === null
+			? (parseFloat(send.token_amount) || 0) * token.price_usd
+			: null;
 
 	const split = send.split_mode;
 	// The split's sum in the display currency — the same arithmetic as the
@@ -801,7 +807,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// contract (spec 096 F12), else a name when it knows one, and the
 		// first-interaction note when it does not.
 		note: recipientLine(send, m),
-		noteWarn: send.recipient_is_token_contract
+		noteWarn: send.recipient_is_token_contract || recipientCaution(send, m) !== undefined
 	};
 
 	// SD2d — the sweep: several tokens, one recipient, one operation. The
@@ -919,8 +925,18 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 						duplicateNote: duplicateNote(send, draft.id, m),
 						// Only a field with something IN it can be wrong; an empty one
 						// is unfinished, and its prompt already says what it wants.
-						addressNote: issue?.address === 'invalid' ? m['send.batchBadAddress'] : undefined,
-						amountNote: issue?.amount === 'invalid' ? m['send.badAmount'] : undefined
+						addressNote:
+							issue?.address !== 'invalid'
+								? undefined
+								: issue.address_checksum
+									? m['send.recipientChecksum']
+									: m['send.batchBadAddress'],
+						amountNote:
+							issue?.amount !== 'invalid'
+								? undefined
+								: issue.amount_issue
+									? amountIssueWords(issue.amount_issue, m, token?.symbol ?? '')
+									: m['send.badAmount']
 					};
 				})
 			: undefined,
@@ -950,7 +966,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					value:
 						send.confirm_amount === ''
 							? '—'
-							: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
+							: `${sentAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
 					detail: splitUsd === null ? undefined : `≈ ${moneyText(splitUsd, currency)}`,
 					over: send.split_over_balance,
 					// The core's own figure for a person to read
@@ -1105,9 +1121,53 @@ function sameFeeWords(send: SendView, m: WalletFlowMessages): string | undefined
  * even then.
  */
 function liveWarning(send: SendView, m: WalletFlowMessages): string | undefined {
+	// The figure itself first (send-1, send-3, agent-1): one that cannot be
+	// read exactly has no balance to be measured against. Absent from a core
+	// built before the field existed — read as none.
+	const issue = send.amount_issue ?? null;
+	if (issue !== null) return amountIssueWords(issue, m, send.selected_token?.symbol ?? '');
 	return send.amount_warning === null
 		? undefined
 		: warningWords(send.amount_warning, m, send.selected_token?.chain_id);
+}
+
+/**
+ * Why an entered figure cannot be sent as it stands (`AmountIssue`), in the
+ * corpus's words: not one figure, more places than the token has — naming
+ * how many it allows — or too large. The form, a split row and an imported
+ * sheet's row say it alike.
+ */
+export function amountIssueWords(
+	issue: AmountIssue,
+	m: WalletFlowMessages,
+	symbol: string
+): string {
+	switch (issue.type) {
+		case 'unreadable':
+			return m['send.warnAmountUnreadable'];
+		case 'too_many_decimals':
+			return fill(m['send.warnTooManyDecimals'], { symbol, decimals: issue.decimals });
+		case 'too_large':
+			return m['send.warnAmountTooLarge'];
+	}
+}
+
+/**
+ * What the core says of the single recipient beyond who it is (send-2,
+ * send-13): a mixed case that fails its checksum (refused at Continue), or
+ * the zero address / the account's own (warned, never refused). `undefined`
+ * when there is nothing to say.
+ */
+function recipientCaution(send: SendView, m: WalletFlowMessages): string | undefined {
+	if (send.recipient_checksum_mismatch) return m['send.recipientChecksum'];
+	switch (send.recipient_warning ?? null) {
+		case 'zero_address':
+			return m['send.recipientZeroAddress'];
+		case 'own_address':
+			return m['send.recipientSelf'];
+		default:
+			return undefined;
+	}
 }
 
 /**
@@ -1228,7 +1288,7 @@ function recipientNote(send: SendView, m: WalletFlowMessages): string | undefine
  */
 function recipientLine(send: SendView, m: WalletFlowMessages): string | undefined {
 	if (send.recipient_is_token_contract) return m['send.recipientTokenContract'];
-	return recipientNote(send, m);
+	return recipientCaution(send, m) ?? recipientNote(send, m);
 }
 
 /**
@@ -1345,9 +1405,10 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 	// no per-row verdict.
 	const recipientTag = send.recipient_is_token_contract
 		? m['send.recipientTokenContract']
-		: !send.split_mode && send.recipient_risk?.first_time === true
-			? m['componentsUi.signing.firstTimeTag']
-			: undefined;
+		: (recipientCaution(send, m) ??
+			(!send.split_mode && send.recipient_risk?.first_time === true
+				? m['componentsUi.signing.firstTimeTag']
+				: undefined));
 
 	// A sweep moves several coins; one mark would name the wrong one.
 	const heroMark =
@@ -1415,7 +1476,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			const amount = sweepAmount(send, row);
 			const rowUsd = row.price_usd === null ? null : (parseFloat(amount) || 0) * row.price_usd;
 			if (rowUsd !== null) totalUsd += rowUsd;
-			const value = `${tokenAmountText(amount)} ${row.symbol}`;
+			const value = `${sentAmountText(amount)} ${row.symbol}`;
 			return {
 				lead: mark(row),
 				label: row.symbol,
@@ -1456,7 +1517,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 				label: lines?.name ?? shortenAddress(draft.address),
 				detail: lines?.detail,
 				mono: lines === undefined,
-				value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
+				value: `${sentAmountText(draft.amount)} ${symbol}`.trim(),
 				// The form's repeat warning, said again on the page that signs
 				// (issue 203): two lines paying one payee are hardest to spot
 				// exactly where the avatars are identical and the sum looks right.
@@ -1470,7 +1531,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		return {
 			...model,
 			mark: heroMark,
-			amount: `${tokenAmountText(send.confirm_amount)} ${symbol}`.trim(),
+			amount: `${sentAmountText(send.confirm_amount)} ${symbol}`.trim(),
 			// A split's total keeps its one-string style (078 round 2).
 			amountUnit: undefined,
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
@@ -1488,7 +1549,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		// The exact amount is what is signed; what is READ is the asset list's
 		// figure for it — never an 18-digit remainder of a fee to the wei. The
 		// coin is its own quieter piece, as on the form's hero (078 round 2).
-		amount: tokenAmountText(send.confirm_amount),
+		amount: sentAmountText(send.confirm_amount),
 		amountUnit: token?.symbol || undefined,
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
@@ -1645,7 +1706,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				coins.length > 1
 					? m['componentsTx.detail.sent']
 					: fill(m['send.txConfirmedTitle'], {
-							amount: tokenAmountText(
+							amount: sentAmountText(
 								coins[0]?.amount ?? send.receipt?.amount ?? send.confirm_amount
 							),
 							symbol: coins[0]?.symbol ?? token?.symbol ?? ''
@@ -1766,7 +1827,7 @@ function receiptParts(
 			breakdown: coins.map((coin) => ({
 				lead: tokenMarkFor(chainId, coin.symbol, coin.token_address, coin.logo_urls),
 				label: coin.symbol,
-				value: `${tokenAmountText(coin.amount)} ${coin.symbol}`.trim()
+				value: `${sentAmountText(coin.amount)} ${coin.symbol}`.trim()
 			}))
 		};
 	}
@@ -1777,14 +1838,14 @@ function receiptParts(
 					identiconSvg: identicon(transfer.to),
 					address: transfer.to,
 					label: transfer.to_name ?? shortenAddress(transfer.to),
-					value: `${tokenAmountText(transfer.amount)} ${transfer.symbol}`.trim()
+					value: `${sentAmountText(transfer.amount)} ${transfer.symbol}`.trim()
 				}))
 			: send.split_mode
 				? send.recipients.map((draft) => ({
 						identiconSvg: draft.address ? identicon(draft.address) : undefined,
 						address: draft.address || undefined,
 						label: draft.name ?? shortenAddress(draft.address),
-						value: `${tokenAmountText(draft.amount)} ${symbol}`.trim()
+						value: `${sentAmountText(draft.amount)} ${symbol}`.trim()
 					}))
 				: [];
 	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };

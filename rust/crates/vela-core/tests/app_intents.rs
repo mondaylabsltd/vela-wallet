@@ -1346,3 +1346,30 @@ fn only_a_currency_the_wallet_offers_is_accepted() {
         "the schema lists the codes: {schema}"
     );
 }
+
+/// send-2 for an agent: a mixed-case address whose case is not its EIP-55
+/// checksum is refused, saying so — never lowercased into "valid".
+#[test]
+fn an_address_that_fails_its_checksum_is_refused() {
+    let to = |address: &str| Action::PrepareTransfer {
+        chain_id: 1,
+        token: None,
+        to: address.to_owned(),
+        amount: "0.5".to_owned(),
+    };
+    let good = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    assert_eq!(validate(&to(good)), Ok(()));
+    assert_eq!(validate(&to(&good.to_lowercase())), Ok(()));
+    let refused = validate(&to(typo)).expect_err("a bad checksum");
+    assert_eq!(refused.code, ReasonCode::InvalidInput);
+    assert!(refused.detail.contains("EIP-55"), "{}", refused.detail);
+    let contact = Action::SaveContact {
+        address: typo.to_owned(),
+        name: "Bob".to_owned(),
+    };
+    assert!(
+        validate(&contact).is_err(),
+        "the address book refuses it too"
+    );
+}

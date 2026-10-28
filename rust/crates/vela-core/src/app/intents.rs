@@ -22,7 +22,6 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
-use super::contacts::is_address;
 use super::fee_policy::FeeTier;
 use super::fee_tier_pref;
 use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
@@ -1076,12 +1075,17 @@ fn invalid(detail: impl Into<String>) -> Result<(), Reason> {
 // ---------------------------------------------------------------------------
 
 fn address(value: &str) -> Result<(), Reason> {
-    if is_address(value.trim()) {
-        Ok(())
-    } else {
-        invalid(format!(
+    use crate::primitives::{address_entry, AddressEntry};
+    match address_entry(value.trim()) {
+        AddressEntry::Valid => Ok(()),
+        // The send's own rule (send-2): the case of a mixed-case address IS
+        // its checksum, so a wrong one is a typo or a changed copy.
+        AddressEntry::BadChecksum => invalid(format!(
+            "not an address: {value} (its mixed case fails the EIP-55 checksum — a typo or an altered copy; check it with the person, or give it in one case)"
+        )),
+        AddressEntry::Malformed => invalid(format!(
             "not an address: {value} (0x followed by 40 hex digits)"
-        ))
+        )),
     }
 }
 

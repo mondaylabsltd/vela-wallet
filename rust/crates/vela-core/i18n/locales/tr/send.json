@@ -168,6 +168,13 @@
     "txSubmittedTitle": "Ağa gönderildi",
     "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
     "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz.",
-    "draftedByAgent": "Yapay zekâ ajanınız hazırladı"
+    "draftedByAgent": "Yapay zekâ ajanınız hazırladı",
+    "recipientChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+    "recipientZeroAddress": "Bu sıfır adresi. Anahtarı kimsede yok — buraya gönderilen her şey kalıcı olarak kaybolur.",
+    "recipientSelf": "Bu sizin kendi adresiniz.",
+    "warnTooManyDecimals": "{{symbol}} en fazla {{decimals}} ondalık basamak alır — tutarı kısaltın.",
+    "warnAmountTooLarge": "Bu tutar çok büyük.",
+    "warnAmountUnreadable": "Tek bir tutar girin: bir ondalık ayırıcı, binlik ayırıcı olmadan.",
+    "batchBadChecksum": "Sağlama toplamı eşleşmiyor"
   }
 }

@@ -74,6 +74,7 @@
     "recentActivity": "Giao dịch gần đây",
     "viewAllActivity": "Xem tất cả giao dịch",
     "deleteContact": "Xóa liên hệ",
-    "edit": "Sửa"
+    "edit": "Sửa",
+    "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại."
   }
 }

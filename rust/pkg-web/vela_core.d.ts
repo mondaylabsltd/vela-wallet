@@ -613,6 +613,13 @@ export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 export function abiEncodeUint256(value_hex: string): Uint8Array;
 
 /**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+ * every field that takes an address refuses by (send-2, set-4).
+ */
+export function addressEntry(address: string): string;
+
+/**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
  * (UTF-16 units, as `selectionStart` counts).
  */
@@ -1786,6 +1793,7 @@ export interface InitOutput {
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly activityfeedcore_view: (a: number) => [number, number, number, number];
+    readonly addressEntry: (a: number, b: number) => [number, number];
     readonly amountTextCaret: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly amountTextClean: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly approvalguardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];

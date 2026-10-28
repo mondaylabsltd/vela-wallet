@@ -74,6 +74,7 @@
     "recentActivity": "Letzte Aktivität",
     "viewAllActivity": "Gesamte Aktivität ansehen",
     "deleteContact": "Kontakt löschen",
-    "edit": "Bearbeiten"
+    "edit": "Bearbeiten",
+    "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut."
   }
 }

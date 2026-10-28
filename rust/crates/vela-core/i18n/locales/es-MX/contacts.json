@@ -75,6 +75,7 @@
     "recentActivity": "Actividad reciente",
     "viewAllActivity": "Ver toda la actividad",
     "deleteContact": "Eliminar contacto",
-    "edit": "Editar"
+    "edit": "Editar",
+    "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla."
   }
 }

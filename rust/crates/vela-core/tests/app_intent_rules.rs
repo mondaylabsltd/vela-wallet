@@ -834,3 +834,55 @@ fn an_approval_names_a_multisig_by_its_name() {
         Some("Team fund (0x2222…2222)")
     );
 }
+
+/// agent-1: a drafted amount with more places than the token has was cut to
+/// fit — 0 wei moved, shown as sent, a fee charged. It is refused before any
+/// form opens, and the reason names the places the token allows.
+#[test]
+fn a_draft_with_more_places_than_the_token_is_refused_saying_how_many() {
+    let session = json!({ "loaded": true, "has_wallet": true, "address": ALICE, "accounts": [] });
+    let held = world(json!({
+        "session": session,
+        "balance": { "hidden": false, "tokens": [
+            { "chain_id": 100, "symbol": "xDAI", "token_address": null, "balance": "5", "decimals": 18 }
+        ] }
+    }));
+    let one = |amount: &str| {
+        action(json!({ "type": "prepare_transfer", "chain_id": 100, "to": BOB, "amount": amount }))
+    };
+    let refused = examine(&one("0.0000000000000000001"), &held);
+    assert_eq!(code(&refused), Some(ReasonCode::InvalidInput));
+    let Examined::Refused { reason } = refused else {
+        unreachable!()
+    };
+    assert!(
+        reason.detail.contains("xDAI allows (18)"),
+        "{}",
+        reason.detail
+    );
+    assert_eq!(examine(&one("0.000000000000000001"), &held), Examined::Go);
+    assert_eq!(
+        examine(&one("1.500000000000000000000"), &held),
+        Examined::Go
+    );
+    assert_eq!(examine(&one("max"), &held), Examined::Go);
+
+    let batch = action(json!({
+        "type": "prepare_batch_transfer", "chain_id": 100,
+        "recipients": [
+            { "to": BOB, "amount": "1" },
+            { "to": ALICE, "amount": "1.0000000000000000001" }
+        ]
+    }));
+    assert_eq!(
+        code(&examine(&batch, &held)),
+        Some(ReasonCode::InvalidInput)
+    );
+    // A token whose places the wallet does not know is the form's to refuse.
+    let unknown =
+        world(json!({ "session": session, "balance": { "hidden": false, "tokens": [] } }));
+    assert_eq!(
+        examine(&one("0.0000000000000000001"), &unknown),
+        Examined::Go
+    );
+}

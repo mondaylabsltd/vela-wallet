@@ -256,6 +256,9 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.signing.firstTimeTag',
 	// Spec 096 F12: the recipient is a token's own contract (`send` core).
 	'send.recipientTokenContract',
+	'send.recipientChecksum',
+	'send.recipientZeroAddress',
+	'send.recipientSelf',
 	'send.txErrorGeneric',
 	// A submit the relay could not take, said on the confirm with its retry
 	// (`SendView.tx_error`): the relay's gas account, and Try again.
@@ -348,6 +351,7 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchRateReset',
 	'send.batchParsedCount',
 	'send.batchBadAddress',
+	'send.batchBadChecksum',
 	'send.batchRejected_one',
 	'send.batchRejected_other',
 	'send.batchApply_other',
@@ -408,6 +412,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.warnInsufficientGas',
 	'send.warnNeedGas',
 	'send.warnCannotConvert',
+	'send.warnTooManyDecimals',
+	'send.warnAmountTooLarge',
+	'send.warnAmountUnreadable',
 	// Why ⇄ is inert: no rate to enter the display currency against. Already in
 	// the corpus for the phones; web drew the control and read none of it.
 	'send.denomToggleNoRate',

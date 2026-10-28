@@ -17,6 +17,7 @@ import { intentOperationProgress } from '$lib/core/client';
 import type { IntentOperation } from '$lib/core/generated/IntentOperation';
 import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
 import type { IntentReason } from '$lib/core/generated/IntentReason';
+import type { AmountIssue } from '$lib/core/generated/AmountIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { sendDesk, type SendDeskPort } from '$lib/flows/send-desk.svelte';
 import { localeOfPath } from '$lib/i18n/locales';
@@ -83,6 +84,19 @@ async function until<T>(read: () => T | null | undefined, ms: number): Promise<T
 	}
 }
 
+/** Why the form will not take a figure, for the agent to act on. */
+function amountIssueText(issue: AmountIssue, view: SendView): string {
+	const symbol = view.selected_token?.symbol ?? 'the token';
+	switch (issue.type) {
+		case 'too_many_decimals':
+			return `more decimal places than ${symbol} allows (${issue.decimals}): round it to at most ${issue.decimals}`;
+		case 'too_large':
+			return 'too large';
+		case 'unreadable':
+			return 'not a dot-decimal figure';
+	}
+}
+
 /** A send's refusal or warning, by its own name. */
 function named(value: { type: string } | null): string | null {
 	return value === null ? null : value.type;
@@ -143,6 +157,10 @@ class Transfers {
 			const amount = decimal(draft.amount);
 			port.dispatch(amount === 'max' ? { type: 'tap_max' } : { type: 'set_amount', amount });
 			return (view) => {
+				// A figure the form cannot read exactly is refused, saying why —
+				// never cut to fit and drafted (agent-1).
+				const issue = view.amount_issue ?? null;
+				if (issue) return `amount: ${amountIssueText(issue, view)}`;
 				if (view.amount_warning) return `amount: ${named(view.amount_warning)}`;
 				return view.can_continue ? 'ok' : null;
 			};
@@ -171,8 +189,13 @@ class Transfers {
 				if (view.recipients.length !== draft.recipients.length)
 					return `recipients: the form took ${view.recipients.length} of ${draft.recipients.length}`;
 				const issue = view.split_row_issues[0];
-				if (issue)
-					return `recipient ${issue.ordinal}: address ${issue.address}, amount ${issue.amount}`;
+				if (issue) {
+					const address = issue.address_checksum ? 'fails its EIP-55 checksum' : issue.address;
+					const amount = issue.amount_issue
+						? amountIssueText(issue.amount_issue, view)
+						: issue.amount;
+					return `recipient ${issue.ordinal}: address ${address}, amount ${amount}`;
+				}
 				if (view.split_over_balance) return 'amount: the total is more than the balance';
 				return view.can_continue ? 'ok' : null;
 			};

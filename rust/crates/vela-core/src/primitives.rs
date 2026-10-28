@@ -97,6 +97,42 @@ pub fn checksum_address(address_hex: &str) -> Result<String, CoreError> {
     Ok(parse_address(address_hex)?.to_checksum(None))
 }
 
+/// What an address a person or an agent ENTERED reads as — typed, pasted,
+/// scanned, imported or handed over. The one rule every place that takes a
+/// recipient refuses by (send-2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddressEntry {
+    /// `0x` and 40 hex digits, in one case or correctly checksummed.
+    Valid,
+    /// Not `0x` and 40 hex digits at all.
+    Malformed,
+    /// Mixed case that is not its EIP-55 checksum. The case IS the checksum:
+    /// one wrong letter or a tampered copy shows here and nowhere else, so
+    /// it is refused, never quietly lowercased into "valid". All-lowercase
+    /// and all-uppercase carry no checksum and pass.
+    BadChecksum,
+}
+
+/// [`AddressEntry`] of `address`, as given (callers trim what a person typed).
+pub fn address_entry(address: &str) -> AddressEntry {
+    let bytes = address.as_bytes();
+    if !(bytes.len() == 42
+        && bytes.starts_with(b"0x")
+        && bytes[2..].iter().all(u8::is_ascii_hexdigit))
+    {
+        return AddressEntry::Malformed;
+    }
+    let body = &bytes[2..];
+    let mixed = body.iter().any(u8::is_ascii_uppercase) && body.iter().any(u8::is_ascii_lowercase);
+    if !mixed {
+        return AddressEntry::Valid;
+    }
+    match checksum_address(address) {
+        Ok(checksummed) if checksummed == address => AddressEntry::Valid,
+        _ => AddressEntry::BadChecksum,
+    }
+}
+
 /// First 4 bytes of keccak256 over the CANONICAL signature (`uint`→`uint256`
 /// normalization, named params stripped). Callers passing already-canonical
 /// signatures get the same selector the TS original produced.

@@ -15,7 +15,7 @@ import { resolveMultisigMessages, resolveWalletFlowMessages } from '$lib/i18n/en
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import { liveAssetRow, MONEY_PENDING } from '$lib/wallet/live';
+import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
 import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { buildFlowState } from './fixtures';
 import { tokenMarkFor } from './marks';
@@ -108,6 +108,9 @@ const EMPTY_SEND: SendView = {
 	gas_fee_token: null,
 	fee_coin: null,
 	amount_warning: null,
+	amount_issue: null,
+	recipient_checksum_mismatch: false,
+	recipient_warning: null,
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
@@ -1129,8 +1132,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			const waiting = split({
 				can_continue: false,
 				split_row_issues: [
-					{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' },
-					{ id: 'c', ordinal: 3, address: 'empty', amount: 'empty' }
+					{
+						id: 'b',
+						ordinal: 2,
+						address: 'ok',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					},
+					{
+						id: 'c',
+						ordinal: 3,
+						address: 'empty',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					}
 				]
 			});
 			expect(waiting.hint).toBe('Recipient 2 needs an amount.');
@@ -1138,7 +1155,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			expect(
 				split({
 					can_continue: false,
-					split_row_issues: [{ id: 'a', ordinal: 1, address: 'invalid', amount: 'ok' }]
+					split_row_issues: [
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'invalid',
+							amount: 'ok',
+							address_checksum: false,
+							amount_issue: null
+						}
+					]
 				}).hint
 			).toBe('Recipient 1 needs an address.');
 			// While the pre-check is out the gate is closed for another reason,
@@ -1147,7 +1173,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 				split({
 					can_continue: false,
 					estimating_gas: true,
-					split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+					split_row_issues: [
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'ok',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
+					]
 				}).hint
 			).toBeUndefined();
 			expect(split({}).hint).toBeUndefined();
@@ -1157,8 +1192,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			const [first, second] =
 				split({
 					split_row_issues: [
-						{ id: 'a', ordinal: 1, address: 'invalid', amount: 'invalid' },
-						{ id: 'b', ordinal: 2, address: 'empty', amount: 'empty' }
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'invalid',
+							amount: 'invalid',
+							address_checksum: false,
+							amount_issue: null
+						},
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'empty',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
 					]
 				}).recipients ?? [];
 			expect(first.addressNote).toBe('Invalid address');
@@ -1186,7 +1235,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					{ id: 'a', address: alice, amount: '0.5', name: null },
 					{ id: 'b', address: bob, amount: '', name: null }
 				],
-				split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+				split_row_issues: [
+					{
+						id: 'b',
+						ordinal: 2,
+						address: 'ok',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					}
+				]
 			});
 			expect(offered.fillEmpty).toEqual({
 				amount: '0.5',
@@ -1202,8 +1260,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 						{ id: 'b', address: bob, amount: '', name: null }
 					],
 					split_row_issues: [
-						{ id: 'a', ordinal: 1, address: 'ok', amount: 'invalid' },
-						{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'ok',
+							amount: 'invalid',
+							address_checksum: false,
+							amount_issue: null
+						},
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'ok',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
 					]
 				}).fillEmpty
 			).toBeUndefined();
@@ -3157,5 +3229,138 @@ describe('a multisig send', () => {
 		const fee = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE })).fee;
 		expect(fee.plain).toBeUndefined();
 		expect(fee.value).toBe('0.0021 ETH');
+	});
+});
+
+describe('entered addresses and amounts, as the core read them', () => {
+	const TO = '0x' + 'ab'.repeat(20);
+
+	// send-1, send-3, agent-1: the figure's own reason comes before any
+	// balance verdict, and the places are named.
+	it('says why a figure cannot be sent as it stands', () => {
+		const alert = (amount_issue: SendView['amount_issue']) =>
+			liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: ETH,
+					amount: '1',
+					amount_issue,
+					amount_warning: { type: 'not_enough_token', symbol: 'ETH' }
+				})
+			).alert;
+		expect(alert({ type: 'too_many_decimals', decimals: 18 })).toBe(
+			fill(m['send.warnTooManyDecimals'], { symbol: 'ETH', decimals: 18 })
+		);
+		expect(alert({ type: 'too_large' })).toBe(m['send.warnAmountTooLarge']);
+		// …and no worth is stated for a figure that is not one.
+		const priced = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				amount: '1.2.3',
+				token_amount: '1.2.3',
+				amount_issue: { type: 'unreadable' }
+			})
+		);
+		expect(priced.amount?.fiat).toBe('');
+		expect(alert({ type: 'unreadable' })).toBe(m['send.warnAmountUnreadable']);
+		expect(m['send.warnTooManyDecimals']).toContain('{{decimals}}');
+		// No issue: the balance verdict, as before.
+		expect(alert(null)).toBe(fill(m['send.warnNotEnoughToken'], { symbol: 'ETH' }));
+	});
+
+	// send-2, send-13: a failing checksum, the zero address and one's own.
+	it('warns beside the recipient on the form and the confirm', () => {
+		const say = (send: Partial<SendView>) => {
+			const form = liveSendForm(
+				formModel(),
+				inputs({ selected_token: ETH, recipient: TO, ...send })
+			);
+			const confirm = liveSendConfirm(
+				confirmModel(),
+				inputs({ selected_token: ETH, recipient: TO, confirm_amount: '1', ...send })
+			);
+			return [form.recipient?.note, form.recipient?.noteWarn, confirm.recipientTag];
+		};
+		expect(say({ recipient_checksum_mismatch: true })).toEqual([
+			m['send.recipientChecksum'],
+			true,
+			m['send.recipientChecksum']
+		]);
+		expect(say({ recipient_warning: 'zero_address' })).toEqual([
+			m['send.recipientZeroAddress'],
+			true,
+			m['send.recipientZeroAddress']
+		]);
+		expect(say({ recipient_warning: 'own_address' })).toEqual([
+			m['send.recipientSelf'],
+			true,
+			m['send.recipientSelf']
+		]);
+		expect(say({})).toEqual([undefined, false, undefined]);
+	});
+
+	it('names a split row’s checksum and its places', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				recipients: [{ id: 'a', address: TO, amount: '1.0000000000000000001', name: null }],
+				split_row_issues: [
+					{
+						id: 'a',
+						ordinal: 1,
+						address: 'invalid',
+						amount: 'invalid',
+						address_checksum: true,
+						amount_issue: { type: 'too_many_decimals', decimals: 18 }
+					}
+				]
+			})
+		);
+		expect(model.recipients?.[0].addressNote).toBe(m['send.recipientChecksum']);
+		expect(model.recipients?.[0].amountNote).toBe(
+			fill(m['send.warnTooManyDecimals'], { symbol: 'ETH', decimals: 18 })
+		);
+	});
+});
+
+// send-12: one transfer read three ways — the receipt rounded half up, the
+// activity row cut at six places. One rule now, and never up.
+describe('an amount sent reads the same everywhere, never rounded up', () => {
+	const SENT = '1.23456789';
+	it('the confirm and the receipt cut it', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: ETH, confirm_amount: SENT, recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(confirm.amount).toBe('1.2345');
+		const receipt = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				selected_token: ETH,
+				confirm_amount: SENT,
+				tx_status: 'confirmed',
+				tx_hash: '0xtx',
+				receipt: {
+					status: 'confirmed',
+					hold_reason: null,
+					refusal_key: null,
+					kind: null,
+					transfers: [],
+					coins: [
+						{ amount: SENT, symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1 }
+					],
+					amount: SENT,
+					usd_value: 1,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+		expect(receipt.title).toContain('1.2345');
+		expect(receipt.title).not.toContain('1.2346');
+		expect(sentAmountText(SENT)).toBe('1.2345');
 	});
 });

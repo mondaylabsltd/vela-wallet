@@ -63,6 +63,8 @@ const DRAWN = '0xdrawn';
 type Behaviour = {
 	/** What `set_amount` / `tap_max` leaves on the form. */
 	amountWarning?: { type: string } | null;
+	/** What the form says of the figure itself (`amount_issue`). */
+	amountIssue?: SendView['amount_issue'];
 	/** What `continue` raises instead of reaching the review. */
 	alertOnContinue?: { type: string };
 	/** What the split form says of the recipients it was seeded with. */
@@ -107,7 +109,14 @@ function desk(behaviour: Behaviour = {}) {
 			if (!view) return;
 			if (event.type === 'set_amount' || event.type === 'tap_max') {
 				const warning = behaviour.amountWarning ?? null;
-				view = { ...view, amount_warning: warning, can_continue: warning === null } as SendView;
+				const issue = behaviour.amountIssue ?? null;
+				view = {
+					...view,
+					selected_token: { chain_id: 5042002, symbol: 'USDC' },
+					amount_warning: warning,
+					amount_issue: issue,
+					can_continue: warning === null && issue === null
+				} as SendView;
 			}
 			if (event.type === 'seed_split_recipients') {
 				const issues = behaviour.splitIssues ?? [];
@@ -260,6 +269,18 @@ describe('a drafted transfer (spec 103)', () => {
 		expect(result).toMatchObject({ code: 'refused' });
 		expect((result as { detail: string }).detail).toContain('insufficient_for_gas');
 		expect((result as { detail: string }).detail).toContain('USDC');
+		expect(d.port.view()).toBeNull();
+		d.detach();
+	});
+
+	// agent-1: 19 places of an 18-decimal coin were cut to 0 wei and drafted.
+	it('refuses a figure with more places than the token has, saying how many', async () => {
+		const d = desk({ amountIssue: { type: 'too_many_decimals', decimals: 6 } });
+		const result = await transfers.prepare(draft('0.0000001'));
+		expect(result).toMatchObject({
+			code: 'refused',
+			detail: 'amount: more decimal places than USDC allows (6): round it to at most 6'
+		});
 		expect(d.port.view()).toBeNull();
 		d.detach();
 	});

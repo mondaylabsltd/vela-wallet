@@ -168,6 +168,13 @@
     "txSubmittedTitle": "Terkirim ke jaringan",
     "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
     "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan.",
-    "draftedByAgent": "Disusun oleh agen AI Anda"
+    "draftedByAgent": "Disusun oleh agen AI Anda",
+    "recipientChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang.",
+    "recipientZeroAddress": "Ini alamat nol. Tidak ada yang memegang kuncinya — apa pun yang dikirim ke sini hilang selamanya.",
+    "recipientSelf": "Ini alamat Anda sendiri.",
+    "warnTooManyDecimals": "{{symbol}} paling banyak {{decimals}} angka desimal — persingkat jumlahnya.",
+    "warnAmountTooLarge": "Jumlah ini terlalu besar.",
+    "warnAmountUnreadable": "Masukkan satu jumlah: satu tanda desimal, tanpa pemisah ribuan.",
+    "batchBadChecksum": "Checksum tidak cocok"
   }
 }

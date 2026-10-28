@@ -497,7 +497,8 @@
    },
    "send": {
     "propose": "Proponi e approva",
-    "invalidAddress": "Inserisci un indirizzo valido."
+    "invalidAddress": "Inserisci un indirizzo valido.",
+    "invalidChecksum": "Le maiuscole di questo indirizzo non corrispondono al suo checksum: un errore di battitura o una copia alterata. Controllalo e copialo di nuovo."
    },
    "create": {
     "title": "Nuovo multisig",
@@ -777,7 +778,14 @@
   "txSubmittedTitle": "Inviata alla rete",
   "txConfirmedTitle": "Inviati {{amount}} {{symbol}}",
   "recipientTokenContract": "Questo è l'indirizzo di un contratto token. Ciò che invii qui di solito non si può recuperare.",
-  "draftedByAgent": "Preparato dal tuo agente IA"
+  "draftedByAgent": "Preparato dal tuo agente IA",
+  "recipientChecksum": "Le maiuscole di questo indirizzo non corrispondono al suo checksum: un errore di battitura o una copia alterata. Controllalo e copialo di nuovo.",
+  "recipientZeroAddress": "Questo è l'indirizzo zero. Nessuno ne possiede la chiave: tutto ciò che invii qui è perso per sempre.",
+  "recipientSelf": "Questo è il tuo indirizzo.",
+  "warnTooManyDecimals": "{{symbol}} ammette al massimo {{decimals}} cifre decimali: accorcia l'importo.",
+  "warnAmountTooLarge": "Questo importo è troppo grande.",
+  "warnAmountUnreadable": "Inserisci un solo importo: un separatore decimale, senza separatori delle migliaia.",
+  "batchBadChecksum": "Checksum non corrispondente"
  },
  "receive": {
   "title": "Ricevi",
@@ -2227,7 +2235,8 @@
   "recentActivity": "Attività recente",
   "viewAllActivity": "Vedi tutta l'attività",
   "deleteContact": "Elimina contatto",
-  "edit": "Modifica"
+  "edit": "Modifica",
+  "invalidChecksum": "Le maiuscole di questo indirizzo non corrispondono al suo checksum: un errore di battitura o una copia alterata. Controllalo e copialo di nuovo."
  },
  "explore": {
   "title": "Esplora",

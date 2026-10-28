@@ -496,7 +496,8 @@
    },
    "send": {
     "propose": "Đề xuất và duyệt",
-    "invalidAddress": "Nhập một địa chỉ hợp lệ."
+    "invalidAddress": "Nhập một địa chỉ hợp lệ.",
+    "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại."
    },
    "create": {
     "title": "Đa chữ ký mới",
@@ -772,7 +773,14 @@
   "txSubmittedTitle": "Đã gửi lên mạng",
   "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}",
   "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại.",
-  "draftedByAgent": "Do tác nhân AI của bạn soạn"
+  "draftedByAgent": "Do tác nhân AI của bạn soạn",
+  "recipientChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại.",
+  "recipientZeroAddress": "Đây là địa chỉ 0. Không ai giữ khóa của nó — mọi thứ gửi đến đây sẽ mất vĩnh viễn.",
+  "recipientSelf": "Đây là địa chỉ của chính bạn.",
+  "warnTooManyDecimals": "{{symbol}} chỉ có tối đa {{decimals}} chữ số thập phân — hãy rút gọn số tiền.",
+  "warnAmountTooLarge": "Số tiền này quá lớn.",
+  "warnAmountUnreadable": "Nhập một số tiền: một dấu thập phân, không có dấu phân cách hàng nghìn.",
+  "batchBadChecksum": "Mã kiểm tra không khớp"
  },
  "receive": {
   "title": "Nhận",
@@ -2219,7 +2227,8 @@
   "recentActivity": "Giao dịch gần đây",
   "viewAllActivity": "Xem tất cả giao dịch",
   "deleteContact": "Xóa liên hệ",
-  "edit": "Sửa"
+  "edit": "Sửa",
+  "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại."
  },
  "explore": {
   "title": "Khám phá",

@@ -244,7 +244,10 @@ describe('the unit on the figure', () => {
 	});
 
 	it('leaves the caret where the person was when a character is dropped', async () => {
-		preferences.numberFormat = 'dot_comma';
+		// A decimal-point preset: a "," left of the point is grouping, and goes.
+		// (Under a decimal-comma preset it is a second decimal mark, which is
+		// kept for the core to refuse — send-3.)
+		preferences.numberFormat = 'comma_dot';
 		const { input } = typedInto({ value: '12.5' });
 		// A stray "," typed after the 1. Cleaned on its own, "1," reads as
 		// "1." and the caret landed after the 2.
