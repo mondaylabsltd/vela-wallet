@@ -29,6 +29,21 @@ export function memberLabel(address: string): string {
 	return localName(address) ?? shortenAddress(address);
 }
 
+/**
+ * A multisig's name: the one in its genesis (part of its address, so the
+ * core has checked it), else its rule ("Multisig 2/3") for one created
+ * without a name.
+ */
+export function multisigName(
+	account: { genesis: { name?: string }; threshold: number; owners: string[] },
+	m: MultisigMessages
+): string {
+	return (
+		account.genesis.name ??
+		fillTemplate(m.switcher.rowName, { m: account.threshold, n: account.owners.length })
+	);
+}
+
 export interface TokenInfo {
 	symbol: string;
 	decimals: number;

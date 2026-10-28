@@ -7,13 +7,13 @@
 	 * its name, since a multisig has no name of its own.
 	 */
 	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
+	import { multisigName } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 
@@ -53,10 +53,7 @@
 					>
 						<span class="text">
 							<span class="name" class:active={selected}>
-								{fillTemplate(m.switcher.rowName, {
-									m: account.threshold,
-									n: account.owners.length
-								})}
+								{multisigName(account, m)}
 							</span>
 							<span class="address">{shortenAddress(account.address)}</span>
 						</span>

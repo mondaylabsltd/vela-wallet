@@ -6,7 +6,7 @@ genesis service (`safe-genesis-registry`'s docker shell) and a local relay.
 | Piece | Where | What |
 | --- | --- | --- |
 | anvil | `127.0.0.1:8545` | Gnosis fork, `--hardfork osaka` (the P-256 precompile at `0x100` that passkey signatures need) |
-| genesis service | `127.0.0.1:8787` | `genesis-server`: the registry at `0xdA88…fb89`, sponsored records, the proposal mailbox |
+| genesis service | `127.0.0.1:8787` | `genesis-server`: the registry (v2, deployed on the fork at start), sponsored records, the proposal mailbox |
 | second anvil | `127.0.0.1:8546` | the same Gnosis state answering as Base (8453): a network the wallet has and the service is NOT configured to read |
 | relay | `127.0.0.1:8790` | `relay.py`: the ERC-4337 methods and REST endpoints the wallet asks the Vela relay; bundles each operation with `EntryPoint.handleOps` |
 

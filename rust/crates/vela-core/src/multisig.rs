@@ -127,6 +127,14 @@ pub struct Genesis {
     /// Hex quantity.
     pub salt_nonce: String,
     pub initializer: String,
+    /// The Safe's name, for one created with it: then `salt_nonce` is
+    /// [`named_salt_nonce`]`(name, name_seed)` — the registry's
+    /// `recordNamed`, where the name is one of the inputs to the address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 32-byte hex; with `name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_seed: Option<String>,
 }
 
 /// A multisig created here: its genesis and the address it gives.
@@ -184,6 +192,29 @@ pub struct Call {
 // Genesis
 // ---------------------------------------------------------------------------
 
+/// The registry's `MAX_NAME_LENGTH`, in bytes.
+pub const MAX_NAME_BYTES: usize = 64;
+
+/// A name a multisig can be created with: displayable (the bar a Vela
+/// account's name is held to — no control characters, no U+FFFD), no space
+/// around it, and within the registry's 64 bytes.
+pub fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.trim() == name
+        && name.len() <= MAX_NAME_BYTES
+        && !name.chars().any(|c| c.is_control() || c == '\u{FFFD}')
+}
+
+/// The registry's `namedSaltNonce(name, seed)`:
+/// `keccak256(abi.encode(keccak256("SafeGenesisRegistry.name"), keccak256(name), seed))`.
+pub fn named_salt_nonce(name: &str, seed: B256) -> U256 {
+    let mut words = Vec::with_capacity(96);
+    words.extend_from_slice(keccak256("SafeGenesisRegistry.name").as_slice());
+    words.extend_from_slice(keccak256(name.as_bytes()).as_slice());
+    words.extend_from_slice(seed.as_slice());
+    U256::from_be_bytes(keccak256(words).0)
+}
+
 /// `setup(owners, threshold, 0, "", handler, 0, 0, 0)`.
 fn encode_setup(owners: &[Address], threshold: u64, fallback_handler: Address) -> Vec<u8> {
     let mut out =
@@ -217,6 +248,18 @@ pub fn genesis_address(g: &Genesis) -> Result<String, CoreError> {
     {
         return Err(err("only Safe v1.4.1 (L2) geneses are supported"));
     }
+    // A name is believed only if it made the salt nonce: one that came with
+    // a genesis from anywhere (the service, a link) is checked here.
+    match (&g.name, &g.name_seed) {
+        (None, None) => {}
+        (Some(name), Some(seed)) => {
+            let seed: B256 = seed.parse().map_err(|_| err("not a 32-byte name seed"))?;
+            if !valid_name(name) || named_salt_nonce(name, seed) != quantity(&g.salt_nonce)? {
+                return Err(err("the name did not make this genesis's salt nonce"));
+            }
+        }
+        _ => return Err(err("a name needs its seed")),
+    }
     let init = unhex(&g.initializer)?;
     let mut salt = keccak256(&init).to_vec();
     salt.extend_from_slice(&word_u256(quantity(&g.salt_nonce)?));
@@ -229,10 +272,31 @@ pub fn genesis_address(g: &Genesis) -> Result<String, CoreError> {
 /// uses, so the address is the same on every chain — with
 /// `CompatibilityFallbackHandler`, no setup hook, no module. `owners` keep the
 /// order given: it is part of the address.
+/// A multisig named `name`: its salt nonce is derived from the name and
+/// `name_seed` (32 random bytes, hex), so the name is part of its address.
 pub fn multisig_genesis(
     owners: &[String],
     threshold: u64,
-    salt_nonce: &str,
+    name: &str,
+    name_seed: &str,
+) -> Result<MultisigGenesis, CoreError> {
+    if !valid_name(name) {
+        return Err(err("not a name a multisig can have"));
+    }
+    let seed: B256 = name_seed
+        .parse()
+        .map_err(|_| err(format!("not a 32-byte seed: {name_seed}")))?;
+    let mut ms = genesis_with_salt(owners, threshold, named_salt_nonce(name, seed))?;
+    ms.genesis.name = Some(name.to_owned());
+    ms.genesis.name_seed = Some(format!("{seed:#x}"));
+    Ok(ms)
+}
+
+/// The genesis these owners and threshold give with this salt nonce (no name).
+fn genesis_with_salt(
+    owners: &[String],
+    threshold: u64,
+    salt_nonce: U256,
 ) -> Result<MultisigGenesis, CoreError> {
     if owners.is_empty() {
         return Err(err("a multisig needs at least one owner"));
@@ -260,12 +324,14 @@ pub fn multisig_genesis(
     let genesis = Genesis {
         factory: addr(safe::SAFE_PROXY_FACTORY)?.to_checksum(None),
         singleton: addr(safe::SAFE_SINGLETON)?.to_checksum(None),
-        salt_nonce: hex_quantity(quantity(salt_nonce)?),
+        salt_nonce: hex_quantity(salt_nonce),
         initializer: hex(&encode_setup(
             &parsed,
             threshold,
             addr(COMPATIBILITY_FALLBACK_HANDLER)?,
         )),
+        name: None,
+        name_seed: None,
     };
     Ok(MultisigGenesis {
         address: genesis_address(&genesis)?,
@@ -290,6 +356,8 @@ pub fn vela_account_genesis(keys: &[WalletKey]) -> Result<(String, Genesis), Cor
             singleton: addr(safe::SAFE_SINGLETON)?.to_checksum(None),
             salt_nonce: hex_quantity(U256::from_be_slice(&info.salt_nonce)),
             initializer: hex(&info.setup_data),
+            name: None,
+            name_seed: None,
         },
     ))
 }
@@ -969,8 +1037,12 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         "genesis" => out(json(&multisig_genesis(
             &arg::<Vec<String>>(&args, "owners")?,
             arg(&args, "threshold")?,
-            &arg::<String>(&args, "saltNonce")?,
+            &arg::<String>(&args, "name")?,
+            &arg::<String>(&args, "nameSeed")?,
         )?)),
+        "validName" => out(serde_json::json!(valid_name(&arg::<String>(
+            &args, "name"
+        )?))),
         "genesisAddress" => out(serde_json::json!(genesis_address(&arg(&args, "genesis")?)?)),
         "genesisMembers" => {
             let (owners, threshold) = genesis_members(&arg(&args, "genesis")?)?;
@@ -1066,13 +1138,23 @@ mod erased {
 mod tests {
     use super::*;
 
+    /// The unnamed genesis for a salt nonce: the hashes pinned below were
+    /// checked against the contracts with these.
+    fn salted(
+        owners: &[String],
+        threshold: u64,
+        salt_nonce: &str,
+    ) -> Result<MultisigGenesis, CoreError> {
+        genesis_with_salt(owners, threshold, quantity(salt_nonce)?)
+    }
+
     const A: &str = "0x1111111111111111111111111111111111111111";
     const B: &str = "0x2222222222222222222222222222222222222222";
 
     #[test]
     fn owner_order_is_part_of_the_address() {
-        let ab = multisig_genesis(&[A.into(), B.into()], 2, "0x7").unwrap();
-        let ba = multisig_genesis(&[B.into(), A.into()], 2, "0x7").unwrap();
+        let ab = salted(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let ba = salted(&[B.into(), A.into()], 2, "0x7").unwrap();
         assert_ne!(ab.address, ba.address);
         assert_eq!(
             genesis_members(&ab.genesis).unwrap(),
@@ -1089,23 +1171,21 @@ mod tests {
 
     #[test]
     fn a_genesis_that_could_never_deploy_is_refused() {
-        assert!(multisig_genesis(&[A.into(), A.into()], 1, "0x1").is_err());
-        assert!(multisig_genesis(
+        assert!(salted(&[A.into(), A.into()], 1, "0x1").is_err());
+        assert!(salted(
             &["0x0000000000000000000000000000000000000001".into()],
             1,
             "0x1"
         )
         .is_err());
-        assert!(multisig_genesis(&[A.into()], 2, "0x1").is_err());
-        assert!(multisig_genesis(&[A.into()], 0, "0x1").is_err());
-        assert!(multisig_genesis(&[], 1, "0x1").is_err());
+        assert!(salted(&[A.into()], 2, "0x1").is_err());
+        assert!(salted(&[A.into()], 0, "0x1").is_err());
+        assert!(salted(&[], 1, "0x1").is_err());
     }
 
     #[test]
     fn the_review_signs_only_what_it_reads() {
-        let ms = multisig_genesis(&[A.into(), B.into()], 2, "0x7")
-            .unwrap()
-            .address;
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
         let one = transfers_tx(
             &[Transfer {
                 token: None,
@@ -1179,6 +1259,8 @@ mod tests {
                 singleton: String::new(),
                 salt_nonce: "0x0".into(),
                 initializer: "0x".into(),
+                name: None,
+                name_seed: None,
             },
             signer: safe::WEBAUTHN_SIGNER.into(),
             authenticator_data: hex(&[0u8; 37]),
@@ -1213,7 +1295,7 @@ mod tests {
     fn the_approval_challenge_is_the_one_the_chain_accepted() {
         let a = crate::dev_fixtures::account(0).unwrap().address;
         let b = crate::dev_fixtures::account(1).unwrap().address;
-        let ms = multisig_genesis(&[a, b.clone()], 2, "0x2a").unwrap();
+        let ms = salted(&[a, b.clone()], 2, "0x2a").unwrap();
         assert_eq!(ms.address, "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83");
         let tx = transfers_tx(
             &[Transfer {
@@ -1248,7 +1330,7 @@ mod tests {
             credential_id: owner.credential_id_hex.clone(),
             public_key_hex: owner.public_key_hex.clone(),
         }];
-        let ms = multisig_genesis(
+        let ms = salted(
             &[fx::account(0).unwrap().address, owner.address.clone()],
             2,
             "0x2a",
@@ -1324,8 +1406,8 @@ mod tests {
 
     #[test]
     fn a_genesis_for_another_address_is_not_deployed() {
-        let ms = multisig_genesis(&[A.into(), B.into()], 2, "0x7").unwrap();
-        let other = multisig_genesis(&[A.into(), B.into()], 2, "0x8").unwrap();
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let other = salted(&[A.into(), B.into()], 2, "0x8").unwrap();
         let tx = transfers_tx(
             &[Transfer {
                 token: None,
@@ -1348,10 +1430,60 @@ mod tests {
 
     #[test]
     fn the_json_door_answers_and_refuses() {
-        let out = call_json("genesis", r#"{"owners":["0x1111111111111111111111111111111111111111","0x2222222222222222222222222222222222222222"],"threshold":2,"saltNonce":"0x7"}"#).unwrap();
+        let out = call_json("genesis", r#"{"owners":["0x1111111111111111111111111111111111111111","0x2222222222222222222222222222222222222222"],"threshold":2,"name":"Team fund","nameSeed":"0x66a80b61b29ec044d14c4c8c613e762ba1fb8eeb0c454d1ee00ed6dedaa5b5c5"}"#).unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["threshold"], 2);
+        assert_eq!(v["genesis"]["name"], "Team fund");
+        assert_eq!(
+            call_json("validName", r#"{"name":" padded"}"#).unwrap(),
+            "false"
+        );
         assert!(call_json("nope", "{}").is_err());
         assert!(call_json("genesis", "not json").is_err());
+    }
+
+    /// A named multisig: the name and seed make the salt nonce, so the name
+    /// is part of the address. Pinned to the registry contract's own
+    /// `namedSaltNonce` and `computeAddress` (v2, on a Gnosis fork), with
+    /// seed `keccak256("seed")`.
+    #[test]
+    fn a_name_is_part_of_the_address() {
+        const SEED: &str = "0x66a80b61b29ec044d14c4c8c613e762ba1fb8eeb0c454d1ee00ed6dedaa5b5c5";
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", SEED).unwrap();
+        assert_eq!(
+            quantity(&ms.genesis.salt_nonce).unwrap(),
+            U256::from_str_radix(
+                "56795118260653280472274806143271415712461894717796793332148123650320774741768",
+                10
+            )
+            .unwrap()
+        );
+        assert_eq!(ms.address, "0x39d2978A5EB07a3D61B4a36Cf39C433c6Bb0872D");
+        assert_eq!(ms.genesis.name.as_deref(), Some("Team fund"));
+        assert_eq!(ms.genesis.name_seed.as_deref(), Some(SEED));
+        assert_eq!(genesis_address(&ms.genesis).unwrap(), ms.address);
+        let renamed = multisig_genesis(&[A.into(), B.into()], 2, "Team fund!", SEED).unwrap();
+        assert_ne!(renamed.address, ms.address);
+        // A name that did not make the salt nonce is refused, not shown.
+        let mut lying = ms.genesis.clone();
+        lying.name = Some("Someone else".into());
+        assert!(genesis_address(&lying).is_err());
+        let mut seedless = ms.genesis.clone();
+        seedless.name_seed = None;
+        assert!(genesis_address(&seedless).is_err());
+    }
+
+    #[test]
+    fn a_name_must_be_one_the_registry_takes() {
+        const SEED: &str = "0x66a80b61b29ec044d14c4c8c613e762ba1fb8eeb0c454d1ee00ed6dedaa5b5c5";
+        let make = |name: &str| multisig_genesis(&[A.into(), B.into()], 2, name, SEED);
+        assert!(make("").is_err());
+        assert!(make(" Team").is_err());
+        assert!(make("Team\u{0007}").is_err());
+        assert!(make(&"x".repeat(65)).is_err());
+        assert!(make(&"x".repeat(64)).is_ok());
+        assert!(make(&"多".repeat(22)).is_err(), "66 bytes");
+        assert!(make(&"多".repeat(21)).is_ok());
+        assert!(multisig_genesis(&[A.into(), B.into()], 2, "Team", "0x12").is_err());
     }
 }

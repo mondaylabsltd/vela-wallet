@@ -173,7 +173,11 @@
         "duplicate": "Dieses Mitglied steht schon auf der Liste.",
         "created": "Multisig erstellt",
         "createdBody": "Teile seine Adresse mit den anderen Mitgliedern, damit sie es in Vela hinzufügen können.",
-        "done": "Fertig"
+        "done": "Fertig",
+        "name": "Name",
+        "namePlaceholder": "z. B. Teamkasse",
+        "nameHint": "Teil seiner Adresse in jedem Netzwerk. Er kann später nicht geändert werden.",
+        "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen und ohne Leerzeichen am Anfang oder Ende."
       },
       "add": {
         "title": "Multisig hinzufügen",

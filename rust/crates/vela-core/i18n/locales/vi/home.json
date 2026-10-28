@@ -173,7 +173,11 @@
         "duplicate": "Thành viên này đã có trong danh sách.",
         "created": "Đã tạo đa chữ ký",
         "createdBody": "Chia sẻ địa chỉ với các thành viên khác để họ thêm vào Vela.",
-        "done": "Xong"
+        "done": "Xong",
+        "name": "Tên",
+        "namePlaceholder": "vd: Quỹ nhóm",
+        "nameHint": "Là một phần địa chỉ của nó trên mọi mạng. Không thể đổi sau này.",
+        "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển hay khoảng trắng ở đầu hoặc cuối."
       },
       "add": {
         "title": "Thêm đa chữ ký",

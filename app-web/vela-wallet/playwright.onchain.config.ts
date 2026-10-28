@@ -12,6 +12,10 @@ export default defineConfig({
 	fullyParallel: false,
 	workers: 1,
 	timeout: 240_000,
+	// A cold fork pulls state from the public Gnosis RPC on first touch, and the
+	// first test of a run can wait past its budget for a balance. One retry,
+	// reported as flaky, not a pass that hides a failure.
+	retries: 1,
 	expect: { timeout: 30_000 },
 	use: {
 		baseURL: process.env.VELA_ONCHAIN_URL ?? 'http://127.0.0.1:5173',

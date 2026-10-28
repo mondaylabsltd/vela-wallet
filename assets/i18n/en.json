@@ -490,7 +490,11 @@
     "duplicate": "This member is already in the list.",
     "created": "Multisig created",
     "createdBody": "Share its address with the other members so they can add it in Vela.",
-    "done": "Done"
+    "done": "Done",
+    "name": "Name",
+    "namePlaceholder": "e.g. Team fund",
+    "nameHint": "Part of its address on every network. It can't be changed later.",
+    "nameInvalid": "Use a shorter name, without control characters or spaces at either end."
    },
    "add": {
     "title": "Add a multisig",

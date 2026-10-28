@@ -491,7 +491,11 @@
     "duplicate": "Este membro já está na lista.",
     "created": "Multisig criada",
     "createdBody": "Compartilhe o endereço com os outros membros para que eles a adicionem na Vela.",
-    "done": "Concluir"
+    "done": "Concluir",
+    "name": "Nome",
+    "namePlaceholder": "ex.: Fundo da equipe",
+    "nameHint": "Faz parte do endereço em todas as redes. Não pode ser alterado depois.",
+    "nameInvalid": "Use um nome mais curto, sem caracteres de controle nem espaços no início ou no fim."
    },
    "add": {
     "title": "Adicionar uma multisig",

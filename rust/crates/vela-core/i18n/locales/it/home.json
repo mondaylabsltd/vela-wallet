@@ -174,7 +174,11 @@
         "duplicate": "Questo membro è già nell’elenco.",
         "created": "Multisig creato",
         "createdBody": "Condividi il suo indirizzo con gli altri membri perché possano aggiungerlo in Vela.",
-        "done": "Fatto"
+        "done": "Fatto",
+        "name": "Nome",
+        "namePlaceholder": "es. Cassa del team",
+        "nameHint": "Fa parte del suo indirizzo su ogni rete. Non potrà essere cambiato in seguito.",
+        "nameInvalid": "Usa un nome più corto, senza caratteri di controllo né spazi all'inizio o alla fine."
       },
       "add": {
         "title": "Aggiungi un multisig",

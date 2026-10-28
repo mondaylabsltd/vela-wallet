@@ -74,7 +74,7 @@
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import { multisigName } from '$lib/multisig/core/display';
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
@@ -195,11 +195,7 @@
 			? null
 			: multisig.active
 				? {
-						// A multisig has no name of its own: its rule stands in for one.
-						name: fillTemplate(data.multisigMessages.switcher.rowName, {
-							m: multisig.active.threshold,
-							n: multisig.active.owners.length
-						}),
+						name: multisigName(multisig.active, data.multisigMessages),
 						address: multisig.active.address,
 						identiconSvg: identiconSvgForClient(multisig.active.address)
 					}

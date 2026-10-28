@@ -97,6 +97,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 		await shot(page, '04-threshold');
 		await page.getByRole('button', { name: 'Next' }).click();
 		await shot(page, '05-review');
+		await page.getByRole('textbox', { name: 'Name' }).fill('Team fund');
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible();
 		await shot(page, '06-created');
@@ -106,6 +107,8 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 	const multisig = await page.evaluate(() => localStorage.getItem('vela.activeMultisig'));
 	expect(multisig).toMatch(/^0x[0-9a-fA-F]{40}$/);
 	await expect(page.getByText('2 of 3 members approve').first()).toBeVisible();
+	// The name is the multisig's own, from its genesis.
+	await expect(page.getByText('Team fund', { exact: true }).first()).toBeVisible();
 	await shot(page, '07-home');
 
 	await test.step('fund and propose', async () => {
@@ -159,6 +162,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await expect(pageA.getByText(/Every member must approve/)).toBeVisible();
 		await shot(pageA, 'x1-threshold-all');
 		await pageA.getByRole('button', { name: 'Next' }).click();
+		await pageA.getByRole('textbox', { name: 'Name' }).fill('Shared 2/2');
 		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 		await pageA.getByRole('button', { name: 'Done' }).click();
 		await expect(pageA.getByText(/This device/i).first()).toBeVisible();
@@ -185,6 +189,8 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await pageB.goto(link);
 		await expect(pageB.getByText('Send 0.25 xDAI').first()).toBeVisible({ timeout: 90_000 });
 		await shot(pageB, 'x4-proposal-b');
+		// The name came with the genesis the service holds, checked by the core.
+		await expect(pageB.getByText('Shared 2/2', { exact: true }).first()).toBeVisible();
 		await pageB.getByRole('button', { name: 'Approve and execute' }).click();
 		await expect(pageB.getByText('Executed', { exact: true }).first()).toBeVisible({
 			timeout: 120_000
@@ -228,6 +234,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await shot(page, 'd2-create');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Desk fund');
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -258,6 +265,7 @@ test('a network the genesis service does not read: propose, approve and execute 
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Base fund');
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;

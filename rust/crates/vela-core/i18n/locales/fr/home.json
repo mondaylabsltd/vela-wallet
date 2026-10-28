@@ -174,7 +174,11 @@
         "duplicate": "Ce membre est déjà dans la liste.",
         "created": "Multisig créé",
         "createdBody": "Partagez son adresse avec les autres membres pour qu’ils l’ajoutent dans Vela.",
-        "done": "Terminé"
+        "done": "Terminé",
+        "name": "Nom",
+        "namePlaceholder": "p. ex. Caisse de l'équipe",
+        "nameHint": "Il fait partie de son adresse sur tous les réseaux. Il ne pourra plus être modifié.",
+        "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni espace au début ou à la fin."
       },
       "add": {
         "title": "Ajouter un multisig",

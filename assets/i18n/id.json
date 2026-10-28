@@ -490,7 +490,11 @@
     "duplicate": "Anggota ini sudah ada di daftar.",
     "created": "Multisig dibuat",
     "createdBody": "Bagikan alamatnya ke anggota lain agar mereka bisa menambahkannya di Vela.",
-    "done": "Selesai"
+    "done": "Selesai",
+    "name": "Nama",
+    "namePlaceholder": "mis. Dana tim",
+    "nameHint": "Bagian dari alamatnya di setiap jaringan. Tidak bisa diubah nanti.",
+    "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau spasi di awal maupun akhir."
    },
    "add": {
     "title": "Tambah multisig",

@@ -490,7 +490,11 @@
     "duplicate": "Bu üye zaten listede.",
     "created": "Çoklu imza oluşturuldu",
     "createdBody": "Adresini diğer üyelerle paylaş ki Vela’da ekleyebilsinler.",
-    "done": "Bitti"
+    "done": "Bitti",
+    "name": "Ad",
+    "namePlaceholder": "ör. Ekip fonu",
+    "nameHint": "Her ağda adresinin bir parçasıdır. Sonradan değiştirilemez.",
+    "nameInvalid": "Daha kısa bir ad kullanın; kontrol karakteri ya da başta veya sonda boşluk olmasın."
    },
    "add": {
     "title": "Çoklu imza ekle",

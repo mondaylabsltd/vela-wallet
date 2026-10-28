@@ -103,6 +103,10 @@ export interface MultisigMessages {
 		created: string;
 		createdBody: string;
 		done: string;
+		name: string;
+		namePlaceholder: string;
+		nameHint: string;
+		nameInvalid: string;
 	};
 	add: {
 		title: string;
@@ -216,7 +220,11 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		duplicate: '',
 		created: '',
 		createdBody: '',
-		done: ''
+		done: '',
+		name: '',
+		namePlaceholder: '',
+		nameHint: '',
+		nameInvalid: ''
 	},
 	add: {
 		title: '',

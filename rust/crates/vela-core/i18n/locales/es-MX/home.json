@@ -174,7 +174,11 @@
         "duplicate": "Este miembro ya está en la lista.",
         "created": "Multifirma creada",
         "createdBody": "Comparte su dirección con los demás miembros para que la agreguen en Vela.",
-        "done": "Listo"
+        "done": "Listo",
+        "name": "Nombre",
+        "namePlaceholder": "p. ej. Fondo del equipo",
+        "nameHint": "Forma parte de su dirección en todas las redes. No se puede cambiar después.",
+        "nameInvalid": "Usa un nombre más corto, sin caracteres de control ni espacios al inicio o al final."
       },
       "add": {
         "title": "Agregar una multifirma",

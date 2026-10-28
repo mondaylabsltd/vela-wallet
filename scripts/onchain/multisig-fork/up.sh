@@ -42,9 +42,19 @@ for a in 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0x57AB0996DC98fbE8Ad58681793
   fund "$a"
 done
 
+# The registry (v2: named geneses), through the deterministic deployer, as on
+# any chain: the address depends only on its code.
+INITCODE=$(cd "$GENESIS_REPO/contracts" && forge inspect SafeGenesisRegistry bytecode)
+SALT=$(cast keccak "safe-genesis-registry/v2")  # script/Deploy.s.sol's SALT
+DEPLOYER=0x4e59b44847b379578588920cA78FbF26c0B4956C
+REGISTRY=$(cast create2 --deployer $DEPLOYER --salt "$SALT" --init-code "$INITCODE" 2>/dev/null | tail -1)
+cast send $DEPLOYER "$SALT${INITCODE#0x}" --rpc-url $RPC \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 >/dev/null
+[ -n "$REGISTRY" ] && [ "$(cast code "$REGISTRY" --rpc-url $RPC)" != "0x" ] || { echo "registry did not deploy"; exit 1; }
+
 (cd "$GENESIS_REPO" && cargo build -q -p genesis-server)
 rm -f "$STATE"/genesis.sqlite*
-REGISTRY_ADDRESS=0xdA88357C2eB85e7e0515B1122a28befd6Dc8fb89 HOME_CHAIN_ID=100 \
+REGISTRY_ADDRESS=$REGISTRY HOME_CHAIN_ID=100 \
 CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["http://127.0.0.1:8545"]}]' \
 PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
 MAX_FEE_WEI=100000000000 LISTEN_ADDR=127.0.0.1:8787 DATABASE_PATH="$STATE/genesis.sqlite" \
@@ -57,4 +67,4 @@ RPCS="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}" RELAY_PORT=8790 NO_PROXY=127.0.0.
 echo $! >"$STATE/relay.pid"
 
 i=0; until curl -s --noproxy '*' http://127.0.0.1:8787/api/health >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "genesis service did not start"; exit 1; }; sleep 1; done
-echo "fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:8787 · relay http://127.0.0.1:8790 · logs $STATE"
+echo "registry $REGISTRY · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:8787 · relay http://127.0.0.1:8790 · logs $STATE"

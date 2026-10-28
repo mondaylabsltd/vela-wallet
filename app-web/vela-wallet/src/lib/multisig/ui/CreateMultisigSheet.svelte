@@ -2,7 +2,9 @@
 	/**
 	 * Creating a multisig, in three steps: who its members are (in order —
 	 * the order is part of the address), how many must approve, and a review
-	 * that shows the address before anything is signed. One passkey prompt at
+	 * that names it and shows the address before anything is signed. The name
+	 * is part of the address too (registry v2): the address follows it as it
+	 * is typed. One passkey prompt at
 	 * the end: the creator's proof, with which the genesis service records the
 	 * multisig. Nothing is deployed and no fee is paid until its first
 	 * transfer out.
@@ -16,9 +18,9 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
+	import { createMultisig, draftGenesis, newNameSeed } from '../core/accounts';
 	import { memberLabel, shortenAddress } from '../core/display';
-	import { sameAddress } from '../core/kernel';
+	import { sameAddress, validName } from '../core/kernel';
 	import { localOwners } from '../core/owners';
 	import { addLink } from '../core/link';
 	import Sheet from './Sheet.svelte';
@@ -38,7 +40,7 @@
 
 	const accounts = loadAccounts();
 	const networks = spaceNetworksSync();
-	const saltNonce = newSaltNonce();
+	const nameSeed = newNameSeed();
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
@@ -48,6 +50,7 @@
 	let typed = $state('');
 	let typedError = $state<string | null>(null);
 	let threshold = $state(1);
+	let name = $state('');
 	let chainId = $state(
 		networks.find((n) => n.chainId === 100)?.chainId ?? networks[0]?.chainId ?? 100
 	);
@@ -60,9 +63,19 @@
 	const local = $derived(localOwners(owners));
 	const creator = $derived(local.find((o) => o.address === creatorChoice) ?? local[0] ?? null);
 	const membersOk = $derived(owners.length >= 2 && local.length >= 1);
+	const cleanName = $derived(name.trim());
+	const nameOk = $derived.by(() => {
+		try {
+			return cleanName !== '' && validName(cleanName);
+		} catch {
+			return false;
+		}
+	});
 	const draft = $derived.by(() => {
 		try {
-			return owners.length > 0 ? draftGenesis({ owners, threshold }, saltNonce) : null;
+			return owners.length > 0 && nameOk
+				? draftGenesis({ owners, threshold, name: cleanName }, nameSeed)
+				: null;
 		} catch {
 			return null;
 		}
@@ -106,11 +119,14 @@
 	const risky = $derived(threshold === owners.length || threshold === 1);
 
 	async function create() {
-		if (!creator || !draft) return;
+		if (!creator || !draft || !nameOk) return;
 		busy = true;
 		failure = null;
 		try {
-			const account = await createMultisig({ owners, threshold, chainId, creator }, saltNonce);
+			const account = await createMultisig(
+				{ owners, threshold, chainId, creator, name: cleanName },
+				nameSeed
+			);
 			created = account.address;
 			step = 'created';
 		} catch (error) {
@@ -238,12 +254,27 @@
 			>
 		</div>
 	{:else if step === 'review'}
+		<label class="select">
+			<span>{m.create.name}</span>
+			<input
+				class="name-field"
+				placeholder={m.create.namePlaceholder}
+				autocomplete="off"
+				bind:value={name}
+			/>
+		</label>
+		{#if cleanName !== '' && !nameOk}
+			<p class="error">{m.create.nameInvalid}</p>
+		{:else}
+			<p class="hint">{m.create.nameHint}</p>
+		{/if}
 		{#if draft}
 			<div class="hero">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 				<span class="hero-avatar" aria-hidden="true"
 					>{@html identiconSvgForClient(draft.address)}</span
 				>
+				<p class="hero-name">{cleanName}</p>
 				<p class="hero-rule">{fillTemplate(m.panel.title, { m: threshold, n: owners.length })}</p>
 				<p class="hero-address">{draft.address}</p>
 				<p class="hint">{m.create.sameEverywhere}</p>
@@ -289,7 +320,7 @@
 				variant="primary"
 				shape="rounded"
 				loading={busy}
-				disabled={busy || !creator}
+				disabled={busy || !creator || !draft}
 				onclick={create}>{m.create.create}</Button
 			>
 		</div>
@@ -297,6 +328,7 @@
 		<div class="hero">
 			<span class="done"><Icon icon={UTILITY_ICONS.check} size="lg" /></span>
 			<p class="hero-rule">{m.create.created}</p>
+			{#if cleanName}<p class="hero-name">{cleanName}</p>{/if}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 			<span class="hero-avatar" aria-hidden="true">{@html identiconSvgForClient(created)}</span>
 			<p class="hero-address">{created}</p>
@@ -420,6 +452,7 @@
 	}
 
 	input.mono,
+	input.name-field,
 	select {
 		min-height: var(--size-control-lg);
 		padding: 0 var(--space-md);
@@ -431,8 +464,21 @@
 		color: var(--color-fg-base);
 	}
 
-	select {
+	select,
+	input.name-field {
 		font-family: var(--font-ui);
+	}
+
+	input.name-field {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+	}
+
+	.hero-name {
+		margin: 0;
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
 	}
 
 	.typed > :global(:last-child) {

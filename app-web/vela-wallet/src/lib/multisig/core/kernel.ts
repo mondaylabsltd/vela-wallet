@@ -11,6 +11,13 @@ export interface Genesis {
 	singleton: string;
 	saltNonce: string;
 	initializer: string;
+	/**
+	 * A Safe created with a name (registry v2 `recordNamed`): the salt nonce
+	 * is derived from it and `nameSeed`, so the name is part of the address.
+	 * The core refuses a genesis whose name did not make its salt nonce.
+	 */
+	name?: string;
+	nameSeed?: string;
 }
 
 export interface MultisigGenesis {
@@ -96,8 +103,15 @@ function call<T>(method: string, args: Record<string, unknown>): T {
 	return JSON.parse(wasm.multisigCall(method, JSON.stringify(args))) as T;
 }
 
-export const multisigGenesis = (owners: string[], threshold: number, saltNonce: string) =>
-	call<MultisigGenesis>('genesis', { owners, threshold, saltNonce });
+export const multisigGenesis = (
+	owners: string[],
+	threshold: number,
+	name: string,
+	nameSeed: string
+) => call<MultisigGenesis>('genesis', { owners, threshold, name, nameSeed });
+
+/** Whether a multisig can be created with this name (the registry's rule). */
+export const validName = (name: string) => call<boolean>('validName', { name });
 
 export const genesisAddress = (genesis: Genesis) => call<string>('genesisAddress', { genesis });
 
