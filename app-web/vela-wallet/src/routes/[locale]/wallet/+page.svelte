@@ -20,6 +20,7 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { transfers } from '$lib/intents/transfers.svelte';
 	import { sendDesk } from '$lib/flows/send-desk.svelte';
@@ -2582,8 +2583,8 @@
 		</main>
 	{/if}
 {:else}
-	<!-- The core has not ruled yet. An empty surface, not a fixture wallet. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The core has not ruled yet. The shape of a screen, not a fixture wallet. -->
+	<CoreWaiting hero rows={3} />
 {/if}
 
 <IdenticonViewerHost copy={data.walletMessages.identiconViewer} />
@@ -2778,11 +2779,6 @@
 		height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg-base);
-	}
-
-	.waiting {
-		min-height: 100dvh;
 		background: var(--color-bg-base);
 	}
 

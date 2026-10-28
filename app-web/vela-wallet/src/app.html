@@ -125,6 +125,8 @@
 			}
 		</script>
 		%sveltekit.head%
+		<!-- The core's wasm on the pages that boot it (`$lib/core/preload.ts`). -->
+		%vela.corePreload%
 	</head>
 
 	<body data-sveltekit-preload-data="hover">

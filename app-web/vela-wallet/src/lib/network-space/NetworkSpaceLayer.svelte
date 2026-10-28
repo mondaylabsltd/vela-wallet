@@ -8,9 +8,10 @@
 	 * - The switch prompt, opened by the header's space label or Settings →
 	 *   Networks: it says what the other space is, and the person's answer
 	 *   goes through the same intent an agent's request takes
-	 *   (`set_network_space`).
+	 *   (`set_network_space`). The intents — and the dApp channel they
+	 *   reach — are imported when the person answers yes, not with the layer:
+	 *   it is over every page, and Welcome carries neither (`budgets.e2e.ts`).
 	 */
-	import { intents } from '$lib/intents/index.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import type { NetworkSpaceMessages } from './messages';
 	import { networkSpace } from './network-space.svelte';
@@ -47,7 +48,11 @@
 		dismissLabel={messages.cancel}
 		onAnswer={(switching) => {
 			networkSpace.switcherOpen = false;
-			if (switching) void intents.invoke('person', { type: 'set_network_space', space: to });
+			if (!switching) return;
+			const space = to;
+			void import('$lib/intents/index.svelte').then(({ intents }) =>
+				intents.invoke('person', { type: 'set_network_space', space })
+			);
 		}}
 	/>
 {/if}

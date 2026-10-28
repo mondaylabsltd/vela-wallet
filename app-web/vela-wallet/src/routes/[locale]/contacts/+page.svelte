@@ -17,6 +17,7 @@
 	 * into events, hands files in and out, and carries a person to /wallet
 	 * when they want to move money (`contact-handoff.ts`).
 	 */
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -790,8 +791,8 @@
 		<div class="toast" role="status">{m.copied}</div>
 	{/if}
 {:else}
-	<!-- The cores have not ruled yet. An empty surface, not a fixture book. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The cores have not ruled yet. The shape of a screen, not a fixture book. -->
+	<CoreWaiting rows={4} />
 {/if}
 
 <IdenticonViewerHost copy={data.identiconViewer} />
@@ -861,10 +862,5 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		box-shadow: var(--shadow-lg);
 		pointer-events: none;
-	}
-
-	.waiting {
-		min-height: 100dvh;
-		background: var(--color-bg-base);
 	}
 </style>

@@ -236,6 +236,19 @@ export {
  */
 let pending: Promise<void> | null = null;
 
+let markLoaded!: () => void;
+const loaded = new Promise<void>((resolve) => (markLoaded = resolve));
+
+/**
+ * Settles the first time the core HAS loaded — and never asks for it. For a
+ * reader that wants the core's word once it is here but must not be the
+ * reason it is fetched: the root layout runs on Welcome, which loads no wasm
+ * (`budgets.e2e.ts`).
+ */
+export function whenCoreLoaded(): Promise<void> {
+	return loaded;
+}
+
 /**
  * Fetch and instantiate the core. Idempotent, and safe to call from every
  * entry point that is about to construct one.
@@ -247,6 +260,7 @@ let pending: Promise<void> | null = null;
 export function loadCore(): Promise<void> {
 	if (pending) return pending;
 	const started = init({ module_or_path: WASM_URL }).then(() => undefined);
+	void started.then(markLoaded, () => undefined);
 	// A failed load must not be cached as "done": the next attempt should be
 	// able to retry rather than construct a core over an uninitialized module
 	// and fail with something unreadable.

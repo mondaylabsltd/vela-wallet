@@ -27,6 +27,7 @@
 	 *   the RPC-provider panel's health — those wait for the features that
 	 *   measure them.
 	 */
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -1189,8 +1190,8 @@
 		current={view.address || null}
 	/>
 {:else}
-	<!-- The core has not ruled yet. An empty surface, not a fixture account. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The core has not ruled yet. The shape of a screen, not a fixture account. -->
+	<CoreWaiting rows={5} />
 {/if}
 
 <IdenticonViewerHost copy={data.identiconViewer} />
@@ -1247,11 +1248,6 @@
 		height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg-base);
-	}
-
-	.waiting {
-		min-height: 100dvh;
 		background: var(--color-bg-base);
 	}
 

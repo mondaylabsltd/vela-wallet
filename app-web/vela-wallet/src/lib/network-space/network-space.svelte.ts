@@ -13,7 +13,7 @@
  * read directly, so the first frame already shows the right space.
  */
 import { browser } from '$app/environment';
-import { loadCore, networkSpaceRead } from '$lib/core/client';
+import { networkSpaceRead, whenCoreLoaded } from '$lib/core/client';
 import type { NetworkSpaceMessages } from './messages';
 
 export type NetworkSpace = 'mainnet' | 'testnet';
@@ -45,10 +45,16 @@ class NetworkSpaceStore {
 	#listeners = new Set<(space: NetworkSpace) => void>();
 	#booted: Promise<void> | null = null;
 
-	/** Read the stored space through the core. Idempotent. */
+	/**
+	 * Read the stored space through the core — once the core is here. Never
+	 * the reason it is fetched: this runs above every page, Welcome included,
+	 * and Welcome loads no wasm (`budgets.e2e.ts`). Every screen that lists
+	 * networks loads the core itself, and the direct read above already gave
+	 * the first frame its space. Idempotent.
+	 */
 	boot(): Promise<void> {
 		this.#booted ??= (async () => {
-			await loadCore();
+			await whenCoreLoaded();
 			const space = networkSpaceRead(stored() ?? undefined) as NetworkSpace;
 			if (space !== this.current) this.#change(space);
 		})();
