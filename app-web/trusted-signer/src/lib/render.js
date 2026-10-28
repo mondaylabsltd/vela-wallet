@@ -189,8 +189,16 @@ window.VelaCS = window.VelaCS || {};
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
-    if (hero.amount.fiat) box.appendChild(el('div', 'amount-fiat', hero.amount.fiat));
+    if (hero.amount.fiat) box.appendChild(fiatLine('amount-fiat', hero.amount.fiat));
     return box;
+  }
+
+  // A fiat figure is the requester's rate times a fact, so it is never drawn
+  // without saying whose rate it is (resolve.js / fee.js make the figure).
+  function fiatLine(className, figure) {
+    var line = el('div', className, figure + ' ');
+    line.appendChild(el('span', 'tag', t('tag.rateByRequester')));
+    return line;
   }
 
   function hero(view) {
@@ -225,7 +233,7 @@ window.VelaCS = window.VelaCS || {};
 
   function fieldRow(field) {
     var row = el('div', 'row' + (field.warning || field.expired ? ' row-warn' : '') + (field.identity ? ' row-identity' : ''));
-    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label)));
+    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label, field.labelParams)));
     var value = el('span', 'row-value');
     if (field.identity) {
       if (field.identity.tag) value.appendChild(el('div', 'row-tag', t(field.identity.tag)));
@@ -233,9 +241,10 @@ window.VelaCS = window.VelaCS || {};
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
-      if (field.amount.fiat) value.appendChild(el('div', 'row-sub', field.amount.fiat));
+      if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
-      value.appendChild(el('span', field.emphasis ? 'strong' : '', field.valueKey ? t(field.valueKey) : field.value));
+      value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
+        field.valueKey ? t(field.valueKey) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
     }
     row.appendChild(value);
@@ -389,7 +398,9 @@ window.VelaCS = window.VelaCS || {};
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
     // The amount and its chevron stay together when a long label wraps.
     var end = el('span', 'fee-end');
-    end.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    var figure = el('span', 'fee-value', headline + (fiat ? ' ' + fiat : ''));
+    if (fiat) figure.appendChild(el('span', 'tag', ' ' + t('tag.rateByRequester')));
+    end.appendChild(figure);
     end.appendChild(icon('chevron-right', 'chevron fee-chevron'));
     row.appendChild(end);
     wrap.appendChild(row);
@@ -410,7 +421,8 @@ window.VelaCS = window.VelaCS || {};
     var rateSymbol = view.fee.leg ? view.fee.leg.symbol : view.fee.gas && view.fee.gas.symbol;
     note.appendChild(el('div', null, rate
       ? t('ui.feeRate', {
-        symbol: rateSymbol, currency: view.fee.currency, rate: rate.toLocaleString('en-US'),
+        // An ISO code (fee.js), so it is spaced from the figure: "USD 1".
+        symbol: rateSymbol, currency: view.fee.currency + ' ', rate: rate.toLocaleString('en-US'),
       })
       : t('ui.feeNoRate')));
     wrap.appendChild(note);
@@ -484,6 +496,11 @@ window.VelaCS = window.VelaCS || {};
       identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
     } else if (!ceremony && view.dapp.originShown) {
       identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    }
+    // A name the site gave that the page cannot vouch for: its words, said
+    // as its words, under the head — never the head itself.
+    if (!ceremony && view.dapp.claimedName) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.siteCallsItself', { name: view.dapp.claimedName })));
     }
     var note = noteFor(view, 'requester');
     if (note) identity.appendChild(note);

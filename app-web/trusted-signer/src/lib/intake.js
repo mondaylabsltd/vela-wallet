@@ -269,20 +269,52 @@ window.VelaCS = window.VelaCS || {};
   // even a refusal code — sent to whatever the link names would go to
   // whoever wrote the link.
 
+  /**
+   * A request that arrived damaged — cut short, not base64url, not deflate,
+   * not JSON, not a request. One error with the page's own words
+   * (`i18nKey`), whatever broke: the browser's ("Unexpected token…",
+   * "Failed to fetch", "Cannot read properties of null") used to be the
+   * status line, and an `atob` that threw outside the promise left
+   * "Waiting for a signing request…" up for ever.
+   */
+  function damaged() {
+    var error = new Error('the signing request in the link is damaged');
+    error.i18nKey = 'ui.requestDamaged';
+    return error;
+  }
+
+  /** `{intent, context}` as the wire carries it, or null for anything else. */
+  function requestShape(payload) {
+    var object = function (value) { return !!value && typeof value === 'object' && !Array.isArray(value); };
+    if (!object(payload) || !object(payload.intent) || typeof payload.intent.method !== 'string') return null;
+    if (payload.context !== undefined && payload.context !== null && !object(payload.context)) return null;
+    return payload;
+  }
+
   function fromUrlFragment(options) {
     var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
     if (!hash.get('i')) return null;
 
-    var raw = b64urlToBytes(hash.get('i'));
-    var callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    var raw;
+    var callback;
+    try {
+      raw = b64urlToBytes(hash.get('i'));
+      callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    } catch (e) {
+      // Read once and gone: a damaged link is not something to keep.
+      scrubFragment();
+      return Promise.reject(damaged());
+    }
     var token = hash.get('t') || '';
     var decoded = hash.get('z') === '1'
       ? inflate(raw)
       : Promise.resolve(new TextDecoder().decode(raw));
 
     return decoded.then(function (json) {
-      var payload = JSON.parse(json);
+      var payload = null;
+      try { payload = requestShape(JSON.parse(json)); } catch (e) { payload = null; }
       scrubFragment();
+      if (!payload) throw damaged();
 
       function callbackUrl(query) {
         return callback + (callback.indexOf('?') >= 0 ? '&' : '?') +
@@ -329,6 +361,9 @@ window.VelaCS = window.VelaCS || {};
       });
       session.finish('single');
       return session;
+    }, function () {
+      scrubFragment();
+      throw damaged();
     });
   }
 

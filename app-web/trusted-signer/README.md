@@ -42,8 +42,9 @@ scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，�
 
 ```sh
 bun samples/answer-test.mjs     # 31 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上
-node samples/hostile-test.mjs   # 32 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
-node samples/channels-test.mjs  # 19 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
+node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
+node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
+node samples/claims-test.mjs    # 51 项：谁的说法 —— 「本账户」、网络费的币种、法币与币种、看不见的字符、读不了的钥匙 id
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则

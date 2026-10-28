@@ -270,4 +270,12 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.pageName': 'Vela 簽名頁',
   'ui.version': '版本 {version}',
   'ui.pageFacts': '零依賴 · 開源 · 可自行架設',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '此外，這筆呼叫會從你的帳戶轉出 {amount} 給它呼叫的合約。',
+  'warn.invisibleChars': '這段文字含有看不見或會改變文字方向的字元，此處顯示為 [U+…]。它們能讓文字讀起來像別的意思。',
+  'tag.rateByRequester': '依請求方提供的匯率',
+  'tag.siteCallsItself': '自稱「{name}」',
+  'ui.requestDamaged': '這個簽署請求到達時已經損壞，無法讀取，所以什麼都沒有簽。請回到 Vela 重新發起。',
+  'refuse.badKeyId': '這個請求給出的金鑰識別碼無法讀取，無法請瀏覽器找這把金鑰。不簽。',
 });

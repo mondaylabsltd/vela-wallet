@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('it', {
   'ui.pageName': 'Pagina di firma di Vela',
   'ui.version': 'versione {version}',
   'ui.pageFacts': 'zero dipendenze · open source · self-hostable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Questa chiamata invia anche {amount} dal tuo account al contratto chiamato, oltre a tutto ciò che è mostrato qui.',
+  'warn.invisibleChars': 'Questo testo contiene caratteri invisibili o che cambiano la direzione della scrittura, mostrati qui come [U+…]. Possono far leggere qualcosa di diverso da ciò che è.',
+  'tag.rateByRequester': 'al tasso del richiedente',
+  'tag.siteCallsItself': 'si fa chiamare “{name}”',
+  'ui.requestDamaged': 'Questa richiesta di firma è arrivata danneggiata e non si può leggere, quindi non è stato firmato nulla. Torna su Vela e ricominciala.',
+  'refuse.badKeyId': 'Questa richiesta indica la sua chiave in una forma illeggibile, quindi non si può chiederla al browser. Non firmo.',
 });

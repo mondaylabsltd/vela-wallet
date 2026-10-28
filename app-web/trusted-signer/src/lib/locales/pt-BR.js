@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.pageName': 'Página de assinatura da Vela',
   'ui.version': 'versão {version}',
   'ui.pageFacts': 'zero dependências · código aberto · auto-hospedável',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Esta chamada também envia {amount} da sua conta para o contrato chamado, além de tudo o que aparece aqui.',
+  'warn.invisibleChars': 'Este texto contém caracteres invisíveis ou que mudam a direção da escrita, mostrados aqui como [U+…]. Eles podem fazer o texto parecer outra coisa.',
+  'tag.rateByRequester': 'pela cotação do solicitante',
+  'tag.siteCallsItself': 'diz se chamar “{name}”',
+  'ui.requestDamaged': 'Esta solicitação de assinatura chegou corrompida e não pode ser lida, então nada foi assinado. Volte à Vela e comece de novo.',
+  'refuse.badKeyId': 'Esta solicitação indica a chave numa forma que não pode ser lida, então o navegador não pode procurá-la. Não será assinado.',
 });

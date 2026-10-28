@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H8t+JmlrigjgRC/GGQTjHfA5AhJe2+jYldYmsPwhaA0='; style-src 'sha256-+/lDGH+/xWr4mTGgQql+2lonVaOXCwuXvNxpp5ocJBQ='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UKhgNYww3KAk7tbF6prKMVl40aLVKZ2wpi27cfyXVuk='; style-src 'sha256-+/lDGH+/xWr4mTGgQql+2lonVaOXCwuXvNxpp5ocJBQ='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1548,6 +1548,14 @@ window.VelaCS.i18n.register('en', {
   'ui.pageName': 'Vela signing page',
   'ui.version': 'version {version}',
   'ui.pageFacts': 'zero dependencies · open source · self-hostable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'This also sends {amount} from your account to the contract it calls, on top of anything else shown here.',
+  'warn.invisibleChars': 'This text contains invisible or direction-changing characters, shown here as [U+…]. They can make it read as something it is not.',
+  'tag.rateByRequester': 'at the requester’s rate',
+  'tag.siteCallsItself': 'calls itself “{name}”',
+  'ui.requestDamaged': 'This signing request arrived damaged and can’t be read, so nothing was signed. Go back to Vela and start it again.',
+  'refuse.badKeyId': 'This request names its key in a form that can’t be read, so the browser can’t be asked for it. Not signing.',
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -1843,6 +1851,14 @@ window.VelaCS.i18n.register('zh', {
   'ui.pageName': 'Vela 签名页',
   'ui.version': '版本 {version}',
   'ui.pageFacts': '零依赖 · 开源 · 可自建',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '此外，这笔调用会从你的账户转出 {amount} 给它调用的合约。',
+  'warn.invisibleChars': '这段文字含有看不见或会改变文字方向的字符，此处显示为 [U+…]。它们能让文字读起来像别的意思。',
+  'tag.rateByRequester': '按请求方给的汇率',
+  'tag.siteCallsItself': '自称「{name}」',
+  'ui.requestDamaged': '这个签名请求到达时已经损坏，无法读取，所以什么都没有签。请回到 Vela 重新发起。',
+  'refuse.badKeyId': '这个请求给出的钥匙标识无法读取，没法让浏览器去找这把钥匙。不签。',
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -2117,6 +2133,14 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.pageName': 'Vela 簽名頁',
   'ui.version': '版本 {version}',
   'ui.pageFacts': '零依賴 · 開源 · 可自行架設',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '此外，這筆呼叫會從你的帳戶轉出 {amount} 給它呼叫的合約。',
+  'warn.invisibleChars': '這段文字含有看不見或會改變文字方向的字元，此處顯示為 [U+…]。它們能讓文字讀起來像別的意思。',
+  'tag.rateByRequester': '依請求方提供的匯率',
+  'tag.siteCallsItself': '自稱「{name}」',
+  'ui.requestDamaged': '這個簽署請求到達時已經損壞，無法讀取，所以什麼都沒有簽。請回到 Vela 重新發起。',
+  'refuse.badKeyId': '這個請求給出的金鑰識別碼無法讀取，無法請瀏覽器找這把金鑰。不簽。',
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2391,6 +2415,14 @@ window.VelaCS.i18n.register('zh-HK', {
   'ui.pageName': 'Vela 簽名頁',
   'ui.version': '版本 {version}',
   'ui.pageFacts': '零依賴 · 開源 · 可自行架設',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '此外，這筆調用會從你的帳戶轉出 {amount} 給它調用的合約。',
+  'warn.invisibleChars': '這段文字含有看不見或會改變文字方向的字符，此處顯示為 [U+…]。它們能令文字讀起來像別的意思。',
+  'tag.rateByRequester': '按請求方提供的匯率',
+  'tag.siteCallsItself': '自稱「{name}」',
+  'ui.requestDamaged': '這個簽署請求到達時已經損壞，無法讀取，所以甚麼都沒有簽。請返回 Vela 重新開始。',
+  'refuse.badKeyId': '這個請求給出的鎖匙識別碼無法讀取，無法請瀏覽器找這條鎖匙。不簽。',
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -2663,6 +2695,14 @@ window.VelaCS.i18n.register('ja', {
   'ui.pageName': 'Vela 署名ページ',
   'ui.version': 'バージョン {version}',
   'ui.pageFacts': '依存ゼロ · オープンソース · セルフホスト可能',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'この呼び出しは、ここに表示された内容とは別に、あなたのアカウントから呼び出し先のコントラクトへ {amount} を送ります。',
+  'warn.invisibleChars': 'このテキストには見えない文字や文字の向きを変える文字が含まれており、ここでは [U+…] と表示しています。実際とは違う内容に読ませることができます。',
+  'tag.rateByRequester': '要求元のレートによる',
+  'tag.siteCallsItself': '「{name}」と名乗っています',
+  'ui.requestDamaged': 'この署名リクエストは壊れた状態で届いたため読み取れず、何も署名していません。Vela に戻って、もう一度始めてください。',
+  'refuse.badKeyId': 'このリクエストが示すキーの ID を読み取れないため、ブラウザーにそのキーを求められません。署名しません。',
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -2935,6 +2975,14 @@ window.VelaCS.i18n.register('ko', {
   'ui.pageName': 'Vela 서명 페이지',
   'ui.version': '버전 {version}',
   'ui.pageFacts': '의존성 없음 · 오픈소스 · 셀프 호스팅 가능',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '이 호출은 여기 표시된 내용과 별도로 내 계정에서 호출 대상 컨트랙트로 {amount}을(를) 보냅니다.',
+  'warn.invisibleChars': '이 텍스트에는 보이지 않거나 글자 방향을 바꾸는 문자가 있어 여기서는 [U+…]로 표시합니다. 실제와 다른 내용으로 읽히게 만들 수 있습니다.',
+  'tag.rateByRequester': '요청한 곳의 환율 기준',
+  'tag.siteCallsItself': '스스로 "{name}"(이)라고 밝힘',
+  'ui.requestDamaged': '이 서명 요청은 손상된 채로 도착해 읽을 수 없으므로 아무것도 서명하지 않았습니다. Vela로 돌아가 다시 시작하세요.',
+  'refuse.badKeyId': '이 요청이 알려 준 키 ID를 읽을 수 없어 브라우저에 해당 키를 요청할 수 없습니다. 서명하지 않습니다.',
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -3207,6 +3255,14 @@ window.VelaCS.i18n.register('vi', {
   'ui.pageName': 'Trang ký Vela',
   'ui.version': 'phiên bản {version}',
   'ui.pageFacts': 'không phụ thuộc · mã nguồn mở · tự triển khai được',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Lệnh gọi này còn gửi {amount} từ tài khoản của bạn tới hợp đồng được gọi, ngoài mọi thứ hiển thị ở đây.',
+  'warn.invisibleChars': 'Đoạn văn bản này có ký tự vô hình hoặc ký tự đổi chiều chữ, được hiển thị ở đây dưới dạng [U+…]. Chúng có thể khiến nội dung đọc thành một điều khác.',
+  'tag.rateByRequester': 'theo tỷ giá của bên yêu cầu',
+  'tag.siteCallsItself': 'tự xưng là “{name}”',
+  'ui.requestDamaged': 'Yêu cầu ký này đến nơi đã bị hỏng và không đọc được, nên không có gì được ký. Hãy quay lại Vela và bắt đầu lại.',
+  'refuse.badKeyId': 'Yêu cầu này ghi mã khóa ở dạng không đọc được, nên không thể nhờ trình duyệt tìm khóa đó. Không ký.',
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -3479,6 +3535,14 @@ window.VelaCS.i18n.register('id', {
   'ui.pageName': 'Halaman tanda tangan Vela',
   'ui.version': 'versi {version}',
   'ui.pageFacts': 'tanpa dependensi · open source · bisa di-host sendiri',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Panggilan ini juga mengirim {amount} dari akun Anda ke kontrak yang dipanggil, di luar semua yang ditampilkan di sini.',
+  'warn.invisibleChars': 'Teks ini berisi karakter tak terlihat atau yang mengubah arah tulisan, ditampilkan di sini sebagai [U+…]. Karakter itu bisa membuat teks terbaca lain dari aslinya.',
+  'tag.rateByRequester': 'dengan kurs dari pihak peminta',
+  'tag.siteCallsItself': 'menyebut dirinya “{name}”',
+  'ui.requestDamaged': 'Permintaan tanda tangan ini tiba dalam keadaan rusak dan tidak bisa dibaca, jadi tidak ada yang ditandatangani. Kembali ke Vela dan mulai lagi.',
+  'refuse.badKeyId': 'Permintaan ini menyebut kuncinya dalam bentuk yang tidak bisa dibaca, jadi browser tidak bisa dimintai kunci itu. Tidak ditandatangani.',
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -3751,6 +3815,14 @@ window.VelaCS.i18n.register('tr', {
   'ui.pageName': 'Vela imza sayfası',
   'ui.version': 'sürüm {version}',
   'ui.pageFacts': 'bağımlılıksız · açık kaynak · kendiniz barındırabilirsiniz',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Bu çağrı, burada gösterilen her şeye ek olarak hesabınızdan çağrılan sözleşmeye {amount} de gönderir.',
+  'warn.invisibleChars': 'Bu metin görünmeyen ya da yazı yönünü değiştiren karakterler içeriyor; burada [U+…] olarak gösteriliyor. Metnin olduğundan farklı okunmasına yol açabilirler.',
+  'tag.rateByRequester': 'isteyen tarafın kuruyla',
+  'tag.siteCallsItself': 'kendini “{name}” olarak tanıtıyor',
+  'ui.requestDamaged': 'Bu imza isteği bozuk ulaştı ve okunamıyor, bu yüzden hiçbir şey imzalanmadı. Vela\'ya dönüp yeniden başlatın.',
+  'refuse.badKeyId': 'Bu istek anahtarını okunamayan bir biçimde belirtiyor, bu yüzden tarayıcıdan o anahtar istenemiyor. İmzalanmıyor.',
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -4023,6 +4095,14 @@ window.VelaCS.i18n.register('es-MX', {
   'ui.pageName': 'Página de firma de Vela',
   'ui.version': 'versión {version}',
   'ui.pageFacts': 'cero dependencias · código abierto · autohospedable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Esta llamada además envía {amount} desde tu cuenta al contrato que llama, aparte de todo lo que se muestra aquí.',
+  'warn.invisibleChars': 'Este texto contiene caracteres invisibles o que cambian la dirección de la escritura; aquí se muestran como [U+…]. Pueden hacer que se lea algo distinto de lo que es.',
+  'tag.rateByRequester': 'al tipo de cambio del solicitante',
+  'tag.siteCallsItself': 'dice llamarse “{name}”',
+  'ui.requestDamaged': 'Esta solicitud de firma llegó dañada y no se puede leer, así que no se firmó nada. Vuelve a Vela e iníciala otra vez.',
+  'refuse.badKeyId': 'Esta solicitud indica su llave en una forma que no se puede leer, así que no se le puede pedir al navegador. No se firma.',
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -4295,6 +4375,14 @@ window.VelaCS.i18n.register('pt-BR', {
   'ui.pageName': 'Página de assinatura da Vela',
   'ui.version': 'versão {version}',
   'ui.pageFacts': 'zero dependências · código aberto · auto-hospedável',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Esta chamada também envia {amount} da sua conta para o contrato chamado, além de tudo o que aparece aqui.',
+  'warn.invisibleChars': 'Este texto contém caracteres invisíveis ou que mudam a direção da escrita, mostrados aqui como [U+…]. Eles podem fazer o texto parecer outra coisa.',
+  'tag.rateByRequester': 'pela cotação do solicitante',
+  'tag.siteCallsItself': 'diz se chamar “{name}”',
+  'ui.requestDamaged': 'Esta solicitação de assinatura chegou corrompida e não pode ser lida, então nada foi assinado. Volte à Vela e comece de novo.',
+  'refuse.badKeyId': 'Esta solicitação indica a chave numa forma que não pode ser lida, então o navegador não pode procurá-la. Não será assinado.',
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -4569,6 +4657,14 @@ window.VelaCS.i18n.register('fr', {
   'ui.pageName': 'Page de signature Vela',
   'ui.version': 'version {version}',
   'ui.pageFacts': 'zéro dépendance · open source · auto-hébergeable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Cet appel envoie aussi {amount} de votre compte au contrat appelé, en plus de tout ce qui est affiché ici.',
+  'warn.invisibleChars': 'Ce texte contient des caractères invisibles ou qui changent le sens d’écriture, affichés ici sous la forme [U+…]. Ils peuvent faire lire autre chose que ce qui est écrit.',
+  'tag.rateByRequester': 'au taux du demandeur',
+  'tag.siteCallsItself': 'se présente comme « {name} »',
+  'ui.requestDamaged': 'Cette demande de signature est arrivée endommagée et ne peut pas être lue : rien n’a été signé. Retournez dans Vela et relancez-la.',
+  'refuse.badKeyId': 'Cette demande désigne sa clé sous une forme illisible, le navigateur ne peut donc pas la demander. Pas de signature.',
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -4843,6 +4939,14 @@ window.VelaCS.i18n.register('de', {
   'ui.pageName': 'Vela-Signaturseite',
   'ui.version': 'Version {version}',
   'ui.pageFacts': 'keine Abhängigkeiten · Open Source · selbst hostbar',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Dieser Aufruf sendet zusätzlich {amount} von deinem Konto an den aufgerufenen Vertrag – neben allem, was hier angezeigt wird.',
+  'warn.invisibleChars': 'Dieser Text enthält unsichtbare oder die Schreibrichtung ändernde Zeichen, hier als [U+…] dargestellt. Sie können ihn anders lesen lassen, als er ist.',
+  'tag.rateByRequester': 'zum Kurs des Anfragenden',
+  'tag.siteCallsItself': 'nennt sich selbst „{name}“',
+  'ui.requestDamaged': 'Diese Signaturanfrage ist beschädigt angekommen und lässt sich nicht lesen, daher wurde nichts signiert. Geh zurück zu Vela und starte sie neu.',
+  'refuse.badKeyId': 'Diese Anfrage nennt ihren Schlüssel in einer Form, die sich nicht lesen lässt, daher kann der Browser nicht danach gefragt werden. Wird nicht signiert.',
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -5117,6 +5221,14 @@ window.VelaCS.i18n.register('ru', {
   'ui.pageName': 'Страница подписи Vela',
   'ui.version': 'версия {version}',
   'ui.pageFacts': 'без зависимостей · открытый код · свой хостинг',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Этот вызов также отправляет {amount} с вашего аккаунта вызываемому контракту — сверх всего, что показано здесь.',
+  'warn.invisibleChars': 'В этом тексте есть невидимые символы или символы, меняющие направление письма; здесь они показаны как [U+…]. Из-за них текст может читаться не так, как есть.',
+  'tag.rateByRequester': 'по курсу отправителя запроса',
+  'tag.siteCallsItself': 'называет себя «{name}»',
+  'ui.requestDamaged': 'Этот запрос на подпись пришёл повреждённым и не читается, поэтому ничего не подписано. Вернитесь в Vela и начните заново.',
+  'refuse.badKeyId': 'Этот запрос указывает ключ в нечитаемом виде, поэтому браузер не может его запросить. Не подписываю.',
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -5389,11 +5501,19 @@ window.VelaCS.i18n.register('it', {
   'ui.pageName': 'Pagina di firma di Vela',
   'ui.version': 'versione {version}',
   'ui.pageFacts': 'zero dipendenze · open source · self-hostable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Questa chiamata invia anche {amount} dal tuo account al contratto chiamato, oltre a tutto ciò che è mostrato qui.',
+  'warn.invisibleChars': 'Questo testo contiene caratteri invisibili o che cambiano la direzione della scrittura, mostrati qui come [U+…]. Possono far leggere qualcosa di diverso da ciò che è.',
+  'tag.rateByRequester': 'al tasso del richiedente',
+  'tag.siteCallsItself': 'si fa chiamare “{name}”',
+  'ui.requestDamaged': 'Questa richiesta di firma è arrivata danneggiata e non si può leggere, quindi non è stato firmato nulla. Torna su Vela e ricominciala.',
+  'refuse.badKeyId': 'Questa richiesta indica la sua chiave in una forma illeggibile, quindi non si può chiederla al browser. Non firmo.',
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
 //
-// 24 built-in networks (app/network_admin.rs BUILTIN_CHAINS) and
+// 33 built-in networks (app/network_admin.rs BUILTIN_CHAINS) and
 // 108 tokens (app/token_registry/table.rs): the networks Vela ships and the
 // tokens it offers on them, exactly as the apps name them. lib/registry.js
 // reads these rows; nothing in a request can add to them or change them.
@@ -5426,6 +5546,15 @@ window.VelaCS.catalog = {
     [57073,'Ink','ETH'],
     [98866,'Plume','PLUME'],
     [1440000,'XRPL EVM','XRP'],
+    [11155111,'Sepolia','ETH'],
+    [84532,'Base Sepolia','ETH'],
+    [421614,'Arbitrum Sepolia','ETH'],
+    [11155420,'OP Sepolia','ETH'],
+    [80002,'Polygon Amoy','POL'],
+    [97,'BNB Chain Testnet','tBNB'],
+    [43113,'Avalanche Fuji','AVAX'],
+    [5042002,'Arc Testnet','USDC'],
+    [42431,'Tempo Moderato','USD'],
   ],
   // [chain id, lowercased address, symbol, decimals]
   tokens: [
@@ -6258,15 +6387,41 @@ window.VelaCS = window.VelaCS || {};
     return whole + (frac ? '.' + frac : '');
   }
 
+  // The requester's currency, only as an ISO 4217 code ("USD"); anything
+  // else is words on the card nobody checked, and no fiat is shown at all.
+  var ISO_CURRENCY = /^[A-Z]{3}$/;
+
+  function currencyOf(context) {
+    var currency = context && context.currency;
+    return typeof currency === 'string' && ISO_CURRENCY.test(currency) ? currency : null;
+  }
+
+  // A figure at the REQUESTER's rate, so render.js marks it as theirs.
   function fiatOf(context, symbol, value, decimals) {
-    var rate = context.rates && context.rates[symbol];
-    if (typeof rate !== 'number' || !isFinite(rate)) return null;
+    var currency = currencyOf(context);
+    var rates = context.rates;
+    var rate = currency && rates && typeof rates === 'object' && Object.prototype.hasOwnProperty.call(rates, symbol)
+      ? rates[symbol] : undefined;
+    if (typeof rate !== 'number' || !isFinite(rate) || rate <= 0) return null;
     var amount = (Number(value) / Math.pow(10, decimals)) * rate;
+    if (!isFinite(amount)) return null;
     return {
-      text: (context.currency || '$') +
+      text: '≈ ' + currency + ' ' +
         (amount >= 1000 ? group(Math.round(amount).toString()) : amount.toFixed(2)),
       rate: rate,
     };
+  }
+
+  /**
+   * The chain's own coin, from this page's catalogue for the chain id that is
+   * signed for — not the requester's `nativeSymbol`, which used to name the
+   * fee on every chain ("0.0009 USDC" on Ethereum), with "ETH" when it said
+   * nothing. The hero's rule (resolve.js `nativeAmount`), so the card never
+   * names one coin two ways: only a chain the page does not know falls back
+   * to the app's word, and the network row then says the chain is the app's.
+   */
+  function nativeSymbolOf(context) {
+    return (ns.registry && ns.registry.nativeSymbol(context.chainId)) || context.nativeSymbol || 'ETH';
   }
 
   /** The 4337 gas ceiling. Zero on Vela, so it is only reported when it is not. */
@@ -6276,7 +6431,7 @@ window.VelaCS = window.VelaCS || {};
       BigInt(operation.preVerificationGas || 0);
     var maxWei = gas * BigInt(operation.maxFeePerGas || 0);
     if (maxWei === 0n) return null;
-    var symbol = context.nativeSymbol || 'ETH';
+    var symbol = nativeSymbolOf(context);
     var fiat = fiatOf(context, symbol, maxWei, 18);
     return {
       symbol: symbol,
@@ -6301,7 +6456,7 @@ window.VelaCS = window.VelaCS || {};
 
     // Native coin: a bare value transfer with no calldata.
     if ((!leg.data || leg.data === '0x') && value > 0n) {
-      var symbol = context.nativeSymbol || 'ETH';
+      var symbol = nativeSymbolOf(context);
       var nativeFiat = fiatOf(context, symbol, value, 18);
       return {
         index: index,
@@ -6346,11 +6501,11 @@ window.VelaCS = window.VelaCS || {};
     if (!operation) return null;
     var gas = gasCeiling(context, operation);
     var leg = inBandLeg(context, calls);
-    if (!gas && !leg) return { gas: null, leg: null, unknown: true, currency: context.currency || '$' };
+    if (!gas && !leg) return { gas: null, leg: null, unknown: true, currency: currencyOf(context) };
     return {
       gas: gas,
       leg: leg,
-      currency: context.currency || '$',
+      currency: currencyOf(context),
       // A paymaster changes who pays; say so rather than showing a number that
       // will never leave this account.
       sponsored: !!(operation.paymasterAndData && operation.paymasterAndData !== '0x'),
@@ -6708,13 +6863,50 @@ window.VelaCS = window.VelaCS || {};
   // Fiat only at a rate the REQUESTER gave (`context.rates`), in its
   // currency — the fee's rule (lib/fee.js). A price this page carried itself
   // would be a guess shown as a fact, and wrong for every coin it forgot.
+  //
+  // Both halves are the requester's, so the figure is drawn as its claim
+  // (render.js puts `tag.rateByRequester` beside every fiat figure), and the
+  // currency must be an ISO 4217 code: free text there was a second line of
+  // words the requester could write onto the card ("≈ <anything>1,000").
+  var ISO_CURRENCY = /^[A-Z]{3}$/;
+
   function fiat(ctx, symbol, value, decimals) {
-    var rate = ctx && ctx.rates && ctx.rates[symbol];
-    if (typeof rate !== 'number' || !isFinite(rate)) return null;
+    var currency = ctx && ctx.currency;
+    if (typeof currency !== 'string' || !ISO_CURRENCY.test(currency)) return null;
+    var rates = ctx.rates;
+    var rate = rates && typeof rates === 'object' && Object.prototype.hasOwnProperty.call(rates, symbol)
+      ? rates[symbol] : undefined;
+    if (typeof rate !== 'number' || !isFinite(rate) || rate <= 0) return null;
     var amount = (Number(value) / Math.pow(10, decimals)) * rate;
     if (!isFinite(amount)) return null;
-    return '≈ ' + ((ctx && ctx.currency) || '$') +
+    return '≈ ' + currency + ' ' +
       (amount >= 1000 ? group(Math.round(amount).toString()) : amount.toFixed(2));
+  }
+
+  // Characters that change how text reads without being seen: direction
+  // overrides and isolates ("bob" U+202E "evil" reads "bob live") and zero-width marks. They
+  // are drawn as their code points instead, and the card says why.
+  var INVISIBLE = /[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+
+  /** `{text, hidden}`: the text with every invisible character made visible. */
+  function reveal(value) {
+    if (typeof value !== 'string') return { text: value, hidden: false };
+    var hidden = false;
+    var shown = value.replace(INVISIBLE, function (c) {
+      hidden = true;
+      return '[U+' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ']';
+    });
+    return { text: shown, hidden: hidden };
+  }
+
+  /** `value` made visible; a caution on `view` when anything was hidden in it. */
+  function visible(value, view) {
+    var out = reveal(value);
+    if (out.hidden && !view.warnings.some(function (w) { return w.key === 'warn.invisibleChars'; })) {
+      view.warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
+      raise(view, 'caution');
+    }
+    return out.text;
   }
 
   function shortAddress(address) {
@@ -6752,8 +6944,9 @@ window.VelaCS = window.VelaCS || {};
     var hints = roleHints || {};
     var known = reg.contract(lower);
     var tag = null;
+    var self = ctx.selfAccount;
 
-    if (ctx.account && lower === String(ctx.account).toLowerCase()) tag = 'tag.self';
+    if (self && lower === String(self).toLowerCase()) tag = 'tag.self';
     else if (hints.isCallTarget) tag = 'tag.calledContract';
     else if (known && known.descriptor) tag = 'tag.localDescriptor';
     else if (known && known.verified) tag = 'tag.sourceVerified';
@@ -6824,6 +7017,25 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
+  /**
+   * The account a "this account" tag may name: the one the signature is FOR,
+   * as the digest fixes it — the operation's `userOp.sender` for a
+   * transaction (SafeOp.safe), or the account a message is wrapped under
+   * (SafeMessage, lib/digest.js). `context.account` alone is the requester's
+   * word, and with an operation present it is ignored: an `account` naming
+   * the recipient drew a stranger as "this account" (and its send as safe).
+   * A transaction with no operation has no account in any digest, so nothing
+   * is tagged.
+   */
+  function selfAccountOf(intent, ctx) {
+    var operation = ctx.operation && ctx.operation.userOp;
+    if (operation) return typeof operation.sender === 'string' ? operation.sender : null;
+    var method = intent && intent.method;
+    if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') return null;
+    // digest.js wraps a message only when it has both.
+    return typeof ctx.account === 'string' && ctx.chainId ? ctx.account : null;
+  }
+
   /** "1,000 USDC" / "Unlimited USDC" — for interpolation into a sentence. */
   function amountPhrase(amount) {
     var head = amount.textKey ? ns.i18n.t(amount.textKey) : amount.text;
@@ -6845,22 +7057,50 @@ window.VelaCS = window.VelaCS || {};
     return fold(name) === fold(host);
   }
 
+  /**
+   * Whether the site's name in `context.dapp` may stand as the head's own
+   * words. Only when it says nothing the page cannot see for itself: the
+   * name IS the host (what the wallet sends — vela-core `trusted_signer.rs`
+   * names a site by its host), or a channel the browser vouches for shows a
+   * Vela wallet asking. `source: 'vela_browser'` is a field anyone can write,
+   * so it proves nothing: "Vela Wallet (verified)" over app.uniswap.org used
+   * to be the head's title. Any other name is the site's claim, said as one
+   * (`dapp.claimedName`).
+   */
+  function nameVouched(name, host, ctx) {
+    if (host && sameSiteWords(name, host)) return true;
+    return ctx.channel === 'post' && ctx.originVerified === true && walletRequester(ctx);
+  }
+
   function baseView(intent, ctx) {
     var origin = (intent && intent.origin) || '';
     var host = origin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    var known = ctx.dapp;
+    var known = ctx.dapp && typeof ctx.dapp === 'object' ? ctx.dapp : null;
+    var given = known && typeof known.name === 'string' && known.name.trim() ? known.name : null;
+    var vouched = !!given && nameVouched(given, host, ctx);
+    var warnings = [];
+    var shown = vouched ? reveal(given) : null;
+    var claimed = given && !vouched ? reveal(given.trim().slice(0, 64)) : null;
+    var accountName = reveal((ctx.signer && typeof ctx.signer.name === 'string' && ctx.signer.name) || null);
+    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden) {
+      warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
+    }
+    var name = shown ? shown.text : null;
     return {
       dapp: {
-        name: (known && known.name) || null,
-        nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
+        name: name,
+        nameKey: name ? null : (host || claimed ? 'tag.unknownSite' : 'tag.wallet'),
+        // A name the site gave that the page cannot vouch for: drawn under
+        // the head as the site's own words, never as its title.
+        claimedName: claimed ? claimed.text : null,
         // The host, for every judgement about it (`warn.claimedOrigin` reads
         // this). Whether the head draws it as a line of its own is
         // `originShown`: not when the name above already says it (082 L-HOST).
         origin: host || null,
-        originShown: !!host && !sameSiteWords((known && known.name) || '', host),
+        originShown: !!host && !sameSiteWords(name || '', host),
         // The wallet asking itself has no host: its initial is the word's.
-        letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
-        tone: (known && known.tone) || '#8a93a5',
+        letter: (name || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
+        tone: (vouched && known.tone) || '#8a93a5',
         // Display-only, and it never touches the digest: a logo cannot change
         // what gets signed, so an https URL from the request is allowed here.
         icon: (known && known.icon) || null,
@@ -6871,7 +7111,7 @@ window.VelaCS = window.VelaCS || {};
         // No site at all: the wallet's own send. The card then names no
         // requester (the apps' `first_party`), rather than a generic
         // "Wallet" line that says nothing a person can check.
-        own: !host && !(known && known.name),
+        own: !host && !given,
       },
       // Named from the chain id we are actually signing for (it is in the
       // digest's domain). The app's own label is only used for a chain this
@@ -6889,11 +7129,11 @@ window.VelaCS = window.VelaCS || {};
       // redirect anything: the money moves per the calldata, and the account
       // itself is `userOp.sender`, which sits inside the signed digest. The
       // address and identicon next to it remain the anchor.
-      accountName: (ctx.signer && ctx.signer.name) || null,
+      accountName: accountName.text,
       fields: [],
-      warnings: [],
+      warnings: warnings,
       legs: [],
-      risk: 'normal',
+      risk: warnings.length ? 'caution' : 'normal',
       level: 1,
       signer: ctx.signer || { name: '—', letter: '?' },
       fee: null,
@@ -6976,6 +7216,7 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.deploy');
       view.warnings.push({ tone: 'caution', key: 'warn.deploy' });
       view.tech = techFor(text('value.contractCreation'), null, data, {});
+      nativeOut(view, value, ctx);
       return view;
     }
 
@@ -7013,6 +7254,59 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
+    resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value);
+    nativeOut(view, value, ctx);
+    return view;
+  }
+
+  /**
+   * Native coin sent along with calldata leaves the account exactly as a
+   * send's does, whatever the function: `deposit()` with 5 ETH, a selector
+   * nobody knows, a `transfer` that also carries value. Only a plain send
+   * (no calldata) and a descriptor that already draws it (`nativeIn`, a swap
+   * paid in the coin) had shown it; everywhere else it sat in the operation
+   * and nowhere on the card. Now it is a row of its own in the amount's
+   * strong type, with a caution in words — in every leg of a batch too,
+   * which carries the caution up to the card (resolve, applyNested).
+   */
+  function nativeOut(view, value, ctx) {
+    if (value === null || value <= 0n || view.nativeShown) return;
+    var amount = nativeAmount(value, ctx, true);
+    var phrase = amount.text + ' ' + amount.symbol;
+    view.nativeShown = true;
+    view.fields.unshift({ label: 'field.nativeAttached', amount: amount, format: 'tokenAmount', role: 'native-out' });
+    view.warnings.push({ tone: 'caution', key: 'warn.nativeValue', params: { amount: phrase } });
+    raise(view, 'caution');
+    if (view.tech) view.tech.params.unshift({ name: 'value', value: phrase });
+  }
+
+  /**
+   * An undecoded call drawn as a leg of a batch (spec: the universal
+   * fallback, L3 at least). A leg has no hero, so without these rows it read
+   * "2 · Blind signature" and nothing else: the contract it calls, the
+   * function, the coin it carries and the calldata itself are all facts the
+   * page holds, and all of them go on the leg.
+   */
+  function legFacts(view, meta, functionText, data, value, ctx, raw) {
+    var facts = [
+      { label: 'ui.contract', identity: meta, format: 'addressName', role: 'contract' },
+      { label: 'ui.function', value: functionText, format: 'raw', mono: true },
+    ];
+    // A coin it carries is `nativeOut`'s row; none is said as 0, not left out.
+    if (raw && value !== null && value === 0n) {
+      var none = nativeAmount(0n, ctx, true);
+      facts.push({ label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw' });
+    }
+    if (raw) {
+      facts.push({
+        label: 'ui.rawData', labelParams: { bytes: abi.byteLength(data) }, value: data, format: 'raw', mono: true,
+      });
+    }
+    view.fields = facts.concat(view.fields);
+  }
+
+  function resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value) {
+    var to = call.to || '';
     var descriptor = selector ? reg.descriptorFor(selector) : null;
 
     // Level 1 — a verified descriptor gives us meaning.
@@ -7039,6 +7333,7 @@ window.VelaCS = window.VelaCS || {};
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
         sim: ctx.simulation && ctx.simulation.summary,
       });
+      if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
     }
 
@@ -7061,6 +7356,7 @@ window.VelaCS = window.VelaCS || {};
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
         sim: ctx.simulation && ctx.simulation.summary,
       });
+      if (isLeg) legFacts(view, meta, p4.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
     }
 
@@ -7095,6 +7391,7 @@ window.VelaCS = window.VelaCS || {};
       null, data,
       { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: sim && sim.summary },
     );
+    if (isLeg) legFacts(view, meta, selector || '0x', data, value, ctx, true);
     return view;
   }
 
@@ -7168,6 +7465,7 @@ window.VelaCS = window.VelaCS || {};
     });
 
     if (descriptor.nativeIn && callValue > 0n) {
+      view.nativeShown = true;
       var paid = nativeAmount(callValue, ctx);
       hero = { kind: 'amount', amount: paid, direction: 'out' };
       rows.unshift({ label: 'field.pay', amount: paid, format: 'tokenAmount', role: 'send-amount' });
@@ -7341,10 +7639,29 @@ window.VelaCS = window.VelaCS || {};
       ? text('sentence.multiSend', { count: inner.length })
       : text('sentence.safeExec');
     view.warnings.push({ tone: 'caution', key: 'warn.nested' });
+    liftLegWarnings(view);
     view.tech = techFor(descriptor.signature, values, call.data, {
       addresses: [{ roleKey: 'ui.outerContract', name: label(meta), address: call.to }],
     });
     return view;
+  }
+
+  /**
+   * A leg's card draws its rows, not its warnings, so the ones a person must
+   * read are lifted onto the card: every danger, and every coin a leg sends
+   * along with its calldata (`nativeOut`), each once.
+   */
+  function liftLegWarnings(view) {
+    view.legs.forEach(function (leg) {
+      leg.view.warnings.forEach(function (w) {
+        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.invisibleChars') {
+          var seen = view.warnings.some(function (o) {
+            return o.key === w.key && JSON.stringify(o.params || null) === JSON.stringify(w.params || null);
+          });
+          if (!seen) view.warnings.push(w);
+        }
+      });
+    });
   }
 
   // Safe's multiSend packs legs as: operation(1) ‖ to(20) ‖ value(32) ‖ len(32) ‖ data
@@ -7418,27 +7735,28 @@ window.VelaCS = window.VelaCS || {};
     if (siwe) {
       var origin = (intent.origin || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
       var mismatch = siwe.domain.toLowerCase() !== origin.toLowerCase();
+      var siweDomain = visible(siwe.domain, view);
       view.intentKey = 'intent.login';
-      view.hero = { kind: 'siwe', domain: siwe.domain, statement: siwe.statement, mismatch: mismatch };
+      view.hero = { kind: 'siwe', domain: siweDomain, statement: visible(siwe.statement, view), mismatch: mismatch };
       view.fields = [
-        { label: 'field.claimedDomain', value: siwe.domain, format: 'raw', warning: mismatch },
+        { label: 'field.claimedDomain', value: siweDomain, format: 'raw', warning: mismatch },
         { label: 'field.actualSite', value: origin, format: 'raw', warning: mismatch },
         { label: 'field.nonce', value: siwe.nonce, format: 'raw', detail: true },
       ];
       if (mismatch) {
         view.risk = 'danger';
-        view.sentence = text('sentence.siwePhish', { claimed: siwe.domain, actual: origin });
+        view.sentence = text('sentence.siwePhish', { claimed: siweDomain, actual: origin });
         view.warnings.push({ tone: 'danger', key: 'warn.siweMismatch' });
       } else {
-        view.risk = 'safe';
-        view.sentence = text('sentence.siweOk', { domain: siwe.domain });
+        if (view.risk !== 'caution') view.risk = 'safe';
+        view.sentence = text('sentence.siweOk', { domain: siweDomain });
       }
       view.tech = techFor('personal_sign (SIWE)', null, payload, {});
       return view;
     }
 
     view.intentKey = 'intent.message';
-    view.hero = { kind: 'message', text: body };
+    view.hero = { kind: 'message', text: visible(body, view) };
     view.sentence = text('sentence.message');
     view.tech = techFor('personal_sign (UTF-8)', null, payload, {});
     return view;
@@ -7568,11 +7886,11 @@ window.VelaCS = window.VelaCS || {};
     view.intentKey = 'intent.typed';
     view.level = 2;
     view.risk = 'caution';
-    view.hero = { kind: 'code', title: primary, sub: domain.name || null };
+    view.hero = { kind: 'code', title: visible(primary, view), sub: visible(domain.name || null, view) };
     view.fields = Object.keys(message).map(function (key) {
-      return { labelRaw: key, value: renderRaw(message[key]), format: 'raw' };
+      return { labelRaw: visible(key, view), value: visible(renderRaw(message[key]), view), format: 'raw' };
     });
-    view.sentence = text('sentence.typedUnknown', { type: primary });
+    view.sentence = text('sentence.typedUnknown', { type: view.hero.title });
     view.warnings.push({ tone: 'caution', key: 'warn.typedUnknown' });
     view.tech = techFor('EIP-712 · ' + primary, null, null, {
       params: Object.keys(message).map(function (k) { return { name: k, value: renderRaw(message[k]) }; }),
@@ -7595,6 +7913,16 @@ window.VelaCS = window.VelaCS || {};
 
   // A 16-byte-or-longer credential id, base64url, as the page's wire carries it.
   var CREDENTIAL_ID = /^[A-Za-z0-9_-]{16,1400}$/;
+
+  /**
+   * A credential id this page can hand to the browser: base64url of the
+   * right length — and one that DECODES. A length of 4n+1 is no base64 at
+   * all, and `atob` threw on it inside the tap, after the button had gone
+   * busy: "Waiting for your passkey…" for ever.
+   */
+  function credentialIdOk(id) {
+    return typeof id === 'string' && CREDENTIAL_ID.test(id) && id.length % 4 !== 1;
+  }
   var P256_POINT = /^(0x)?04[0-9a-fA-F]{128}$/;
   /** A 20-byte contract address, `0x`-prefixed as the wallet sends it. */
   var ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -7640,7 +7968,7 @@ window.VelaCS = window.VelaCS || {};
     var place = Object.prototype.hasOwnProperty.call(PLACE_HINTS, raw.place) ? raw.place : null;
     var id = null;
     if (raw.credentialId !== undefined && raw.credentialId !== null) {
-      if (typeof raw.credentialId !== 'string' || !CREDENTIAL_ID.test(raw.credentialId)) return null;
+      if (!credentialIdOk(raw.credentialId)) return null;
       id = raw.credentialId;
       if (Array.isArray(allow) && allow.length && allow.indexOf(id) < 0) return null;
     }
@@ -7857,6 +8185,7 @@ window.VelaCS = window.VelaCS || {};
     var noDeployment = false;
 
     view.kind = 'ceremony';
+    view.dapp.claimedName = null;
     view.intentKey = 'intent.' + kind;
     view.risk = 'normal';
     view.level = 1;
@@ -7923,7 +8252,7 @@ window.VelaCS = window.VelaCS || {};
       var name = p.name === undefined ? (wallet || 'Vela') : displayName(p.name);
       var exclude = p.excludeCredentialIds === undefined ? [] : p.excludeCredentialIds;
       if (!name || !Array.isArray(exclude) || !exclude.every(function (id) {
-        return typeof id === 'string' && CREDENTIAL_ID.test(id);
+        return credentialIdOk(id);
       })) bad = true;
       view.ceremony.name = name;
       view.ceremony.excludeCredentialIds = Array.isArray(exclude) ? exclude : [];
@@ -7942,7 +8271,7 @@ window.VelaCS = window.VelaCS || {};
     } else if (kind === 'proof') {
       var purpose = p.purpose;
       if (!ns.ceremony.proofChallenge(purpose)) bad = true;
-      if (p.credentialId !== undefined && !(typeof p.credentialId === 'string' && CREDENTIAL_ID.test(p.credentialId))) bad = true;
+      if (p.credentialId !== undefined && !credentialIdOk(p.credentialId)) bad = true;
       view.ceremony.purpose = purpose;
       view.ceremony.credentialId = typeof p.credentialId === 'string' ? p.credentialId : null;
       view.intentKey = purpose === 'verify' ? 'intent.proofVerify' : 'intent.proofRecover';
@@ -7967,7 +8296,7 @@ window.VelaCS = window.VelaCS || {};
         chainId: p.chainId,
         registryContract: p.registryContract,
       };
-      if (typeof member.credentialId !== 'string' || !CREDENTIAL_ID.test(member.credentialId)) bad = true;
+      if (!credentialIdOk(member.credentialId)) bad = true;
       if (typeof member.publicKey !== 'string' || !P256_POINT.test(member.publicKey)) bad = true;
       if (typeof member.groupPublicKey !== 'string' || !P256_POINT.test(member.groupPublicKey)) bad = true;
       if (typeof member.attestation !== 'string' || !/^(0x)?([0-9a-fA-F]{40})?$/.test(member.attestation)) bad = true;
@@ -8202,7 +8531,9 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function resolve(requested, ctx) {
-    ctx = ctx || {};
+    // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
+    ctx = Object.assign({}, ctx || {});
+    ctx.selfAccount = selfAccountOf(requested, ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
@@ -8229,11 +8560,7 @@ window.VelaCS = window.VelaCS || {};
       // at least two legs — the call and the fee — so an overwrite here would
       // offer the button for exactly the tampered operation it exists to stop.
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
-      view.legs.forEach(function (leg) {
-        leg.view.warnings.forEach(function (w) {
-          if (w.tone === 'danger') view.warnings.push(w);
-        });
-      });
+      liftLegWarnings(view);
       if (ctx.simulation) view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
       view.tech = techFor('wallet_sendCalls (EIP-5792)', null, null, {});
     } else if (intent.method === 'personal_sign') {
@@ -8289,6 +8616,16 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.unshift(destination
         ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
         : { tone: 'danger', key: 'refuse.answerNotToWallet' });
+    }
+
+    // The account's keys, as the browser will be asked for them. One that
+    // cannot be read cannot be asked for: refused here, with the reason,
+    // rather than failing inside the tap.
+    var allow = ctx.allowCredentials;
+    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
     }
 
     // The key that signs, and where it lives (spec 102 R5). sign.js asks for
@@ -8500,8 +8837,16 @@ window.VelaCS = window.VelaCS || {};
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
-    if (hero.amount.fiat) box.appendChild(el('div', 'amount-fiat', hero.amount.fiat));
+    if (hero.amount.fiat) box.appendChild(fiatLine('amount-fiat', hero.amount.fiat));
     return box;
+  }
+
+  // A fiat figure is the requester's rate times a fact, so it is never drawn
+  // without saying whose rate it is (resolve.js / fee.js make the figure).
+  function fiatLine(className, figure) {
+    var line = el('div', className, figure + ' ');
+    line.appendChild(el('span', 'tag', t('tag.rateByRequester')));
+    return line;
   }
 
   function hero(view) {
@@ -8536,7 +8881,7 @@ window.VelaCS = window.VelaCS || {};
 
   function fieldRow(field) {
     var row = el('div', 'row' + (field.warning || field.expired ? ' row-warn' : '') + (field.identity ? ' row-identity' : ''));
-    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label)));
+    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label, field.labelParams)));
     var value = el('span', 'row-value');
     if (field.identity) {
       if (field.identity.tag) value.appendChild(el('div', 'row-tag', t(field.identity.tag)));
@@ -8544,9 +8889,10 @@ window.VelaCS = window.VelaCS || {};
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
-      if (field.amount.fiat) value.appendChild(el('div', 'row-sub', field.amount.fiat));
+      if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
-      value.appendChild(el('span', field.emphasis ? 'strong' : '', field.valueKey ? t(field.valueKey) : field.value));
+      value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
+        field.valueKey ? t(field.valueKey) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
     }
     row.appendChild(value);
@@ -8700,7 +9046,9 @@ window.VelaCS = window.VelaCS || {};
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
     // The amount and its chevron stay together when a long label wraps.
     var end = el('span', 'fee-end');
-    end.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    var figure = el('span', 'fee-value', headline + (fiat ? ' ' + fiat : ''));
+    if (fiat) figure.appendChild(el('span', 'tag', ' ' + t('tag.rateByRequester')));
+    end.appendChild(figure);
     end.appendChild(icon('chevron-right', 'chevron fee-chevron'));
     row.appendChild(end);
     wrap.appendChild(row);
@@ -8721,7 +9069,8 @@ window.VelaCS = window.VelaCS || {};
     var rateSymbol = view.fee.leg ? view.fee.leg.symbol : view.fee.gas && view.fee.gas.symbol;
     note.appendChild(el('div', null, rate
       ? t('ui.feeRate', {
-        symbol: rateSymbol, currency: view.fee.currency, rate: rate.toLocaleString('en-US'),
+        // An ISO code (fee.js), so it is spaced from the figure: "USD 1".
+        symbol: rateSymbol, currency: view.fee.currency + ' ', rate: rate.toLocaleString('en-US'),
       })
       : t('ui.feeNoRate')));
     wrap.appendChild(note);
@@ -8795,6 +9144,11 @@ window.VelaCS = window.VelaCS || {};
       identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
     } else if (!ceremony && view.dapp.originShown) {
       identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    }
+    // A name the site gave that the page cannot vouch for: its words, said
+    // as its words, under the head — never the head itself.
+    if (!ceremony && view.dapp.claimedName) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.siteCallsItself', { name: view.dapp.claimedName })));
     }
     var note = noteFor(view, 'requester');
     if (note) identity.appendChild(note);
@@ -9510,7 +9864,17 @@ window.VelaCS = window.VelaCS || {};
    */
   function credentials(ids, key) {
     return (ids || []).map(function (id) {
-      var entry = { type: 'public-key', id: unb64url(id) };
+      var bytes;
+      try {
+        bytes = unb64url(id);
+      } catch (e) {
+        // resolve.js refuses such a request first; this is the last line, so
+        // a key id that is not base64url is a sentence, never a busy button.
+        var bad = new Error('a credential id is not base64url');
+        bad.badKeyId = true;
+        throw bad;
+      }
+      var entry = { type: 'public-key', id: bytes };
       if (key && key.credentialId === id && key.transports.length) entry.transports = key.transports.slice();
       return entry;
     });
@@ -9549,8 +9913,13 @@ window.VelaCS = window.VelaCS || {};
       userVerification: 'required',
       timeout: 60000,
     };
-    if (options.allowCredentials && options.allowCredentials.length) {
-      request.allowCredentials = credentials(options.allowCredentials, options.key);
+    try {
+      if (options.allowCredentials && options.allowCredentials.length) {
+        request.allowCredentials = credentials(options.allowCredentials, options.key);
+      }
+    } catch (error) {
+      // A promise either way: the caller's `.catch` says what went wrong.
+      return Promise.reject(error);
     }
     withHints(request, options.key);
 
@@ -9809,7 +10178,14 @@ window.VelaCS = window.VelaCS || {};
       publicKey.authenticatorSelection.authenticatorAttachment = ATTACHMENT[key.place];
     }
     ns.signer.withHints(publicKey, key);
-    var exclude = (options.excludeCredentialIds || []).map(unb64url);
+    var exclude;
+    try {
+      exclude = (options.excludeCredentialIds || []).map(unb64url);
+    } catch (e) {
+      var bad = new Error('a credential id is not base64url');
+      bad.badKeyId = true;
+      return Promise.reject(bad);
+    }
     if (exclude.length) {
       publicKey.excludeCredentials = exclude.map(function (id) { return { type: 'public-key', id: id }; });
     }
@@ -9858,7 +10234,11 @@ window.VelaCS = window.VelaCS || {};
       userVerification: 'required',
       timeout: CEREMONY_TIMEOUT,
     };
-    if (allow.length) request.allowCredentials = ns.signer.credentials(allow, key);
+    try {
+      if (allow.length) request.allowCredentials = ns.signer.credentials(allow, key);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     ns.signer.withHints(request, key);
     return navigator.credentials.get({ publicKey: request }).then(function (credential) {
       var response = credential.response;
@@ -10172,20 +10552,52 @@ window.VelaCS = window.VelaCS || {};
   // even a refusal code — sent to whatever the link names would go to
   // whoever wrote the link.
 
+  /**
+   * A request that arrived damaged — cut short, not base64url, not deflate,
+   * not JSON, not a request. One error with the page's own words
+   * (`i18nKey`), whatever broke: the browser's ("Unexpected token…",
+   * "Failed to fetch", "Cannot read properties of null") used to be the
+   * status line, and an `atob` that threw outside the promise left
+   * "Waiting for a signing request…" up for ever.
+   */
+  function damaged() {
+    var error = new Error('the signing request in the link is damaged');
+    error.i18nKey = 'ui.requestDamaged';
+    return error;
+  }
+
+  /** `{intent, context}` as the wire carries it, or null for anything else. */
+  function requestShape(payload) {
+    var object = function (value) { return !!value && typeof value === 'object' && !Array.isArray(value); };
+    if (!object(payload) || !object(payload.intent) || typeof payload.intent.method !== 'string') return null;
+    if (payload.context !== undefined && payload.context !== null && !object(payload.context)) return null;
+    return payload;
+  }
+
   function fromUrlFragment(options) {
     var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
     if (!hash.get('i')) return null;
 
-    var raw = b64urlToBytes(hash.get('i'));
-    var callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    var raw;
+    var callback;
+    try {
+      raw = b64urlToBytes(hash.get('i'));
+      callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    } catch (e) {
+      // Read once and gone: a damaged link is not something to keep.
+      scrubFragment();
+      return Promise.reject(damaged());
+    }
     var token = hash.get('t') || '';
     var decoded = hash.get('z') === '1'
       ? inflate(raw)
       : Promise.resolve(new TextDecoder().decode(raw));
 
     return decoded.then(function (json) {
-      var payload = JSON.parse(json);
+      var payload = null;
+      try { payload = requestShape(JSON.parse(json)); } catch (e) { payload = null; }
       scrubFragment();
+      if (!payload) throw damaged();
 
       function callbackUrl(query) {
         return callback + (callback.indexOf('?') >= 0 ? '&' : '?') +
@@ -10232,6 +10644,9 @@ window.VelaCS = window.VelaCS || {};
       });
       session.finish('single');
       return session;
+    }, function () {
+      scrubFragment();
+      throw damaged();
     });
   }
 
@@ -10649,6 +11064,13 @@ window.VelaCS = window.VelaCS || {};
         if (request.gone) return;
         idle(button);
         phase('card');
+        if (error && error.badKeyId) {
+          // Not a try-again: the request names a key no browser can be asked for.
+          off(button, 'button.cannotSign');
+          say('refuse.badKeyId');
+          phase('refused');
+          return;
+        }
         if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
           // Cancelled, timed out, or this device simply holds no key for the
           // account. WebAuthn deliberately does not say which — so the words
@@ -10740,7 +11162,11 @@ window.VelaCS = window.VelaCS || {};
       if (request.gone) return;
       idle(button);
       phase('card');
-      if (error && error.wrongCredential) say('ui.wrongCredential');
+      if (error && error.badKeyId) {
+        off(button, 'button.cannotSign');
+        say('refuse.badKeyId');
+        phase('refused');
+      } else if (error && error.wrongCredential) say('ui.wrongCredential');
       else if (error && error.name === 'InvalidStateError') say('ui.keyExists');
       else if (error && error.name === 'NotAllowedError') say(c.kind === 'create' ? 'ui.createFailed' : 'ui.proofFailed');
       else say(String((error && error.message) || error));
@@ -10783,6 +11209,21 @@ window.VelaCS = window.VelaCS || {};
     session.next().then(function (request) {
       if (request) show(request);
       else ended();
+    }).catch(function () {
+      // A request this page could not even draw is refused, never left on
+      // "Waiting…": the status says so, and the wallet hears "refused" (at
+      // once on a session, when the page closes on the url channel).
+      window.__slider = null;
+      say('ui.requestDamaged');
+      phase('refused');
+      if (current && !current.answered) {
+        current.refusalCode = 'refused';
+        if (session.persistent) {
+          current.reject('refused');
+          current = null;
+          loop();
+        }
+      }
     });
   }
 
@@ -10879,7 +11320,13 @@ window.VelaCS = window.VelaCS || {};
         var message = String((error && error.message) || error);
         // A reload (or a link opened twice) finds no request in the address —
         // the fragment is wiped once read. Say what that means (spec 079).
-        say(/found no request/.test(message) ? 'ui.requestEnded' : message);
+        // Anything else is a link this page cannot read, said in its words —
+        // never the engine's ("Unexpected token…", "Failed to fetch").
+        var key = error && error.i18nKey ? error.i18nKey
+          : /found no request|no signing request/.test(message) ? 'ui.requestEnded'
+          : 'ui.requestDamaged';
+        say(key);
+        phase(key === 'ui.requestEnded' ? 'ended' : 'damaged');
       });
   }
 

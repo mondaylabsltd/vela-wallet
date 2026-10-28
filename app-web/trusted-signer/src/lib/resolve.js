@@ -51,13 +51,50 @@ window.VelaCS = window.VelaCS || {};
   // Fiat only at a rate the REQUESTER gave (`context.rates`), in its
   // currency — the fee's rule (lib/fee.js). A price this page carried itself
   // would be a guess shown as a fact, and wrong for every coin it forgot.
+  //
+  // Both halves are the requester's, so the figure is drawn as its claim
+  // (render.js puts `tag.rateByRequester` beside every fiat figure), and the
+  // currency must be an ISO 4217 code: free text there was a second line of
+  // words the requester could write onto the card ("≈ <anything>1,000").
+  var ISO_CURRENCY = /^[A-Z]{3}$/;
+
   function fiat(ctx, symbol, value, decimals) {
-    var rate = ctx && ctx.rates && ctx.rates[symbol];
-    if (typeof rate !== 'number' || !isFinite(rate)) return null;
+    var currency = ctx && ctx.currency;
+    if (typeof currency !== 'string' || !ISO_CURRENCY.test(currency)) return null;
+    var rates = ctx.rates;
+    var rate = rates && typeof rates === 'object' && Object.prototype.hasOwnProperty.call(rates, symbol)
+      ? rates[symbol] : undefined;
+    if (typeof rate !== 'number' || !isFinite(rate) || rate <= 0) return null;
     var amount = (Number(value) / Math.pow(10, decimals)) * rate;
     if (!isFinite(amount)) return null;
-    return '≈ ' + ((ctx && ctx.currency) || '$') +
+    return '≈ ' + currency + ' ' +
       (amount >= 1000 ? group(Math.round(amount).toString()) : amount.toFixed(2));
+  }
+
+  // Characters that change how text reads without being seen: direction
+  // overrides and isolates ("bob" U+202E "evil" reads "bob live") and zero-width marks. They
+  // are drawn as their code points instead, and the card says why.
+  var INVISIBLE = /[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+
+  /** `{text, hidden}`: the text with every invisible character made visible. */
+  function reveal(value) {
+    if (typeof value !== 'string') return { text: value, hidden: false };
+    var hidden = false;
+    var shown = value.replace(INVISIBLE, function (c) {
+      hidden = true;
+      return '[U+' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ']';
+    });
+    return { text: shown, hidden: hidden };
+  }
+
+  /** `value` made visible; a caution on `view` when anything was hidden in it. */
+  function visible(value, view) {
+    var out = reveal(value);
+    if (out.hidden && !view.warnings.some(function (w) { return w.key === 'warn.invisibleChars'; })) {
+      view.warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
+      raise(view, 'caution');
+    }
+    return out.text;
   }
 
   function shortAddress(address) {
@@ -95,8 +132,9 @@ window.VelaCS = window.VelaCS || {};
     var hints = roleHints || {};
     var known = reg.contract(lower);
     var tag = null;
+    var self = ctx.selfAccount;
 
-    if (ctx.account && lower === String(ctx.account).toLowerCase()) tag = 'tag.self';
+    if (self && lower === String(self).toLowerCase()) tag = 'tag.self';
     else if (hints.isCallTarget) tag = 'tag.calledContract';
     else if (known && known.descriptor) tag = 'tag.localDescriptor';
     else if (known && known.verified) tag = 'tag.sourceVerified';
@@ -167,6 +205,25 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
+  /**
+   * The account a "this account" tag may name: the one the signature is FOR,
+   * as the digest fixes it — the operation's `userOp.sender` for a
+   * transaction (SafeOp.safe), or the account a message is wrapped under
+   * (SafeMessage, lib/digest.js). `context.account` alone is the requester's
+   * word, and with an operation present it is ignored: an `account` naming
+   * the recipient drew a stranger as "this account" (and its send as safe).
+   * A transaction with no operation has no account in any digest, so nothing
+   * is tagged.
+   */
+  function selfAccountOf(intent, ctx) {
+    var operation = ctx.operation && ctx.operation.userOp;
+    if (operation) return typeof operation.sender === 'string' ? operation.sender : null;
+    var method = intent && intent.method;
+    if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') return null;
+    // digest.js wraps a message only when it has both.
+    return typeof ctx.account === 'string' && ctx.chainId ? ctx.account : null;
+  }
+
   /** "1,000 USDC" / "Unlimited USDC" — for interpolation into a sentence. */
   function amountPhrase(amount) {
     var head = amount.textKey ? ns.i18n.t(amount.textKey) : amount.text;
@@ -188,22 +245,50 @@ window.VelaCS = window.VelaCS || {};
     return fold(name) === fold(host);
   }
 
+  /**
+   * Whether the site's name in `context.dapp` may stand as the head's own
+   * words. Only when it says nothing the page cannot see for itself: the
+   * name IS the host (what the wallet sends — vela-core `trusted_signer.rs`
+   * names a site by its host), or a channel the browser vouches for shows a
+   * Vela wallet asking. `source: 'vela_browser'` is a field anyone can write,
+   * so it proves nothing: "Vela Wallet (verified)" over app.uniswap.org used
+   * to be the head's title. Any other name is the site's claim, said as one
+   * (`dapp.claimedName`).
+   */
+  function nameVouched(name, host, ctx) {
+    if (host && sameSiteWords(name, host)) return true;
+    return ctx.channel === 'post' && ctx.originVerified === true && walletRequester(ctx);
+  }
+
   function baseView(intent, ctx) {
     var origin = (intent && intent.origin) || '';
     var host = origin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    var known = ctx.dapp;
+    var known = ctx.dapp && typeof ctx.dapp === 'object' ? ctx.dapp : null;
+    var given = known && typeof known.name === 'string' && known.name.trim() ? known.name : null;
+    var vouched = !!given && nameVouched(given, host, ctx);
+    var warnings = [];
+    var shown = vouched ? reveal(given) : null;
+    var claimed = given && !vouched ? reveal(given.trim().slice(0, 64)) : null;
+    var accountName = reveal((ctx.signer && typeof ctx.signer.name === 'string' && ctx.signer.name) || null);
+    if ((shown && shown.hidden) || (claimed && claimed.hidden) || accountName.hidden) {
+      warnings.push({ tone: 'caution', key: 'warn.invisibleChars' });
+    }
+    var name = shown ? shown.text : null;
     return {
       dapp: {
-        name: (known && known.name) || null,
-        nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
+        name: name,
+        nameKey: name ? null : (host || claimed ? 'tag.unknownSite' : 'tag.wallet'),
+        // A name the site gave that the page cannot vouch for: drawn under
+        // the head as the site's own words, never as its title.
+        claimedName: claimed ? claimed.text : null,
         // The host, for every judgement about it (`warn.claimedOrigin` reads
         // this). Whether the head draws it as a line of its own is
         // `originShown`: not when the name above already says it (082 L-HOST).
         origin: host || null,
-        originShown: !!host && !sameSiteWords((known && known.name) || '', host),
+        originShown: !!host && !sameSiteWords(name || '', host),
         // The wallet asking itself has no host: its initial is the word's.
-        letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
-        tone: (known && known.tone) || '#8a93a5',
+        letter: (name || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
+        tone: (vouched && known.tone) || '#8a93a5',
         // Display-only, and it never touches the digest: a logo cannot change
         // what gets signed, so an https URL from the request is allowed here.
         icon: (known && known.icon) || null,
@@ -214,7 +299,7 @@ window.VelaCS = window.VelaCS || {};
         // No site at all: the wallet's own send. The card then names no
         // requester (the apps' `first_party`), rather than a generic
         // "Wallet" line that says nothing a person can check.
-        own: !host && !(known && known.name),
+        own: !host && !given,
       },
       // Named from the chain id we are actually signing for (it is in the
       // digest's domain). The app's own label is only used for a chain this
@@ -232,11 +317,11 @@ window.VelaCS = window.VelaCS || {};
       // redirect anything: the money moves per the calldata, and the account
       // itself is `userOp.sender`, which sits inside the signed digest. The
       // address and identicon next to it remain the anchor.
-      accountName: (ctx.signer && ctx.signer.name) || null,
+      accountName: accountName.text,
       fields: [],
-      warnings: [],
+      warnings: warnings,
       legs: [],
-      risk: 'normal',
+      risk: warnings.length ? 'caution' : 'normal',
       level: 1,
       signer: ctx.signer || { name: '—', letter: '?' },
       fee: null,
@@ -319,6 +404,7 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.deploy');
       view.warnings.push({ tone: 'caution', key: 'warn.deploy' });
       view.tech = techFor(text('value.contractCreation'), null, data, {});
+      nativeOut(view, value, ctx);
       return view;
     }
 
@@ -356,6 +442,59 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
+    resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value);
+    nativeOut(view, value, ctx);
+    return view;
+  }
+
+  /**
+   * Native coin sent along with calldata leaves the account exactly as a
+   * send's does, whatever the function: `deposit()` with 5 ETH, a selector
+   * nobody knows, a `transfer` that also carries value. Only a plain send
+   * (no calldata) and a descriptor that already draws it (`nativeIn`, a swap
+   * paid in the coin) had shown it; everywhere else it sat in the operation
+   * and nowhere on the card. Now it is a row of its own in the amount's
+   * strong type, with a caution in words — in every leg of a batch too,
+   * which carries the caution up to the card (resolve, applyNested).
+   */
+  function nativeOut(view, value, ctx) {
+    if (value === null || value <= 0n || view.nativeShown) return;
+    var amount = nativeAmount(value, ctx, true);
+    var phrase = amount.text + ' ' + amount.symbol;
+    view.nativeShown = true;
+    view.fields.unshift({ label: 'field.nativeAttached', amount: amount, format: 'tokenAmount', role: 'native-out' });
+    view.warnings.push({ tone: 'caution', key: 'warn.nativeValue', params: { amount: phrase } });
+    raise(view, 'caution');
+    if (view.tech) view.tech.params.unshift({ name: 'value', value: phrase });
+  }
+
+  /**
+   * An undecoded call drawn as a leg of a batch (spec: the universal
+   * fallback, L3 at least). A leg has no hero, so without these rows it read
+   * "2 · Blind signature" and nothing else: the contract it calls, the
+   * function, the coin it carries and the calldata itself are all facts the
+   * page holds, and all of them go on the leg.
+   */
+  function legFacts(view, meta, functionText, data, value, ctx, raw) {
+    var facts = [
+      { label: 'ui.contract', identity: meta, format: 'addressName', role: 'contract' },
+      { label: 'ui.function', value: functionText, format: 'raw', mono: true },
+    ];
+    // A coin it carries is `nativeOut`'s row; none is said as 0, not left out.
+    if (raw && value !== null && value === 0n) {
+      var none = nativeAmount(0n, ctx, true);
+      facts.push({ label: 'field.nativeAttached', value: none.text + ' ' + none.symbol, format: 'raw' });
+    }
+    if (raw) {
+      facts.push({
+        label: 'ui.rawData', labelParams: { bytes: abi.byteLength(data) }, value: data, format: 'raw', mono: true,
+      });
+    }
+    view.fields = facts.concat(view.fields);
+  }
+
+  function resolveCalldata(call, ctx, view, isLeg, meta, data, selector, value) {
+    var to = call.to || '';
     var descriptor = selector ? reg.descriptorFor(selector) : null;
 
     // Level 1 — a verified descriptor gives us meaning.
@@ -382,6 +521,7 @@ window.VelaCS = window.VelaCS || {};
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
         sim: ctx.simulation && ctx.simulation.summary,
       });
+      if (isLeg) legFacts(view, meta, parsed.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
     }
 
@@ -404,6 +544,7 @@ window.VelaCS = window.VelaCS || {};
         addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }],
         sim: ctx.simulation && ctx.simulation.summary,
       });
+      if (isLeg) legFacts(view, meta, p4.name + '(…) · ' + selector, data, value, ctx, false);
       return view;
     }
 
@@ -438,6 +579,7 @@ window.VelaCS = window.VelaCS || {};
       null, data,
       { addresses: [{ roleKey: 'ui.contract', name: label(meta), address: to }], sim: sim && sim.summary },
     );
+    if (isLeg) legFacts(view, meta, selector || '0x', data, value, ctx, true);
     return view;
   }
 
@@ -511,6 +653,7 @@ window.VelaCS = window.VelaCS || {};
     });
 
     if (descriptor.nativeIn && callValue > 0n) {
+      view.nativeShown = true;
       var paid = nativeAmount(callValue, ctx);
       hero = { kind: 'amount', amount: paid, direction: 'out' };
       rows.unshift({ label: 'field.pay', amount: paid, format: 'tokenAmount', role: 'send-amount' });
@@ -684,10 +827,29 @@ window.VelaCS = window.VelaCS || {};
       ? text('sentence.multiSend', { count: inner.length })
       : text('sentence.safeExec');
     view.warnings.push({ tone: 'caution', key: 'warn.nested' });
+    liftLegWarnings(view);
     view.tech = techFor(descriptor.signature, values, call.data, {
       addresses: [{ roleKey: 'ui.outerContract', name: label(meta), address: call.to }],
     });
     return view;
+  }
+
+  /**
+   * A leg's card draws its rows, not its warnings, so the ones a person must
+   * read are lifted onto the card: every danger, and every coin a leg sends
+   * along with its calldata (`nativeOut`), each once.
+   */
+  function liftLegWarnings(view) {
+    view.legs.forEach(function (leg) {
+      leg.view.warnings.forEach(function (w) {
+        if (w.tone === 'danger' || w.key === 'warn.nativeValue' || w.key === 'warn.invisibleChars') {
+          var seen = view.warnings.some(function (o) {
+            return o.key === w.key && JSON.stringify(o.params || null) === JSON.stringify(w.params || null);
+          });
+          if (!seen) view.warnings.push(w);
+        }
+      });
+    });
   }
 
   // Safe's multiSend packs legs as: operation(1) ‖ to(20) ‖ value(32) ‖ len(32) ‖ data
@@ -761,27 +923,28 @@ window.VelaCS = window.VelaCS || {};
     if (siwe) {
       var origin = (intent.origin || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
       var mismatch = siwe.domain.toLowerCase() !== origin.toLowerCase();
+      var siweDomain = visible(siwe.domain, view);
       view.intentKey = 'intent.login';
-      view.hero = { kind: 'siwe', domain: siwe.domain, statement: siwe.statement, mismatch: mismatch };
+      view.hero = { kind: 'siwe', domain: siweDomain, statement: visible(siwe.statement, view), mismatch: mismatch };
       view.fields = [
-        { label: 'field.claimedDomain', value: siwe.domain, format: 'raw', warning: mismatch },
+        { label: 'field.claimedDomain', value: siweDomain, format: 'raw', warning: mismatch },
         { label: 'field.actualSite', value: origin, format: 'raw', warning: mismatch },
         { label: 'field.nonce', value: siwe.nonce, format: 'raw', detail: true },
       ];
       if (mismatch) {
         view.risk = 'danger';
-        view.sentence = text('sentence.siwePhish', { claimed: siwe.domain, actual: origin });
+        view.sentence = text('sentence.siwePhish', { claimed: siweDomain, actual: origin });
         view.warnings.push({ tone: 'danger', key: 'warn.siweMismatch' });
       } else {
-        view.risk = 'safe';
-        view.sentence = text('sentence.siweOk', { domain: siwe.domain });
+        if (view.risk !== 'caution') view.risk = 'safe';
+        view.sentence = text('sentence.siweOk', { domain: siweDomain });
       }
       view.tech = techFor('personal_sign (SIWE)', null, payload, {});
       return view;
     }
 
     view.intentKey = 'intent.message';
-    view.hero = { kind: 'message', text: body };
+    view.hero = { kind: 'message', text: visible(body, view) };
     view.sentence = text('sentence.message');
     view.tech = techFor('personal_sign (UTF-8)', null, payload, {});
     return view;
@@ -911,11 +1074,11 @@ window.VelaCS = window.VelaCS || {};
     view.intentKey = 'intent.typed';
     view.level = 2;
     view.risk = 'caution';
-    view.hero = { kind: 'code', title: primary, sub: domain.name || null };
+    view.hero = { kind: 'code', title: visible(primary, view), sub: visible(domain.name || null, view) };
     view.fields = Object.keys(message).map(function (key) {
-      return { labelRaw: key, value: renderRaw(message[key]), format: 'raw' };
+      return { labelRaw: visible(key, view), value: visible(renderRaw(message[key]), view), format: 'raw' };
     });
-    view.sentence = text('sentence.typedUnknown', { type: primary });
+    view.sentence = text('sentence.typedUnknown', { type: view.hero.title });
     view.warnings.push({ tone: 'caution', key: 'warn.typedUnknown' });
     view.tech = techFor('EIP-712 · ' + primary, null, null, {
       params: Object.keys(message).map(function (k) { return { name: k, value: renderRaw(message[k]) }; }),
@@ -938,6 +1101,16 @@ window.VelaCS = window.VelaCS || {};
 
   // A 16-byte-or-longer credential id, base64url, as the page's wire carries it.
   var CREDENTIAL_ID = /^[A-Za-z0-9_-]{16,1400}$/;
+
+  /**
+   * A credential id this page can hand to the browser: base64url of the
+   * right length — and one that DECODES. A length of 4n+1 is no base64 at
+   * all, and `atob` threw on it inside the tap, after the button had gone
+   * busy: "Waiting for your passkey…" for ever.
+   */
+  function credentialIdOk(id) {
+    return typeof id === 'string' && CREDENTIAL_ID.test(id) && id.length % 4 !== 1;
+  }
   var P256_POINT = /^(0x)?04[0-9a-fA-F]{128}$/;
   /** A 20-byte contract address, `0x`-prefixed as the wallet sends it. */
   var ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -983,7 +1156,7 @@ window.VelaCS = window.VelaCS || {};
     var place = Object.prototype.hasOwnProperty.call(PLACE_HINTS, raw.place) ? raw.place : null;
     var id = null;
     if (raw.credentialId !== undefined && raw.credentialId !== null) {
-      if (typeof raw.credentialId !== 'string' || !CREDENTIAL_ID.test(raw.credentialId)) return null;
+      if (!credentialIdOk(raw.credentialId)) return null;
       id = raw.credentialId;
       if (Array.isArray(allow) && allow.length && allow.indexOf(id) < 0) return null;
     }
@@ -1200,6 +1373,7 @@ window.VelaCS = window.VelaCS || {};
     var noDeployment = false;
 
     view.kind = 'ceremony';
+    view.dapp.claimedName = null;
     view.intentKey = 'intent.' + kind;
     view.risk = 'normal';
     view.level = 1;
@@ -1266,7 +1440,7 @@ window.VelaCS = window.VelaCS || {};
       var name = p.name === undefined ? (wallet || 'Vela') : displayName(p.name);
       var exclude = p.excludeCredentialIds === undefined ? [] : p.excludeCredentialIds;
       if (!name || !Array.isArray(exclude) || !exclude.every(function (id) {
-        return typeof id === 'string' && CREDENTIAL_ID.test(id);
+        return credentialIdOk(id);
       })) bad = true;
       view.ceremony.name = name;
       view.ceremony.excludeCredentialIds = Array.isArray(exclude) ? exclude : [];
@@ -1285,7 +1459,7 @@ window.VelaCS = window.VelaCS || {};
     } else if (kind === 'proof') {
       var purpose = p.purpose;
       if (!ns.ceremony.proofChallenge(purpose)) bad = true;
-      if (p.credentialId !== undefined && !(typeof p.credentialId === 'string' && CREDENTIAL_ID.test(p.credentialId))) bad = true;
+      if (p.credentialId !== undefined && !credentialIdOk(p.credentialId)) bad = true;
       view.ceremony.purpose = purpose;
       view.ceremony.credentialId = typeof p.credentialId === 'string' ? p.credentialId : null;
       view.intentKey = purpose === 'verify' ? 'intent.proofVerify' : 'intent.proofRecover';
@@ -1310,7 +1484,7 @@ window.VelaCS = window.VelaCS || {};
         chainId: p.chainId,
         registryContract: p.registryContract,
       };
-      if (typeof member.credentialId !== 'string' || !CREDENTIAL_ID.test(member.credentialId)) bad = true;
+      if (!credentialIdOk(member.credentialId)) bad = true;
       if (typeof member.publicKey !== 'string' || !P256_POINT.test(member.publicKey)) bad = true;
       if (typeof member.groupPublicKey !== 'string' || !P256_POINT.test(member.groupPublicKey)) bad = true;
       if (typeof member.attestation !== 'string' || !/^(0x)?([0-9a-fA-F]{40})?$/.test(member.attestation)) bad = true;
@@ -1545,7 +1719,9 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function resolve(requested, ctx) {
-    ctx = ctx || {};
+    // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
+    ctx = Object.assign({}, ctx || {});
+    ctx.selfAccount = selfAccountOf(requested, ctx);
     var view = baseView(requested, ctx);
     var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);
     if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
@@ -1572,11 +1748,7 @@ window.VelaCS = window.VelaCS || {};
       // at least two legs — the call and the fee — so an overwrite here would
       // offer the button for exactly the tampered operation it exists to stop.
       view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
-      view.legs.forEach(function (leg) {
-        leg.view.warnings.forEach(function (w) {
-          if (w.tone === 'danger') view.warnings.push(w);
-        });
-      });
+      liftLegWarnings(view);
       if (ctx.simulation) view.balance = { rows: ctx.simulation.rows, note: ctx.simulation.note, claimed: true };
       view.tech = techFor('wallet_sendCalls (EIP-5792)', null, null, {});
     } else if (intent.method === 'personal_sign') {
@@ -1632,6 +1804,16 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.unshift(destination
         ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
         : { tone: 'danger', key: 'refuse.answerNotToWallet' });
+    }
+
+    // The account's keys, as the browser will be asked for them. One that
+    // cannot be read cannot be asked for: refused here, with the reason,
+    // rather than failing inside the tap.
+    var allow = ctx.allowCredentials;
+    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
     }
 
     // The key that signs, and where it lives (spec 102 R5). sign.js asks for

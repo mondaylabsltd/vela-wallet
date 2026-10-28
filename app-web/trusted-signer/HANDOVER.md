@@ -68,8 +68,8 @@ export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，�
 bun samples/answer-test.mjs        # 31/31 答复只交给钱包（102 R7），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
 bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
-bun samples/hostile-test.mjs       # 32/32 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
-bun samples/channels-test.mjs      # 19/19 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
+bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
+bun samples/channels-test.mjs      # 41/41 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏掉的链接（截断、非 base64url、非 JSON、不是请求）说一句本页的话，不留「等待…」也不露引擎报错；读不了的钥匙 id 在卡片上拒签
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
 bun samples/confirm-test.mjs       # 33/33 真触摸点按（规格 102）：passkey 弹窗在点按里发起、只问路线上那一把钥匙、等待时不接第二次点按；创建按所选位置；答复要交去别处就按不动；成员挑战码本地算；回车也能确认
 node samples/key-route-test.mjs     # 50/50 钥匙路线（102 R5）：签名与四种仪式发给浏览器的选项（allowCredentials / transports / hints / authenticatorAttachment）、路线的校验、按钮上的动作、Base USDC 读成 250 而不是「0 ?」
@@ -80,9 +80,10 @@ bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
-node samples/origin-line-test.mjs   # 24/24 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名
-node samples/plain-send-test.mjs    # 153/153 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）
-bun samples/plain-send-test.mjs     # 153/153 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
+node samples/origin-line-test.mjs   # 30/30 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名
+node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）
+bun samples/plain-send-test.mjs     # 183/183 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
+node samples/claims-test.mjs        # 51/51 谁的说法（2026-10-28）：「本账户」只给 userOp.sender / 消息所属账户；网络费币种按本页目录；法币标「按请求方给的汇率」、币种只认 ISO 代码；方向控制符与零宽字符显示成码位并提示；读不了的钥匙 id 拒签而不是一直转圈
 ```
 
 > 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数；082 的两个新套件与其余各套件 09-29 重跑，数不变）。浏览器套件要用 `bun` 跑：

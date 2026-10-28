@@ -33,15 +33,41 @@ window.VelaCS = window.VelaCS || {};
     return whole + (frac ? '.' + frac : '');
   }
 
+  // The requester's currency, only as an ISO 4217 code ("USD"); anything
+  // else is words on the card nobody checked, and no fiat is shown at all.
+  var ISO_CURRENCY = /^[A-Z]{3}$/;
+
+  function currencyOf(context) {
+    var currency = context && context.currency;
+    return typeof currency === 'string' && ISO_CURRENCY.test(currency) ? currency : null;
+  }
+
+  // A figure at the REQUESTER's rate, so render.js marks it as theirs.
   function fiatOf(context, symbol, value, decimals) {
-    var rate = context.rates && context.rates[symbol];
-    if (typeof rate !== 'number' || !isFinite(rate)) return null;
+    var currency = currencyOf(context);
+    var rates = context.rates;
+    var rate = currency && rates && typeof rates === 'object' && Object.prototype.hasOwnProperty.call(rates, symbol)
+      ? rates[symbol] : undefined;
+    if (typeof rate !== 'number' || !isFinite(rate) || rate <= 0) return null;
     var amount = (Number(value) / Math.pow(10, decimals)) * rate;
+    if (!isFinite(amount)) return null;
     return {
-      text: (context.currency || '$') +
+      text: '≈ ' + currency + ' ' +
         (amount >= 1000 ? group(Math.round(amount).toString()) : amount.toFixed(2)),
       rate: rate,
     };
+  }
+
+  /**
+   * The chain's own coin, from this page's catalogue for the chain id that is
+   * signed for — not the requester's `nativeSymbol`, which used to name the
+   * fee on every chain ("0.0009 USDC" on Ethereum), with "ETH" when it said
+   * nothing. The hero's rule (resolve.js `nativeAmount`), so the card never
+   * names one coin two ways: only a chain the page does not know falls back
+   * to the app's word, and the network row then says the chain is the app's.
+   */
+  function nativeSymbolOf(context) {
+    return (ns.registry && ns.registry.nativeSymbol(context.chainId)) || context.nativeSymbol || 'ETH';
   }
 
   /** The 4337 gas ceiling. Zero on Vela, so it is only reported when it is not. */
@@ -51,7 +77,7 @@ window.VelaCS = window.VelaCS || {};
       BigInt(operation.preVerificationGas || 0);
     var maxWei = gas * BigInt(operation.maxFeePerGas || 0);
     if (maxWei === 0n) return null;
-    var symbol = context.nativeSymbol || 'ETH';
+    var symbol = nativeSymbolOf(context);
     var fiat = fiatOf(context, symbol, maxWei, 18);
     return {
       symbol: symbol,
@@ -76,7 +102,7 @@ window.VelaCS = window.VelaCS || {};
 
     // Native coin: a bare value transfer with no calldata.
     if ((!leg.data || leg.data === '0x') && value > 0n) {
-      var symbol = context.nativeSymbol || 'ETH';
+      var symbol = nativeSymbolOf(context);
       var nativeFiat = fiatOf(context, symbol, value, 18);
       return {
         index: index,
@@ -121,11 +147,11 @@ window.VelaCS = window.VelaCS || {};
     if (!operation) return null;
     var gas = gasCeiling(context, operation);
     var leg = inBandLeg(context, calls);
-    if (!gas && !leg) return { gas: null, leg: null, unknown: true, currency: context.currency || '$' };
+    if (!gas && !leg) return { gas: null, leg: null, unknown: true, currency: currencyOf(context) };
     return {
       gas: gas,
       leg: leg,
-      currency: context.currency || '$',
+      currency: currencyOf(context),
       // A paymaster changes who pays; say so rather than showing a number that
       // will never leave this account.
       sponsored: !!(operation.paymasterAndData && operation.paymasterAndData !== '0x'),

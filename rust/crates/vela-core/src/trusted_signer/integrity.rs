@@ -61,6 +61,19 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // f14e755a's page with what the 2026-10-28 exploratory pass found: native
+    // coin sent along with calldata is a row of its own and a caution (every
+    // leg of a batch too); an undecoded leg lists its contract, selector,
+    // value and calldata; "this account" only for `userOp.sender` (or the
+    // account a message is wrapped under); the fee's coin from the page's own
+    // catalogue, which now carries the core's 33 networks (Arc Testnet and the
+    // other testnets); fiat said as the requester's rate, ISO currencies only;
+    // a site name that is not its host is the site's claim, not the head;
+    // invisible and direction characters drawn as code points, with a caution;
+    // a damaged link or an unreadable key id says so instead of an engine
+    // error or a spinner. Not LAUNCH yet — only once `dist/` is deployed and
+    // `/b/c64ee864…/sign` answers 200 + immutable with these bytes.
+    "c64ee8646ca09e5cb30bd20d4cddf203c8e535a99e8c32d679a45ff3c5cb19cd",
     // 245c9ea1's page and behaviour, with two wordings from the owner's
     // review (2026-10-09). The tag beside the fee and beside a chain the page
     // does not know says WHOSE word it is — 「App 标注」 / "per the app" for

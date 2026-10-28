@@ -270,4 +270,12 @@ window.VelaCS.i18n.register('fr', {
   'ui.pageName': 'Page de signature Vela',
   'ui.version': 'version {version}',
   'ui.pageFacts': 'zéro dépendance · open source · auto-hébergeable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Cet appel envoie aussi {amount} de votre compte au contrat appelé, en plus de tout ce qui est affiché ici.',
+  'warn.invisibleChars': 'Ce texte contient des caractères invisibles ou qui changent le sens d’écriture, affichés ici sous la forme [U+…]. Ils peuvent faire lire autre chose que ce qui est écrit.',
+  'tag.rateByRequester': 'au taux du demandeur',
+  'tag.siteCallsItself': 'se présente comme « {name} »',
+  'ui.requestDamaged': 'Cette demande de signature est arrivée endommagée et ne peut pas être lue : rien n’a été signé. Retournez dans Vela et relancez-la.',
+  'refuse.badKeyId': 'Cette demande désigne sa clé sous une forme illisible, le navigateur ne peut donc pas la demander. Pas de signature.',
 });

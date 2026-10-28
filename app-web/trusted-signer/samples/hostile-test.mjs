@@ -98,9 +98,14 @@ const hostile = {
       fee: { kind: 'onchain', native: 'POISONFEE ETH', fiat: '≈ $POISONFIAT' },
       digest: '0xdeadbeef'.padEnd(66, '0'),
       signer: { name: 'Daily wallet' },   // allowed: it points at a passkey
-      dapp: { name: 'Uniswap', tone: '#ff007a' },
+      // A name that is not the host is the site's claim, whatever `source`
+      // says (2026-10-28): never the head, always said as its words.
+      dapp: { name: 'POISONNAME', tone: '#ff007a', source: 'vela_browser' },
+      // The fee's coin is the chain's, from the page's catalogue; a currency
+      // that is not an ISO code is words, and no fiat is shown at all.
+      nativeSymbol: 'POISONSYM',
       rates: { USDC: 1 },
-      currency: '$',
+      currency: '≈ POISONCUR',
       simulation: {
         rows: [{ symbol: 'USDC', delta: '-7,654.321' }],
         note: 'POISONSIM',
@@ -166,10 +171,17 @@ try {
     'a pre-rendered fee amount': 'POISONFEE',
     'a pre-rendered fiat total': 'POISONFIAT',
     'a chain name over a known chain id': 'POISONCHAIN',
+    'a coin symbol over a known chain id': 'POISONSYM',
+    'a currency that is not an ISO code': 'POISONCUR',
   };
   for (const [what, marker] of Object.entries(forbidden)) {
     check(`never shown: ${what}`, !text.includes(marker));
   }
+
+  // The site's own name for itself is shown — as its claim, under the head.
+  check('a site name that is not its host is never the head',
+    !(await ev("[...document.querySelectorAll('.dapp-name')].some(n => n.textContent.includes('POISONNAME'))")) &&
+    (await ev("[...document.querySelectorAll('.dapp-claimed')].some(n => n.textContent.includes('POISONNAME'))")));
 
   // The simulation IS shown — it is often the only thing that can be shown —
   // but it must be labelled as the requester's, not as this page's finding.

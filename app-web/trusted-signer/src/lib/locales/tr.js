@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('tr', {
   'ui.pageName': 'Vela imza sayfası',
   'ui.version': 'sürüm {version}',
   'ui.pageFacts': 'bağımlılıksız · açık kaynak · kendiniz barındırabilirsiniz',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Bu çağrı, burada gösterilen her şeye ek olarak hesabınızdan çağrılan sözleşmeye {amount} de gönderir.',
+  'warn.invisibleChars': 'Bu metin görünmeyen ya da yazı yönünü değiştiren karakterler içeriyor; burada [U+…] olarak gösteriliyor. Metnin olduğundan farklı okunmasına yol açabilirler.',
+  'tag.rateByRequester': 'isteyen tarafın kuruyla',
+  'tag.siteCallsItself': 'kendini “{name}” olarak tanıtıyor',
+  'ui.requestDamaged': 'Bu imza isteği bozuk ulaştı ve okunamıyor, bu yüzden hiçbir şey imzalanmadı. Vela\'ya dönüp yeniden başlatın.',
+  'refuse.badKeyId': 'Bu istek anahtarını okunamayan bir biçimde belirtiyor, bu yüzden tarayıcıdan o anahtar istenemiyor. İmzalanmıyor.',
 });

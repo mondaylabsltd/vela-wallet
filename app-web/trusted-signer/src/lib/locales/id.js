@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('id', {
   'ui.pageName': 'Halaman tanda tangan Vela',
   'ui.version': 'versi {version}',
   'ui.pageFacts': 'tanpa dependensi · open source · bisa di-host sendiri',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Panggilan ini juga mengirim {amount} dari akun Anda ke kontrak yang dipanggil, di luar semua yang ditampilkan di sini.',
+  'warn.invisibleChars': 'Teks ini berisi karakter tak terlihat atau yang mengubah arah tulisan, ditampilkan di sini sebagai [U+…]. Karakter itu bisa membuat teks terbaca lain dari aslinya.',
+  'tag.rateByRequester': 'dengan kurs dari pihak peminta',
+  'tag.siteCallsItself': 'menyebut dirinya “{name}”',
+  'ui.requestDamaged': 'Permintaan tanda tangan ini tiba dalam keadaan rusak dan tidak bisa dibaca, jadi tidak ada yang ditandatangani. Kembali ke Vela dan mulai lagi.',
+  'refuse.badKeyId': 'Permintaan ini menyebut kuncinya dalam bentuk yang tidak bisa dibaca, jadi browser tidak bisa dimintai kunci itu. Tidak ditandatangani.',
 });

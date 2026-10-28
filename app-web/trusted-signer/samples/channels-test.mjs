@@ -405,6 +405,82 @@ try {
       warnings.slice(0, 80));
   }
 
+  // === 6. a damaged link says so, in the page's words (2026-10-28) ==========
+  //
+  // A link cut short, not base64url, not deflate, not JSON or not a request
+  // used to put the browser's own words on the status line ("Unexpected
+  // token…", "Failed to fetch", "Cannot read properties of null") — or, when
+  // `atob` threw outside the promise, leave "Waiting for a signing request…"
+  // up for ever.
+  {
+    const { deflateRawSync } = await import('node:zlib');
+    const good = JSON.stringify({ intent: login.intent, context: login.context });
+    const tail = '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-damaged';
+    const damagedText = 'This signing request arrived damaged and can’t be read, so nothing was signed. Go back to Vela and start it again.';
+    for (const [name, fragment] of [
+      ['not base64url', 'i=%25%25%25%25' + tail],
+      ['not JSON', 'i=' + b64url('hello world') + tail],
+      ['a JSON array', 'i=' + b64url('[]') + tail],
+      ['JSON null', 'i=' + b64url('null') + tail],
+      ['an intent with no method', 'i=' + b64url(JSON.stringify({ intent: {}, context: {} })) + tail],
+      ['a context that is not an object', 'i=' + b64url(JSON.stringify({ intent: login.intent, context: 'x' })) + tail],
+      ['cut short', 'i=' + b64url(good).slice(0, 61) + tail],
+      ['deflated, cut short', 'i=' + Buffer.from(deflateRawSync(Buffer.from(good))).toString('base64url').slice(0, 40) + tail + '&z=1'],
+      ['marked deflated but plain', 'i=' + b64url(good) + tail + '&z=1'],
+      ['an answer address that is not base64url', 'i=' + b64url(good) + '&cb=%25%25%25&t=x'],
+    ]) {
+      const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#' + fragment);
+      const settled = await waitFor(page, "!!window.__velaState && window.__velaState.phase === 'damaged'", 6000);
+      const status = String(await page.ev("document.getElementById('status').textContent"));
+      check(`damaged link (${name}): the page says so in its own words`, settled && status === damagedText,
+        `${await page.ev('window.__velaState && window.__velaState.phase')} · ${status.slice(0, 70)}`);
+      check(`damaged link (${name}): nothing to sign, and the link is wiped`,
+        !(await page.ev("!!document.querySelector('.sheet') || !!window.__slider")) && !(await page.ev('location.hash')));
+      await page.send('Page.close').catch(() => {});
+    }
+  }
+
+  // === 7. a key id the browser cannot be asked for (2026-10-28) =============
+  //
+  // An `allowCredentials` entry that is not base64url made `atob` throw inside
+  // the tap, after the button had gone busy: "Waiting for your passkey…" for
+  // ever. It is refused on the card now, with the reason, before any prompt.
+  {
+    const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+    const ALICE = '0xaF5e8917831Ef08A64e18b2Cde9f8f5d32c7b3e1';
+    const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
+    const transferCall = lib.encode.call('transfer(address,uint256)', [ALICE, 1000000000n]);
+    const context = {
+      chainId: 1, account: SAFE, allowCredentials: ['not base64 !!'],
+      operation: {
+        userOp: {
+          sender: SAFE, nonce: '0x7', initCode: '0x',
+          callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [USDC, 0n, transferCall, 0]),
+          verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
+          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x',
+        },
+      },
+    };
+    const intent = { method: 'eth_sendTransaction', origin: 'https://app.uniswap.org', params: [{ to: USDC, value: '0x0', data: transferCall }] };
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
+      b64url(JSON.stringify({ intent, context })) + '&cb=' + b64url(WALLET_CALLBACK) + '&t=tok-key');
+    await page.addAuthenticator();
+    const settled = await waitFor(page, "!!window.__velaState && window.__velaState.phase === 'refused'", 6000);
+    const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
+    check('bad key id: refused on the card, with the reason', settled && /names its key in a form that can’t be read/.test(warnings) &&
+      (await page.ev("document.querySelector('.confirm').disabled")), warnings.slice(0, 90));
+    // Pushed past the card anyway, the tap still ends in a sentence, not a spinner.
+    await page.ev(`(() => {
+      const b = document.querySelector('.confirm');
+      b.disabled = false;
+      VelaCS.signer.sign(new Uint8Array(32), { allowCredentials: ['not base64 !!'] })
+        .then(() => { window.__keyOutcome = 'signed'; }, (e) => { window.__keyOutcome = e && e.badKeyId ? 'badKeyId' : 'other'; });
+      return true;
+    })()`, true);
+    check('bad key id: the passkey call rejects with its reason instead of throwing',
+      await waitFor(page, "window.__keyOutcome === 'badKeyId'", 3000));
+  }
+
   // === 5 and 4 · the WebSocket and the extension: not driven from here ====
   //
   // The phones' loopback WebSocket used to be exercised here, with the app's

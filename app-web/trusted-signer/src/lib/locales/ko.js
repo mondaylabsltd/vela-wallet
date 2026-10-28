@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('ko', {
   'ui.pageName': 'Vela 서명 페이지',
   'ui.version': '버전 {version}',
   'ui.pageFacts': '의존성 없음 · 오픈소스 · 셀프 호스팅 가능',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '이 호출은 여기 표시된 내용과 별도로 내 계정에서 호출 대상 컨트랙트로 {amount}을(를) 보냅니다.',
+  'warn.invisibleChars': '이 텍스트에는 보이지 않거나 글자 방향을 바꾸는 문자가 있어 여기서는 [U+…]로 표시합니다. 실제와 다른 내용으로 읽히게 만들 수 있습니다.',
+  'tag.rateByRequester': '요청한 곳의 환율 기준',
+  'tag.siteCallsItself': '스스로 "{name}"(이)라고 밝힘',
+  'ui.requestDamaged': '이 서명 요청은 손상된 채로 도착해 읽을 수 없으므로 아무것도 서명하지 않았습니다. Vela로 돌아가 다시 시작하세요.',
+  'refuse.badKeyId': '이 요청이 알려 준 키 ID를 읽을 수 없어 브라우저에 해당 키를 요청할 수 없습니다. 서명하지 않습니다.',
 });

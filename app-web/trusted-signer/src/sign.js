@@ -275,6 +275,13 @@
         if (request.gone) return;
         idle(button);
         phase('card');
+        if (error && error.badKeyId) {
+          // Not a try-again: the request names a key no browser can be asked for.
+          off(button, 'button.cannotSign');
+          say('refuse.badKeyId');
+          phase('refused');
+          return;
+        }
         if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
           // Cancelled, timed out, or this device simply holds no key for the
           // account. WebAuthn deliberately does not say which — so the words
@@ -366,7 +373,11 @@
       if (request.gone) return;
       idle(button);
       phase('card');
-      if (error && error.wrongCredential) say('ui.wrongCredential');
+      if (error && error.badKeyId) {
+        off(button, 'button.cannotSign');
+        say('refuse.badKeyId');
+        phase('refused');
+      } else if (error && error.wrongCredential) say('ui.wrongCredential');
       else if (error && error.name === 'InvalidStateError') say('ui.keyExists');
       else if (error && error.name === 'NotAllowedError') say(c.kind === 'create' ? 'ui.createFailed' : 'ui.proofFailed');
       else say(String((error && error.message) || error));
@@ -409,6 +420,21 @@
     session.next().then(function (request) {
       if (request) show(request);
       else ended();
+    }).catch(function () {
+      // A request this page could not even draw is refused, never left on
+      // "Waiting…": the status says so, and the wallet hears "refused" (at
+      // once on a session, when the page closes on the url channel).
+      window.__slider = null;
+      say('ui.requestDamaged');
+      phase('refused');
+      if (current && !current.answered) {
+        current.refusalCode = 'refused';
+        if (session.persistent) {
+          current.reject('refused');
+          current = null;
+          loop();
+        }
+      }
     });
   }
 
@@ -505,7 +531,13 @@
         var message = String((error && error.message) || error);
         // A reload (or a link opened twice) finds no request in the address —
         // the fragment is wiped once read. Say what that means (spec 079).
-        say(/found no request/.test(message) ? 'ui.requestEnded' : message);
+        // Anything else is a link this page cannot read, said in its words —
+        // never the engine's ("Unexpected token…", "Failed to fetch").
+        var key = error && error.i18nKey ? error.i18nKey
+          : /found no request|no signing request/.test(message) ? 'ui.requestEnded'
+          : 'ui.requestDamaged';
+        say(key);
+        phase(key === 'ui.requestEnded' ? 'ended' : 'damaged');
       });
   }
 

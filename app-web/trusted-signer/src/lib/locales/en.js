@@ -292,4 +292,12 @@ window.VelaCS.i18n.register('en', {
   'ui.pageName': 'Vela signing page',
   'ui.version': 'version {version}',
   'ui.pageFacts': 'zero dependencies · open source · self-hostable',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'This also sends {amount} from your account to the contract it calls, on top of anything else shown here.',
+  'warn.invisibleChars': 'This text contains invisible or direction-changing characters, shown here as [U+…]. They can make it read as something it is not.',
+  'tag.rateByRequester': 'at the requester’s rate',
+  'tag.siteCallsItself': 'calls itself “{name}”',
+  'ui.requestDamaged': 'This signing request arrived damaged and can’t be read, so nothing was signed. Go back to Vela and start it again.',
+  'refuse.badKeyId': 'This request names its key in a form that can’t be read, so the browser can’t be asked for it. Not signing.',
 });

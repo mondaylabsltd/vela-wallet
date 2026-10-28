@@ -41,13 +41,15 @@
           "name": "Daily wallet"
         },
         "dapp": {
-          "name": "Uniswap",
-          "tone": "#ff007a"
+          "name": "POISONNAME",
+          "tone": "#ff007a",
+          "source": "vela_browser"
         },
+        "nativeSymbol": "POISONSYM",
         "rates": {
           "USDC": 1
         },
-        "currency": "$",
+        "currency": "≈ POISONCUR",
         "simulation": {
           "rows": [
             {

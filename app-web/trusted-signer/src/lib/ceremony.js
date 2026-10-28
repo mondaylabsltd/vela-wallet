@@ -205,7 +205,14 @@ window.VelaCS = window.VelaCS || {};
       publicKey.authenticatorSelection.authenticatorAttachment = ATTACHMENT[key.place];
     }
     ns.signer.withHints(publicKey, key);
-    var exclude = (options.excludeCredentialIds || []).map(unb64url);
+    var exclude;
+    try {
+      exclude = (options.excludeCredentialIds || []).map(unb64url);
+    } catch (e) {
+      var bad = new Error('a credential id is not base64url');
+      bad.badKeyId = true;
+      return Promise.reject(bad);
+    }
     if (exclude.length) {
       publicKey.excludeCredentials = exclude.map(function (id) { return { type: 'public-key', id: id }; });
     }
@@ -254,7 +261,11 @@ window.VelaCS = window.VelaCS || {};
       userVerification: 'required',
       timeout: CEREMONY_TIMEOUT,
     };
-    if (allow.length) request.allowCredentials = ns.signer.credentials(allow, key);
+    try {
+      if (allow.length) request.allowCredentials = ns.signer.credentials(allow, key);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     ns.signer.withHints(request, key);
     return navigator.credentials.get({ publicKey: request }).then(function (credential) {
       var response = credential.response;

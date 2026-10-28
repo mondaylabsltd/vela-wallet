@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('vi', {
   'ui.pageName': 'Trang ký Vela',
   'ui.version': 'phiên bản {version}',
   'ui.pageFacts': 'không phụ thuộc · mã nguồn mở · tự triển khai được',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'Lệnh gọi này còn gửi {amount} từ tài khoản của bạn tới hợp đồng được gọi, ngoài mọi thứ hiển thị ở đây.',
+  'warn.invisibleChars': 'Đoạn văn bản này có ký tự vô hình hoặc ký tự đổi chiều chữ, được hiển thị ở đây dưới dạng [U+…]. Chúng có thể khiến nội dung đọc thành một điều khác.',
+  'tag.rateByRequester': 'theo tỷ giá của bên yêu cầu',
+  'tag.siteCallsItself': 'tự xưng là “{name}”',
+  'ui.requestDamaged': 'Yêu cầu ký này đến nơi đã bị hỏng và không đọc được, nên không có gì được ký. Hãy quay lại Vela và bắt đầu lại.',
+  'refuse.badKeyId': 'Yêu cầu này ghi mã khóa ở dạng không đọc được, nên không thể nhờ trình duyệt tìm khóa đó. Không ký.',
 });

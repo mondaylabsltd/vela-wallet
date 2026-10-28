@@ -268,4 +268,12 @@ window.VelaCS.i18n.register('ja', {
   'ui.pageName': 'Vela 署名ページ',
   'ui.version': 'バージョン {version}',
   'ui.pageFacts': '依存ゼロ · オープンソース · セルフホスト可能',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': 'この呼び出しは、ここに表示された内容とは別に、あなたのアカウントから呼び出し先のコントラクトへ {amount} を送ります。',
+  'warn.invisibleChars': 'このテキストには見えない文字や文字の向きを変える文字が含まれており、ここでは [U+…] と表示しています。実際とは違う内容に読ませることができます。',
+  'tag.rateByRequester': '要求元のレートによる',
+  'tag.siteCallsItself': '「{name}」と名乗っています',
+  'ui.requestDamaged': 'この署名リクエストは壊れた状態で届いたため読み取れず、何も署名していません。Vela に戻って、もう一度始めてください。',
+  'refuse.badKeyId': 'このリクエストが示すキーの ID を読み取れないため、ブラウザーにそのキーを求められません。署名しません。',
 });

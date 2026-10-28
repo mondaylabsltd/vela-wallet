@@ -291,4 +291,12 @@ window.VelaCS.i18n.register('zh', {
   'ui.pageName': 'Vela 签名页',
   'ui.version': '版本 {version}',
   'ui.pageFacts': '零依赖 · 开源 · 可自建',
+  // --- 2026-10-28: native value with calldata, invisible characters,
+  //     whose rate and whose name, a damaged link, an unreadable key id
+  'warn.nativeValue': '此外，这笔调用会从你的账户转出 {amount} 给它调用的合约。',
+  'warn.invisibleChars': '这段文字含有看不见或会改变文字方向的字符，此处显示为 [U+…]。它们能让文字读起来像别的意思。',
+  'tag.rateByRequester': '按请求方给的汇率',
+  'tag.siteCallsItself': '自称「{name}」',
+  'ui.requestDamaged': '这个签名请求到达时已经损坏，无法读取，所以什么都没有签。请回到 Vela 重新发起。',
+  'refuse.badKeyId': '这个请求给出的钥匙标识无法读取，没法让浏览器去找这把钥匙。不签。',
 });
