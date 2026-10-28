@@ -903,11 +903,22 @@ for (let i = 1; i < PATHS.length; i++) {
 //   three plural families contacts.{memberCount, batchSendHintCount,
 //   batchSendHintTitledCount} (4 forms each = 12), settingsModals.health.urlRefused,
 //   networkSpace.{addedTestnet, addedMainnet}. 2046 + 25 = 2071 leaves, 116 branches.
-// 2230 (all five of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 =
-//   2113 leaves, 117 branches.
-if (PATHS.length !== 2230) fail(`expected 2230 paths (2113 leaf + 117 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2113) fail(`expected 2113 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
+// 2165 (a message read whole, its hidden characters shown, clear-signing
+//   audit cs-10/cs-11, 2026-10-28): + `componentsUi.signing.hiddenChars`,
+//   `blankLines` and `confirmBlock.messageUnread`. 2046 + 3 = 2049 leaves,
+//   116 branches.
+// 2199 (what is certain and what is interpreted, clear-signing audit
+//   cs-1…cs-19, 2026-10-28): + `componentsUi.signing.labelAddsToAllowance`
+//   and `componentsUi.signing.certain`, 32 words. 2049 + 33 = 2082 leaves,
+//   116 + 1 = 117 branches.
+// 2208 (your AI agent's opinion on the signing sheet, 2026-10-28): +
+//   `componentsUi.signing.agentAdvice`, 8 words. 2082 + 8 = 2090 leaves,
+//   117 + 1 = 118 branches.
+// 2276 (all six of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 + 44 =
+//   2157 leaves; 116 + 1 + 2 = 119 branches.
+if (PATHS.length !== 2276) fail(`expected 2276 paths (2157 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2157) fail(`expected 2157 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

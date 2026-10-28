@@ -6,6 +6,7 @@
 	 * multisig sheet is open. The page stays the session's; this only adds.
 	 */
 	import { onMount } from 'svelte';
+	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { addMultisig, followUnrecorded } from '../core/accounts';
 	import { parseAddLink, parseProposalLink } from '../core/link';
@@ -22,6 +23,8 @@
 
 	interface Props {
 		m: MultisigMessages;
+		/** The signing sheet's words: a proposal's call reads as that sheet reads it (cs-12). */
+		signing: SigningMessages;
 		locale: string;
 		wide: boolean;
 		closeLabel: string;
@@ -31,7 +34,7 @@
 		onchanged?: () => void;
 	}
 
-	let { m, locale, wide, closeLabel, current, onchanged }: Props = $props();
+	let { m, signing, locale, wide, closeLabel, current, onchanged }: Props = $props();
 
 	let addPrefill = $state('');
 
@@ -133,6 +136,7 @@
 {:else if sheet?.kind === 'proposal' && active}
 	<ProposalSheet
 		{m}
+		{signing}
 		account={active}
 		chainId={sheet.chainId}
 		safeTxHash={sheet.safeTxHash}
@@ -179,6 +183,13 @@
 <!-- An outside owner's wallet, asked from any sheet or from the send flow: on top of them. -->
 {#if externalSigning.request}
 	{#key externalSigning.request}
-		<ExternalSignSheet {m} {locale} request={externalSigning.request} {wide} {closeLabel} />
+		<ExternalSignSheet
+			{m}
+			{signing}
+			{locale}
+			request={externalSigning.request}
+			{wide}
+			{closeLabel}
+		/>
 	{/key}
 {/if}

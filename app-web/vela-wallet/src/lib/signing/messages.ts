@@ -17,6 +17,7 @@
 
 import type { SpeedWords } from '$lib/flows/speed-control';
 import type { SettingsMessages } from '$lib/settings/messages';
+import type { AgentAdviceMessages } from '$lib/agent/advisor';
 
 /**
  * Every quiet line the core can name for the verdict's place
@@ -79,6 +80,42 @@ export interface HandoffMessages {
 	 */
 	places: Record<string, string>;
 }
+
+export const CERTAIN_KEYS = [
+	'readByVela',
+	'readByVelaSignature',
+	'describedBuiltIn',
+	'describedBuiltInPlain',
+	'describedFetched',
+	'describedFetchedPlain',
+	'shapeOnly',
+	'selectorName',
+	'siteClaim',
+	'labelFrom',
+	'sourceBuiltIn',
+	'sourceFetched',
+	'sourceSelectorDb',
+	'sourceShape',
+	'sourceList',
+	'contractNamed',
+	'contractUnnamed',
+	'contractNoCode',
+	'contradiction',
+	'noCode',
+	'elsewhere',
+	'dustMinimum',
+	'tokenByContract',
+	'thisAccount',
+	'allowsUpTo',
+	'allowsMore',
+	'approveAllYour',
+	'signAnyway',
+	'chipGrantAll',
+	'chooseGrant',
+	'labelSource',
+	'byVela'
+] as const;
+export type CertainKey = (typeof CERTAIN_KEYS)[number];
 
 export interface SigningMessages {
 	panelTitle: string;
@@ -194,6 +231,13 @@ export interface SigningMessages {
 	warnEthSign: string;
 	bodyEthSign: string;
 	warnSiweMismatch: string;
+	/**
+	 * cs-11: what is drawn carries hidden or direction-changing characters,
+	 * each shown as its `⟨U+…⟩` marker (`ClearSigningView.has_invisible_chars`).
+	 */
+	warnHiddenChars: string;
+	/** cs-10: a folded run of empty lines in a message (`{{lines}}`, how many). */
+	messageBlankLines: string;
 	okSiwe: string;
 	warnTokenToContract: string;
 	warnUnverifiedAmount: string;
@@ -329,6 +373,13 @@ export interface SigningMessages {
 	 * "Unlimited". A result's text is English; `localizedTerms` in `live.ts`
 	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
 	 */
+	/**
+	 * What is CERTAIN and what is INTERPRETED (clear-signing audit cs-1…cs-19,
+	 * `componentsUi.signing.certain`): the provenance line under the intent,
+	 * each row's source, the contract on the card's face, and the danger lines
+	 * the certain decode raises against a description.
+	 */
+	certain: Record<CertainKey, string>;
 	terms: Record<string, string>;
 	/**
 	 * Spec 077: the landing a submitted transaction shows, in the SEND
@@ -428,4 +479,9 @@ export interface SigningMessages {
 	labelTotal: string;
 	expiredValue: string;
 	sentToTokenContract: string;
+	/**
+	 * The person's AI agent's opinion, in its own card under Vela's own lines
+	 * (spec 103, `vela_advise`): never one of the sheet's words.
+	 */
+	agentAdvice: AgentAdviceMessages;
 }

@@ -35,6 +35,7 @@ import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
 import {
+	CERTAIN_KEYS,
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
 	SIM_WILL_FAIL_KEY,
@@ -1273,7 +1274,11 @@ export const CONFIRM_BLOCK_KEYS = [
 	// PR 3: everything else is ready and the sheet's own simulation has not
 	// given its verdict yet (`ConfirmBlock::SimChecking`) — "Checking what
 	// this transaction does…", for four seconds at most.
-	'componentsUi.signing.confirmBlock.simChecking'
+	'componentsUi.signing.confirmBlock.simChecking',
+	// cs-10: a message taller than the sheet whose end has not been in sight
+	// (`ConfirmBlock::MessageUnread`) — "The message continues — scroll to
+	// read all of it".
+	'componentsUi.signing.confirmBlock.messageUnread'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1391,6 +1396,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnEthSign: k('componentsUi.signing.ethSignWarning'),
 		bodyEthSign: k('componentsUi.signing.ethSignBody'),
 		warnSiweMismatch: k('componentsUi.signing.siweMismatch'),
+		warnHiddenChars: k('componentsUi.signing.hiddenChars'),
+		messageBlankLines: k('componentsUi.signing.blankLines'),
 		okSiwe: k('componentsUi.signing.siweOk'),
 		warnTokenToContract: k('componentsUi.signing.tokenToContractWarning'),
 		warnUnverifiedAmount: k('componentsUi.signing.unverifiedWarning'),
@@ -1453,7 +1460,21 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		certain: Object.fromEntries(
+			CERTAIN_KEYS.map((key) => [key, k(`componentsUi.signing.certain.${key}`)])
+		) as SigningMessages['certain'],
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
+		// Spec 103: the AI agent's opinion, in its own card.
+		agentAdvice: {
+			title: k('componentsUi.signing.agentAdvice.title'),
+			looksFine: k('componentsUi.signing.agentAdvice.looksFine'),
+			caution: k('componentsUi.signing.agentAdvice.caution'),
+			danger: k('componentsUi.signing.agentAdvice.danger'),
+			unsure: k('componentsUi.signing.agentAdvice.unsure'),
+			sources: k('componentsUi.signing.agentAdvice.sources'),
+			footer: k('componentsUi.signing.agentAdvice.footer'),
+			stale: k('componentsUi.signing.agentAdvice.stale')
+		},
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

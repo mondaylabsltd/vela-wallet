@@ -135,6 +135,13 @@ fn answer(op: &Op, chain_silent: bool) -> Res {
             path: path.clone(),
             json: descriptor_body(path),
         },
+        Op::RpcGetCode { chain_id, address } => Res::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id: *chain_id,
+            to: address.clone(),
+            result: Some("0x60806040".to_owned()),
+            rpc_error: false,
+        },
         Op::RpcEthCall {
             chain_id,
             to,
@@ -194,17 +201,22 @@ fn event_of(request: &Value, chain_id: u32, locale: ClearLocale) -> Event {
                 value: text("value"),
                 chain_id,
                 locale,
+                from: None,
+                probe_code: false,
             }
         }
         "wallet_sendCalls" => Event::ResolveBatch {
             params_json: params.to_string(),
             chain_id,
             locale,
+            from: None,
+            probe_code: false,
         },
         method if method.starts_with("eth_signTypedData") => Event::ResolveTypedData {
             typed_data_json: params[1].as_str().expect("typed data").to_owned(),
             chain_id,
             locale,
+            from: None,
         },
         other => panic!("no reader for {other}"),
     }
@@ -301,6 +313,8 @@ fn native_order_with_word(word: usize, hex64: &str) -> Event {
         value: tx["value"].as_str().map(str::to_owned),
         chain_id: 56,
         locale: beijing(),
+        from: None,
+        probe_code: false,
     }
 }
 
@@ -493,6 +507,7 @@ fn a_oneinch_order_that_fills_in_parts_says_so() {
             typed_data_json: typed.to_string(),
             chain_id: 56,
             locale: utc(),
+            from: None,
         },
         false,
     );
@@ -551,6 +566,8 @@ fn a_registry_token_row_is_its_symbol_alone() {
             value: Some("0x0".to_owned()),
             chain_id: 1,
             locale: beijing(),
+            from: None,
+            probe_code: false,
         },
         false,
     );
@@ -630,13 +647,18 @@ fn a_registry_name_holds_on_its_own_chain_only() {
         value: Some("0x0".to_owned()),
         chain_id,
         locale: beijing(),
+        from: None,
+        probe_code: false,
     };
     let unlimited = "f".repeat(64);
     let on_bnb = resolve(approve(56, &unlimited), false)
         .result
         .expect("read");
     let token = field(&on_bnb, "Token");
-    assert_eq!(token.value, "USDC (0xa0b869...06eb48)");
+    assert_eq!(
+        token.value, "USDC? (0xa0b869...06eb48)",
+        "the chain's own answer, marked as its word (cs-1)"
+    );
     assert_eq!(token.address.as_deref(), Some(USDC_ETHEREUM));
 
     let silent = resolve(approve(56, "11b340"), true).result.expect("read");

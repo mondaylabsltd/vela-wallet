@@ -8,6 +8,8 @@
  * decoded ones instead of forking the layout.
  */
 
+import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+
 export type SigningStateId =
 	| 'cs1'
 	| 'cs2'
@@ -79,6 +81,12 @@ export interface KeyValueRow {
 	value: string;
 	valueTone?: Tone;
 	mono?: boolean;
+	/**
+	 * Who wrote this row's label, when it is not Vela's own reading of the
+	 * bytes ("Label from a fetched description (…)", cs-14): a faint marker
+	 * beside the label that says so when tapped.
+	 */
+	source?: string;
 }
 
 /**
@@ -152,6 +160,18 @@ export interface BalancesBlock {
 /** What can stand in the verdict's place: the balance card, or the core's notice. */
 export type VerdictBlock = BalancesBlock | WarningBlock;
 
+/**
+ * A stretch of a code line. `muted`: what the core put there for the eye, not
+ * the text itself — a hidden character's `⟨U+202E⟩` marker, a folded run of
+ * empty lines (cs-10, cs-11).
+ */
+export interface CodeRun {
+	text: string;
+	muted?: boolean;
+}
+
+export type CodeLine = string | CodeRun[];
+
 export type Block =
 	/** The eyebrow above the hero — "发送", "授权", "盲签". */
 	| { kind: 'intent'; text: string; tone: Tone }
@@ -182,12 +202,39 @@ export type Block =
 			/** Drawn under the chips: the field a custom cap is typed into. */
 			custom?: AllowanceInput;
 	  }
-	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
+	| {
+			kind: 'party';
+			label: string;
+			name: string;
+			address?: string;
+			badge?: PartyBadge;
+			/** As a row's `source` (cs-14). */
+			source?: string;
+	  }
+	/**
+	 * One small line saying where something came from (cs-14): the reading's
+	 * provenance under the intent, the contract on the card's face, a token
+	 * named only by its own contract. Muted; `caution`/`danger` tint it.
+	 */
+	| { kind: 'source'; text: string; tone: 'neutral' | 'caution' | 'danger' }
 	| { kind: 'rows'; rows: KeyValueRow[] }
 	| WarningBlock
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
-	| { kind: 'code'; lines: string[]; note?: string }
+	| {
+			kind: 'code';
+			/** A line is its text, or its runs when part of it is drawn muted. */
+			lines: CodeLine[];
+			note?: string;
+			/**
+			 * cs-10: a message the person must be able to read to its end
+			 * before the confirm opens. The sheet reports whether its last line
+			 * has been in sight (`onunread`), and the core's gate holds the
+			 * confirm until it has (`ConfirmBlock::MessageUnread`). Nothing is
+			 * held when it fits.
+			 */
+			readToEnd?: boolean;
+	  }
 	/** A batch step or a Safe inner call. */
 	| { kind: 'card'; title?: string; rows: KeyValueRow[]; tone: Tone }
 	| BalancesBlock
@@ -399,6 +446,8 @@ export interface SigningModel {
 		 */
 		host: string;
 		letter: string;
+		/** The site named itself: "Name and icon from the site itself" (cs-14). */
+		claim?: string;
 		tint: string;
 		/**
 		 * The site's own icon, tried in order over the letter (founder ruling
@@ -432,6 +481,13 @@ export interface SigningModel {
 	 * landed first must still be in sight once it has. Absent once read.
 	 */
 	reading?: 'out';
+	/**
+	 * The person's AI agent's opinion on this request (spec 103,
+	 * `vela_advise`), drawn in its own card under the blocks and over the fee
+	 * — set by the host beside the model, never by `blocksFor`, and read by
+	 * nothing else: no block, tone or confirm depends on it.
+	 */
+	advice?: AgentAdviceCardModel | null;
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
 	techOpen: boolean;
@@ -455,6 +511,8 @@ export interface SigningModel {
 		enabled: boolean;
 		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
+		/** Nobody could read the request: the red "Sign anyway" (cs-8). */
+		danger?: boolean;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;

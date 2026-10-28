@@ -675,6 +675,8 @@ pub fn sign_confirm_state(
         &clear_json,
         fee_json.as_deref(),
         speed_tier.as_deref(),
+        // The apps do not observe a message's scroll yet (cs-10): nothing held.
+        false,
     )
 }
 

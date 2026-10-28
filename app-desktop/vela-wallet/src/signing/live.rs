@@ -2827,6 +2827,10 @@ mod tests {
             label_term: None,
             value_term: None,
             bound: None,
+            source: vela_core::app::clear_signing::ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         }
     }
 
@@ -2887,6 +2891,7 @@ mod tests {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: vela_core::app::clear_signing::ClearReading::default(),
         }
     }
 
@@ -2908,6 +2913,8 @@ mod tests {
             value: Some("0x0".to_owned()),
             chain_id,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         assert!(ops.is_empty(), "the backup reads with nothing to fetch");
         host.view()
@@ -3068,6 +3075,8 @@ mod tests {
             params_json: params.to_owned(),
             chain_id: 100,
             locale: vela_core::app::clear_signing::ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         host.view()
     }
@@ -3165,6 +3174,8 @@ mod tests {
             params_json: r#"[{"calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x1"},{"to":"0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c","value":1000}]}]"#.to_owned(),
             chain_id: 100,
             locale: vela_core::app::clear_signing::ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         let clear = host.view();
         let drawn = cards(&blocks(&clear, &facts, &s));
@@ -3344,11 +3355,14 @@ mod tests {
                 typed_data_json: params[1].as_str().unwrap_or_default().to_owned(),
                 chain_id: 56,
                 locale,
+                from: None,
             },
             Some("wallet_sendCalls") => Event::ResolveBatch {
                 params_json: params.to_string(),
                 chain_id: 56,
                 locale,
+                from: None,
+                probe_code: false,
             },
             _ => {
                 let text = |key: &str| params[0][key].as_str().map(str::to_owned);
@@ -3358,6 +3372,8 @@ mod tests {
                     value: text("value"),
                     chain_id: 56,
                     locale,
+                    from: None,
+                    probe_code: false,
                 }
             }
         };
@@ -3375,6 +3391,7 @@ mod tests {
                 Op::Now => Res::Clock {
                     now_ms: 1_790_957_000_000.0,
                 },
+                Op::RpcGetCode { .. } => unreachable!("this shell asks no code check"),
                 Op::HttpGet { path } => Res::DescriptorFetched {
                     path: path.clone(),
                     json: path
@@ -3550,6 +3567,8 @@ mod tests {
             siwe: None,
             binding: None,
             danger_class: danger,
+            display_lines: Vec::new(),
+            has_invisible_chars: false,
         }
     }
 
@@ -3601,6 +3620,7 @@ mod tests {
                             key: "spender".to_owned(),
                             value: "0xdddd".to_owned(),
                         }],
+                        has_invisible_chars: false,
                     }),
                     ..pristine()
                 },

@@ -154,6 +154,16 @@ pub fn review(input_json: &str) -> String {
     to_json(&intent_rules::review(&input))
 }
 
+/// `vela_advise`: the agent's opinion on the review on the sheet, accepted
+/// as plain capped text bound to its digest — or refused
+/// ([`super::agent_review::advice`]).
+#[must_use]
+pub fn advice(input_json: &str) -> String {
+    let input =
+        serde_json::from_str::<super::agent_review::AdviceInput>(input_json).unwrap_or_default();
+    to_json(&super::agent_review::advice(&input))
+}
+
 /// What an agent's request changes, for its approval, with what the wallet
 /// knows around it (`world_json`, as for [`examine`]): `null` where the
 /// action's name is enough.

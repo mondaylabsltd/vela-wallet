@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SourceMark from './SourceMark.svelte';
 	import type { KeyValueRow } from '../model';
 
 	interface Props {
@@ -11,7 +12,9 @@
 <dl>
 	{#each rows as row, i (i)}
 		<div class="row">
-			<dt>{row.label}</dt>
+			<dt>
+				{row.label}{#if row.source}<SourceMark text={row.source} />{/if}
+			</dt>
 			<dd class:mono={row.mono} data-tone={row.valueTone ?? 'neutral'}>{row.value}</dd>
 		</div>
 	{/each}

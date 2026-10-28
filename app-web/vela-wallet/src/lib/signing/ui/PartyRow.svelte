@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SourceMark from './SourceMark.svelte';
 	import type { PartyBadge } from '../model';
 
 	interface Props {
@@ -6,13 +7,17 @@
 		name: string;
 		address?: string;
 		badge?: PartyBadge;
+		/** Who wrote the label, when not Vela (cs-14). */
+		source?: string;
 	}
 
-	let { label, name, address, badge }: Props = $props();
+	let { label, name, address, badge, source }: Props = $props();
 </script>
 
 <div class="party">
-	<p class="label">{label}</p>
+	<p class="label">
+		{label}{#if source}<SourceMark text={source} />{/if}
+	</p>
 	<div class="line">
 		<span class="who">
 			<span class="name">{name}</span>

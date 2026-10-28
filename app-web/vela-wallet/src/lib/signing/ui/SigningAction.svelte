@@ -62,7 +62,7 @@
 		-->
 		<div class="confirm">
 			<Button
-				variant="value"
+				variant={model.confirm.danger ? 'danger' : 'value'}
 				shape="rounded"
 				testid="signing-confirm"
 				disabled={!model.confirm.enabled}

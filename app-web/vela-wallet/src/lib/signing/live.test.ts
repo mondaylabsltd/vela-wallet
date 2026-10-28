@@ -12,6 +12,7 @@ import type { ClearOperation } from '$lib/core/generated/ClearOperation';
 import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
 import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
 import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
+import type { ClearReading } from '$lib/core/generated/ClearReading';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -164,6 +165,21 @@ function field(over: Partial<ClearSignField> = {}): ClearSignField {
 	} as ClearSignField;
 }
 
+/** A reading nobody graded: Vela's own, nothing raised (the core's default). */
+const READING: ClearReading = {
+	source: 'vela',
+	descriptor_owner: null,
+	descriptor_path: null,
+	contract_named_by: null,
+	contradictions: [],
+	selector_name: null,
+	goes_elsewhere: false,
+	dust_minimum: false,
+	allowance: false,
+	allowance_adds: false,
+	shape_intent: null
+};
+
 const DECODED: ClearSigningView = {
 	...INITIAL_CLEAR_VIEW,
 	resolved: true,
@@ -185,7 +201,8 @@ const DECODED: ClearSigningView = {
 		partial: false,
 		best_effort: false,
 		to_own_token: false,
-		terms_off_chain: false
+		terms_off_chain: false,
+		reading: READING
 	}
 };
 
@@ -1002,7 +1019,9 @@ describe('a decoded request', () => {
 	it('leads with what it does, then the amount, then who receives it', () => {
 		const model = buildSigningModel(inputs())!;
 		expect(model.blocks[0]).toMatchObject({ kind: 'intent', text: 'Send USDC' });
-		expect(model.blocks[1]).toMatchObject({ kind: 'amount' });
+		// cs-14: where the reading came from, in one small line under it.
+		expect(model.blocks[1]).toMatchObject({ kind: 'source', text: m.certain.readByVela });
+		expect(model.blocks[2]).toMatchObject({ kind: 'amount' });
 		expect(model.blocks.find((b) => b.kind === 'party')).toMatchObject({ name: 'alice.eth' });
 		// Named by its host, said once (spec 079 F14).
 		expect(model.dapp.name).toBe('app.example');
@@ -1027,14 +1046,26 @@ describe('a decoded request', () => {
 						to_own_token: true,
 						verified: false,
 						provenance: 'selector_db',
-						best_effort: true
+						best_effort: true,
+						reading: {
+							...READING,
+							source: 'selector_db',
+							selector_name: 'mintTokens(address,uint256)'
+						}
 					}
 				}
 			})
 		)!;
 		const warnings = flagged.blocks.filter((b) => b.kind === 'warning');
 		expect(warnings).toHaveLength(2);
-		expect(warnings[0]).toMatchObject({ tone: 'danger' });
+		// The burn, in red; the name's source, under the intent (cs-7).
+		expect(warnings).toContainEqual(expect.objectContaining({ tone: 'danger', text: m.warnDrain }));
+		expect(warnings).toContainEqual(
+			expect.objectContaining({
+				tone: 'caution',
+				text: fill(m.certain.selectorName, { name: 'mintTokens(address,uint256)' })
+			})
+		);
 		// …and says them in words, not in template slots: "Calling {{fn}} —"
 		// shipped once (spec 062 found it on the registry backup).
 		for (const warning of warnings) {
@@ -1050,21 +1081,30 @@ describe('a decoded request', () => {
 	 * is a line about authentication.
 	 */
 	it('says where a fetched description came from, and nothing about the other sources', () => {
-		const said = (provenance: ClearProvenance) =>
+		const said = (provenance: ClearProvenance, source: ClearReading['source']) =>
 			buildSigningModel(
 				inputs({
 					m: { ...m, warnDescriptorFetched: 'Not authenticated.' },
 					clear: {
 						...DECODED,
-						result: { ...DECODED.result!, verified: false, provenance }
+						result: {
+							...DECODED.result!,
+							verified: false,
+							provenance,
+							reading: { ...READING, source }
+						}
 					}
 				})
 			)!.blocks.filter((b) => b.kind === 'warning');
 
-		expect(said('fetched')).toMatchObject([{ tone: 'caution', text: 'Not authenticated.' }]);
-		expect(said('standard')).toHaveLength(0);
-		expect(said('pinned_match')).toHaveLength(0);
-		expect(said('none')).toHaveLength(0);
+		expect(said('fetched', 'fetched')).toMatchObject([
+			{ tone: 'caution', text: 'Not authenticated.' }
+		]);
+		expect(said('standard', 'vela')).toHaveLength(0);
+		expect(said('pinned_match', 'built_in')).toHaveLength(0);
+		expect(said('none', 'vela')).toHaveLength(0);
+		// cs-15: a shape match is nobody's description — not blamed on the service.
+		expect(said('fetched', 'shape')).toHaveLength(0);
 	});
 
 	it("the wallet's own registry backup is drawn verified, with rows and no warning", () => {
@@ -1464,7 +1504,8 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 		)!;
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
-		expect(allowance.chips.find((c) => c.id === 'revoke')?.state).toBe('disabled');
+		// cs-16: not offered, so not drawn — a greyed Revoke read as one.
+		expect(allowance.chips.find((c) => c.id === 'revoke')).toBeUndefined();
 	});
 
 	it('kept as asked, the decode is the truth and is left alone', () => {
@@ -1507,7 +1548,7 @@ describe('the deeper rungs of the ladder', () => {
 		expect(model.blocks[0]).toMatchObject({ text: m.warnEthSign });
 	});
 
-	it('a message shows its text and flags a SIWE domain mismatch as danger', () => {
+	it('a message shows its text and flags a SIWE domain mismatch as danger, both names said', () => {
 		const model = buildSigningModel(
 			inputs({
 				clear: {
@@ -1520,18 +1561,33 @@ describe('the deeper rungs of the ladder', () => {
 						decoded_text: 'hello',
 						binary_preview: null,
 						non_printable: false,
-						siwe: null,
+						siwe: {
+							domain: 'OpenSea.io:443',
+							domain_host: 'opensea.io',
+							address: null,
+							statement: null,
+							uri: null,
+							chain_id: null,
+							nonce: null
+						},
 						binding: 'mismatch',
-						danger_class: 'siwe_phish'
+						danger_class: 'siwe_phish',
+						display_lines: [{ type: 'text', runs: [{ text: 'hello', marker: false }] }],
+						has_invisible_chars: false
 					}
 				}
 			})
 		)!;
 		expect(model.blocks.find((b) => b.kind === 'code')).toMatchObject({ lines: ['hello'] });
-		expect(model.blocks.find((b) => b.kind === 'warning')).toMatchObject({
+		// cs-9: the template was drawn unfilled — "for {{domain}} but … from {{origin}}".
+		const warning = model.blocks.find((b) => b.kind === 'warning');
+		expect(warning).toMatchObject({
 			tone: 'danger',
-			text: m.warnSiweMismatch
+			text: fill(m.warnSiweMismatch, { domain: 'opensea.io', origin: 'app.example' })
 		});
+		expect(warning && 'text' in warning ? warning.text : '').not.toContain('{{');
+		expect(warning && 'text' in warning ? warning.text : '').toContain('opensea.io');
+		expect(warning && 'text' in warning ? warning.text : '').toContain('app.example');
 	});
 
 	it('while the core is still resolving, the sheet waits instead of guessing', () => {
@@ -1540,6 +1596,168 @@ describe('the deeper rungs of the ladder', () => {
 		)!;
 		expect(requestBlocks(model)).toHaveLength(1);
 		expect(model.blocks[0].kind).toBe('sentence');
+	});
+});
+
+/**
+ * Clear-signing audit cs-9 – cs-11, through the REAL core: what a message
+ * draws is the core's (`display_lines`), a long run of empty lines is one
+ * counted line, a hidden character is its muted ⟨U+…⟩ marker under a danger
+ * line, and a message that runs past the sheet holds the confirm until its
+ * end has been in sight.
+ */
+describe('a message is drawn whole and as it is', () => {
+	const MESSAGE_SIGN: SignView = {
+		...OPEN_SIGN,
+		request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+	};
+	const NO_FEE = { ...QUOTED_FEE, fee: null, confirm_fee_ready: false };
+
+	function presented(payload: string, origin: string | null = null): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(
+				JSON.stringify({
+					type: 'message_presented',
+					method: 'personal_sign',
+					params: [payload],
+					request_origin: origin
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	function hex(text: string): string {
+		return '0x' + Buffer.from(text, 'utf8').toString('hex');
+	}
+
+	function messageModel(clear: ClearSigningView, messageUnread?: boolean) {
+		return buildSigningModel(inputs({ sign: MESSAGE_SIGN, clear, fee: NO_FEE, messageUnread }))!;
+	}
+
+	const codeOf = (model: ReturnType<typeof messageModel>) => {
+		const code = model.blocks.find((b) => b.kind === 'code');
+		if (!code || code.kind !== 'code') throw new Error('no message drawn');
+		return code;
+	};
+
+	it('cs-9: a sign-in for another site names both, from the core’s reading', () => {
+		const siwe = [
+			'opensea.io wants you to sign in with your Ethereum account:',
+			'0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1',
+			'',
+			'Sign in',
+			'',
+			'URI: https://opensea.io',
+			'Version: 1',
+			'Chain ID: 1',
+			'Nonce: 8a3b9f2c'
+		].join('\n');
+		const model = messageModel(presented(siwe, REQUEST.origin));
+		const danger = model.blocks.filter((b) => b.kind === 'warning' && b.tone === 'danger');
+		expect(danger).toEqual([
+			{
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnSiweMismatch, { domain: 'opensea.io', origin: 'app.example' })
+			}
+		]);
+	});
+
+	it('cs-10: sixty empty lines are one counted, muted line, and the transfer is right under it', () => {
+		const text = `Welcome to Explore! Click to sign in.${'\n'.repeat(61)}I authorise transfer of all my assets to 0xBAdBad.`;
+		const code = codeOf(messageModel(presented(text)));
+		expect(code.lines).toEqual([
+			'Welcome to Explore! Click to sign in.',
+			[{ text: fill(m.messageBlankLines, { lines: '60' }), muted: true }],
+			'I authorise transfer of all my assets to 0xBAdBad.'
+		]);
+		expect(code.readToEnd).toBe(true);
+		expect(m.messageBlankLines).toContain('{{lines}}');
+	});
+
+	it('cs-10: a message whose end has not been in sight holds the confirm, and says why', () => {
+		const clear = presented('A long message');
+		const held = messageModel(clear, true);
+		expect(held.confirm.enabled).toBe(false);
+		expect(held.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.messageUnread']
+		);
+		expect(held.confirm.note).toBeTruthy();
+
+		// Read to its end — or never reported unread, because it fits.
+		for (const unread of [false, undefined]) {
+			const open = messageModel(clear, unread);
+			expect(open.confirm.enabled).toBe(true);
+			expect(open.confirm.note).toBeUndefined();
+		}
+	});
+
+	it('cs-10: the observation holds nothing but a message', () => {
+		const typed = buildSigningModel(
+			inputs({ clear: { ...DECODED, surface: 'clear_sign' }, messageUnread: true })
+		)!;
+		expect(typed.confirm.enabled).toBe(true);
+	});
+
+	it('cs-11: a direction override is drawn as muted markers, under a danger line', () => {
+		const payload = 'Approve transfer to Bob \u202Egpj.exe\u202C\u200B\u200B ok';
+		const model = messageModel(presented(hex(payload)));
+		const code = codeOf(model);
+		expect(code.lines).toEqual([
+			[
+				{ text: 'Approve transfer to Bob ' },
+				{ text: '⟨U+202E⟩', muted: true },
+				{ text: 'gpj.exe' },
+				{ text: '⟨U+202C⟩', muted: true },
+				{ text: '⟨U+200B⟩', muted: true },
+				{ text: '⟨U+200B⟩', muted: true },
+				{ text: ' ok' }
+			]
+		]);
+		// Nothing that draws the text carries the character itself.
+		expect(JSON.stringify(code.lines)).not.toMatch(/[\u202A-\u202E\u200B-\u200F\u2066-\u2069]/);
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnHiddenChars
+		});
+		expect(m.warnHiddenChars).toContain('⟨U+…⟩');
+	});
+
+	it('cs-11: an ordinary message says nothing of hidden characters', () => {
+		const model = messageModel(presented('Sign in to Example\n中文 · 👨\u200D👩\u200D👧'));
+		expect(codeOf(model).lines).toEqual(['Sign in to Example', '中文 · 👨\u200D👩\u200D👧']);
+		expect(model.blocks.some((b) => b.kind === 'warning')).toBe(false);
+	});
+
+	it('cs-11: a decoded field the core marked is drawn with its markers, under the same line', () => {
+		const clear: ClearSigningView = {
+			...DECODED,
+			has_invisible_chars: true
+		};
+		const model = buildSigningModel(inputs({ clear }))!;
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnHiddenChars
+		});
+		const plain = buildSigningModel(inputs())!;
+		expect(plain.blocks.some((b) => b.kind === 'warning' && b.text === m.warnHiddenChars)).toBe(
+			false
+		);
+	});
+
+	it.each(SUPPORTED_LOCALES)('has the words for all of it in %s', (locale) => {
+		const words = resolveSigningMessages(locale);
+		expect(words.warnHiddenChars).toContain('⟨U+…⟩');
+		expect(words.messageBlankLines).toContain('{{lines}}');
+		expect(words.confirmBlock['componentsUi.signing.confirmBlock.messageUnread']).toBeTruthy();
+		expect(words.warnSiweMismatch).toContain('{{domain}}');
+		expect(words.warnSiweMismatch).toContain('{{origin}}');
 	});
 });
 
@@ -2273,7 +2491,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 0,
 					value_wei: '1',
 					amount: '0.000000000000000001',
-					risk: 'normal'
+					risk: 'normal',
+					no_code: false
 				},
 				{
 					index: 2,
@@ -2291,7 +2510,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 68,
 					value_wei: '0',
 					amount: '0',
-					risk: 'danger'
+					risk: 'danger',
+					no_code: false
 				},
 				{
 					index: 3,
@@ -2303,7 +2523,8 @@ describe('a batch shows every call (089 S1)', () => {
 					data_bytes: 36,
 					value_wei: '10000000000000000',
 					amount: '0.01',
-					risk: 'caution'
+					risk: 'caution',
+					no_code: false
 				}
 			],
 			total_value_wei: '10000000000000001',
@@ -2391,8 +2612,10 @@ describe('a batch shows every call (089 S1)', () => {
 		if (approve.kind !== 'card' || blind.kind !== 'card') throw new Error('kind');
 		expect(approve.tone).toBe('danger');
 		expect(approve.rows[0]).toMatchObject({ value: m.terms.valueUnlimited, valueTone: 'danger' });
+		// cs-14: whose reading each leg is.
+		expect(approve.rows.at(-1)).toEqual({ label: m.certain.labelSource, value: m.certain.byVela });
 		// …and whom the call goes to: inside a batch nothing else says it.
-		expect(approve.rows.at(-1)).toEqual({
+		expect(approve.rows.at(-2)).toEqual({
 			label: m.labelInteracting,
 			value: '0x' + 'cc'.repeat(20),
 			mono: true
@@ -2549,7 +2772,7 @@ describe('the readable part says what the call does (096)', () => {
 			native_value: { value_wei: '3000000000000000', amount: '0.003' }
 		};
 		const model = buildSigningModel(inputs({ sign: BNB, clear: supply }))!;
-		expect(model.blocks[1]).toEqual({
+		expect(model.blocks[2]).toEqual({
 			kind: 'amount',
 			line: { sign: '\u2212', value: '0.003', symbol: 'BNB', tone: 'neutral' }
 		});
@@ -2601,7 +2824,8 @@ describe('the readable part says what the call does (096)', () => {
 						data_bytes: 164,
 						value_wei: '0',
 						amount: '0',
-						risk: 'caution'
+						risk: 'caution',
+						no_code: false
 					},
 					{
 						index: 2,
@@ -2613,7 +2837,8 @@ describe('the readable part says what the call does (096)', () => {
 						data_bytes: 4,
 						value_wei: '0',
 						amount: '0',
-						risk: 'caution'
+						risk: 'caution',
+						no_code: false
 					}
 				],
 				total_value_wei: '0',
@@ -2704,6 +2929,15 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 				return { type: 'selector_candidates', sigs: [] };
 			case 'timer':
 				return { type: 'timed_out', token: op.token };
+			case 'rpc_get_code':
+				return {
+					type: 'rpc_answer',
+					probe: 'code',
+					chain_id: op.chain_id,
+					to: op.address,
+					result: null,
+					rpc_error: false
+				};
 		}
 	}
 
@@ -2717,14 +2951,17 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 						type: 'resolve_typed_data',
 						typed_data_json: request.params[1] as string,
 						chain_id: 56,
-						locale
+						locale,
+						from: null
 					}
 				: request.method === 'wallet_sendCalls'
 					? {
 							type: 'resolve_batch',
 							params_json: JSON.stringify(request.params),
 							chain_id: 56,
-							locale
+							locale,
+							from: null,
+							probe_code: false
 						}
 					: (() => {
 							const tx = request.params[0] as Record<string, string | undefined>;
@@ -2734,7 +2971,9 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 								data: tx.data ?? null,
 								value: tx.value ?? null,
 								chain_id: 56,
-								locale
+								locale,
+								from: null,
+								probe_code: false
 							};
 						})();
 		const core = new ClearSigningCore();
@@ -2800,10 +3039,16 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 			label: m.terms.labelRecipient,
 			name: '0x88cca0...266894',
 			address: WALLET,
-			badge: undefined
+			badge: undefined,
+			source: fill(m.certain.labelFrom, { source: m.certain.sourceBuiltIn })
 		});
 		expect(JSON.stringify(model.blocks)).toContain(
-			JSON.stringify({ label: m.terms.labelValidUntil, value: '2026-10-03, 00:42', mono: false })
+			JSON.stringify({
+				label: m.terms.labelValidUntil,
+				value: '2026-10-03, 00:42',
+				mono: false,
+				source: fill(m.certain.labelFrom, { source: m.certain.sourceBuiltIn })
+			})
 		);
 		expect(JSON.stringify(model.blocks)).not.toContain('0x00000000');
 	});
@@ -2816,7 +3061,10 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 			label: 'Beneficiary',
 			name: '0x88cca0...266894',
 			address: WALLET,
-			badge: undefined
+			badge: undefined,
+			source: fill(m.certain.labelFrom, {
+				source: fill(m.certain.sourceFetched, { host: 'ethereum-data.getvela.app' })
+			})
 		});
 		expect(model.blocks.find((b) => b.kind === 'swap')).toMatchObject({
 			receive: { value: '2.418146082462759045 USDC', tone: 'success' }
@@ -2848,7 +3096,7 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 
 	it('an Aave borrow is money coming in (N2)', () => {
 		const model = buildSigningModel(inputs({ sign: BNB, clear: read('aave-borrow.json') }))!;
-		expect(model.blocks[1]).toMatchObject({
+		expect(model.blocks[2]).toMatchObject({
 			kind: 'amount',
 			line: { sign: '+', value: '0.3 USDC', tone: 'success' }
 		});

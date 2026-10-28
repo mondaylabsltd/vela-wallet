@@ -118,6 +118,28 @@ export async function executeClearOperation(
 			});
 		}
 
+		case 'rpc_get_code': {
+			// cs-13: whether anything lives at the target on this chain. The
+			// answer stays raw — "0x" means no code, and what that means for a
+			// name or a descriptor is the core's ruling.
+			const key = `code\u0001${operation.chain_id}\u0001${operation.address}`;
+			return coalesced(key, async () => {
+				const response = await poolRpcCall(
+					'eth_getCode',
+					[operation.address, 'latest'],
+					operation.chain_id
+				);
+				return {
+					type: 'rpc_answer',
+					probe: 'code',
+					chain_id: operation.chain_id,
+					to: operation.address,
+					result: typeof response?.result === 'string' ? response.result : null,
+					rpc_error: response?.error != null
+				};
+			});
+		}
+
 		case 'selector_db_lookup':
 			// `lookupSelector` owns its own network policy, merge order and cache.
 			return { type: 'selector_candidates', sigs: await lookupSelector(operation.selector) };
@@ -156,6 +178,16 @@ export function clearOperationFailure(effect: ClearEffect): ClearShellResult {
 				probe: operation.probe,
 				chain_id: operation.chain_id,
 				to: operation.to,
+				result: null,
+				rpc_error: false
+			};
+		case 'rpc_get_code':
+			// Unreachable: the core's "unknown", which names as it did before.
+			return {
+				type: 'rpc_answer',
+				probe: 'code',
+				chain_id: operation.chain_id,
+				to: operation.address,
 				result: null,
 				rpc_error: false
 			};

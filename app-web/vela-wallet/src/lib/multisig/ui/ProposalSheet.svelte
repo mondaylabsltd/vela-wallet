@@ -4,7 +4,10 @@
 	 * them approves.
 	 *
 	 * What it does is the core's reading of the transaction itself
-	 * (`reviewTx`), never text that came with it. Each approval shown was
+	 * (`reviewTx`), never text that came with it. A call to another contract
+	 * (a dApp's) is read further, the way the signing sheet reads the same
+	 * call sent by a site — the same machines, the same blocks (cs-12) — so
+	 * every member approves what they can read. Each approval shown was
 	 * verified here, and counts only if its owner is an owner on that chain
 	 * now. There is one primary action, the next thing that moves it forward:
 	 * approve, approve and execute, or execute — each one passkey prompt.
@@ -14,7 +17,7 @@
 	 * Decline — nothing is signed until the person has seen what the site
 	 * asks. Once proposed it is the transaction like any other.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -22,7 +25,9 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
+	import { CallReading, callTitle } from '../core/call-review.svelte';
 	import { names } from '../core/names.svelte';
 	import {
 		actionRecipient,
@@ -51,10 +56,13 @@
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
 	import type { DappProposal } from '../core/ui.svelte';
+	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
 		m: MultisigMessages;
+		/** The signing sheet's words, for a call's review (cs-12). */
+		signing: SigningMessages;
 		account: MultisigAccount;
 		chainId: number;
 		safeTxHash: string;
@@ -70,6 +78,7 @@
 
 	let {
 		m,
+		signing,
 		account,
 		chainId,
 		safeTxHash,
@@ -131,6 +140,37 @@
 			).then((l) => (lines = l));
 		} else lines = [];
 	});
+
+	/*
+	 * A call to another contract, read by the signing sheet's machines. Keyed
+	 * by the call itself: the list is re-read every few seconds, and the same
+	 * call must not be read again (and flash "Loading…") each time.
+	 */
+	const callKey = $derived.by(() => {
+		const action = item?.review.action;
+		return action?.kind === 'call'
+			? `${chainId}:${account.address}:${action.to}:${action.value}:${action.data}`
+			: '';
+	});
+	let reading = $state<CallReading | null>(null);
+	$effect(() => {
+		if (!callKey) return;
+		const { action, chain, address } = untrack(() => ({
+			action: item?.review.action,
+			chain: chainId,
+			address: account.address
+		}));
+		if (action?.kind !== 'call') return;
+		const next = new CallReading(chain, address, action);
+		reading = next;
+		void next.start();
+		return () => {
+			next.dispose();
+			if (reading === next) reading = null;
+		};
+	});
+	/** The core's verb for a call it could read ("Approve"); else the multisig's line. */
+	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
 
 	/** Whose hand does the work: the person picks among this device's members. */
 	let chosen = $state<string | null>(null);
@@ -314,7 +354,7 @@
 
 	async function shareLink() {
 		try {
-			await navigator.share({ title: title || m.proposal.title, url: link });
+			await navigator.share({ title: shownTitle || m.proposal.title, url: link });
 		} catch {
 			// dismissed, or no share sheet: copying is the fallback
 		}
@@ -363,15 +403,20 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			<p class="title">{title || '…'}</p>
+			<p class="title">{shownTitle || '…'}</p>
 			{#if recipient}
+				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
 				<p class="to">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
 					<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(recipient)}</span>
-					<span class="to-label">{m.action.to}</span>
-					{#if localName(recipient)}<span class="to-who">{localName(recipient)}</span>{/if}
+					<!-- A call names the contract it calls, in the signing sheet's word. -->
+					<span class="to-label">{reading ? signing.labelInteracting : m.action.to}</span>
+					{#if named}<span class="to-who">{named}</span>{/if}
 					<span class="to-address">{shortenAddress(recipient)}</span>
 				</p>
+			{/if}
+			{#if reading}
+				<CallReview {reading} m={signing} />
 			{/if}
 			{#if lines.length > 0}
 				<ul class="lines">

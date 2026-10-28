@@ -37,6 +37,7 @@ use crate::types::{ClientDataKind, WebAuthnAssertion};
 use crate::webauthn;
 
 pub mod activity_feed;
+pub mod agent_review;
 pub mod approval_guard;
 pub mod balance_dashboard;
 pub mod batch_import;
@@ -63,6 +64,7 @@ pub mod fee_tier_pref;
 pub mod intent_json;
 pub mod intent_rules;
 pub mod intents;
+pub mod invisible_chars;
 pub mod login;
 pub mod manage_tokens;
 pub mod method_words;

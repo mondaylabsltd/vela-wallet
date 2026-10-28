@@ -1102,6 +1102,8 @@ fn the_sheets_reading_names_the_contract_for_the_record() {
         value: None,
         chain_id: BSC,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     for _ in 0..200 {
         let Some(op) = sut.outstanding().first().cloned() else {
@@ -1109,6 +1111,7 @@ fn the_sheets_reading_names_the_contract_for_the_record() {
         };
         sut.resolve(match op {
             COp::Now => CRes::Clock { now_ms: NOW },
+            COp::RpcGetCode { .. } => unreachable!("no code check asked"),
             COp::HttpGet { path } => CRes::DescriptorFetched { path, json: None },
             // The chain answers for USDC on BNB Chain: 18 decimals, "USDC".
             COp::RpcEthCall {

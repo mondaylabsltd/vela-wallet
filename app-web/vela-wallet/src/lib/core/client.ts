@@ -72,6 +72,7 @@ import init, {
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	intentAdvice,
 	intentAgentReads,
 	intentAgentState,
 	intentApprovalDetail,
@@ -214,6 +215,7 @@ export { intentCatalog, intentCheck };
 // Their judgements over the wallet's state (spec 104): examine, verdict, a
 // transfer's progress, and what an agent reads. JSON in and out.
 export {
+	intentAdvice,
 	intentAgentReads,
 	intentAgentState,
 	intentApprovalDetail,

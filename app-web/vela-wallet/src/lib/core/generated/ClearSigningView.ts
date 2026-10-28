@@ -82,4 +82,27 @@ native_value: ClearNativeValue | null,
  * `None` on every surface but [`ClearSurface::ClearSign`] and
  * [`ClearSurface::Batch`], and when the reading named nothing.
  */
-record_reading: DappReading | null, };
+record_reading: DappReading | null, 
+/**
+ * The target has no code on this chain (cs-13): nothing named it and no
+ * descriptor read it, and the sheet warns "No contract at this address
+ * on <chain>". Only when the shell asked (`probe_code`).
+ */
+no_code: boolean, 
+/**
+ * Nobody could read this request: the confirm is the red "Sign anyway"
+ * (cs-8). True on the blind surfaces.
+ */
+sign_anyway: boolean, 
+/**
+ * What the sheet draws for this request carries a hidden or
+ * direction-changing character (cs-11): the message on
+ * [`ClearSurface::MessageSign`] / [`ClearSurface::EthSign`], a reading's
+ * fields on [`ClearSurface::ClearSign`] (typed data or a call), any
+ * call's on [`ClearSurface::Batch`]. Each is drawn as its `⟨U+…⟩` marker
+ * already; every shell also says so in one line
+ * (`componentsUi.signing.hiddenChars`). The blind typed-data rows carry
+ * their own flag ([`ClearBlindTyped::has_invisible_chars`]) for the
+ * shells that draw them.
+ */
+has_invisible_chars: boolean, };

@@ -103,6 +103,13 @@ pub fn intent_review(input_json: &str) -> String {
     intent_json::review(input_json)
 }
 
+/// `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
+#[wasm_bindgen(js_name = intentAdvice)]
+#[must_use]
+pub fn intent_advice(input_json: &str) -> String {
+    intent_json::advice(input_json)
+}
+
 /// What an agent's request changes, for its approval, with what the wallet
 /// knows around it (`world_json`, as for `intentExamine`).
 #[wasm_bindgen(js_name = intentApprovalDetailIn)]
