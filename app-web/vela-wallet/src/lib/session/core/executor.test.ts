@@ -8,7 +8,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
+import type { PendingPublish } from '../generated/PendingPublish';
 import { executeSession, sessionFailure } from './executor';
+
+// ob-2: the replayed publish is `publish.ts`'s mechanism (its own tests); what
+// this shell owes is the arguments it hands over, and the answer it makes.
+const publish = vi.hoisted(() =>
+	vi.fn<(args: Record<string, unknown>) => Promise<string | null>>()
+);
+vi.mock('$lib/onboarding/core/publish', () => ({ publish }));
+vi.mock('$lib/core/kernels', () => ({
+	trustedSignerRegistryRpId: (page: string | null) => (page ? 'sign.example.org' : null)
+}));
 
 class MemoryStorage implements Storage {
 	#map = new Map<string, string>();
@@ -144,5 +155,80 @@ describe('the restore read (settings set-21)', () => {
 	it('nothing stored is still an empty list', async () => {
 		const effect = { id: 1, operation: { type: 'load_accounts' as const } };
 		expect(await executeSession(effect)).toEqual({ type: 'accounts_loaded', accounts: [] });
+	});
+});
+
+describe('the replayed publish, on the web (ob-2)', () => {
+	const pending: PendingPublish = {
+		metadata_hex: 'a1b2',
+		members: [
+			{
+				credential_id: 'cred-1',
+				public_key_hex: '04ab',
+				attestation_hex: '',
+				authenticator_attachment: 'platform',
+				transports: 'internal',
+				proof: {
+					authenticatorData: 'aa',
+					clientDataJSON: 'bb',
+					challengeIndex: 9,
+					typeIndex: 1,
+					r: '11',
+					s: '22'
+				}
+			}
+		],
+		group_seed_hex: '5eed',
+		group_public_key_hex: '04feed'
+	};
+
+	beforeEach(() => {
+		publish.mockReset();
+	});
+
+	it('sends the record’s own publish — its proofs, its group key — and waits for the landing', async () => {
+		publish.mockResolvedValue(null);
+		const answer = await executeSession(
+			effect({ type: 'publish_pending_upload', publish: pending })
+		);
+		expect(answer).toEqual({ type: 'registry_landed' });
+		expect(publish).toHaveBeenCalledOnce();
+		expect(publish.mock.calls[0][0]).toMatchObject({
+			metadataHex: 'a1b2',
+			members: pending.members,
+			seedHex: '5eed',
+			groupPublicKeyHex: '04feed',
+			page: null,
+			// Never answered at the 202: only a landing removes the record.
+			answerWhenAccepted: false
+		});
+	});
+
+	it('files a custom-domain wallet under its page', async () => {
+		publish.mockResolvedValue(null);
+		await executeSession(
+			effect({
+				type: 'publish_pending_upload',
+				publish: { ...pending, page: 'https://sign.example.org/' }
+			})
+		);
+		expect(publish.mock.calls[0][0]).toMatchObject({
+			rpId: 'sign.example.org',
+			page: 'https://sign.example.org/'
+		});
+	});
+
+	it('a publish that did not land is unconfirmed — the record stays', async () => {
+		publish.mockRejectedValue(new Error('Register failed: 500'));
+		const answer = await executeSession(
+			effect({ type: 'publish_pending_upload', publish: pending })
+		);
+		expect(answer).toEqual({
+			type: 'registry_landing_unconfirmed',
+			message: 'Register failed: 500'
+		});
+		expect(sessionFailure(effect({ type: 'publish_pending_upload', publish: pending })).type).toBe(
+			'registry_landing_unconfirmed'
+		);
 	});
 });

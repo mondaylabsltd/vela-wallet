@@ -464,6 +464,10 @@ export interface SettingsMessages {
 		cancel: string;
 		/** The erase ran and something survived — said, never swallowed. */
 		failed: string;
+		/** ob-2: the wallets not yet synced, `{{names}}` — what erasing may lose for good. */
+		unsynced: string;
+		/** …and the box the person ticks before the erase may go ahead. */
+		unsyncedAck: string;
 	};
 	bugReport: {
 		title: string;
@@ -1103,6 +1107,8 @@ export const SETTINGS_KEYS = [
 	'settings.eraseDevice.confirm',
 	'settings.eraseDevice.cancel',
 	'settings.eraseDevice.failed',
+	'settings.eraseDevice.unsynced',
+	'settings.eraseDevice.unsyncedAck',
 	'componentsUi.bugReport.title',
 	'componentsUi.bugReport.subtitle',
 	'componentsUi.bugReport.whatPlaceholder',

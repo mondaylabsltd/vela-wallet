@@ -133,12 +133,6 @@ pub const ITEMS: [StorageItem; 8] = [
 /// Every key the app writes is under this prefix — the erase is a scan of it.
 pub const KEY_PREFIX: &str = "vela.";
 
-/// The one `vela.` key an erase leaves behind: a passkey public key the index
-/// service has never confirmed. Its retry needs no account list, but a
-/// deleted record can never be retried — and that key could then never be
-/// found at sign-in on any device (web `erase-device.ts`).
-pub const ERASE_KEEP_KEYS: [&str; 1] = ["vela.pendingUploads"];
-
 /// The drawn row a key belongs to; `None` is "your data nobody named" (the
 /// accounts, the preferences), counted as user data and never swept by
 /// "clear all caches".
@@ -173,11 +167,17 @@ pub fn is_ours(key: &str) -> bool {
     key.starts_with(KEY_PREFIX) || key.starts_with("recipient_id:")
 }
 
-/// Would "erase this device" delete this key? Everything of ours but the
-/// keep-list — found by scanning, never by a list of what to delete.
+/// Would "erase this device" delete this key? Everything of ours — found by
+/// scanning, never by a list of what to delete.
+///
+/// The pending-upload outbox included (owner, 2026-10-28): erasing means
+/// everything. It used to be kept, so a key the registry never confirmed
+/// could still be retried; now the erase's confirmation names every wallet
+/// that has not finished syncing ([`crate::app::session::SessionView::unsynced`])
+/// and asks for an explicit confirm before it goes.
 #[must_use]
 pub fn is_erasable_key(key: &str) -> bool {
-    is_ours(key) && !ERASE_KEEP_KEYS.contains(&key)
+    is_ours(key)
 }
 
 /// How many records a stored value holds, for the rows that count records:
@@ -258,12 +258,14 @@ mod tests {
     }
 
     #[test]
-    fn erase_is_a_scan_of_the_namespace_minus_the_keep_list() {
+    fn erase_is_a_scan_of_the_whole_namespace() {
         assert!(is_erasable_key("vela.theme"));
         assert!(is_erasable_key("vela.perm.https://x"));
         assert!(is_erasable_key("recipient_id:0xabc"));
         assert!(is_erasable_key("vela.some-key-added-next-year"));
-        assert!(!is_erasable_key("vela.pendingUploads"));
+        // Erasing means everything (owner, 2026-10-28) — the outbox too; the
+        // confirmation names what it would lose instead.
+        assert!(is_erasable_key("vela.pendingUploads"));
         assert!(!is_erasable_key("theme_preference"));
     }
 

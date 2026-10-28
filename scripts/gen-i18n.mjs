@@ -947,8 +947,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
 //   cue to it, instead of a scroll that takes the person from where they
 //   were reading. 2207 + 2 = 2209 leaves, 119 branches.
-if (PATHS.length !== 2328) fail(`expected 2328 paths (2209 leaf + 119 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2209) fail(`expected 2209 leaf paths, got ${leafSet.size}`);
+// 2331 (a wallet saved before it syncs, and an erase that names what it would
+//   lose — ob-2, 2026-10-28): + `onboarding.create.syncFailedNext` (the retry
+//   screen's countdown) and `settings.eraseDevice.{unsynced, unsyncedAck}`.
+//   2209 + 3 = 2212 leaves, 119 branches.
+if (PATHS.length !== 2331) fail(`expected 2331 paths (2212 leaf + 119 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2212) fail(`expected 2212 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 119) fail(`expected 119 branch paths, got ${branchSet.size}`);
 

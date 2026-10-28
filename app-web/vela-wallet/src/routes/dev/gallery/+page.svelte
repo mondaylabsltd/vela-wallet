@@ -228,6 +228,8 @@
 					busy={view.busy}
 					{strings}
 					onRetry={() => log('retry_upload')}
+					onEnter={() => log('enter_wallet')}
+					showStartOver={view.show_start_over}
 					onStartOver={() => log('start_over')}
 				/>
 			{:else if screen === 'done' && coreReady}

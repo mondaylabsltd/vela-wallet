@@ -461,9 +461,10 @@ pub struct PendingUploadMember {
 /// later launch.
 ///
 /// The scalar fields mirror `members[0]` (legacy single-key records have no
-/// `members` and the scalars are the whole story). A record with
-/// `members.len() > 1` must never be retried silently — replaying the publish
-/// takes one passkey prompt per member.
+/// `members` and the scalars are the whole story). A record without
+/// [`Self::publish`] must never be retried silently — replaying its publish
+/// takes one passkey prompt per member. One WITH it is retried by the session
+/// on its own (ob-2): every member's creation-time proof rides in it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct PendingUpload {
@@ -491,6 +492,44 @@ pub struct PendingUpload {
     /// record whose publish was never accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+    /// ob-2: the publish itself, exactly as the create flow sends it — so a
+    /// wallet whose sync failed, or whose page closed mid-sync, is published
+    /// by the session on its next try (and the next launch) with no prompt.
+    /// Absent on records written before it, which still need a sign-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish: Option<PendingPublish>,
+}
+
+/// A registry publish that can be replayed later without a single prompt
+/// (ob-2): every member carries the possession proof it made at creation, and
+/// the one-time group key those proofs bind to travels with them.
+///
+/// The group key is single-purpose — it closes THIS group over its content
+/// hash and nothing else — and the record holding it goes once the group has
+/// landed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct PendingPublish {
+    pub metadata_hex: String,
+    pub members: Vec<RegistryPublishMember>,
+    pub group_seed_hex: String,
+    pub group_public_key_hex: String,
+    /// Spec 102 R3: the page the unit is filed under, as the create's own
+    /// publish names it. `None`: the app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+}
+
+impl PendingPublish {
+    /// Can it be sent with no prompt at all? Every member proven, and the
+    /// group key present.
+    #[must_use]
+    pub fn replayable(&self) -> bool {
+        !self.members.is_empty()
+            && !self.group_seed_hex.is_empty()
+            && !self.group_public_key_hex.is_empty()
+            && self.members.iter().all(|member| member.proof.is_some())
+    }
 }
 
 impl PendingUpload {
@@ -504,6 +543,32 @@ impl PendingUpload {
             return None;
         }
         self.task_id.as_deref().filter(|task| !task.is_empty())
+    }
+
+    /// ob-2: the publish this record still owes, when it can be sent with no
+    /// prompt. A record waiting only on its landing has nothing to send.
+    #[must_use]
+    pub fn replayable_publish(&self) -> Option<&PendingPublish> {
+        if self.awaits_landing().is_some() {
+            return None;
+        }
+        self.publish.as_ref().filter(|publish| publish.replayable())
+    }
+
+    /// The wallet this record is for, derived from its whole founding set
+    /// (the scalar key alone for a legacy record); `None` when the keys
+    /// derive none.
+    #[must_use]
+    pub fn address(&self) -> Option<String> {
+        let keys: Vec<String> = if self.members.is_empty() {
+            vec![self.public_key_hex.clone()]
+        } else {
+            self.members
+                .iter()
+                .map(|member| member.public_key_hex.clone())
+                .collect()
+        };
+        address_from_public_key_hexes(&keys).ok()
     }
 }
 
@@ -950,6 +1015,8 @@ impl<'de> Deserialize<'de> for PendingUpload {
             members: Vec<PendingUploadMember>,
             #[serde(default)]
             task_id: Option<String>,
+            #[serde(default)]
+            publish: Option<PendingPublish>,
         }
         let w = Wire::deserialize(d)?;
         Ok(PendingUpload {
@@ -970,6 +1037,7 @@ impl<'de> Deserialize<'de> for PendingUpload {
             transports: w.transports,
             members: w.members,
             task_id: w.task_id.filter(|task| !task.is_empty()),
+            publish: w.publish,
         })
     }
 }

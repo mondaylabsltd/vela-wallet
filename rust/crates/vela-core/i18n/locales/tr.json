@@ -246,7 +246,9 @@
       "keeps": "Cüzdan kalır: geçiş anahtarlarınızı bu uygulama değil, geçiş anahtarı sağlayıcınız saklar — yeniden giriş yapın, aynı adres geri gelir. Silinmeyenler: Vela Relay gönderilen işlemleri 14 güne kadar, anahtar dizini kayıtları 30 güne kadar saklar; zincirdeki açık anahtar kaydı kalıcıdır ve kimse silemez.",
       "confirm": "Her Şeyi Sil",
       "cancel": "İptal",
-      "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."
+      "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin.",
+      "unsynced": "Eşitlemesi bitmedi: {{names}}. Eşitlenene kadar başka hiçbir cihaz bu cüzdanı bulamaz — şimdi temizlerseniz kalıcı olarak kaybedebilirsiniz.",
+      "unsyncedAck": "Eşitlenmemiş bir cüzdanın kalıcı olarak kaybolabileceğini anlıyorum"
     },
     "formatNote": {
       "system": "Sistem",

@@ -785,7 +785,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			keeps: k('settings.eraseDevice.keeps'),
 			confirm: k('settings.eraseDevice.confirm'),
 			cancel: k('settings.eraseDevice.cancel'),
-			failed: k('settings.eraseDevice.failed')
+			failed: k('settings.eraseDevice.failed'),
+			unsynced: k('settings.eraseDevice.unsynced'),
+			unsyncedAck: k('settings.eraseDevice.unsyncedAck')
 		},
 		bugReport: {
 			title: k('componentsUi.bugReport.title'),

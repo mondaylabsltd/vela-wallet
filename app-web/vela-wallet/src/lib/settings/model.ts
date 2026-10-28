@@ -349,6 +349,17 @@ export interface ConfirmSheetModel {
 	/** Second, quieter paragraph — the sign-out sheet's "keeps" line. */
 	note?: string;
 	callout?: CalloutModel;
+	/**
+	 * A loss this action would cause that nothing brings back — the erase's
+	 * wallets not yet synced, by name (ob-2). Drawn as its own danger callout,
+	 * so a failure that replaces `callout` does not take it away.
+	 */
+	warning?: string;
+	/**
+	 * Present ⇒ the confirm stays disabled until this box is ticked: the
+	 * explicit acknowledgement of `warning`.
+	 */
+	ack?: string;
 	confirm: string;
 	cancel: string;
 	tone: 'accent' | 'danger';

@@ -6,11 +6,21 @@
 //!   │ cancel-at-register KEEPS drafts    └──add_key(≤7)─────┘ │
 //!   │                                                finish_keys
 //!   │                                                        ▼
-//!   └────────────── SavingPending ─► Syncing{publish ─┬─ landed ─► remove pending}
-//!                                                     └─ accepted (ONE key) ─►
-//!                                                        record the task id}
-//!                                                        ─► Saving ─► Created
+//!   └── SavingPending ─► Saving ─► Syncing{publish ─┬─ landed ─► remove pending}
+//!                                     │             └─ accepted (ONE key) ─►
+//!                                     │                record the task id}
+//!                                     │                ─► Created
+//!                                     └─ failed ─► SyncFailed (saved here;
+//!                                                  retried, or entered)
 //! ```
+//!
+//! ob-2 (owner, 2026-10-28): the account is written to this device the moment
+//! the key set is frozen — BEFORE the publish — with a pending record that
+//! carries the whole publish, every member's proof and the group key with it.
+//! A publish that fails, a page that is closed mid-sync and a reload all find
+//! the wallet saved, and the session publishes the record on its own until it
+//! lands (`session.rs`, the landing watch). "Created" is never said over
+//! nothing stored, and nothing a person made is lost to a failed sync.
 //!
 //! The ordering is the product. The passkey must first produce a valid
 //! signature (a provider can report `create()` success and still have stored
@@ -20,11 +30,10 @@
 //! possession-proven group *before* it is entered (option B): the same key set
 //! that derives the address is the group's membership. For a multi-key wallet
 //! that publish is load-bearing for recovery — a sibling device can only
-//! reconstruct the address from the registry group — which is exactly why the
-//! account is saved and enterable only after the publish has landed on-chain.
-//! A publish failure surfaces the retry screen while the passkeys and their
-//! drafts are kept; a single key additionally stays recoverable on-device
-//! from two signatures.
+//! reconstruct the address from the registry group — which is why a failed
+//! publish is never quiet: the retry screen says the wallet is saved on this
+//! device only, and the session keeps publishing it. A single key
+//! additionally stays recoverable on-device from two signatures.
 //!
 //! That last fact is why a ONE-key wallet does not wait for the chain (issue
 //! #409, owner's decision 2026-10-04). Its publish is answered as soon as the
@@ -42,7 +51,8 @@ use serde::{Deserialize, Serialize};
 use super::shell::{CompletionMode, Effect, ShellOperation, ShellResult};
 use super::{
     name_fits_user_handle, public_key_hex_from_attestation, Account, AccountKey, FailureKind,
-    KeyMethod, PendingUpload, PromptKind, RegistryPublishMember, SignInKey, StatusKey,
+    KeyMethod, PendingPublish, PendingUpload, PromptKind, RegistryPublishMember, SignInKey,
+    StatusKey,
 };
 use crate::error::CoreError;
 use crate::registry_metadata::{RegistryMetadata, REGISTRY_METADATA_VERSION};
@@ -339,8 +349,12 @@ pub enum Stage {
     /// remove founding keys, then `FinishKeys` freezes the set.
     AddKeys,
     SavingPending,
-    Syncing(SyncStep),
+    /// ob-2: writing the account to this device — before the publish, so a
+    /// sync that fails (or a page that closes) leaves the wallet stored.
     Saving,
+    Syncing(SyncStep),
+    /// The publish did not land. The account IS saved on this device, and the
+    /// pending record carries everything a prompt-free retry needs.
     SyncFailed,
     Created,
     Completing,
@@ -352,6 +366,15 @@ impl Stage {
         !matches!(
             self,
             Stage::Form | Stage::AddKeys | Stage::SyncFailed | Stage::Created
+        )
+    }
+
+    /// Is the account on this device already (ob-2)? From the moment the
+    /// publish starts — it is written just before.
+    fn account_saved(&self) -> bool {
+        matches!(
+            self,
+            Stage::Syncing(_) | Stage::SyncFailed | Stage::Created | Stage::Completing
         )
     }
 }
@@ -402,6 +425,10 @@ pub enum CreateStage {
     /// finish button. Also shown (busy) while an added key's registration is
     /// in flight.
     AddKeys,
+    /// The wallet is saved on this device; its publish has not landed (ob-2).
+    /// It is retried — here, and by the session afterwards — and the wallet
+    /// may be entered meanwhile ([`Event::EnterWallet`]). Never "created"
+    /// alone, and never offered to be started over: it exists.
     SyncFailed,
     Created,
 }
@@ -653,7 +680,9 @@ impl App for CreateWallet {
             },
             busy,
             status: model.status,
-            show_start_over: has_draft && !busy,
+            // Not once the account is saved (ob-2): starting over would leave
+            // a stored wallet behind the person's back.
+            show_start_over: has_draft && !busy && !model.stage.account_saved(),
             address: match stage {
                 CreateStage::Created => model.prepared.as_ref().map(|p| p.address.clone()),
                 _ => None,
@@ -946,7 +975,7 @@ fn confirm_key(model: &mut Model, index: usize) -> Command<Effect, Event> {
 
 /// Freeze the founding set: every key already confirmed its membership at
 /// creation, so this derives the address from ALL of them and writes the
-/// pending-sync record — all before a single byte of account state exists.
+/// pending-sync record, the publish inside it — and then the account (ob-2).
 fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
     if model.stage != Stage::AddKeys || model.drafts.is_empty() {
         return Command::done();
@@ -1000,7 +1029,7 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
         signing_domain,
         signing_venue,
     };
-    let record = pending_record(&prepared, None);
+    let record = pending_record(&prepared, pending_publish(model, &prepared).ok(), None);
     model.prepared = Some(prepared);
     model.stage = Stage::SavingPending;
     request(model, ShellOperation::SavePendingUpload { record })
@@ -1008,9 +1037,14 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
 
 /// The pending-upload record for a prepared wallet: the first key's fields
 /// as the scalars (what legacy readers know), the whole founding set as
-/// `members`, and — once the registry has accepted a one-key publish — the
-/// task that publish was queued under (issue 409).
-fn pending_record(prepared: &Prepared, task_id: Option<String>) -> PendingUpload {
+/// `members`, the publish itself so the session can send it with no prompt
+/// (ob-2), and — once the registry has accepted a one-key publish — the task
+/// that publish was queued under (issue 409).
+fn pending_record(
+    prepared: &Prepared,
+    publish: Option<PendingPublish>,
+    task_id: Option<String>,
+) -> PendingUpload {
     let first = prepared.first();
     PendingUpload {
         id: first.credential_id.clone(),
@@ -1034,7 +1068,43 @@ fn pending_record(prepared: &Prepared, task_id: Option<String>) -> PendingUpload
             })
             .collect(),
         task_id,
+        publish,
     }
+}
+
+/// The publish this wallet owes, with every member's creation-time proof and
+/// the group key they bind to — what the create sends, and what the pending
+/// record keeps so the session can send it again with no prompt (ob-2).
+fn pending_publish(model: &Model, prepared: &Prepared) -> Result<PendingPublish, CoreError> {
+    let metadata = RegistryMetadata {
+        version: REGISTRY_METADATA_VERSION,
+        address: prepared.address.clone(),
+        wallet_version: WALLET_VERSION.to_owned(),
+        key_names: prepared.keys.iter().map(|key| key.name.clone()).collect(),
+        created_at_iso: prepared.created_at_iso.clone(),
+    };
+    Ok(PendingPublish {
+        metadata_hex: metadata.encode_hex()?,
+        members: prepared
+            .keys
+            .iter()
+            .map(|key| RegistryPublishMember {
+                credential_id: key.credential_id.clone(),
+                public_key_hex: key.public_key_hex.clone(),
+                attestation_hex: key.attestation_hex.clone(),
+                authenticator_attachment: key.authenticator_attachment.clone(),
+                transports: key.transports.clone(),
+                proof: key.proof.clone(),
+            })
+            .collect(),
+        group_seed_hex: model.group_seed_hex.clone().unwrap_or_default(),
+        group_public_key_hex: model.group_public_key_hex.clone().unwrap_or_default(),
+        // The unit is filed under the domain its keys were minted for.
+        page: prepared
+            .signing_venue
+            .page_url()
+            .and_then(|url| crate::signing_venue::ceremony_page(Some(url))),
+    })
 }
 
 /// Is a passkey prompt up — the only in-flight work a person may abandon
@@ -1056,9 +1126,16 @@ fn cancel_pending(model: &mut Model) {
 }
 
 fn start_over(model: &mut Model) -> Command<Effect, Event> {
-    // Abandon the drafted passkeys. Nothing about them was persisted (no
-    // account, and the pending upload only exists once the set is frozen), so
-    // this is a clean reset; the orphaned authenticator entries are inert.
+    // ob-2: a wallet already saved on this device — or being written to it —
+    // is not a draft any more: starting over would leave it stored behind the
+    // person's back, and the retry screen does not offer it.
+    if model.stage.account_saved() || model.stage == Stage::Saving {
+        return Command::done();
+    }
+    // Abandon the drafted passkeys. No account was written (the pending
+    // record exists only once the set is frozen, and a frozen set that could
+    // not be saved stays publishable), so this is a clean reset; the orphaned
+    // authenticator entries are inert.
     model.attempt += 1;
     if let Some(handle) = model.abort.take() {
         handle.abort();
@@ -1080,22 +1157,23 @@ fn retry_upload(model: &mut Model) -> Command<Effect, Event> {
         return Command::done();
     }
     // Resumes at the publish — never at registration. The passkey is already
-    // proven; re-registering would mint a second one for the same wallet. The
-    // publish re-prompts for the member signature, which an explicit retry
-    // makes expected.
+    // proven; re-registering would mint a second one for the same wallet.
+    // Every member replays its creation-time proof, so no prompt shows.
     model.attempt += 1;
     begin_publish(model)
 }
 
 fn enter_wallet(model: &mut Model) -> Command<Effect, Event> {
-    if model.stage != Stage::Created {
+    // ob-2: from the retry screen too — the account is saved on this device,
+    // and its pending record is the session's to publish from here on.
+    if !matches!(model.stage, Stage::Created | Stage::SyncFailed) {
         return Command::done();
     }
     let Some(prepared) = model.prepared.clone() else {
         return Command::done();
     };
-    // Signing was proven during creation and the key is synced — entering is
-    // now a state transition, not another ceremony.
+    // Signing was proven during creation — entering is a state transition,
+    // not another ceremony.
     model.attempt += 1;
     model.stage = Stage::Completing;
     request(
@@ -1292,14 +1370,25 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         }
 
         // -- pending record --------------------------------------------------
-        (Stage::SavingPending, ShellResult::PendingUploadSaved) => begin_publish(model),
+        // ob-2: the record is down, so the account goes down next — before
+        // the publish, so nothing the publish does can leave it unstored.
+        (Stage::SavingPending, ShellResult::PendingUploadSaved) => save_account(model),
         (Stage::SavingPending, ShellResult::StorageFailed { message }) => {
+            fail_to_form(model, PromptKind::create_failed(message), None)
+        }
+
+        // -- local persistence ----------------------------------------------
+        (Stage::Saving, ShellResult::AccountSaved) => begin_publish(model),
+        // Not saved, and said so. The drafts are kept, so the form's "Finish"
+        // tries again; the pending record already written is the session's to
+        // publish, so the keys stay findable at sign-in either way.
+        (Stage::Saving, ShellResult::StorageFailed { message }) => {
             fail_to_form(model, PromptKind::create_failed(message), None)
         }
 
         // -- registry publish (option B: publish before entering) ------------
         // Published (or the identical group was already on-chain) → clear the
-        // pending record, then save and enter.
+        // pending record, and the wallet is created.
         (Stage::Syncing(SyncStep::Publishing), ShellResult::RegistryPublished) => {
             let Some(prepared) = model.prepared.clone() else {
                 return Command::done();
@@ -1328,32 +1417,23 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         (
             Stage::Syncing(SyncStep::RecordingAcceptance),
             ShellResult::PendingUploadSaved | ShellResult::StorageFailed { .. },
-        ) => save_account(model),
-        // Publish failed. There is no silent retry — the publish needs a
-        // passkey signature — so offer the retry screen. The pending record is
-        // kept, and the key stays recoverable on-device regardless.
+        ) => created(model),
+        // Publish failed. The account is saved on this device and the pending
+        // record keeps the whole publish, so the retry screen says so, the
+        // retry replays the proofs with no prompt, and the session publishes
+        // the record on its own once the person has entered (ob-2).
         (Stage::Syncing(SyncStep::Publishing), ShellResult::IndexFailed { message, .. }) => {
             model.sync.last_error = Some(message);
             model.stage = Stage::SyncFailed;
             model.status = None;
             render()
         }
-        (Stage::Syncing(SyncStep::RemovingPending), ShellResult::PendingUploadRemoved) => {
-            save_account(model)
-        }
-        (Stage::Syncing(SyncStep::RemovingPending), ShellResult::StorageFailed { .. }) => {
-            save_account(model)
-        }
-
-        // -- local persistence ----------------------------------------------
-        (Stage::Saving, ShellResult::AccountSaved) => {
-            model.stage = Stage::Created;
-            model.status = None;
-            render()
-        }
-        (Stage::Saving, ShellResult::StorageFailed { message }) => {
-            fail_to_form(model, PromptKind::create_failed(message), None)
-        }
+        // A record that outlives a failed removal is published again by the
+        // session — idempotent by content hash — and then removed.
+        (
+            Stage::Syncing(SyncStep::RemovingPending),
+            ShellResult::PendingUploadRemoved | ShellResult::StorageFailed { .. },
+        ) => created(model),
 
         // -- handover ---------------------------------------------------------
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
@@ -1376,12 +1456,10 @@ fn begin_publish(model: &mut Model) -> Command<Effect, Event> {
     };
     model.sync = SyncState::default();
     model.status = Some(StatusKey::SyncingKey);
-    let group_seed_hex = model.group_seed_hex.clone().unwrap_or_default();
-    let group_public_key_hex = model.group_public_key_hex.clone().unwrap_or_default();
-    match registry_publish_op(&prepared, group_seed_hex, group_public_key_hex) {
-        Ok(operation) => {
+    match pending_publish(model, &prepared) {
+        Ok(publish) => {
             model.stage = Stage::Syncing(SyncStep::Publishing);
-            request(model, operation)
+            request(model, registry_publish_op(&prepared, publish))
         }
         Err(error) => {
             model.sync.last_error = Some(error.to_string());
@@ -1393,7 +1471,7 @@ fn begin_publish(model: &mut Model) -> Command<Effect, Event> {
 }
 
 /// Issue 409: a one-key wallet's publish was accepted. Re-write its pending
-/// record with the task, then save the account and enter.
+/// record with the task, and the wallet is created.
 ///
 /// Only a one-key wallet's publish asks to be answered on acceptance. A
 /// multi-key wallet answered this way would be entered before a sibling device
@@ -1413,13 +1491,13 @@ fn record_acceptance(model: &mut Model, task_id: String) -> Command<Effect, Even
         model.status = None;
         return render();
     }
+    let record = pending_record(
+        &prepared,
+        pending_publish(model, &prepared).ok(),
+        Some(task_id),
+    );
     model.stage = Stage::Syncing(SyncStep::RecordingAcceptance);
-    request(
-        model,
-        ShellOperation::SavePendingUpload {
-            record: pending_record(&prepared, Some(task_id)),
-        },
-    )
+    request(model, ShellOperation::SavePendingUpload { record })
 }
 
 /// May this wallet be entered once the registry has accepted its publish,
@@ -1430,54 +1508,28 @@ fn enters_on_acceptance(prepared: &Prepared) -> bool {
     prepared.keys.len() == 1
 }
 
-/// Build the registry publish operation for a prepared wallet: one member per
-/// founding key, `key_names` in the same canonical founding order, every
-/// member carrying its creation-time proof — the executor closes the group
-/// with the software key and registers, no prompts.
-fn registry_publish_op(
-    prepared: &Prepared,
-    group_seed_hex: String,
-    group_public_key_hex: String,
-) -> Result<ShellOperation, CoreError> {
-    let metadata = RegistryMetadata {
-        version: REGISTRY_METADATA_VERSION,
-        address: prepared.address.clone(),
-        wallet_version: WALLET_VERSION.to_owned(),
-        key_names: prepared.keys.iter().map(|key| key.name.clone()).collect(),
-        created_at_iso: prepared.created_at_iso.clone(),
-    };
-    Ok(ShellOperation::RegistryPublish {
-        metadata_hex: metadata.encode_hex()?,
-        members: prepared
-            .keys
-            .iter()
-            .map(|key| RegistryPublishMember {
-                credential_id: key.credential_id.clone(),
-                public_key_hex: key.public_key_hex.clone(),
-                attestation_hex: key.attestation_hex.clone(),
-                authenticator_attachment: key.authenticator_attachment.clone(),
-                transports: key.transports.clone(),
-                proof: key.proof.clone(),
-            })
-            .collect(),
-        group_seed_hex,
-        group_public_key_hex,
-        // Every member above replays its creation-time proof, so no live
-        // signature happens and no route is consulted; the default satisfies
-        // the field.
+/// Build the registry publish operation for a prepared wallet from the
+/// publish it owes ([`pending_publish`]): one member per founding key,
+/// `key_names` in the same canonical founding order, every member carrying its
+/// creation-time proof — the executor closes the group with the software key
+/// and registers, no prompts.
+fn registry_publish_op(prepared: &Prepared, publish: PendingPublish) -> ShellOperation {
+    ShellOperation::RegistryPublish {
+        metadata_hex: publish.metadata_hex,
+        members: publish.members,
+        group_seed_hex: publish.group_seed_hex,
+        group_public_key_hex: publish.group_public_key_hex,
+        // Every member replays its creation-time proof, so no live signature
+        // happens and no route is consulted; the default satisfies the field.
         method: KeyMethod::default(),
         answer_when_accepted: enters_on_acceptance(prepared),
-        // The unit is filed under the domain its keys were minted for.
-        page: prepared
-            .signing_venue
-            .page_url()
-            .and_then(|url| crate::signing_venue::ceremony_page(Some(url))),
-    })
+        page: publish.page,
+    }
 }
 
-/// The only place an account is ever written — reachable only after the
-/// possession-proven publish has landed or, for a one-key wallet, been accepted
-/// by the registry (issue 409).
+/// The only place an account is ever written — the moment its pending record
+/// is down and before the publish (ob-2), so no sync failure, closed page or
+/// reload can leave a wallet the person made unstored.
 fn save_account(model: &mut Model) -> Command<Effect, Event> {
     let Some(prepared) = model.prepared.clone() else {
         return Command::done();
@@ -1489,6 +1541,13 @@ fn save_account(model: &mut Model) -> Command<Effect, Event> {
             account: prepared.account(),
         },
     )
+}
+
+/// The publish landed (or, one key, was accepted): the wallet is created.
+fn created(model: &mut Model) -> Command<Effect, Event> {
+    model.stage = Stage::Created;
+    model.status = None;
+    render()
 }
 
 /// A registration failure returns to wherever the drafts live: the key list

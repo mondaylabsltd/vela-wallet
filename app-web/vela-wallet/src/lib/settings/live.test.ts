@@ -20,6 +20,7 @@ import {
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
+	withEraseUnsynced,
 	chosenCurrency,
 	withLiveCurrency,
 	withLiveCurrencyDesktop,
@@ -860,6 +861,45 @@ describe('withEraseFailure', () => {
 		expect(desktop.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failed });
 		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, false);
 		expect(home.eraseSheet.callout?.text).toBe(m.erase.loses);
+	});
+});
+
+describe('withEraseUnsynced (ob-2)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+
+	it('names every wallet an erase would take before it syncs, and asks for an explicit confirm', () => {
+		const home = withEraseUnsynced(
+			buildMobileState('st16', m, IDENTICON),
+			m,
+			[
+				{ name: 'Everyday', address: '0xAAAA000000000000000000000000000000000001' },
+				{ name: '', address: '0xBBBB000000000000000000000000000000000002' }
+			],
+			'en'
+		);
+		expect(home.eraseSheet.warning).toContain('Everyday');
+		expect(home.eraseSheet.warning).toContain('0xBBBB');
+		expect(home.eraseSheet.warning).not.toContain('{{names}}');
+		expect(home.eraseSheet.ack).toBe(m.erase.unsyncedAck);
+		// A failure says itself in the callout; the warning stays where it was.
+		const failed = withEraseFailure(home, m, true);
+		expect(failed.eraseSheet.warning).toBe(home.eraseSheet.warning);
+		expect(failed.eraseSheet.callout?.text).toBe(m.erase.failed);
+	});
+
+	it('leaves the sheet as it was when nothing is owed', () => {
+		const desktop = buildDesktopState('dst1', m, IDENTICON);
+		expect(withEraseUnsynced(desktop, m, [], 'en')).toBe(desktop);
+		expect(desktop.eraseSheet.warning).toBeUndefined();
+		expect(desktop.eraseSheet.ack).toBeUndefined();
+	});
+
+	it('is worded in every locale', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSettingsMessages(locale as Locale);
+			expect(words.erase.unsynced, locale).toContain('{{names}}');
+			expect(words.erase.unsyncedAck, locale).not.toBe('');
+		}
 	});
 });
 

@@ -101,6 +101,7 @@
 		themeFromSegment,
 		withEraseFailure,
 		withEraseFailureDesktop,
+		withEraseUnsynced,
 		withFeedback,
 		withFeedbackDesktop,
 		walletKeysModel,
@@ -986,6 +987,8 @@
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale, systemLocale);
+		// ob-2: the wallets an erase would take before they sync, by name.
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		model = withFeedback(model, m, deviceFacts);
 		model = {
@@ -1056,6 +1059,7 @@
 				return [item, { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title }];
 			})
 		};
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card
 		// with no handler, and a report panel that did not exist.

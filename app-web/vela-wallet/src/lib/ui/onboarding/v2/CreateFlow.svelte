@@ -215,7 +215,8 @@
 	/**
 	 * ob-9: the form, kept for this tab (sessionStorage — never the passkeys
 	 * or anything signed, only what the person typed and ticked). Cleared once
-	 * the wallet exists.
+	 * the wallet exists — saved on this device is existing (ob-2), whether or
+	 * not its sync has landed.
 	 */
 	const FORM_KEY = 'vela.create.form';
 
@@ -236,7 +237,8 @@
 	$effect(() => {
 		if (!view) return;
 		try {
-			if (view.stage === 'created') sessionStorage.removeItem(FORM_KEY);
+			if (view.stage === 'created' || view.stage === 'sync_failed')
+				sessionStorage.removeItem(FORM_KEY);
 			else sessionStorage.setItem(FORM_KEY, JSON.stringify({ name: view.name, acks: view.acks }));
 		} catch {
 			// Storage refused: a reload starts blank, as it always did.
@@ -368,6 +370,8 @@
 			busy={view.busy}
 			{strings}
 			onRetry={() => send({ type: 'retry_upload' })}
+			onEnter={() => send({ type: 'enter_wallet' })}
+			showStartOver={view.show_start_over}
 			onStartOver={() => send({ type: 'start_over' })}
 		/>
 	{:else if screen === 'done'}
