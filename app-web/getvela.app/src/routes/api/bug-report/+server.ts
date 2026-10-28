@@ -6,9 +6,10 @@
  * fine-grained PAT, so users who don't have a GitHub account can still file a
  * bug. The token NEVER reaches the client — it lives only as a Cloudflare secret
  * (`wrangler secret put GITHUB_BUG_TOKEN`). Since spec 081 deleted the five
- * dormant proxy routes it is the ONLY secret this Worker reads —
- * `ALCHEMY_API_KEY`, `PIMLICO_API_KEY` and `BUNDLER_PROVIDER` went with them,
- * and `GITHUB_BUG_REPO` is a default, not a secret.
+ * dormant proxy routes it and `PEERCONNECT_APP_SECRET` (`api/peerconnect-token`)
+ * are the only secrets this Worker reads — `ALCHEMY_API_KEY`, `PIMLICO_API_KEY`
+ * and `BUNDLER_PROVIDER` went with them, and `GITHUB_BUG_REPO` is a default,
+ * not a secret.
  *
  * If the token isn't configured the route returns 503 `{ error: 'not_configured' }`
  * so the client transparently falls back to the prefilled-GitHub-URL path.
