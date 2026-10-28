@@ -856,9 +856,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   1980 leaves, 113 branches.
 // 2097 (a multisig's name, part of its genesis, 2026-10-28): + 4
 //   `home.multisig.create` words. 1980 + 4 = 1984 leaves, 113 branches.
-if (PATHS.length !== 2097) fail(`expected 2097 paths (1984 leaf + 113 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1984) fail(`expected 1984 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 113) fail(`expected 113 branch paths, got ${branchSet.size}`);
+// 2132 (an outside owner's wallet, through Vela's connect page, 2026-10-28):
+//   + `home.multisig.external`, 34 words. 1984 + 34 = 2018 leaves,
+//   113 + 1 = 114 branches.
+// 2144 (importing Safes from a Safe{Wallet} export, 2026-10-28): +
+//   `home.multisig.import`, 11 words. 2018 + 11 = 2029 leaves, 115 branches.
+if (PATHS.length !== 2144) fail(`expected 2144 paths (2029 leaf + 115 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2029) fail(`expected 2029 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 115) fail(`expected 115 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

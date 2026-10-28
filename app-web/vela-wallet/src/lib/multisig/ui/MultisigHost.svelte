@@ -13,7 +13,9 @@
 	import { recordExecution } from '../core/records';
 	import { multisig } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import { externalSigning } from '../external/signing.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
+	import ExternalSignSheet from './ExternalSignSheet.svelte';
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
@@ -145,4 +147,11 @@
 		{closeLabel}
 		onclose={() => multisigUi.close()}
 	/>
+{/if}
+
+<!-- An outside owner's wallet, asked from any sheet or from the send flow: on top of them. -->
+{#if externalSigning.request}
+	{#key externalSigning.request}
+		<ExternalSignSheet {m} {locale} request={externalSigning.request} {wide} {closeLabel} />
+	{/key}
 {/if}

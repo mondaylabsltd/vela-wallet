@@ -108,6 +108,55 @@ export interface MultisigMessages {
 		nameHint: string;
 		nameInvalid: string;
 	};
+	external: {
+		pageTitle: string;
+		looking: string;
+		noWallet: string;
+		noWalletBody: string;
+		copyLink: string;
+		copied: string;
+		chooseWallet: string;
+		askConnect: string;
+		askNote: string;
+		connect: string;
+		decline: string;
+		keepOpen: string;
+		waitingVela: string;
+		noSession: string;
+		requests: string;
+		signTx: string;
+		sendTx: string;
+		switchChain: string;
+		disconnect: string;
+		signWithWallet: string;
+		sheetTitle: string;
+		scanBody: string;
+		resumeBody: string;
+		waiting: string;
+		connecting: string;
+		wrongAccount: string;
+		switching: string;
+		confirming: string;
+		declined: string;
+		badSignature: string;
+		signedBy: string;
+		unpair: string;
+		ownerWallet: string;
+		retry: string;
+	};
+	import: {
+		or: string;
+		body: string;
+		choose: string;
+		notExport: string;
+		empty: string;
+		pick: string;
+		undeployed: string;
+		importSome: string;
+		importing: string;
+		imported: string;
+		already: string;
+	};
 	add: {
 		title: string;
 		intro: string;
@@ -225,6 +274,55 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		namePlaceholder: '',
 		nameHint: '',
 		nameInvalid: ''
+	},
+	external: {
+		pageTitle: '',
+		looking: '',
+		noWallet: '',
+		noWalletBody: '',
+		copyLink: '',
+		copied: '',
+		chooseWallet: '',
+		askConnect: '',
+		askNote: '',
+		connect: '',
+		decline: '',
+		keepOpen: '',
+		waitingVela: '',
+		noSession: '',
+		requests: '',
+		signTx: '',
+		sendTx: '',
+		switchChain: '',
+		disconnect: '',
+		signWithWallet: '',
+		sheetTitle: '',
+		scanBody: '',
+		resumeBody: '',
+		waiting: '',
+		connecting: '',
+		wrongAccount: '',
+		switching: '',
+		confirming: '',
+		declined: '',
+		badSignature: '',
+		signedBy: '',
+		unpair: '',
+		ownerWallet: '',
+		retry: ''
+	},
+	import: {
+		or: '',
+		body: '',
+		choose: '',
+		notExport: '',
+		empty: '',
+		pick: '',
+		undeployed: '',
+		importSome: '',
+		importing: '',
+		imported: '',
+		already: ''
 	},
 	add: {
 		title: '',

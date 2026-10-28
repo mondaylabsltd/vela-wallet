@@ -70,6 +70,10 @@
 			 *
 			 * VELA_LAUNCH_REPLAY_AFTER_MS = 604800000  (7 days)
 			 */
+			// The connect page (an outside owner's wallet, `/<locale>/connect`) is a
+			// utility page for someone who may never have used Vela: no splash.
+			var quiet =
+				location.search.indexOf('skipLaunch') !== -1 || /\/connect\/?$/.test(location.pathname);
 			try {
 				var due = true;
 				var raw = localStorage.getItem('vela.launch.played');
@@ -77,13 +81,13 @@
 					var last = Number(raw);
 					due = !isFinite(last) || Date.now() - last >= 604800000;
 				}
-				if (due && location.search.indexOf('skipLaunch') === -1) {
+				if (due && !quiet) {
 					document.documentElement.dataset.launch = 'playing';
 				}
 			} catch (e) {
 				/* Blocked storage: play it. A decoration must never be the reason a
 				   wallet page fails. */
-				if (location.search.indexOf('skipLaunch') === -1) {
+				if (!quiet) {
 					document.documentElement.dataset.launch = 'playing';
 				}
 			}

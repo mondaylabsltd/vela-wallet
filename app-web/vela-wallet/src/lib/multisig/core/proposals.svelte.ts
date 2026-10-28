@@ -19,16 +19,20 @@ import {
 	reviewTx,
 	transfersTx,
 	safeTxHash,
+	isEcdsaApproval,
 	sameAddress,
 	verifyApproval,
-	type PasskeyApproval,
+	verifyEcdsaApproval,
+	type Approval,
 	type Review,
 	type SafeTx
 } from './kernel';
+import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { fetchProposals, submitApproval, type Proposal } from './service';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
+import { externalSigning } from '../external/signing.svelte';
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */
@@ -44,7 +48,7 @@ export interface ApprovalRow {
 	owner: string;
 	/** Verified, and its owner is an owner on this chain now. */
 	counts: boolean;
-	approval: PasskeyApproval;
+	approval: Approval;
 	createdMs: number;
 }
 
@@ -95,7 +99,9 @@ export function readProposal(
 		if (approvals.some((r) => sameAddress(r.owner, a.owner))) continue;
 		let valid: boolean;
 		try {
-			valid = verifyApproval(p.chainId, hash, a);
+			valid = isEcdsaApproval(a)
+				? sameAddress(verifyEcdsaApproval(hash, a).owner, a.owner)
+				: verifyApproval(p.chainId, hash, a);
 		} catch {
 			valid = false;
 		}
@@ -119,14 +125,23 @@ export function readProposal(
 				: approved >= members.threshold
 					? 'ready'
 					: 'pending';
-	// The executor is `msg.sender`: one approval more if it has not approved.
+	// An owner executing is `msg.sender`: one approval more if it has not
+	// approved. Once the approvals alone meet the threshold, any Vela account
+	// on this device can send it (a Safe imported with outside owners only).
+	const owners = local.filter((o) => {
+		const own = approvals.some((a) => a.counts && sameAddress(a.owner, o.address));
+		return approved + (own ? 0 : 1) >= members.threshold;
+	});
+	const anyone =
+		approved >= members.threshold
+			? localOwners(loadAccounts().map((a) => a.address)).filter(
+					(o) => !owners.some((x) => sameAddress(x.address, o.address))
+				)
+			: [];
 	const canExecute =
 		status === 'done' || status === 'queued' || review.action === null
 			? []
-			: local.filter((o) => {
-					const own = approvals.some((a) => a.counts && sameAddress(a.owner, o.address));
-					return approved + (own ? 0 : 1) >= members.threshold;
-				});
+			: [...owners, ...anyone];
 	return {
 		chainId: p.chainId,
 		safeTxHash: hash,
@@ -268,6 +283,16 @@ export async function propose(
 	}
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await signApproval(owner.account, chainId, hash);
+	return submitProposal(account, chainId, tx, approval);
+}
+
+/** Hand `tx` and one owner's approval of it to the mailbox. */
+export async function submitProposal(
+	account: MultisigAccount,
+	chainId: number,
+	tx: SafeTx,
+	approval: Approval
+) {
 	const answer = await submitApproval({
 		chainId,
 		safe: account.address,
@@ -277,7 +302,29 @@ export async function propose(
 	});
 	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
 	multisig.useChain(account.address, chainId);
-	return { safeTxHash: hash, proposal: answer.proposal };
+	return { safeTxHash: safeTxHash(chainId, account.address, tx), proposal: answer.proposal };
+}
+
+/**
+ * An approval of `item` by an owner whose wallet is elsewhere (MetaMask,
+ * Rabby, a wallet app), through Vela's connect page — any of `owners` that
+ * the wallet holds. Resolves once the mailbox has it.
+ */
+export async function approveExternally(
+	account: MultisigAccount,
+	chainId: number,
+	tx: SafeTx,
+	owners: string[]
+) {
+	const hash = safeTxHash(chainId, account.address, tx);
+	const approval = await externalSigning.approve({
+		chainId,
+		safe: account.address,
+		tx,
+		safeTxHash: hash,
+		owners
+	});
+	return submitProposal(account, chainId, tx, approval);
 }
 
 /**
@@ -293,11 +340,12 @@ export async function proposeTransfers(
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
-	const owner = localOwners(account.owners)[0];
-	if (!owner) throw new Error('no member of this multisig on this device');
 	multisig.useChain(account.address, chainId);
 	const fresh = multisig.find(account.address) ?? account;
 	await proposals.refresh(fresh, fresh.chainIds);
+	// The owners on that chain now (a Safe's owners may have changed since its genesis).
+	const owners = proposals.chain(chainId)?.members.owners ?? account.owners;
+	const owner = localOwners(owners)[0];
 	const nonce = proposals.nextNonce(chainId);
 	const tx = transfersTx(
 		transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
@@ -305,7 +353,11 @@ export async function proposeTransfers(
 	);
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
-	const { safeTxHash } = await propose(fresh, chainId, tx, owner);
+	// An owner on this device approves with its passkey; otherwise an owner's
+	// own wallet does, through the connect page.
+	const { safeTxHash } = owner
+		? await propose(fresh, chainId, tx, owner)
+		: await approveExternally(fresh, chainId, tx, owners);
 	await proposals.refresh(fresh, fresh.chainIds);
 	return { safeTxHash };
 }

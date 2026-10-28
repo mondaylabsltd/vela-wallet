@@ -244,22 +244,118 @@ pub fn named_salt_nonce(name: &str, seed: B256) -> U256 {
 
 /// `setup(owners, threshold, 0, "", handler, 0, 0, 0)`.
 fn encode_setup(owners: &[Address], threshold: u64, fallback_handler: Address) -> Vec<u8> {
+    encode_setup_full(&SetupArgs {
+        owners: owners.to_vec(),
+        threshold: U256::from(threshold),
+        to: Address::ZERO,
+        data: Vec::new(),
+        fallback_handler,
+        payment_token: Address::ZERO,
+        payment: U256::ZERO,
+        payment_receiver: Address::ZERO,
+    })
+}
+
+/// `setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)`.
+struct SetupArgs {
+    owners: Vec<Address>,
+    threshold: U256,
+    to: Address,
+    data: Vec<u8>,
+    fallback_handler: Address,
+    payment_token: Address,
+    payment: U256,
+    payment_receiver: Address,
+}
+
+fn encode_setup_full(a: &SetupArgs) -> Vec<u8> {
     let mut out =
         selector("setup(address[],uint256,address,bytes,address,address,uint256,address)").to_vec();
     out.extend_from_slice(&word_usize(0x100)); // owners offset (8 head words)
-    out.extend_from_slice(&word_u256(U256::from(threshold)));
-    out.extend_from_slice(&word_addr(Address::ZERO)); // no setup hook
-    out.extend_from_slice(&word_usize(0x100 + 32 + owners.len() * 32)); // data offset
-    out.extend_from_slice(&word_addr(fallback_handler));
-    out.extend_from_slice(&word_addr(Address::ZERO));
-    out.extend_from_slice(&word_u256(U256::ZERO));
-    out.extend_from_slice(&word_addr(Address::ZERO));
-    out.extend_from_slice(&word_usize(owners.len()));
-    for o in owners {
+    out.extend_from_slice(&word_u256(a.threshold));
+    out.extend_from_slice(&word_addr(a.to));
+    out.extend_from_slice(&word_usize(0x100 + 32 + a.owners.len() * 32)); // data offset
+    out.extend_from_slice(&word_addr(a.fallback_handler));
+    out.extend_from_slice(&word_addr(a.payment_token));
+    out.extend_from_slice(&word_u256(a.payment));
+    out.extend_from_slice(&word_addr(a.payment_receiver));
+    out.extend_from_slice(&word_usize(a.owners.len()));
+    for o in &a.owners {
         out.extend_from_slice(&word_addr(*o));
     }
-    out.extend_from_slice(&word_usize(0)); // data: empty bytes
+    out.extend(bytes_tail(&a.data));
     out
+}
+
+/// The genesis of a Safe that Safe{Wallet} keeps undeployed (an export's
+/// `undeployedSafes[chain][address].props`): its `setup` built as Safe{Wallet}
+/// deploys it, believed only if it derives `address`.
+pub fn safe_wallet_props_genesis(
+    props: &serde_json::Value,
+    address: &str,
+) -> Result<Genesis, CoreError> {
+    let field =
+        |o: &serde_json::Value, k: &str| o.get(k).and_then(|v| v.as_str()).map(str::to_owned);
+    let opt_addr = |o: &serde_json::Value, k: &str| -> Result<Address, CoreError> {
+        field(o, k)
+            .filter(|s| !s.is_empty())
+            .map(|s| addr(&s))
+            .unwrap_or(Ok(Address::ZERO))
+    };
+    let config = props
+        .get("safeAccountConfig")
+        .ok_or_else(|| err("no safeAccountConfig"))?;
+    let owners = config
+        .get("owners")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| err("no owners"))?
+        .iter()
+        .map(|o| {
+            o.as_str()
+                .ok_or_else(|| err("an owner is not an address"))
+                .and_then(addr)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let threshold = config
+        .get("threshold")
+        .and_then(|t| t.as_u64())
+        .ok_or_else(|| err("no threshold"))?;
+    let payment = match config.get("payment") {
+        None | Some(serde_json::Value::Null) => U256::ZERO,
+        Some(serde_json::Value::Number(n)) => {
+            U256::from(n.as_u64().ok_or_else(|| err("bad payment"))?)
+        }
+        Some(serde_json::Value::String(s)) => quantity(s)?,
+        Some(_) => return Err(err("bad payment")),
+    };
+    let initializer = encode_setup_full(&SetupArgs {
+        owners,
+        threshold: U256::from(threshold),
+        to: opt_addr(config, "to")?,
+        data: field(config, "data")
+            .map(|d| unhex(&d))
+            .transpose()?
+            .unwrap_or_default(),
+        fallback_handler: opt_addr(config, "fallbackHandler")?,
+        payment_token: opt_addr(config, "paymentToken")?,
+        payment,
+        payment_receiver: opt_addr(config, "paymentReceiver")?,
+    });
+    let salt_nonce = field(props, "saltNonce").ok_or_else(|| err("no saltNonce"))?;
+    let genesis = Genesis {
+        factory: addr(&field(props, "factoryAddress").ok_or_else(|| err("no factoryAddress"))?)?
+            .to_checksum(None),
+        singleton: addr(&field(props, "masterCopy").ok_or_else(|| err("no masterCopy"))?)?
+            .to_checksum(None),
+        salt_nonce: hex_quantity(quantity(&salt_nonce)?),
+        initializer: hex(&initializer),
+        name: None,
+        name_seed: None,
+    };
+    if genesis_address(&genesis)? != addr(address)?.to_checksum(None) {
+        return Err(err("these creation parameters give another address"));
+    }
+    Ok(genesis)
 }
 
 /// Safe's v1.3.0 proxy factories' `proxyCreationCode()` (canonical and
@@ -896,8 +992,12 @@ pub struct ExecutionPlan {
     pub deploy_owners: Vec<Genesis>,
     pub tx: SafeTx,
     pub approvals: Vec<Approval>,
-    /// The executor: an owner sending this as its own user operation.
-    pub executor: String,
+    /// The executor, when it is an owner: it sends this as its own user
+    /// operation and approves as `msg.sender`. `None` for a sender that is not
+    /// an owner (any Vela account, or an external wallet): the approvals alone
+    /// must meet the threshold.
+    #[serde(default)]
+    pub executor: Option<String>,
 }
 
 /// The executor's calls: deploy what has no code yet, then `execTransaction`.
@@ -912,7 +1012,7 @@ pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
     for g in &plan.deploy_owners {
         calls.push(deploy_call(g)?);
     }
-    let signatures = assemble_signatures(&plan.approvals, Some(&plan.executor))?;
+    let signatures = assemble_signatures(&plan.approvals, plan.executor.as_deref())?;
     calls.push(Call {
         to: addr(&plan.multisig)?.to_checksum(None),
         value: "0x0".into(),
@@ -1437,6 +1537,10 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "signatures")?,
         )?)),
         "parseSafeExport" => out(json(&parse_safe_export(&arg::<String>(&args, "json")?)?)),
+        "safeWalletPropsGenesis" => out(json(&safe_wallet_props_genesis(
+            &arg::<serde_json::Value>(&args, "props")?,
+            &arg::<String>(&args, "address")?,
+        )?)),
         "executionCalls" => out(json(&execution_calls(&arg(&args, "plan")?)?)),
         "review" => out(json(&review(
             arg(&args, "chainId")?,
@@ -1756,7 +1860,7 @@ mod tests {
             deploy_owners: vec![],
             tx: tx.clone(),
             approvals: vec![Approval::Passkey(Box::new(approval))],
-            executor: fx::account(0).unwrap().address,
+            executor: Some(fx::account(0).unwrap().address),
         };
         let calls = execution_calls(&plan).unwrap();
         assert_eq!(calls.len(), 2);
@@ -1783,7 +1887,7 @@ mod tests {
             deploy_owners: vec![],
             tx,
             approvals: vec![],
-            executor: A.into(),
+            executor: Some(A.into()),
         };
         assert!(execution_calls(&plan).is_err());
     }
@@ -1927,7 +2031,8 @@ mod tests {
             owner: owner.clone(),
             signature: eoa_sign(&key, hash),
         });
-        let sigs = unhex(&assemble_signatures(std::slice::from_ref(&ecdsa), Some(B)).unwrap()).unwrap();
+        let sigs =
+            unhex(&assemble_signatures(std::slice::from_ref(&ecdsa), Some(B)).unwrap()).unwrap();
         assert_eq!(sigs.len(), 130);
         let mut entries = [(addr(&owner).unwrap(), 0usize), (addr(B).unwrap(), 1)];
         entries.sort_by_key(|(o, _)| *o);
@@ -2019,5 +2124,32 @@ mod tests {
         assert!(vault.chains[0].props.is_some());
         assert!(parse_safe_export("{}").is_err());
         assert!(parse_safe_export("not json").is_err());
+    }
+
+    /// An undeployed Safe as Safe{Wallet} keeps it: its props build the
+    /// genesis the core builds for the same owners and salt (pinned address).
+    #[test]
+    fn safe_wallet_props_build_the_same_genesis() {
+        let props = serde_json::json!({
+            "factoryAddress": safe::SAFE_PROXY_FACTORY,
+            "masterCopy": safe::SAFE_SINGLETON,
+            "safeAccountConfig": {
+                "threshold": 2,
+                "owners": [A, B],
+                "fallbackHandler": COMPATIBILITY_FALLBACK_HANDLER,
+                "to": "0x0000000000000000000000000000000000000000",
+                "data": "0x",
+                "paymentReceiver": "0x0000000000000000000000000000000000000000"
+            },
+            "safeVersion": "1.4.1",
+            "saltNonce": "7"
+        });
+        let expected = salted(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let g = safe_wallet_props_genesis(&props, &expected.address).unwrap();
+        assert_eq!(g, expected.genesis);
+        assert!(
+            safe_wallet_props_genesis(&props, B).is_err(),
+            "another address is refused"
+        );
     }
 }

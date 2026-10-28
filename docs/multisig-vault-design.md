@@ -13,6 +13,7 @@
 | vela-core `multisig` | genesis（Safe L2 v1.4.1、CompatibilityFallbackHandler、无 hook、owner 按给定顺序）、safeTxHash、批准哈希 `SafeMessage(safeTxHash)`、passkey assertion → 批准、批准核对、签名拼装（按 owner 排序、嵌套 1271、执行者 `v = 1`）、执行调用（缺代码的多签和批准 owner 一并部署）、交易解读与安全形状。对外只有一个 JSON 入口 `multisigCall` |
 | genesis 服务 | 凭 owner passkey 证明代付未部署 Safe 的记录（独立通道和单 owner 限额）；提案信箱（`/api/proposals`，批准按链上规则核对、并发安全合并）；证明过的 genesis 在记录落链前就能查到（`pending`） |
 | web | 账户切换器里的多签一栏；创建（不部署）、按地址添加、邀请；首页多签面板（规则、成员、待批准）；多签有名字：名字和随机种子一起推导 saltNonce，所以名字是地址的一部分，写在注册表 v2 的 genesis 里（`recordNamed`，0x0872…28CF），不可伪造也不可更改，其他设备按地址添加时由 core 校验后显示；任何钱包里添加过的网络都能发起提案（服务不读的链按 genesis 判定成员）；发起转账走和 Vela 账户完全相同的发送流程（发送、扫码、通讯录、代币详情；选币、金额、收款人、分账、确认页都一样），只有两处不同：手续费那一行换成「几人中几人批准；手续费由执行成员支付」，确认按钮是「发起并批准」，确认后打开提案详情；提案详情（批准 / 批准并执行 / 执行、邀请链接、拒绝 = 同 nonce 作废）；执行后写活动记录，其他设备执行的从链上 `ExecutionSuccess` 找回；15 种语言 |
+| 导入与外部 owner（§11） | 从 Safe{Wallet} 导出文件导入（core 解析；已部署的由服务从交易服务还原 genesis，未部署的在本机由 props 推导，都由 core 核对地址；地址簿名字作本机备注）；Safe v1.3.0 / v1.4.1 / v1.5.0；外部钱包签名走 PeerConnect + WalletPair（Vela 的 `/connect` 页面是钱包端，EIP-6963 发现钱包，签 SafeTx 的 EIP-712），签名由 core ecrecover 核对后进信箱；服务接受 EOA 批准；没有 owner 在本机时，发送确认直接走外部签名；签名凑齐后任何本机 Vela 账户都可以执行（非 owner 时不占签名位）；分叉测试覆盖：EOA 成员 + passkey 成员混签执行，导入两个 Safe 后两个 EOA 先后签名、非 owner 的 Vela 账户执行并部署 |
 
 **和设计稿的出入**：
 
@@ -20,7 +21,10 @@
 - 首页面板列出待批准交易，"拒绝"即发起同 nonce 的作废交易；反对票、软过期尚未实现。
 - 多签账户暂不连接 dApp：web 本身没有内置浏览器，扩展仍以 session 的 Vela 账户应答。
 - 执行手续费由执行者账户按现有方式在交易内支付，执行前不单独展示金额（按 relay 当时报价签名）。
-- 只支持 Vela 创建的那种 genesis（Safe v1.4.1 factory + SafeL2 singleton）；其他 Safe 地址添加时提示"暂不支持这个版本"。
+- 支持 Safe v1.3.0 – v1.5.0 的已知 factory 和 singleton；更早的版本（EIP-712 域里没有 chainId）导入时提示"暂不支持这个版本"。
+- Vela passkey 成员在 v1.5.0 Safe 里的批准挑战不同（合约签名走 `isValidSignature(bytes32,bytes)`），暂未适配；EOA 成员不受影响。
+- 外部签名默认中继 `wss://relay.peerconnect.dev`（可用 `vela.peerconnectRelay` 改），上线前决定是否自建。
+- 外部钱包自己发送 `execTransaction`（本机没有任何 Vela 账户时）还没接到界面上；Vela 总有登录账户，所以目前都由 Vela 账户执行。
 
 **上线前还需要**：
 

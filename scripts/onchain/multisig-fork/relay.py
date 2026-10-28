@@ -99,13 +99,15 @@ def send(op: dict) -> str:
         if h in ops:
             return h
         data = cast("calldata", f"handleOps({PACKED}[],address)", f"[{packed(op)}]", FEE_RECIPIENT)
-        out = cast(
+        # As a bundler does: answer with the hash at once, mine in the background.
+        # (Waiting for the receipt here made a slow fork's answer late enough
+        # for the wallet to give up and send the operation again.)
+        tx = cast(
             "send", ENTRY_POINT, data, "--private-key", BUNDLER_KEY, "--rpc-url", url(),
-            "--gas-limit", "15000000", "--json",
+            "--gas-limit", "15000000", "--async",
         )
-        receipt = json.loads(out)
-        ops[h] = receipt["transactionHash"]
-        print(f"[relay] {h[:12]}… → {receipt['transactionHash']} status {receipt['status']}", flush=True)
+        ops[h] = tx
+        print(f"[relay] {h[:12]}… → {tx}", flush=True)
     return h
 
 

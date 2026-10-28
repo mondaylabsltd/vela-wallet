@@ -83,7 +83,8 @@
 	{#if local.length === 0}
 		<p class="note">{m.panel.readOnly}</p>
 	{/if}
-	{#if !account.recorded && !account.shared}
+	<!-- Sharing is for other Vela members: it matters once one is here. -->
+	{#if !account.recorded && !account.shared && local.length > 0}
 		<p class="note">{m.panel.notShared}</p>
 	{/if}
 

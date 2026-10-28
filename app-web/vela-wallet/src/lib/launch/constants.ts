@@ -141,6 +141,8 @@ export function isDue(storedValue: string | null, now: number): boolean {
 export function shouldPlay(win: Window = window, now: number = Date.now()): boolean {
 	try {
 		if (new URLSearchParams(win.location.search).has(SKIP_PARAM)) return false;
+		// The connect page (an outside owner's wallet) is no front door: no splash.
+		if (/\/connect\/?$/.test(win.location.pathname)) return false;
 		return isDue(win.localStorage.getItem(STORAGE_KEY), now);
 	} catch {
 		// Storage throws in private modes and sandboxed frames. A wallet's

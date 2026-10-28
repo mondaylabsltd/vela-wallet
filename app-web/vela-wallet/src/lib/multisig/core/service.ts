@@ -12,7 +12,7 @@
  * write-once, an approval merges), so a call that failed in flight is simply
  * made again.
  */
-import type { Genesis, PasskeyApproval, SafeTx } from './kernel';
+import type { Approval, Genesis, SafeTx } from './kernel';
 
 export const DEFAULT_GENESIS_SERVICE_URL = 'https://safe-genesis.getvela.app';
 /** A developer's or a test's own service; unset means the default. */
@@ -138,9 +138,9 @@ export interface Members {
 	nonce: string;
 }
 
-export interface StoredApproval extends PasskeyApproval {
+export type StoredApproval = Approval & {
 	createdMs: number;
-}
+};
 
 export interface Proposal {
 	chainId: number;
@@ -183,7 +183,7 @@ export async function submitApproval(req: {
 	chainId: number;
 	safe: string;
 	safeTx: SafeTx;
-	approval: PasskeyApproval;
+	approval: Approval;
 	/** The multisig's genesis: lets the mailbox take a proposal before the registry holds the record. */
 	genesis?: Genesis;
 }): Promise<SubmitAnswer> {

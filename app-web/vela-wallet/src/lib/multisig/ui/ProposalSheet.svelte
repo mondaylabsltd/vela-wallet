@@ -31,6 +31,7 @@
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
+		approveExternally,
 		execute,
 		proposals,
 		proposeCancel,
@@ -148,6 +149,27 @@
 		}
 	}
 
+	/** Owners still to approve whose wallets are elsewhere: an outside wallet can sign for any. */
+	const outside = $derived(
+		!item || item.status === 'done' || item.status === 'queued' || item.review.action === null
+			? []
+			: (members?.owners ?? []).filter(
+					(o) =>
+						localOwners([o]).length === 0 &&
+						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
+				)
+	);
+
+	async function onExternal() {
+		if (!item) return;
+		try {
+			await approveExternally(account, chainId, item.tx, outside);
+			await proposals.refresh(account, account.chainIds);
+		} catch (error) {
+			if (!cancelled(error)) phase = { kind: 'failed', reason: reasonOf(error) };
+		}
+	}
+
 	async function onReject() {
 		if (!item || !actor) return;
 		phase = { kind: 'busy', what: 'reject' };
@@ -182,14 +204,14 @@
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 	const busy = $derived(phase.kind === 'busy');
 	const recipient = $derived(item ? actionRecipient(item.review.action) : null);
-	/** The executor approves as `msg.sender`: once it has sent, it counts. */
+	/** An owner executing approves as `msg.sender`: once it has sent, it counts. Anyone else adds nothing. */
 	const shownApproved = $derived.by(() => {
 		if (!item) return 0;
 		const p = phase;
 		if (p.kind !== 'sent') return item.approved;
-		return item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by))
-			? item.approved
-			: item.approved + 1;
+		const owner = (members?.owners ?? []).some((o) => sameAddress(o, p.by));
+		const approved = item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by));
+		return owner && !approved ? item.approved + 1 : item.approved;
 	});
 </script>
 
@@ -276,6 +298,10 @@
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.executed}
 							{:else if row}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.approved}
+							{:else if outside.some((o) => sameAddress(o, owner)) && phase.kind === 'idle'}
+								<button type="button" class="external" onclick={onExternal}
+									>{m.external.signWithWallet}</button
+								>
 							{:else}
 								{m.proposal.waiting}
 							{/if}
@@ -410,6 +436,17 @@
 </Sheet>
 
 <style>
+	.external {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
 	.what {
 		padding-block-end: var(--space-lg);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);

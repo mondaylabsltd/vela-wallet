@@ -20,9 +20,10 @@ import { signChallenge } from '$lib/signing/sign-challenge';
 import { hasCode, type ChainMembers } from './chain';
 import {
 	executionCalls,
+	isEcdsaApproval,
 	sameAddress,
+	type Approval,
 	type Genesis,
-	type PasskeyApproval,
 	type SafeTx
 } from './kernel';
 import type { LocalOwner } from './owners';
@@ -34,16 +35,27 @@ export interface ExecutionInput {
 	members: ChainMembers;
 	tx: SafeTx;
 	/** Verified approvals; the executor's own, if any, is ignored (it signs as `msg.sender`). */
-	approvals: PasskeyApproval[];
+	approvals: Approval[];
+	/**
+	 * A Vela account on this device. An owner counts as one approval (as
+	 * `msg.sender`); any other account only sends it — `execTransaction` is
+	 * anyone's to send once the approvals meet the threshold.
+	 */
 	executor: LocalOwner;
 }
 
 /** The executor's calls, with whatever must be deployed first. */
 export async function planCalls(input: ExecutionInput) {
-	const others = input.approvals.filter((a) => !sameAddress(a.owner, input.executor.address));
+	const owner = input.members.owners.some((o) => sameAddress(o, input.executor.address));
+	const others = owner
+		? input.approvals.filter((a) => !sameAddress(a.owner, input.executor.address))
+		: input.approvals;
+	// A passkey owner's check needs its wallet's code; a plain account signs as it is.
 	const deployOwners: Genesis[] = [];
 	for (const a of others) {
-		if (!(await hasCode(input.chainId, a.owner))) deployOwners.push(a.ownerGenesis);
+		if (!isEcdsaApproval(a) && !(await hasCode(input.chainId, a.owner))) {
+			deployOwners.push(a.ownerGenesis);
+		}
 	}
 	return executionCalls({
 		multisig: input.multisig,
@@ -51,7 +63,7 @@ export async function planCalls(input: ExecutionInput) {
 		deployOwners,
 		tx: input.tx,
 		approvals: others,
-		executor: input.executor.address
+		executor: owner ? input.executor.address : null
 	});
 }
 

@@ -35,11 +35,12 @@ export function memberLabel(address: string): string {
  * without a name.
  */
 export function multisigName(
-	account: { genesis: { name?: string }; threshold: number; owners: string[] },
+	account: { genesis: { name?: string }; label?: string; threshold: number; owners: string[] },
 	m: MultisigMessages
 ): string {
 	return (
 		account.genesis.name ??
+		account.label ??
 		fillTemplate(m.switcher.rowName, { m: account.threshold, n: account.owners.length })
 	);
 }

@@ -52,6 +52,20 @@ export interface PasskeyApproval {
 	s: string;
 }
 
+/**
+ * An owner that is a plain account (MetaMask, Rabby, …): its EIP-712
+ * signature of the SafeTx, `r ‖ s ‖ v`.
+ */
+export interface EcdsaApproval {
+	owner: string;
+	signature: string;
+}
+
+/** One owner's approval, either kind (told apart by their fields). */
+export type Approval = PasskeyApproval | EcdsaApproval;
+
+export const isEcdsaApproval = (a: Approval): a is EcdsaApproval => 'signature' in a;
+
 export interface Call {
 	to: string;
 	value: string;
@@ -89,8 +103,25 @@ export interface ExecutionPlan {
 	deployMultisig: Genesis | null;
 	deployOwners: Genesis[];
 	tx: SafeTx;
-	approvals: PasskeyApproval[];
-	executor: string;
+	approvals: Approval[];
+	/** The executor when it is an owner (it approves as `msg.sender`); `null` for any other sender. */
+	executor: string | null;
+}
+
+/** One Safe in a Safe{Wallet} export, across the chains it is listed on. */
+export interface ExportedSafe {
+	address: string;
+	/** The person's own name for it (the export's address book): a note on this device. */
+	name: string | null;
+	chains: {
+		chainId: number;
+		deployed: boolean;
+		owners: string[];
+		threshold: number;
+		/** An undeployed Safe's creation parameters (the service's `safeWalletProps`). */
+		props: unknown | null;
+		version: string | null;
+	}[];
 }
 
 /** A founding key as the account record stores it. */
@@ -160,3 +191,25 @@ export const cancelTx = (multisig: string, nonce: string) =>
 export function sameAddress(a: string | null | undefined, b: string | null | undefined): boolean {
 	return !!a && !!b && a.toLowerCase() === b.toLowerCase();
 }
+
+/** A plain account's approval, checked as the Safe checks it; `v` comes back as 27/28. */
+export const verifyEcdsaApproval = (safeTxHash: string, approval: EcdsaApproval) =>
+	call<EcdsaApproval>('verifyEcdsaApproval', { safeTxHash, approval });
+
+/** The SafeTx as `eth_signTypedData_v4` takes it (its EIP-712 hash is the safeTxHash). */
+export const safeTxTypedData = (chainId: number, safe: string, tx: SafeTx) =>
+	call<Record<string, unknown>>('safeTxTypedData', { chainId, safe, tx });
+
+/** The signatures `execTransaction` takes, sorted by owner; no executor when a wallet sends it. */
+export const signatures = (approvals: Approval[], executor: string | null) =>
+	call<string>('signatures', { approvals, executor });
+
+export const execTransactionData = (tx: SafeTx, signatures: string) =>
+	call<string>('execTransactionData', { tx, signatures });
+
+/** An undeployed Safe{Wallet} Safe's genesis from its props; throws unless it derives `address`. */
+export const safeWalletPropsGenesis = (props: unknown, address: string) =>
+	call<Genesis>('safeWalletPropsGenesis', { props, address });
+
+/** A Safe{Wallet} export, merged by address. Throws on a file that is not one. */
+export const parseSafeExport = (json: string) => call<ExportedSafe[]>('parseSafeExport', { json });

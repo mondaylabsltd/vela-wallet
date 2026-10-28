@@ -14,7 +14,14 @@
  * cannot hand over a wrong one.
  */
 import { hasCode } from './chain';
-import { genesisAddress, multisigGenesis, sameAddress, type Genesis } from './kernel';
+import {
+	genesisAddress,
+	multisigGenesis,
+	safeWalletPropsGenesis,
+	sameAddress,
+	type ExportedSafe,
+	type Genesis
+} from './kernel';
 import { signOwnerProof, type LocalOwner } from './owners';
 import {
 	fetchGenesis,
@@ -240,4 +247,81 @@ async function waitForTask(id: string): Promise<void> {
 		const task = await fetchTask(id).catch(() => null);
 		if (task && (task.status === 'done' || task.status === 'failed')) return;
 	}
+}
+
+export type ImportOutcome =
+	| { ok: true; account: MultisigAccount }
+	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' };
+
+/**
+ * Import one Safe from a Safe{Wallet} export. Its genesis is, in order: the
+ * one the genesis service holds; one derived here from Safe{Wallet}'s own
+ * creation parameters (an undeployed Safe); or one the service resolves from
+ * a chain it is deployed on, and records. Whichever it is, the core must
+ * derive the Safe's address from it. The address book's name is kept as this
+ * device's label. A Safe already here is kept, and given the label if it has
+ * none.
+ */
+export async function importExported(safe: ExportedSafe): Promise<ImportOutcome> {
+	const chainIds = safe.chains.map((c) => c.chainId);
+	const existing = multisig.find(safe.address);
+	if (existing) {
+		for (const chainId of chainIds) multisig.useChain(existing.address, chainId);
+		if (!existing.label && safe.name) multisig.setLabel(existing.address, safe.name);
+		return { ok: true, account: multisig.find(existing.address) ?? existing };
+	}
+	let genesis: Genesis | null = null;
+	let recorded = false;
+	let serviceDown = false;
+	try {
+		const known = await fetchGenesis(safe.address);
+		if (known.found && known.genesis) {
+			genesis = known.genesis;
+			recorded = !known.pending;
+		}
+	} catch {
+		serviceDown = true;
+	}
+	if (!genesis) {
+		for (const c of safe.chains) {
+			if (c.deployed || !c.props) continue;
+			try {
+				genesis = safeWalletPropsGenesis(c.props, safe.address);
+				break;
+			} catch {
+				// another chain's entry may hold it
+			}
+		}
+	}
+	if (!genesis && !serviceDown) {
+		for (const c of safe.chains.filter((c) => c.deployed)) {
+			try {
+				const imported = await importGenesis({ chainId: c.chainId, safe: safe.address });
+				if (imported.status === 'queued') await waitForTask(imported.taskId);
+				if (imported.status === 'error') serviceDown = true;
+				if (imported.status === 'error' || imported.status === 'refused') continue;
+				const known = await fetchGenesis(safe.address);
+				if (known.found && known.genesis) {
+					genesis = known.genesis;
+					recorded = !known.pending;
+					serviceDown = false;
+					break;
+				}
+			} catch {
+				// the next chain may be one the service reads
+				serviceDown = true;
+			}
+		}
+	}
+	if (!genesis) return { ok: false, reason: serviceDown ? 'unavailable' : 'notFound' };
+	try {
+		if (!sameAddress(genesisAddress(genesis), safe.address))
+			return { ok: false, reason: 'notFound' };
+	} catch {
+		return { ok: false, reason: 'unsupported' };
+	}
+	const account = multisig.add(safe.address, genesis, recorded, chainIds);
+	if (safe.name) multisig.setLabel(account.address, safe.name);
+	if (recorded) multisig.markShared(account.address);
+	return { ok: true, account: multisig.find(account.address) ?? account };
 }

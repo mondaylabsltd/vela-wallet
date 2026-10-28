@@ -118,9 +118,9 @@ describe('launch timing', () => {
 });
 
 describe('replay gate', () => {
-	function fakeWindow(search = '', storage: Record<string, string> | null = {}) {
+	function fakeWindow(search = '', storage: Record<string, string> | null = {}, pathname = '/en') {
 		return {
-			location: { search },
+			location: { search, pathname },
 			localStorage: storage
 				? {
 						getItem: (k: string) => storage[k] ?? null,
@@ -165,6 +165,12 @@ describe('replay gate', () => {
 	it('honours the deterministic skip used by tests (FR-029)', () => {
 		expect(shouldPlay(fakeWindow(`?${SKIP_PARAM}`))).toBe(false);
 		expect(shouldPlay(fakeWindow(`?locale=en&${SKIP_PARAM}=1`))).toBe(false);
+	});
+
+	it('never plays on the connect page, an outside owner’s first visit', () => {
+		expect(shouldPlay(fakeWindow('', {}, '/en/connect'))).toBe(false);
+		expect(shouldPlay(fakeWindow('', {}, '/zh-TW/connect/'))).toBe(false);
+		expect(shouldPlay(fakeWindow('', {}, '/en/wallet'))).toBe(true);
 	});
 
 	/**

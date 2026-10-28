@@ -3,6 +3,8 @@
 # relay, wired so the web wallet's multisig flows run against real contracts.
 #
 #   GENESIS_REPO   path to safe-genesis-registry (default ../../../../production3/safe-genesis-registry)
+#   PEERCONNECT_REPO  path to peerconnect (default ../../../../production3/peerconnect): its relay carries
+#                  an outside owner's session (ws://127.0.0.1:8792)
 #   STATE          where logs and the service's database go (default ./.state)
 #
 # A second fork answers as Base (8453) on :8546: Gnosis's state under another
@@ -17,6 +19,7 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 GENESIS_REPO=${GENESIS_REPO:-"$here/../../../../../production3/safe-genesis-registry"}
+PEERCONNECT_REPO=${PEERCONNECT_REPO:-"$here/../../../../../production3/peerconnect"}
 STATE=${STATE:-"$here/.state"}
 RPC=http://127.0.0.1:8545
 UNREAD=http://127.0.0.1:8546
@@ -32,6 +35,29 @@ echo $! >"$STATE/anvil-unread.pid"
 for r in $RPC $UNREAD; do
   i=0; until cast block-number --rpc-url $r >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "anvil did not start ($r)"; exit 1; }; sleep 1; done
 done
+
+# Warm the forks: the first read of a contract fetches it from the public RPC
+# (seconds each), longer than the genesis service waits for an answer.
+warming=""
+for r in $RPC $UNREAD; do
+  for a in 0xa6B71E26C5e0845f74c812102Ca7114b6A896AB2 0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67 \
+           0x14F2982D601c9458F93bD70B218933A6f8165e7b 0x3E5c63644E683549055b9Be8653de26E0B4CD36E \
+           0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552 0x29fcB43b46531BcA003ddC8FCB67FFE91900C762 \
+           0x41675C099F32341bf84BFc5382aF534df5C7461a 0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99 \
+           0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4 0x9641d764fc13c8B624c04430C7356C1C7C8102e2 \
+           0x0000000071727De22E5E9d8BAf0edAc6f37da032 0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226 \
+           0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47 0x94a4F6affBd8975951142c3999aEAB7ecee555c2 \
+           0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526 0xA42f6c68d9e0E13ac0910837356c0A0155413E8C; do
+    cast code "$a" --rpc-url $r >/dev/null 2>&1 &
+    warming="$warming $!"
+  done
+  for f in 0xa6B71E26C5e0845f74c812102Ca7114b6A896AB2 0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67 0x14F2982D601c9458F93bD70B218933A6f8165e7b; do
+    cast call "$f" "proxyCreationCode()(bytes)" --rpc-url $r >/dev/null 2>&1 &
+    warming="$warming $!"
+  done
+done
+# Only the warm-up: a bare `wait` would wait for the forks themselves.
+for p in $warming; do wait "$p" 2>/dev/null; done
 
 fund() { for r in $RPC $UNREAD; do cast rpc anvil_setBalance "$1" 0x3635C9ADC5DEA00000 --rpc-url $r >/dev/null; done; }  # 1000 of the native coin
 # The service's sponsor (anvil #0), the relay's bundler (relay.py), and the parallel
@@ -55,16 +81,21 @@ cast send $DEPLOYER "$SALT${INITCODE#0x}" --rpc-url $RPC \
 (cd "$GENESIS_REPO" && cargo build -q -p genesis-server)
 rm -f "$STATE"/genesis.sqlite*
 REGISTRY_ADDRESS=$REGISTRY HOME_CHAIN_ID=100 \
-CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["http://127.0.0.1:8545"]}]' \
+CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["http://127.0.0.1:8545"],"txService":"https://api.safe.global/tx-service/gno"}]' \
 PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
 MAX_FEE_WEI=100000000000 LISTEN_ADDR=127.0.0.1:8787 DATABASE_PATH="$STATE/genesis.sqlite" \
 NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
   "$GENESIS_REPO/target/debug/genesis-server" >"$STATE/genesis.log" 2>&1 &
 echo $! >"$STATE/genesis.pid"
 
+# The PeerConnect relay an outside owner's wallet page and Vela meet through.
+(cd "$PEERCONNECT_REPO" && cargo build -q -p peerconnect-relay)
+PEERCONNECT_LISTEN=127.0.0.1:8792 "$PEERCONNECT_REPO/target/debug/peerconnect-relay" >"$STATE/peerconnect.log" 2>&1 &
+echo $! >"$STATE/peerconnect.pid"
+
 RPCS="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}" RELAY_PORT=8790 NO_PROXY=127.0.0.1 no_proxy=127.0.0.1 \
   python3 "$here/relay.py" >"$STATE/relay.log" 2>&1 &
 echo $! >"$STATE/relay.pid"
 
 i=0; until curl -s --noproxy '*' http://127.0.0.1:8787/api/health >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "genesis service did not start"; exit 1; }; sleep 1; done
-echo "registry $REGISTRY · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:8787 · relay http://127.0.0.1:8790 · logs $STATE"
+echo "registry $REGISTRY · peerconnect ws://127.0.0.1:8792 · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:8787 · relay http://127.0.0.1:8790 · logs $STATE"

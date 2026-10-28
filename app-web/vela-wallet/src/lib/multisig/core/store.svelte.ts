@@ -35,6 +35,12 @@ export interface MultisigAccount {
 	shared?: boolean;
 	/** The networks it is used on: where its proposals are looked for. */
 	chainIds: number[];
+	/**
+	 * The person's own name for it on this device — an imported Safe's name
+	 * from the Safe{Wallet} address book. Never part of the Safe; a name in
+	 * its genesis comes first.
+	 */
+	label?: string;
 	addedMs: number;
 }
 
@@ -142,6 +148,15 @@ class MultisigStore {
 		this.accounts = [...this.accounts, row];
 		write(this.accounts);
 		return row;
+	}
+
+	/** This device's own name for it (shown when its genesis has none). */
+	setLabel(address: string, label: string | null): void {
+		const clean = label?.trim() || undefined;
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, label: clean } : a
+		);
+		write(this.accounts);
 	}
 
 	/** Note that the multisig is used on `chainId` (its proposals are looked for there). */

@@ -7,12 +7,16 @@
 import { expect, test, type Page } from '@playwright/test';
 import { en } from '../live-helpers';
 import {
+	EOA_ONE,
+	EOA_TWO,
 	FIXTURES,
 	UNREAD_CHAIN,
 	balanceOf,
 	enterParallel,
 	setBalance,
-	useHarness
+	undeployedSafe,
+	useHarness,
+	withInjectedWallet
 } from './harness';
 
 const SHOTS = 'e2e/onchain/.shots';
@@ -286,5 +290,209 @@ test('a network the genesis service does not read: propose, approve and execute 
 	await shot(page, 'u3-executed');
 	expect((await balanceOf(RECIPIENT, UNREAD_CHAIN)) - before).toBe(5n * 10n ** 17n);
 	expect(thrown).toEqual([]);
+	await ctx.close();
+});
+
+test('an outside owner signs with their own wallet, through the connect page', async ({
+	browser
+}) => {
+	const a = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(a);
+	const page = await a.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+
+	await test.step('a 2-of-2 with a member whose wallet is MetaMask-like', async () => {
+		await page
+			.getByRole('button', { name: /Parallel One/ })
+			.first()
+			.click();
+		await page.getByRole('button', { name: 'Create multisig' }).click();
+		await page.getByPlaceholder("Member's address (0x…)").fill(EOA_ONE);
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
+		await page.getByRole('button', { name: 'Next' }).click();
+		await expect(page.getByText('2 of 2')).toBeVisible();
+		await page.getByRole('button', { name: 'Next' }).click();
+		await page.getByRole('textbox', { name: 'Name' }).fill('With MetaMask');
+		await page.getByRole('button', { name: 'Create', exact: true }).click();
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	await setBalance(multisig, 2n * 10n ** 18n);
+	await page.reload();
+	await proposeSend(page, '0.5', 'e1-propose');
+	await expect(page.getByText('1/2 approved').first()).toBeVisible();
+
+	let link = '';
+	await test.step('Vela shows the connect link for the outside owner', async () => {
+		await page.getByRole('button', { name: 'Sign with another wallet' }).click();
+		link = (await page.getByTestId('external-link').textContent())!.trim();
+		expect(link).toMatch(/\/en\/connect#ws/);
+		await expect(page.getByTestId('external-status')).toContainText('Waiting for the wallet page');
+		await shot(page, 'e2-external-sheet');
+	});
+
+	const b = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await withInjectedWallet(b, EOA_ONE);
+	const walletPage = await b.newPage();
+	const thrownB = errors(walletPage);
+	await test.step('the owner opens it where their wallet is, connects, and it signs', async () => {
+		await walletPage.goto(link);
+		await expect(walletPage.getByText('Vela asks to use this wallet')).toBeVisible({
+			timeout: 30_000
+		});
+		await shot(walletPage, 'e3-connect-ask');
+		await walletPage.getByRole('button', { name: 'Connect', exact: true }).click();
+		await expect(walletPage.getByTestId('connect-connected')).toBeVisible({ timeout: 30_000 });
+		// Vela checks the signature and hands it to the mailbox: the sheet closes, both approved.
+		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
+		await shot(walletPage, 'e4-connect-done');
+		await shot(page, 'e5-approved');
+	});
+
+	await test.step('the Vela member executes with both signatures', async () => {
+		const before = await balanceOf(RECIPIENT);
+		await page.getByRole('button', { name: /^Execute|Approve and execute/ }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		expect((await balanceOf(RECIPIENT)) - before).toBe(5n * 10n ** 17n);
+		await shot(page, 'e6-executed');
+	});
+
+	expect(thrown).toEqual([]);
+	expect(thrownB).toEqual([]);
+	await a.close();
+	await b.close();
+});
+
+/** A public Safe v1.3.0 on Gnosis (the genesis registry's fixtures): its owners changed since. */
+const PUBLIC_SAFE = '0xA42f6c68d9e0E13ac0910837356c0A0155413E8C';
+
+/**
+ * Sign through the connect page in a fresh browser holding `owner`'s wallet,
+ * from the link Vela's sheet shows.
+ */
+async function signElsewhere(
+	browser: import('@playwright/test').Browser,
+	vela: Page,
+	owner: string,
+	name: string
+): Promise<string[]> {
+	const link = (await vela.getByTestId('external-link').textContent())!.trim();
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await withInjectedWallet(ctx, owner);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await page.goto(link);
+	await page.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 });
+	await expect(page.getByTestId('connect-connected')).toBeVisible({ timeout: 30_000 });
+	await expect(vela.getByTestId('external-link')).toHaveCount(0, { timeout: 60_000 });
+	await shot(page, name);
+	await ctx.close();
+	return thrown;
+}
+
+test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed and executed', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+
+	// An export as Safe{Wallet} writes it: a deployed Safe, an undeployed one, the address book.
+	const vault = await undeployedSafe([EOA_ONE, EOA_TWO], 2, String(Date.now()));
+	const file = test.info().outputPath('safe-export.json');
+	const { writeFileSync } = await import('node:fs');
+	writeFileSync(
+		file,
+		JSON.stringify({
+			version: '3.0',
+			data: {
+				addedSafes: {
+					'100': {
+						[PUBLIC_SAFE]: {
+							owners: [{ value: '0xe8460717Cf006b9482BEabb31d2f23B710caB2C0' }],
+							threshold: 1
+						}
+					}
+				},
+				undeployedSafes: {
+					'100': {
+						[vault.address]: {
+							props: vault.props,
+							status: { status: 'AWAITING_EXECUTION', type: 'PayLater' }
+						}
+					}
+				},
+				addressBook: { '100': { [PUBLIC_SAFE]: 'Public treasury', [vault.address]: 'EOA vault' } },
+				settings: {}
+			}
+		})
+	);
+
+	await test.step('import both', async () => {
+		await page
+			.getByRole('button', { name: /Parallel One/ })
+			.first()
+			.click();
+		await page.getByRole('button', { name: 'Add multisig' }).click();
+		await page.locator('input[type=file]').setInputFiles(file);
+		await expect(page.getByText('Choose the Safes to import')).toBeVisible();
+		await expect(page.getByText('Public treasury')).toBeVisible();
+		await expect(page.getByText('EOA vault')).toBeVisible();
+		await shot(page, 'i1-pick');
+		await page.getByRole('button', { name: 'Import 2' }).click();
+		await expect(page.getByText('Imported', { exact: true })).toHaveCount(2, { timeout: 90_000 });
+		await shot(page, 'i2-imported');
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+
+	await test.step('the undeployed one: fund it and send, no owner on this device', async () => {
+		await page
+			.getByRole('button', { name: /Parallel One|EOA vault|Public treasury/ })
+			.first()
+			.click();
+		await page
+			.getByRole('button', { name: /EOA vault/ })
+			.first()
+			.click();
+		await expect(page.getByText('EOA vault', { exact: true }).first()).toBeVisible();
+		await setBalance(vault.address, 2n * 10n ** 18n);
+		await page.reload();
+		await proposeSend(page, '0.5', 'i3-propose');
+		// No owner here: the proposer's approval comes from an outside wallet.
+		await expect(page.getByTestId('external-link')).toBeVisible({ timeout: 30_000 });
+		// On top of the send flow, all of it on screen.
+		await expect(page.getByTestId('external-link')).toBeInViewport();
+		await expect(page.getByRole('button', { name: 'Copy link' })).toBeInViewport();
+		await shot(page, 'i4-external-first');
+	});
+
+	const thrownOne = await signElsewhere(browser, page, EOA_ONE, 'i5-signed-one');
+	await expect(page.getByText('1/2 approved').first()).toBeVisible({ timeout: 60_000 });
+
+	await test.step('the second owner signs from another wallet', async () => {
+		await page.getByRole('button', { name: 'Sign with another wallet' }).first().click();
+		await expect(page.getByTestId('external-link')).toBeVisible();
+	});
+	const thrownTwo = await signElsewhere(browser, page, EOA_TWO, 'i6-signed-two');
+	await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
+
+	await test.step('a Vela account that is no owner executes, deploying the Safe', async () => {
+		const before = await balanceOf(RECIPIENT);
+		await page.getByRole('button', { name: /^Execute/ }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		expect((await balanceOf(RECIPIENT)) - before).toBe(5n * 10n ** 17n);
+		await shot(page, 'i7-executed');
+	});
+
+	expect(thrown).toEqual([]);
+	expect(thrownOne).toEqual([]);
+	expect(thrownTwo).toEqual([]);
 	await ctx.close();
 });
