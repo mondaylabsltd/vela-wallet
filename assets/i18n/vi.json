@@ -246,7 +246,9 @@
    "keeps": "Ví vẫn còn: passkey do nhà cung cấp passkey của bạn giữ, không nằm trong ứng dụng này — đăng nhập lại và cùng một địa chỉ sẽ trở lại. Không bị xoá: Vela Relay lưu giao dịch đã gửi tối đa 14 ngày, chỉ mục khoá lưu thông tin đăng ký tối đa 30 ngày, và bản ghi khoá công khai trên chain là vĩnh viễn; không ai có thể xoá.",
    "confirm": "Xoá tất cả",
    "cancel": "Hủy",
-   "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại."
+   "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại.",
+   "unsynced": "Chưa đồng bộ xong: {{names}}. Khi chưa đồng bộ, không thiết bị nào khác tìm thấy ví này — xoá ngay bây giờ có thể làm mất ví vĩnh viễn.",
+   "unsyncedAck": "Tôi hiểu rằng ví chưa đồng bộ có thể bị mất vĩnh viễn"
   },
   "formatNote": {
    "system": "Hệ thống",
@@ -1227,9 +1229,10 @@
    "successMessage_one": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
    "successMessage_other": "Chỉ cần một khoá là đăng nhập được. Hợp đồng triển khai ở giao dịch đầu tiên.",
    "successTitle": "Đã tạo ví",
-   "syncFailedHint": "Hãy giữ trang này mở: Vela sẽ tự thử lại khi có kết nối, hoặc chạm Tải lên lại. Rời đi hoặc tải lại trang lúc này sẽ bỏ ví này.",
-   "syncFailedMessage": "Passkey đã được tạo, nhưng ví chưa đăng ký được với chỉ mục passkey của Vela nên chưa được lưu trên thiết bị này.",
-   "syncFailedTitle": "Chưa được lưu",
+   "syncFailedHint": "Vela sẽ tự thử lại — ngay bây giờ, khi có kết nối trở lại và mỗi lần bạn mở ứng dụng — cho đến khi thành công. Trong lúc đó bạn vẫn có thể vào ví.",
+   "syncFailedMessage": "Ví đã được lưu ở đây, nhưng chưa được đăng ký với chỉ mục passkey của Vela nên các thiết bị khác chưa tìm thấy được.",
+   "syncFailedNext": "Thử lại sau {{seconds}} giây",
+   "syncFailedTitle": "Đã lưu trên thiết bị này",
    "taskDeriveAddress": "Suy ra địa chỉ tài khoản",
    "taskVerifyKey": "Kiểm tra khoá công khai của passkey",
    "taskWriteIndex": "Ghi chỉ mục khoá",

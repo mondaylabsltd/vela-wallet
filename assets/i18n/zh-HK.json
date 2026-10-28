@@ -246,7 +246,9 @@
    "keeps": "錢包仍然存在：通行密鑰由你的通行密鑰提供者保管，不在此應用程式內——重新登入，同一個地址便會恢復。不會被清除的：Vela Relay 最多保留已送出的交易 14 日，密鑰索引最多保留註冊資料 30 日；鏈上的公鑰記錄會永久存在，任何人都無法刪除。",
    "confirm": "全部清除",
    "cancel": "取消",
-   "failed": "清除未完成。此裝置上仍有資料，你亦仍處於登入狀態——請再試一次。"
+   "failed": "清除未完成。此裝置上仍有資料，你亦仍處於登入狀態——請再試一次。",
+   "unsynced": "尚未完成同步：{{names}}。錢包同步完成前，其他裝置都找不到它——現在清除可能會永久失去它。",
+   "unsyncedAck": "我明白未同步的錢包可能會永久遺失"
   },
   "formatNote": {
    "system": "系統",
@@ -1227,9 +1229,10 @@
    "successMessage_one": "你的密鑰可獨立登入。合約會在第一筆交易時才部署。",
    "successMessage_other": "你的密鑰可獨立登入。合約會在第一筆交易時才部署。",
    "successTitle": "錢包建立完成",
-   "syncFailedHint": "請保持此頁面開啟：網絡恢復後 Vela 會自動重試，你亦可按「重試上載」。如現在離開或重新載入，此錢包將被捨棄。",
-   "syncFailedMessage": "通行密鑰已建立，但錢包未能登記至 Vela 的通行密鑰索引，因此尚未儲存在此裝置。",
-   "syncFailedTitle": "尚未儲存",
+   "syncFailedHint": "Vela 會自動重試——現在、網絡恢復時，以及每次開啟時——直至登記成功。期間你可以先進入錢包。",
+   "syncFailedMessage": "錢包已儲存在這裏，但尚未登記至 Vela 的通行密鑰索引，其他裝置暫時找不到它。",
+   "syncFailedNext": "{{seconds}} 秒後重試",
+   "syncFailedTitle": "已儲存在此裝置",
    "taskDeriveAddress": "正在推導帳戶地址",
    "taskVerifyKey": "正在驗證通行密鑰的公鑰",
    "taskWriteIndex": "正在寫入密鑰索引",

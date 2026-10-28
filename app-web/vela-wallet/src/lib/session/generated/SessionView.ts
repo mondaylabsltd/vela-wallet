@@ -2,6 +2,7 @@
 import type { SessionAccountRow } from "./SessionAccountRow";
 import type { SessionRoute } from "./SessionRoute";
 import type { SessionSignOutView } from "./SessionSignOutView";
+import type { SessionUnsynced } from "./SessionUnsynced";
 
 export type SessionView = { 
 /**
@@ -24,4 +25,11 @@ sign_out: SessionSignOutView | null,
  * rather than look signed out. Nothing was written: the list is where it
  * was. Clears once a wallet is established.
  */
-accounts_unreadable: boolean, };
+accounts_unreadable: boolean, 
+/**
+ * ob-2: the wallets on this device whose registration has not finished —
+ * no other device can find them yet. Named, so the screens that could
+ * lose one (erasing this device) say WHICH; empty once every record has
+ * landed. As of the landing watch's last read of the outbox.
+ */
+unsynced: Array<SessionUnsynced>, };
