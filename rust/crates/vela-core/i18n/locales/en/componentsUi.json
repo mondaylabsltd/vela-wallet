@@ -316,7 +316,7 @@
         "contractUnnamed": "Contract · {{address}} · no name known",
         "contractNoCode": "Contract · {{address}} · no code here",
         "contradiction": "A description calls this “{{words}}” — that is not what the transaction does",
-        "noCode": "No contract at this address on {{chain}} — the call does nothing but send what it sends",
+        "noCode": "No contract at this address on {{chain}}: nothing runs there, and any coin sent simply goes to the address",
         "elsewhere": "Goes to an address that is not this account",
         "dustMinimum": "The least this accepts back is almost nothing — a bad price would not be refused",
         "tokenByContract": "{{symbol}} · {{address}} — name given by the token's own contract",
