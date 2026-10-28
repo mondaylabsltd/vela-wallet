@@ -885,10 +885,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `home.multisig.proposal.hash`, the label safeTxHash went without; + 1
 //   `componentsTx.receipt.copyHash` (a hash's copy button said "Copy
 //   address"). 2046 + 4 + 3 + 1 + 1 = 2055 leaves, 116 branches.
-// 2178 (both of the above, 2026-10-28): 2046 + 7 + 9 = 2062 leaves, 116 branches.
-if (PATHS.length !== 2178) fail(`expected 2178 paths (2062 leaf + 116 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2062) fail(`expected 2062 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 116) fail(`expected 116 branch paths, got ${branchSet.size}`);
+// 2180 (the agent, after its exploratory test, 2026-10-28): + 16
+//   `settings.agent` words — another tab answering it and taking it back,
+//   an approval's detail in the person's words and punctuation
+//   (`settings.agent.detail`, a new branch), the last action's outcome — and
+//   `send.draftedByAgent`, the review's marker. 2046 + 17 = 2063 leaves,
+//   116 + 1 = 117 branches.
+// 2196 (all three of the above, 2026-10-28): 2046 + 7 + 9 + 17 = 2079 leaves,
+//   117 branches.
+if (PATHS.length !== 2196) fail(`expected 2196 paths (2079 leaf + 117 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2079) fail(`expected 2079 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 117) fail(`expected 117 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

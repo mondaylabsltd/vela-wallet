@@ -167,6 +167,7 @@
     "txCloseBackground": "Đóng · vẫn chạy tiếp",
     "txSubmittedTitle": "Đã gửi lên mạng",
     "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}",
-    "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại."
+    "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại.",
+    "draftedByAgent": "Do tác nhân AI của bạn soạn"
   }
 }

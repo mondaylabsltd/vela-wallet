@@ -204,7 +204,25 @@
       "clientId": "Client {{id}}",
       "wallets": "智能体可使用的钱包",
       "walletsHint": "智能体只能查看和操作你在这里打开的钱包。",
-      "walletsNone": "至少打开一个钱包，智能体才能工作。"
+      "walletsNone": "至少打开一个钱包，智能体才能工作。",
+      "statusElsewhere": "正在另一个标签页中使用",
+      "useHere": "在此使用",
+      "approveLine": "{{action}}——{{detail}}。{{hint}}",
+      "approveAction": "{{action}}。{{hint}}",
+      "detailPair": "{{label}}：{{value}}",
+      "statusOn": "已开启",
+      "chain": "网络 {{id}}",
+      "lastDone": "已完成",
+      "lastRefused": "未完成",
+      "lastWaiting": "进行中",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "区块浏览器",
+        "ethereumData": "链数据索引",
+        "passkeyIndex": "通行密钥索引",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "法币汇率"
+      }
     },
     "about": {
       "title": "关于",

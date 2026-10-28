@@ -369,7 +369,11 @@
 	<ReportToastHost />
 
 	{#if agent !== null && agentMessages !== undefined}
-		<agent.Layer messages={agentMessages} status={agent.bridge.status} />
+		<agent.Layer
+			messages={agentMessages}
+			status={agent.bridge.status}
+			onusehere={() => agent?.bridge.useHere()}
+		/>
 	{/if}
 
 	{#if launching}

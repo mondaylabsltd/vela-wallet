@@ -204,7 +204,25 @@
    "clientId": "クライアント {{id}}",
    "wallets": "エージェントが使えるウォレット",
    "walletsHint": "エージェントは、ここでオンにしたウォレットだけを確認・操作できます。",
-   "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。"
+   "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。",
+   "statusElsewhere": "別のタブで使用中",
+   "useHere": "ここで使う",
+   "approveLine": "{{action}}：{{detail}}。{{hint}}",
+   "approveAction": "{{action}}。{{hint}}",
+   "detailPair": "{{label}}：{{value}}",
+   "statusOn": "オン",
+   "chain": "ネットワーク {{id}}",
+   "lastDone": "完了",
+   "lastRefused": "実行されませんでした",
+   "lastWaiting": "進行中",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "エクスプローラー",
+    "ethereumData": "チェーンデータインデックス",
+    "passkeyIndex": "パスキーインデックス",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "法定通貨レート"
+   }
   },
   "about": {
    "title": "このアプリについて",
@@ -753,7 +771,8 @@
   "txCloseBackground": "閉じる · バックグラウンドで続行",
   "txSubmittedTitle": "ネットワークに送信しました",
   "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
-  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
+  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。",
+  "draftedByAgent": "AIエージェントが作成"
  },
  "receive": {
   "title": "受け取る",

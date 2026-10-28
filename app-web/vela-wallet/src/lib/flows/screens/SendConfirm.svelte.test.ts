@@ -154,6 +154,17 @@ describe('SendConfirm — the failed fee line does what it says (PR 2 polish)', 
 		expect(calls).toEqual(['fee-coins']);
 	});
 
+	it('says on the review itself that the AI agent drafted it — on every size', async () => {
+		const { screen } = await drawn(model({ drafted: 'Drafted by your AI agent' }));
+		const tag = screen.container.querySelector('[data-testid="send-drafted-by-agent"]');
+		expect(tag?.textContent).toBe('Drafted by your AI agent');
+		expect(getComputedStyle(tag as Element).display).not.toBe('none');
+		screen.unmount();
+		const { screen: own } = await drawn(model());
+		expect(own.container.querySelector('[data-testid="send-drafted-by-agent"]')).toBeNull();
+		own.unmount();
+	});
+
 	it('a dash with nothing behind it — and every settled fee — is a fact, never pressable', async () => {
 		for (const fee of [{ value: '—' }, {}]) {
 			const { screen, calls } = await drawn(model({}, fee));

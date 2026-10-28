@@ -568,6 +568,8 @@ export interface AgentPanelModel {
 	token: UrlFieldModel;
 	/** The connection, as the bridge last said. */
 	status: StatusPillModel;
+	/** Another tab of this wallet has the agent: the button that takes it back here. */
+	useHere?: string;
 	/** Where the agent connects, derived from the bridge address — absent until it parses. */
 	endpoint?: { label: string; value: string; hint: string };
 	/** The control the agent pressed last. */

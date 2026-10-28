@@ -71,7 +71,12 @@ export const intents = new Intents({
 					agent_enabled: seen.agent.enabled,
 					wallets: seen.agent.wallets,
 					// The account on screen: a multisig shown is the agent's wallet too.
-					wallet: shownAddress(seen.session?.address ?? '')
+					wallet: shownAddress(seen.session?.address ?? ''),
+					// Every wallet here: what an erase takes with it.
+					device_wallets: [
+						...(seen.session?.accounts ?? []).map((row) => row.account.address),
+						...seen.multisigs.map((m) => m.address)
+					]
 				})
 			)
 		) as IntentCheck,

@@ -12,60 +12,53 @@
 	 *   uses); turning it back on is in Settings.
 	 */
 	import { untrack } from 'svelte';
+	import { page } from '$app/state';
 	import type { IntentAction } from '$lib/core/generated/IntentAction';
 	import { intentApprovalDetailIn } from '$lib/core/client';
 	import { worldJson } from '$lib/intents/world';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { intents, world } from '$lib/intents/index.svelte';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import { session } from '$lib/session/core/session.svelte';
+	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
+	import { feed } from '$lib/wallet/core/feed.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import type { Status } from './clientmcp';
+	import { approvalDetail, approvalMessage } from './detail';
 	import type { AgentMessages } from './messages';
 
 	interface Props {
 		messages: AgentMessages;
-		status: Status | 'off';
+		status: Status | 'off' | 'elsewhere';
+		/** Take the agent back into this tab from the one that has it. */
+		onusehere?: () => void;
 	}
 
-	let { messages, status }: Props = $props();
+	let { messages, status, onusehere }: Props = $props();
 
 	const name = (type: string) => messages.actions[type] ?? type;
-	const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 	/**
-	 * What the request names, as the person knows it: a contact's or wallet's
-	 * name — and, the core's, the network, URL or record it changes.
+	 * What the request names, as the person knows it: a contact's, wallet's
+	 * or network's name, a setting as Settings says it — and, the core's, the
+	 * wallets a switch moves between.
 	 */
 	function detail(action: IntentAction): string | null {
-		switch (action.type) {
-			case 'delete_contact': {
-				const known = contactsBook.view?.contacts.find((c) => same(c.address, action.address));
-				return known?.name ?? action.address;
-			}
-			case 'delete_group':
-				return contactsBook.view?.groups.find((g) => g.id === action.id)?.name ?? action.id;
-			case 'remove_wallet': {
-				const row = session.view.accounts.find((r) => same(r.account.address, action.address));
-				return row ? `${row.account.name} · ${action.address}` : action.address;
-			}
-			case 'clear_storage_item':
-				return action.item;
-			case 'set_preference':
-				return `${action.preference.kind}: ${String(action.preference.value)}`;
-			case 'set_network_space': {
-				const words = networkSpace.words;
-				if (!words) return action.space;
-				return action.space === 'testnet' ? words.testnet : words.mainnet;
-			}
-			case 'set_balance_privacy':
-				return action.hidden ? messages.hideBalance : messages.showBalance;
-			default:
-				// The core's, read against the wallet: the wallet a switch leaves
-				// and the one it goes to (spec 107).
-				return JSON.parse(intentApprovalDetailIn(JSON.stringify(action), worldJson(world()))) as
-					string | null;
-		}
+		const book = contactsBook.view;
+		const net = networkAdmin.view;
+		const checking = net.wizard.chain_info;
+		return approvalDetail(action, {
+			messages,
+			locale: page.params.locale ?? 'en',
+			contacts: book?.contacts ?? [],
+			groups: book?.groups ?? [],
+			networks: net.networks,
+			checking: checking ? { chain_id: checking.chain_id, name: checking.name } : null,
+			records: feed.view.transactions,
+			space: networkSpace.words,
+			core: (request) =>
+				JSON.parse(intentApprovalDetailIn(JSON.stringify(request), worldJson(world()))) as
+					string | null
+		});
 	}
 
 	const pending = $derived(intents.approvals[0]);
@@ -109,7 +102,15 @@
 	}
 </script>
 
-{#if status === 'online' || pending !== undefined}
+{#if status === 'elsewhere' && pending === undefined}
+	<!-- Another tab of this wallet answers the agent: said here on every
+	     size, with the way to take it back. -->
+	<div class="bar" role="status" data-testid="agent-bar">
+		<span class="dot elsewhere" aria-hidden="true"></span>
+		<span class="note" data-testid="agent-elsewhere">{messages.elsewhere}</span>
+		<button type="button" class="here" onclick={() => onusehere?.()}>{messages.useHere}</button>
+	</div>
+{:else if status === 'online' || pending !== undefined}
 	<div class="bar" role="status" data-testid="agent-bar">
 		<span class="dot" class:busy={latest?.stage != null} aria-hidden="true"></span>
 		<span class="who">{messages.title}</span>
@@ -127,7 +128,7 @@
 		<PromptSheet
 			copy={{
 				title: messages.approveTitle,
-				message: `${name(pending.action.type)}${what === null ? '' : ` — ${what}`}. ${messages.approveHint}`,
+				message: approvalMessage(name(pending.action.type), what, messages),
 				confirm: { confirmLabel: messages.allow, cancelLabel: messages.deny }
 			}}
 			dismissLabel={messages.deny}
@@ -188,6 +189,32 @@
 	.who {
 		font-weight: var(--weight-semibold);
 		white-space: nowrap;
+	}
+
+	.dot.elsewhere {
+		background: var(--color-fg-subtle);
+	}
+
+	/* Another tab has the agent: the one line this tab says, on every size. */
+	.note {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--color-fg-muted);
+	}
+
+	.here {
+		flex-shrink: 0;
+		min-height: var(--size-control-sm);
+		padding-inline: var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-base);
+		color: var(--color-fg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		cursor: pointer;
 	}
 
 	.what {

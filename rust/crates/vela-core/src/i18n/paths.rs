@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2178 paths = 2062 leaf + 116 branch. Repeated per locale these key bytes
-//! would cost 881985 bytes; interned once they cost 60981.
+//! 2196 paths = 2079 leaf + 117 branch. Repeated per locale these key bytes
+//! would cost 888855 bytes; interned once they cost 61460.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2178] = [
+pub(crate) static PATHS: [&str; 2196] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -1705,6 +1705,7 @@ pub(crate) static PATHS: [&str; 2178] = [
     "send.confirmTotalLine",
     "send.continueBtn",
     "send.denomToggleNoRate",
+    "send.draftedByAgent",
     "send.estFeeLabel",
     "send.estimatingFee",
     "send.feeRefresh",
@@ -1882,11 +1883,14 @@ pub(crate) static PATHS: [&str; 2178] = [
     "settings.agent.agentAddress",
     "settings.agent.agentAddressHint",
     "settings.agent.allow",
+    "settings.agent.approveAction",
     "settings.agent.approveHint",
+    "settings.agent.approveLine",
     "settings.agent.approveTitle",
     "settings.agent.bridge",
     "settings.agent.bridgeHint",
     "settings.agent.bridgeInvalid",
+    "settings.agent.chain",
     "settings.agent.clientId",
     "settings.agent.connect",
     "settings.agent.connectAgent",
@@ -1898,12 +1902,23 @@ pub(crate) static PATHS: [&str; 2178] = [
     "settings.agent.copy",
     "settings.agent.deny",
     "settings.agent.description",
+    "settings.agent.detail",
+    "settings.agent.detail.bundlerService",
+    "settings.agent.detail.ethereumData",
+    "settings.agent.detail.explorer",
+    "settings.agent.detail.fiatRates",
+    "settings.agent.detail.passkeyIndex",
+    "settings.agent.detail.rpc",
+    "settings.agent.detailPair",
     "settings.agent.disconnect",
     "settings.agent.enable",
     "settings.agent.endpoint",
     "settings.agent.endpointHint",
     "settings.agent.hide",
     "settings.agent.lastAction",
+    "settings.agent.lastDone",
+    "settings.agent.lastRefused",
+    "settings.agent.lastWaiting",
     "settings.agent.linkExpired",
     "settings.agent.linkFailed",
     "settings.agent.linkNetwork",
@@ -1916,8 +1931,10 @@ pub(crate) static PATHS: [&str; 2178] = [
     "settings.agent.share",
     "settings.agent.show",
     "settings.agent.statusConnecting",
+    "settings.agent.statusElsewhere",
     "settings.agent.statusOff",
     "settings.agent.statusOffline",
+    "settings.agent.statusOn",
     "settings.agent.statusOnline",
     "settings.agent.statusRefused",
     "settings.agent.stop",
@@ -1925,6 +1942,7 @@ pub(crate) static PATHS: [&str; 2178] = [
     "settings.agent.title",
     "settings.agent.token",
     "settings.agent.tokenHint",
+    "settings.agent.useHere",
     "settings.agent.wallets",
     "settings.agent.walletsHint",
     "settings.agent.walletsNone",
@@ -2193,7 +2211,7 @@ pub(crate) static PATHS: [&str; 2178] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 273] = [
+pub(crate) static IS_BRANCH: [u8; 275] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00,
     0x00, 0x00, 0x01, 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x22, 0x84, 0x00, 0x00,
     0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x85, 0x44, 0x08, 0x00, 0x00, 0x40, 0x20, 0x04, 0x14,
@@ -2207,15 +2225,15 @@ pub(crate) static IS_BRANCH: [u8; 273] = [
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x40, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x20, 0x04, 0x00, 0xc0, 0x49, 0x92,
     0x84, 0x00, 0x40, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x80, 0x09, 0x01, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
-    0x04, 0x08, 0x01, 0x92, 0x10, 0x01, 0x02, 0x81, 0x00, 0x01, 0x80, 0x00, 0x00, 0x00, 0x10, 0xc0,
-    0x10, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x22, 0x00, 0x02, 0x20, 0x00, 0x02, 0x01, 0x04, 0x01,
-    0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x13, 0x02, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x12, 0x20, 0x04, 0x48, 0x42, 0x04, 0x08, 0x04, 0x02, 0x04, 0x00, 0x02, 0x00, 0x00,
+    0x40, 0x00, 0x43, 0x00, 0x00, 0x00, 0x08, 0x04, 0x00, 0x88, 0x00, 0x08, 0x80, 0x00, 0x08, 0x04,
+    0x10, 0x04, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2178;
+pub(crate) const N_PATHS: usize = 2196;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

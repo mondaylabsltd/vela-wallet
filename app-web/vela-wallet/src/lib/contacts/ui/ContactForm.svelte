@@ -13,7 +13,7 @@
 	 */
 	import NameField from '$lib/ui/onboarding/NameField.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import type { ContactDraft, ContactFormCopy } from '../forms';
+	import { cleanName, NAME_MAX_CHARS, type ContactDraft, type ContactFormCopy } from '../forms';
 
 	interface Props {
 		copy: ContactFormCopy;
@@ -35,12 +35,12 @@
 	const editing = initial !== undefined;
 	/** The core's `is_address` shape: 0x + 40 hex. */
 	const validAddress = $derived(/^0x[0-9a-fA-F]{40}$/.test(address.trim()));
-	const canSave = $derived(validAddress && name.trim() !== '');
+	const canSave = $derived(validAddress && cleanName(name) !== '');
 
 	function save() {
 		touched = true;
 		if (!canSave) return;
-		onsave({ name: name.trim(), address: address.trim() });
+		onsave({ name: cleanName(name), address: address.trim() });
 	}
 </script>
 
@@ -49,6 +49,7 @@
 		label={copy.nameLabel}
 		placeholder={copy.namePlaceholder}
 		value={name}
+		maxlength={NAME_MAX_CHARS}
 		oninput={(next) => (name = next)}
 	/>
 	{#if editing}

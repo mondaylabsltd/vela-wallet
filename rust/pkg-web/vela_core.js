@@ -4415,6 +4415,30 @@ export function inFlightOps(track_view_json) {
 }
 
 /**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+ * @param {string} world_json
+ * @param {string | null} [operation]
+ * @returns {string}
+ */
+export function intentAgentReads(world_json, operation) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(world_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(operation) ? 0 : passStringToWasm0(operation, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.intentAgentReads(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * `vela_state`: the wallet as an agent reads it.
  * @param {string} world_json
  * @param {string} page

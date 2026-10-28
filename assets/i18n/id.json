@@ -204,7 +204,25 @@
    "clientId": "Klien {{id}}",
    "wallets": "Dompet yang boleh dipakai agen",
    "walletsHint": "Agen hanya melihat dan bertindak di dompet yang Anda aktifkan di sini.",
-   "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja."
+   "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja.",
+   "statusElsewhere": "Sedang dipakai di tab lain",
+   "useHere": "Pakai di sini",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Nyala",
+   "chain": "Jaringan {{id}}",
+   "lastDone": "Selesai",
+   "lastRefused": "Tidak dilakukan",
+   "lastWaiting": "Sedang berjalan",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Penjelajah",
+    "ethereumData": "Indeks data chain",
+    "passkeyIndex": "Indeks passkey",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Kurs fiat"
+   }
   },
   "about": {
    "title": "Tentang",
@@ -753,7 +771,8 @@
   "txCloseBackground": "Tutup · tetap jalan",
   "txSubmittedTitle": "Terkirim ke jaringan",
   "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
-  "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan."
+  "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan.",
+  "draftedByAgent": "Disusun oleh agen AI Anda"
  },
  "receive": {
   "title": "Terima",

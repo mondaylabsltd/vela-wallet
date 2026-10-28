@@ -58,6 +58,8 @@
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
 	import { agentSettings, bridgeUrlProblem, mcpEndpoint } from '$lib/agent/settings.svelte';
 	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
+	import type { AgentMessages } from '$lib/agent/messages';
+	import { page } from '$app/state';
 	import { fill } from '$lib/wallet/messages';
 	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
 	import {
@@ -496,6 +498,9 @@
 				});
 				return;
 			}
+			case 'agent-use-here':
+				agentBridge?.useHere();
+				return;
 			case 'agent-unlink':
 				// Forgotten here; the client stays on clientmcp.dev until deleted there.
 				configureAgent({ enabled: false, bridge_url: '', client_token: '' });
@@ -672,6 +677,9 @@
 				return { tone: 'warn', label: a.statusOffline, dot: true };
 			case 'closed':
 				return { tone: 'error', label: a.statusRefused, dot: true };
+			// Another tab of this wallet answers the agent (the bridge keeps one).
+			case 'elsewhere':
+				return { tone: 'neutral', label: a.statusElsewhere, dot: true };
 			default:
 				return { tone: 'accent', label: a.statusConnecting, dot: true };
 		}
@@ -682,12 +690,18 @@
 		const url = agentSettings.url;
 		const invalid = url.trim() !== '' && bridgeUrlProblem(url) !== null;
 		const endpoint = mcpEndpoint(url);
-		// The agent's latest call, by its action's name and how it ended.
+		// The agent's latest call, by its action's name and how it ended — in
+		// words, as the bar and the approval name it.
 		const latest = intents.activity[0];
+		const names = (page.data as { agent?: AgentMessages } | undefined)?.agent?.actions;
+		const ended =
+			latest?.outcome == null
+				? a.lastWaiting
+				: latest.outcome.status === 'rejected'
+					? a.lastRefused
+					: a.lastDone;
 		const last =
-			latest === undefined
-				? null
-				: `${latest.action} · ${latest.outcome?.status === 'rejected' ? latest.outcome.reason.code : (latest.outcome?.status ?? latest.stage ?? '')}`;
+			latest === undefined ? null : `${names?.[latest.action] ?? latest.action} · ${ended}`;
 		return {
 			title: a.title,
 			description: a.description,
@@ -713,6 +727,7 @@
 				secret: true
 			},
 			status: agentStatus,
+			useHere: agentBridge?.status === 'elsewhere' ? a.useHere : undefined,
 			endpoint:
 				endpoint === null
 					? undefined

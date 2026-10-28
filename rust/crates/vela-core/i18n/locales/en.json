@@ -204,7 +204,25 @@
       "clientId": "Client {{id}}",
       "wallets": "Wallets the agent may use",
       "walletsHint": "The agent sees and acts only in the wallets you turn on here.",
-      "walletsNone": "Turn on at least one wallet for the agent to work."
+      "walletsNone": "Turn on at least one wallet for the agent to work.",
+      "statusElsewhere": "In use in another tab",
+      "useHere": "Use here",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "On",
+      "chain": "Network {{id}}",
+      "lastDone": "Done",
+      "lastRefused": "Not done",
+      "lastWaiting": "In progress",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Explorer",
+        "ethereumData": "Chain data index",
+        "passkeyIndex": "Passkey index",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Fiat rates"
+      }
     },
     "about": {
       "title": "About",

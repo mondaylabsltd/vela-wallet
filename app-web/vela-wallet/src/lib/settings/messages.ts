@@ -64,7 +64,12 @@ export interface SettingsMessages {
 		| 'statusOnline'
 		| 'statusOffline'
 		| 'statusRefused'
+		| 'statusElsewhere'
+		| 'useHere'
 		| 'lastAction'
+		| 'lastDone'
+		| 'lastRefused'
+		| 'lastWaiting'
 		// Spec 106: connecting with clientmcp.dev.
 		| 'connect'
 		| 'connectHint'
@@ -798,7 +803,12 @@ export const SETTINGS_KEYS = [
 	'settings.agent.statusOnline',
 	'settings.agent.statusOffline',
 	'settings.agent.statusRefused',
+	'settings.agent.statusElsewhere',
+	'settings.agent.useHere',
 	'settings.agent.lastAction',
+	'settings.agent.lastDone',
+	'settings.agent.lastRefused',
+	'settings.agent.lastWaiting',
 	'settings.agent.connect',
 	'settings.agent.connectHint',
 	'settings.agent.connecting',

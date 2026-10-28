@@ -459,7 +459,12 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			statusOnline: k('settings.agent.statusOnline'),
 			statusOffline: k('settings.agent.statusOffline'),
 			statusRefused: k('settings.agent.statusRefused'),
+			statusElsewhere: k('settings.agent.statusElsewhere'),
+			useHere: k('settings.agent.useHere'),
 			lastAction: k('settings.agent.lastAction'),
+			lastDone: k('settings.agent.lastDone'),
+			lastRefused: k('settings.agent.lastRefused'),
+			lastWaiting: k('settings.agent.lastWaiting'),
 			connect: k('settings.agent.connect'),
 			connectHint: k('settings.agent.connectHint'),
 			connecting: k('settings.agent.connecting'),
@@ -1022,16 +1027,69 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
 	const action = (name: string) => k(`settings.agent.action.${name}`);
+	const detail = (name: string) => k(`settings.agent.detail.${name}`);
 	return {
 		title: k('settings.agent.title'),
 		connected: k('settings.agent.statusOnline'),
+		elsewhere: k('settings.agent.statusElsewhere'),
+		useHere: k('settings.agent.useHere'),
 		approveTitle: k('settings.agent.approveTitle'),
 		approveHint: k('settings.agent.approveHint'),
+		approveLine: k('settings.agent.approveLine'),
+		approveAction: k('settings.agent.approveAction'),
+		pair: k('settings.agent.detailPair'),
 		allow: k('settings.agent.allow'),
 		deny: k('settings.agent.deny'),
 		stop: k('settings.agent.stop'),
 		showBalance: k('home.a11yShowBalance'),
 		hideBalance: k('home.a11yHideBalance'),
+		on: k('settings.agent.statusOn'),
+		off: k('settings.agent.statusOff'),
+		chain: k('settings.agent.chain'),
+		// As Settings names them, so the request and the page it changes agree.
+		preferences: {
+			theme: k('settings.appearance.themeTitle'),
+			language: k('language.title'),
+			text_scale: k('settings.appearance.textScale'),
+			number_format: k('settings.localization.numberTitle'),
+			date_format: k('settings.localization.dateTitle'),
+			time_format: k('settings.localization.timeTitle'),
+			currency: k('settings.localization.currencyTitle'),
+			fee_speed: k('settings.feeSpeed.title'),
+			analytics: k('settings.analytics.title')
+		},
+		values: {
+			'theme.system': k('settings.appearance.themeAuto'),
+			'theme.light': k('settings.appearance.themeLight'),
+			'theme.dark': k('settings.appearance.themeDark'),
+			'language.auto': k('language.followSystem'),
+			'number_format.auto': k('settings.formatNote.system'),
+			'number_format.indian': k('settings.formatNote.indian'),
+			'date_format.auto': k('settings.formatNote.system'),
+			'time_format.auto': k('settings.formatNote.system'),
+			'time_format.h24': k('settings.formatNote.h24'),
+			'time_format.h12': k('settings.formatNote.h12'),
+			'fee_speed.fast': k('send.gasTier.fast'),
+			'fee_speed.standard': k('send.gasTier.standard'),
+			'fee_speed.slow': k('send.gasTier.slow')
+		},
+		storage: {
+			transactions: k('settings.storage.itemTransactions'),
+			contacts: k('settings.storage.itemContacts'),
+			custom: k('settings.storage.itemCustom'),
+			browsing: k('settings.storage.itemBrowsing'),
+			balances: k('settings.storage.itemBalances'),
+			rates: k('settings.storage.itemRates'),
+			scan: k('settings.storage.itemScan'),
+			dapps: k('settings.storage.itemDapps')
+		},
+		services: {
+			ethereum_data: detail('ethereumData'),
+			passkey_index: detail('passkeyIndex'),
+			bundler_service: detail('bundlerService'),
+			fiat_rates: detail('fiatRates')
+		},
+		fields: { rpc: detail('rpc'), explorer: detail('explorer') },
 		actions: {
 			show: action('show'),
 			switch_account: action('switchAccount'),
@@ -1062,7 +1120,18 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			remove_network: action('removeNetwork'),
 			set_provider_key: action('setProviderKey'),
 			set_service_endpoint: action('setServiceEndpoint'),
-			reset_service_endpoints: action('resetServiceEndpoints')
+			reset_service_endpoints: action('resetServiceEndpoints'),
+			open_site: action('openSite'),
+			browse: action('browse'),
+			close_tab: action('closeTab'),
+			close_all_tabs: action('closeAllTabs'),
+			set_site_favorite: action('setSiteFavorite'),
+			clear_recent_sites: action('clearRecentSites'),
+			forget_site: action('forgetSite'),
+			disconnect_site: action('disconnectSite'),
+			set_site_network: action('setSiteNetwork'),
+			reject_dapp_request: action('rejectDappRequest'),
+			ask_person_dapp_request: action('askPersonDappRequest')
 		}
 	};
 }

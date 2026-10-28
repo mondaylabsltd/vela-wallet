@@ -489,6 +489,55 @@ pub fn grants(world: &World) -> super::intents::Grants {
         wallets: world.agent_wallets.clone(),
         // The account in front: a multisig shown is the agent's wallet too.
         wallet: world.front().unwrap_or_default().to_owned(),
+        device_wallets: world
+            .session
+            .iter()
+            .flat_map(|session| {
+                session
+                    .accounts
+                    .iter()
+                    .map(|row| row.account.address.clone())
+            })
+            .chain(world.multisigs.iter().map(|m| m.address.clone()))
+            .collect(),
+    }
+}
+
+/// Whether an agent may read `op`: a wallet is signed in, and the account it
+/// is sent from is one the person lets the agent use — the one in front, for
+/// a transfer that does not say (spec 107 E8).
+fn agent_reads_operation(world: &World, op: &Operation) -> bool {
+    let signed_in = world.session.as_ref().is_some_and(|s| s.has_wallet);
+    signed_in
+        && op
+            .account
+            .as_deref()
+            .map(str::trim)
+            .filter(|account| !account.is_empty())
+            .map_or_else(|| world.agent_may_use_active(), |a| world.agent_may_use(a))
+}
+
+/// Why an agent may not read what `vela_review` (no `operation`) or
+/// `vela_wait` (`operation`) would answer, or `None` when it may: what the
+/// person is asked to sign is the wallet in front's, and a transfer is its
+/// account's (spec 107 E8). A transfer nobody has is the caller's
+/// `not_found`.
+#[must_use]
+pub fn agent_reads(world: &World, operation: Option<&str>) -> Option<Reason> {
+    match operation {
+        None if world.agent_may_use_active() => None,
+        None => Some(reason(
+            ReasonCode::WalletNotAllowed,
+            "the person has not let the agent use the wallet in front (Settings → AI agent)",
+        )),
+        Some(id) => match self::operation(world, id) {
+            None => None,
+            Some(op) if agent_reads_operation(world, op) => None,
+            Some(_) => Some(reason(
+                ReasonCode::WalletNotAllowed,
+                "that transfer is from a wallet the person has not let the agent use (Settings → AI agent)",
+            )),
+        },
     }
 }
 
@@ -1685,7 +1734,8 @@ struct AgentState<'a> {
     /// Explore (spec 107): tabs, favorites, recent and connected sites, a
     /// dApp's pending request — never what a page says.
     explore: Option<&'a ExploreFacts>,
-    transfers: &'a [Operation],
+    /// The transfers of the wallets the agent may use.
+    transfers: Vec<&'a Operation>,
     waiting_for_person: &'a Value,
     recent_agent_actions: &'a Value,
 }
@@ -1770,6 +1820,7 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
                 |name| format!("{name} ({chain_id})"),
             )
     };
+    // An account or a multisig, by the name the person gave it.
     let wallet = |address: &str| {
         let short = short_address(address);
         world
@@ -1782,6 +1833,13 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
                     .find(|row| same(&row.account.address, address))
             })
             .map(|row| row.account.name.trim())
+            .or_else(|| {
+                world
+                    .multisigs
+                    .iter()
+                    .find(|m| same(&m.address, address))
+                    .map(|m| m.name.trim())
+            })
             .filter(|name| !name.is_empty())
             .map_or_else(|| short.clone(), |name| format!("{name} ({short})"))
     };
@@ -1826,6 +1884,7 @@ pub fn approval_detail_in(action: &Action, world: &World) -> Option<String> {
             }
             Some(detail)
         }
+        Action::RemoveWallet { address } => Some(wallet(address)),
         Action::SwitchAccount { address } => {
             let to = wallet(address);
             Some(
@@ -1887,11 +1946,19 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
     let hidden = world.balance.as_ref().is_some_and(|b| b.hidden);
     let book = read_book(world);
     let testnets = world.network_space == super::network_space::NetworkSpace::Testnet;
-    // E8: a wallet the agent may not use is not read at all.
+    // E8: a wallet the agent may not use is not read at all — nor, once
+    // the person has signed out, the one they left (its book, its balances).
     let allowed = world.agent_may_use_active();
-    let book = book.filter(|_| allowed);
+    let signed_in = session.is_some_and(|s| s.has_wallet);
+    let readable = allowed && signed_in;
+    let book = book.filter(|_| readable);
+    let transfers: Vec<&Operation> = world
+        .operations
+        .iter()
+        .filter(|op| agent_reads_operation(world, op))
+        .collect();
     let state = AgentState {
-        signed_in: session.is_some_and(|s| s.has_wallet),
+        signed_in,
         wallet_allowed: allowed,
         page,
         network_space: world.network_space,
@@ -1922,7 +1989,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
         balances: world
             .balance
             .as_ref()
-            .filter(|_| allowed)
+            .filter(|_| readable)
             .map(|b| BalancesOut {
                 hidden,
                 // A testnet's coins have no value (spec 105): no total to read.
@@ -1945,7 +2012,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     })
                     .collect(),
             }),
-        recent_transactions: world.feed.as_ref().filter(|_| allowed).map(|f| {
+        recent_transactions: world.feed.as_ref().filter(|_| readable).map(|f| {
             f.transactions
                 .iter()
                 .take(RECENT_KEPT)
@@ -1960,7 +2027,13 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     symbol: &tx.symbol,
                     value: (!hidden).then_some(tx.value.as_str()),
                     tx_hash: &tx.tx_hash,
-                    timestamp_ms: tx.timestamp,
+                    // Stored in epoch seconds; a millisecond figure is
+                    // tolerated, as the feed's own reading does.
+                    timestamp_ms: if tx.timestamp < 1e12 {
+                        tx.timestamp * 1000.0
+                    } else {
+                        tx.timestamp
+                    },
                 })
                 .collect()
         }),
@@ -2028,8 +2101,8 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                 })
                 .collect(),
         }),
-        explore: world.explore.as_ref().filter(|_| allowed),
-        transfers: &world.operations,
+        explore: world.explore.as_ref().filter(|_| readable),
+        transfers,
         waiting_for_person: approvals,
         recent_agent_actions: activity,
     };

@@ -167,6 +167,7 @@
     "txCloseBackground": "Kapat · çalışmaya devam",
     "txSubmittedTitle": "Ağa gönderildi",
     "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
-    "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz."
+    "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz.",
+    "draftedByAgent": "Yapay zekâ ajanınız hazırladı"
   }
 }

@@ -52,6 +52,8 @@ export type SettingsPrefEvent =
 	/** Spec 106: connect (or reconnect) with clientmcp.dev; disconnect from it. */
 	| { kind: 'agent-link' }
 	| { kind: 'agent-unlink' }
+	/** Another tab has the agent: answer it here instead. */
+	| { kind: 'agent-use-here' }
 	/** Spec 107 E8: one wallet the agent may use, on or off. */
 	| { kind: 'agent-wallet'; address: string; on: boolean }
 	/** The destructive one, confirmed. */

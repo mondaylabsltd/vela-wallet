@@ -204,7 +204,25 @@
    "clientId": "Client {{id}}",
    "wallets": "代理可使用的錢包",
    "walletsHint": "代理只能查看和操作你在這裡開啟的錢包。",
-   "walletsNone": "至少開啟一個錢包，代理才能運作。"
+   "walletsNone": "至少開啟一個錢包，代理才能運作。",
+   "statusElsewhere": "正在另一個分頁中使用",
+   "useHere": "在此使用",
+   "approveLine": "{{action}}——{{detail}}。{{hint}}",
+   "approveAction": "{{action}}。{{hint}}",
+   "detailPair": "{{label}}：{{value}}",
+   "statusOn": "已開啟",
+   "chain": "網路 {{id}}",
+   "lastDone": "已完成",
+   "lastRefused": "未完成",
+   "lastWaiting": "進行中",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "區塊鏈瀏覽器",
+    "ethereumData": "鏈資料索引",
+    "passkeyIndex": "通行密鑰索引",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "法幣匯率"
+   }
   },
   "about": {
    "title": "關於",
@@ -753,7 +771,8 @@
   "txCloseBackground": "關閉 · 背景繼續",
   "txSubmittedTitle": "交易已提交至網路",
   "txConfirmedTitle": "已發送 {{amount}} {{symbol}}",
-  "recipientTokenContract": "這是代幣合約地址，轉到這裡的資產通常無法找回。"
+  "recipientTokenContract": "這是代幣合約地址，轉到這裡的資產通常無法找回。",
+  "draftedByAgent": "由你的 AI 代理草擬"
  },
  "receive": {
   "title": "收款",

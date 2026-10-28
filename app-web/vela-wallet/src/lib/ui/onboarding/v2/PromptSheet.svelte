@@ -153,6 +153,9 @@
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 		white-space: pre-line;
+		/* A name or an address with no break in it wraps rather than running
+		   off the sheet. */
+		overflow-wrap: anywhere;
 	}
 
 	.actions {

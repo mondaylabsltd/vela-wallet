@@ -29,10 +29,12 @@
 		errorText?: string;
 		/** Initial value from state; edits stay local, reported via oninput. */
 		value?: string;
+		/** The most characters it takes (a name's cap). */
+		maxlength?: number;
 		oninput?: (value: string) => void;
 	}
 
-	let { label, labelledby, placeholder, hint, errorText, value = '', oninput }: Props = $props();
+	let { label, labelledby, placeholder, hint, errorText, value = '', maxlength, oninput }: Props = $props();
 
 	const id = $props.id();
 
@@ -55,6 +57,7 @@
 		{id}
 		type="text"
 		{placeholder}
+		{maxlength}
 		autocomplete="off"
 		spellcheck="false"
 		aria-label={label || labelledby ? undefined : placeholder}

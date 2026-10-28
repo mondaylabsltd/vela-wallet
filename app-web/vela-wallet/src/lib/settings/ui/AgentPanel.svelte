@@ -26,10 +26,13 @@
 		ontoken?: (token: string) => void;
 		onlink?: () => void;
 		onunlink?: () => void;
+		/** Another tab has the agent: answer it here instead. */
+		onusehere?: () => void;
 		onwallet?: (address: string, on: boolean) => void;
 	}
 
-	let { panel, onenable, onbridge, ontoken, onlink, onunlink, onwallet }: Props = $props();
+	let { panel, onenable, onbridge, ontoken, onlink, onunlink, onusehere, onwallet }: Props =
+		$props();
 	const link = $derived(panel.link);
 
 	/** The agent's address: masked until Show — it is a credential. */
@@ -70,6 +73,13 @@
 		</div>
 		<div data-testid="agent-status"><StatusPill pill={panel.status} /></div>
 	</section>
+	{#if panel.useHere !== undefined}
+		<div class="here">
+			<Button variant="secondary" shape="rounded" testid="agent-use-here" onclick={onusehere}
+				>{panel.useHere}</Button
+			>
+		</div>
+	{/if}
 
 	<div class="switch"><SwitchRow row={panel.enable} onchange={onenable} /></div>
 
@@ -158,6 +168,13 @@
 		<div class="status" data-testid="agent-status">
 			<StatusPill pill={panel.status} />
 		</div>
+		{#if panel.useHere !== undefined}
+			<div class="here">
+				<Button variant="secondary" shape="rounded" testid="agent-use-here" onclick={onusehere}
+					>{panel.useHere}</Button
+				>
+			</div>
+		{/if}
 
 		{#if panel.endpoint !== undefined}
 			<section class="endpoint">
@@ -185,6 +202,10 @@
 {/if}
 
 <style>
+	.here {
+		margin-block-end: var(--space-xl);
+	}
+
 	.description {
 		margin: 0 0 var(--space-xl);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

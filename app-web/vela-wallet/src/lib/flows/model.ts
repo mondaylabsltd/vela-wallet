@@ -1023,6 +1023,12 @@ export interface SendConfirmModel {
 	amountUnit?: string;
 	/** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
 	subline: string;
+	/**
+	 * "Drafted by your AI agent": the person's AI agent put this transfer on
+	 * the review (spec 103). Said on the review itself — on a phone the agent's
+	 * bar has room for its name only.
+	 */
+	drafted?: string;
 	facts: FactRowModel[];
 	/** SD3b's recipient list / SD3c's asset list, as a second card. */
 	breakdown?: BreakdownRowModel[];

@@ -204,7 +204,25 @@
    "clientId": "Client {{id}}",
    "wallets": "Portefeuilles que l’agent peut utiliser",
    "walletsHint": "L’agent ne voit et n’agit que dans les portefeuilles que vous activez ici.",
-   "walletsNone": "Activez au moins un portefeuille pour que l’agent fonctionne."
+   "walletsNone": "Activez au moins un portefeuille pour que l’agent fonctionne.",
+   "statusElsewhere": "Utilisé dans un autre onglet",
+   "useHere": "Utiliser ici",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}} : {{value}}",
+   "statusOn": "Activé",
+   "chain": "Réseau {{id}}",
+   "lastDone": "Terminé",
+   "lastRefused": "Non effectué",
+   "lastWaiting": "En cours",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Explorateur",
+    "ethereumData": "Index des données de chaîne",
+    "passkeyIndex": "Index des clés d'accès",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Taux fiat"
+   }
   },
   "about": {
    "title": "À propos",
@@ -758,7 +776,8 @@
   "txCloseBackground": "Fermer · continuer en arrière-plan",
   "txSubmittedTitle": "Envoyée au réseau",
   "txConfirmedTitle": "{{amount}} {{symbol}} envoyés",
-  "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu."
+  "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu.",
+  "draftedByAgent": "Préparé par votre agent IA"
  },
  "receive": {
   "title": "Recevoir",

@@ -342,8 +342,12 @@
 		padding-block: var(--space-2xl) var(--space-3xl);
 	}
 
+	/* A long name wraps inside the screen, however it is written. */
 	.hero-name {
+		max-width: 100%;
 		margin: var(--space-lg) 0 0;
+		overflow-wrap: anywhere;
+		text-align: center;
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
@@ -419,6 +423,7 @@
 
 	.group-title {
 		margin: var(--space-2xl) 0 var(--space-sm);
+		overflow-wrap: anywhere;
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);

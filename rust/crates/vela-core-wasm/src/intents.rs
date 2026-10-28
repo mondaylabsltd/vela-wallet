@@ -88,6 +88,14 @@ pub fn intent_agent_state(
     intent_json::agent_state(world_json, page, approvals_json, activity_json)
 }
 
+/// Why an agent may not read what `vela_review` (`operation` absent) or
+/// `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+#[wasm_bindgen(js_name = intentAgentReads)]
+#[must_use]
+pub fn intent_agent_reads(world_json: &str, operation: Option<String>) -> String {
+    intent_json::agent_reads(world_json, operation.as_deref())
+}
+
 /// `vela_review`: what the person is being asked to sign.
 #[wasm_bindgen(js_name = intentReview)]
 #[must_use]

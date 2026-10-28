@@ -204,7 +204,25 @@
    "clientId": "Client {{id}}",
    "wallets": "Ví tác nhân được dùng",
    "walletsHint": "Tác nhân chỉ xem và thao tác trong các ví bạn bật ở đây.",
-   "walletsNone": "Hãy bật ít nhất một ví để tác nhân hoạt động."
+   "walletsNone": "Hãy bật ít nhất một ví để tác nhân hoạt động.",
+   "statusElsewhere": "Đang dùng ở một thẻ khác",
+   "useHere": "Dùng ở đây",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Bật",
+   "chain": "Mạng {{id}}",
+   "lastDone": "Xong",
+   "lastRefused": "Không thực hiện",
+   "lastWaiting": "Đang thực hiện",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Trình khám phá",
+    "ethereumData": "Chỉ mục dữ liệu chain",
+    "passkeyIndex": "Chỉ mục passkey",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Tỷ giá fiat"
+   }
   },
   "about": {
    "title": "Giới thiệu",
@@ -753,7 +771,8 @@
   "txCloseBackground": "Đóng · vẫn chạy tiếp",
   "txSubmittedTitle": "Đã gửi lên mạng",
   "txConfirmedTitle": "Đã gửi {{amount}} {{symbol}}",
-  "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại."
+  "recipientTokenContract": "Đây là địa chỉ hợp đồng token. Tài sản gửi đến đây thường không thể lấy lại.",
+  "draftedByAgent": "Do tác nhân AI của bạn soạn"
  },
  "receive": {
   "title": "Nhận",

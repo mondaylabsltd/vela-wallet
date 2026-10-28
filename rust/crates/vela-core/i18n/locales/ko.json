@@ -204,7 +204,25 @@
       "clientId": "클라이언트 {{id}}",
       "wallets": "에이전트가 사용할 수 있는 지갑",
       "walletsHint": "에이전트는 여기에서 켠 지갑만 보고 조작할 수 있습니다.",
-      "walletsNone": "에이전트가 작동하려면 지갑을 하나 이상 켜세요."
+      "walletsNone": "에이전트가 작동하려면 지갑을 하나 이상 켜세요.",
+      "statusElsewhere": "다른 탭에서 사용 중",
+      "useHere": "여기서 사용",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "켬",
+      "chain": "네트워크 {{id}}",
+      "lastDone": "완료",
+      "lastRefused": "실행되지 않음",
+      "lastWaiting": "진행 중",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "탐색기",
+        "ethereumData": "체인 데이터 인덱스",
+        "passkeyIndex": "패스키 인덱스",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "법정화폐 환율"
+      }
     },
     "about": {
       "title": "정보",

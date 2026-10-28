@@ -173,6 +173,7 @@
     "txCloseBackground": "Закрыть · продолжить в фоне",
     "txSubmittedTitle": "Отправлено в сеть",
     "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}",
-    "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть."
+    "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть.",
+    "draftedByAgent": "Подготовлено вашим ИИ-агентом"
   }
 }

@@ -82,6 +82,8 @@ export interface SendLiveInputs {
 	};
 	fee: FeeView;
 	m: WalletFlowMessages;
+	/** The review on screen is one the person's AI agent drafted (spec 103). */
+	draftedByAgent?: boolean;
 	currency: CurrencyView;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -1296,7 +1298,8 @@ function confirmHolds(
  * proposes (the member who executes pays the fee).
  */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
-	const page = liveSendConfirmPage(model, inputs);
+	const drafted = inputs.draftedByAgent ? inputs.m['send.draftedByAgent'] : undefined;
+	const page = { ...liveSendConfirmPage(model, inputs), drafted };
 	const { send, m } = inputs;
 	if (!send.multisig || !inputs.multisig) return page;
 	const feeLabels = new Set([m['send.estFeeLabel'], m['send.feeTokenEstimate']]);
@@ -1432,7 +1435,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			facts,
 			breakdown,
 			recipientTag,
-			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1473,7 +1476,7 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
-			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1491,7 +1494,12 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		facts,
 		breakdown: undefined,
 		recipientTag,
-		alert: alertWords(inputs.alert, m, formChainOf(send)),
+		// The fee the review measured, when the account cannot pay it: the
+		// confirm stays shut, and this says why (the form's own sentences).
+		alert:
+			alertWords(inputs.alert, m, formChainOf(send)) ??
+			sameFeeWords(send, m) ??
+			liveWarning(send, m),
 		...holds,
 		cta: m['send.confirmSendBtn']
 	};

@@ -170,6 +170,7 @@
     "txCloseBackground": "Chiudi · continua in background",
     "txSubmittedTitle": "Inviata alla rete",
     "txConfirmedTitle": "Inviati {{amount}} {{symbol}}",
-    "recipientTokenContract": "Questo è l'indirizzo di un contratto token. Ciò che invii qui di solito non si può recuperare."
+    "recipientTokenContract": "Questo è l'indirizzo di un contratto token. Ciò che invii qui di solito non si può recuperare.",
+    "draftedByAgent": "Preparato dal tuo agente IA"
   }
 }

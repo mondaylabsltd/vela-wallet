@@ -27,6 +27,7 @@ use super::fee_policy::FeeTier;
 use super::fee_tier_pref;
 use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
 use super::send::BATCH_MAX_RECIPIENTS;
+use crate::l10n::currency::OFFERED_CURRENCIES;
 use crate::{i18n, prefs, storage_catalog};
 
 /// The settings pages a [`Screen::Settings`] may name (each shell lays out
@@ -712,7 +713,7 @@ fn input_schema(kind: &str) -> serde_json::Value {
                     choice("number_format", strings(&prefs::NUMBER_FORMATS)),
                     choice("date_format", strings(&prefs::DATE_FORMATS)),
                     choice("time_format", strings(&prefs::TIME_FORMATS)),
-                    choice("currency", json!({ "type": "string", "pattern": "^[A-Z]{3}$" })),
+                    choice("currency", strings(&OFFERED_CURRENCIES)),
                     choice("fee_speed", strings(&["fast", "standard", "slow"])),
                     choice("analytics", json!({ "type": "boolean" })),
                 ] } }),
@@ -723,13 +724,13 @@ fn input_schema(kind: &str) -> serde_json::Value {
             object(json!({ "address": address }), &["address"])
         }
         "save_contact" => object(
-            json!({ "address": address, "name": { "type": "string", "minLength": 1 } }),
+            json!({ "address": address, "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS } }),
             &["address", "name"],
         ),
         "save_group" => object(
             json!({
                 "id": { "type": ["string", "null"], "description": "Absent or null: a new group." },
-                "name": { "type": "string", "minLength": 1 }
+                "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS }
             }),
             &["name"],
         ),
@@ -1007,6 +1008,12 @@ pub struct Operation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "bindings", ts(optional))]
     pub safe_tx_hash: Option<String>,
+    /// The account it is sent from — the one in front when it came on its
+    /// review. What an agent reads of it is held to the person's list for
+    /// that account (spec 107 E8), whichever account is in front now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub account: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1086,6 +1093,42 @@ fn named(value: &str, what: &str) -> Result<(), Reason> {
     }
 }
 
+/// The longest name a contact or a group may have, in characters: room for
+/// a full name or a company's, not for a page of text.
+pub const NAME_MAX_CHARS: usize = 64;
+
+/// The characters that reorder the text around them (Unicode's
+/// bidirectional controls): in a name they can make "Bob" read as someone
+/// else's, or run an address backwards.
+#[must_use]
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// A contact's or a group's name: not empty, at most [`NAME_MAX_CHARS`],
+/// and nothing in it that reorders the text around it or is not text.
+fn person_name(value: &str, what: &str) -> Result<(), Reason> {
+    named(value, what)?;
+    let name = value.trim();
+    if name.chars().count() > NAME_MAX_CHARS {
+        return invalid(format!(
+            "{what} is too long: at most {NAME_MAX_CHARS} characters"
+        ));
+    }
+    if name.chars().any(is_bidi_control) {
+        return invalid(format!(
+            "{what} must not contain characters that reorder the text (bidirectional controls)"
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return invalid(format!("{what} must not contain control characters"));
+    }
+    Ok(())
+}
+
 fn one_of(value: &str, allowed: &[&str], what: &str) -> Result<(), Reason> {
     if allowed.contains(&value) {
         Ok(())
@@ -1112,13 +1155,7 @@ fn preference(preference: &Preference) -> Result<(), Reason> {
         Preference::NumberFormat(value) => one_of(value, &prefs::NUMBER_FORMATS, "number_format"),
         Preference::DateFormat(value) => one_of(value, &prefs::DATE_FORMATS, "date_format"),
         Preference::TimeFormat(value) => one_of(value, &prefs::TIME_FORMATS, "time_format"),
-        Preference::Currency(code) => {
-            if code.len() == 3 && code.bytes().all(|byte| byte.is_ascii_uppercase()) {
-                Ok(())
-            } else {
-                invalid("currency must be an ISO 4217 code, e.g. USD")
-            }
-        }
+        Preference::Currency(code) => one_of(code, &OFFERED_CURRENCIES, "currency"),
         Preference::FeeSpeed(tier) => {
             if fee_tier_pref::OFFERED.contains(tier) {
                 Ok(())
@@ -1168,12 +1205,12 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         Action::SaveContact {
             address: value,
             name,
-        } => address(value).and_then(|()| named(name, "a contact's name")),
+        } => address(value).and_then(|()| person_name(name, "a contact's name")),
         Action::SaveGroup { id, name } => {
             if let Some(id) = id {
                 named(id, "group id")?;
             }
-            named(name, "a group's name")
+            person_name(name, "a group's name")
         }
         Action::DeleteGroup { id } => named(id, "group id"),
         Action::SetGroupMembers { id, members } => {
@@ -1380,6 +1417,9 @@ pub struct Grants {
     pub wallets: Vec<String>,
     /// The wallet in front; empty while nobody is in.
     pub wallet: String,
+    /// Every wallet on this device (its accounts and multisigs): what
+    /// erasing it takes away.
+    pub device_wallets: Vec<String>,
 }
 
 impl Grants {
@@ -1437,13 +1477,45 @@ pub fn authorize(actor: Actor, action: &Action, grants: &Grants) -> Decision {
         };
     }
     // E8: only the wallets the person allowed. Showing a screen reads nothing.
-    if matches!(action, Action::SwitchAccount { address } if !grants.allows(address)) {
+    // A wallet the agent may not use is not its to switch to, nor to remove
+    // (owner, 2026-10-28: whatever the person would approve).
+    if matches!(
+        action,
+        Action::SwitchAccount { address } | Action::RemoveWallet { address }
+            if !grants.allows(address)
+    ) {
         return Decision::Deny {
             reason: reason(
                 ReasonCode::WalletNotAllowed,
                 "the person has not let the agent use that wallet (Settings → AI agent)",
             ),
         };
+    }
+    if matches!(action, Action::EraseDevice) {
+        // Nobody signed in: no wallet is in front for the agent to act in,
+        // and the sign-in screen's erase is the person's alone.
+        if grants.wallet.trim().is_empty() {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::PersonOnly,
+                    "nobody is signed in: erasing this device is the person's alone",
+                ),
+            };
+        }
+        // Erasing takes every wallet with it: one the agent may not use is
+        // not its to take.
+        if grants
+            .device_wallets
+            .iter()
+            .any(|wallet| !wallet.trim().is_empty() && !grants.allows(wallet))
+        {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::WalletNotAllowed,
+                    "erasing this device would remove wallets the person has not let the agent use (Settings → AI agent)",
+                ),
+            };
+        }
     }
     if !grants.wallet.trim().is_empty()
         && !grants.allows(&grants.wallet)

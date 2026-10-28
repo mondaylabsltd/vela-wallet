@@ -1309,6 +1309,7 @@
 					send: sendView,
 					fee: feeInForce,
 					m: data.flowMessages,
+					draftedByAgent: transfers.agentReview(),
 					currency: currency.view,
 					identity,
 					identicon: identiconSvgForClient,

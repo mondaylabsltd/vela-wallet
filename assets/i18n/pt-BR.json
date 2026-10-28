@@ -204,7 +204,25 @@
    "clientId": "Cliente {{id}}",
    "wallets": "Carteiras que o agente pode usar",
    "walletsHint": "O agente só vê e age nas carteiras que você ativar aqui.",
-   "walletsNone": "Ative pelo menos uma carteira para o agente funcionar."
+   "walletsNone": "Ative pelo menos uma carteira para o agente funcionar.",
+   "statusElsewhere": "Em uso em outra aba",
+   "useHere": "Usar aqui",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Ligado",
+   "chain": "Rede {{id}}",
+   "lastDone": "Concluído",
+   "lastRefused": "Não feito",
+   "lastWaiting": "Em andamento",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Explorador",
+    "ethereumData": "Índice de dados da chain",
+    "passkeyIndex": "Índice de passkey",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Cotações fiat"
+   }
   },
   "about": {
    "title": "Sobre",
@@ -758,7 +776,8 @@
   "txCloseBackground": "Fechar · continuar em segundo plano",
   "txSubmittedTitle": "Enviada para a rede",
   "txConfirmedTitle": "Enviou {{amount}} {{symbol}}",
-  "recipientTokenContract": "Este é o endereço de um contrato de token. O que você enviar para cá geralmente não pode ser recuperado."
+  "recipientTokenContract": "Este é o endereço de um contrato de token. O que você enviar para cá geralmente não pode ser recuperado.",
+  "draftedByAgent": "Preparado pelo seu agente de IA"
  },
  "receive": {
   "title": "Receber",

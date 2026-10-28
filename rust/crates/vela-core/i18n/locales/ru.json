@@ -204,7 +204,25 @@
       "clientId": "Клиент {{id}}",
       "wallets": "Кошельки, доступные агенту",
       "walletsHint": "Агент видит и действует только в кошельках, которые вы включите здесь.",
-      "walletsNone": "Включите хотя бы один кошелёк, чтобы агент мог работать."
+      "walletsNone": "Включите хотя бы один кошелёк, чтобы агент мог работать.",
+      "statusElsewhere": "Используется в другой вкладке",
+      "useHere": "Использовать здесь",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Включено",
+      "chain": "Сеть {{id}}",
+      "lastDone": "Выполнено",
+      "lastRefused": "Не выполнено",
+      "lastWaiting": "Выполняется",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Обозреватель",
+        "ethereumData": "Индекс данных сетей",
+        "passkeyIndex": "Индекс passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Курсы валют"
+      }
     },
     "about": {
       "title": "О приложении",

@@ -99,6 +99,7 @@ impl Transfers {
                     tx_hash: None,
                     reason: None,
                     safe_tx_hash: None,
+                    account: None,
                 },
                 session,
                 confirmed_after: None,

@@ -204,7 +204,25 @@
       "clientId": "İstemci {{id}}",
       "wallets": "Ajanın kullanabileceği cüzdanlar",
       "walletsHint": "Ajan yalnızca burada açtığınız cüzdanları görür ve kullanır.",
-      "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın."
+      "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın.",
+      "statusElsewhere": "Başka bir sekmede kullanılıyor",
+      "useHere": "Burada kullan",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Açık",
+      "chain": "Ağ {{id}}",
+      "lastDone": "Tamamlandı",
+      "lastRefused": "Yapılmadı",
+      "lastWaiting": "Sürüyor",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Gezgin",
+        "ethereumData": "Zincir veri dizini",
+        "passkeyIndex": "Passkey dizini",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Fiat kurları"
+      }
     },
     "about": {
       "title": "Hakkında",

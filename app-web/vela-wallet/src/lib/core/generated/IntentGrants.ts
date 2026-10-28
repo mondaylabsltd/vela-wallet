@@ -16,4 +16,9 @@ wallets: Array<string>,
 /**
  * The wallet in front; empty while nobody is in.
  */
-wallet: string, };
+wallet: string, 
+/**
+ * Every wallet on this device (its accounts and multisigs): what
+ * erasing it takes away.
+ */
+device_wallets: Array<string>, };

@@ -167,6 +167,7 @@
     "txCloseBackground": "닫기 · 계속 진행",
     "txSubmittedTitle": "네트워크에 제출됨",
     "txConfirmedTitle": "{{amount}} {{symbol}} 전송 완료",
-    "recipientTokenContract": "토큰 컨트랙트 주소입니다. 이 주소로 보낸 자산은 대개 되찾을 수 없습니다."
+    "recipientTokenContract": "토큰 컨트랙트 주소입니다. 이 주소로 보낸 자산은 대개 되찾을 수 없습니다.",
+    "draftedByAgent": "AI 에이전트가 작성함"
   }
 }

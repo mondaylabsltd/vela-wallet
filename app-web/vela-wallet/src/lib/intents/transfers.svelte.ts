@@ -88,6 +88,20 @@ function named(value: { type: string } | null): string | null {
 	return value === null ? null : value.type;
 }
 
+/**
+ * Why the review's fee cannot be paid, for an agent to act on — the send
+ * core's own verdicts (`amount_warning`, `same_asset_fee_issue`) — or `null`.
+ */
+export function unpayable(view: SendView): string | null {
+	const issue = view.same_asset_fee_issue;
+	if (issue)
+		return `fee: the transfer and its fee need ${issue.total} ${issue.symbol} (base units) and the account holds ${issue.balance}; at most ${issue.max_transfer_amount} can be sent. Nothing was left on the review`;
+	const warning = view.amount_warning;
+	if (!warning) return null;
+	const coin = 'symbol' in warning && warning.symbol ? ` ${warning.symbol}` : '';
+	return `fee: ${warning.type} — the account cannot pay the network fee${coin ? ` in${coin}` : ''} for this transfer. Nothing was left on the review`;
+}
+
 class Transfers {
 	/** Every operation drafted or confirmed this visit, newest first. */
 	operations = $state<Tracked[]>([]);
@@ -207,10 +221,24 @@ class Transfers {
 		}
 
 		// "Not held" is only true of balances that have been read: right after
-		// the page opens, they may not have been yet.
-		// The balance the wallet reads: the shown account's (a multisig, if one is).
-		const account = shownAddress(session.view.address);
-		await until(() => (balance.settledFor(account) ? true : null), STEP_MS.open);
+		// the page opens, or an account switch, they may not have been yet —
+		// and the view may still be the previous account's. Only the shown
+		// account's own (a multisig, if one is), settled, is read.
+		const loaded = await until(() => {
+			if (stopped()) return 'stopped';
+			const account = shownAddress(session.view.address);
+			return account !== '' &&
+				balance.settledFor(account) &&
+				same(balance.view.address ?? '', account)
+				? 'loaded'
+				: null;
+		}, STEP_MS.open);
+		if (stopped()) return halted;
+		if (loaded === null)
+			return reason(
+				'not_ready',
+				'the balances of the wallet in front are still loading: try again in a moment'
+			);
 		const token = balance.view.tokens.find(
 			(held) =>
 				!held.spam &&
@@ -219,8 +247,13 @@ class Transfers {
 					? held.token_address === null
 					: held.token_address !== null && same(held.token_address, contract))
 		);
-		if (!token) return reason('not_found', 'the wallet holds no such token on that chain');
-		if (stopped()) return halted;
+		if (!token)
+			return balance.view.balance_partial
+				? reason(
+						'not_ready',
+						"not every network's balances could be read yet: try again in a moment"
+					)
+				: reason('not_found', 'the wallet holds no such token on that chain');
 
 		port.open({
 			preselected_symbol: token.symbol,
@@ -269,6 +302,24 @@ class Transfers {
 			if (stopped()) return halted;
 			return reason('refused', reviewed ?? 'the review did not open in time');
 		}
+		// The review measures the fee. One the account cannot pay leaves a
+		// confirm that can never open: the draft is refused, saying why, and
+		// nothing is left on the review.
+		const unpaid = await until(() => {
+			if (stopped()) return 'stopped';
+			const view = port.view();
+			if (!view || view.stage !== 'confirm') return 'gone';
+			if (view.estimating_gas || view.fee_busy) return null;
+			// Only a confirm the core holds shut for it: a warning beside an
+			// open confirm is the person's to read.
+			return (!view.can_confirm && unpayable(view)) || 'ok';
+		}, STEP_MS.review);
+		if (unpaid !== null && unpaid !== 'ok') {
+			port.close();
+			if (stopped()) return halted;
+			if (unpaid === 'gone') return reason('refused', 'the review closed before its fee was known');
+			return reason('refused', unpaid);
+		}
 		const drafted = this.#adopt(port, token.chain_id);
 		drafted.closed = closed;
 		drafted.draftedBy = by;
@@ -283,6 +334,20 @@ class Transfers {
 		if (left <= 0) return;
 		this.settling = true;
 		this.#settle = setTimeout(() => (this.settling = false), left);
+	}
+
+	/**
+	 * Whether the review on screen is one an agent drafted — read without
+	 * adopting it (a template may draw it; a read here writes nothing).
+	 */
+	agentReview(): boolean {
+		const port = sendDesk.port;
+		if (!port || port.view()?.stage !== 'confirm') return false;
+		const session = port.session();
+		return this.operations.some(
+			(entry) =>
+				entry.session === session && !FINAL.includes(entry.state) && entry.draftedBy === 'agent'
+		);
 	}
 
 	/** Who drafted `id` onto its review. */
@@ -425,15 +490,18 @@ class Transfers {
 	}
 
 	#adopt(port: SendDeskPort, chainId: number | null): Tracked {
-		const session = port.session();
+		const sessionId = port.session();
 		// One that has ended — left without sending, say — is not this review's:
 		// the person went back, and what they review now is another transfer.
 		const existing = this.operations.find(
-			(operation) => operation.session === session && !FINAL.includes(operation.state)
+			(operation) => operation.session === sessionId && !FINAL.includes(operation.state)
 		);
 		if (existing) return existing;
+		const account = shownAddress(session.view.address);
 		const created: Tracked = {
 			id: `transfer-${this.#next++}`,
+			// The account in front as it comes on its review: whose it is.
+			...(account ? { account } : {}),
 			state: 'awaiting_confirmation',
 			chain_id: chainId,
 			user_op_hash: null,
@@ -442,7 +510,7 @@ class Transfers {
 			closed: null,
 			draftedBy: 'person',
 			reviewedAt: this.clock.now(),
-			session,
+			session: sessionId,
 			confirmedAfter: null
 		};
 		this.operations = [created, ...this.operations];
@@ -450,7 +518,7 @@ class Transfers {
 	}
 
 	#plain(operation: Tracked): IntentOperation {
-		const { id, state, chain_id, user_op_hash, tx_hash, reason, safe_tx_hash } = operation;
+		const { id, state, chain_id, user_op_hash, tx_hash, reason, safe_tx_hash, account } = operation;
 		return {
 			id,
 			state,
@@ -459,7 +527,8 @@ class Transfers {
 			tx_hash,
 			reason,
 			// A multisig's proposal; absent for a Vela account's transfer.
-			...(safe_tx_hash ? { safe_tx_hash } : {})
+			...(safe_tx_hash ? { safe_tx_hash } : {}),
+			...(account ? { account } : {})
 		};
 	}
 

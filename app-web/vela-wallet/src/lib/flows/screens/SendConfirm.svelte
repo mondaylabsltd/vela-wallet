@@ -56,6 +56,9 @@
 
 <div class="confirm">
 	<div class="hero">
+		{#if model.drafted !== undefined}
+			<p class="drafted" data-testid="send-drafted-by-agent">{model.drafted}</p>
+		{/if}
 		{#if model.mark !== undefined}
 			<TokenIcon
 				ticker={model.mark.ticker}
@@ -185,6 +188,17 @@
 		font-size: calc(26em / 46);
 		font-weight: var(--weight-medium);
 		line-height: var(--leading-none);
+		color: var(--color-fg-muted);
+	}
+
+	/* Who put this transfer here: a quiet tag above what it sends. */
+	.drafted {
+		margin: 0 0 var(--space-sm);
+		padding: var(--space-xs) var(--space-md);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-sunken);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
 	}
 

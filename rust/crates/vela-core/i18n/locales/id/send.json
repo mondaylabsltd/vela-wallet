@@ -167,6 +167,7 @@
     "txCloseBackground": "Tutup · tetap jalan",
     "txSubmittedTitle": "Terkirim ke jaringan",
     "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
-    "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan."
+    "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan.",
+    "draftedByAgent": "Disusun oleh agen AI Anda"
   }
 }

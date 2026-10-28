@@ -30,6 +30,7 @@ fn on() -> Grants {
         agent_enabled: true,
         wallets: vec![MINE.to_owned(), ALICE.to_owned()],
         wallet: MINE.to_owned(),
+        device_wallets: vec![MINE.to_owned(), ALICE.to_owned()],
     }
 }
 
@@ -1234,4 +1235,114 @@ fn a_browser_not_started_yet_reads_as_empty() {
     .expect("json");
     assert_eq!(facts["browser"], true);
     assert_eq!(facts["tabs"], serde_json::json!([]));
+}
+
+/// Owner, 2026-10-28: a wallet the agent may not use is not its to remove,
+/// whatever the person would approve — and erasing the device, which takes
+/// every wallet with it, is refused while one of them is not on the list,
+/// and while nobody is signed in.
+#[test]
+fn a_wallet_not_on_the_list_is_not_the_agents_to_remove_or_erase() {
+    const OTHER: &str = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let remove = |address: &str| Action::RemoveWallet {
+        address: address.to_owned(),
+    };
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &remove(OTHER), &on())),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    assert!(matches!(
+        authorize(Actor::Agent, &remove(ALICE), &on()),
+        Decision::Approve { .. }
+    ));
+    // The person's own remove is theirs.
+    assert_eq!(
+        authorize(Actor::Person, &remove(OTHER), &on()),
+        Decision::Allow
+    );
+
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::EraseDevice, &on()),
+        Decision::Approve { .. }
+    ));
+    let mut more = on();
+    more.device_wallets.push(OTHER.to_owned());
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &Action::EraseDevice, &more)),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    let signed_out = Grants {
+        wallet: String::new(),
+        ..on()
+    };
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &Action::EraseDevice, &signed_out)),
+        Some(ReasonCode::PersonOnly)
+    );
+    assert_eq!(
+        authorize(Actor::Person, &Action::EraseDevice, &signed_out),
+        Decision::Allow
+    );
+}
+
+/// A contact's or a group's name is a name: at most 64 characters, and no
+/// character that reorders the text around it ("Bob\u{202E}evil" would read
+/// as someone else) or is not text at all.
+#[test]
+fn a_name_is_short_and_reads_as_written() {
+    let contact = |name: &str| Action::SaveContact {
+        address: ALICE.to_owned(),
+        name: name.to_owned(),
+    };
+    let group = |name: &str| Action::SaveGroup {
+        id: None,
+        name: name.to_owned(),
+    };
+    let longest = "名".repeat(64);
+    assert_eq!(validate(&contact(&longest)), Ok(()));
+    assert_eq!(validate(&group(&longest)), Ok(()));
+    for bad in [
+        "W".repeat(65),
+        "Bob \u{202E}evil".to_owned(),
+        "a\u{2066}b".to_owned(),
+        "a\u{200F}b".to_owned(),
+        "line\nbreak".to_owned(),
+    ] {
+        let refusal = validate(&contact(&bad)).expect_err("refused");
+        assert_eq!(refusal.code, ReasonCode::InvalidInput, "{bad:?}");
+        assert!(
+            refusal.detail.contains("a contact's name"),
+            "{}",
+            refusal.detail
+        );
+        assert!(validate(&group(&bad)).is_err(), "{bad:?}");
+    }
+    assert!(validate(&contact(&"W".repeat(65)))
+        .expect_err("refused")
+        .detail
+        .contains("64"));
+}
+
+/// A display currency is one the wallet can price: three capitals are not
+/// enough.
+#[test]
+fn only_a_currency_the_wallet_offers_is_accepted() {
+    let currency = |code: &str| Action::SetPreference {
+        preference: Preference::Currency(code.to_owned()),
+    };
+    assert!(validate(&currency("ZZZ")).is_err());
+    assert!(validate(&currency("XAU")).is_err());
+    for code in ["USD", "EUR", "CNY", "TWD", "ZAR"] {
+        assert_eq!(validate(&currency(code)), Ok(()), "{code}");
+    }
+    let schema = catalog()
+        .into_iter()
+        .find(|entry| entry.action == "set_preference")
+        .expect("set_preference")
+        .input_schema
+        .to_string();
+    assert!(
+        schema.contains("\"TWD\""),
+        "the schema lists the codes: {schema}"
+    );
 }

@@ -167,6 +167,7 @@
     "txCloseBackground": "关闭 · 后台继续",
     "txSubmittedTitle": "交易已提交至网络",
     "txConfirmedTitle": "已发送 {{amount}} {{symbol}}",
-    "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。"
+    "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。",
+    "draftedByAgent": "由你的 AI 智能体起草"
   }
 }

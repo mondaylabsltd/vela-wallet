@@ -951,6 +951,30 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		).toBeUndefined();
 	});
 
+	it('says why its confirm is shut when the fee it measured cannot be paid', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ETH,
+				confirm_amount: '1',
+				fee: QUOTE,
+				can_confirm: false,
+				amount_warning: { type: 'insufficient_for_gas', symbol: 'ETH' }
+			})
+		);
+		expect(confirm.alert).toBe('Insufficient ETH to cover amount + gas fees');
+		expect(
+			liveSendConfirm(confirmModel(), inputs({ selected_token: ETH, confirm_amount: '1' })).alert
+		).toBeUndefined();
+	});
+
+	it('is marked as the AI agent’s draft when the agent drafted it, and only then', () => {
+		const single = { selected_token: ETH, confirm_amount: '1' };
+		expect(liveSendConfirm(confirmModel(), inputs(single)).drafted).toBeUndefined();
+		const drafted = liveSendConfirm(confirmModel(), { ...inputs(single), draftedByAgent: true });
+		expect(drafted.drafted).toBe(m['send.draftedByAgent']);
+	});
+
 	it('Continue’s alert is worded by its cause, the chain named (note 13)', () => {
 		const said = (kind: Parameters<typeof alertWords>[0]) => alertWords(kind, m, 1);
 		expect(said({ type: 'estimate_failed', kind: down })).toBe(

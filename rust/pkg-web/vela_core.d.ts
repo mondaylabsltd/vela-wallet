@@ -1038,6 +1038,12 @@ export function identiconSvgCircular(seed: string): string;
 export function inFlightOps(track_view_json: string): string;
 
 /**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+ */
+export function intentAgentReads(world_json: string, operation?: string | null): string;
+
+/**
  * `vela_state`: the wallet as an agent reads it.
  */
 export function intentAgentState(world_json: string, page: string, approvals_json: string, activity_json: string): string;
@@ -1925,6 +1931,7 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly intentAgentReads: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly intentApprovalDetail: (a: number, b: number) => [number, number];
     readonly intentApprovalDetailIn: (a: number, b: number, c: number, d: number) => [number, number];

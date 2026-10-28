@@ -204,7 +204,25 @@
       "clientId": "Cliente {{id}}",
       "wallets": "Billeteras que el agente puede usar",
       "walletsHint": "El agente solo ve y actúa en las billeteras que actives aquí.",
-      "walletsNone": "Activa al menos una billetera para que el agente funcione."
+      "walletsNone": "Activa al menos una billetera para que el agente funcione.",
+      "statusElsewhere": "En uso en otra pestaña",
+      "useHere": "Usar aquí",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Activado",
+      "chain": "Red {{id}}",
+      "lastDone": "Hecho",
+      "lastRefused": "No se hizo",
+      "lastWaiting": "En curso",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Explorador",
+        "ethereumData": "Índice de datos de cadena",
+        "passkeyIndex": "Índice de passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Tipos de cambio fiat"
+      }
     },
     "about": {
       "title": "Acerca de",

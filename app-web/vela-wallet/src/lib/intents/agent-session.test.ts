@@ -26,6 +26,7 @@ vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 vi.mock('$lib/wallet/core/balance.svelte', () => ({
 	balance: {
 		view: {
+			address: MINE,
 			hidden: false,
 			tokens: [
 				{ chain_id: 5042002, symbol: 'USDC', token_address: null, spam: false, balance: '20' }

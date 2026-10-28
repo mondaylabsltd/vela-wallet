@@ -544,12 +544,21 @@ async fn answer(
     let gone = move || gone.load(Ordering::SeqCst);
     match name.as_str() {
         "vela_state" => Ok(Reply::Json(state(&mut live))),
-        "vela_review" => Ok(Reply::Json(review(&mut live))),
+        "vela_review" => Ok(match unread(&mut live, None) {
+            Some(refusal) => refusal,
+            None => Reply::Json(review(&mut live)),
+        }),
         "vela_wait" => {
             let wait = Wait::of(&args);
             let mut waited = 0;
             loop {
                 let operation = transfers::get(&wait.operation, &mut live.desk());
+                // A transfer of a wallet the agent may not use is not read.
+                if operation.is_some()
+                    && let Some(refusal) = unread(&mut live, Some(&wait.operation))
+                {
+                    return Ok(refusal);
+                }
                 if let Some(reply) = wait.look(operation, waited, gone()) {
                     return Ok(reply);
                 }
@@ -567,6 +576,13 @@ async fn answer(
             None => Err(format!("Unknown tool: {name}")),
         },
     }
+}
+
+/// Why the agent may not read what `vela_review` (no `operation`) or
+/// `vela_wait` would answer — the core's rule (spec 107 E8) — as the reply.
+fn unread(live: &mut Live, operation: Option<&str>) -> Option<Reply> {
+    intent_rules::agent_reads(&live.world(), operation)
+        .map(|reason| tools::reply(intents::Outcome::Rejected { reason }))
 }
 
 /// `vela_state`: the wallet as an agent reads it — the core decides what it
@@ -703,9 +719,16 @@ mod tests {
     }
 
     /// The agent switched on (not connected: these calls come straight in).
+    const MINE: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
     fn wallet() -> (Arc<Fake>, Agent) {
         let fake = Arc::new(Fake {
+            // Signed in, in a wallet the agent may use: what it reads of one.
             views: Mutex::new(json!({
+                "session": { "has_wallet": true, "address": MINE, "accounts": [
+                    { "index": 0, "account": { "address": MINE, "name": "Main" } }
+                ] },
+                "agent_wallets": [MINE],
                 "contacts": { "loaded": true, "contacts": [], "groups": [{ "id": "g1", "name": "Team" }] }
             })),
             ..Fake::default()

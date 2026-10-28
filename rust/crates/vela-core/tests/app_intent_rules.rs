@@ -5,9 +5,9 @@
 
 use serde_json::{json, Value};
 use vela_core::app::intent_rules::{
-    agent_state, approval_detail, baseline, examine, operation_progress, redact_url, review,
-    verdict, world_needs, Ceremony, Examined, Progress, ReviewInput, SendFacts, TrackFacts,
-    Verdict, World, REVIEW_NOTE,
+    agent_reads, agent_state, approval_detail, approval_detail_in, baseline, examine,
+    operation_progress, redact_url, review, verdict, world_needs, Ceremony, Examined, Progress,
+    ReviewInput, SendFacts, TrackFacts, Verdict, World, REVIEW_NOTE,
 };
 use vela_core::app::intents::{Action, OperationState, ReasonCode};
 
@@ -374,6 +374,10 @@ fn a_send_gone_before_signing_was_left_unsent() {
 #[test]
 fn the_agents_state_keeps_hidden_amounts_hidden_and_never_shows_a_key() {
     let w = world(json!({
+        "session": { "has_wallet": true, "address": ALICE, "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ] },
+        "agent_wallets": [ALICE],
         "balance": { "hidden": true, "display_total_usd": 20.0,
             "tokens": [{ "chain_id": 1, "symbol": "USDC", "balance": "20" }, { "chain_id": 1, "symbol": "SCAM", "spam": true }] },
         "feed": { "transactions": [{ "id": "r1", "value": "5" }] },
@@ -697,4 +701,136 @@ fn a_multisig_is_read_and_switched_to_like_any_account() {
     let state = agent_state(&closed, "wallet", &json!([]), &json!([]));
     assert_eq!(state["wallet_allowed"], false);
     assert!(state["balances"].is_null());
+}
+
+/// The wallet the person signed out of is read no more: no contacts, no
+/// balances, no activity, no transfers.
+#[test]
+fn after_signing_out_nothing_of_the_wallet_is_read() {
+    let w = world(json!({
+        "session": { "has_wallet": false, "address": "", "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ] },
+        "agent_wallets": [ALICE],
+        "contacts": { "loaded": true, "contacts": [{ "address": BOB, "name": "Bob" }], "groups": [] },
+        "balance": { "hidden": false, "display_total_usd": 99.0, "tokens": [{ "chain_id": 1, "symbol": "ETH", "balance": "1" }] },
+        "feed": { "transactions": [{ "id": "r1", "value": "5" }] },
+        "operations": [{ "id": "transfer-1", "state": "confirmed", "chain_id": 1, "user_op_hash": null,
+            "tx_hash": null, "reason": null, "account": ALICE }]
+    }));
+    let state = agent_state(&w, "welcome", &json!([]), &json!([]));
+    assert_eq!(state["signed_in"], false);
+    assert!(state["contacts"].is_null());
+    assert!(state["groups"].is_null());
+    assert!(state["balances"].is_null());
+    assert!(state["recent_transactions"].is_null());
+    assert_eq!(state["transfers"], json!([]));
+    assert_eq!(
+        agent_reads(&w, Some("transfer-1")).map(|r| r.code),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+}
+
+/// Spec 107 E8: a transfer is its account's — the agent reads it, in
+/// vela_state and vela_wait, only when the person lets it use that account,
+/// and reads the review in front only in a wallet it may use.
+#[test]
+fn a_transfer_and_a_review_are_read_only_in_a_wallet_the_agent_may_use() {
+    let op = |id: &str, account: Option<&str>| {
+        json!({ "id": id, "state": "awaiting_confirmation", "chain_id": 100, "user_op_hash": null,
+            "tx_hash": null, "reason": null, "account": account })
+    };
+    let base = |front: &str| {
+        json!({
+            "session": { "has_wallet": true, "address": front, "accounts": [
+                { "index": 0, "account": { "address": ALICE, "name": "Main" } },
+                { "index": 1, "account": { "address": BOB, "name": "Three" } }
+            ] },
+            "agent_wallets": [ALICE],
+            "operations": [op("transfer-1", Some(ALICE)), op("transfer-2", Some(BOB)), op("transfer-3", None)]
+        })
+    };
+    // In front: the allowed wallet. Its own transfer is read; the other
+    // wallet's is not, though the agent may use the one in front.
+    let allowed = world(base(ALICE));
+    let ids = |state: &Value| -> Vec<String> {
+        state["transfers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let state = agent_state(&allowed, "wallet", &json!([]), &json!([]));
+    assert_eq!(ids(&state), ["transfer-1", "transfer-3"]);
+    assert_eq!(state["transfers"][0]["account"], ALICE);
+    assert_eq!(agent_reads(&allowed, None), None);
+    assert_eq!(agent_reads(&allowed, Some("transfer-1")), None);
+    assert_eq!(
+        agent_reads(&allowed, Some("transfer-2")).map(|r| r.code),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    // A transfer nobody has is the caller's not_found.
+    assert_eq!(agent_reads(&allowed, Some("transfer-9")), None);
+
+    // In front: a wallet the person did not allow. Nothing of it is read —
+    // not what it is asked to sign, not a transfer of unknown account.
+    let closed = world(base(BOB));
+    let state = agent_state(&closed, "wallet", &json!([]), &json!([]));
+    assert_eq!(ids(&state), ["transfer-1"]);
+    assert_eq!(
+        agent_reads(&closed, None).map(|r| r.code),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    assert_eq!(
+        agent_reads(&closed, Some("transfer-3")).map(|r| r.code),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    assert_eq!(agent_reads(&closed, Some("transfer-1")), None);
+}
+
+/// Activity is stored in epoch seconds; the agent reads milliseconds, as the
+/// field's name says. A figure already in milliseconds is kept.
+#[test]
+fn recent_transactions_are_dated_in_milliseconds() {
+    let w = world(json!({
+        "session": { "has_wallet": true, "address": ALICE, "accounts": [] },
+        "agent_wallets": [ALICE],
+        "feed": { "transactions": [
+            { "id": "s", "timestamp": 1_761_600_000.0 },
+            { "id": "ms", "timestamp": 1_761_600_000_000.0 }
+        ] }
+    }));
+    let state = agent_state(&w, "wallet", &json!([]), &json!([]));
+    assert_eq!(
+        state["recent_transactions"][0]["timestamp_ms"],
+        1_761_600_000_000.0
+    );
+    assert_eq!(
+        state["recent_transactions"][1]["timestamp_ms"],
+        1_761_600_000_000.0
+    );
+}
+
+/// A multisig is named in an approval as the person named it, not by a bare
+/// address.
+#[test]
+fn an_approval_names_a_multisig_by_its_name() {
+    const SAFE: &str = "0x2222222222222222222222222222222222222222";
+    let w = world(json!({
+        "session": { "has_wallet": true, "address": ALICE, "accounts": [
+            { "index": 0, "account": { "address": ALICE, "name": "Main" } }
+        ] },
+        "multisigs": [{ "address": SAFE, "name": "Team fund", "threshold": 2, "owners": [ALICE, BOB] }]
+    }));
+    let switch = action(json!({ "type": "switch_account", "address": SAFE }));
+    assert_eq!(
+        approval_detail_in(&switch, &w).as_deref(),
+        Some("Main (0x0000…05fa) → Team fund (0x2222…2222)")
+    );
+    let remove = action(json!({ "type": "remove_wallet", "address": SAFE }));
+    assert_eq!(
+        approval_detail_in(&remove, &w).as_deref(),
+        Some("Team fund (0x2222…2222)")
+    );
 }

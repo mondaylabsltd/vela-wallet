@@ -7,7 +7,7 @@
 	 */
 	import NameField from '$lib/ui/onboarding/NameField.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import type { GroupFormCopy } from '../forms';
+	import { cleanName, NAME_MAX_CHARS, type GroupFormCopy } from '../forms';
 
 	interface Props {
 		copy: GroupFormCopy;
@@ -20,7 +20,7 @@
 	// Seed by design: the form is keyed per open; edits stay local.
 	// svelte-ignore state_referenced_locally
 	let name = $state(initialName ?? '');
-	const canSave = $derived(name.trim() !== '');
+	const canSave = $derived(cleanName(name) !== '');
 </script>
 
 <div class="form">
@@ -28,6 +28,7 @@
 		label={copy.nameLabel}
 		placeholder={copy.namePlaceholder}
 		value={name}
+		maxlength={NAME_MAX_CHARS}
 		oninput={(next) => (name = next)}
 	/>
 	<div class="actions">
@@ -35,7 +36,7 @@
 			variant="primary"
 			shape="rounded"
 			disabled={!canSave}
-			onclick={() => canSave && onsave(name.trim())}
+			onclick={() => canSave && onsave(cleanName(name))}
 		>
 			{copy.save}
 		</Button>

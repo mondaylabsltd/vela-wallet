@@ -492,6 +492,23 @@
       "fn": "intent_agent_state",
       "input": {
         "world": {
+          "session": {
+            "has_wallet": true,
+            "address": "0x00000000219ab540356cbb839cbe05303d7705fa",
+            "active_index": 0,
+            "accounts": [
+              {
+                "index": 0,
+                "account": {
+                  "address": "0x00000000219ab540356cbb839cbe05303d7705fa",
+                  "name": "Main"
+                }
+              }
+            ]
+          },
+          "agent_wallets": [
+            "0x00000000219ab540356cbb839cbe05303d7705fa"
+          ],
           "balance": {
             "hidden": true,
             "display_total_usd": 20.0,
@@ -523,10 +540,17 @@
         "activity": []
       },
       "expect": {
-        "signed_in": false,
+        "signed_in": true,
         "page": "wallet",
         "network_space": "mainnet",
-        "accounts": [],
+        "accounts": [
+          {
+            "address": "0x00000000219ab540356cbb839cbe05303d7705fa",
+            "name": "Main",
+            "active": true,
+            "agent_allowed": true
+          }
+        ],
         "balances": {
           "hidden": true,
           "total_usd": null,

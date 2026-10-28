@@ -311,6 +311,7 @@ export const WALLET_FLOW_KEYS = [
 	// person's choice (issue 686): that a faster speed is free here, so this
 	// send takes it; and that there is only one speed to have.
 	'send.feeSpeedFree',
+	'send.draftedByAgent',
 	'send.feeSpeedSingle',
 	'send.gasTier.fast',
 	'send.gasTier.standard',

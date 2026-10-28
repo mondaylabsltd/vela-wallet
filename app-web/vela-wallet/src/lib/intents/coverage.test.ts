@@ -299,6 +299,9 @@ const SETTINGS: Record<string, Place> = {
 		none: "the person's own sign-in on clientmcp.dev (spec 106); what it gives is applied as configure_agent"
 	},
 	'pref.agent-unlink': { intent: 'configure_agent' },
+	'pref.agent-use-here': {
+		none: 'which of the browser’s tabs answers the agent: the connection, not anything in the wallet'
+	},
 	'pref.agent-wallet': { intent: 'configure_agent' },
 	'pref.signing-venue': {
 		none: 'where this account signs is the signing boundary itself (spec 102)'

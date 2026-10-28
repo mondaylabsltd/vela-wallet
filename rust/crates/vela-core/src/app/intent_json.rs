@@ -139,6 +139,14 @@ pub fn agent_state(
     ))
 }
 
+/// Why an agent may not read `vela_review` (`operation` `null`) or a
+/// transfer it follows (`operation`, its id): a reason, or `null` when it
+/// may. An unreadable world is nobody's wallet: nothing is refused for it.
+#[must_use]
+pub fn agent_reads(world_json: &str, operation: Option<&str>) -> String {
+    to_json(&intent_rules::agent_reads(&world_of(world_json), operation))
+}
+
 /// `vela_review`: what the person is being asked to sign.
 #[must_use]
 pub fn review(input_json: &str) -> String {

@@ -167,6 +167,7 @@
     "txCloseBackground": "Schließen · weiterlaufen lassen",
     "txSubmittedTitle": "An das Netzwerk gesendet",
     "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
-    "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen."
+    "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen.",
+    "draftedByAgent": "Von Ihrem KI-Agenten vorbereitet"
   }
 }

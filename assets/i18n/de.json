@@ -204,7 +204,25 @@
    "clientId": "Client {{id}}",
    "wallets": "Wallets, die der Agent nutzen darf",
    "walletsHint": "Der Agent sieht und handelt nur in den Wallets, die du hier einschaltest.",
-   "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann."
+   "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann.",
+   "statusElsewhere": "In einem anderen Tab aktiv",
+   "useHere": "Hier verwenden",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "An",
+   "chain": "Netzwerk {{id}}",
+   "lastDone": "Erledigt",
+   "lastRefused": "Nicht ausgeführt",
+   "lastWaiting": "Läuft",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Block-Explorer",
+    "ethereumData": "Chain-Daten-Index",
+    "passkeyIndex": "Passkey-Index",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Fiat-Kurse"
+   }
   },
   "about": {
    "title": "Über",
@@ -753,7 +771,8 @@
   "txCloseBackground": "Schließen · weiterlaufen lassen",
   "txSubmittedTitle": "An das Netzwerk gesendet",
   "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
-  "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen."
+  "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen.",
+  "draftedByAgent": "Von Ihrem KI-Agenten vorbereitet"
  },
  "receive": {
   "title": "Empfangen",
