@@ -106,7 +106,9 @@
         "waiting": "等待其他成员",
         "queued": "排队中",
         "progress": "已批准 {{approved}}/{{threshold}}",
-        "unsent": "尚未发出"
+        "unsent": "尚未发出",
+        "cannotRun": "现在无法执行 — {{reason}}",
+        "nobodyPays": "此设备上没有账户能支付网络费"
       },
       "action": {
         "send": "发送 {{amount}} {{symbol}}",
@@ -187,12 +189,35 @@
         "outboxBusy": "多签服务繁忙——{{seconds}} 秒后重新发送。",
         "outboxAway": "无法连接多签服务——{{seconds}} 秒后重新发送。",
         "outboxNotSent": "尚未发出：多签服务没有接收。它保存在本设备上，发出之前其他成员看不到。",
-        "outboxSendAgain": "重新发送"
+        "outboxSendAgain": "重新发送",
+        "wouldFail": "现在执行会失败：{{reason}}。",
+        "whyShort": "多签持有 {{have}}，而这笔需要 {{need}}",
+        "whyReverts": "网络拒绝了它 —「{{reason}}」",
+        "whyRevertsPlain": "它在执行时回滚，网络没有给出原因",
+        "unpricedReason": "无法算出网络费 — 请稍后再试",
+        "feeLine": "网络费 ≈ {{fee}}，由 {{name}} 支付",
+        "feeChecking": "正在检查能否执行，以及网络费…",
+        "feeUnpriced": "暂时无法算出网络费。",
+        "feeRetry": "重新检查",
+        "feeSetup": "包含在 {{network}} 上的一次性设置 ≈ {{amount}}：",
+        "feeSetupPlain": "包含在 {{network}} 上的一次性设置：",
+        "setupMultisig": "部署这个多签",
+        "setupMember": "激活 {{name}} 的账户 — 多签通过该账户核验其批准",
+        "setupExecutor": "激活支付费用的 {{name}} 的账户",
+        "cantPayOther": "{{name}} 付不起网络费 — {{other}} 可以执行。",
+        "pickerCantPay": "付不起手续费",
+        "approvedNotExecuted": "你的批准已生效。执行未能进行：{{reason}}",
+        "notNeeded": "不需要",
+        "sendLink": "发送链接",
+        "approvesInVela": "在自己设备上的 Vela 中批准：{{names}}。把这个链接发给他们。",
+        "rejectCancel": "取消",
+        "noOutsideSigner": "此设备上没有成员，而每位成员都在自己设备上的 Vela 中批准 — 请其中一位来提议"
       },
       "send": {
         "propose": "发起并批准",
         "invalidAddress": "请输入有效的地址。",
-        "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。"
+        "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+        "proposeOnly": "提议"
       },
       "create": {
         "title": "新建多签账户",

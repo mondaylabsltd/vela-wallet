@@ -1083,8 +1083,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
+// 2464 (an execution is looked at before its passkey — would it run, its fee
+//   and what that pays for, who can pay, how each member signs, 2026-10-29):
+//   + `home.multisig.status.{cannotRun, nobodyPays}`, + `home.multisig.
+//   proposal.{wouldFail, whyShort, whyReverts, whyRevertsPlain,
+//   unpricedReason, feeLine, feeChecking, feeUnpriced, feeRetry, feeSetup,
+//   feeSetupPlain, setupMultisig, setupMember, setupExecutor, cantPayOther,
+//   pickerCantPay, approvedNotExecuted, notNeeded, sendLink, approvesInVela,
+//   rejectCancel, noOutsideSigner}`, + `home.multisig.send.proposeOnly` (a
+//   device with no member proposes; nobody here approves). 2318 + 25 = 2343
+//   leaves, 121 branches.
+if (PATHS.length !== 2464) fail(`expected 2464 paths (2343 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2343) fail(`expected 2343 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

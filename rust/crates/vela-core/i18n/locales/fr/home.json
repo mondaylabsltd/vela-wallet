@@ -107,7 +107,9 @@
         "waiting": "En attente des autres",
         "queued": "En file d’attente",
         "progress": "{{approved}}/{{threshold}} approbations",
-        "unsent": "Pas encore envoyée"
+        "unsent": "Pas encore envoyée",
+        "cannotRun": "Impossible pour l’instant — {{reason}}",
+        "nobodyPays": "aucun compte de cet appareil ne peut payer les frais de réseau"
       },
       "action": {
         "send": "Envoyer {{amount}} {{symbol}}",
@@ -188,12 +190,35 @@
         "outboxBusy": "Le service multisig est occupé — nouvel envoi dans {{seconds}} s.",
         "outboxAway": "Impossible de joindre le service multisig — nouvel envoi dans {{seconds}} s.",
         "outboxNotSent": "Pas encore envoyée : le service multisig ne l’a pas acceptée. Elle est conservée sur cet appareil, et les autres membres ne la voient pas tant qu’elle n’est pas envoyée.",
-        "outboxSendAgain": "Renvoyer"
+        "outboxSendAgain": "Renvoyer",
+        "wouldFail": "Cela échouerait si c’était exécuté maintenant : {{reason}}.",
+        "whyShort": "le multisig détient {{have}}, et il faut {{need}}",
+        "whyReverts": "le réseau la refuse — « {{reason}} »",
+        "whyRevertsPlain": "elle échoue à l’exécution, et le réseau ne donne aucune raison",
+        "unpricedReason": "les frais de réseau n’ont pas pu être calculés — réessayez dans un instant",
+        "feeLine": "Frais de réseau ≈ {{fee}}, payés par {{name}}",
+        "feeChecking": "Vérification de l’exécution et des frais de réseau…",
+        "feeUnpriced": "Impossible de calculer les frais de réseau pour l’instant.",
+        "feeRetry": "Vérifier à nouveau",
+        "feeSetup": "Comprend une mise en place unique sur {{network}} ≈ {{amount}} :",
+        "feeSetupPlain": "Comprend une mise en place unique sur {{network}} :",
+        "setupMultisig": "déployer ce multisig",
+        "setupMember": "activer le compte de {{name}} — le multisig vérifie son approbation par ce compte",
+        "setupExecutor": "activer le compte de {{name}}, qui paie les frais",
+        "cantPayOther": "{{name}} ne peut pas payer les frais de réseau — {{other}} peut l’exécuter.",
+        "pickerCantPay": "ne peut pas payer les frais",
+        "approvedNotExecuted": "Votre approbation est enregistrée. L’exécution n’a pas pu avoir lieu : {{reason}}",
+        "notNeeded": "Pas nécessaire",
+        "sendLink": "Envoyer le lien",
+        "approvesInVela": "Approuve dans Vela sur son propre appareil : {{names}}. Envoyez-leur ce lien.",
+        "rejectCancel": "Annuler",
+        "noOutsideSigner": "aucun membre n’est sur cet appareil, et chaque membre approuve dans Vela sur son propre appareil — demandez à l’un d’eux de la proposer"
       },
       "send": {
         "propose": "Proposer et approuver",
         "invalidAddress": "Saisissez une adresse valide.",
-        "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau."
+        "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau.",
+        "proposeOnly": "Proposer"
       },
       "create": {
         "title": "Nouveau multisig",

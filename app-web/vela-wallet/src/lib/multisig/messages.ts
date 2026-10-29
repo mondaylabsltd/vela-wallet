@@ -39,6 +39,10 @@ export interface MultisigMessages {
 		progress: string;
 		/** Signed here, not in the mailbox yet. */
 		unsent: string;
+		/** r4-5: a ready one that cannot run now (`{{reason}}`). */
+		cannotRun: string;
+		/** …because no account on this device can pay the fee. */
+		nobodyPays: string;
 	};
 	action: {
 		send: string;
@@ -139,9 +143,47 @@ export interface MultisigMessages {
 		/** Not sent after a while: kept, Send again. */
 		outboxNotSent: string;
 		outboxSendAgain: string;
+		/** r4-5: the execution would fail now (`{{reason}}`, one of the `why*`). */
+		wouldFail: string;
+		/** The multisig holds less than it spends (`{{have}}`, `{{need}}`, with the coin). */
+		whyShort: string;
+		/** It reverts; the network's reason (`{{reason}}`). */
+		whyReverts: string;
+		whyRevertsPlain: string;
+		/** The fee could not be priced: the reason an execution stopped before its passkey. */
+		unpricedReason: string;
+		/** r4-7: the fee before the passkey (`{{fee}}`, `{{name}}`: who pays). */
+		feeLine: string;
+		feeChecking: string;
+		feeUnpriced: string;
+		feeRetry: string;
+		/** What of the fee is one-time setup (`{{network}}`, `{{amount}}`). */
+		feeSetup: string;
+		feeSetupPlain: string;
+		setupMultisig: string;
+		/** A member's account deployed for its approval (`{{name}}`). */
+		setupMember: string;
+		setupExecutor: string;
+		/** r4D-1: who cannot pay, and who here can (`{{name}}`, `{{other}}`). */
+		cantPayOther: string;
+		/** r4-10: the picker's mark on an account that cannot pay. */
+		pickerCantPay: string;
+		/** r4-11: approved; only executing could not run (`{{reason}}`). */
+		approvedNotExecuted: string;
+		/** r4D-6: a member's approval once enough have approved. */
+		notNeeded: string;
+		sendLink: string;
+		/** r4-9: Vela members elsewhere approve from the link (`{{names}}`). */
+		approvesInVela: string;
+		/** r4D-14: the way back from Reject. */
+		rejectCancel: string;
+		/** r4C-10: no member here, and none can sign through an outside wallet. */
+		noOutsideSigner: string;
 	};
 	send: {
 		propose: string;
+		/** r4C-10: proposing on a device with no member — nobody here approves. */
+		proposeOnly: string;
 		invalidAddress: string;
 		/** A member's mixed case is not its EIP-55 checksum (send-2). */
 		invalidChecksum: string;
@@ -332,7 +374,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		waiting: '',
 		queued: '',
 		progress: '',
-		unsent: ''
+		unsent: '',
+		cannotRun: '',
+		nobodyPays: ''
 	},
 	action: {
 		send: '',
@@ -413,10 +457,33 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		outboxBusy: '',
 		outboxAway: '',
 		outboxNotSent: '',
-		outboxSendAgain: ''
+		outboxSendAgain: '',
+		wouldFail: '',
+		whyShort: '',
+		whyReverts: '',
+		whyRevertsPlain: '',
+		unpricedReason: '',
+		feeLine: '',
+		feeChecking: '',
+		feeUnpriced: '',
+		feeRetry: '',
+		feeSetup: '',
+		feeSetupPlain: '',
+		setupMultisig: '',
+		setupMember: '',
+		setupExecutor: '',
+		cantPayOther: '',
+		pickerCantPay: '',
+		approvedNotExecuted: '',
+		notNeeded: '',
+		sendLink: '',
+		approvesInVela: '',
+		rejectCancel: '',
+		noOutsideSigner: ''
 	},
 	send: {
 		propose: '',
+		proposeOnly: '',
 		invalidAddress: '',
 		invalidChecksum: ''
 	},

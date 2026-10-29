@@ -106,7 +106,9 @@
         "waiting": "Đang chờ người khác",
         "queued": "Đang xếp hàng",
         "progress": "Đã duyệt {{approved}}/{{threshold}}",
-        "unsent": "Chưa gửi"
+        "unsent": "Chưa gửi",
+        "cannotRun": "Chưa thể thực thi — {{reason}}",
+        "nobodyPays": "không tài khoản nào trên thiết bị này trả được phí mạng"
       },
       "action": {
         "send": "Gửi {{amount}} {{symbol}}",
@@ -187,12 +189,35 @@
         "outboxBusy": "Dịch vụ multisig đang bận — sẽ gửi lại sau {{seconds}} giây.",
         "outboxAway": "Không kết nối được dịch vụ multisig — sẽ gửi lại sau {{seconds}} giây.",
         "outboxNotSent": "Chưa gửi: dịch vụ multisig không nhận giao dịch. Giao dịch được giữ trên thiết bị này, và các thành viên khác không thấy được cho đến khi nó được gửi.",
-        "outboxSendAgain": "Gửi lại"
+        "outboxSendAgain": "Gửi lại",
+        "wouldFail": "Giao dịch này sẽ thất bại nếu thực thi bây giờ: {{reason}}.",
+        "whyShort": "multisig đang có {{have}}, còn giao dịch này cần {{need}}",
+        "whyReverts": "mạng từ chối — “{{reason}}”",
+        "whyRevertsPlain": "nó bị hoàn tác khi chạy, và mạng không nêu lý do",
+        "unpricedReason": "không tính được phí mạng — hãy thử lại sau giây lát",
+        "feeLine": "Phí mạng ≈ {{fee}}, do {{name}} trả",
+        "feeChecking": "Đang kiểm tra giao dịch có chạy được không, và phí mạng…",
+        "feeUnpriced": "Hiện không tính được phí mạng.",
+        "feeRetry": "Kiểm tra lại",
+        "feeSetup": "Bao gồm thiết lập một lần trên {{network}} ≈ {{amount}}:",
+        "feeSetupPlain": "Bao gồm thiết lập một lần trên {{network}}:",
+        "setupMultisig": "triển khai multisig này",
+        "setupMember": "kích hoạt tài khoản của {{name}} — multisig kiểm tra phê duyệt của họ qua tài khoản đó",
+        "setupExecutor": "kích hoạt tài khoản của {{name}}, tài khoản trả phí",
+        "cantPayOther": "{{name}} không trả được phí mạng — {{other}} có thể thực thi.",
+        "pickerCantPay": "không trả được phí",
+        "approvedNotExecuted": "Đã ghi nhận phê duyệt của bạn. Không thể thực thi: {{reason}}",
+        "notNeeded": "Không cần",
+        "sendLink": "Gửi liên kết",
+        "approvesInVela": "Phê duyệt trong Vela trên thiết bị của họ: {{names}}. Hãy gửi họ liên kết này.",
+        "rejectCancel": "Hủy",
+        "noOutsideSigner": "không có thành viên nào trên thiết bị này, và mọi thành viên đều phê duyệt trong Vela trên thiết bị của họ — hãy nhờ một người đề xuất"
       },
       "send": {
         "propose": "Đề xuất và duyệt",
         "invalidAddress": "Nhập một địa chỉ hợp lệ.",
-        "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại."
+        "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại.",
+        "proposeOnly": "Đề xuất"
       },
       "create": {
         "title": "Đa chữ ký mới",

@@ -106,6 +106,7 @@
 		waitingRows
 	} from '$lib/multisig/core/activity.svelte';
 	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
+	import { localOwners } from '$lib/multisig/core/owners';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
@@ -1423,7 +1424,14 @@
 									label: data.multisigMessages.proposal.approvals,
 									rule: data.multisigMessages.panel.title,
 									feeNote: data.multisigMessages.proposal.feeNote,
-									confirm: data.multisigMessages.send.propose,
+									// r4C-10: with no member here, nobody here approves it.
+									confirm:
+										localOwners([
+											...(multisig.active?.owners ?? []),
+											...multisigProposals.chains.flatMap((c) => c.members.owners)
+										]).length > 0
+											? data.multisigMessages.send.propose
+											: data.multisigMessages.send.proposeOnly,
 									// The rule on the send's network: its members there now.
 									membersOn: (chainId: number) => {
 										const there = multisigProposals.chain(chainId)?.members;

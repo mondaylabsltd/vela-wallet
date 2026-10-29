@@ -16,7 +16,7 @@
  * may have been sent is followed rather than sent again.
  */
 import { hasCode, readMembers, type ChainMembers } from './chain';
-import { submitExecution } from './execute';
+import { submitExecution, type ExecutionInput, type ExecutionPreview } from './execute';
 import {
 	callsTx,
 	cancelTx,
@@ -37,6 +37,7 @@ import {
 } from './kernel';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
+import { plainAccounts } from './signers.svelte';
 import {
 	fetchAllProposals,
 	fetchProposals,
@@ -958,9 +959,16 @@ async function proposeBuilt(
 	const tx = build(nextNonceOf(chain));
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
+	// No member here: an outside wallet proposes it — only a plain account's
+	// can; a Vela member approves in Vela, never on a wallet page (r4C-10).
+	let outside: string[] = [];
+	if (!owner) {
+		outside = await plainAccounts(chainId, owners);
+		if (outside.length === 0) throw new NoOutsideSignerError();
+	}
 	const { safeTxHash } = owner
 		? await propose(fresh, chainId, tx, owner)
-		: await approveExternally(fresh, chainId, tx, owners);
+		: await approveExternally(fresh, chainId, tx, outside);
 	await proposals.refresh(fresh, fresh.chainIds);
 	return { safeTxHash };
 }
@@ -980,23 +988,37 @@ export async function approve(account: MultisigAccount, item: ProposalItem, owne
 	return answer?.proposal ?? null;
 }
 
-/** `executor` executes `item` (one passkey prompt); resolves with the transaction hash. */
-export async function execute(
-	account: MultisigAccount,
+/** What `executor` executing `item` is, for its preview and its submit alike. */
+export function executionInput(
+	account: Pick<MultisigAccount, 'address' | 'genesis'>,
 	item: ProposalItem,
 	executor: LocalOwner,
 	members: ChainMembers
-) {
-	const result = await submitExecution({
+): ExecutionInput {
+	return {
 		chainId: item.chainId,
 		multisig: account.address,
 		genesis: account.genesis,
 		members,
 		tx: item.tx,
 		approvals: item.approvals.filter((a) => a.counts).map((a) => a.approval),
-		executor
-	});
-	return result;
+		executor,
+		action: item.review.action
+	};
+}
+
+/**
+ * `executor` executes `item` (one passkey prompt); resolves once the relay
+ * has it. `preview` is the one shown: its calls and fee are what is signed.
+ */
+export async function execute(
+	account: MultisigAccount,
+	item: ProposalItem,
+	executor: LocalOwner,
+	members: ChainMembers,
+	preview?: ExecutionPreview
+) {
+	return submitExecution(executionInput(account, item, executor, members), preview);
 }
 
 /** A voiding transaction at `item`'s nonce, approved at once by `owner`. */
@@ -1022,6 +1044,18 @@ export class MailboxUnreadableError extends Error {
 	constructor() {
 		super("the multisig's waiting transactions could not be read");
 		this.name = 'MailboxUnreadableError';
+	}
+}
+
+/**
+ * No member is on this device, and none can sign through an outside wallet:
+ * every member is a Vela account, which approves in Vela on its own device.
+ * Nothing was proposed.
+ */
+export class NoOutsideSignerError extends Error {
+	constructor() {
+		super('no member can sign through an outside wallet');
+		this.name = 'NoOutsideSignerError';
 	}
 }
 

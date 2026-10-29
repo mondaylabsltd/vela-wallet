@@ -106,7 +106,9 @@
         "waiting": "他のメンバー待ち",
         "queued": "順番待ち",
         "progress": "承認 {{approved}}/{{threshold}}",
-        "unsent": "未送信"
+        "unsent": "未送信",
+        "cannotRun": "今は実行できません — {{reason}}",
+        "nobodyPays": "このデバイスのどのアカウントもネットワーク手数料を支払えません"
       },
       "action": {
         "send": "{{amount}} {{symbol}} を送金",
@@ -187,12 +189,35 @@
         "outboxBusy": "マルチシグサービスが混み合っています。{{seconds}} 秒後に再送信します。",
         "outboxAway": "マルチシグサービスに接続できませんでした。{{seconds}} 秒後に再送信します。",
         "outboxNotSent": "まだ送信されていません。マルチシグサービスに受け付けられませんでした。この端末に保管されており、送信されるまで他のメンバーには見えません。",
-        "outboxSendAgain": "もう一度送信"
+        "outboxSendAgain": "もう一度送信",
+        "wouldFail": "今実行すると失敗します：{{reason}}。",
+        "whyShort": "マルチシグの残高は {{have}} で、{{need}} が必要です",
+        "whyReverts": "ネットワークが拒否しています —「{{reason}}」",
+        "whyRevertsPlain": "実行時にリバートし、ネットワークは理由を示していません",
+        "unpricedReason": "ネットワーク手数料を算出できませんでした — 少し待ってからもう一度お試しください",
+        "feeLine": "ネットワーク手数料 ≈ {{fee}}（{{name}} が支払い）",
+        "feeChecking": "実行できるか、ネットワーク手数料を確認しています…",
+        "feeUnpriced": "現在ネットワーク手数料を算出できません。",
+        "feeRetry": "もう一度確認",
+        "feeSetup": "{{network}} での一度きりのセットアップを含みます ≈ {{amount}}：",
+        "feeSetupPlain": "{{network}} での一度きりのセットアップを含みます：",
+        "setupMultisig": "このマルチシグのデプロイ",
+        "setupMember": "{{name}} のアカウントの有効化 — マルチシグはこのアカウントを通じて承認を確認します",
+        "setupExecutor": "手数料を支払う {{name}} のアカウントの有効化",
+        "cantPayOther": "{{name}} はネットワーク手数料を支払えません — {{other}} なら実行できます。",
+        "pickerCantPay": "手数料を支払えません",
+        "approvedNotExecuted": "承認は完了しました。実行はできませんでした：{{reason}}",
+        "notNeeded": "不要",
+        "sendLink": "リンクを送る",
+        "approvesInVela": "自分のデバイスの Vela で承認します：{{names}}。このリンクを送ってください。",
+        "rejectCancel": "キャンセル",
+        "noOutsideSigner": "このデバイスにメンバーはおらず、全員が自分のデバイスの Vela で承認します — メンバーの誰かに提案を頼んでください"
       },
       "send": {
         "propose": "提案して承認",
         "invalidAddress": "有効なアドレスを入力してください。",
-        "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。"
+        "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+        "proposeOnly": "提案"
       },
       "create": {
         "title": "新しいマルチシグ",

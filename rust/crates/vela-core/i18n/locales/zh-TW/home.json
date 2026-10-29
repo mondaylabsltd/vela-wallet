@@ -106,7 +106,9 @@
         "waiting": "等待其他成員",
         "queued": "排隊中",
         "progress": "已核准 {{approved}}/{{threshold}}",
-        "unsent": "尚未送出"
+        "unsent": "尚未送出",
+        "cannotRun": "現在無法執行 — {{reason}}",
+        "nobodyPays": "此裝置上沒有帳戶能支付網路費"
       },
       "action": {
         "send": "傳送 {{amount}} {{symbol}}",
@@ -187,12 +189,35 @@
         "outboxBusy": "多簽服務忙碌中——{{seconds}} 秒後重新送出。",
         "outboxAway": "無法連線多簽服務——{{seconds}} 秒後重新送出。",
         "outboxNotSent": "尚未送出：多簽服務沒有接收。它保存在本裝置上，送出之前其他成員看不到。",
-        "outboxSendAgain": "重新送出"
+        "outboxSendAgain": "重新送出",
+        "wouldFail": "現在執行會失敗：{{reason}}。",
+        "whyShort": "多簽持有 {{have}}，而這筆需要 {{need}}",
+        "whyReverts": "網路拒絕了它 —「{{reason}}」",
+        "whyRevertsPlain": "它在執行時回滾，網路沒有給出原因",
+        "unpricedReason": "無法算出網路費 — 請稍後再試",
+        "feeLine": "網路費 ≈ {{fee}}，由 {{name}} 支付",
+        "feeChecking": "正在檢查能否執行，以及網路費…",
+        "feeUnpriced": "暫時無法算出網路費。",
+        "feeRetry": "重新檢查",
+        "feeSetup": "包含在 {{network}} 上的一次性設定 ≈ {{amount}}：",
+        "feeSetupPlain": "包含在 {{network}} 上的一次性設定：",
+        "setupMultisig": "部署這個多簽",
+        "setupMember": "啟用 {{name}} 的帳戶 — 多簽透過該帳戶核驗其批准",
+        "setupExecutor": "啟用支付費用的 {{name}} 的帳戶",
+        "cantPayOther": "{{name}} 付不起網路費 — {{other}} 可以執行。",
+        "pickerCantPay": "付不起手續費",
+        "approvedNotExecuted": "你的批准已生效。執行未能進行：{{reason}}",
+        "notNeeded": "不需要",
+        "sendLink": "傳送連結",
+        "approvesInVela": "在自己裝置上的 Vela 中批准：{{names}}。把這個連結傳給他們。",
+        "rejectCancel": "取消",
+        "noOutsideSigner": "此裝置上沒有成員，而每位成員都在自己裝置上的 Vela 中批准 — 請其中一位來提議"
       },
       "send": {
         "propose": "發起並核准",
         "invalidAddress": "請輸入有效的地址。",
-        "invalidChecksum": "此地址的大小寫與校驗碼不符——可能是輸入錯誤，或複製的地址遭到竄改。請核對後重新複製。"
+        "invalidChecksum": "此地址的大小寫與校驗碼不符——可能是輸入錯誤，或複製的地址遭到竄改。請核對後重新複製。",
+        "proposeOnly": "提議"
       },
       "create": {
         "title": "建立多簽帳戶",
