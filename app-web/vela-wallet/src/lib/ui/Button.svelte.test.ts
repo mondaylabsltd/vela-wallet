@@ -22,7 +22,7 @@ function resolved(prop: 'color' | 'background-color', token: string): string {
 }
 
 describe('Button', () => {
-	it('draws `value` in the accent and `primary` in the neutral ink', async () => {
+	it('draws `value` in the accent fill and `primary` in the neutral ink', async () => {
 		const value = render(Button, {
 			props: { variant: 'value', children: label('Confirm & Send') }
 		});
@@ -30,16 +30,40 @@ describe('Button', () => {
 		await tick();
 		const send = value.container.querySelector('button') as HTMLButtonElement;
 		const next = primary.container.querySelector('button') as HTMLButtonElement;
+		// r4D-11: the fill token, under which the white label is AA.
 		expect(getComputedStyle(send).backgroundColor).toBe(
-			resolved('background-color', '--color-accent-base')
+			resolved('background-color', '--color-accent-fill')
 		);
 		expect(getComputedStyle(next).backgroundColor).toBe(
 			resolved('background-color', '--color-fg-base')
 		);
 		expect(getComputedStyle(next).color).toBe(resolved('color', '--color-fg-inverse'));
 		expect(getComputedStyle(next).backgroundColor).not.toBe(
-			resolved('background-color', '--color-accent-base')
+			resolved('background-color', '--color-accent-fill')
 		);
+	});
+
+	it('draws `danger` in the error fill (r4D-11)', async () => {
+		const screen = render(Button, { props: { variant: 'danger', children: label('Remove') } });
+		await tick();
+		const button = screen.container.querySelector('button') as HTMLButtonElement;
+		expect(getComputedStyle(button).backgroundColor).toBe(
+			resolved('background-color', '--color-error-fill')
+		);
+	});
+
+	it('keeps its name while it spins (r4D-12)', async () => {
+		const screen = render(Button, {
+			props: { variant: 'primary', loading: true, children: label('Add') }
+		});
+		await tick();
+		const button = screen.container.querySelector('button') as HTMLButtonElement;
+		expect(button.getAttribute('aria-busy')).toBe('true');
+		// The label stays in the accessibility tree: not hidden, only see-through.
+		const text = button.querySelector('.label') as HTMLElement;
+		expect(getComputedStyle(text).visibility).toBe('visible');
+		expect(getComputedStyle(text).opacity).toBe('0');
+		await expect.element(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
 	});
 
 	it('as a link, still runs its handler before it goes (ob-1)', async () => {

@@ -440,6 +440,8 @@ export interface SettingsMessages {
 		signInExisting: string;
 		/** Taking ONE wallet off this device (2026-09-23). */
 		remove: string;
+		/** r4D-12: the ✕'s name, saying which one (`{{name}}`). */
+		removeNamed: string;
 		removeBody: string;
 		/** That question's way out (ob-5: the button was drawn with no words). */
 		cancel: string;

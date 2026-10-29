@@ -211,6 +211,7 @@
 			<span>{m.create.name}</span>
 			<input
 				class="name-field"
+				data-field
 				placeholder={m.create.namePlaceholder}
 				autocomplete="off"
 				bind:value={name}
@@ -249,6 +250,7 @@
 		<div class="typed">
 			<input
 				class="mono"
+				data-field
 				placeholder={m.create.addressPlaceholder}
 				autocomplete="off"
 				spellcheck="false"
@@ -371,6 +373,7 @@
 				}}
 			/>
 		</div>
+		<p class="hint">{m.create.networkHint}</p>
 		{#if networks.length === 0}
 			<p class="error" role="alert">{m.create.noSafeNetworks}</p>
 		{/if}
@@ -451,7 +454,7 @@
 		margin: var(--space-lg) 0 var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.choices,
@@ -512,7 +515,7 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.typed {
@@ -576,8 +579,14 @@
 		color: var(--color-fg-muted);
 	}
 
+	/* r4D-12: never drawn smaller than the target floor (--size-targetMin). */
 	.remove {
 		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--size-targetMin);
+		min-height: var(--size-targetMin);
 		padding: var(--space-xs);
 		border: 0;
 		background: none;
@@ -704,7 +713,7 @@
 		gap: var(--space-xs);
 		margin-block-start: var(--space-lg);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.label {

@@ -196,6 +196,7 @@
 		>
 			<input
 				class="mono"
+				data-field
 				placeholder={m.add.placeholder}
 				autocomplete="off"
 				spellcheck="false"
@@ -275,7 +276,7 @@
 		margin: 0 0 var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.import {

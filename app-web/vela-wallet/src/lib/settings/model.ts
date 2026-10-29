@@ -352,6 +352,8 @@ export interface AccountsSheetModel {
 	 * leaves the affordance undrawn, which is what a fixture board wants.
 	 */
 	remove?: string;
+	/** r4D-12: the ✕'s accessible name, naming the row (`{{name}}`). */
+	removeNamed?: string;
 	removeBody?: string;
 	removeCancel?: string;
 }
@@ -1260,6 +1262,7 @@ export interface SettingsDesktopModel {
 		secondary: string;
 		/** ob-14: the switcher's remove and its confirm, here too (live only). */
 		remove?: string;
+		removeNamed?: string;
 		removeBody?: string;
 		removeCancel?: string;
 		signOutLabel: string;

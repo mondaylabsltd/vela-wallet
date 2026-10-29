@@ -52,10 +52,12 @@ export interface MultisigMessages {
 		to: string;
 		network: string;
 		number: string;
+		/** The number itself, in the locale's form (`{{nonce}}`): "#0", "Nr. 0". */
+		numberValue: string;
 		call: string;
 		callWithValue: string;
 		batchCalls: string;
-		/** A rename of its record in the registry (`{{name}}`). */
+		/** A change of its shared name (`{{name}}`). */
 		rename: string;
 	};
 	proposal: {
@@ -164,6 +166,8 @@ export interface MultisigMessages {
 		address: string;
 		sameEverywhere: string;
 		network: string;
+		/** r4D-13: what the first network is for, under its select. */
+		networkHint: string;
 		creator: string;
 		create: string;
 		next: string;
@@ -346,6 +350,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		to: '',
 		network: '',
 		number: '',
+		numberValue: '',
 		call: '',
 		callWithValue: '',
 		batchCalls: '',
@@ -437,6 +442,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		address: '',
 		sameEverywhere: '',
 		network: '',
+		networkHint: '',
 		creator: '',
 		create: '',
 		next: '',

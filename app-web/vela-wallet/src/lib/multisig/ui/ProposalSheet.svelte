@@ -575,7 +575,8 @@
 				</div>
 				<div>
 					<dt>{m.action.number}</dt>
-					<dd>{item.nonce.toString()}</dd>
+					<!-- r4D-13: "#0", "Nr. 0": a number, never "Transaction # 0", a count. -->
+					<dd>{fillTemplate(m.action.numberValue, { nonce: item.nonce.toString() })}</dd>
 				</div>
 				<div>
 					<dt>{m.proposal.hash}</dt>
@@ -990,7 +991,9 @@
 		gap: var(--space-sm);
 	}
 
+	/* r4D-12: a link-styled button still measures the target floor (--size-targetMin). */
 	.external {
+		min-height: var(--size-targetMin);
 		padding: 0;
 		border: 0;
 		background: none;
@@ -1024,7 +1027,7 @@
 	}
 
 	.to-label {
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.to-who {
@@ -1036,7 +1039,7 @@
 	.mono {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.lines {
@@ -1067,7 +1070,7 @@
 
 	dt {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	dd {
@@ -1113,38 +1116,43 @@
 		padding: 0;
 	}
 
+	/* r4D-15: a member's short address is already the short form, never cut
+	   a second time ("0x08bdcA…f6…"): the row wraps instead — the name line
+	   first, the state under it at the end — and a name wraps at its spaces. */
 	.approvals li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-md);
+		gap: var(--space-xs) var(--space-md);
 		padding-block: var(--space-sm);
 	}
 
 	.who {
-		flex: 1;
+		flex: 1 1 auto;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 	}
 
+	/* "· On this device" moves as one, onto the next line if it must. */
 	.here {
-		color: var(--color-fg-subtle);
+		white-space: nowrap;
+		color: var(--color-fg-muted);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.state {
 		display: inline-flex;
 		align-items: center;
+		margin-inline-start: auto;
 		gap: var(--space-xs);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	li.done .state {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.quiet {
@@ -1178,7 +1186,7 @@
 	.actor legend {
 		margin-block-end: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.actor label {
@@ -1216,7 +1224,7 @@
 
 	.fine.subtle {
 		margin-block-start: var(--space-xl);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.sent {
@@ -1227,7 +1235,7 @@
 		padding: var(--space-md);
 		border-radius: var(--radius-lg);
 		background: var(--color-success-soft);
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 		font-weight: var(--weight-medium);
 	}
 
@@ -1260,7 +1268,7 @@
 	.data {
 		margin-block-start: var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.data summary {

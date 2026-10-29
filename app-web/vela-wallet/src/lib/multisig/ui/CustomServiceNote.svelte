@@ -25,7 +25,7 @@
 		margin: 0 0 var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		overflow-wrap: anywhere;
 	}
 </style>

@@ -3319,7 +3319,7 @@ describe('a multisig send', () => {
 	it('the form says who must approve where the fee would be, calmly', () => {
 		const fee = liveSendForm(formModel(), multisig({ selected_token: ETH, fee: QUOTE })).fee;
 		expect(fee.label).toBe('Approvals');
-		expect(fee.value).toBe('2 of 3 members approve');
+		expect(fee.value).toBe('Needs 2 of 3 members');
 		expect(fee.staleNote).toBe(words.proposal.feeNote);
 		expect(fee.reason).toBeUndefined();
 		expect(fee.plain).toBe(true);
@@ -3333,7 +3333,7 @@ describe('a multisig send', () => {
 		);
 		expect(confirm.cta).toBe('Propose and approve');
 		const approvals = confirm.facts.find((fact) => fact.label === 'Approvals');
-		expect(approvals?.value).toBe('2 of 3 members approve');
+		expect(approvals?.value).toBe('Needs 2 of 3 members');
 		expect(confirm.facts.some((fact) => fact.label === m['send.estFeeLabel'])).toBe(false);
 	});
 
@@ -3346,10 +3346,10 @@ describe('a multisig send', () => {
 		});
 		// A member added and the threshold lowered on this network.
 		expect(liveSendForm(formModel(), on({ threshold: 1, owners: 4 })).fee.value).toBe(
-			'1 of 4 members approve'
+			'Needs 1 of 4 members'
 		);
 		// Nothing read there: the multisig's own rule (what it starts with).
-		expect(liveSendForm(formModel(), on(null)).fee.value).toBe('2 of 3 members approve');
+		expect(liveSendForm(formModel(), on(null)).fee.value).toBe('Needs 2 of 3 members');
 	});
 
 	it('a Vela account send is untouched', () => {

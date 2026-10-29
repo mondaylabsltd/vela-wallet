@@ -126,7 +126,7 @@
 		flex: 0 1 auto;
 		min-width: min-content;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.value-wrap {
@@ -208,7 +208,7 @@
 	.detail {
 		max-width: 100%;
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		text-align: end;
 		overflow-wrap: anywhere;
 	}
@@ -219,7 +219,7 @@
 	}
 
 	.value[data-tone='success'] {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	/* The whole row is the target (PR 2 polish): the same row, unstyled as a
@@ -264,6 +264,6 @@
 	}
 
 	.copied {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 </style>

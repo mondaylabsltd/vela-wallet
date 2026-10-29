@@ -34,6 +34,7 @@
       "switch": "切换账户",
       "contactsSubtitle": "已保存地址与最近收款人",
       "remove": "从这台设备移除",
+      "removeNamed": "从这台设备移除 {{name}}",
       "removeBody": "只有这个钱包离开，其余的不动。",
       "openInSafe": "这个账户是标准的 Safe，你也可以在 {{app}} 中打开它"
     },

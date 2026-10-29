@@ -237,6 +237,7 @@
 					<MultisigRows
 						m={multisigCopy}
 						removeLabel={sheet.remove ?? ''}
+						removeNamed={sheet.removeNamed}
 						cancelLabel={sheet.removeCancel ?? ''}
 						amount={(address) => accountAmount(input, address)}
 						loading={(address) => accountLoading(input, address)}

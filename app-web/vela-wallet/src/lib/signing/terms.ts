@@ -21,7 +21,7 @@ const ALL = {
 	// index relabel in the shell. The term keeps its first name on the wire.
 	intentBackUpPublicKeys: true,
 	// Vela's other contract, the Safe Genesis Registry: a multisig's setup
-	// saved there ("Save its setup to Ethereum"), and a Safe's rename. The
+	// saved there ("Back up its setup on Ethereum"), and a Safe's rename. The
 	// record's rows are the network, the multisig's address and its name.
 	intentSaveMultisigSetup: true,
 	intentRenameInRegistry: true,

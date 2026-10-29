@@ -95,7 +95,7 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		white-space: nowrap;
 	}
 

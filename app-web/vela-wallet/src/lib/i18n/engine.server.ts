@@ -769,6 +769,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
+			removeNamed: k('settings.account.removeNamed'),
 			removeBody: k('settings.account.removeBody'),
 			cancel: k('common.cancel'),
 			syncing: k('home.syncingLine')

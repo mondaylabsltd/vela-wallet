@@ -339,6 +339,7 @@
 						primary: model.account.primary,
 						secondary: model.account.secondary,
 						remove: model.account.remove,
+						removeNamed: model.account.removeNamed,
 						removeBody: model.account.removeBody,
 						removeCancel: model.account.removeCancel
 					}}

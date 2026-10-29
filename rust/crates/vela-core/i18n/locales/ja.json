@@ -34,6 +34,7 @@
       "switch": "アカウントを切り替える",
       "contactsSubtitle": "保存済みのアドレスと最近の送金先",
       "remove": "この端末から削除",
+      "removeNamed": "{{name}} をこの端末から削除",
       "removeBody": "このウォレットだけが離れ、ほかは残ります。",
       "openInSafe": "このアカウントは標準の Safe です。{{app}} でも開けます"
     },

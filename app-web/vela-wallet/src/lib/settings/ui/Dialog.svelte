@@ -107,7 +107,8 @@
 	data-focus-inner
 	bind:this={panel}
 >
-	<header>
+	<!-- A div, not a <header>: the dialog's title row is no second banner. -->
+	<div class="head">
 		<div class="titles">
 			<h2>{title}</h2>
 			{#if subtitle !== undefined}<p>{subtitle}</p>{/if}
@@ -115,7 +116,7 @@
 		<button type="button" class="close" aria-label={closeLabel} onclick={onclose}>
 			<Icon icon={UTILITY_ICONS.x} size="md" />
 		</button>
-	</header>
+	</div>
 	<div class="content">{@render children()}</div>
 </div>
 
@@ -144,7 +145,7 @@
 		box-shadow: var(--shadow-lg);
 	}
 
-	header {
+	.head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;

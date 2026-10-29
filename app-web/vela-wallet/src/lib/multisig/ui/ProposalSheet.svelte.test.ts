@@ -659,7 +659,7 @@ describe('every artwork opens the identicon viewer (founder call, 2026-09-05)', 
 		expect(rows).toHaveLength(2);
 		rows[1].querySelector<HTMLButtonElement>('button.identicon')?.click();
 		expect(identiconViewer.current?.address).toBe(OTHER);
-		// "Sign with another wallet" is the row's own control, beside the
+		// "Approve with another wallet" is the row's own control, beside the
 		// artwork's button: no button holds another.
 		expect(rows[1].textContent).toContain('external.signWithWallet');
 		expect(document.body.querySelector('button button')).toBeNull();

@@ -129,7 +129,7 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		letter-spacing: var(--letterSpacing-sectionLabel);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.networks {

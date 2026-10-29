@@ -157,8 +157,12 @@
 		cursor: default;
 	}
 
+	/* Transparent, not `visibility: hidden`: a hidden label leaves the
+	   accessibility tree, and the button went nameless — a bare spinner, to a
+	   screen reader nothing at all (r4D-12). Kept, it still names the button
+	   while `aria-busy` says it is working. */
 	.button.loading .label {
-		visibility: hidden;
+		opacity: 0;
 	}
 
 	.spinner {
@@ -211,8 +215,10 @@
 		color: var(--color-fg-inverse);
 	}
 
+	/* r4D-11: the fill tokens, not the mark colours — a white 17-point label
+	   needs 4.5:1 under it (tokens.css, contrast.test.ts). */
 	.value {
-		background: var(--color-accent-base);
+		background: var(--color-accent-fill);
 		color: var(--color-onAccent);
 	}
 
@@ -223,7 +229,7 @@
 	}
 
 	.danger {
-		background: var(--color-error-base);
+		background: var(--color-error-fill);
 		color: var(--color-onAccent);
 	}
 </style>

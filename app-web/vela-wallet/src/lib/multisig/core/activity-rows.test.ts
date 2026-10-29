@@ -82,10 +82,40 @@ describe('a waiting multisig transaction in Activity', () => {
 		const rows = waitingRows.group(m, 'To {{name}}')!.rows;
 		expect(rows[0].badgeLogoUrl).toBe('/logo/100.svg');
 		expect(rows[0].amount).toBe('−1.5');
-		expect(rows[0].subtitle).toBe('Waiting for others · 1/2 approved · To Alice');
+		expect(rows[0].subtitle).toBe('1/2 approved · To Alice');
 		// No name on this device: the checksummed short form.
-		expect(rows[1].subtitle).toBe('Waiting for others · 1/2 approved · To 0x222222…CdEf00');
+		expect(rows[1].subtitle).toBe('1/2 approved · To 0x222222…CdEf00');
 		// Not a transfer: the network, as before.
-		expect(rows[2].subtitle).toBe('Waiting for others · 1/2 approved · Gnosis');
+		expect(rows[2].subtitle).toBe('1/2 approved · Gnosis');
+	});
+
+	it('says one thing about where it stands, so it fits two lines at 320px (r4D-13)', async () => {
+		const to = {
+			kind: 'transfer',
+			token: null,
+			to: '0x1111111111111111111111111111111111111111',
+			amount: '1'
+		};
+		proposals.chains = [
+			{
+				chainId: 100,
+				items: [
+					{ ...item(to, '0xd'), approved: 2, status: 'ready' },
+					{ ...item(to, '0xe'), canApprove: ['0x1111111111111111111111111111111111111111'] },
+					{ ...item(to, '0xf'), status: 'queued' }
+				]
+			}
+		] as never;
+		waitingRows.follow(m);
+		await vi.waitFor(() =>
+			expect(waitingRows.group(m, 'To {{name}}')?.rows[0].amount).not.toBe('')
+		);
+		const rows = waitingRows.group(m, 'To {{name}}')!.rows;
+		// Never a status AND its count: "Ready to execute" already says 2/2.
+		expect(rows.map((r) => r.subtitle)).toEqual([
+			'Ready to execute · To Alice',
+			'Needs your approval · To Alice',
+			'Queued · To Alice'
+		]);
 	});
 });

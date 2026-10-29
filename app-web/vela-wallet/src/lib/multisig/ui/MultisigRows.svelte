@@ -6,6 +6,7 @@
 	 * inside `AccountsSheetBody`'s list and styled as its rows are.
 	 */
 	import Button from '$lib/ui/Button.svelte';
+	import { fillTemplate } from '$lib/i18n/fill';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
@@ -21,6 +22,8 @@
 	interface Props {
 		m: MultisigMessages;
 		removeLabel: string;
+		/** r4D-12: the ✕'s name, saying which multisig (`{{name}}`). */
+		removeNamed?: string;
 		cancelLabel: string;
 		/** Its total as the Vela rows draw theirs: the mask, the figure, or nothing yet. */
 		amount?: (address: string) => string;
@@ -29,7 +32,7 @@
 		onselect: (account: MultisigAccount) => void;
 	}
 
-	let { m, removeLabel, cancelLabel, amount, loading, onselect }: Props = $props();
+	let { m, removeLabel, removeNamed, cancelLabel, amount, loading, onselect }: Props = $props();
 
 	let removing = $state<string | null>(null);
 	const active = $derived(multisig.active);
@@ -79,7 +82,9 @@
 		<button
 			type="button"
 			class="remove"
-			aria-label={removeLabel}
+			aria-label={removeNamed
+				? fillTemplate(removeNamed, { name: multisigName(account, m) })
+				: removeLabel}
 			onclick={() => (removing = account.address)}
 		>
 			<Icon icon={UTILITY_ICONS['x']} size="md" />
@@ -156,7 +161,7 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	/* What this row's account cannot do yet, said where it is picked. */
@@ -209,8 +214,14 @@
 		color: var(--color-fg-base);
 	}
 
+	/* r4D-12: never drawn smaller than the target floor (--size-targetMin). */
 	.remove {
 		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--size-targetMin);
+		min-height: var(--size-targetMin);
 		padding: var(--space-xs);
 		border: 0;
 		background: none;

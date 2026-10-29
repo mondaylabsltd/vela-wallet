@@ -128,7 +128,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 
 	const multisig = await page.evaluate(() => localStorage.getItem('vela.activeMultisig'));
 	expect(multisig).toMatch(/^0x[0-9a-fA-F]{40}$/);
-	await expect(page.getByRole('link', { name: '2 of 3 members approve' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Needs 2 of 3 members' }).first()).toBeVisible();
 	// The name is the multisig's own, from its genesis.
 	await expect(page.getByText('Team fund', { exact: true }).first()).toBeVisible();
 	await shot(page, '07-home');
@@ -188,7 +188,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await pageA.getByRole('button', { name: 'Next' }).click();
 		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 		await pageA.getByRole('button', { name: 'Done' }).click();
-		await expect(pageA.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 		await shot(pageA, 'x2-home-a');
 	});
 
@@ -224,7 +224,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 
 	await test.step('device A sees it done', async () => {
 		await pageA.reload();
-		await expect(pageA.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+		await expect(pageA.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 		// Nothing left waiting: the executed transaction is gone from the panel.
 		await expect(pageA.getByText('Waiting for approval')).toHaveCount(0, { timeout: 30_000 });
 		// Executed on device B, found on chain here, and in this device's activity.
@@ -267,7 +267,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
 	await setBalance(multisig, 2n * 10n ** 18n);
 	await page.reload();
-	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 	await shot(page, 'd3-home');
 	await proposeSend(page, '0.5', 'd4-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
@@ -279,7 +279,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await shot(page, 'd6-activity');
 
 	// Its settings are where a Vela account's are: Settings → Account.
-	await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
+	await page.getByRole('link', { name: 'Needs 2 of 2 members' }).first().click();
 	await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
 		timeout: 30_000
 	});
@@ -290,7 +290,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await page.getByRole('button', { name: 'Contacts' }).first().click();
 	await expect(page.getByRole('heading', { name: 'Contacts' }).first()).toBeVisible();
 	await expect(page.getByText('Desk fund').first()).toBeVisible();
-	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 	await page
 		.getByRole('button', { name: /Desk fund/ })
 		.first()
@@ -327,7 +327,7 @@ test('a network the genesis service does not read: propose, approve and execute 
 	// Funds on "Base" only: the second fork, which the service has no RPC for.
 	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
 	await page.reload();
-	await expect(page.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 
 	await proposeSend(page, '0.5', 'u1-propose', { row: /^ETH Base/, symbol: 'ETH' });
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
@@ -377,7 +377,7 @@ test('an outside owner signs with their own wallet, through the connect page', a
 
 	let link = '';
 	await test.step('Vela shows the connect link for the outside owner', async () => {
-		await page.getByRole('button', { name: 'Sign with another wallet' }).click();
+		await page.getByRole('button', { name: 'Approve with another wallet' }).click();
 		link = (await page.getByTestId('external-link').textContent())!.trim();
 		expect(link).toMatch(/\/en\/connect#ws/);
 		// ms-14: the member Vela asks for rides in the fragment with the
@@ -534,7 +534,7 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 	await expect(page.getByText('1/2 approved').first()).toBeVisible({ timeout: 60_000 });
 
 	await test.step('the second owner signs from another wallet', async () => {
-		await page.getByRole('button', { name: 'Sign with another wallet' }).first().click();
+		await page.getByRole('button', { name: 'Approve with another wallet' }).first().click();
 		await expect(page.getByTestId('external-link')).toBeVisible();
 	});
 	const thrownTwo = await signElsewhere(browser, page, EOA_TWO, 'i6-signed-two');
@@ -596,12 +596,12 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 	expect(await recordOnChain(multisig)).toEqual({ name: 'Old name', renamedAt: 0 });
 
 	await test.step('not deployed on Gnosis: nothing that deploys is offered', async () => {
-		await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
+		await page.getByRole('link', { name: 'Needs 2 of 2 members' }).first().click();
 		await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
 			timeout: 30_000
 		});
 		await expect(page.getByTestId('rename-not-deployed')).toBeVisible({ timeout: 30_000 });
-		await expect(page.getByRole('button', { name: 'Rename on chain' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Change the shared name' })).toHaveCount(0);
 		await shot(page, 'r0-not-deployed');
 	});
 
@@ -624,12 +624,12 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 	});
 
 	await test.step('propose the rename from its settings', async () => {
-		await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
+		await page.getByRole('link', { name: 'Needs 2 of 2 members' }).first().click();
 		await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
 			timeout: 30_000
 		});
 		await expect(page.getByTestId('registry-name')).toHaveText('Old name');
-		await page.getByRole('button', { name: 'Rename on chain' }).click();
+		await page.getByRole('button', { name: 'Change the shared name' }).click();
 		await page.getByRole('textbox', { name: 'Name' }).fill('Team treasury');
 		await shot(page, 'r1-rename');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
@@ -916,7 +916,7 @@ test('a proposal on a network it is not deployed on: found by another device wit
 			{ address: multisig, genesis, owners: [FIXTURES.one, FIXTURES.two] }
 		);
 		await pageB.reload();
-		await expect(pageB.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+		await expect(pageB.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 	});
 
 	await test.step('device A proposes on Base, where it is deployed nowhere', async () => {

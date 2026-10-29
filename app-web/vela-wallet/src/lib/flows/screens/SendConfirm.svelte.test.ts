@@ -180,8 +180,8 @@ describe('SendConfirm — the failed fee line does what it says (PR 2 polish)', 
 		) as HTMLElement;
 		expect(check.textContent).toContain('Couldn’t check your past sends');
 		expect(check.getAttribute('role')).toBe('status');
-		// Neutral — never the warning ink of the first-time tag.
-		expect(getComputedStyle(check).color).toBe(colourOf('--color-fg-subtle'));
+		// Neutral — never the warning ink of the first-time tag — and AA (r4D-11).
+		expect(getComputedStyle(check).color).toBe(colourOf('--color-fg-muted'));
 		expect(screen.container.querySelector('.tag')).toBeNull();
 		(check.querySelector('button') as HTMLButtonElement).click();
 		await tick();

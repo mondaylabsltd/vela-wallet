@@ -177,13 +177,14 @@ class WaitingRows {
 				id: proposalRowId(item),
 				kind: 'sent',
 				title: drawn?.title ?? '…',
+				// r4D-13: ONE word about where it stands, so the line fits two
+				// lines on a 320-wide phone. "Ready to execute" already says every
+				// approval is in, "Needs your approval" is the one thing to do,
+				// "Queued" waits on another; only a plain wait says its count
+				// ("1/2 approved"), which says "waiting for others" by itself.
 				subtitle: [
 					drawn?.source,
-					statusOf(m, item),
-					fillTemplate(m.status.progress, {
-						approved: item.approved,
-						threshold: item.threshold
-					}),
+					standing(m, item),
 					// vis-18: whom a transfer goes to, as a Vela account's row
 					// says it; the chain logo on the glyph already names the
 					// network, so a transfer's line has room for the person.
@@ -255,13 +256,17 @@ function recipientLine(item: ProposalItem, toName: string | undefined): string |
 	return fillTemplate(toName, { name: localName(address) ?? shortenAddress(address) });
 }
 
-function statusOf(m: MultisigMessages, item: ProposalItem): string {
+/**
+ * An Activity row's one word on where it stands (see `group`): a plain wait
+ * is said by its count, which already says "waiting for others".
+ */
+function standing(m: MultisigMessages, item: ProposalItem): string {
 	// Signed here, not in the mailbox yet: the one thing to know about it.
 	if (item.unsent) return m.status.unsent;
 	if (item.status === 'queued') return m.status.queued;
 	if (item.status === 'ready') return m.status.ready;
 	if (item.canApprove.length > 0) return m.status.yourTurn;
-	return m.status.waiting;
+	return fillTemplate(m.status.progress, { approved: item.approved, threshold: item.threshold });
 }
 
 export const waitingRows = new WaitingRows();

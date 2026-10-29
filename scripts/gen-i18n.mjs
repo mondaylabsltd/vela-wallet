@@ -1083,8 +1083,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
+// 2442 (round 4, accessibility and words, 2026-10-29): + `settings.account.
+//   removeNamed` (the switcher's ✕ names the account it removes), +
+//   `home.multisig.create.networkHint` (what "First network" means), +
+//   `home.multisig.action.numberValue` (a transaction's number in the
+//   locale's own form, "#0" / "Nr. 0", not "Transaction # 0").
+//   `panel.title`, `action.number`, `action.rename`, `create.order`,
+//   `create.thresholdAll`, `settings.{renameTitle, renameAction, backupTitle,
+//   renameNotDeployed}`, `proposal.{renameRuns, renameUndeployed}`,
+//   `external.{signWithWallet, sheetTitle, signedBy, pageTitle, signTx}` and
+//   `panel.readOnly` change value only. 2318 + 3 = 2321 leaves, 121 branches.
+if (PATHS.length !== 2442) fail(`expected 2442 paths (2321 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2321) fail(`expected 2321 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

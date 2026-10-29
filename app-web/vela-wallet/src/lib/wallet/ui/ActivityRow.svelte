@@ -277,11 +277,11 @@
 
 	.unit {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.positive .value {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.danger .value {
@@ -292,7 +292,7 @@
 	.back .value {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.masked .value {
