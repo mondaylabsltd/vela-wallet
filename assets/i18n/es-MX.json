@@ -254,6 +254,7 @@
    "confirm": "Borrar todo",
    "cancel": "Cancelar",
    "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo.",
+   "failedHeld": "Se borró todo lo que Vela guardó aquí, pero otra pestaña todavía tiene abierto el almacenamiento de Vela, así que el borrado no pudo terminar. Cierra Vela en tus otras pestañas y ventanas, y vuelve a intentarlo.",
    "unsynced": "Sin terminar de sincronizar: {{names}}. Hasta que se sincronice, ningún otro dispositivo puede encontrarla; si borras ahora, podrías perderla para siempre.",
    "unsyncedAck": "Entiendo que una billetera sin sincronizar podría perderse para siempre"
   },

@@ -254,6 +254,7 @@
    "confirm": "Alles löschen",
    "cancel": "Abbrechen",
    "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen.",
+   "failedHeld": "Alles, was Vela hier gespeichert hat, wurde gelöscht, aber ein anderer Tab hält den Speicher von Vela noch offen, deshalb konnte das Löschen nicht abgeschlossen werden. Schließen Sie Vela in Ihren anderen Tabs und Fenstern und versuchen Sie es dann erneut.",
    "unsynced": "Noch nicht fertig synchronisiert: {{names}}. Solange eine Wallet nicht synchronisiert ist, kann kein anderes Gerät sie finden – wenn Sie jetzt löschen, kann sie für immer verloren sein.",
    "unsyncedAck": "Ich verstehe, dass eine nicht synchronisierte Wallet für immer verloren sein kann"
   },

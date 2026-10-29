@@ -254,6 +254,7 @@
    "confirm": "Erase Everything",
    "cancel": "Cancel",
    "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again.",
+   "failedHeld": "Everything Vela stored here was deleted, but another tab still has Vela's storage open, so the erase could not finish. Close Vela in your other tabs and windows, then try again.",
    "unsynced": "Not finished syncing: {{names}}. Until a wallet syncs, no other device can find it — erasing now may lose it for good.",
    "unsyncedAck": "I understand an unsynced wallet may be lost for good"
   },

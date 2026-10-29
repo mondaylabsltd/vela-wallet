@@ -254,6 +254,7 @@
    "confirm": "Xoá tất cả",
    "cancel": "Hủy",
    "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại.",
+   "failedHeld": "Mọi thứ Vela lưu ở đây đã bị xoá, nhưng một thẻ khác vẫn đang mở bộ nhớ của Vela nên việc xoá chưa thể hoàn tất. Hãy đóng Vela ở các thẻ và cửa sổ khác rồi thử lại.",
    "unsynced": "Chưa đồng bộ xong: {{names}}. Khi chưa đồng bộ, không thiết bị nào khác tìm thấy ví này — xoá ngay bây giờ có thể làm mất ví vĩnh viễn.",
    "unsyncedAck": "Tôi hiểu rằng ví chưa đồng bộ có thể bị mất vĩnh viễn"
   },

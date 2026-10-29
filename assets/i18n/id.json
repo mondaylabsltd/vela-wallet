@@ -254,6 +254,7 @@
    "confirm": "Hapus Semuanya",
    "cancel": "Batal",
    "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi.",
+   "failedHeld": "Semua yang disimpan Vela di sini sudah dihapus, tetapi tab lain masih membuka penyimpanan Vela, jadi penghapusan tidak dapat selesai. Tutup Vela di tab dan jendela lain, lalu coba lagi.",
    "unsynced": "Belum selesai disinkronkan: {{names}}. Sebelum tersinkron, perangkat lain tidak dapat menemukan dompet ini — menghapus sekarang bisa membuatnya hilang selamanya.",
    "unsyncedAck": "Saya mengerti dompet yang belum tersinkron bisa hilang selamanya"
   },

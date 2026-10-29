@@ -254,6 +254,7 @@
    "confirm": "Tout effacer",
    "cancel": "Annuler",
    "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez.",
+   "failedHeld": "Tout ce que Vela avait stocké ici a été supprimé, mais un autre onglet garde encore le stockage de Vela ouvert : l'effacement n'a pas pu se terminer. Fermez Vela dans vos autres onglets et fenêtres, puis réessayez.",
    "unsynced": "Synchronisation non terminée : {{names}}. Tant qu'un portefeuille n'est pas synchronisé, aucun autre appareil ne peut le trouver — effacer maintenant peut le faire perdre définitivement.",
    "unsyncedAck": "Je comprends qu'un portefeuille non synchronisé peut être perdu définitivement"
   },
