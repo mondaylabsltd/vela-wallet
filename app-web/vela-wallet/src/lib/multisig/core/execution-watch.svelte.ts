@@ -16,13 +16,24 @@ import { poolRpcCall } from '$lib/services/rpc-pool';
 import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import { readNonce } from './chain';
 import { NOT_TAKEN_AFTER_MS } from './execute';
-import { executionVerdict, type ExecutedIn, type ExecutionVerdict, type OurOp } from './kernel';
-import { findExecution } from './records';
+import {
+	executionVerdict,
+	type ExecutedIn,
+	type ExecutionVerdict,
+	type OurOp,
+	type OurReceipt
+} from './kernel';
+import { EXECUTION_SUCCESS, findExecution } from './records';
 
 /** How long an execution is watched before it is said as not landed. */
 export const EXECUTION_LIMIT_MS = 180_000;
 /** How often it is asked about. */
 export const EXECUTION_PAUSE_MS = 2_500;
+/**
+ * How long "the chain can't say" is asked again before it is said: a node a
+ * few blocks behind catches up within it; one that is down is said as that.
+ */
+export const UNKNOWN_GRACE_MS = 30_000;
 
 /** An execution sent from this device, as it is kept. */
 export interface InFlight {
@@ -106,16 +117,40 @@ export const executions = new Executions();
 /** `keccak256("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)")`. */
 const USER_OPERATION_EVENT = '0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f';
 
-/** Whether `txHash` carried this device's operation (its `UserOperationEvent`). */
-async function carries(chainId: number, txHash: string, userOpHash: string): Promise<boolean> {
+/** A transaction's receipt, as far as the watch reads it. */
+export interface Receipt {
+	logs?: { address?: string; topics?: string[]; data?: string }[];
+}
+
+/** A transaction's receipt, or `null` when no node gave it (not mined there, or no answer). */
+async function receiptOf(chainId: number, txHash: string): Promise<Receipt | null> {
 	const answer = await poolRpcCall('eth_getTransactionReceipt', [txHash], chainId).catch(
 		() => null
 	);
-	const logs = (answer?.result as { logs?: { topics?: string[] }[] } | null)?.logs ?? [];
-	return logs.some(
+	const receipt = answer?.result as Receipt | null | undefined;
+	return receipt && Array.isArray(receipt.logs) ? receipt : null;
+}
+
+/** Whether `receipt` carried this device's operation (its `UserOperationEvent`). */
+export function carriesOp(receipt: Receipt, userOpHash: string): boolean {
+	return (receipt.logs ?? []).some(
 		(l) =>
 			l.topics?.[0]?.toLowerCase() === USER_OPERATION_EVENT &&
 			l.topics?.[1]?.toLowerCase() === userOpHash.toLowerCase()
+	);
+}
+
+/**
+ * Whether `receipt` holds the multisig's `ExecutionSuccess` for `safeTxHash`
+ * — indexed (Safe 1.4.1) or in its data (1.3.0).
+ */
+export function executesIn(receipt: Receipt, multisig: string, safeTxHash: string): boolean {
+	const hash = safeTxHash.toLowerCase();
+	return (receipt.logs ?? []).some(
+		(l) =>
+			l.address?.toLowerCase() === multisig.toLowerCase() &&
+			l.topics?.[0]?.toLowerCase() === EXECUTION_SUCCESS &&
+			(l.topics?.[1]?.toLowerCase() === hash || (l.data ?? '').toLowerCase().startsWith(hash))
 	);
 }
 
@@ -123,7 +158,7 @@ export interface WatchPorts {
 	status?: typeof pollUserOpStatus;
 	nonce?: (chainId: number, safe: string) => Promise<bigint>;
 	lookup?: typeof findExecution;
-	carries?: typeof carries;
+	receipt?: typeof receiptOf;
 	now?: () => number;
 }
 
@@ -152,7 +187,19 @@ async function ourOp(
 	return { kind: 'pending' };
 }
 
-/** One round of facts, judged by the core. */
+/**
+ * One round of facts, judged by the core.
+ *
+ * Round 5: a verdict never contradicts this device's own receipt. A
+ * successful execution was once said as "Another transaction ran first":
+ * the history was searched on a node behind the one that read the nonce,
+ * found no `ExecutionSuccess`, and "none" stood. So the receipt of this
+ * device's landed transaction is read first and is the word on it
+ * (`receipt`); a lookup's find is believed only once its own receipt is read
+ * and shows the execution (a log on one node, gone on another, is nobody's);
+ * and a lookup's "none" is final only where the history reached a block at
+ * which the number was used (`lookupExecution`'s cross-check).
+ */
 export async function judgeExecution(
 	flight: InFlight,
 	ports: Required<WatchPorts>,
@@ -163,33 +210,42 @@ export async function judgeExecution(
 		ourOp(flight, ports, own)
 	]);
 	const nonceUsed = nonce === null ? null : nonce > BigInt(flight.nonce);
+	const executes = (r: Receipt) => executesIn(r, flight.multisig, flight.safeTxHash);
 	let executedIn: ExecutedIn = { kind: 'none' };
 	let landed = op;
-	if (nonceUsed !== false || op.kind === 'landed') {
+	let receipt: OurReceipt = 'unread';
+	if (op.kind === 'landed') {
+		const mine = await ports.receipt(flight.chainId, op.txHash).catch(() => null);
+		if (mine) receipt = executes(mine) ? 'executed' : 'notExecuted';
+	}
+	if (receipt !== 'executed' && (nonceUsed !== false || op.kind === 'landed')) {
 		const found = await ports.lookup(flight.multisig, flight.chainId, flight.safeTxHash, {
 			sinceMs: flight.createdMs,
 			final: nonceUsed === true,
 			nonce: BigInt(flight.nonce)
 		});
-		executedIn =
-			found === undefined
-				? { kind: 'unknown' }
-				: found === null
-					? { kind: 'none' }
-					: { kind: 'found', txHash: found };
-		// The relay may not have said yet that its execution is this device's own.
-		if (
-			found &&
-			op.kind !== 'landed' &&
-			(await ports.carries(flight.chainId, found, flight.userOpHash))
-		) {
-			landed = { kind: 'landed', txHash: found };
+		if (found === undefined) executedIn = { kind: 'unknown' };
+		else if (found === null) executedIn = { kind: 'none' };
+		else if (op.kind === 'landed' && found.toLowerCase() === op.txHash.toLowerCase()) {
+			executedIn = { kind: 'found', txHash: found };
+		} else {
+			// Whose it is, and that it is one, by its own receipt.
+			const theirs = await ports.receipt(flight.chainId, found).catch(() => null);
+			if (!theirs || !executes(theirs)) executedIn = { kind: 'unknown' };
+			else if (carriesOp(theirs, flight.userOpHash)) {
+				// The relay may not have said yet (or named another bundle) that
+				// its execution is this device's own.
+				landed = { kind: 'landed', txHash: found };
+				receipt = 'executed';
+				executedIn = { kind: 'found', txHash: found };
+			} else executedIn = { kind: 'found', txHash: found };
 		}
 	}
 	return executionVerdict({
 		nonceUsed,
 		executedIn,
 		ourOp: landed,
+		receipt,
 		elapsedMs: Math.max(0, ports.now() - flight.startedMs),
 		limitMs: EXECUTION_LIMIT_MS
 	});
@@ -219,15 +275,23 @@ export async function watchExecution(
 		status: ports.status ?? pollUserOpStatus,
 		nonce: ports.nonce ?? readNonce,
 		lookup: ports.lookup ?? findExecution,
-		carries: ports.carries ?? carries,
+		receipt: ports.receipt ?? receiptOf,
 		now: ports.now ?? Date.now
 	};
+	let unknownSince: number | null = null;
 	while (!signal.aborted) {
 		const verdict = await judgeExecution(flight, all, own()).catch(
 			() => ({ kind: 'waiting' }) as const
 		);
 		if (signal.aborted) break;
-		if (verdict.kind !== 'waiting') return verdict;
+		// "Can't say" is asked again a while — a node behind catches up —
+		// and said only once it lasts (or the watch is past its time).
+		if (verdict.kind === 'unknown') {
+			unknownSince ??= all.now();
+			const late = all.now() - flight.startedMs >= EXECUTION_LIMIT_MS;
+			if (late || all.now() - unknownSince >= UNKNOWN_GRACE_MS) return verdict;
+		} else if (verdict.kind !== 'waiting') return verdict;
+		else unknownSince = null;
 		if (all.now() - flight.startedMs >= EXECUTION_LIMIT_MS) return { kind: 'timedOut' };
 		await new Promise<void>((done) => {
 			const timer = setTimeout(done, pauseMs);

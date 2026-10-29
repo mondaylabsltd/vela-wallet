@@ -100,6 +100,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         settlement: None,
         // A `receive`'s mark (PR 3); a dApp row carries none.
         time_verified: None,
+        token: None,
     }
 }
 

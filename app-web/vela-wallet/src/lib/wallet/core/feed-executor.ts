@@ -283,6 +283,9 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		// no mark (serde takes nothing else here, and a refused record would
 		// fault the whole feed).
 		...(typeof tx.timeVerified === 'boolean' ? { time_verified: tx.timeVerified } : {}),
+		// Round 5: a transfer's token contract, as stored — absent stays absent
+		// (an older record, the chain's coin), and only a string is one.
+		...(typeof tx.token === 'string' && tx.token !== '' ? { token: tx.token } : {}),
 		...dapp,
 		// The call's data, for a dApp transaction (spec 082 RJ16): the core
 		// decodes a plain token transfer's real recipient from it, and names

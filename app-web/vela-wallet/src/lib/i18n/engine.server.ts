@@ -72,10 +72,42 @@ const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
 	eager: true
 }) as Record<string, string>;
 
+/**
+ * The on-demand namespaces (gen-i18n's `ON_DEMAND`, round 5): `home.multisig`
+ * is left out of the main catalog every native shell holds — none draws it —
+ * and written as `assets/i18n/multisig/<lng>.json`. This app draws it (the
+ * multisig screens, the connect page, the send flow's token note), and
+ * resolves at build time, so it merges each locale's back in here.
+ */
+const ON_DEMAND = import.meta.glob('../../../../../assets/i18n/*/*.json', {
+	query: '?raw',
+	import: 'default',
+	eager: true
+}) as Record<string, string>;
+
+function deepMerge(
+	a: Record<string, unknown>,
+	b: Record<string, unknown>
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...a };
+	for (const [key, value] of Object.entries(b)) {
+		const here = out[key];
+		out[key] =
+			value && typeof value === 'object' && here && typeof here === 'object'
+				? deepMerge(here as Record<string, unknown>, value as Record<string, unknown>)
+				: value;
+	}
+	return out;
+}
+
 function catalogBytes(locale: string): Uint8Array {
 	const entry = Object.entries(CATALOGS).find(([path]) => path.endsWith(`/${locale}.json`));
 	if (!entry) throw new Error(`no generated catalog for locale "${locale}" in assets/i18n/`);
-	return new TextEncoder().encode(entry[1]);
+	const parts = Object.entries(ON_DEMAND).filter(([path]) => path.endsWith(`/${locale}.json`));
+	if (parts.length === 0) return new TextEncoder().encode(entry[1]);
+	let doc = JSON.parse(entry[1]) as Record<string, unknown>;
+	for (const [, raw] of parts) doc = deepMerge(doc, JSON.parse(raw) as Record<string, unknown>);
+	return new TextEncoder().encode(JSON.stringify(doc));
 }
 
 const engine = new WasmI18n(catalogBytes(FALLBACK_LOCALE));
@@ -235,7 +267,9 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			assetsCount: k('componentsTx.receipt.assetsCount'),
 			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
 			unknown: k('componentsUi.signing.intentUnknown'),
-			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
+			emptyTitleNetwork: k('home.emptyNoActivityNetwork'),
+			tokenUnverified: k('home.multisig.token.unverified'),
+			tokenLookalike: k('home.multisig.token.lookalike')
 		},
 		assets: {
 			emptyTitle: k('assets.emptyTitle'),

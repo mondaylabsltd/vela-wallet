@@ -709,6 +709,35 @@ async function proposalChains(address: string, chainIds: number[]): Promise<numb
 
 /** Multisigs whose networks were looked for this session. */
 const discovered = new Set<string>();
+/**
+ * r4D-18 (round 5): when each multisig's networks were last looked for, kept
+ * on the device — a reload in the hour after does not read the code at its
+ * address on every network of the space again (each one a node, and a chain
+ * document, for a page that only shows it).
+ */
+const DISCOVERED_KEY = 'vela.multisigDiscovered';
+export const DISCOVER_EVERY_MS = 60 * 60 * 1000;
+
+function lookedFor(key: string, now: number): boolean {
+	try {
+		const all = JSON.parse(localStorage.getItem(DISCOVERED_KEY) ?? '{}') as Record<string, number>;
+		const at = all[key];
+		return typeof at === 'number' && now - at < DISCOVER_EVERY_MS;
+	} catch {
+		return false;
+	}
+}
+
+function rememberLookedFor(key: string, now: number): void {
+	try {
+		const all = JSON.parse(localStorage.getItem(DISCOVERED_KEY) ?? '{}') as Record<string, number>;
+		all[key] = now;
+		for (const [k, at] of Object.entries(all)) if (now - at >= DISCOVER_EVERY_MS) delete all[k];
+		localStorage.setItem(DISCOVERED_KEY, JSON.stringify(all));
+	} catch {
+		// no storage: looked for again next page
+	}
+}
 
 /**
  * Once a session, look on every network of `chainIds` for a deployment this
@@ -721,13 +750,20 @@ const discovered = new Set<string>();
  * an older service. Quiet on failure; a network that cannot be read adds
  * nothing.
  */
-export async function discoverChains(account: MultisigAccount, chainIds: number[]): Promise<void> {
+export async function discoverChains(
+	account: MultisigAccount,
+	chainIds: number[],
+	now = Date.now()
+): Promise<void> {
 	const key = account.address.toLowerCase();
 	if (discovered.has(key)) return;
 	discovered.add(key);
 	const unseen = chainIds.filter((id) => !account.chainIds.includes(id));
 	if (unseen.length === 0) return;
+	const space = `${key}:${[...unseen].sort((a, b) => a - b).join(',')}`;
+	if (lookedFor(space, now)) return;
 	const deployed = await deployedChains(account.address, unseen);
+	rememberLookedFor(space, now);
 	const where = multisigNetworks({ deployed, kept: account.chainIds });
 	for (const id of where) {
 		if (!account.chainIds.includes(id)) multisig.useChain(account.address, id);

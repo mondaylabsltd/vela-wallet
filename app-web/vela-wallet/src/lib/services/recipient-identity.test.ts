@@ -332,6 +332,23 @@ describe('a name service is asked only on a network the wallet has', () => {
 	});
 });
 
+/** r4D-18 (round 5), spec 105: the testnet space reads only its own networks. */
+describe('in the testnet space', () => {
+	it('no mainnet name service is asked', async () => {
+		const { networkSpace } = await import('$lib/network-space/network-space.svelte');
+		serve(1, '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e', 'alice.eth');
+		networkSpace.set('testnet');
+		try {
+			expect(await resolveRecipientIdentity(ADDR)).toBeNull();
+			expect(rpcCalls.filter((c) => [1, 56, 8453, 42161].includes(c))).toEqual([]);
+		} finally {
+			networkSpace.set('mainnet');
+		}
+		rpcCalls.length = 0;
+		expect(await resolveRecipientIdentity(ADDR)).toEqual({ name: 'alice.eth', source: 'ENS' });
+	});
+});
+
 describe('decodeString', () => {
 	it('decodes offset + length + padded bytes; rejects short/empty payloads', () => {
 		expect(decodeString(abiString('vitalik.eth'))).toBe('vitalik.eth');

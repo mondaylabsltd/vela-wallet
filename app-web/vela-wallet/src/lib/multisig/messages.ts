@@ -228,10 +228,13 @@ export interface MultisigMessages {
 		whyRevertsPlain: string;
 		/** The fee could not be priced: the reason an execution stopped before its passkey. */
 		unpricedReason: string;
+		/** Round 5: the look did not answer in time — whether it would run is not known. */
+		uncheckedReason: string;
 		/** r4-7: the fee before the passkey (`{{fee}}`, `{{name}}`: who pays). */
 		feeLine: string;
 		feeChecking: string;
 		feeUnpriced: string;
+		feeUnchecked: string;
 		feeRetry: string;
 		/** What of the fee is one-time setup (`{{network}}`, `{{amount}}`). */
 		feeSetup: string;
@@ -627,6 +630,20 @@ export interface MultisigMessages {
 	};
 	/** Changing the members and the approvals needed (Settings), one proposal per network. */
 	members: MemberMessages;
+	/** r4D-17: an executed transaction's story — Created → Approved → Executed. */
+	timeline: {
+		heading: string;
+		/** `{{name}}`: who proposed it. */
+		created: string;
+		approved: string;
+		/** The executor's approval, given by sending it. */
+		approvedByExecuting: string;
+		executed: string;
+		executedBy: string;
+		/** An approval that counted when it ran, and one that did not. */
+		counted: string;
+		notCounted: string;
+	};
 }
 
 /** `home.multisig.members`: changing who the members are and how many must approve. */
@@ -873,9 +890,11 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		whyReverts: '',
 		whyRevertsPlain: '',
 		unpricedReason: '',
+		uncheckedReason: '',
 		feeLine: '',
 		feeChecking: '',
 		feeUnpriced: '',
+		feeUnchecked: '',
 		feeRetry: '',
 		feeSetup: '',
 		feeSetupPlain: '',
@@ -1254,5 +1273,15 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 			tooMany: '',
 			changeWaiting: ''
 		}
+	},
+	timeline: {
+		heading: '',
+		created: '',
+		approved: '',
+		approvedByExecuting: '',
+		executed: '',
+		executedBy: '',
+		counted: '',
+		notCounted: ''
 	}
 };

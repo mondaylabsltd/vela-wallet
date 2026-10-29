@@ -216,9 +216,11 @@
         "whyReverts": "the network refuses it — “{{reason}}”",
         "whyRevertsPlain": "it reverts when it runs, and the network gives no reason",
         "unpricedReason": "the network fee couldn’t be worked out — try again in a moment",
+        "uncheckedReason": "it couldn’t be checked whether it would run — try again in a moment",
         "feeLine": "Network fee ≈ {{fee}}, paid by {{name}}",
         "feeChecking": "Checking that it would run, and the network fee…",
         "feeUnpriced": "Couldn’t work out the network fee right now.",
+        "feeUnchecked": "Couldn’t check whether it would run — you can still approve; Execute checks again.",
         "feeRetry": "Check again",
         "feeSetup": "Includes one-time setup on {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Includes one-time setup on {{network}}:",
@@ -331,7 +333,7 @@
         "body": "Members scan the code or open the link: it adds the multisig in Vela with its network and the members' names.",
         "shareText": "Join our multisig in Vela",
         "qrLabel": "Invite code",
-        "outsideHint": "Members who use another wallet, not Vela, don't need to add it: when a transaction needs their approval, send them its link and they sign with their own wallet."
+        "outsideHint": "Members who use another wallet, not Vela, don't need to add it: when a transaction needs their approval, send them its link and they approve it with their own wallet."
       },
       "presence": {
         "needsYou_one": "{{count}} needs your approval",
@@ -406,7 +408,7 @@
         "askNote": "Continue only if you started this in Vela just now. Nothing is signed unless your wallet asks you.",
         "connect": "Connect",
         "decline": "Decline",
-        "keepOpen": "Connected. Keep this page open: Vela's requests appear in your wallet.",
+        "keepOpen": "Connected. Keep this page open: Vela's requests appear here first, then in your wallet.",
         "waitingVela": "Waiting for Vela…",
         "noSession": "Open this page from the link Vela shows when a member signs with another wallet.",
         "requests": "Requests",
@@ -625,6 +627,16 @@
           "tooMany": "A multisig can have at most {{max}} members.",
           "changeWaiting": "Another member change is waiting there. Execute or reject it first."
         }
+      },
+      "timeline": {
+        "heading": "History",
+        "created": "Created by {{name}}",
+        "approved": "Approved by {{name}}",
+        "approvedByExecuting": "Approved by {{name}}, by executing it",
+        "executed": "Executed",
+        "executedBy": "Executed by {{name}}",
+        "counted": "counted",
+        "notCounted": "not counted"
       }
     },
     "balanceDetailStatusOwnNode": "Your node isn't answering",

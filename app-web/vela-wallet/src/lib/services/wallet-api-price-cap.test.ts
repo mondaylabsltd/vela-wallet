@@ -14,7 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const price = vi.hoisted(() => ({
 	/** What Ethereum's Chainlink read does: answer `prices`, or never. */
 	live: null as Record<string, number> | null,
-	known: {} as Record<string, number>
+	known: {} as Record<string, number>,
+	asked: 0
 }));
 
 vi.mock('./rpc-pool', () => ({
@@ -58,8 +59,10 @@ vi.mock('./price-service', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./price-service')>();
 	return {
 		...actual,
-		fetchChainlinkPrices: () =>
-			price.live === null ? new Promise(() => {}) : Promise.resolve(price.live),
+		fetchChainlinkPrices: () => {
+			price.asked += 1;
+			return price.live === null ? new Promise(() => {}) : Promise.resolve(price.live);
+		},
 		lastKnownChainlinkPrices: async () => price.known
 	};
 });
@@ -116,6 +119,19 @@ describe('Ethereum’s price read never holds the chains (perf-5)', () => {
 			expect(tokens.every((t) => t.priceUsd === null)).toBe(true);
 		} finally {
 			vi.useRealTimers();
+		}
+	});
+
+	it('r4D-18, spec 105: the testnet space prices nothing, so reads no price feed', async () => {
+		const { networkSpace } = await import('$lib/network-space/network-space.svelte');
+		networkSpace.set('testnet');
+		try {
+			price.asked = 0;
+			// No feed asked, and nothing waits for one: the round ends at once.
+			await fetchTokens(ADDRESS, { forceRefresh: true });
+			expect(price.asked).toBe(0);
+		} finally {
+			networkSpace.set('mainnet');
 		}
 	});
 

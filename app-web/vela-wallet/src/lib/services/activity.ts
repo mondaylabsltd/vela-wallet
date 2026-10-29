@@ -122,6 +122,9 @@ export function incomingToRecord(
 		symbol,
 		decimals,
 		...(logoUrls.length ? { logoUrls } : {}),
+		// Round 5: the contract it came from — a symbol alone is whatever a
+		// contract answers.
+		...(!tx.isNative && tx.token ? { token: tx.token } : {}),
 		chainId: tx.chainId,
 		timestamp: tx.timestamp,
 		// PR 3: the feed's time IS the block's own (`token_trust` withholds a

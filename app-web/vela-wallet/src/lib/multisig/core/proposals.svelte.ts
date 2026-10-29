@@ -312,16 +312,19 @@ export async function readChain(
 	{
 		background = false,
 		mailbox: ask = true,
-		listed
+		listed,
+		members: known
 	}: {
 		background?: boolean;
 		mailbox?: boolean;
 		/** This chain's part of the cross-chain list, read for every chain at once. */
 		listed?: Proposal[];
+		/** Its members as last read, taken as they are (a quiet poll, r4D-18). */
+		members?: ChainMembers;
 	} = {}
 ): Promise<ChainState & { proposals: Proposal[] }> {
 	const [members, answer] = await Promise.all([
-		readMembers(chainId, account.address, account.genesis),
+		known ?? readMembers(chainId, account.address, account.genesis),
 		// `false`: unread (a `null` is the mailbox knowing nothing of it).
 		listed !== undefined
 			? { proposals: listed }
@@ -390,6 +393,28 @@ export function nextNonceOf(chain: ChainState): bigint {
 
 /** A refresh still out after this long: the person is told the list may be stale. */
 export const SLOW_REFRESH_MS = 8_000;
+/** The poll's pace while the multisig is shown. */
+export const POLL_MS = 12_000;
+/**
+ * r4D-18 (round 5): on a network with nothing waiting — no open proposal in
+ * the mailbox's list or here, nothing of this device's in flight — the chain
+ * is read every this many polls (a minute), not every poll: nothing there can
+ * be executed meanwhile but a transaction from outside Vela, said within the
+ * minute. Anything waiting, and every read the person or the page asks for,
+ * reads the chain at once.
+ */
+export const QUIET_POLLS = 5;
+
+/** Whether `list` holds a proposal at or past `nonce` (one that can still run). */
+function hasOpen(list: Proposal[], nonce: bigint): boolean {
+	return list.some((p) => {
+		try {
+			return BigInt(p.safeTx.nonce) >= nonce;
+		} catch {
+			return true;
+		}
+	});
+}
 
 /**
  * Proposals the mailbox holds for the multisig on a network this device
@@ -530,6 +555,8 @@ class Proposals {
 	#address: string | null = null;
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#inflight: Promise<void> | null = null;
+	/** The poll's rounds since the last read the person or the page asked for. */
+	#ticks = 0;
 	/** The last list the mailbox gave, per chain: kept while it cannot be read. */
 	#lists = new Map<number, Proposal[]>();
 	/** The service those lists came from: another one's say nothing of it. */
@@ -599,8 +626,8 @@ class Proposals {
 		}
 		this.#timer = setInterval(() => {
 			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-			void this.refresh(account, chainIds);
-		}, 12_000);
+			void this.refresh(account, chainIds, { tick: true });
+		}, POLL_MS);
 	}
 
 	/**
@@ -640,9 +667,18 @@ class Proposals {
 		return account ? this.refresh(account, this.#chainIds) : Promise.resolve();
 	}
 
-	/** Re-read every chain the multisig is used on. One refresh at a time. */
-	refresh(account: MultisigAccount, chainIds: number[]): Promise<void> {
+	/**
+	 * Re-read every chain the multisig is used on. One refresh at a time.
+	 * `tick`: the poll's own round — a quiet network's chain is read only
+	 * every {@link QUIET_POLLS}th.
+	 */
+	refresh(
+		account: MultisigAccount,
+		chainIds: number[],
+		{ tick = false }: { tick?: boolean } = {}
+	): Promise<void> {
 		if (this.#inflight) return this.#inflight;
+		const round = tick ? (this.#ticks += 1) : (this.#ticks = 0);
 		// Another service (Settings): the lists the last one gave are not its.
 		const source = genesisServiceURL();
 		if (this.#source !== source) {
@@ -689,11 +725,24 @@ class Proposals {
 			await Promise.all(
 				reading.map(async (chainId) => {
 					const known = followed() ? (this.#lists.get(chainId) ?? null) : null;
+					const listed = split ? (split.lists.get(chainId) ?? []) : undefined;
+					const previous = followed() ? this.chains.find((c) => c.chainId === chainId) : undefined;
+					// r4D-18: a quiet network's members, as last read, on all
+					// but every QUIET_POLLS-th poll.
+					const quiet =
+						tick &&
+						round % QUIET_POLLS !== 0 &&
+						previous !== undefined &&
+						previous.mailbox &&
+						listed !== undefined &&
+						!hasOpen(listed, previous.members.nonce) &&
+						!previous.items.some((i) => i.status !== 'done' || i.executing);
 					try {
 						const read = await readChain(account, chainId, known, {
 							background: true,
 							mailbox,
-							listed: split ? (split.lists.get(chainId) ?? []) : undefined
+							listed,
+							members: quiet && previous ? previous.members : undefined
 						});
 						if (!read.mailbox) failed = true;
 						else if (followed()) this.#lists.set(chainId, read.proposals);

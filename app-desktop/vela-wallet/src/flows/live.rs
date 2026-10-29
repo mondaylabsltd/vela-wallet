@@ -6871,6 +6871,7 @@ mod tests {
                 decimals: 18,
                 usd_value: 0.0,
                 logo_urls: logos,
+                token: None,
             };
             let named = "https://data.example/usdc.png".to_owned();
             let item = |kind: FeedBatchKind| FeedItem {
@@ -6915,6 +6916,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             };
             let s = strings();
             let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s, false);
@@ -6992,6 +6994,7 @@ mod tests {
                     summary: None,
                     settlement: None,
                     time_verified: None,
+                    token: None,
                 }
             };
             let (s, w) = (strings(), wallet_strings());
@@ -7070,6 +7073,7 @@ mod tests {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -7296,6 +7300,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             };
             let view = FeedView {
                 rows: vec![
@@ -7336,6 +7341,7 @@ mod tests {
                     summary: None,
                     settlement: None,
                     time_verified: None,
+                    token: None,
                 }],
                 ..host.view()
             };
@@ -7614,6 +7620,7 @@ mod tests {
             }),
             settlement: None,
             time_verified: None,
+            token: None,
         };
         let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
         borrow.tx_hash = format!("0x{}", "cb".repeat(32));
@@ -7915,6 +7922,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             },
         };
         let view = FeedView {
@@ -8556,6 +8564,7 @@ mod tests {
             subtitle: Vec::new(),
             priced: false,
             figure_maskable: true,
+            token: None,
         };
         let view = FeedView {
             rows: vec![

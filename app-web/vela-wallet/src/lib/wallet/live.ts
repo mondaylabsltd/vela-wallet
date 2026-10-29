@@ -36,6 +36,7 @@ import {
 } from '$lib/services/locale-format';
 import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
 import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
+import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
 import { pageLanguage } from '$lib/i18n/page-language.svelte';
@@ -924,6 +925,7 @@ export function liveActivityRow(
 	const masked = hidden && item.figure_maskable;
 	const back = item.dapp?.received ?? null;
 	const titleParts = item.dapp ? dappTitleParts(item.dapp, m) : undefined;
+	const note = tokenNote(item, m);
 	return {
 		id: item.id,
 		kind,
@@ -952,12 +954,41 @@ export function liveActivityRow(
 		positive: received,
 		masked,
 		...(figure.danger ? { danger: true } : {}),
+		// Round 5: whose token it was, where a symbol alone could lie.
+		...(note ? { caution: `${note.text} · ${note.short}` } : {}),
 		...(back === null
 			? {}
 			: { received: { amount: hidden ? MASK : changeFigure(back), unit: back.symbol } }),
 		badgeColor: chainColor(item.chain_id),
 		badgeLogoUrl: chainLogoURL(item.chain_id)
 	};
+}
+
+/**
+ * Round 5 (r4a-2 in Activity): the note a transfer of an unvouched token
+ * wears — its record's contract (`FeedItem.token`, a folded batch's lines'
+ * own), judged by the core (`token_provenance`): "Unverified token", or a
+ * lookalike's "Not the real USDC". The first such line of a batch speaks for
+ * it. `null` for the chain's coin, a vouched token, an older record that kept
+ * no contract, and a dApp row (its lines are the simulation's).
+ */
+export function tokenNote(item: FeedItem, m: RowMessages): ProvenanceNote | null {
+	const unverified = m.activity.tokenUnverified;
+	const lookalike = m.activity.tokenLookalike;
+	if (!unverified || !lookalike || item.dapp) return null;
+	const words = { unverified, lookalike };
+	const lines: { token?: string | null; symbol: string }[] = item.batch
+		? item.batch.transfers
+		: [{ token: item.token, symbol: item.symbol }];
+	let note: ProvenanceNote | null = null;
+	for (const line of lines) {
+		const found = line.token ? provenanceNote(item.chain_id, line.token, line.symbol, words) : null;
+		// A lookalike is said over a plain unverified one.
+		if (found && (note === null || (found.tone === 'danger' && note.tone !== 'danger'))) {
+			note = found;
+		}
+	}
+	return note;
 }
 
 /**

@@ -217,9 +217,11 @@
         "whyReverts": "le réseau la refuse — « {{reason}} »",
         "whyRevertsPlain": "elle échoue à l’exécution, et le réseau ne donne aucune raison",
         "unpricedReason": "les frais de réseau n’ont pas pu être calculés — réessayez dans un instant",
+        "uncheckedReason": "impossible de vérifier si elle passerait — réessayez dans un instant",
         "feeLine": "Frais de réseau ≈ {{fee}}, payés par {{name}}",
         "feeChecking": "Vérification de l’exécution et des frais de réseau…",
         "feeUnpriced": "Impossible de calculer les frais de réseau pour l’instant.",
+        "feeUnchecked": "Impossible de vérifier si elle passerait — vous pouvez quand même approuver ; Exécuter vérifie à nouveau.",
         "feeRetry": "Vérifier à nouveau",
         "feeSetup": "Comprend une mise en place unique sur {{network}} ≈ {{amount}} :",
         "feeSetupPlain": "Comprend une mise en place unique sur {{network}} :",
@@ -333,7 +335,7 @@
         "body": "Les membres scannent le code ou ouvrent le lien : il ajoute le multisig dans Vela avec son réseau et les noms des membres.",
         "shareText": "Rejoins notre multisig dans Vela",
         "qrLabel": "Code d’invitation",
-        "outsideHint": "Les membres qui utilisent un autre portefeuille que Vela n’ont rien à ajouter : quand une transaction a besoin de leur approbation, envoyez-leur son lien et ils signent avec leur propre portefeuille."
+        "outsideHint": "Les membres qui utilisent un autre portefeuille que Vela n’ont rien à ajouter : quand une transaction a besoin de leur approbation, envoyez-leur son lien et ils l’approuvent avec leur propre portefeuille."
       },
       "presence": {
         "needsYou_one": "{{count}} attend votre approbation",
@@ -410,7 +412,7 @@
         "askNote": "Ne continuez que si vous venez de lancer cela dans Vela. Rien n'est signé sans que votre wallet vous le demande.",
         "connect": "Connecter",
         "decline": "Refuser",
-        "keepOpen": "Connecté. Gardez cette page ouverte : les demandes de Vela apparaissent dans votre wallet.",
+        "keepOpen": "Connecté. Gardez cette page ouverte : les demandes de Vela apparaissent d’abord ici, puis dans votre wallet.",
         "waitingVela": "En attente de Vela…",
         "noSession": "Ouvrez cette page depuis le lien que Vela affiche quand un membre signe avec un autre wallet.",
         "requests": "Demandes",
@@ -629,6 +631,16 @@
           "tooMany": "Un multisig peut avoir au plus {{max}} membres.",
           "changeWaiting": "Une autre modification de membres y est en attente. Exécutez-la ou rejetez-la d'abord."
         }
+      },
+      "timeline": {
+        "heading": "Historique",
+        "created": "Créée par {{name}}",
+        "approved": "Approuvée par {{name}}",
+        "approvedByExecuting": "Approuvée par {{name}} en l’exécutant",
+        "executed": "Exécutée",
+        "executedBy": "Exécutée par {{name}}",
+        "counted": "comptée",
+        "notCounted": "non comptée"
       }
     },
     "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",

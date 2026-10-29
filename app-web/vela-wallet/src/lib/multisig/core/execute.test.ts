@@ -124,6 +124,8 @@ const {
 	ExecutorCannotPayError,
 	ExecutionWouldFailError,
 	ExecutionUnpricedError,
+	ExecutionUncheckedError,
+	bounded,
 	relayRefused,
 	NOT_TAKEN_AFTER_MS
 } = await import('./execute');
@@ -414,6 +416,25 @@ describe('reasons, as a person reads them', () => {
 		expect(plainReason('ERC20: transfer amount exceeds balance')).toBe(
 			'ERC20: transfer amount exceeds balance'
 		);
+	});
+});
+
+describe('a read that never answers (round 5)', () => {
+	it('is bounded: past its time it said nothing, and the look goes on', async () => {
+		vi.useFakeTimers();
+		try {
+			const never = new Promise<bigint | null>(() => {});
+			const read = bounded(never, null, 8_000);
+			await vi.advanceTimersByTimeAsync(8_000);
+			expect(await read).toBeNull();
+			expect(await bounded(Promise.resolve(5n), null, 8_000)).toBe(5n);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('a look that could not check it stops before the passkey, and the approval is kept', () => {
+		expect(stoppedBeforeSigning(new ExecutionUncheckedError())).toBe(true);
 	});
 });
 

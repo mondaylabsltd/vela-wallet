@@ -19,6 +19,8 @@ const chain = vi.hoisted(() => ({
 }));
 vi.mock('$lib/services/rpc-pool', () => ({
 	poolRpcCall: async (method: string) => {
+		// r4D-17: its block's time, for the timeline.
+		if (method === 'eth_getBlockByNumber') return { result: { timestamp: '0x6720f000' } };
 		if (method !== 'eth_getTransactionReceipt') throw new Error(method);
 		return { result: chain.receipt };
 	}
@@ -53,7 +55,10 @@ beforeEach(() => {
 
 describe('the facts an executed transaction keeps', () => {
 	it('reads them from its receipt, by the core', async () => {
-		chain.receipt = { logs: [{ address: SAFE, topics: ['0x01'], data: '0x', extra: 1 }] };
+		chain.receipt = {
+			blockNumber: '0x10',
+			logs: [{ address: SAFE, topics: ['0x01'], data: '0x', extra: 1 }]
+		};
 		chain.facts = {
 			executor: C,
 			threshold: 2,
@@ -67,7 +72,8 @@ describe('the facts an executed transaction keeps', () => {
 			threshold: 2,
 			approvers: [A, C],
 			executorApproved: true,
-			source: 'chain'
+			source: 'chain',
+			atMs: 0x6720f000 * 1000
 		});
 		// The receipt's logs as the node gave them, and nothing else of it.
 		expect(chain.asked[0]).toEqual([
@@ -81,14 +87,18 @@ describe('the facts an executed transaction keeps', () => {
 	it('falls back to what this device recorded when it executed it', async () => {
 		chain.receipt = { logs: [] };
 		const safeTxHash = nextHash();
+		const before = Date.now();
 		rememberExecution(100, SAFE, safeTxHash, factsOfExecution([A], B, true, 2));
-		expect(await frozenFacts(100, SAFE, safeTxHash, TX)).toEqual({
+		const facts = await frozenFacts(100, SAFE, safeTxHash, TX);
+		expect(facts).toMatchObject({
 			executor: B,
 			threshold: 2,
 			approvers: [A, B],
 			executorApproved: true,
 			source: 'device'
 		});
+		// When this device saw it land.
+		expect(facts?.atMs).toBeGreaterThanOrEqual(before);
 	});
 
 	it('claims nothing when neither says', async () => {

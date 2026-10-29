@@ -1268,6 +1268,7 @@ mod tests {
             // As the scan stores a receipt it found (PR 3): its time is its
             // block's, so the core has nothing to repair here.
             time_verified: Some(true),
+            token: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -1406,6 +1407,7 @@ mod tests {
             subtitle: Vec::new(),
             priced: false,
             figure_maskable: value.is_some(),
+            token: None,
         }
     }
 
@@ -1473,6 +1475,7 @@ mod tests {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         }
     }
 
@@ -3260,6 +3263,7 @@ mod tests {
                         subtitle: Vec::new(),
                         priced: true,
                         figure_maskable: true,
+                        token: None,
                     },
                 }],
                 ..host.view()

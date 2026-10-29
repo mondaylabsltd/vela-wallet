@@ -109,6 +109,7 @@ function words(): MultisigMessages {
 	out.members.recovery = 'recovery {{m}}/{{n}}';
 	out.action.changeThreshold = 'Require {{threshold}}';
 	out.members.changeAdd = 'Add {{name}}';
+	out.members.changeReplace = 'Replace {{old}} with {{new}}';
 	(out.members.refuse as Record<string, string>).belowThreshold =
 		'belowThreshold {{owners}} {{threshold}}';
 	return out as unknown as MultisigMessages;
@@ -245,6 +246,10 @@ describe('changing the members (Settings)', () => {
 		name.value = 'Dana';
 		name.dispatchEvent(new Event('input', { bubbles: true }));
 		await tick();
+		// Round 5: the preview names who replaces whom, by the name just typed.
+		expect(
+			screen.container.querySelector('[data-testid="member-replace-preview"]')?.textContent?.trim()
+		).toBe('Replace name-33 with Dana');
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed[1][2]).toEqual({ kind: 'replace', oldOwner: C, newOwner: D });

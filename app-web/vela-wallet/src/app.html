@@ -108,6 +108,29 @@
 			/* set-12:end */
 
 			/*
+			 * Round 5: the connect page opened from an approve-later link (its
+			 * transaction in the fragment, `ms=`, and no invite) is reading that
+			 * transaction from its first frame — said so before any module runs,
+			 * never "Connecting to Vela…" for a page that is not waiting on Vela.
+			 * The fragment never reaches the prerendered page; this reads it.
+			 * `connect-boot.test.ts` runs this block.
+			 */
+			/* connect-boot:begin */
+			try {
+				var fragment = location.hash || '';
+				if (
+					/\/connect\/?$/.test(location.pathname) &&
+					/(^#|&)ms=/.test(fragment) &&
+					!/(^#|&)wss?(%3A|:)/i.test(fragment)
+				) {
+					document.documentElement.dataset.connectTx = '1';
+				}
+			} catch (e) {
+				/* No fragment to read: the page says what it waits for once it runs. */
+			}
+			/* connect-boot:end */
+
+			/*
 			 * Spec 012: decide BEFORE first paint whether the launch animation plays,
 			 * and if so hide the page in the same frame the document appears.
 			 *

@@ -216,9 +216,11 @@
         "whyReverts": "mạng từ chối — “{{reason}}”",
         "whyRevertsPlain": "nó bị hoàn tác khi chạy, và mạng không nêu lý do",
         "unpricedReason": "không tính được phí mạng — hãy thử lại sau giây lát",
+        "uncheckedReason": "không kiểm tra được giao dịch có chạy được không — hãy thử lại sau giây lát",
         "feeLine": "Phí mạng ≈ {{fee}}, do {{name}} trả",
         "feeChecking": "Đang kiểm tra giao dịch có chạy được không, và phí mạng…",
         "feeUnpriced": "Hiện không tính được phí mạng.",
+        "feeUnchecked": "Không kiểm tra được giao dịch có chạy được không — bạn vẫn có thể duyệt; Thực thi sẽ kiểm tra lại.",
         "feeRetry": "Kiểm tra lại",
         "feeSetup": "Bao gồm thiết lập một lần trên {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Bao gồm thiết lập một lần trên {{network}}:",
@@ -331,7 +333,7 @@
         "body": "Thành viên quét mã hoặc mở liên kết: multisig được thêm vào Vela cùng mạng và tên các thành viên.",
         "shareText": "Tham gia multisig của chúng tôi trên Vela",
         "qrLabel": "Mã mời",
-        "outsideHint": "Thành viên dùng ví khác, không phải Vela, không cần thêm gì: khi một giao dịch cần họ phê duyệt, hãy gửi họ liên kết của giao dịch đó để ký bằng ví của mình."
+        "outsideHint": "Thành viên dùng ví khác, không phải Vela, không cần thêm gì: khi một giao dịch cần họ phê duyệt, hãy gửi họ liên kết của giao dịch đó để duyệt bằng ví của mình."
       },
       "presence": {
         "needsYou_one": "{{count}} giao dịch cần bạn phê duyệt",
@@ -406,7 +408,7 @@
         "askNote": "Chỉ tiếp tục nếu bạn vừa bắt đầu việc này trong Vela. Không có gì được ký nếu ví của bạn không hỏi bạn.",
         "connect": "Kết nối",
         "decline": "Từ chối",
-        "keepOpen": "Đã kết nối. Hãy giữ trang này mở: yêu cầu của Vela sẽ hiện trong ví của bạn.",
+        "keepOpen": "Đã kết nối. Hãy giữ trang này mở: yêu cầu của Vela hiện ở đây trước, rồi mới trong ví của bạn.",
         "waitingVela": "Đang chờ Vela…",
         "noSession": "Hãy mở trang này từ liên kết Vela hiển thị khi một thành viên ký bằng ví khác.",
         "requests": "Yêu cầu",
@@ -625,6 +627,16 @@
           "tooMany": "Multisig có tối đa {{max}} thành viên.",
           "changeWaiting": "Ở đó đang có một thay đổi thành viên khác chờ. Hãy thực hiện hoặc từ chối nó trước."
         }
+      },
+      "timeline": {
+        "heading": "Lịch sử",
+        "created": "{{name}} đã tạo",
+        "approved": "{{name}} đã duyệt",
+        "approvedByExecuting": "{{name}} đã duyệt bằng cách thực thi",
+        "executed": "Đã thực thi",
+        "executedBy": "{{name}} đã thực thi",
+        "counted": "được tính",
+        "notCounted": "không được tính"
       }
     },
     "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",

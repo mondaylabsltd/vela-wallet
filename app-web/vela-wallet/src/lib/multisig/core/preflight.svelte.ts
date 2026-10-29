@@ -15,6 +15,14 @@ import {
 export const PREVIEW_FRESH_MS = 15_000;
 /** A look that could not price the fee is taken again sooner. */
 export const UNPRICED_FRESH_MS = 5_000;
+/**
+ * Round 5: the longest one look is waited for. "Approve and execute" once
+ * stayed disabled four minutes on a look that never answered; past this the
+ * look is said as not checked (`unchecked`) — approving goes ahead, and
+ * Execute looks again before its passkey. A look that answers later still
+ * lands.
+ */
+export const PREVIEW_CAP_MS = 15_000;
 
 /** One execution by one executor, at the multisig's state it was looked at in. */
 export function previewKey(input: ExecutionInput): string {
@@ -44,6 +52,7 @@ class Preflight {
 	#entries = new Map<string, Entry>();
 	#running = new Map<string, Promise<ExecutionPreview>>();
 	#look: (input: ExecutionInput) => Promise<ExecutionPreview> = (input) => previewExecution(input);
+	#capMs = PREVIEW_CAP_MS;
 
 	/** The last look at this execution, or `null` before the first lands. Reactive. */
 	get(input: ExecutionInput): ExecutionPreview | null {
@@ -55,28 +64,51 @@ class Preflight {
 		const key = previewKey(input);
 		const hit = this.#entries.get(key);
 		const age = hit ? Date.now() - hit.at : Infinity;
-		const fresh = hit?.preview.kind === 'unpriced' ? Math.min(freshMs, UNPRICED_FRESH_MS) : freshMs;
+		const soon = hit?.preview.kind === 'unpriced' || hit?.preview.kind === 'unchecked';
+		const fresh = soon ? Math.min(freshMs, UNPRICED_FRESH_MS) : freshMs;
 		if (hit && age < fresh) return Promise.resolve(hit.preview);
 		const running = this.#running.get(key);
 		if (running) return running;
-		const look = this.#look(input)
+		const keep = (preview: ExecutionPreview) => {
+			this.#entries.set(key, { at: Date.now(), preview });
+			this.#shown = { ...this.#shown, [key]: preview };
+			return preview;
+		};
+		let capped = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const answered = this.#look(input)
 			.catch((): ExecutionPreview => ({ kind: 'unpriced' }))
 			.then((preview) => {
-				this.#entries.set(key, { at: Date.now(), preview });
-				this.#shown = { ...this.#shown, [key]: preview };
+				// Past the cap it lands all the same — unless a newer look has.
+				if (!capped || this.#entries.get(key)?.preview.kind === 'unchecked') keep(preview);
 				return preview;
+			});
+		const look = Promise.race([
+			answered,
+			new Promise<ExecutionPreview>((done) => {
+				timer = setTimeout(() => {
+					capped = true;
+					done(keep({ kind: 'unchecked' }));
+				}, this.#capMs);
 			})
-			.finally(() => this.#running.delete(key));
+		]).finally(() => {
+			clearTimeout(timer);
+			this.#running.delete(key);
+		});
 		this.#running.set(key, look);
 		return look;
 	}
 
 	/** Tests: the look itself, and a clean slate. */
-	_reset(look?: (input: ExecutionInput) => Promise<ExecutionPreview>): void {
+	_reset(
+		look?: (input: ExecutionInput) => Promise<ExecutionPreview>,
+		capMs = PREVIEW_CAP_MS
+	): void {
 		this.#shown = {};
 		this.#entries.clear();
 		this.#running.clear();
 		this.#look = look ?? ((input) => previewExecution(input));
+		this.#capMs = capMs;
 	}
 }
 

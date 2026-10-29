@@ -115,18 +115,51 @@ export interface ChainMembers {
 }
 
 /**
- * Multisigs seen deployed, per chain, this session (r4D-18): code does not go
- * away, so a deployed Safe's code is not read again on every refresh.
+ * Multisigs seen deployed, per chain (r4D-18): code does not go away, so a
+ * deployed Safe's code is not read again on every refresh — nor, kept on
+ * this device (round 5), on every page.
  */
-const deployedSeen = new Set<string>();
+const DEPLOYED_KEY = 'vela.multisigDeployed';
+const DEPLOYED_CAP = 200;
+const deployedSeen = new Set<string>(readDeployed());
+
+function readDeployed(): string[] {
+	try {
+		const kept = JSON.parse(localStorage.getItem(DEPLOYED_KEY) ?? '[]');
+		return Array.isArray(kept) ? kept.filter((k): k is string => typeof k === 'string') : [];
+	} catch {
+		return [];
+	}
+}
 
 async function deployed(chainId: number, safe: string): Promise<boolean> {
 	const key = `${chainId}:${safe.toLowerCase()}`;
 	if (deployedSeen.has(key)) return true;
 	const yes = await hasCode(chainId, safe);
-	if (yes) deployedSeen.add(key);
+	if (yes) {
+		deployedSeen.add(key);
+		try {
+			localStorage.setItem(DEPLOYED_KEY, JSON.stringify([...deployedSeen].slice(-DEPLOYED_CAP)));
+		} catch {
+			// no storage: read again next page
+		}
+	}
 	return yes;
 }
+
+/**
+ * The owners and threshold last read per deployed multisig, at the nonce
+ * they were read at (round 5, r4D-18): a Safe's own transactions move its
+ * members, and every one of them moves its nonce — an unmoved nonce is
+ * unmoved members, not read again. A module can change them without a
+ * transaction (§3.5 says when one is enabled), so they are read again a
+ * minute on regardless.
+ */
+const membersAt = new Map<
+	string,
+	{ nonce: bigint; owners: string[]; threshold: number; at: number }
+>();
+export const MEMBERS_FRESH_MS = 60_000;
 
 /** The multisig's nonce on `chainId` now (0 where it is not deployed). */
 export async function readNonce(chainId: number, safe: string): Promise<bigint> {
@@ -144,15 +177,36 @@ export async function readMembers(
 		const { owners, threshold } = genesisMembers(genesis);
 		return { deployed: false, owners, threshold, nonce: 0n };
 	}
-	const [owners, threshold, nonce] = await Promise.all([
+	const key = `${chainId}:${safe.toLowerCase()}`;
+	const nonce = BigInt(await ethCall(chainId, safe, NONCE));
+	const kept = membersAt.get(key);
+	if (kept && kept.nonce === nonce && now() - kept.at < MEMBERS_FRESH_MS) {
+		return { deployed: true, owners: [...kept.owners], threshold: kept.threshold, nonce };
+	}
+	const [owners, threshold] = await Promise.all([
 		ethCall(chainId, safe, GET_OWNERS),
-		ethCall(chainId, safe, GET_THRESHOLD),
-		ethCall(chainId, safe, NONCE)
+		ethCall(chainId, safe, GET_THRESHOLD)
 	]);
-	return {
-		deployed: true,
+	const read = {
+		nonce,
 		owners: decodeAddresses(owners),
 		threshold: Number(BigInt(threshold)),
-		nonce: BigInt(nonce)
+		at: now()
 	};
+	membersAt.set(key, read);
+	return { deployed: true, owners: [...read.owners], threshold: read.threshold, nonce };
+}
+
+let now = () => Date.now();
+
+/** For tests: forget what was read (and read the clock from `clock`). */
+export function resetChainReadsForTests(clock: () => number = () => Date.now()): void {
+	now = clock;
+	deployedSeen.clear();
+	membersAt.clear();
+	try {
+		localStorage.removeItem(DEPLOYED_KEY);
+	} catch {
+		// no storage
+	}
 }

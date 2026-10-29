@@ -159,4 +159,34 @@ describe('the looks the sheet and the home share', () => {
 		});
 		expect(await preflight.check(input())).toEqual({ kind: 'unpriced' });
 	});
+
+	/**
+	 * Round 5 (S2): "Approve and execute" stayed disabled four minutes on a
+	 * look that never answered. Every look is capped: past it, "couldn't
+	 * check" — approving goes ahead, Execute looks again — and a late answer
+	 * still lands.
+	 */
+	it('a look that never answers is said as unchecked at its cap — never endless', async () => {
+		vi.useFakeTimers();
+		try {
+			const answers: ((p: Priced) => void)[] = [];
+			preflight._reset(() => new Promise<Priced>((done) => answers.push(done)), 15_000);
+			const looking = preflight.check(input());
+			expect(preflight.get(input())).toBeNull();
+			await vi.advanceTimersByTimeAsync(15_000);
+			expect(await looking).toEqual({ kind: 'unchecked' });
+			expect(preflight.get(input())).toEqual({ kind: 'unchecked' });
+			// Not reused: Execute's own look (freshness 0) asks again, capped too.
+			const again = preflight.check(input(), 0);
+			expect(answers).toHaveLength(2);
+			await vi.advanceTimersByTimeAsync(15_000);
+			expect(await again).toEqual({ kind: 'unchecked' });
+			// The first look answers at last: it lands.
+			answers[0](priced());
+			await vi.advanceTimersByTimeAsync(0);
+			expect(preflight.get(input())).toEqual(priced());
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

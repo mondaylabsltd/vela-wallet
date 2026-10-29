@@ -159,6 +159,7 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // block's own. Absent stays absent: that is what marks a row written
         // before the mark existed, and the core repairs those.
         time_verified: row.get("timeVerified").and_then(Value::as_bool),
+        token: row.get("token").and_then(Value::as_str).map(str::to_owned),
     })
 }
 

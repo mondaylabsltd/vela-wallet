@@ -217,9 +217,11 @@
         "whyReverts": "a rede recusa — “{{reason}}”",
         "whyRevertsPlain": "ela é revertida ao ser executada, e a rede não informa o motivo",
         "unpricedReason": "não foi possível calcular a taxa de rede — tente de novo em instantes",
+        "uncheckedReason": "não foi possível verificar se ela seria executada — tente de novo em instantes",
         "feeLine": "Taxa de rede ≈ {{fee}}, paga por {{name}}",
         "feeChecking": "Verificando se seria executada, e a taxa de rede…",
         "feeUnpriced": "Não foi possível calcular a taxa de rede agora.",
+        "feeUnchecked": "Não foi possível verificar se ela seria executada — você ainda pode aprovar; Executar verifica de novo.",
         "feeRetry": "Verificar de novo",
         "feeSetup": "Inclui uma configuração única em {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Inclui uma configuração única em {{network}}:",
@@ -333,7 +335,7 @@
         "body": "Os membros escaneiam o código ou abrem o link: ele adiciona o multisig no Vela com a rede e os nomes dos membros.",
         "shareText": "Entre no nosso multisig no Vela",
         "qrLabel": "Código de convite",
-        "outsideHint": "Membros que usam outra carteira, não o Vela, não precisam adicionar nada: quando uma transação precisar da aprovação deles, envie o link dela e eles assinam com a própria carteira."
+        "outsideHint": "Membros que usam outra carteira, não o Vela, não precisam adicionar nada: quando uma transação precisar da aprovação deles, envie o link dela e eles a aprovam com a própria carteira."
       },
       "presence": {
         "needsYou_one": "{{count}} precisa da sua aprovação",
@@ -410,7 +412,7 @@
         "askNote": "Continue só se você acabou de iniciar isso na Vela. Nada é assinado sem que sua carteira pergunte.",
         "connect": "Conectar",
         "decline": "Recusar",
-        "keepOpen": "Conectado. Mantenha esta página aberta: os pedidos da Vela aparecem na sua carteira.",
+        "keepOpen": "Conectado. Mantenha esta página aberta: os pedidos da Vela aparecem primeiro aqui e depois na sua carteira.",
         "waitingVela": "Aguardando a Vela…",
         "noSession": "Abra esta página pelo link que a Vela mostra quando um membro assina com outra carteira.",
         "requests": "Pedidos",
@@ -629,6 +631,16 @@
           "tooMany": "Uma multisig pode ter no máximo {{max}} membros.",
           "changeWaiting": "Há outra alteração de membros pendente lá. Execute ou rejeite-a primeiro."
         }
+      },
+      "timeline": {
+        "heading": "Histórico",
+        "created": "Criada por {{name}}",
+        "approved": "Aprovada por {{name}}",
+        "approvedByExecuting": "Aprovada por {{name}} ao executá-la",
+        "executed": "Executada",
+        "executedBy": "Executada por {{name}}",
+        "counted": "contou",
+        "notCounted": "não contou"
       }
     },
     "balanceDetailStatusOwnNode": "Seu nó não está respondendo",

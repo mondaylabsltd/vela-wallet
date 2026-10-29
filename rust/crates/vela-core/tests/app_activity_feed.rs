@@ -72,6 +72,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         // A record as this build writes it. The records stored before the
         // mark existed are the repair's own tests (`unmarked`).
         time_verified: Some(true),
+        token: None,
     }
 }
 
@@ -289,6 +290,43 @@ fn batch_siblings_fold_to_one_split_row() {
     assert_eq!(batch.ids, vec!["h-0", "h-1", "h-2"]);
     assert_eq!(batch.symbol.as_deref(), Some("USDC"));
     assert_eq!(batch.transfers.len(), 3);
+}
+
+/// Round 5: a transfer's token contract rides from its record to its row (and
+/// a batch's lines), so a shell can say whose "USDC" it was; a record from
+/// before the field reads as it always did, and is written back without one.
+#[test]
+fn a_transfers_token_contract_reaches_its_row_and_an_older_record_still_reads() {
+    let fake = "0x57e64022d8d9a420dfe08a22d6a687caabc6b7c6";
+    let mut got = recv("r-fake", "0xBob", "5000", "USDC", 90_000.0);
+    got.token = Some(fake.to_owned());
+    let mut a = send("t-0", "0xT", "0xAaa", "1", 100_000.0);
+    let mut b = send("t-1", "0xT", "0xBbb", "2", 100_000.0);
+    a.token = Some(fake.to_owned());
+    b.token = Some(fake.to_owned());
+    let sut = boot(vec![got, a, b]);
+    let rows = items(&sut);
+    let received = rows.iter().find(|r| r.id == "r-fake").expect("the receive");
+    assert_eq!(received.token.as_deref(), Some(fake));
+    let batch = rows.iter().find(|r| r.id == "0xT").expect("the batch");
+    assert!(
+        batch.token.is_none(),
+        "a folded row's lines carry their own"
+    );
+    let lines = &batch.batch.as_ref().expect("batch payload").transfers;
+    assert!(lines.iter().all(|l| l.token.as_deref() == Some(fake)));
+
+    // An older record: no `token` key at all.
+    let mut old = serde_json::to_value(base("old", 1.0)).expect("record");
+    old.as_object_mut().expect("object").remove("token");
+    let read: FeedTxRecord = serde_json::from_value(old).expect("an older record reads");
+    assert!(read.token.is_none());
+    assert!(
+        !serde_json::to_string(&read)
+            .expect("json")
+            .contains("\"token\""),
+        "absent stays absent on the wire"
+    );
 }
 
 /// Many tokens to one recipient = multi_select: no summable token figure

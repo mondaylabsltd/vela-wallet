@@ -129,14 +129,17 @@ vi.mock('../core/execute', () => {
 		}
 	}
 	class ExecutionUnpricedError extends Error {}
+	class ExecutionUncheckedError extends Error {}
 	return {
 		ExecutorCannotPayError,
 		ExecutionWouldFailError,
 		ExecutionUnpricedError,
+		ExecutionUncheckedError,
 		stoppedBeforeSigning: (e: unknown) =>
 			e instanceof ExecutorCannotPayError ||
 			e instanceof ExecutionWouldFailError ||
-			e instanceof ExecutionUnpricedError,
+			e instanceof ExecutionUnpricedError ||
+			e instanceof ExecutionUncheckedError,
 		relayRefused: async () => fake.refused
 	};
 });
@@ -1419,6 +1422,28 @@ describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
 		await settle();
 		expect(fake.calls).toEqual(['execute']);
 		expect(fake.executedWith).toEqual([look]);
+		await screen.unmount();
+	});
+
+	/**
+	 * Round 5 (S2): a look that did not answer in time is said as not checked
+	 * — approving goes ahead, and Execute is offered: it looks again first.
+	 */
+	it('a look past its cap: says it could not check, Approve and Execute both usable', async () => {
+		fake.chain.items = [ready()];
+		fake.previews = { [ME]: { kind: 'unchecked' } };
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="execute-unchecked"]')?.textContent).toContain(
+			'proposal.feeUnchecked'
+		);
+		expect(document.querySelector('[data-testid="execute-checking"]')).toBeNull();
+		for (const name of ['proposal.approve', 'proposal.approveAndExecute']) {
+			const button = [...document.querySelectorAll('button')].find(
+				(b) => b.textContent?.trim() === name
+			) as HTMLButtonElement | undefined;
+			expect(button?.disabled, name).toBe(false);
+		}
 		await screen.unmount();
 	});
 

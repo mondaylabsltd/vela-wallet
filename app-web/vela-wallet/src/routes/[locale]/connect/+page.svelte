@@ -428,7 +428,13 @@
 		<!-- r4D-16: from the first frame (prerendered), a spinner and what it waits for. -->
 		<p class="waiting" aria-busy="true" data-testid="connect-booting">
 			<span class="spinner" aria-hidden="true"></span>
-			{invited || !outside ? m.connectingVela : m.loadingTx}
+			{#if invited || outside}
+				{invited || !outside ? m.connectingVela : m.loadingTx}
+			{:else}
+				<!-- Round 5: before this page runs, `app.html` read the fragment — an
+				     approve-later link says "Reading the transaction…" from its first frame. -->
+				<span class="boot-vela">{m.connectingVela}</span><span class="boot-tx">{m.loadingTx}</span>
+			{/if}
 		</p>
 	{:else if providers.length === 0}
 		<section class="card">
@@ -909,6 +915,16 @@
 {/snippet}
 
 <style>
+	/* Round 5: which booting line the first frame shows (`app.html`, connect-boot). */
+	.boot-tx,
+	:global(html[data-connect-tx]) .boot-vela {
+		display: none;
+	}
+
+	:global(html[data-connect-tx]) .boot-tx {
+		display: inline;
+	}
+
 	.risk-ask {
 		display: flex;
 		flex-direction: column;

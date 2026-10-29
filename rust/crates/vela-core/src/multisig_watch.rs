@@ -9,6 +9,15 @@
 //! refused, still on its way, or past its time — never "Executing…" without
 //! end.
 //!
+//! Round 5: a verdict never contradicts this device's own receipt. A log
+//! lookup is an index a lagging node may not have caught up with, so the
+//! receipt of this device's own landed transaction ([`OurReceipt`]) is read
+//! first and wins: a transaction whose own receipt shows the
+//! `ExecutionSuccess` was executed here, whatever a lookup elsewhere says;
+//! and without that receipt read, a lookup's "none" never becomes "another
+//! transaction ran first" — that is said only once the receipt shows it did
+//! not execute.
+//!
 //! (Reading a history in windows uses the pool's own rule for a window a node
 //! refuses as too wide, `app::rpc_pool::get_logs_range_cap`.)
 
@@ -42,6 +51,20 @@ pub enum OurOp {
     Unknown,
 }
 
+/// What the receipt of this device's own landed transaction shows of the
+/// transaction it executes: the one fact about it no log index can lag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OurReceipt {
+    /// It holds the multisig's `ExecutionSuccess` for this transaction.
+    Executed,
+    /// It was read, and holds none: this device's transaction did not execute it.
+    NotExecuted,
+    /// Not read (no landed transaction, or no node answered for it).
+    #[default]
+    Unread,
+}
+
 /// The facts the shell gathered about one execution in flight.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,6 +73,10 @@ pub struct ExecutionFacts {
     pub nonce_used: Option<bool>,
     pub executed_in: ExecutedIn,
     pub our_op: OurOp,
+    /// What the receipt of this device's landed transaction shows (read only
+    /// once [`OurOp::Landed`]; absent from an older shell: unread).
+    #[serde(default)]
+    pub receipt: OurReceipt,
     /// How long it has been watched, and how long it may be.
     pub elapsed_ms: u64,
     pub limit_ms: u64,
@@ -86,8 +113,13 @@ pub enum ExecutionVerdict {
 pub fn execution_verdict(f: &ExecutionFacts) -> ExecutionVerdict {
     use ExecutionVerdict as V;
     let used = f.nonce_used == Some(true);
-    match (&f.our_op, &f.executed_in) {
-        (OurOp::Landed { tx_hash }, ExecutedIn::Found { tx_hash: by }) => {
+    match (&f.our_op, &f.executed_in, f.receipt) {
+        // Its own receipt says it executed: executed here, whatever a lookup
+        // on another node (or a stale one) says.
+        (OurOp::Landed { tx_hash }, _, OurReceipt::Executed) => V::Executed {
+            tx_hash: tx_hash.clone(),
+        },
+        (OurOp::Landed { tx_hash }, ExecutedIn::Found { tx_hash: by }, _) => {
             if tx_hash.eq_ignore_ascii_case(by) {
                 V::Executed {
                     tx_hash: tx_hash.clone(),
@@ -99,23 +131,28 @@ pub fn execution_verdict(f: &ExecutionFacts) -> ExecutionVerdict {
                 }
             }
         }
-        (OurOp::Landed { .. }, ExecutedIn::None) if used => V::Replaced { paid: true },
-        (OurOp::Landed { tx_hash }, ExecutedIn::None) => V::Failed {
+        // Landed and did not execute it: the number used by another
+        // transaction, or its own call failed.
+        (OurOp::Landed { .. }, ExecutedIn::None, OurReceipt::NotExecuted) if used => {
+            V::Replaced { paid: true }
+        }
+        (
+            OurOp::Landed { tx_hash },
+            ExecutedIn::None | ExecutedIn::Unknown,
+            OurReceipt::NotExecuted,
+        ) if !used => V::Failed {
             tx_hash: tx_hash.clone(),
         },
-        // Landed and the number moved: its execution is the one that moved
-        // it until the history says otherwise.
-        (OurOp::Landed { tx_hash }, ExecutedIn::Unknown) if used => V::Executed {
-            tx_hash: tx_hash.clone(),
-        },
-        (OurOp::Landed { .. }, ExecutedIn::Unknown) => V::Waiting,
-        (_, ExecutedIn::Found { tx_hash }) => V::ExecutedByOther {
+        // Landed, its receipt unread: no lookup's "none" says what it did.
+        (OurOp::Landed { .. }, _, _) if used => V::Unknown,
+        (OurOp::Landed { .. }, _, _) => V::Waiting,
+        (_, ExecutedIn::Found { tx_hash }, _) => V::ExecutedByOther {
             tx_hash: tx_hash.clone(),
             paid: false,
         },
-        (_, ExecutedIn::None) if used => V::Replaced { paid: false },
-        (_, ExecutedIn::Unknown) if used => V::Unknown,
-        (OurOp::Refused, _) => V::NotSent,
+        (_, ExecutedIn::None, _) if used => V::Replaced { paid: false },
+        (_, ExecutedIn::Unknown, _) if used => V::Unknown,
+        (OurOp::Refused, _, _) => V::NotSent,
         _ if f.elapsed_ms >= f.limit_ms => V::TimedOut,
         _ => V::Waiting,
     }
@@ -131,6 +168,7 @@ mod tests {
             nonce_used,
             executed_in,
             our_op,
+            receipt: OurReceipt::Unread,
             elapsed_ms: 5_000,
             limit_ms: 180_000,
         }
@@ -212,19 +250,75 @@ mod tests {
         assert_eq!(execution_verdict(&late), ExecutionVerdict::TimedOut);
     }
 
+    fn landed(h: &str, receipt: OurReceipt) -> ExecutionFacts {
+        let mut f = facts(
+            Some(true),
+            ExecutedIn::None,
+            OurOp::Landed { tx_hash: h.into() },
+        );
+        f.receipt = receipt;
+        f
+    }
+
     #[test]
     fn landed_without_executing_is_a_failure_with_its_fee_paid() {
+        let mut f = landed("0xdd", OurReceipt::NotExecuted);
+        f.nonce_used = Some(false);
         assert_eq!(
-            execution_verdict(&facts(
-                Some(false),
-                ExecutedIn::None,
-                OurOp::Landed {
-                    tx_hash: "0xdd".into()
-                }
-            )),
+            execution_verdict(&f),
             ExecutionVerdict::Failed {
                 tx_hash: "0xdd".into()
             }
+        );
+        // Its receipt unread, the number unused (a node behind): still on its way.
+        f.receipt = OurReceipt::Unread;
+        assert_eq!(execution_verdict(&f), ExecutionVerdict::Waiting);
+    }
+
+    /// Round 5: a successful execution was once said as "Another transaction
+    /// ran first" — a lookup on a node behind the head found no
+    /// `ExecutionSuccess`. Its own receipt is the word, and wins.
+    #[test]
+    fn its_own_receipt_is_never_contradicted_by_a_lookup_on_a_lagging_node() {
+        // The lookup found none (the node is behind), the number is used: the
+        // receipt shows it executed here.
+        assert_eq!(
+            execution_verdict(&landed("0xee", OurReceipt::Executed)),
+            ExecutionVerdict::Executed {
+                tx_hash: "0xee".into()
+            }
+        );
+        // Nor does an unread history or an unused number on a stale node.
+        for (used, executed_in) in [
+            (Some(true), ExecutedIn::Unknown),
+            (Some(false), ExecutedIn::None),
+            (None, ExecutedIn::Unknown),
+        ] {
+            let mut f = landed("0xee", OurReceipt::Executed);
+            f.nonce_used = used;
+            f.executed_in = executed_in;
+            assert_eq!(
+                execution_verdict(&f),
+                ExecutionVerdict::Executed {
+                    tx_hash: "0xee".into()
+                }
+            );
+        }
+        // Its receipt unread: "none" is never "another transaction ran first".
+        assert_eq!(
+            execution_verdict(&landed("0xee", OurReceipt::Unread)),
+            ExecutionVerdict::Unknown
+        );
+        let mut unread_history = landed("0xee", OurReceipt::Unread);
+        unread_history.executed_in = ExecutedIn::Unknown;
+        assert_eq!(
+            execution_verdict(&unread_history),
+            ExecutionVerdict::Unknown
+        );
+        // Read, and it did not execute: then another transaction did run first.
+        assert_eq!(
+            execution_verdict(&landed("0xee", OurReceipt::NotExecuted)),
+            ExecutionVerdict::Replaced { paid: true }
         );
     }
 
@@ -237,6 +331,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(execution_verdict(&f)).unwrap(),
             serde_json::json!({"kind":"executedByOther","txHash":"0x1","paid":false})
+        );
+        let landed: ExecutionFacts = serde_json::from_str(
+            r#"{"nonceUsed":true,"executedIn":{"kind":"none"},"ourOp":{"kind":"landed","txHash":"0x2"},"receipt":"executed","elapsedMs":1,"limitMs":2}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(execution_verdict(&landed)).unwrap(),
+            serde_json::json!({"kind":"executed","txHash":"0x2"})
         );
     }
 }

@@ -76,6 +76,8 @@ export async function executionRows(
 			value: plainUnits(t.amount, info.decimals),
 			symbol: info.symbol,
 			decimals: info.decimals,
+			// Round 5: which token it was, for Activity's lookalike note.
+			...(t.token ? { token: t.token } : {}),
 			chainId: item.chainId,
 			timestamp: at,
 			status: 'confirmed',
@@ -318,7 +320,8 @@ const searching = new Map<string, Promise<Found>>();
  * The transaction that executed `safeTxHash` on `chainId`: searched from the
  * head back to just before `sinceMs` (when its proposal was made). `final`:
  * its number was already used when the search began, so "none" is the
- * chain's last word (voided), and is kept. Throws
+ * chain's last word (voided), and is kept — once the history read is seen to
+ * reach a block where the number was used. Throws
  * {@link HistoryUnreadableError}.
  */
 export async function lookupExecution(
@@ -356,6 +359,20 @@ export async function lookupExecution(
 			(await nonceAt(chainId, multisig, from)) > nonce
 		) {
 			throw new HistoryUnreadableError(chainId, 'its number was used before the search began');
+		}
+		// Round 5: "none" is the chain's last word only where the history read
+		// reached a block at which the number was used. A node behind the one
+		// that read the nonce (or another chain's, behind a pool) holds no
+		// `ExecutionSuccess` yet, and its "none" once said a successful
+		// execution was replaced — kept for good. Checked at the head the
+		// search read to: used there, or it cannot say.
+		if (
+			!found &&
+			final &&
+			nonce !== undefined &&
+			(await nonceAt(chainId, multisig, head)) <= nonce
+		) {
+			throw new HistoryUnreadableError(chainId, 'the history read is behind the nonce');
 		}
 		if (found || final) remember(chainId, multisig, safeTxHash, found);
 		return found;
