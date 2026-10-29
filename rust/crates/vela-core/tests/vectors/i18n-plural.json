@@ -139,6 +139,34 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 ready to execute"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -343,6 +371,34 @@
    },
    "expect": {
     "value": "Up to 1 member can lose access and the funds still move."
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 needs your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 ready to execute"
    }
   },
   {
@@ -553,6 +609,34 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 ready to execute"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -757,6 +841,34 @@
    },
    "expect": {
     "value": "Up to 3 members can lose access and the funds still move."
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 ready to execute"
    }
   },
   {
@@ -967,6 +1079,34 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 ready to execute"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -1171,6 +1311,34 @@
    },
    "expect": {
     "value": "Up to 11 members can lose access and the funds still move."
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 ready to execute"
    }
   },
   {
@@ -1381,6 +1549,34 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 ready to execute"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -1588,6 +1784,34 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 ready to execute"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -1792,6 +2016,34 @@
    },
    "expect": {
     "value": "Up to 1000000 members can lose access and the funds still move."
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 need your approval"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 ready to execute"
    }
   },
   {
@@ -2014,6 +2266,34 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 笔可执行"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -2218,6 +2498,34 @@
    },
    "expect": {
     "value": "最多 1 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 笔可执行"
    }
   },
   {
@@ -2428,6 +2736,34 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 笔可执行"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -2632,6 +2968,34 @@
    },
    "expect": {
     "value": "最多 3 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 笔可执行"
    }
   },
   {
@@ -2842,6 +3206,34 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 笔可执行"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -3046,6 +3438,34 @@
    },
    "expect": {
     "value": "最多 11 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 笔可执行"
    }
   },
   {
@@ -3256,6 +3676,34 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 笔可执行"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -3463,6 +3911,34 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 笔可执行"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -3667,6 +4143,34 @@
    },
    "expect": {
     "value": "最多 1000000 位成员失去访问，资金仍能转出。"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 笔待你批准"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 笔可执行"
    }
   },
   {
@@ -3889,6 +4393,34 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆可執行"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -4093,6 +4625,34 @@
    },
    "expect": {
     "value": "最多 1 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆可執行"
    }
   },
   {
@@ -4303,6 +4863,34 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆可執行"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -4507,6 +5095,34 @@
    },
    "expect": {
     "value": "最多 3 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆可執行"
    }
   },
   {
@@ -4717,6 +5333,34 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆可執行"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -4921,6 +5565,34 @@
    },
    "expect": {
     "value": "最多 11 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆可執行"
    }
   },
   {
@@ -5131,6 +5803,34 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆可執行"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -5338,6 +6038,34 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆可執行"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -5542,6 +6270,34 @@
    },
    "expect": {
     "value": "最多 1000000 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆待你核准"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆可執行"
    }
   },
   {
@@ -5764,6 +6520,34 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆可執行"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -5968,6 +6752,34 @@
    },
    "expect": {
     "value": "最多 1 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆可執行"
    }
   },
   {
@@ -6178,6 +6990,34 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆可執行"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -6382,6 +7222,34 @@
    },
    "expect": {
     "value": "最多 3 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆可執行"
    }
   },
   {
@@ -6592,6 +7460,34 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆可執行"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -6796,6 +7692,34 @@
    },
    "expect": {
     "value": "最多 11 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆可執行"
    }
   },
   {
@@ -7006,6 +7930,34 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆可執行"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -7213,6 +8165,34 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆可執行"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -7417,6 +8397,34 @@
    },
    "expect": {
     "value": "最多 1000000 位成員失去存取權，資金仍能轉出。"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆待你批准"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆可執行"
    }
   },
   {
@@ -7639,6 +8647,34 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 件が実行可能"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -7843,6 +8879,34 @@
    },
    "expect": {
     "value": "最大 1 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 件が実行可能"
    }
   },
   {
@@ -8053,6 +9117,34 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 件が実行可能"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -8257,6 +9349,34 @@
    },
    "expect": {
     "value": "最大 3 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 件が実行可能"
    }
   },
   {
@@ -8467,6 +9587,34 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 件が実行可能"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -8671,6 +9819,34 @@
    },
    "expect": {
     "value": "最大 11 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 件が実行可能"
    }
   },
   {
@@ -8881,6 +10057,34 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 件が実行可能"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -9088,6 +10292,34 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 件が実行可能"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -9292,6 +10524,34 @@
    },
    "expect": {
     "value": "最大 1000000 人がアクセスを失っても資金を動かせます。"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 件があなたの承認待ち"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 件が実行可能"
    }
   },
   {
@@ -9514,6 +10774,34 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0건 실행 가능"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -9718,6 +11006,34 @@
    },
    "expect": {
     "value": "최대 1명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1건 실행 가능"
    }
   },
   {
@@ -9928,6 +11244,34 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2건 실행 가능"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -10132,6 +11476,34 @@
    },
    "expect": {
     "value": "최대 3명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3건 실행 가능"
    }
   },
   {
@@ -10342,6 +11714,34 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5건 실행 가능"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -10546,6 +11946,34 @@
    },
    "expect": {
     "value": "최대 11명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11건 실행 가능"
    }
   },
   {
@@ -10756,6 +12184,34 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21건 실행 가능"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -10963,6 +12419,34 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101건 실행 가능"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -11167,6 +12651,34 @@
    },
    "expect": {
     "value": "최대 1000000명이 접근 권한을 잃어도 자금을 옮길 수 있습니다."
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000건이 내 승인 대기"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000건 실행 가능"
    }
   },
   {
@@ -11389,6 +12901,34 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -11593,6 +13133,34 @@
    },
    "expect": {
     "value": "Tối đa 1 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 giao dịch sẵn sàng thực hiện"
    }
   },
   {
@@ -11803,6 +13371,34 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -12007,6 +13603,34 @@
    },
    "expect": {
     "value": "Tối đa 3 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 giao dịch sẵn sàng thực hiện"
    }
   },
   {
@@ -12217,6 +13841,34 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -12421,6 +14073,34 @@
    },
    "expect": {
     "value": "Tối đa 11 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 giao dịch sẵn sàng thực hiện"
    }
   },
   {
@@ -12631,6 +14311,34 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -12838,6 +14546,34 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -13042,6 +14778,34 @@
    },
    "expect": {
     "value": "Tối đa 1000000 thành viên mất quyền truy cập thì tiền vẫn chuyển được."
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 giao dịch cần bạn phê duyệt"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 giao dịch sẵn sàng thực hiện"
    }
   },
   {
@@ -13264,6 +15028,34 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 siap dieksekusi"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -13468,6 +15260,34 @@
    },
    "expect": {
     "value": "Hingga 1 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 siap dieksekusi"
    }
   },
   {
@@ -13678,6 +15498,34 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 siap dieksekusi"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -13882,6 +15730,34 @@
    },
    "expect": {
     "value": "Hingga 3 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 siap dieksekusi"
    }
   },
   {
@@ -14092,6 +15968,34 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 siap dieksekusi"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -14296,6 +16200,34 @@
    },
    "expect": {
     "value": "Hingga 11 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 siap dieksekusi"
    }
   },
   {
@@ -14506,6 +16438,34 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 siap dieksekusi"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -14713,6 +16673,34 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 siap dieksekusi"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -14917,6 +16905,34 @@
    },
    "expect": {
     "value": "Hingga 1000000 anggota bisa kehilangan akses dan dana tetap bisa dipindahkan."
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 perlu persetujuan Anda"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 siap dieksekusi"
    }
   },
   {
@@ -15140,6 +17156,34 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 işlem yürütülmeye hazır"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -15344,6 +17388,34 @@
    },
    "expect": {
     "value": "En fazla 1 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 işlem yürütülmeye hazır"
    }
   },
   {
@@ -15554,6 +17626,34 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 işlem yürütülmeye hazır"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -15758,6 +17858,34 @@
    },
    "expect": {
     "value": "En fazla 3 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 işlem yürütülmeye hazır"
    }
   },
   {
@@ -15968,6 +18096,34 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 işlem yürütülmeye hazır"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -16172,6 +18328,34 @@
    },
    "expect": {
     "value": "En fazla 11 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 işlem yürütülmeye hazır"
    }
   },
   {
@@ -16382,6 +18566,34 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 işlem yürütülmeye hazır"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -16589,6 +18801,34 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 işlem yürütülmeye hazır"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -16793,6 +19033,34 @@
    },
    "expect": {
     "value": "En fazla 1000000 üye erişimini kaybetse de fonlar hareket edebilir."
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 işlem onayınızı bekliyor"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 işlem yürütülmeye hazır"
    }
   },
   {
@@ -17017,6 +19285,34 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 listas para ejecutar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -17221,6 +19517,34 @@
    },
    "expect": {
     "value": "Hasta 1 miembro puede perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 necesita tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 lista para ejecutar"
    }
   },
   {
@@ -17431,6 +19755,34 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 listas para ejecutar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -17635,6 +19987,34 @@
    },
    "expect": {
     "value": "Hasta 3 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 listas para ejecutar"
    }
   },
   {
@@ -17845,6 +20225,34 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 listas para ejecutar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -18049,6 +20457,34 @@
    },
    "expect": {
     "value": "Hasta 11 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 listas para ejecutar"
    }
   },
   {
@@ -18259,6 +20695,34 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 listas para ejecutar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -18466,6 +20930,34 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 listas para ejecutar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -18670,6 +21162,34 @@
    },
    "expect": {
     "value": "Hasta 1000000 miembros pueden perder el acceso y los fondos se seguirán moviendo."
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 necesitan tu aprobación"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 listas para ejecutar"
    }
   },
   {
@@ -18894,6 +21414,34 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 precisa da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 pronta para executar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -19098,6 +21646,34 @@
    },
    "expect": {
     "value": "Até 1 membro pode perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 precisa da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 pronta para executar"
    }
   },
   {
@@ -19308,6 +21884,34 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 prontas para executar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -19512,6 +22116,34 @@
    },
    "expect": {
     "value": "Até 3 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 prontas para executar"
    }
   },
   {
@@ -19722,6 +22354,34 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 prontas para executar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -19926,6 +22586,34 @@
    },
    "expect": {
     "value": "Até 11 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 prontas para executar"
    }
   },
   {
@@ -20136,6 +22824,34 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 prontas para executar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -20343,6 +23059,34 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 prontas para executar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -20547,6 +23291,34 @@
    },
    "expect": {
     "value": "Até 1000000 membros podem perder o acesso e os fundos continuam podendo ser movidos."
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 precisam da sua aprovação"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 prontas para executar"
    }
   },
   {
@@ -20771,6 +23543,34 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 attend votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 prête à exécuter"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -20975,6 +23775,34 @@
    },
    "expect": {
     "value": "Jusqu’à 1 membre peut perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 attend votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 prête à exécuter"
    }
   },
   {
@@ -21185,6 +24013,34 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 prêtes à exécuter"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -21389,6 +24245,34 @@
    },
    "expect": {
     "value": "Jusqu’à 3 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 prêtes à exécuter"
    }
   },
   {
@@ -21599,6 +24483,34 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 prêtes à exécuter"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -21803,6 +24715,34 @@
    },
    "expect": {
     "value": "Jusqu’à 11 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 prêtes à exécuter"
    }
   },
   {
@@ -22013,6 +24953,34 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 prêtes à exécuter"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -22220,6 +25188,34 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 prêtes à exécuter"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -22424,6 +25420,34 @@
    },
    "expect": {
     "value": "Jusqu’à 1000000 membres peuvent perdre l’accès sans bloquer les fonds."
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 attendent votre approbation"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 prêtes à exécuter"
    }
   },
   {
@@ -22647,6 +25671,34 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 bereit zum Ausführen"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -22851,6 +25903,34 @@
    },
    "expect": {
     "value": "Bis zu 1 Mitglied kann den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 braucht Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 bereit zum Ausführen"
    }
   },
   {
@@ -23061,6 +26141,34 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 bereit zum Ausführen"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -23265,6 +26373,34 @@
    },
    "expect": {
     "value": "Bis zu 3 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 bereit zum Ausführen"
    }
   },
   {
@@ -23475,6 +26611,34 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 bereit zum Ausführen"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -23679,6 +26843,34 @@
    },
    "expect": {
     "value": "Bis zu 11 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 bereit zum Ausführen"
    }
   },
   {
@@ -23889,6 +27081,34 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 bereit zum Ausführen"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -24096,6 +27316,34 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 bereit zum Ausführen"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -24300,6 +27548,34 @@
    },
    "expect": {
     "value": "Bis zu 1000000 Mitglieder können den Zugang verlieren, und das Guthaben bleibt beweglich."
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 brauchen Ihre Zustimmung"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 bereit zum Ausführen"
    }
   },
   {
@@ -24525,6 +27801,34 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 готовы к выполнению"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -24729,6 +28033,34 @@
    },
    "expect": {
     "value": "Доступ могут потерять до 1 участника, и средства всё равно можно будет переместить."
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 ждёт вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 готова к выполнению"
    }
   },
   {
@@ -24939,6 +28271,34 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 готовы к выполнению"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -25143,6 +28503,34 @@
    },
    "expect": {
     "value": "Доступ могут потерять до 3 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 готовы к выполнению"
    }
   },
   {
@@ -25353,6 +28741,34 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 готовы к выполнению"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -25557,6 +28973,34 @@
    },
    "expect": {
     "value": "Доступ могут потерять до 11 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 готовы к выполнению"
    }
   },
   {
@@ -25767,6 +29211,34 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 ждёт вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 готова к выполнению"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -25974,6 +29446,34 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 ждёт вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 готова к выполнению"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -26178,6 +29678,34 @@
    },
    "expect": {
     "value": "Доступ могут потерять до 1000000 участников, и средства всё равно можно будет переместить."
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 ждут вашего одобрения"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 готовы к выполнению"
    }
   },
   {
@@ -26402,6 +29930,34 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.needsYou/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/0",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 pronte da eseguire"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/0",
    "fn": "i18n_t",
    "input": {
@@ -26606,6 +30162,34 @@
    },
    "expect": {
     "value": "Fino a 1 membro può perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.needsYou/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 richiede la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/1",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 pronta da eseguire"
    }
   },
   {
@@ -26816,6 +30400,34 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.needsYou/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/2",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 pronte da eseguire"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/2",
    "fn": "i18n_t",
    "input": {
@@ -27020,6 +30632,34 @@
    },
    "expect": {
     "value": "Fino a 3 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.needsYou/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/3",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 pronte da eseguire"
    }
   },
   {
@@ -27230,6 +30870,34 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.needsYou/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/5",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 pronte da eseguire"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/5",
    "fn": "i18n_t",
    "input": {
@@ -27434,6 +31102,34 @@
    },
    "expect": {
     "value": "Fino a 11 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.needsYou/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/11",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 pronte da eseguire"
    }
   },
   {
@@ -27644,6 +31340,34 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.needsYou/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/21",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 pronte da eseguire"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/21",
    "fn": "i18n_t",
    "input": {
@@ -27851,6 +31575,34 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.needsYou/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/101",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 pronte da eseguire"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/101",
    "fn": "i18n_t",
    "input": {
@@ -28055,6 +31807,34 @@
    },
    "expect": {
     "value": "Fino a 1000000 membri possono perdere l’accesso e i fondi restano movimentabili."
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.needsYou/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.needsYou",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 richiedono la tua approvazione"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.ready/1000000",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.ready",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 pronte da eseguire"
    }
   },
   {

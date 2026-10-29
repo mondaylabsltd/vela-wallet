@@ -3,9 +3,15 @@
 	 * Adding a multisig by its address — all another member needs. The
 	 * genesis comes from the service and is accepted only if the core
 	 * re-derives the address from it (`addMultisig`). Its networks are where
-	 * it is deployed or has proposals in the mailbox — never where its record
-	 * is (the registry is an index); when nothing says, the person picks one
-	 * here (`chooseNetwork`) — never the first network of the space, silently.
+	 * it is deployed or has proposals in the mailbox, or what its invite names
+	 * (r4D-4) — never where its record is (the registry is an index); when
+	 * nothing says, the person picks one here (`chooseNetwork`), the likely
+	 * ones first, and then taps Add (r4b-8) — never the first network of the
+	 * space, silently, and never added on the pick itself.
+	 *
+	 * An invite opens this sheet with what it carries — the address, its
+	 * networks, its members' labels — and adds nothing until the person's
+	 * Add. A damaged invite says so at once (r4b-13).
 	 *
 	 * Or importing Safes from a Safe{Wallet} export: the file is read by the
 	 * core on this device, the person picks the Safes, and each is imported
@@ -17,21 +23,28 @@
 	 * with what that is, and added only on the person's explicit tap.
 	 */
 	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
-	import Dropdown from '$lib/settings/ui/Dropdown.svelte';
 	import { addressEntry } from '$lib/core/kernels';
 	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName, spaceNetworksSync } from '$lib/services/networks';
+	import { chainName, networkForChainId, spaceNetworksSync } from '$lib/services/networks';
+	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import { addMultisig, importExported, type AddOutcome } from '../core/accounts';
 	import type { Finding } from '../core/refusal';
+	import { indexName, missingTitle } from '../core/activity.svelte';
+	import { keepLink } from '../core/kept-link';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
+	import { addLink, type AddLink } from '../core/link';
+	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
 	import { multisig } from '../core/store.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
+	import NetworkChoice from './NetworkChoice.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -43,6 +56,12 @@
 		 * once; the address is not looked up again until the person taps Add.
 		 */
 		prefillFailure?: string | null;
+		/** The invite it was opened from: its networks, its members' labels. */
+		link?: AddLink;
+		/** It was opened from an invite that does not read: said at once. */
+		broken?: boolean;
+		/** The page's locale, for the way to Settings → Add network. */
+		locale?: string;
 		wide: boolean;
 		closeLabel: string;
 		onclose: () => void;
@@ -53,6 +72,9 @@
 		m,
 		prefill = '',
 		prefillFailure = null,
+		link,
+		broken = false,
+		locale = 'en',
 		wide,
 		closeLabel,
 		onclose,
@@ -62,20 +84,42 @@
 	// The link's address seeds the field once; the person may edit it.
 	let address = $state(untrack(() => prefill));
 	let busy = $state(false);
-	let failure = $state<string | null>(untrack(() => prefillFailure));
+	// r4b-13: a damaged invite is said the moment it opens, not at Add; so is
+	// what a proposal link's own lookup already found.
+	let failure = $state<string | null>(untrack(() => (broken ? m.add.badInvite : prefillFailure)));
 	// The core's one address rule (send-2), checksum included.
 	const entry = $derived(addressEntry(address.trim()));
 	const valid = $derived(entry === 'valid');
 
 	const networks = spaceNetworksSync();
+	/** The invite's networks this device has, its first network first. */
+	const linkHas = untrack(() =>
+		(link?.chainIds ?? []).filter((id) => networkForChainId(id) !== null)
+	);
+	/** Its first network, which this device lacks: said, with Add network. */
+	const linkLacks = untrack(() =>
+		link && link.chainIds.length > 0 && linkHas.length === 0 ? link.chainIds[0] : null
+	);
+	let lackingName = $state<string | null>(null);
+	if (linkLacks !== null) void indexName(linkLacks).then((name) => (lackingName = name));
+	/** The invite still names this address (the person did not type another). */
+	const fromLink = $derived(!!link && address.trim().toLowerCase() === link.multisig.toLowerCase());
+
 	/** Nothing says which network it is used on: the person's pick, asked for. */
 	let choosing = $state(false);
 	let chosen = $state<number | null>(null);
-	let menuOpen = $state(false);
 	/** The core refused its genesis: why, every reason — and nothing adds it. */
 	let refused = $state<Finding[] | null>(null);
 	/** Deployed, and more than its members can act for it: added only on the person's tap. */
 	let risky = $state<Finding[] | null>(null);
+	/** The likely networks first (r4D-4): the invite's, the ones used here, where funds are. */
+	const offered = $derived(
+		likelyNetworks(networks, {
+			named: fromLink ? linkHas : [],
+			used: lastUsedChains(),
+			held: heldChains(balance.view.tokens)
+		})
+	);
 
 	async function add(acceptRisks = false) {
 		if (!valid) {
@@ -87,10 +131,11 @@
 		failure = null;
 		refused = null;
 		if (!acceptRisks) risky = null;
+		const named = choosing && chosen !== null ? chosen : fromLink ? linkHas[0] : undefined;
 		const outcome = await addMultisig(
 			address.trim(),
 			networks.map((n) => n.chainId),
-			choosing && chosen !== null ? chosen : undefined,
+			named,
 			{ acceptRisks }
 		);
 		busy = false;
@@ -98,8 +143,12 @@
 	}
 
 	function said(outcome: AddOutcome) {
-		if (outcome.ok) onadded(outcome.account.address);
-		else if (outcome.reason === 'chooseNetwork') choosing = true;
+		if (outcome.ok) {
+			// Every network the invite names is one it is used on (a link
+			// naming one is evidence, the core's rule).
+			if (fromLink) for (const id of linkHas) multisig.useChain(outcome.account.address, id);
+			onadded(outcome.account.address);
+		} else if (outcome.reason === 'chooseNetwork') choosing = true;
 		else if (outcome.reason === 'refused') refused = outcome.findings;
 		else if (outcome.reason === 'highRisk') risky = outcome.findings;
 		else if (outcome.reason === 'unverified') {
@@ -107,9 +156,18 @@
 		} else failure = m.add[outcome.reason];
 	}
 
-	$effect(() => {
-		if (prefill && valid && untrack(() => prefillFailure) === null) void add();
-	});
+	/** Settings → Add network for the invite's network; the invite opens again once it is added. */
+	function addNetwork(chainId: number) {
+		if (link) {
+			const again = addLink('https://x', locale, link.multisig, {
+				chainIds: link.chainIds,
+				members: link.members ?? []
+			});
+			keepLink(new URL(again).hash);
+		}
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Settings, resolved, with its query
+		void goto(`${resolve('/[locale]/settings', { locale })}?addNetwork=${chainId}`);
+	}
 
 	// -- importing from Safe{Wallet} ----------------------------------------------
 
@@ -307,22 +365,50 @@
 					onclick={() => void add(true)}>{m.authority.riskConfirm}</Button
 				>
 			{/if}
+			{#if fromLink && link && (link.chainIds.length > 0 || link.members?.some((x) => x.name))}
+				<!-- What the invite says, before anything is added (r4D-4, r4D-5). -->
+				<div class="invite" data-testid="invite-summary">
+					{#if linkHas.length > 0}
+						<p class="line">
+							{fillTemplate(m.add.usedOn, { networks: linkHas.map(chainName).join(', ') })}
+						</p>
+					{:else if linkLacks !== null}
+						<p class="line" role="status">
+							{fillTemplate(m.add.networkMissing, {
+								network: missingTitle(m, linkLacks, lackingName)
+							})}
+						</p>
+						<Button variant="secondary" shape="rounded" onclick={() => addNetwork(linkLacks)}
+							>{m.proposal.addNetwork}</Button
+						>
+					{/if}
+					{#if link.members?.some((member) => member.name)}
+						<p class="line">{m.add.invitedMembers}</p>
+						<ul class="named">
+							{#each link.members as member, i (i)}
+								{#if member.name}
+									<li>
+										<span class="who">{member.name}</span>
+										{#if member.kind}<span class="kind"
+												>{member.kind === 'passkey' ? m.add.kindPasskey : m.add.kindWallet}</span
+											>{/if}
+									</li>
+								{/if}
+							{/each}
+						</ul>
+						<p class="hint">{m.add.labelsNote}</p>
+					{/if}
+				</div>
+			{/if}
 			{#if choosing}
 				<p class="choose" role="status">{m.add.chooseNetwork}</p>
-				<Dropdown
+				<NetworkChoice
 					label={m.action.network}
-					value={networks.find((n) => n.chainId === chosen)?.displayName ?? m.action.network}
-					open={menuOpen}
-					rows={networks.map((n) => ({
-						id: String(n.chainId),
-						label: n.displayName,
-						selected: n.chainId === chosen
-					}))}
-					ontoggle={() => (menuOpen = !menuOpen)}
-					onselect={(id) => {
-						chosen = Number(id);
-						menuOpen = false;
-					}}
+					moreLabel={m.add.moreNetworks}
+					networks={offered}
+					{chosen}
+					disabled={busy}
+					onchoose={(id) => (chosen = id)}
 				/>
 			{/if}
 			{#if !risky}
@@ -467,6 +553,53 @@
 		flex-direction: column;
 		gap: var(--space-sm);
 		padding-block-end: var(--space-sm);
+	}
+
+	.invite {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+	}
+
+	.line,
+	.hint {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
+	}
+
+	.hint {
+		color: var(--color-fg-muted);
+	}
+
+	.named {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.named li {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.who {
+		font-weight: var(--weight-semibold);
+		overflow-wrap: anywhere;
+	}
+
+	.kind {
+		color: var(--color-fg-muted);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 	}
 
 	.choose {

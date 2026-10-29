@@ -31,7 +31,15 @@ const seams = vi.hoisted(() => ({
 	proposed: [] as [string, number, unknown][],
 	opened: [] as unknown[],
 	refuseOn: null as number | null,
-	contacts: [] as unknown[]
+	contacts: [] as unknown[],
+	/** Members' labels kept with the multisig (create's store, r4D-5). */
+	named: [] as [string, Record<string, unknown>][]
+}));
+vi.mock('../core/store.svelte', () => ({
+	multisig: {
+		nameMembers: (address: string, known: Record<string, unknown>) =>
+			void seams.named.push([address, known])
+	}
 }));
 vi.mock('../core/proposals.svelte', async () => {
 	const { MemberChangeRefusedError } = await import('../core/member-changes');
@@ -79,7 +87,6 @@ vi.mock('$lib/wallet/identicon', () => ({
 }));
 
 const { default: MemberChanges } = await import('./MemberChanges.svelte');
-const { memberNotes } = await import('../core/member-notes.svelte');
 
 function words(): MultisigMessages {
 	const walk = (node: Record<string, unknown>, prefix: string): Record<string, unknown> =>
@@ -144,6 +151,7 @@ afterEach(() => {
 	seams.chains = [];
 	seams.items = [];
 	seams.proposed = [];
+	seams.named = [];
 	seams.opened = [];
 	seams.refuseOn = null;
 	seams.contacts = [];
@@ -240,7 +248,7 @@ describe('changing the members (Settings)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed[1][2]).toEqual({ kind: 'replace', oldOwner: C, newOwner: D });
-		expect(memberNotes.get(D)).toEqual({ name: 'Dana', kind: 'wallet' });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana', kind: 'wallet' } });
 	});
 
 	it('changes the approvals needed with the stepper, and says a network that refuses', async () => {
@@ -303,7 +311,7 @@ describe('changing the members (Settings)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed[0][2]).toEqual({ kind: 'add', owner: D, threshold: undefined });
-		expect(memberNotes.get(D)).toEqual({ name: 'Dana', kind: 'wallet' });
+		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana', kind: 'wallet' } });
 	});
 
 	it('offers nothing when it is deployed nowhere', async () => {

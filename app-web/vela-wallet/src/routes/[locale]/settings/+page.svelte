@@ -151,6 +151,8 @@
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
 	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
 	import MultisigSettings from '$lib/multisig/ui/MultisigSettings.svelte';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import Button from '$lib/ui/Button.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -188,7 +190,8 @@
 						addressDisplay: shortenAddress(identity.address),
 						addressFull: identity.address,
 						identiconSvg: identity.identiconSvg,
-						...(identity.rule ? { rule: identity.rule } : {})
+						...(identity.rule ? { rule: identity.rule } : {}),
+						...(identity.waiting ? { waiting: identity.waiting } : {})
 					}
 					// No network list: it is the wallet's filter (spec 028 Phase 9,
 					// RULING 2), and a click that left this page for the wallet was a
@@ -1371,6 +1374,7 @@
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
 				accountMore={multisigRows}
+				accountExtra={multisigAdd}
 				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</div>
@@ -1454,6 +1458,18 @@
 	/>
 {/snippet}
 
+{#snippet multisigAdd()}
+	<!-- r4D-19: the two ways to a multisig, here too (the switcher had them alone). -->
+	<div class="multisig-add">
+		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'create' })}
+			>{data.multisigMessages.switcher.create}</Button
+		>
+		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'add' })}
+			>{data.multisigMessages.switcher.add}</Button
+		>
+	</div>
+{/snippet}
+
 {#snippet multisigKeys()}
 	{#if shownMultisig}
 		<MultisigSettings
@@ -1466,6 +1482,17 @@
 {/snippet}
 
 <style>
+	.multisig-add {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-sm);
+	}
+
+	.multisig-add > :global(*) {
+		flex: 1;
+	}
+
 	/* The phone screens are `height: 100%` of whatever holds them, and the
 	   root layout only sets a MIN-height — so without a frame the screen
 	   stood as tall as its own rows, the DOCUMENT scrolled, and the tab bar

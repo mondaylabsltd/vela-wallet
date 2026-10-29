@@ -284,7 +284,6 @@ export interface MultisigMessages {
 		create: string;
 		next: string;
 		back: string;
-		needTwo: string;
 		needLocal: string;
 		duplicate: string;
 		notMember: string;
@@ -300,6 +299,63 @@ export interface MultisigMessages {
 		copyAddress: string;
 		/** Every network the person has lacks the Safe contracts a multisig needs. */
 		noSafeNetworks: string;
+		/** r4a-14: the name's size (`{{bytes}}`, `{{limit}}`). */
+		nameBytes: string;
+		/** r4a-14: over the registry's limit (`{{bytes}}`, `{{limit}}`). */
+		nameTooLong: string;
+		/** r4a-14: Next with no name. */
+		nameNeeded: string;
+		/** r4D-5: a member's own label, typed with its address. */
+		memberName: string;
+		memberNamePlaceholder: string;
+		/** r4D-5: an ENS name's address (`{{name}}`), shown in full under it. */
+		ensResolved: string;
+		ensNotFound: string;
+		ensUnavailable: string;
+		ensUnsupported: string;
+		/** r4a-14: members from the address book. */
+		fromContacts: string;
+		/** r4a-14: one member — what a 1 of 1 multisig is. */
+		solo: string;
+		/** r4a-14: what "first network" means. */
+		networkHint: string;
+		/** r4a-14: nothing says which; the person picks. */
+		networkNeeded: string;
+		/** r4a-13: kept on this device, its record on its way. */
+		savedSharing: string;
+		/** r4a-12: kept on this device, shared once the service is reachable. */
+		savedLater: string;
+		shared: string;
+		/** The service refused the record (`{{reason}}`). */
+		refused: string;
+		copyInvite: string;
+		/** r4D-8: the first steps on the home of a multisig created here. */
+		firstRunTitle: string;
+		firstRunInvite: string;
+		firstRunInviteNote: string;
+		firstRunFund: string;
+		/** `{{network}}` */
+		firstRunFundNote: string;
+		/** The first transfer out sets it up there (`{{network}}`). */
+		firstRunCost: string;
+		firstRunDismiss: string;
+	};
+	/** r4D-16: the invite sheet. */
+	invite: {
+		body: string;
+		/** The text a share sheet carries with the link. */
+		shareText: string;
+		qrLabel: string;
+		/** Members who sign with another wallet add nothing. */
+		outsideHint: string;
+	};
+	/** r4D-7: what waits on this device, and the rule in force. */
+	presence: {
+		needsYou: PluralCopy;
+		ready: PluralCopy;
+		ruleDiffers: string;
+		/** The switcher button's dot, in words. */
+		othersWaiting: string;
 	};
 	external: {
 		pageTitle: string;
@@ -378,6 +434,8 @@ export interface MultisigMessages {
 		renameUnavailable: string;
 		/** Its record's chain is one it is not deployed on: nothing offered (`{{network}}`). */
 		renameNotDeployed: string;
+		/** r4a-12: its record is not saved yet — nothing to rename. */
+		renameNotRecorded: string;
 		originalMembers: string;
 		originalNote: string;
 		/** `{{network}}` */
@@ -420,6 +478,18 @@ export interface MultisigMessages {
 		chooseNetwork: string;
 		/** r4b-13: the invite link is damaged. */
 		badLink: string;
+		/** r4b-13: an invite that does not read, said at once. */
+		badInvite: string;
+		/** `{{networks}}`: where its invite says it is used. */
+		usedOn: string;
+		/** Its invite's network is not on this device (`{{network}}`). */
+		networkMissing: string;
+		moreNetworks: string;
+		/** r4D-5: the members' labels an invite carries. */
+		invitedMembers: string;
+		kindPasskey: string;
+		kindWallet: string;
+		labelsNote: string;
 	};
 	/**
 	 * Who can act for a multisig (§3.5): a genesis the core refuses or cannot
@@ -755,7 +825,6 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		create: '',
 		next: '',
 		back: '',
-		needTwo: '',
 		needLocal: '',
 		duplicate: '',
 		notMember: '',
@@ -769,7 +838,44 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		fewer: '',
 		more: '',
 		copyAddress: '',
-		noSafeNetworks: ''
+		noSafeNetworks: '',
+		nameBytes: '',
+		nameTooLong: '',
+		nameNeeded: '',
+		memberName: '',
+		memberNamePlaceholder: '',
+		ensResolved: '',
+		ensNotFound: '',
+		ensUnavailable: '',
+		ensUnsupported: '',
+		fromContacts: '',
+		solo: '',
+		networkHint: '',
+		networkNeeded: '',
+		savedSharing: '',
+		savedLater: '',
+		shared: '',
+		refused: '',
+		copyInvite: '',
+		firstRunTitle: '',
+		firstRunInvite: '',
+		firstRunInviteNote: '',
+		firstRunFund: '',
+		firstRunFundNote: '',
+		firstRunCost: '',
+		firstRunDismiss: ''
+	},
+	invite: {
+		body: '',
+		shareText: '',
+		qrLabel: '',
+		outsideHint: ''
+	},
+	presence: {
+		needsYou: { locale: '', forms: {} },
+		ready: { locale: '', forms: {} },
+		ruleDiffers: '',
+		othersWaiting: ''
 	},
 	external: {
 		pageTitle: '',
@@ -841,6 +947,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		renameAction: '',
 		renameUnavailable: '',
 		renameNotDeployed: '',
+		renameNotRecorded: '',
 		originalMembers: '',
 		originalNote: '',
 		currentOn: '',
@@ -870,7 +977,15 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		notMultisig: '',
 		chooseNetwork: '',
-		badLink: ''
+		badLink: '',
+		badInvite: '',
+		usedOn: '',
+		networkMissing: '',
+		moreNetworks: '',
+		invitedMembers: '',
+		kindPasskey: '',
+		kindWallet: '',
+		labelsNote: ''
 	},
 	authority: {
 		refusedTitle: '',

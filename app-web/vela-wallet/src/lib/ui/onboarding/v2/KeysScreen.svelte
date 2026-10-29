@@ -64,6 +64,12 @@
 		/** The core's `can_cancel`: a passkey prompt is waiting (ob-7). */
 		canCancel?: boolean;
 		onCancel?: () => void;
+		/**
+		 * The core's status line (`CreateView.status`), in words: a passkey that
+		 * was not made says so here, on the screen it returns to — never a
+		 * highlighted button and nothing else (r4a onboarding note).
+		 */
+		statusText?: string;
 	}
 
 	let {
@@ -85,7 +91,8 @@
 		onRemoveKey,
 		onFinish,
 		canCancel = false,
-		onCancel
+		onCancel,
+		statusText
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
@@ -247,6 +254,10 @@
 		/>
 	</div>
 
+	{#if statusText && !canCancel}
+		<p class="status" role="alert" data-testid="keys-status">{statusText}</p>
+	{/if}
+
 	{#if canCancel}
 		<!-- ob-7: the prompt is up; the way out is said, not hidden behind it. -->
 		<p class="waiting" role="status">{strings('onboarding.common.confirmInPrompt')}</p>
@@ -272,6 +283,17 @@
 		color: var(--color-fg-muted);
 		font-size: var(--text-sm);
 		text-align: center;
+	}
+
+	.status {
+		margin: 0;
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-warning-soft);
+		border: var(--border-hairline) solid var(--color-warning-border);
+		color: var(--color-fg-base);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 	}
 
 	/* The form's quiet "Start over", for the same kind of way out. */

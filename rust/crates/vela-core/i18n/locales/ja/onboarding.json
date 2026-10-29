@@ -210,7 +210,7 @@
       "statusComputingAddress": "ウォレットアドレスを計算中...",
       "statusExtractingKey": "公開鍵を抽出中...",
       "statusSettingUpIdentity": "安全な本人確認を設定中...",
-      "statusSetupCancelled": "セットアップがキャンセルされました。",
+      "statusSetupCancelled": "パスキーは作成されませんでした。プロンプトを閉じていない場合、この端末が拒否した可能性があります（例：パスキーの保存領域がいっぱい）。もう一度試すか、キーの保存先を変えてください。",
       "statusSyncingKey": "公開鍵を同期中...",
       "statusVerifyCancelled": "確認がキャンセルされました。もう一度お試しください。",
       "statusVerifyingIdentity": "本人確認中...",

@@ -27,6 +27,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import { keepLink } from '$lib/multisig/core/kept-link';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
@@ -260,6 +261,10 @@
 	});
 
 	onMount(() => {
+		// r4b-9, r4b-17: a multisig link opened here (`/en#msa=…`), or sent here
+		// by a wallet with no account yet, is kept and opened in the wallet —
+		// after creating or signing in, or at once for someone signed in.
+		keepLink(location.hash);
 		// ob-6: a signed-in person who opens `/`, `/en` or presses Back into
 		// Welcome is taken to the wallet. `app.html` already hid this page
 		// before paint on the same rule; the attribute goes once we have left.

@@ -360,6 +360,7 @@
 			onFinish={() => send({ type: 'finish_keys' })}
 			canCancel={view.can_cancel}
 			onCancel={() => send({ type: 'cancel_pending' })}
+			{statusText}
 		/>
 	{:else if screen === 'progress'}
 		<ProgressScreen position={progressFor(view.status)!} keyCount={view.keys.length} {strings} />

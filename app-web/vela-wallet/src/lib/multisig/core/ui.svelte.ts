@@ -5,7 +5,7 @@
  */
 import type { DappCall } from './proposals.svelte';
 import type { LinkedProposals } from './linked.svelte';
-import type { ProposalLink } from './link';
+import type { AddLink, ProposalLink } from './link';
 import type { SigningRefusedError, SigningUncheckedError } from './gate.svelte';
 
 /**
@@ -44,7 +44,12 @@ export interface DappProposal {
 
 export type MultisigSheet =
 	| { kind: 'create' }
-	| { kind: 'add' }
+	/**
+	 * Add one by its address. `link`: the invite it came from (its networks,
+	 * its members' labels); `broken`: what a damaged invite held, said at
+	 * once (r4b-13).
+	 */
+	| { kind: 'add'; link?: AddLink; broken?: string }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	/**
 	 * ms-21: a link's transaction on a device with none of its multisig's

@@ -1151,9 +1151,27 @@ for (let i = 1; i < PATHS.length; i++) {
 //   2318 + 49 = 2367 leaves, 121 + 2 = 123 branches.
 // 2600 (the above on 2549, merged): 2424 + 49 = 2473 leaves, 125 + 2 = 127
 //   branches.
-if (PATHS.length !== 2600) fail(`expected 2600 paths (2473 leaf + 127 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2473) fail(`expected 2473 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 127) fail(`expected 127 branch paths, got ${branchSet.size}`);
+// 2488 (round 4: invites carry everything, create keeps it here first,
+//   presence, 2026-10-29): − `home.multisig.create.needTwo` (one member is
+//   a 1 of 1 multisig now), + `home.multisig.create.{nameBytes, nameTooLong,
+//   nameNeeded, memberName, memberNamePlaceholder, ensResolved, ensNotFound,
+//   ensUnavailable, ensUnsupported, fromContacts, solo, networkHint,
+//   networkNeeded, savedSharing, savedLater, shared, refused, copyInvite,
+//   firstRunTitle, firstRunInvite, firstRunInviteNote, firstRunFund,
+//   firstRunFundNote, firstRunCost, firstRunDismiss}` (25), + the
+//   `home.multisig.invite` branch `{body, shareText, qrLabel, outsideHint}`,
+//   + the `home.multisig.presence` branch `{needsYou_*, ready_*, ruleDiffers,
+//   othersWaiting}` (one/few/many/other each: 10), + `home.multisig.settings.
+//   renameNotRecorded`, + `home.multisig.add.{badInvite, usedOn,
+//   networkMissing, moreNetworks, invitedMembers, kindPasskey, kindWallet,
+//   labelsNote}`. `create.createdBody`, `settings.shareAgainNote`,
+//   `add.chooseNetwork` and `onboarding.create.statusSetupCancelled` change
+//   value only. 2318 − 1 + 25 + 4 + 10 + 1 + 8 = 2365 leaves, 123 branches.
+// 2649 (the above on 2600, merged): 2473 − 1 + 48 = 2520 leaves, 127 + 2 =
+//   129 branches.
+if (PATHS.length !== 2649) fail(`expected 2649 paths (2520 leaf + 129 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2520) fail(`expected 2520 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

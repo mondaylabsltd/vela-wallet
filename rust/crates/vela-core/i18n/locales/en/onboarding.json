@@ -210,7 +210,7 @@
       "statusComputingAddress": "Computing wallet address...",
       "statusExtractingKey": "Extracting public key...",
       "statusSettingUpIdentity": "Setting up secure identity...",
-      "statusSetupCancelled": "Setup was cancelled.",
+      "statusSetupCancelled": "The passkey wasn't created. If you didn't close the prompt, this device may have refused it — for example, its passkey storage is full. Try again, or choose another place for the key.",
       "statusSyncingKey": "Syncing public key...",
       "statusVerifyCancelled": "Verification was cancelled. Please try again.",
       "statusVerifyingIdentity": "Verifying identity...",

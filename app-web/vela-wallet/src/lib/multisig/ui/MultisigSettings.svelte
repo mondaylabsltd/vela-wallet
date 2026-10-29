@@ -20,7 +20,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
-	import { recordHomeChain, shareAgain } from '../core/accounts';
+	import { recordHomeChain, recordWaiting, shareAgain } from '../core/accounts';
 	import { hasCode } from '../core/chain';
 	import { checkBackup, startBackup, type BackupState } from '../core/backup';
 	import { chainName } from '../core/display';
@@ -109,16 +109,26 @@
 	 */
 	let renameDeployed = $state<boolean | undefined>(undefined);
 
+	/**
+	 * r4a-12: why there is no `renameChain` — its record is not saved yet
+	 * (nothing to rename), the service could not be asked, or it is held only
+	 * on chains this wallet lacks. Each said as itself; "isn't on a network
+	 * this wallet has" was said of all three.
+	 */
+	let renameBlocked = $state<'unrecorded' | 'unreachable' | 'elsewhere' | null>(null);
+
 	async function findRenameChain() {
 		try {
 			const answer = await fetchGenesis(account.address);
 			const home = await recordHomeChain();
-			const held = (answer.found && !answer.pending ? (answer.recordedOn ?? []) : []).filter(
-				(id) => networkForChainId(id) !== null
-			);
+			const recordedOn = answer.found && !answer.pending ? (answer.recordedOn ?? []) : [];
+			const held = recordedOn.filter((id) => networkForChainId(id) !== null);
 			renameChain = held.includes(home) ? home : (held[0] ?? null);
+			renameBlocked =
+				renameChain !== null ? null : recordedOn.length > 0 ? 'elsewhere' : 'unrecorded';
 		} catch {
 			renameChain = null;
+			renameBlocked = 'unreachable';
 		}
 		if (renameChain == null) return;
 		const chainId = renameChain;
@@ -309,11 +319,14 @@
 	<MemberChanges {m} {account} {cancelLabel} />
 	{#if !isShared(multisig.find(account.address) ?? account)}
 		<!-- Its record has not landed: another member cannot add it yet. -->
-		<p class="note" role="status">{m.panel.notShared}</p>
+		<p class="note" role="status">
+			{recordWaiting(account.address) ? m.create.savedLater : m.panel.notShared}
+		</p>
 		{#if founders.length > 0}
-			<!-- The service has no record of it (an earlier registry's, or one that
-			     never landed): an owner here shares it again, one passkey. -->
-			<p class="note">{m.settings.shareAgainNote}</p>
+			<!-- An owner here shares it (again), one passkey. r4a-12: the "older
+			     registry" guess is said only when no record of it is on its way
+			     from this device — never of a creation still sharing. -->
+			{#if !recordWaiting(account.address)}<p class="note">{m.settings.shareAgainNote}</p>{/if}
 			<div class="row-actions">
 				<Button variant="secondary" shape="rounded" disabled={sharing} onclick={() => void share()}
 					>{m.settings.shareAgain}</Button
@@ -336,7 +349,13 @@
 			<span class="state" data-testid="registry-name">{recordedName ?? '…'}</span>
 		</span>
 		{#if renameChain === null}
-			<p class="note">{m.settings.renameUnavailable}</p>
+			<p class="note" data-testid="rename-blocked">
+				{renameBlocked === 'unrecorded'
+					? m.settings.renameNotRecorded
+					: renameBlocked === 'unreachable'
+						? m.add.unavailable
+						: m.settings.renameUnavailable}
+			</p>
 		{:else if renameChain !== undefined && renameDeployed === false}
 			<!-- A rename never deploys it: only the deployed multisig renames its record. -->
 			<p class="note" data-testid="rename-not-deployed">

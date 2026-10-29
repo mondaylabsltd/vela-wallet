@@ -343,3 +343,40 @@ describe('a passkey prompt waiting', () => {
 		expect(cancelled).toBe(1);
 	});
 });
+
+/**
+ * r4a (onboarding note): a passkey the authenticator would not make (full,
+ * or refused) came back to this screen with a highlighted button and no
+ * word: the core's status line was drawn on the name form only. It is said
+ * here now, in the corpus's words, with what to do.
+ */
+describe('a passkey that was not made', () => {
+	it('is said on the keys screen, with what to do', () => {
+		const view = board('K0');
+		const strings = stringsIn(en);
+		const screen = render(KeysScreen, {
+			props: {
+				keys: view.keys,
+				canAddKey: view.can_add_key,
+				canFinish: view.can_finish,
+				needsSecondKey: view.needs_second_key,
+				busy: false,
+				maxKeys: 7,
+				addMethods: view.add_methods,
+				addHeadingKey: view.add_heading_key,
+				keyCountShown: view.key_count_shown,
+				methodsPinned: view.methods_pinned,
+				strings,
+				onAddKey: () => {},
+				onConfirmKey: () => {},
+				onRemoveKey: () => {},
+				onFinish: () => {},
+				statusText: strings('onboarding.create.statusSetupCancelled')
+			}
+		});
+		const status = screen.container.querySelector('[data-testid="keys-status"]');
+		expect(status?.getAttribute('role')).toBe('alert');
+		expect(status?.textContent).toContain("The passkey wasn't created");
+		expect(status?.textContent).toContain('storage is full');
+	});
+});

@@ -15,6 +15,7 @@ import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 const ME = '0x00000000000000000000000000000000000000aa';
 const TWO = '0x00000000000000000000000000000000000000bb';
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+const DAN = '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65';
 
 vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/onboarding/core/storage')>()),
@@ -44,10 +45,44 @@ vi.mock('../core/accounts', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../core/accounts')>()),
 	newSaltNonce: () => '1',
 	draftGenesis: () => ({ address: SAFE }),
-	createMultisig: async (choice: { chainId: number }) => {
+	createMultisig: async (
+		choice: { chainId: number },
+		_salt: string,
+		onsaved?: (a: { address: string }) => void
+	) => {
 		seams.created.push(choice);
-		return { address: SAFE };
+		onsaved?.({ address: SAFE });
+		return { account: { address: SAFE }, refused: null };
 	}
+}));
+vi.mock('$lib/core/kernels', async (importOriginal) => {
+	const { eip55 } = await import('../external/eip55');
+	return {
+		...(await importOriginal<typeof import('$lib/core/kernels')>()),
+		checksumAddress: (a: string) => eip55(a)
+	};
+});
+vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
+	contactsBook: {
+		ensure: async () => {},
+		view: {
+			contacts: [
+				{
+					address: '0x90f79bf6eb2c4f870365e785982e1f101e93b906',
+					name: 'Carol',
+					resolved_name: null
+				}
+			]
+		}
+	}
+}));
+vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: { tokens: [] } } }));
+vi.mock('../core/names.svelte', () => ({
+	names: { label: (a: string) => a.slice(0, 6), kindOf: () => null }
+}));
+vi.mock('../core/ens-name', () => ({
+	looksLikeEns: (t: string) => t.trim().endsWith('.eth'),
+	resolveEns: async (name: string) => ({ kind: 'found', name, address: DAN })
 }));
 vi.mock('../core/owners', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../core/owners')>()),
@@ -76,10 +111,16 @@ vi.mock('$lib/wallet/identicon', async (importOriginal) => ({
 const { default: CreateMultisigSheet } = await import('./CreateMultisigSheet.svelte');
 
 function words(): MultisigMessages {
-	const out: Record<string, Record<string, string>> = {};
+	const out: Record<string, Record<string, unknown>> = {};
 	for (const [group, keys] of Object.entries(MULTISIG_SHAPE)) {
 		out[group] = {};
-		for (const key of Object.keys(keys)) out[group][key] = `${group}.${key}`;
+		for (const [key, value] of Object.entries(keys)) {
+			// A plural key ships as its forms.
+			out[group][key] =
+				typeof value === 'string'
+					? `${group}.${key}`
+					: { locale: 'en', forms: { _other: `${group}.${key}` } };
+		}
 	}
 	out.panel.title = '{{m}} of {{n}}';
 	out.create.thresholdValue = '{{m}} of {{n}}';
@@ -164,7 +205,10 @@ describe('creating a multisig', () => {
 		expect(identiconViewer.current?.address).toBe(SAFE);
 		identiconViewer.close();
 
-		// Created: the same address, the same viewer.
+		// Created: the same address, the same viewer. Nothing said which network
+		// (r4a-14): the person picks it.
+		document.body.querySelector<HTMLButtonElement>('[role="radio"][data-chain="100"]')?.click();
+		await settle();
 		press('create.create');
 		await settle();
 		expect(document.body.textContent).toContain('create.created');
@@ -223,17 +267,16 @@ describe("the create sheet's networks", () => {
 			await settle();
 			press('create.next');
 			await settle();
-			document.body.querySelector<HTMLButtonElement>('.select [aria-haspopup="listbox"]')?.click();
-			await settle();
-			const rows = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')]
+			const rows = [...document.body.querySelectorAll('[role="radio"]')]
 				.map((r) => r.textContent?.trim())
 				.filter(Boolean);
-			expect(rows).toEqual(['Gnosis', 'Arbitrum', 'Base']);
+			expect([...rows].sort()).toEqual(['Arbitrum', 'Base', 'Gnosis']);
 			expect(document.body.textContent).not.toContain('create.noSafeNetworks');
+			// r4a-14: nothing said which: none is picked for the person, Create waits.
+			expect(document.body.querySelector('[role="radio"][aria-checked="true"]')).toBeNull();
+			expect(document.body.textContent).toContain('create.networkNeeded');
 			// Arbitrum, a network the service does not read, is picked and created on.
-			[...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')]
-				.find((r) => r.textContent?.trim() === 'Arbitrum')
-				?.click();
+			document.body.querySelector<HTMLButtonElement>('[role="radio"][data-chain="42161"]')?.click();
 			await settle();
 			press('create.create');
 			await settle();
@@ -275,6 +318,141 @@ describe("the create sheet's networks", () => {
 		press('create.create');
 		await settle();
 		expect(seams.created).toEqual([]);
+		await screen.unmount();
+	});
+});
+
+const open = () =>
+	render(CreateMultisigSheet, {
+		props: {
+			m: words(),
+			locale: 'en',
+			current: ME,
+			wide: true,
+			closeLabel: 'Close',
+			onclose: () => {},
+			oncreated: () => {}
+		}
+	});
+const type = (selector: string, value: string) => {
+	const input = document.body.querySelector<HTMLInputElement>(selector);
+	if (!input) throw new Error(`no ${selector}`);
+	input.value = value;
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+const addPressed = () =>
+	[...document.body.querySelectorAll<HTMLButtonElement>('.typed button')]
+		.find((b) => b.textContent?.trim() === 'create.addMember')
+		?.click();
+
+describe('r4a-14: what a creation can be, and how its members come', () => {
+	it('one member is a 1 of 1 multisig, said what it means', async () => {
+		const screen = open();
+		await settle();
+		type('.name-field', 'Solo');
+		await settle();
+		expect(document.body.querySelector('[data-testid="solo-hint"]')?.textContent).toContain(
+			'create.solo'
+		);
+		press('create.next');
+		await settle();
+		expect(document.body.querySelector('output')?.textContent).toBe('1 of 1');
+		expect(document.body.textContent).toContain('create.solo');
+		press('create.next');
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		press('create.create');
+		await settle();
+		expect(seams.created).toEqual([expect.objectContaining({ owners: [ME], threshold: 1 })]);
+		await screen.unmount();
+	});
+
+	it('counts the name in bytes and says what is wrong with it, on the name', async () => {
+		const screen = open();
+		await settle();
+		expect(document.body.querySelector('[data-testid="name-bytes"]')?.textContent).toContain(
+			'create.nameBytes'
+		);
+		// Next with no name: the field says so.
+		press('create.next');
+		await settle();
+		expect(document.body.querySelector('[data-testid="name-error"]')?.textContent).toBe(
+			'create.nameNeeded'
+		);
+		type('.name-field', '团'.repeat(22)); // 66 bytes
+		await settle();
+		expect(document.body.querySelector('[data-testid="name-error"]')?.textContent).toBe(
+			'create.nameTooLong'
+		);
+		await screen.unmount();
+	});
+
+	it('checksums a typed address, keeps its name, and reads an outside member in full on review', async () => {
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		type('input.mono', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc');
+		type('.name-field.small', 'Bob');
+		await settle();
+		addPressed();
+		await settle();
+		expect(document.body.querySelector('.owners')?.textContent).toContain('Bob');
+		// From the contacts too, with the contact's name.
+		[...document.body.querySelectorAll<HTMLButtonElement>('button.pick')][0]?.click();
+		await settle();
+		document.body
+			.querySelector<HTMLButtonElement>('[data-testid="contacts-picker"] button')
+			?.click();
+		await settle();
+		expect(document.body.querySelector('.owners')?.textContent).toContain('Carol');
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		const full = [...document.body.querySelectorAll('[data-testid="review-full"]')].map(
+			(e) => e.textContent
+		);
+		expect(full).toEqual([
+			'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+			'0x90F79bf6EB2c4f870365E785982E1f101E93b906'
+		]);
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		press('create.create');
+		await settle();
+		expect(seams.created[0]).toEqual(
+			expect.objectContaining({
+				owners: [
+					ME,
+					'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+					'0x90F79bf6EB2c4f870365E785982E1f101E93b906'
+				],
+				members: expect.objectContaining({
+					'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC': { name: 'Bob' },
+					'0x90F79bf6EB2c4f870365E785982E1f101E93b906': { name: 'Carol' }
+				})
+			})
+		);
+		await screen.unmount();
+	});
+
+	it('r4D-5: an ENS name is shown as its address, in full, and the address is what is added', async () => {
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		type('input.mono', 'dan.eth');
+		await settle();
+		addPressed();
+		await settle();
+		const answer = document.body.querySelector('[data-testid="ens-answer"]');
+		expect(answer?.querySelector('.ens-address')?.textContent).toBe(DAN);
+		// Not added until the person adds the address it showed.
+		expect(document.body.querySelectorAll('.owners li')).toHaveLength(1);
+		answer?.querySelector<HTMLButtonElement>('button')?.click();
+		await settle();
+		expect(document.body.querySelectorAll('.owners li')).toHaveLength(2);
+		expect(document.body.querySelector('.owners')?.textContent).toContain('dan.eth');
 		await screen.unmount();
 	});
 });

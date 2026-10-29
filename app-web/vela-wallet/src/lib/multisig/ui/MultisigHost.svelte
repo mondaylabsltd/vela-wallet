@@ -17,12 +17,16 @@
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import {
-		brokenAddText,
 		brokenLink,
+		brokenLinkText,
+		carriedLinkHash,
+		isMultisigLink,
 		parseAddLink,
 		parseProposalLink,
+		type AddLink,
 		type ProposalLink
 	} from '../core/link';
+	import { keepLink, takeKeptLink } from '../core/kept-link';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
@@ -54,9 +58,24 @@
 		current: string | null;
 		/** Something moved on chain from here: balances and activity are stale. */
 		onchanged?: () => void;
+		/**
+		 * r4b-9: this page opens the link kept while the person had no
+		 * account yet (the wallet page; not Settings, whose own wizards it
+		 * would cover).
+		 */
+		takeKept?: boolean;
 	}
 
-	let { m, signing, locale, wide, closeLabel, current, onchanged }: Props = $props();
+	let {
+		m,
+		signing,
+		locale,
+		wide,
+		closeLabel,
+		current,
+		onchanged,
+		takeKept = false
+	}: Props = $props();
 
 	let addPrefill = $state('');
 	/** r4b-13: what the link's own lookup found, said at once in the add sheet. */
@@ -108,6 +127,15 @@
 		// have changed; the service may have no record of an older registry's).
 		void checkRecords();
 		void resumeLink();
+		// r4b-9: a link opened before this device had an account opens now.
+		if (takeKept) {
+			// A link in the address is the one answered; the same link kept on
+			// the way here (Welcome keeps it, and carries it too) is spent with it.
+			const kept = takeKeptLink();
+			if (!isMultisigLink(location.hash)) {
+				if (kept) replaceUrl(location.pathname + location.search + kept);
+			} else if (kept && carriedLinkHash(kept) !== carriedLinkHash(location.hash)) keepLink(kept);
+		}
 		void answerLink();
 		const onhash = () => void answerLink();
 		window.addEventListener('hashchange', onhash);
@@ -160,17 +188,13 @@
 	async function answerLink() {
 		const broken = brokenLink(location.hash);
 		if (broken) {
-			// ms-22: a damaged link is said, not ignored. A broken add link
-			// shows what it held in the add sheet, where the address rule says
-			// what is wrong with it.
-			const raw = brokenAddText(location.hash);
+			// ms-22, r4b-13: a damaged link is said at once, not ignored. A broken
+			// invite shows what it held in the add sheet, with what is wrong
+			// with it already said.
+			const raw = brokenLinkText(location.hash);
 			clearHash();
-			if (broken === 'add') {
-				// r4b-13: said at once — not only once Add is tapped.
-				addPrefill = raw;
-				addFailure = m.add.badLink;
-				multisigUi.open({ kind: 'add' });
-			} else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
+			if (broken === 'add') multisigUi.open({ kind: 'add', broken: raw });
+			else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
 			return;
 		}
 		const proposal = parseProposalLink(location.hash);
@@ -178,13 +202,27 @@
 		if (!proposal && !adding) return;
 		clearHash();
 		if (adding) {
-			addPrefill = adding;
-			addFailure = null;
-			multisigUi.open({ kind: 'add' });
+			// r4D-4: its networks and its members' labels ride along; adding
+			// is still the person's tap (r4b-8).
+			multisigUi.open({ kind: 'add', link: adding });
 			return;
 		}
 		if (!proposal) return;
 		await openProposal(proposal);
+	}
+
+	/**
+	 * r4D-5: what an invite says of the founding members, kept with the
+	 * multisig on this device — matched by the genesis's own order, so a
+	 * label never lands on another member. Labels only.
+	 */
+	function keepInvited(address: string, link: AddLink | undefined) {
+		const account = multisig.find(address);
+		if (!account || !link?.members || link.members.length !== account.owners.length) return;
+		multisig.nameMembers(
+			account.address,
+			Object.fromEntries(account.owners.map((owner, i) => [owner, link.members?.[i] ?? {}]))
+		);
 	}
 
 	/** A proposal link's transaction (from the hash, or kept while its network was added). */
@@ -323,28 +361,37 @@
 		oncreated={() => multisigUi.close()}
 	/>
 {:else if sheet?.kind === 'add'}
-	<AddMultisigSheet
-		{m}
-		prefill={addPrefill}
-		prefillFailure={addFailure}
-		{wide}
-		{closeLabel}
-		onclose={() => {
-			addPrefill = '';
-			addFailure = null;
-			pendingLink = null;
-			multisigUi.close();
-		}}
-		onadded={(address) => {
-			addPrefill = '';
-			addFailure = null;
-			// ms-22: added from a link's transaction: that transaction opens now.
-			const linked = pendingLink;
-			if (linked && linked.multisig.toLowerCase() === address.toLowerCase()) {
-				openLinked(address, linked);
-			} else multisigUi.close();
-		}}
-	/>
+	{@const invite = sheet.link}
+	<!-- Another link while one is open: a fresh sheet, never the last one's
+	     address and networks under the new link's. -->
+	{#key sheet}
+		<AddMultisigSheet
+			{m}
+			prefill={invite?.multisig ?? sheet.broken ?? addPrefill}
+			link={invite}
+			broken={sheet.broken !== undefined}
+			prefillFailure={invite || sheet.broken !== undefined ? null : addFailure}
+			{locale}
+			{wide}
+			{closeLabel}
+			onclose={() => {
+				addPrefill = '';
+				addFailure = null;
+				pendingLink = null;
+				multisigUi.close();
+			}}
+			onadded={(address) => {
+				addPrefill = '';
+				addFailure = null;
+				keepInvited(address, invite);
+				// ms-22: added from a link's transaction: that transaction opens now.
+				const linked = pendingLink;
+				if (linked && linked.multisig.toLowerCase() === address.toLowerCase()) {
+					openLinked(address, linked);
+				} else multisigUi.close();
+			}}
+		/>
+	{/key}
 {:else if sheet?.kind === 'proposal' && active}
 	<ProposalSheet
 		{m}

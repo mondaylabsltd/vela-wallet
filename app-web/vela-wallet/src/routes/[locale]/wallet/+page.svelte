@@ -99,6 +99,8 @@
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import MultisigHomeCard from '$lib/multisig/ui/MultisigHomeCard.svelte';
+	import { keepLink } from '$lib/multisig/core/kept-link';
 	import {
 		MULTISIG_RETRY,
 		missingOfRow,
@@ -2085,7 +2087,11 @@
 	// core has not ruled yet, and bouncing on a non-answer would throw a
 	// reloading person back to Welcome mid-boot.
 	$effect(() => {
-		if (view.allowed_route === 'onboarding') void goto(welcome, { replaceState: true });
+		if (view.allowed_route !== 'onboarding') return;
+		// r4b-9: a multisig link opened here before there is an account is kept
+		// through Welcome and opened once the wallet is.
+		keepLink(location.hash);
+		void goto(welcome, { replaceState: true });
 	});
 
 	/**
@@ -2764,6 +2770,8 @@
 <!-- "Get Vela on your phone" — draws nothing until the store links exist
      (`$lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
+	<!-- r4D-7, r4D-8: the multisig's own lines — what waits here, its first steps. -->
+	<MultisigHomeCard m={data.multisigMessages} onfund={() => flowTo('receive')} />
 	<AppPrompt placement="home" messages={data.appPrompt} />
 {/snippet}
 
@@ -2890,6 +2898,7 @@
 		wide={wide.current}
 		closeLabel={data.walletMessages.identiconViewer.close}
 		current={view.address || null}
+		takeKept
 		onchanged={() => {
 			refreshBalances();
 			feed.focusTick();

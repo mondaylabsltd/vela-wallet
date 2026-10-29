@@ -26,7 +26,12 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
 	import { chainName } from '../core/display';
-	import { sameAddress, type Action, type MemberChangeRequest, type MemberRefusal } from '../core/kernel';
+	import {
+		sameAddress,
+		type Action,
+		type MemberChangeRequest,
+		type MemberRefusal
+	} from '../core/kernel';
 	import {
 		deployedMembers,
 		memberChangeGroups,
@@ -35,11 +40,10 @@
 		progressLine
 	} from '../core/member-changes';
 	import { looksLikeName, resolveTypedName } from '../core/member-entry';
-	import { memberNotes, type MemberKind } from '../core/member-notes.svelte';
 	import { memberProblem } from '../core/members';
 	import { names } from '../core/names.svelte';
 	import { MailboxUnreadableError, proposals, proposeMemberChange } from '../core/proposals.svelte';
-	import type { MultisigAccount } from '../core/store.svelte';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 
 	interface Props {
@@ -74,6 +78,8 @@
 	let picked = $state<number | null>(null);
 
 	// -- who joins (Add, Replace) -------------------------------------------------
+	/** A Vela account (approves with its passkey, in Vela) or an outside wallet. */
+	type MemberKind = 'vela' | 'wallet';
 	let typed = $state('');
 	let entry = $state<{ address: string; name: string | null } | null>(null);
 	let entryNote = $state<string | null>(null);
@@ -235,7 +241,11 @@
 		if (!c || !plan || plan.ready.length === 0 || busy) return;
 		if ((c.kind === 'add' || c.kind === 'replace') && entry) {
 			const who = c.kind === 'add' ? c.owner : c.newOwner;
-			memberNotes.set(who, { name: memberName, kind });
+			// Kept with the multisig on this device, as its creator's names are
+			// (r4D-5): one store of members' labels, read by `names.label`.
+			multisig.nameMembers(account.address, {
+				[who]: { name: memberName, kind: kind === 'vela' ? 'passkey' : 'wallet' }
+			});
 		}
 		// The networks as they stood when the person pressed: once one is
 		// proposed, the plan reads it as a change waiting there.

@@ -70,7 +70,18 @@
 			<!-- The full name on hover: the clamp below is the only place a long
 			     name is ever cut, and the switcher this opens prints it whole. -->
 			<span class="name" title={header.name}>{header.name}</span>
-			<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-down']} size="sm" /></span>
+			<span class="chevron"
+				><Icon
+					icon={UTILITY_ICONS['chevron-down']}
+					size="sm"
+				/>{#if header.waiting}<!-- r4D-7:
+					     another account has something waiting: a dot the switcher's
+					     button carries, said in words for whoever cannot see it. --><span
+						class="waiting"
+						data-testid="others-waiting"
+						title={header.waiting}
+					></span><span class="visually-hidden">{header.waiting}</span>{/if}</span
+			>
 		</button>
 		<span class="facts">
 			{#if onclick && header.addressFull !== ''}
@@ -100,6 +111,23 @@
 				>
 			{:else}
 				<span class="address">{header.addressDisplay}</span>
+			{/if}
+			{#if header.rule}
+				<!-- r4D-7: a multisig's rule, beside its address on every layout —
+				     the rule in force on its networks now; the way to its members. -->
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- the page resolved it -->
+				{#if onclick}
+					<a
+						class="chip rule"
+						data-tap
+						data-testid="rule-chip"
+						href={header.rule.href}
+						title={header.rule.title}>{header.rule.label}</a
+					>
+				{:else}
+					<span class="chip rule" title={header.rule.title}>{header.rule.label}</span>
+				{/if}
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/if}
 			<!-- The space in front (spec 105), beside the account it shows: tapping it
 			     offers the other space. Live headers only — the gallery's is a picture. -->
@@ -169,8 +197,21 @@
 	}
 
 	.chevron {
+		position: relative;
 		display: flex;
 		flex-shrink: 0;
+	}
+
+	/* Something waits in another account: a small neutral dot on the chevron. */
+	.waiting {
+		position: absolute;
+		inset-block-start: calc(var(--space-xs) * -1);
+		inset-inline-end: calc(var(--space-xs) * -1);
+		width: var(--space-sm);
+		height: var(--space-sm);
+		border-radius: var(--radius-full);
+		background: var(--color-fg-base);
+		box-shadow: 0 0 0 var(--border-hairline) var(--color-bg-base);
 	}
 
 	/* vis-23: the name opens the switcher; under a pointer it says so, as a
@@ -285,8 +326,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: var(--icon-md);
-		height: var(--icon-md);
+		/* r4D-7, r4D-12: a 24 px target (WCAG 2.5.8), not 18. */
+		width: calc(var(--icon-xs) * 2);
+		height: calc(var(--icon-xs) * 2);
 		border-radius: var(--radius-full);
 		background: var(--color-bg-sunken);
 		box-shadow: 0 0 0 var(--border-emphasis) var(--color-bg-base);
@@ -314,6 +356,12 @@
 		color: var(--color-fg-muted);
 		text-decoration: none;
 		cursor: pointer;
+	}
+
+	/* r4D-7: the rule, in the chip's own neutral ink. */
+	.rule {
+		color: var(--color-fg-base);
+		white-space: nowrap;
 	}
 
 	.space.testnet {

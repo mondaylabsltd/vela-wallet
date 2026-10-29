@@ -32,6 +32,11 @@ export interface WalletHeaderModel {
 	 */
 	rule?: { label: string; title: string; href: string };
 	/**
+	 * r4D-7: another account has something waiting — a dot on the switcher's
+	 * button, these words its accessible name.
+	 */
+	waiting?: string;
+	/**
 	 * ob-2: this wallet is saved on this device and its registration has not
 	 * landed — a quiet line under the address, and a retry once it has failed
 	 * a while (`retry`, absent while it is still trying on its own).

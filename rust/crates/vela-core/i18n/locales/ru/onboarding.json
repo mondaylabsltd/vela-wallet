@@ -212,7 +212,7 @@
       "statusComputingAddress": "Вычисление адреса кошелька…",
       "statusExtractingKey": "Извлечение открытого ключа…",
       "statusSettingUpIdentity": "Настройка защищённой личности…",
-      "statusSetupCancelled": "Настройка отменена.",
+      "statusSetupCancelled": "Passkey не создан. Если вы не закрывали запрос, устройство могло его отклонить — например, хранилище passkey заполнено. Попробуйте снова или выберите другое место для ключа.",
       "statusSyncingKey": "Синхронизация открытого ключа…",
       "statusVerifyCancelled": "Проверка отменена. Попробуйте снова.",
       "statusVerifyingIdentity": "Проверка личности…",

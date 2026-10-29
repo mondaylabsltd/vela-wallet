@@ -13,27 +13,53 @@
 	 * chain with the Safe v1.4.1 contracts. So every network the person has
 	 * is offered but one the core finds without them (`safeContractsOn`); the
 	 * service's own chain table bounds nothing here.
+	 *
+	 * r4a-14: one member is a multisig too (1 of 1, a valid Safe — said what
+	 * it means); members come from this device, the contacts, an address
+	 * (checksummed as it is added) or an ENS name (shown as the address it
+	 * gives, which is what is added); each may carry a name — a label kept
+	 * with the multisig and carried by its invite (r4D-5), never authority.
+	 * The first network is the one the person last used a multisig on, or
+	 * holds funds on — never one picked for them when nothing says.
+	 *
+	 * r4a-13: the moment the passkey answers, the multisig is kept on this
+	 * device (`createMultisig`); the created screen says, honestly, whether
+	 * it is shared yet.
 	 */
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Dropdown from '$lib/settings/ui/Dropdown.svelte';
+	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
+	import { checksumAddress } from '$lib/core/kernels';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralForm } from '$lib/i18n/plural';
 	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import { spaceNetworksSync } from '$lib/services/networks';
+	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
-	import { memberLabel, shortenAddress } from '../core/display';
+	import { localName, shortenAddress } from '../core/display';
+	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';
+	import { inviteLink } from '../core/invite';
 	import { sameAddress, validName } from '../core/kernel';
+	import { MEMBER_NAME_MAX, shareOrigin } from '../core/link';
+	import {
+		firstNetworkDefault,
+		heldChains,
+		lastUsedChains,
+		likelyNetworks
+	} from '../core/likely-networks';
 	import { localOwners } from '../core/owners';
-	import { addLink, shareOrigin } from '../core/link';
 	import { memberProblem } from '../core/members';
+	import { names } from '../core/names.svelte';
 	import { safeContractsOn } from '../core/chain';
+	import { isShared, multisig, type MemberInfo } from '../core/store.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
+	import NetworkChoice from './NetworkChoice.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -63,40 +89,68 @@
 			() => {}
 		);
 	}
+	const hints = {
+		used: lastUsedChains(),
+		held: untrack(() => heldChains(balance.view.tokens))
+	};
 	// A network that did not answer stays offered: nothing is deployed until
-	// the first transfer out, and nothing says it lacks them.
-	const networks = $derived(spaceNetworks.filter((n) => !without.includes(n.chainId)));
+	// the first transfer out, and nothing says it lacks them. The likely ones
+	// first (r4a-14).
+	const networks = $derived(
+		likelyNetworks(
+			spaceNetworks.filter((n) => !without.includes(n.chainId)),
+			hints
+		)
+	);
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
 	let owners = $state<string[]>(
 		untrack(() => (current ? [current] : accounts.slice(0, 1).map((a) => a.address)))
 	);
+	/** What the person said of each member added by address, contact or name (r4D-5). */
+	let info = $state<Record<string, MemberInfo>>({});
 	let typed = $state('');
+	let typedName = $state('');
 	let typedError = $state<string | null>(null);
+	/** An ENS name typed, and what Ethereum said it points to (r4D-5). */
+	let ens = $state<EnsAnswer | null>(null);
+	let ensBusy = $state(false);
+	let picking = $state(false);
 	let threshold = $state(1);
 	let name = $state('');
-	let chainId = $state(
-		spaceNetworks.find((n) => n.chainId === 100)?.chainId ?? spaceNetworks[0]?.chainId ?? 100
-	);
+	/** Next was pressed with no name: the field says so (r4a-14). */
+	let nameAsked = $state(false);
+	// r4a-14: the network the person last used, or holds funds on — never
+	// Sepolia by accident; nothing, when nothing says (the person picks).
+	let chainId = $state<number | null>(untrack(() => firstNetworkDefault(spaceNetworks, hints)));
 	// A network found without the Safe contracts is not the pick.
 	$effect(() => {
-		if (networks.length > 0 && !networks.some((n) => n.chainId === chainId)) {
-			chainId = (networks.find((n) => n.chainId === 100) ?? networks[0]).chainId;
-		}
+		if (chainId !== null && !networks.some((n) => n.chainId === chainId)) chainId = null;
 	});
 	let creatorChoice = $state<string | null>(null);
-	/** vis-19: which of the review's two choices has its menu open. */
-	let menu = $state<'network' | 'creator' | null>(null);
-	const toggleMenu = (which: 'network' | 'creator') => (menu = menu === which ? null : which);
+	/** vis-19: the review's creator menu. */
+	let menu = $state<'creator' | null>(null);
 	let busy = $state(false);
 	let failure = $state<string | null>(null);
 	let created = $state<string | null>(null);
+	/** r4a-13: the record is being asked for (the multisig is already kept here). */
+	let sharing = $state(false);
+	/** The service refused the record: said, with what it said. */
+	let refused = $state<string | null>(null);
 	let copied = $state(false);
+
+	onMount(() => {
+		// The address book, for the contacts picker (read once per app).
+		void contactsBook.ensure(current);
+	});
 
 	const local = $derived(localOwners(owners));
 	const creator = $derived(local.find((o) => o.address === creatorChoice) ?? local[0] ?? null);
 	const cleanName = $derived(name.trim());
+	/** r4a-14: the name's size in the registry's unit — bytes, not characters. */
+	const nameBytes = $derived(new TextEncoder().encode(cleanName).length);
+	const NAME_LIMIT = 64;
 	const nameOk = $derived.by(() => {
 		try {
 			return cleanName !== '' && validName(cleanName);
@@ -104,7 +158,19 @@
 			return false;
 		}
 	});
-	const membersOk = $derived(owners.length >= 2 && local.length >= 1 && nameOk);
+	/** r4a-14: what is wrong with the name, said of the name (not one catch-all). */
+	const nameError = $derived(
+		cleanName === ''
+			? nameAsked
+				? m.create.nameNeeded
+				: null
+			: nameBytes > NAME_LIMIT
+				? fillTemplate(m.create.nameTooLong, { bytes: nameBytes, limit: NAME_LIMIT })
+				: nameOk
+					? null
+					: m.create.nameInvalid
+	);
+	const membersOk = $derived(owners.length >= 1 && local.length >= 1 && nameOk);
 	const draft = $derived.by(() => {
 		try {
 			return owners.length > 0 && nameOk
@@ -115,15 +181,20 @@
 		}
 	});
 
+	/** A member's label here: this device's account name, what the person typed, else the index's. */
+	function label(address: string): string {
+		return localName(address) ?? info[address.toLowerCase()]?.name ?? names.label(address);
+	}
+
 	function toggle(address: string) {
 		owners = owners.some((o) => sameAddress(o, address))
 			? owners.filter((o) => !sameAddress(o, address))
 			: [...owners, address];
 	}
 
-	function addTyped() {
-		const value = typed.trim();
-		const problem = memberProblem(value, owners);
+	/** Add `address` (any case) as a member, checksummed (r4a-14), with what is known of it. */
+	function addMember(address: string, memberName?: string | null): boolean {
+		const problem = memberProblem(address, owners);
 		if (problem) {
 			typedError = {
 				invalidAddress: m.send.invalidAddress,
@@ -131,18 +202,47 @@
 				notMember: m.create.notMember,
 				duplicate: m.create.duplicate
 			}[problem];
+			return false;
+		}
+		const member = checksumAddress(address);
+		const clean = memberName?.trim().slice(0, MEMBER_NAME_MAX);
+		if (clean) info = { ...info, [member.toLowerCase()]: { name: clean } };
+		owners = [...owners, member];
+		typed = '';
+		typedName = '';
+		typedError = null;
+		ens = null;
+		return true;
+	}
+
+	async function addTyped() {
+		const value = typed.trim();
+		// r4D-5: a name is read on Ethereum and shown as its address first.
+		if (looksLikeEns(value)) {
+			ensBusy = true;
+			typedError = null;
+			ens = await resolveEns(value);
+			ensBusy = false;
 			return;
 		}
-		owners = [...owners, value];
-		typed = '';
-		typedError = null;
+		addMember(value, typedName);
 	}
+
+	/** The contacts that could be members: not here already. */
+	const contacts = $derived(
+		(contactsBook.view?.contacts ?? []).filter(
+			(c) => /^0x[0-9a-fA-F]{40}$/.test(c.address) && !owners.some((o) => sameAddress(o, c.address))
+		)
+	);
 
 	/** The member count the threshold was last set for: back and Next keep the person's pick. */
 	let thresholdFor = 0;
 
 	function toThreshold() {
-		if (!membersOk) return;
+		if (!membersOk) {
+			nameAsked = true;
+			return;
+		}
 		// A sensible start: all of two, else all but one — one lost passkey is
 		// survivable. Only when the members changed; else it stays the person's.
 		if (thresholdFor !== owners.length) {
@@ -153,26 +253,48 @@
 	}
 
 	const thresholdNote = $derived(
-		threshold === owners.length
-			? m.create.thresholdAll
-			: threshold === 1
-				? m.create.thresholdOne
-				: fillTemplate(pluralForm(m.create.thresholdSpare, owners.length - threshold), {
-						count: owners.length - threshold
-					})
+		owners.length === 1
+			? m.create.solo
+			: threshold === owners.length
+				? m.create.thresholdAll
+				: threshold === 1
+					? m.create.thresholdOne
+					: fillTemplate(pluralForm(m.create.thresholdSpare, owners.length - threshold), {
+							count: owners.length - threshold
+						})
 	);
-	const risky = $derived(threshold === owners.length || threshold === 1);
+	const risky = $derived(owners.length > 1 && (threshold === owners.length || threshold === 1));
+
+	/** What the person knows of the members, for the multisig here and its invite (r4D-5). */
+	function membersInfo(): Record<string, MemberInfo> {
+		return Object.fromEntries(
+			owners.map((o) => {
+				const own = localName(o);
+				const kind = own ? 'passkey' : names.kindOf(o);
+				const said = info[o.toLowerCase()]?.name;
+				return [o, { ...(said ? { name: said } : {}), ...(kind ? { kind } : {}) }];
+			})
+		);
+	}
 
 	async function create() {
-		if (!creator || !draft || !nameOk) return;
+		if (!creator || !draft || !nameOk || chainId === null) return;
 		busy = true;
 		failure = null;
 		try {
-			const account = await createMultisig(
-				{ owners, threshold, chainId, creator, name: cleanName },
-				saltNonce
+			const outcome = await createMultisig(
+				{ owners, threshold, chainId, creator, name: cleanName, members: membersInfo() },
+				saltNonce,
+				(account) => {
+					// Kept here: the created screen now, whatever the service does.
+					created = account.address;
+					sharing = true;
+					busy = false;
+					step = 'created';
+				}
 			);
-			created = account.address;
+			created = outcome.account.address;
+			refused = outcome.refused;
 			step = 'created';
 		} catch (error) {
 			const name = error instanceof DOMException ? error.name : '';
@@ -181,14 +303,29 @@
 			}
 		} finally {
 			busy = false;
+			sharing = false;
 		}
 	}
 
+	/** The created multisig as the store holds it now (its sharing moves on its own). */
+	const kept = $derived(created ? (multisig.find(created) ?? null) : null);
+	const sharedState = $derived(
+		!kept
+			? null
+			: isShared(kept)
+				? m.create.shared
+				: refused
+					? fillTemplate(m.create.refused, { reason: refused })
+					: sharing
+						? m.create.savedSharing
+						: m.create.savedLater
+	);
+
 	async function copy() {
-		if (!created) return;
+		if (!kept) return;
 		try {
-			// The link adds it in Vela with one tap; the address is in it.
-			await navigator.clipboard.writeText(addLink(shareOrigin(location.origin), locale, created));
+			// What the button says: the invite link — its networks and members ride along.
+			await navigator.clipboard.writeText(inviteLink(shareOrigin(location.origin), locale, kept));
 			copied = true;
 			setTimeout(() => (copied = false), 1600);
 		} catch {
@@ -208,16 +345,24 @@
 		<p class="intro">{m.create.intro}</p>
 		<!-- First, as a Vela account's name is: it is part of the address. -->
 		<label class="select">
-			<span>{m.create.name}</span>
+			<span class="field-head"
+				><span>{m.create.name}</span><span
+					class="count"
+					class:over={nameBytes > NAME_LIMIT}
+					data-testid="name-bytes"
+					>{fillTemplate(m.create.nameBytes, { bytes: nameBytes, limit: NAME_LIMIT })}</span
+				></span
+			>
 			<input
 				class="name-field"
 				placeholder={m.create.namePlaceholder}
 				autocomplete="off"
 				bind:value={name}
+				aria-invalid={nameError !== null}
 			/>
 		</label>
-		{#if cleanName !== '' && !nameOk}
-			<p class="error">{m.create.nameInvalid}</p>
+		{#if nameError}
+			<p class="error" data-testid="name-error">{nameError}</p>
 		{:else}
 			<p class="hint">{m.create.nameHint}</p>
 		{/if}
@@ -253,11 +398,85 @@
 				autocomplete="off"
 				spellcheck="false"
 				bind:value={typed}
-				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTyped())}
+				oninput={() => {
+					typedError = null;
+					ens = null;
+				}}
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), void addTyped())}
 			/>
-			<Button variant="secondary" shape="rounded" onclick={addTyped}>{m.create.addMember}</Button>
 		</div>
-		{#if typedError}<p class="error">{typedError}</p>{/if}
+		<div class="typed">
+			<input
+				class="name-field small"
+				placeholder={m.create.memberNamePlaceholder}
+				aria-label={m.create.memberName}
+				autocomplete="off"
+				maxlength={MEMBER_NAME_MAX}
+				bind:value={typedName}
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), void addTyped())}
+			/>
+			<Button
+				variant="secondary"
+				shape="rounded"
+				loading={ensBusy}
+				disabled={ensBusy || typed.trim() === ''}
+				onclick={() => void addTyped()}>{m.create.addMember}</Button
+			>
+		</div>
+		{#if typedError}<p class="error" role="alert">{typedError}</p>{/if}
+		{#if ens}
+			<!-- r4D-5: the name's address, in full and first; the name is only its label. -->
+			<div class="ens" role="status" data-testid="ens-answer">
+				{#if ens.kind === 'found'}
+					{@const found = ens}
+					<p class="line">{fillTemplate(m.create.ensResolved, { name: found.name })}</p>
+					<p class="ens-address">{found.address}</p>
+					<Button
+						variant="secondary"
+						shape="rounded"
+						onclick={() => addMember(found.address, typedName.trim() || found.name)}
+						>{m.create.addMember}</Button
+					>
+				{:else if ens.kind === 'none'}
+					<p class="line">{fillTemplate(m.create.ensNotFound, { name: ens.name })}</p>
+				{:else if ens.kind === 'unsupported'}
+					<p class="line">{m.create.ensUnsupported}</p>
+				{:else}
+					<p class="line">{fillTemplate(m.create.ensUnavailable, { name: ens.name })}</p>
+				{/if}
+			</div>
+		{/if}
+		{#if contacts.length > 0}
+			<button
+				type="button"
+				class="pick"
+				aria-expanded={picking}
+				onclick={() => (picking = !picking)}
+			>
+				<Icon icon={UTILITY_ICONS['user-round']} size="sm" />{m.create.fromContacts}
+			</button>
+			{#if picking}
+				<ul class="contacts" data-testid="contacts-picker">
+					{#each contacts as c (c.address)}
+						<li>
+							<button
+								type="button"
+								onclick={() => {
+									if (addMember(c.address, c.name ?? c.resolved_name)) picking = false;
+								}}
+							>
+								<Identicon svg={identiconSvgForClient(c.address)} size="row" />
+								<span class="text"
+									><span class="name">{c.name ?? c.resolved_name ?? shortenAddress(c.address)}</span
+									><span class="address">{shortenAddress(checksumAddress(c.address))}</span></span
+								>
+								<Icon icon={UTILITY_ICONS.plus} size="sm" />
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{/if}
 
 		{#if owners.length > 0}
 			<h3>{m.create.members} · {owners.length}</h3>
@@ -267,16 +486,15 @@
 						<span class="ordinal">{i + 1}</span>
 						<Identicon svg={identiconSvgForClient(o)} size="row" address={o} />
 						<span class="text"
-							><span class="name">{memberLabel(o)}</span
-							>{#if memberLabel(o) !== shortenAddress(o)}<span class="address"
-									>{shortenAddress(o)}</span
+							><span class="name">{label(o)}</span>{#if label(o) !== shortenAddress(o)}<span
+									class="address">{shortenAddress(o)}</span
 								>{/if}</span
 						>
 						<!-- vis-16: named for what it does, with whom (it read "Close"). -->
 						<button
 							type="button"
 							class="remove"
-							aria-label="{m.action.removeOwner} · {memberLabel(o)}"
+							aria-label="{m.action.removeOwner} · {label(o)}"
 							onclick={() => toggle(o)}
 						>
 							<Icon icon={UTILITY_ICONS['x']} size="sm" />
@@ -286,12 +504,17 @@
 			</ol>
 			<p class="hint">{m.create.order}</p>
 		{/if}
-		{#if owners.length > 0 && owners.length < 2}<p class="hint">{m.create.needTwo}</p>{/if}
-		{#if owners.length >= 2 && local.length === 0}<p class="error">{m.create.needLocal}</p>{/if}
+		{#if owners.length === 1 && local.length === 1}<p class="hint" data-testid="solo-hint">
+				{m.create.solo}
+			</p>{/if}
+		{#if owners.length >= 1 && local.length === 0}<p class="error">{m.create.needLocal}</p>{/if}
 
 		<div class="nav">
-			<Button variant="primary" shape="rounded" disabled={!membersOk} onclick={toThreshold}
-				>{m.create.next}</Button
+			<Button
+				variant="primary"
+				shape="rounded"
+				disabled={owners.length === 0 || local.length === 0}
+				onclick={toThreshold}>{m.create.next}</Button
 			>
 		</div>
 	{:else if step === 'threshold'}
@@ -345,37 +568,35 @@
 		<h3>{m.create.members}</h3>
 		<ol class="owners compact">
 			{#each owners as o, i (o)}
+				{@const mine = !!localName(o)}
 				<li>
 					<span class="ordinal">{i + 1}</span><span class="text"
-						><span class="name">{memberLabel(o)}</span
-						>{#if memberLabel(o) !== shortenAddress(o)}<span class="address"
-								>{shortenAddress(o)}</span
+						><span class="name">{label(o)}</span>
+						<!-- r4a-14: a member from outside this device reads in full here,
+						     where it is checked before the passkey signs. -->
+						{#if mine}{#if label(o) !== shortenAddress(o)}<span class="address"
+									>{shortenAddress(o)}</span
+								>{/if}{:else}<span class="address full" data-testid="review-full">{o}</span
 							>{/if}</span
 					>
 				</li>
 			{/each}
 		</ol>
 		<CustomServiceNote {m} />
-		<!-- vis-19: the app's own select (the settings dropdown and its rows),
-		     not the browser's — a native menu drew in the system's face and
-		     colours, the one control in the sheet that did. -->
 		<div class="select">
 			<span>{m.create.network}</span>
-			<Dropdown
+			<p class="hint flush">{m.create.networkHint}</p>
+			<NetworkChoice
 				label={m.create.network}
-				value={networks.find((n) => n.chainId === chainId)?.displayName ?? ''}
-				open={menu === 'network'}
-				rows={networks.map((n) => ({
-					id: String(n.chainId),
-					label: n.displayName,
-					selected: n.chainId === chainId
-				}))}
-				ontoggle={() => toggleMenu('network')}
-				onselect={(id) => {
-					chainId = Number(id);
-					menu = null;
-				}}
+				moreLabel={m.add.moreNetworks}
+				{networks}
+				chosen={chainId}
+				disabled={busy}
+				onchoose={(id) => (chainId = id)}
 			/>
+			{#if chainId === null && networks.length > 0}
+				<p class="hint flush" role="status">{m.create.networkNeeded}</p>
+			{/if}
 		</div>
 		{#if networks.length === 0}
 			<p class="error" role="alert">{m.create.noSafeNetworks}</p>
@@ -392,7 +613,7 @@
 						label: o.name,
 						selected: o.address === creator?.address
 					}))}
-					ontoggle={() => toggleMenu('creator')}
+					ontoggle={() => (menu = menu === 'creator' ? null : 'creator')}
 					onselect={(id) => {
 						creatorChoice = id;
 						menu = null;
@@ -414,7 +635,7 @@
 				variant="primary"
 				shape="rounded"
 				loading={busy}
-				disabled={busy || !creator || !draft || networks.length === 0}
+				disabled={busy || !creator || !draft || networks.length === 0 || chainId === null}
 				onclick={create}>{m.create.create}</Button
 			>
 		</div>
@@ -427,6 +648,17 @@
 				><Identicon svg={identiconSvgForClient(created)} size="detail" address={created} /></span
 			>
 			<p class="hero-address">{created}</p>
+			{#if sharedState}
+				<!-- r4a-12, r4a-13: kept here first; shared when the service has it — said as it is. -->
+				<p
+					class="state"
+					class:pending={!kept || !isShared(kept)}
+					role="status"
+					data-testid="created-state"
+				>
+					{sharedState}
+				</p>
+			{/if}
 			<p class="hint">{m.create.createdBody}</p>
 		</div>
 		<div class="nav two">
@@ -434,7 +666,7 @@
 				<span class="label"
 					><Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />{copied
 						? m.proposal.copied
-						: m.proposal.copyLink}</span
+						: m.create.copyInvite}</span
 				>
 			</Button>
 			<Button variant="primary" shape="rounded" onclick={() => oncreated(created ?? '')}
@@ -444,9 +676,117 @@
 	{/if}
 </Sheet>
 
-<!-- eslint-enable svelte/no-at-html-tags -->
-
 <style>
+	.field-head {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--space-sm);
+	}
+
+	.count {
+		font-family: var(--font-numeric);
+		color: var(--color-fg-muted);
+	}
+
+	.count.over {
+		color: var(--color-error-base);
+	}
+
+	input.name-field.small {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.typed + .typed {
+		margin-block-start: var(--space-sm);
+	}
+
+	.ens {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-sm);
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+	}
+
+	.line {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+	}
+
+	.ens-address {
+		margin: 0;
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
+	}
+
+	.pick {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		min-height: var(--size-control-md);
+		margin-block-start: var(--space-sm);
+		padding: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-decoration-thickness: var(--border-hairline);
+		text-underline-offset: var(--space-xs);
+		cursor: pointer;
+	}
+
+	.contacts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.contacts button {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		width: 100%;
+		padding: var(--space-sm) 0;
+		border: none;
+		border-bottom: var(--border-hairline) solid var(--color-border-base);
+		background: none;
+		font-family: var(--font-ui);
+		text-align: start;
+		color: var(--color-fg-base);
+		cursor: pointer;
+	}
+
+	.address.full {
+		overflow-wrap: anywhere;
+	}
+
+	.hint.flush {
+		margin: 0;
+	}
+
+	.state {
+		margin: var(--space-md) 0 0;
+		padding: var(--space-sm) var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+	}
+
+	.state.pending {
+		background: var(--color-warning-soft);
+		border: var(--border-hairline) solid var(--color-warning-border);
+	}
+
 	.intro {
 		margin: 0 0 var(--space-lg);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
