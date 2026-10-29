@@ -91,6 +91,10 @@ export interface SendLiveInputs {
 		 * `null`: the chain could not be read, and the rule is the genesis's.
 		 */
 		membersOn?: (chainId: number) => { threshold: number; owners: number } | 'reading' | null;
+		/** r4D-10: the proposal's own words when its waiting list could not be read. */
+		mailboxDown?: string;
+		/** r4D-10: …and when this device is offline. */
+		offline?: string;
 	};
 	fee: FeeView;
 	m: WalletFlowMessages;
@@ -1428,6 +1432,9 @@ function confirmHolds(
 					}
 				};
 			case 'generic':
+			case 'proposal_mailbox_down':
+			case 'proposal_offline':
+				// A proposal's own words replace these (`liveSendConfirm`).
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
 		}
 	}
@@ -1480,8 +1487,20 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		value: multisigRule(inputs, send),
 		note: inputs.multisig.feeNote
 	};
+	// r4D-10: one cause, one message, one button — the proposal's own words,
+	// and the confirm itself proposes again (no second "Try again").
+	const words =
+		send.tx_error === 'proposal_mailbox_down'
+			? inputs.multisig.mailboxDown
+			: send.tx_error === 'proposal_offline'
+				? inputs.multisig.offline
+				: undefined;
+	const error = page.error
+		? { ...page.error, text: words ?? page.error.text, retry: undefined }
+		: undefined;
 	return {
 		...page,
+		error,
 		facts: page.facts.map((fact) => (feeLabels.has(fact.label) ? approvals : fact)),
 		cta: inputs.multisig.confirm
 	};

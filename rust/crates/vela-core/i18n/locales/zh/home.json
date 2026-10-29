@@ -98,7 +98,10 @@
         "pending": "待批准",
         "stale": "暂时无法刷新，显示的是上次的状态。",
         "notShared": "尚未共享：记录完成后其他成员才能添加，Vela 会自动重试。",
-        "invite": "邀请成员"
+        "invite": "邀请成员",
+        "lastKnown": "这是 {{time}} 时的列表，正在检查有没有变化。",
+        "checking": "正在查找等待批准的交易…",
+        "historyUnreadable": "无法读取这个多签在 {{network}} 上的记录：在其他设备上执行的交易可能没有显示在这里。"
       },
       "status": {
         "ready": "可以执行",
@@ -106,7 +109,9 @@
         "waiting": "等待其他成员",
         "queued": "排队中",
         "progress": "已批准 {{approved}}/{{threshold}}",
-        "unsent": "尚未发出"
+        "unsent": "尚未发出",
+        "executing": "执行中…",
+        "conflict": "其中只有一笔能执行"
       },
       "action": {
         "send": "发送 {{amount}} {{symbol}}",
@@ -203,6 +208,27 @@
         "outboxAway": "无法连接多签服务——{{seconds}} 秒后重新发送。",
         "outboxNotSent": "尚未发出：多签服务没有接收。它保存在本设备上，发出之前其他成员看不到。",
         "outboxSendAgain": "重新发送",
+        "lostRace": "另一位成员先执行了这笔交易。你的账户没有发送任何东西。",
+        "lostRacePaid": "另一位成员先执行了这笔交易。你的账户的执行也上了链，并支付了它的网络费。",
+        "replacedFirst": "序号 #{{nonce}} 上的另一笔交易先执行了，这笔交易永远不会执行。你的账户没有发送任何东西。",
+        "replacedFirstPaid": "序号 #{{nonce}} 上的另一笔交易先执行了，这笔交易永远不会执行。你的账户的执行上了链，并支付了它的网络费。",
+        "execFailed": "交易已上链，但调用失败，没有执行。网络费已支付。",
+        "cantCheck": "无法连接 {{network}}，暂时无法检查这笔交易。",
+        "cantCheckUsed": "这笔交易的序号已被使用，但暂时无法读取 {{network}}，无法确认它是已执行还是被替代。",
+        "conflict": "序号 #{{nonce}} 上等待中的交易只有一笔能执行：最先执行的那笔会替代其他交易。",
+        "queuedNoteMany": "交易 {{nonces}} 执行或作废后，才能执行这笔。",
+        "openNumber": "打开 #{{nonce}}",
+        "reason": {
+          "passkeyClosed": "通行密钥窗口已关闭，没有签署任何内容。如果这台设备上没有这个账户的通行密钥，请使用有密钥的设备。",
+          "passkeyTimedOut": "通行密钥请求已超时，没有签署任何内容。准备好后请重试。",
+          "passkeyMissing": "这台设备上没有这个账户的通行密钥，没有签署任何内容。请使用有密钥的设备。",
+          "passkeyFailed": "通行密钥的签名与这个账户不符，没有签署或发送任何内容。",
+          "serviceKept": "多签服务没有响应。你签署的内容保存在这台设备上，会自动重新发送。",
+          "serviceRefused": "多签服务拒绝了它，所以没有保存。没有发送任何内容。",
+          "offline": "你已离线，没有发送任何内容。恢复联网后请重试。",
+          "chainUnreachable": "暂时无法连接 {{network}}，没有发送任何内容。请稍后重试。",
+          "unknown": "出了点问题，没有发送任何内容。请重试。"
+        },
         "copy": "复制",
         "executedBy": "由 {{name}} 执行",
         "countedThen": "执行时计入的批准：{{threshold}} 位中的 {{approved}} 位",
@@ -260,7 +286,8 @@
         "unavailable": "暂时无法连接服务，请重试。",
         "unsupported": "暂不支持这个版本的 Safe。",
         "notMultisig": "这个地址不是 Vela 能识别的多签账户。",
-        "chooseNetwork": "目前还无法得知这个多签用在哪个网络上，请选择它的网络："
+        "chooseNetwork": "目前还无法得知这个多签用在哪个网络上，请选择它的网络：",
+        "badLink": "这个邀请链接不完整或已损坏。请重新索取，或直接输入多签地址。"
       },
       "authority": {
         "refusedTitle": "Vela 不会使用这个多签账户",
@@ -379,7 +406,10 @@
       "service": {
         "customNote": "正在使用自定义多签服务（{{host}}）",
         "unreachableNote": "多签服务无法连接——待批准交易无法加载，正在重试。",
-        "retry": "重试"
+        "retry": "重试",
+        "offline": "你已离线，显示的是之前加载的内容。",
+        "offlineSince": "你已离线，显示的是 {{time}} 加载的内容。",
+        "chainUnreachable": "无法连接 {{network}}，暂时无法检查等待中的交易。"
       }
     },
     "balanceDetailStatusOwnNode": "你的节点没有响应",

@@ -1117,9 +1117,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   read by Vela). 2318 + 22 = 2340 leaves, 121 + 2 = 123 branches.
 // 2495 (the above on 2471, merged): 2349 + 22 = 2371 leaves, 122 + 2 = 124
 //   branches.
-if (PATHS.length !== 2495) fail(`expected 2495 paths (2371 leaf + 124 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2371) fail(`expected 2371 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
+// 2468 (round 4: state, sync and history): + `home.multisig.status.
+//   {executing, conflict}`, + `home.multisig.panel.{lastKnown, checking,
+//   historyUnreadable}`, + `home.multisig.proposal.{lostRace, lostRacePaid,
+//   replacedFirst, replacedFirstPaid, execFailed, cantCheck, cantCheckUsed,
+//   conflict, queuedNoteMany, openNumber}`, + the `home.multisig.proposal.
+//   reason` branch's 9 leaves (passkeyClosed, passkeyTimedOut, passkeyMissing,
+//   passkeyFailed, serviceKept, serviceRefused, offline, chainUnreachable,
+//   unknown), + `home.multisig.service.{offline, offlineSince,
+//   chainUnreachable}`, + `home.multisig.add.badLink`.
+//   2318 + 28 = 2346 leaves, 121 + 1 = 122 branches.
+// 2524 (the above on 2495, merged): 2371 + 28 = 2399 leaves, 124 + 1 = 125
+//   branches.
+if (PATHS.length !== 2524) fail(`expected 2524 paths (2399 leaf + 125 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2399) fail(`expected 2399 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 125) fail(`expected 125 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

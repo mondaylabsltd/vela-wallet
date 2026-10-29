@@ -39,7 +39,7 @@
  * converted into the result variant that operation answers with.
  */
 
-import { proposeTransfers } from '$lib/multisig/core/proposals.svelte';
+import { MailboxUnreadableError, proposeTransfers } from '$lib/multisig/core/proposals.svelte';
 import { SigningRefusedError, SigningUncheckedError } from '$lib/multisig/core/gate.svelte';
 import { multisigUi } from '$lib/multisig/core/ui.svelte';
 import {
@@ -212,6 +212,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	 * and consumed by the `TrackSubmitted` that always follows it.
 	 */
 	const submitted = new Map<string, SubmitResult>();
+
+	/**
+	 * r4b-5: the multisig proposal being made, stopped when the person
+	 * withdraws it (the confirm dismissed, the flow closed) — no passkey after
+	 * that, nothing proposed.
+	 */
+	let proposing: AbortController | null = null;
 
 	/**
 	 * The write-ahead waiting for the core's `ClearToPost` (spec 082 RJ1), by
@@ -624,6 +631,7 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'cancel_passkey_sign': {
+				proposing?.abort();
 				cancelChallenge();
 				return { type: 'passkey_cancel_acknowledged' };
 			}
@@ -632,11 +640,14 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				// A multisig's confirm (docs/multisig-vault-design.md): the
 				// reviewed transfers, proposed and approved by this device's
 				// member — one passkey, nothing sent until the members agree.
+				proposing?.abort();
+				const stop = (proposing = new AbortController());
 				try {
 					const { safeTxHash } = await proposeTransfers(
 						operation.multisig,
 						operation.chain_id,
-						operation.transfers
+						operation.transfers,
+						stop.signal
 					);
 					return { type: 'proposed', safe_tx_hash: safeTxHash };
 				} catch (error) {
@@ -647,10 +658,23 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					if (error instanceof SigningRefusedError || error instanceof SigningUncheckedError) {
 						multisigUi.open({ kind: 'authority', error });
 					}
+					// r4D-10: one cause, one message — the mailbox down, offline.
+					const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
 					return {
 						type: 'propose_failed',
-						cancelled: name === 'NotAllowedError' || name === 'AbortError'
+						cancelled:
+							stop.signal.aborted ||
+							name === 'NotAllowedError' ||
+							name === 'AbortError' ||
+							(error instanceof PasskeyError && error.kind === 'cancelled'),
+						reason: offline
+							? 'offline'
+							: error instanceof MailboxUnreadableError
+								? 'mailbox_down'
+								: null
 					};
+				} finally {
+					if (proposing === stop) proposing = null;
 				}
 			}
 
@@ -917,7 +941,7 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			case 'cancel_passkey_sign':
 				return { type: 'passkey_cancel_acknowledged' };
 			case 'propose_safe_tx':
-				return { type: 'propose_failed', cancelled: false };
+				return { type: 'propose_failed', cancelled: false, reason: null };
 			case 'persist_tx_records':
 				// Best effort, exactly like the TS `.catch(() => {})` — and the core
 				// must still be told, or `TrackSubmitted` never fires (invariant ⑥).
@@ -950,5 +974,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		}
 	}
 
-	return { execute, toFailure };
+	/** The session is gone: whatever it was proposing stops (r4b-5). */
+	function dispose(): void {
+		proposing?.abort();
+		proposing = null;
+	}
+
+	return { execute, toFailure, dispose };
 }

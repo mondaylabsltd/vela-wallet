@@ -48,7 +48,7 @@ vi.mock('./proposals.svelte', () => ({
 	}
 }));
 
-const { openProposalLink } = await import('./linked.svelte');
+const { LINKED_POLL_MS, LinkedProposals, openProposalLink } = await import('./linked.svelte');
 
 const LINK = { chainId: 100, multisig: SAFE, safeTxHash: HASH };
 const account = (owners: string[]) => ({ address: SAFE, owners, genesis: {}, chainIds: [100] });
@@ -123,5 +123,53 @@ describe('a proposal link opened here (ms-21)', () => {
 		}
 		expect(fake.reads).toBe(0);
 		expect(fake.writes).toEqual([]);
+	});
+});
+
+/**
+ * r4b-4: a non-member's read-only preview is read again while it is shown,
+ * as a member's sheet is — an execution elsewhere is seen there too — and a
+ * network that does not answer is said as that (r4b-3).
+ */
+describe('a linked transaction, kept fresh while shown (r4b-4)', () => {
+	it('is read again on the poll and when the tab comes back, and stops when closed', async () => {
+		vi.useFakeTimers();
+		const listeners = new Map<string, () => void>();
+		const target = {
+			addEventListener: (type: string, fn: () => void) => void listeners.set(type, fn),
+			removeEventListener: (type: string) => void listeners.delete(type)
+		};
+		vi.stubGlobal('window', target);
+		vi.stubGlobal('document', { ...target, visibilityState: 'visible' });
+		try {
+			const source = new LinkedProposals(account([OTHER]) as never, 100);
+			const stop = source.watch();
+			fake.reads = 0;
+			await vi.advanceTimersByTimeAsync(LINKED_POLL_MS + 1);
+			expect(fake.reads).toBe(1);
+			listeners.get('visibilitychange')?.();
+			await vi.advanceTimersByTimeAsync(0);
+			expect(fake.reads).toBe(2);
+			stop();
+			expect(listeners.size).toBe(0);
+			await vi.advanceTimersByTimeAsync(LINKED_POLL_MS * 3);
+			expect(fake.reads).toBe(2);
+		} finally {
+			vi.useRealTimers();
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('a network that does not answer is named, the last read kept', async () => {
+		const source = new LinkedProposals(account([OTHER]) as never, 100);
+		await source.refresh();
+		expect(source.chain(100)).toBeDefined();
+		fake.chainFails = true;
+		await source.refresh();
+		expect(source.unreadable).toEqual([100]);
+		expect(source.chain(100)).toBeDefined();
+		fake.chainFails = false;
+		await source.refresh();
+		expect(source.unreadable).toEqual([]);
 	});
 });

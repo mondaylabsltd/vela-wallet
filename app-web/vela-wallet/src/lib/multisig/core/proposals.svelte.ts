@@ -51,6 +51,7 @@ import {
 import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
+import { executions } from './execution-watch.svelte';
 import { networkForChainId, networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 import { authorizeSigning } from './gate.svelte';
@@ -97,6 +98,16 @@ export interface ProposalItem {
 	canExecute: LocalOwner[];
 	/** Another proposal at the same nonce that voids this one (a cancellation). */
 	cancelledBy: string | null;
+	/**
+	 * r4b-6: the other open proposals at its number — only one of them can
+	 * run; the rest are voided by it.
+	 */
+	sameNonce: string[];
+	/**
+	 * r4b-7: this device sent its execution and it may still land: not
+	 * offered again, its sheet watches it.
+	 */
+	executing: boolean;
 	createdMs: number;
 	/**
 	 * Something signed on this device for it has not reached the mailbox yet
@@ -183,8 +194,13 @@ export function readProposal(
 	// A rename runs only where the multisig is deployed: executed elsewhere it
 	// would deploy it there with its original members (the core refuses it too).
 	const renameUndeployed = review.action?.kind === 'rename' && !members.deployed;
+	const executing = status !== 'done' && !!executions.get(p.chainId, account.address, hash);
 	const canExecute =
-		status === 'done' || status === 'queued' || review.action === null || renameUndeployed
+		status === 'done' ||
+		status === 'queued' ||
+		review.action === null ||
+		renameUndeployed ||
+		executing
 			? []
 			: [...owners, ...anyone];
 	return {
@@ -201,6 +217,8 @@ export function readProposal(
 		canApprove: review.action === null || status === 'done' ? [] : canApprove,
 		canExecute,
 		cancelledBy: null,
+		sameNonce: [],
+		executing,
 		createdMs: p.createdMs,
 		unsent: false,
 		renameUndeployed
@@ -352,9 +370,68 @@ export function splitListed(
 	return { lists, used, missing };
 }
 
+/**
+ * r4b-11: the last list read for each multisig, kept across reloads — its
+ * members and the mailbox's waiting proposals per chain, by service. Shown at
+ * once on the next page (as the last known, said so), re-read against the
+ * chain as soon as it answers; never a source of a new proposal's number.
+ */
+const WAITING_KEY = 'vela.multisigWaiting';
+const WAITING_CAP = 20;
+
+interface KeptChain {
+	chainId: number;
+	members: Omit<ChainMembers, 'nonce'> & { nonce: string };
+	proposals: Proposal[];
+}
+
+interface KeptList {
+	service: string;
+	at: number;
+	chains: KeptChain[];
+}
+
+function readWaiting(): Record<string, KeptList> {
+	try {
+		return JSON.parse(localStorage.getItem(WAITING_KEY) ?? '{}') as Record<string, KeptList>;
+	} catch {
+		return {};
+	}
+}
+
+/** The list kept for `address` from `service`, or `null`. */
+export function keptWaiting(address: string, service: string): KeptList | null {
+	const kept = readWaiting()[address.toLowerCase()];
+	return kept && kept.service === service ? kept : null;
+}
+
+function keepWaiting(address: string, list: KeptList): void {
+	try {
+		const all = { ...readWaiting(), [address.toLowerCase()]: list };
+		const keys = Object.keys(all);
+		for (const old of keys.slice(0, Math.max(0, keys.length - WAITING_CAP))) delete all[old];
+		localStorage.setItem(WAITING_KEY, JSON.stringify(all));
+	} catch {
+		// best effort: the next page reads it afresh
+	}
+}
+
 class Proposals {
 	/** Per chain the multisig is used on. */
 	chains = $state<ChainState[]>([]);
+	/**
+	 * r4b-11: what is shown is the list kept from an earlier page, not read
+	 * yet on this one (`at`: when it was read). Said as the last known.
+	 */
+	cached = $state<{ at: number } | null>(null);
+	/** r4b-3: networks whose members could not be read on the last refresh. */
+	unreadable = $state<number[]>([]);
+	/** r4b-2: networks whose history could not be read (executions elsewhere may be missing). */
+	historyUnreadable = $state<number[]>([]);
+	/** r4b-15: the device says it is offline. */
+	offline = $state(false);
+	/** When the list shown was last read in full (the offline line names it). */
+	readAt = $state<number | null>(null);
 	/** The networks the mailbox holds proposals of it on that this device lacks. */
 	missing = $state<MissingChain[]>([]);
 	loading = $state(false);
@@ -375,6 +452,8 @@ class Proposals {
 	#chainIds: number[] = [];
 	#account: MultisigAccount | null = null;
 	#online: (() => void) | null = null;
+	#offline: (() => void) | null = null;
+	#visible: (() => void) | null = null;
 
 	/** The multisig followed (`null`: none). */
 	get followed(): string | null {
@@ -396,27 +475,76 @@ class Proposals {
 		if (this.#timer) clearInterval(this.#timer);
 		this.#timer = null;
 		if (this.#online) window.removeEventListener('online', this.#online);
+		if (this.#offline) window.removeEventListener('offline', this.#offline);
+		if (this.#visible) document.removeEventListener('visibilitychange', this.#visible);
 		this.#online = null;
+		this.#offline = null;
+		this.#visible = null;
 		if (!sameAddress(this.#address, address)) {
 			this.chains = [];
 			this.missing = [];
 			this.#lists.clear();
 			this.stale = false;
+			this.cached = null;
+			this.unreadable = [];
+			this.historyUnreadable = [];
+			this.readAt = null;
 		}
 		this.#address = address;
 		this.#account = account;
 		this.#chainIds = chainIds;
 		if (!account) return;
+		if (this.chains.length === 0) this.#seed(account);
 		void this.refresh(account, chainIds);
-		// Back online: the outage is over as far as anyone knows — read now.
 		if (typeof window !== 'undefined') {
-			this.#online = () => this.retry();
+			this.offline = navigator.onLine === false;
+			// Back online: the outage is over as far as anyone knows — read now.
+			this.#online = () => {
+				this.offline = false;
+				void this.retry();
+			};
+			this.#offline = () => (this.offline = true);
 			window.addEventListener('online', this.#online);
+			window.addEventListener('offline', this.#offline);
+			// r4b-16: back to the tab — read now, not at the next tick.
+			this.#visible = () => {
+				if (document.visibilityState === 'visible') void this.refresh(account, chainIds);
+			};
+			document.addEventListener('visibilitychange', this.#visible);
 		}
 		this.#timer = setInterval(() => {
 			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
 			void this.refresh(account, chainIds);
 		}, 12_000);
+	}
+
+	/**
+	 * r4b-11: the list kept from an earlier page, shown before anything is
+	 * read — each proposal re-read here against the members kept with it.
+	 */
+	#seed(account: MultisigAccount): void {
+		const kept = keptWaiting(account.address, genesisServiceURL());
+		if (!kept) return;
+		try {
+			const chains: ChainState[] = kept.chains.map((c) => {
+				const members: ChainMembers = { ...c.members, nonce: BigInt(c.members.nonce) };
+				const items = c.proposals
+					.map((p) => readProposal(account, members, p))
+					.filter((i): i is ProposalItem => i !== null);
+				markCancellations(account.address, items);
+				this.#lists.set(c.chainId, c.proposals);
+				return { chainId: c.chainId, members, items, mailbox: false };
+			});
+			this.chains = chains.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
+			this.#source = genesisServiceURL();
+			this.cached = { at: kept.at };
+			this.readAt = kept.at;
+			this.stale = true;
+		} catch {
+			// a kept list this build cannot read: read afresh
+			this.chains = [];
+			this.#lists.clear();
+		}
 	}
 
 	/**
@@ -430,6 +558,7 @@ class Proposals {
 	/** The person's Retry (or `online`): ask the service now, whatever its schedule. */
 	retry(): Promise<void> {
 		serviceOutage.reset();
+		this.historyUnreadable = [];
 		const account = this.#account;
 		return account ? this.refresh(account, this.#chainIds) : Promise.resolve();
 	}
@@ -454,6 +583,7 @@ class Proposals {
 		const run = (async () => {
 			let failed = false;
 			const next: ChainState[] = [];
+			const unread: number[] = [];
 			// While the service is away: nothing until its next step, then one
 			// probe for every network — not a failed read per network per round.
 			let mailbox = await serviceOutage.available(probeService);
@@ -497,7 +627,10 @@ class Proposals {
 							mailbox: read.mailbox
 						});
 					} catch {
+						// r4b-3: the network did not answer — said as that, never as
+						// a transaction nobody shared.
 						failed = true;
+						unread.push(chainId);
 						const previous = this.chains.find((c) => c.chainId === chainId);
 						if (previous) next.push({ ...previous, mailbox: false });
 					}
@@ -508,15 +641,46 @@ class Proposals {
 				// The wallet's network order (owner decision 2026-10-29).
 				this.chains = next.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
 				this.stale = failed;
+				this.unreadable = unread;
+				if (!failed) {
+					this.cached = null;
+					this.readAt = Date.now();
+					this.#keep(account, source);
+				}
+				// Executed on another member's device (or this one's, before a
+				// reload): no longer in flight here.
+				for (const item of this.items) {
+					if (item.status === 'done')
+						executions.end(item.chainId, account.address, item.safeTxHash);
+				}
 				// Executed on another member's device: into this device's activity too.
-				void recordRemoteExecutions(account.address, this.items).then((wrote) => {
-					if (wrote) this.onrecorded?.();
-				});
+				void recordRemoteExecutions(account.address, this.items).then(
+					({ wrote, unreadable }) => {
+						if (followed()) this.historyUnreadable = unreadable;
+						if (wrote) this.onrecorded?.();
+					},
+					() => {}
+				);
 			}
 			this.loading = false;
 		})();
 		this.#inflight = run.finally(() => (this.#inflight = null));
 		return this.#inflight;
+	}
+
+	/** r4b-11: what was read in full, kept for the next page (open proposals only). */
+	#keep(account: MultisigAccount, service: string): void {
+		keepWaiting(account.address, {
+			service,
+			at: Date.now(),
+			chains: this.chains.map((c) => ({
+				chainId: c.chainId,
+				members: { ...c.members, nonce: c.members.nonce.toString() },
+				proposals: (this.#lists.get(c.chainId) ?? []).filter(
+					(p) => BigInt(p.safeTx.nonce) >= c.members.nonce
+				)
+			}))
+		});
 	}
 
 	chain(chainId: number): ChainState | undefined {
@@ -530,13 +694,23 @@ class Proposals {
 	}
 }
 
-/** A proposal at the same nonce that sends nothing to the multisig itself voids the others. */
-function markCancellations(multisigAddress: string, items: ProposalItem[]): void {
+/**
+ * A proposal at the same nonce that sends nothing to the multisig itself
+ * voids the others; and every open proposal knows the others waiting at its
+ * number (r4b-6: only one of them can run).
+ */
+export function markCancellations(multisigAddress: string, items: ProposalItem[]): void {
 	for (const c of items) {
 		if (c.review.action?.kind !== 'cancel') continue;
 		for (const i of items) {
 			if (i !== c && i.nonce === c.nonce) i.cancelledBy = c.safeTxHash;
 		}
+	}
+	for (const i of items) {
+		if (i.status === 'done') continue;
+		i.sameNonce = items
+			.filter((o) => o !== i && o.status !== 'done' && o.nonce === i.nonce)
+			.map((o) => o.safeTxHash);
 	}
 	void multisigAddress;
 }
@@ -572,7 +746,8 @@ export async function propose(
 	account: MultisigAccount,
 	chainId: number,
 	tx: SafeTx,
-	owner: LocalOwner
+	owner: LocalOwner,
+	signal?: AbortSignal
 ) {
 	// A delegatecall into nothing "succeeds" doing nothing and spends the
 	// nonce: the batch contract (MultiSendCallOnly) must be on this chain, which
@@ -584,8 +759,16 @@ export async function propose(
 	// more than its members can act for it — before the passkey.
 	await authorizeSigning(account, chainId);
 	const hash = safeTxHash(chainId, account.address, tx);
+	stopIfWithdrawn(signal);
 	const approval = await signApproval(owner.account, chainId, hash);
+	// r4b-5: withdrawn while the passkey was up: what it signed goes nowhere.
+	stopIfWithdrawn(signal);
 	return submitProposal(account, chainId, tx, approval);
+}
+
+/** r4b-5: the person withdrew it (the confirm dismissed): nothing more is asked or sent. */
+function stopIfWithdrawn(signal: AbortSignal | undefined): void {
+	if (signal?.aborted) throw new DOMException('the proposal was withdrawn', 'AbortError');
 }
 
 /**
@@ -832,13 +1015,19 @@ export async function approveExternally(
 export async function proposeTransfers(
 	address: string,
 	chainId: number,
-	transfers: { to: string; token: string | null; amount: string }[]
+	transfers: { to: string; token: string | null; amount: string }[],
+	/** r4b-5: stops it — no passkey, nothing proposed — once the person withdraws it. */
+	signal?: AbortSignal
 ): Promise<{ safeTxHash: string }> {
-	return proposeBuilt(address, chainId, (nonce) =>
-		transfersTx(
-			transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
-			`0x${nonce.toString(16)}`
-		)
+	return proposeBuilt(
+		address,
+		chainId,
+		(nonce) =>
+			transfersTx(
+				transfers.map((t) => ({ token: t.token, to: t.to, amount: t.amount })),
+				`0x${nonce.toString(16)}`
+			),
+		signal
 	);
 }
 
@@ -946,7 +1135,8 @@ export async function proposeCalls(
 async function proposeBuilt(
 	address: string,
 	chainId: number,
-	build: (nonce: bigint) => SafeTx
+	build: (nonce: bigint) => SafeTx,
+	signal?: AbortSignal
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
@@ -963,8 +1153,9 @@ async function proposeBuilt(
 	const tx = build(nextNonceOf(chain));
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
+	stopIfWithdrawn(signal);
 	const { safeTxHash } = owner
-		? await propose(fresh, chainId, tx, owner)
+		? await propose(fresh, chainId, tx, owner, signal)
 		: await approveExternally(fresh, chainId, tx, owners);
 	await proposals.refresh(fresh, fresh.chainIds);
 	return { safeTxHash };

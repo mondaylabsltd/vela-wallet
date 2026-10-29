@@ -3077,6 +3077,10 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "safeTxHash")?,
             &arg::<Vec<crate::multisig_reading::ReceiptLog>>(&args, "logs")?,
         )?)),
+        // An execution in flight (`multisig_watch`).
+        "executionVerdict" => out(json(&crate::multisig_watch::execution_verdict(&arg(
+            &args, "facts",
+        )?))),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]
         "serviceAnswer" => out(json(&crate::app::genesis_service::service_answer(

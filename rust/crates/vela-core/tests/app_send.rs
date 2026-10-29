@@ -27,12 +27,12 @@ use vela_core::app::send::{
     Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
     SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
-    SendOperation as Op, SendPasskeyNote, SendPayee, SendReceiptKind, SendReceiptOutcome,
-    SendReceiptStatus, SendRecipientDraft, SendRecipientRisk, SendRowFieldState, SendScan,
-    SendShellResult as Res, SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta,
-    SendTreasuryAsset, SendTreasuryCoin, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey,
-    SendTxRecord, SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, RISK_WAIT_MS,
-    TREASURY_WATCH_MS,
+    SendOperation as Op, SendPasskeyNote, SendPayee, SendProposeFailure, SendReceiptKind,
+    SendReceiptOutcome, SendReceiptStatus, SendRecipientDraft, SendRecipientRisk,
+    SendRowFieldState, SendScan, SendShellResult as Res, SendStage, SendSubmitFailure,
+    SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin, SendTreasuryProbe,
+    SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus, SendUnitIssue, SendView,
+    BATCH_MAX_RECIPIENTS, RISK_WAIT_MS, TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -9785,7 +9785,10 @@ mod multisig {
         sut.dispatch(Event::SlideConfirm {
             review: view.review_digest.clone(),
         });
-        let ops = sut.resolve(Res::ProposeFailed { cancelled: true });
+        let ops = sut.resolve(Res::ProposeFailed {
+            cancelled: true,
+            reason: None,
+        });
         assert!(ops.is_empty(), "{ops:?}");
         let view = sut.view();
         assert_eq!(view.tx_status, SendTxStatus::Idle);
@@ -9800,11 +9803,100 @@ mod multisig {
         sut.dispatch(Event::SlideConfirm {
             review: view.review_digest.clone(),
         });
-        sut.resolve(Res::ProposeFailed { cancelled: false });
+        sut.resolve(Res::ProposeFailed {
+            cancelled: false,
+            reason: None,
+        });
         let view = sut.view();
         assert_eq!(view.tx_status, SendTxStatus::Error);
         assert_eq!(view.tx_error, Some(SendTxErrorKey::Generic));
         assert!(view.proposed.is_none());
+    }
+
+    /// r4D-10: one cause, one message — the mailbox down and offline are
+    /// their own words, never the send's generic failure.
+    #[test]
+    fn a_proposal_the_mailbox_or_the_network_stopped_says_which() {
+        for (reason, key) in [
+            (
+                SendProposeFailure::MailboxDown,
+                SendTxErrorKey::ProposalMailboxDown,
+            ),
+            (SendProposeFailure::Offline, SendTxErrorKey::ProposalOffline),
+        ] {
+            let mut sut = boot_multisig(vec![eth("2")]);
+            let view = to_review(&mut sut, "0.5");
+            sut.dispatch(Event::SlideConfirm {
+                review: view.review_digest.clone(),
+            });
+            sut.resolve(Res::ProposeFailed {
+                cancelled: false,
+                reason: Some(reason),
+            });
+            let view = sut.view();
+            assert_eq!(view.tx_error, Some(key));
+            // The confirm itself proposes again: one message, one button.
+            assert!(view.can_confirm, "{key:?}: the confirm is the retry");
+            let ops = sut.dispatch(Event::SlideConfirm {
+                review: view.review_digest.clone(),
+            });
+            assert!(
+                ops.iter().any(|op| matches!(op, Op::ProposeSafeTx { .. })),
+                "{ops:?}"
+            );
+            assert_eq!(sut.view().tx_error, None);
+        }
+    }
+
+    /// r4b-5: leaving the confirm (‹, Escape) while the proposal is being
+    /// made withdraws it — the passkey is stopped, the form is back, and an
+    /// answer that still comes back opens nothing.
+    #[test]
+    fn leaving_the_confirm_while_proposing_withdraws_the_proposal() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.dispatch(Event::Back);
+        assert!(
+            ops.iter().any(|op| matches!(op, Op::CancelPasskeySign)),
+            "{ops:?}"
+        );
+        assert_eq!(sut.view().stage, SendStage::EnterDetails);
+        sut.resolve_matching(
+            |op| matches!(op, Op::ProposeSafeTx { .. }),
+            Res::Proposed {
+                safe_tx_hash: "0xabc".to_owned(),
+            },
+        );
+        assert!(sut.view().proposed.is_none());
+    }
+
+    /// r4b-5: dismissing the confirm while the proposal is being made stops
+    /// it — the shell is told to stop the passkey, and an answer that still
+    /// comes back opens nothing.
+    #[test]
+    fn a_proposal_withdrawn_before_it_is_made_opens_nothing() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.dispatch(Event::CancelSigning);
+        assert!(
+            ops.iter().any(|op| matches!(op, Op::CancelPasskeySign)),
+            "{ops:?}"
+        );
+        sut.resolve_matching(
+            |op| matches!(op, Op::ProposeSafeTx { .. }),
+            Res::Proposed {
+                safe_tx_hash: "0xabc".to_owned(),
+            },
+        );
+        let view = sut.view();
+        assert!(view.proposed.is_none(), "nothing opens after the dismissal");
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
     }
 
     #[test]

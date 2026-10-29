@@ -28,15 +28,28 @@ import { proposals, type ProposalItem } from './proposals.svelte';
 import { readCall } from './call-review.svelte';
 import { readChainDoc } from '$lib/services/chain-doc';
 import type { SigningMessages } from '$lib/signing/messages';
+import { ROW_PREFIX, transactionOfRow, waitingRowId } from './row-id';
+import { progressLine } from './progress';
 
-/** The id an Activity row carries for a waiting transaction. */
-export const PROPOSAL_ROW_PREFIX = 'multisig:';
+/** The id an Activity row carries for a waiting transaction (`row-id.ts`). */
+export const PROPOSAL_ROW_PREFIX = ROW_PREFIX;
 
-/** The waiting group's action while the multisig service is away: ask it now. */
+/** The waiting group's action while the multisig service (or a network) is away: ask it now. */
 export const MULTISIG_RETRY = 'multisig-retry';
 
 export function proposalRowId(item: Pick<ProposalItem, 'chainId' | 'safeTxHash'>): string {
-	return `${PROPOSAL_ROW_PREFIX}${item.chainId}:${item.safeTxHash}`;
+	return waitingRowId(item.chainId, item.safeTxHash);
+}
+
+export { progressLine };
+
+/** A time of day the way this browser shows one ("4:36 PM"). */
+function clockTime(at: number): string {
+	try {
+		return new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+	} catch {
+		return new Date(at).toISOString().slice(11, 16);
+	}
 }
 
 /** The id of a row for proposals on a network this device does not have. */
@@ -66,14 +79,16 @@ export async function indexName(chainId: number): Promise<string | null> {
 	return typeof name === 'string' && name.trim() !== '' ? name.trim() : null;
 }
 
-/** The proposal a row id names, or `null` for any other row. */
+/**
+ * The transaction a row id names — a waiting one's row, or one its execution
+ * wrote (r4a-4) — or `null` for any other row: nothing but the one scheme
+ * parses (`row-id.ts`).
+ */
 export function proposalOfRow(
 	id: string | undefined
 ): { chainId: number; safeTxHash: string } | null {
-	if (!id?.startsWith(PROPOSAL_ROW_PREFIX)) return null;
-	const [chain, hash] = id.slice(PROPOSAL_ROW_PREFIX.length).split(':');
-	const chainId = Number(chain);
-	return Number.isInteger(chainId) && hash ? { chainId, safeTxHash: hash } : null;
+	const read = transactionOfRow(id);
+	return read ? { chainId: read.chainId, safeTxHash: read.safeTxHash } : null;
 }
 
 interface Drawn {
@@ -190,7 +205,13 @@ class WaitingRows {
 	group(m: MultisigMessages, toName?: string): ActivityGroupModel | null {
 		const open = proposals.open;
 		const missing = proposals.missing;
-		if (open.length === 0 && missing.length === 0 && !proposals.stale) return null;
+		const said =
+			proposals.stale ||
+			proposals.offline ||
+			proposals.unreadable.length > 0 ||
+			proposals.historyUnreadable.length > 0 ||
+			proposals.loading;
+		if (open.length === 0 && missing.length === 0 && !said) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
 			const change = memberChangeOf(m, item);
@@ -202,10 +223,9 @@ class WaitingRows {
 				subtitle: [
 					drawn?.source,
 					statusOf(m, item),
-					fillTemplate(m.status.progress, {
-						approved: item.approved,
-						threshold: item.threshold
-					}),
+					// r4b-6: proposals at one number — only one of them can run.
+					item.sameNonce.length > 0 ? m.status.conflict : null,
+					progressLine(m, item.approved, item.threshold),
 					// r4a-1: the rule it meets and the one it leaves.
 					change?.rule,
 					// vis-18: whom a transfer goes to, as a Vela account's row
@@ -257,19 +277,63 @@ class WaitingRows {
 				badgeColor: chainColor(gap.chainId)
 			});
 		}
-		// The service away is said as itself, once for every network, with a
-		// Retry: its own schedule retries too, but nobody should have to wait.
-		if (proposals.unreachable) {
+		const retry = () => ({ id: MULTISIG_RETRY, label: m.service.retry });
+		// r4b-15: offline is said as offline — with when the list shown was read.
+		if (proposals.offline) {
+			const at = proposals.readAt;
 			return {
 				label: m.panel.pending,
-				note: m.service.unreachableNote,
-				action: { id: MULTISIG_RETRY, label: m.service.retry },
+				note: at
+					? fillTemplate(m.service.offlineSince, { time: clockTime(at) })
+					: m.service.offline,
 				rows
 			};
 		}
-		return proposals.stale
-			? { label: m.panel.pending, note: m.panel.stale, rows }
-			: { label: m.panel.pending, rows };
+		// The service away is said as itself, once for every network, with a
+		// Retry: its own schedule retries too, but nobody should have to wait.
+		if (proposals.unreachable) {
+			return { label: m.panel.pending, note: m.service.unreachableNote, action: retry(), rows };
+		}
+		// r4b-3: a network that did not answer is named, never "nothing waits".
+		const unread = proposals.unreadable;
+		if (unread.length > 0) {
+			return {
+				label: m.panel.pending,
+				note: fillTemplate(m.service.chainUnreachable, {
+					network: unread.map((id) => chainName(id)).join(', ')
+				}),
+				action: retry(),
+				rows
+			};
+		}
+		// r4b-11: the list kept from an earlier page, shown at once — said as
+		// the last known while it is checked (or while the mailbox is slow).
+		if (proposals.cached) {
+			return {
+				label: m.panel.pending,
+				note: fillTemplate(m.panel.lastKnown, { time: clockTime(proposals.cached.at) }),
+				rows
+			};
+		}
+		if (proposals.stale) return { label: m.panel.pending, note: m.panel.stale, rows };
+		// r4b-2: a history that could not be read is said, with Retry.
+		const history = proposals.historyUnreadable;
+		if (history.length > 0) {
+			return {
+				label: m.panel.pending,
+				note: fillTemplate(m.panel.historyUnreadable, {
+					network: history.map((id) => chainName(id)).join(', ')
+				}),
+				action: retry(),
+				rows
+			};
+		}
+		// r4b-11, r4D-9: still reading, nothing to show yet — said from the
+		// first frame, never an empty space the list then jumps into.
+		if (rows.length === 0 && proposals.loading) {
+			return { label: m.panel.pending, note: m.panel.checking, rows };
+		}
+		return { label: m.panel.pending, rows };
 	}
 }
 
@@ -310,6 +374,8 @@ function memberChangeOf(m: MultisigMessages, item: ProposalItem): { rule: string
 function statusOf(m: MultisigMessages, item: ProposalItem): string {
 	// Signed here, not in the mailbox yet: the one thing to know about it.
 	if (item.unsent) return m.status.unsent;
+	// r4b-7: sent from here and may still land — not offered again.
+	if (item.executing) return m.status.executing;
 	if (item.status === 'queued') return m.status.queued;
 	if (item.status === 'ready') return m.status.ready;
 	if (item.canApprove.length > 0) return m.status.yourTurn;

@@ -98,7 +98,10 @@
         "pending": "Đang chờ duyệt",
         "stale": "Không làm mới được — đang hiển thị trạng thái gần nhất.",
         "notShared": "Chưa chia sẻ: các thành viên khác có thể thêm sau khi được ghi nhận. Vela vẫn đang thử lại.",
-        "invite": "Mời thành viên"
+        "invite": "Mời thành viên",
+        "lastKnown": "Danh sách gần nhất, lúc {{time}} — đang kiểm tra thay đổi.",
+        "checking": "Đang kiểm tra các giao dịch chờ phê duyệt…",
+        "historyUnreadable": "Không đọc được lịch sử của đa chữ ký này trên {{network}}: các giao dịch thực thi ở nơi khác có thể không hiện ở đây."
       },
       "status": {
         "ready": "Sẵn sàng thực thi",
@@ -106,7 +109,9 @@
         "waiting": "Đang chờ người khác",
         "queued": "Đang xếp hàng",
         "progress": "Đã duyệt {{approved}}/{{threshold}}",
-        "unsent": "Chưa gửi"
+        "unsent": "Chưa gửi",
+        "executing": "Đang thực thi…",
+        "conflict": "Chỉ một trong số này có thể chạy"
       },
       "action": {
         "send": "Gửi {{amount}} {{symbol}}",
@@ -203,6 +208,27 @@
         "outboxAway": "Không kết nối được dịch vụ multisig — sẽ gửi lại sau {{seconds}} giây.",
         "outboxNotSent": "Chưa gửi: dịch vụ multisig không nhận giao dịch. Giao dịch được giữ trên thiết bị này, và các thành viên khác không thấy được cho đến khi nó được gửi.",
         "outboxSendAgain": "Gửi lại",
+        "lostRace": "Một thành viên khác đã thực thi trước. Không có gì được gửi từ tài khoản của bạn.",
+        "lostRacePaid": "Một thành viên khác đã thực thi trước. Lần thử của tài khoản bạn cũng đã lên mạng và trả phí mạng của nó.",
+        "replacedFirst": "Một giao dịch khác ở số #{{nonce}} đã chạy trước, nên giao dịch này sẽ không bao giờ chạy được. Không có gì được gửi từ tài khoản của bạn.",
+        "replacedFirstPaid": "Một giao dịch khác ở số #{{nonce}} đã chạy trước, nên giao dịch này sẽ không bao giờ chạy được. Lần thử của tài khoản bạn đã lên mạng và trả phí mạng của nó.",
+        "execFailed": "Giao dịch đã lên mạng nhưng không được thực thi: lệnh gọi bị lỗi. Phí mạng đã được trả.",
+        "cantCheck": "Không kết nối được {{network}} — hiện không thể kiểm tra giao dịch này.",
+        "cantCheckUsed": "Số của giao dịch này đã được dùng, nhưng hiện không đọc được {{network}} để biết nó đã được thực thi hay bị thay thế.",
+        "conflict": "Chỉ một trong các giao dịch đang chờ ở số #{{nonce}} có thể chạy: giao dịch được thực thi đầu tiên sẽ thay thế các giao dịch còn lại.",
+        "queuedNoteMany": "Có thể chạy sau khi các giao dịch {{nonces}} được thực thi hoặc hủy.",
+        "openNumber": "Mở #{{nonce}}",
+        "reason": {
+          "passkeyClosed": "Hộp thoại khóa truy cập đã bị đóng nên chưa có gì được ký. Nếu thiết bị này không có khóa truy cập cho tài khoản này, hãy dùng thiết bị có khóa.",
+          "passkeyTimedOut": "Hộp thoại khóa truy cập đã hết thời gian nên chưa có gì được ký. Hãy thử lại khi bạn sẵn sàng.",
+          "passkeyMissing": "Thiết bị này không có khóa truy cập cho tài khoản này nên chưa có gì được ký. Hãy dùng thiết bị có khóa.",
+          "passkeyFailed": "Chữ ký của khóa truy cập không khớp với tài khoản này nên chưa có gì được ký hay gửi.",
+          "serviceKept": "Dịch vụ đa chữ ký không phản hồi. Những gì bạn đã ký được giữ trên thiết bị này và sẽ tự động gửi lại.",
+          "serviceRefused": "Dịch vụ đa chữ ký đã từ chối nên không được lưu. Không có gì được gửi.",
+          "offline": "Bạn đang ngoại tuyến nên không có gì được gửi. Hãy thử lại khi có mạng.",
+          "chainUnreachable": "Hiện không kết nối được {{network}} nên không có gì được gửi. Hãy thử lại sau giây lát.",
+          "unknown": "Đã xảy ra lỗi nên không có gì được gửi. Hãy thử lại."
+        },
         "copy": "Sao chép",
         "executedBy": "Do {{name}} thực thi",
         "countedThen": "{{approved}} trong {{threshold}} lượt duyệt được tính khi thực thi",
@@ -260,7 +286,8 @@
         "unavailable": "Không kết nối được dịch vụ. Hãy thử lại.",
         "unsupported": "Phiên bản Safe này chưa được hỗ trợ.",
         "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
-        "chooseNetwork": "Chưa có thông tin multisig này được dùng trên mạng nào. Hãy chọn mạng của nó:"
+        "chooseNetwork": "Chưa có thông tin multisig này được dùng trên mạng nào. Hãy chọn mạng của nó:",
+        "badLink": "Liên kết mời này không đầy đủ hoặc bị hỏng. Hãy xin lại, hoặc nhập địa chỉ của đa chữ ký."
       },
       "authority": {
         "refusedTitle": "Vela sẽ không dùng đa chữ ký này",
@@ -379,7 +406,10 @@
       "service": {
         "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
         "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
-        "retry": "Thử lại"
+        "retry": "Thử lại",
+        "offline": "Bạn đang ngoại tuyến — đang hiển thị dữ liệu đã tải trước đó.",
+        "offlineSince": "Bạn đang ngoại tuyến — đang hiển thị dữ liệu đã tải lúc {{time}}.",
+        "chainUnreachable": "Không kết nối được {{network}} — hiện không thể kiểm tra các giao dịch đang chờ."
       }
     },
     "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",

@@ -477,7 +477,13 @@ async function vetAuthority(
 export async function findMultisig(
 	address: string,
 	chainIds: number[],
-	network?: number
+	network?: number,
+	/**
+	 * r4b-13: how many times a record that is not there yet is asked for
+	 * again, 5 s apart (a multisig created moments ago). A link answers in a
+	 * few seconds: it asks once more.
+	 */
+	{ waits = 4, waitMs = 5000 }: { waits?: number; waitMs?: number } = {}
 ): Promise<AddOutcome> {
 	// What the address is on chain, read beside the registry (ms-16): the
 	// wait for a record on its way is only for an address with no code and no
@@ -502,10 +508,10 @@ export async function findMultisig(
 		// to the registry. Ask again for a little while before giving up.
 		for (
 			let wait = 0;
-			!answer.found && wait < 4 && (await onChain).deployed.length === 0;
+			!answer.found && wait < waits && (await onChain).deployed.length === 0;
 			wait += 1
 		) {
-			await new Promise((r) => setTimeout(r, 5000));
+			await new Promise((r) => setTimeout(r, waitMs));
 			answer = await fetchGenesis(address);
 		}
 	} catch {
@@ -537,7 +543,8 @@ export async function findMultisig(
 		return { ok: false, reason: 'unsupported' };
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
-	const used = await deployedChains(address, chainIds);
+	// Read once, beside the registry (r4b-13): never a second round of the same reads.
+	const used = (await onChain).deployed;
 	// The mailbox's proposals on every chain, in one read (a service that has
 	// the list). An older one is asked network by network, and only when
 	// nothing else says: one read per network the wallet has would spend the

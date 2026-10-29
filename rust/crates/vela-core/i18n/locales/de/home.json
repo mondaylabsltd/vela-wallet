@@ -98,7 +98,10 @@
         "pending": "Wartet auf Genehmigung",
         "stale": "Aktualisierung fehlgeschlagen – angezeigt wird der letzte bekannte Stand.",
         "notShared": "Noch nicht geteilt: Andere Mitglieder können es hinzufügen, sobald es erfasst ist. Vela versucht es weiter.",
-        "invite": "Mitglieder einladen"
+        "invite": "Mitglieder einladen",
+        "lastKnown": "Letzter bekannter Stand von {{time}} – es wird nach Änderungen gesucht.",
+        "checking": "Es wird nach Transaktionen gesucht, die auf Freigabe warten…",
+        "historyUnreadable": "Der Verlauf dieses Multisigs auf {{network}} konnte nicht gelesen werden: Anderswo ausgeführte Transaktionen fehlen hier eventuell."
       },
       "status": {
         "ready": "Bereit zur Ausführung",
@@ -106,7 +109,9 @@
         "waiting": "Wartet auf andere",
         "queued": "In der Warteschlange",
         "progress": "{{approved}}/{{threshold}} genehmigt",
-        "unsent": "Noch nicht gesendet"
+        "unsent": "Noch nicht gesendet",
+        "executing": "Wird ausgeführt…",
+        "conflict": "Nur eine davon kann laufen"
       },
       "action": {
         "send": "{{amount}} {{symbol}} senden",
@@ -203,6 +208,27 @@
         "outboxAway": "Der Multisig-Dienst war nicht erreichbar – erneutes Senden in {{seconds}} s.",
         "outboxNotSent": "Noch nicht gesendet: Der Multisig-Dienst hat sie nicht angenommen. Sie bleibt auf diesem Gerät, und andere Mitglieder sehen sie erst, wenn sie gesendet ist.",
         "outboxSendAgain": "Erneut senden",
+        "lostRace": "Ein anderes Mitglied hat sie zuerst ausgeführt. Von deinem Konto wurde nichts gesendet.",
+        "lostRacePaid": "Ein anderes Mitglied hat sie zuerst ausgeführt. Der Versuch deines Kontos hat das Netzwerk ebenfalls erreicht und seine Netzwerkgebühr bezahlt.",
+        "replacedFirst": "Eine andere Transaktion mit Nummer #{{nonce}} lief zuerst, daher kann diese nie mehr laufen. Von deinem Konto wurde nichts gesendet.",
+        "replacedFirstPaid": "Eine andere Transaktion mit Nummer #{{nonce}} lief zuerst, daher kann diese nie mehr laufen. Der Versuch deines Kontos hat das Netzwerk erreicht und seine Netzwerkgebühr bezahlt.",
+        "execFailed": "Sie hat das Netzwerk erreicht, wurde aber nicht ausgeführt: Ihr Aufruf ist fehlgeschlagen. Die Netzwerkgebühr wurde bezahlt.",
+        "cantCheck": "{{network}} ist nicht erreichbar – diese Transaktion kann gerade nicht geprüft werden.",
+        "cantCheckUsed": "Die Nummer dieser Transaktion ist vergeben, aber {{network}} kann gerade nicht gelesen werden, um zu sagen, ob sie ausgeführt oder ersetzt wurde.",
+        "conflict": "Von den Transaktionen mit Nummer #{{nonce}} kann nur eine laufen: Die zuerst ausgeführte ersetzt die anderen.",
+        "queuedNoteMany": "Sie kann laufen, sobald die Transaktionen {{nonces}} ausgeführt oder storniert sind.",
+        "openNumber": "#{{nonce}} öffnen",
+        "reason": {
+          "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, daher wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nutze das Gerät, das ihn hat.",
+          "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, daher wurde nichts signiert. Versuche es erneut, wenn du bereit bist.",
+          "passkeyMissing": "Dieses Gerät hat keinen Passkey für dieses Konto, daher wurde nichts signiert. Nutze das Gerät, das ihn hat.",
+          "passkeyFailed": "Die Signatur des Passkeys passt nicht zu diesem Konto, daher wurde nichts signiert oder gesendet.",
+          "serviceKept": "Der Multisig-Dienst hat nicht geantwortet. Was du signiert hast, bleibt auf diesem Gerät und wird von selbst erneut gesendet.",
+          "serviceRefused": "Der Multisig-Dienst hat sie abgelehnt, daher wurde sie nicht gespeichert. Es wurde nichts gesendet.",
+          "offline": "Du bist offline, daher wurde nichts gesendet. Versuche es erneut, sobald du wieder online bist.",
+          "chainUnreachable": "{{network}} ist gerade nicht erreichbar, daher wurde nichts gesendet. Versuche es gleich noch einmal.",
+          "unknown": "Etwas ist schiefgelaufen, daher wurde nichts gesendet. Versuche es erneut."
+        },
         "copy": "Kopieren",
         "executedBy": "Ausgeführt von {{name}}",
         "countedThen": "{{approved}} von {{threshold}} Genehmigungen zählten bei der Ausführung",
@@ -260,7 +286,8 @@
         "unavailable": "Der Dienst ist nicht erreichbar. Versuche es erneut.",
         "unsupported": "Diese Safe-Version wird noch nicht unterstützt.",
         "notMultisig": "Diese Adresse ist kein Multisig, das Vela lesen kann.",
-        "chooseNetwork": "Noch ist nirgends vermerkt, auf welchem Netzwerk dieser Multisig genutzt wird. Wähle sein Netzwerk:"
+        "chooseNetwork": "Noch ist nirgends vermerkt, auf welchem Netzwerk dieser Multisig genutzt wird. Wähle sein Netzwerk:",
+        "badLink": "Dieser Einladungslink ist unvollständig oder beschädigt. Bitte erneut darum oder gib die Adresse des Multisigs ein."
       },
       "authority": {
         "refusedTitle": "Vela verwendet dieses Multisig nicht",
@@ -379,7 +406,10 @@
       "service": {
         "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",
         "unreachableNote": "Multisig-Dienst nicht erreichbar – wartende Transaktionen können nicht geladen werden; neuer Versuch folgt.",
-        "retry": "Erneut versuchen"
+        "retry": "Erneut versuchen",
+        "offline": "Du bist offline – angezeigt wird, was zuvor geladen wurde.",
+        "offlineSince": "Du bist offline – angezeigt wird, was um {{time}} geladen wurde.",
+        "chainUnreachable": "{{network}} ist nicht erreichbar – wartende Transaktionen können gerade nicht geprüft werden."
       }
     },
     "balanceDetailStatusOwnNode": "Dein Knoten antwortet nicht",

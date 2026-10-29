@@ -73,6 +73,18 @@ async function signAs(
 	});
 }
 
+/**
+ * r4b-12: the passkey answered, and what it signed does not check out as
+ * this account's (another account's passkey, a key it does not hold, a
+ * signature the core cannot verify): nothing was signed for it.
+ */
+export class PasskeyCheckError extends Error {
+	constructor(detail: string) {
+		super(`the passkey's signature did not check out: ${detail}`);
+		this.name = 'PasskeyCheckError';
+	}
+}
+
 /** `owner` approves `safeTxHash` of a multisig on `chainId`: one passkey prompt. */
 export async function signApproval(
 	owner: Account,
@@ -81,12 +93,16 @@ export async function signApproval(
 ): Promise<PasskeyApproval> {
 	const challenge = approvalChallenge(chainId, owner.address, safeTxHash);
 	const assertion = await signAs(owner, challenge, 'vela_multisigApprove', chainId, { safeTxHash });
-	return approvalFromAssertion(foundingKeys(owner), {
-		credentialId: assertion.credentialId,
-		authenticatorData: assertion.authenticatorDataHex,
-		clientDataJSON: assertion.clientDataJSONHex,
-		signature: assertion.signatureHex
-	});
+	try {
+		return approvalFromAssertion(foundingKeys(owner), {
+			credentialId: assertion.credentialId,
+			authenticatorData: assertion.authenticatorDataHex,
+			clientDataJSON: assertion.clientDataJSONHex,
+			signature: assertion.signatureHex
+		});
+	} catch (error) {
+		throw new PasskeyCheckError(error instanceof Error ? error.message : String(error));
+	}
 }
 
 /** `owner` asks the genesis service to record `multisig`: one passkey prompt. */

@@ -364,6 +364,7 @@ export * from './SendOperation';
 export * from './SendPasskeyNote';
 export * from './SendPayee';
 export * from './SendPreviousPending';
+export * from './SendProposeFailure';
 export * from './SendProposed';
 export * from './SendQuotedFee';
 export * from './SendReceiptCoin';

@@ -3374,6 +3374,26 @@ describe('a multisig send', () => {
 		expect(fee.plain).toBeUndefined();
 		expect(fee.value).toBe('0.0021 ETH');
 	});
+
+	// r4D-10: one cause, one message, one button — the proposal's own words,
+	// and the confirm (Propose and approve) is the way to try again.
+	it('a proposal the mailbox or the network stopped says which, once, with no second button', () => {
+		const said = (tx_error: SendView['tx_error']) => {
+			const base = multisig({ selected_token: ETH, tx_status: 'error', tx_error });
+			return liveSendConfirm(confirmModel(), {
+				...base,
+				multisig: {
+					...base.multisig!,
+					mailboxDown: words.proposal.mailboxDown,
+					offline: words.proposal.reason.offline
+				}
+			});
+		};
+		expect(said('proposal_mailbox_down').error).toEqual({ text: words.proposal.mailboxDown });
+		expect(said('proposal_offline').error).toEqual({ text: words.proposal.reason.offline });
+		expect(said('generic').error?.retry).toBeUndefined();
+		expect(said('proposal_mailbox_down').cta).toBe(words.send.propose);
+	});
 });
 
 describe('entered addresses and amounts, as the core read them', () => {

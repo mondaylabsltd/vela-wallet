@@ -193,3 +193,25 @@ describe('who can act for the multisig (§3.5)', () => {
 		expect(added).toEqual([RISKY]);
 	});
 });
+
+/** r4b-13: what a link's own lookup found is said at once — never looked up twice. */
+describe('a link the wallet already looked up, or a damaged one', () => {
+	it('says what was found at once, and asks the service nothing until Add', async () => {
+		calls.length = 0;
+		const screen = render(AddMultisigSheet, {
+			props: {
+				m,
+				prefill: '0x013124f0f8b38d42a2e192bcc26337ee9d7ffbf1',
+				prefillFailure: 'nf',
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				onadded: () => {}
+			}
+		});
+		await settle();
+		expect(document.body.textContent).toContain('nf');
+		expect(calls).toEqual([]);
+		await screen.unmount();
+	});
+});

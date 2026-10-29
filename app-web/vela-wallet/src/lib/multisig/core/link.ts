@@ -27,15 +27,39 @@ export interface ProposalLink {
 
 const PREFIX = 'ms=';
 
+/**
+ * r4b-17: a link's hash as it was meant — a chat app or a mail client that
+ * percent-encodes it (`#ms%3D…`) or adds spaces around it is read the same.
+ * One that does not decode is kept as it came (and is said as damaged).
+ */
+function body(hash: string): string {
+	const raw = (hash.startsWith('#') ? hash.slice(1) : hash).trim();
+	try {
+		return decodeURIComponent(raw).trim();
+	} catch {
+		return raw;
+	}
+}
+
+/**
+ * r4b-17: the hash to carry to the wallet when a multisig link opened another
+ * page (`/en#msa=…`, the site's root): the link itself, or `''`.
+ */
+export function carriedLinkHash(hash: string): string {
+	const b = body(hash);
+	return b.startsWith(PREFIX) || b.startsWith(ADD_PREFIX) ? `#${b}` : '';
+}
+
 export function proposalLink(origin: string, locale: string, link: ProposalLink): string {
 	return `${origin}/${locale}/wallet#${PREFIX}${link.chainId}.${link.multisig}.${link.safeTxHash}`;
 }
 
 /** The link in a location hash, or `null`. */
 export function parseProposalLink(hash: string): ProposalLink | null {
-	const body = hash.startsWith('#') ? hash.slice(1) : hash;
-	if (!body.startsWith(PREFIX)) return null;
-	const [chain, multisig, safeTxHash] = body.slice(PREFIX.length).split('.');
+	const text = body(hash);
+	if (!text.startsWith(PREFIX)) return null;
+	const [chain, multisig, safeTxHash, ...rest] = text.slice(PREFIX.length).split('.');
+	if (rest.length > 0) return null;
 	if (!/^[1-9]\d{0,15}$/.test(chain ?? '')) return null;
 	const chainId = Number(chain);
 	if (!Number.isSafeInteger(chainId)) return null;
@@ -50,10 +74,16 @@ export function parseProposalLink(hash: string): ProposalLink | null {
  * ignored.
  */
 export function brokenLink(hash: string): 'proposal' | 'add' | null {
-	const body = hash.startsWith('#') ? hash.slice(1) : hash;
-	if (body.startsWith(PREFIX) && !parseProposalLink(hash)) return 'proposal';
-	if (body.startsWith(ADD_PREFIX) && !parseAddLink(hash)) return 'add';
+	const text = body(hash);
+	if (text.startsWith(PREFIX) && !parseProposalLink(hash)) return 'proposal';
+	if (text.startsWith(ADD_PREFIX) && !parseAddLink(hash)) return 'add';
 	return null;
+}
+
+/** What a damaged add link held after its `msa=`, for the add sheet to show. */
+export function brokenAddText(hash: string): string {
+	const text = body(hash);
+	return text.startsWith(ADD_PREFIX) ? text.slice(ADD_PREFIX.length) : '';
 }
 
 const ADD_PREFIX = 'msa=';
@@ -65,8 +95,8 @@ export function addLink(origin: string, locale: string, multisig: string): strin
 
 /** The multisig an add link names, or `null`. */
 export function parseAddLink(hash: string): string | null {
-	const body = hash.startsWith('#') ? hash.slice(1) : hash;
-	if (!body.startsWith(ADD_PREFIX)) return null;
-	const address = body.slice(ADD_PREFIX.length);
+	const text = body(hash);
+	if (!text.startsWith(ADD_PREFIX)) return null;
+	const address = text.slice(ADD_PREFIX.length);
 	return /^0x[0-9a-fA-F]{40}$/.test(address) ? address : null;
 }

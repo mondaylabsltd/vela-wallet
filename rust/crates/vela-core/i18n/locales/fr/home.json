@@ -99,7 +99,10 @@
         "pending": "En attente d’approbation",
         "stale": "Actualisation impossible : dernier état connu affiché.",
         "notShared": "Pas encore partagé : les autres membres pourront l’ajouter une fois enregistré. Vela continue d’essayer.",
-        "invite": "Inviter des membres"
+        "invite": "Inviter des membres",
+        "lastKnown": "Dernière liste connue, de {{time}} : recherche de changements.",
+        "checking": "Recherche des transactions en attente d’approbation…",
+        "historyUnreadable": "Impossible de lire l’historique de ce multisig sur {{network}} : des transactions exécutées ailleurs peuvent manquer ici."
       },
       "status": {
         "ready": "Prête à exécuter",
@@ -107,7 +110,9 @@
         "waiting": "En attente des autres",
         "queued": "En file d’attente",
         "progress": "{{approved}}/{{threshold}} approbations",
-        "unsent": "Pas encore envoyée"
+        "unsent": "Pas encore envoyée",
+        "executing": "Exécution…",
+        "conflict": "Une seule de ces transactions peut s’exécuter"
       },
       "action": {
         "send": "Envoyer {{amount}} {{symbol}}",
@@ -204,6 +209,27 @@
         "outboxAway": "Impossible de joindre le service multisig — nouvel envoi dans {{seconds}} s.",
         "outboxNotSent": "Pas encore envoyée : le service multisig ne l’a pas acceptée. Elle est conservée sur cet appareil, et les autres membres ne la voient pas tant qu’elle n’est pas envoyée.",
         "outboxSendAgain": "Renvoyer",
+        "lostRace": "Un autre membre l’a exécutée en premier. Rien n’a été envoyé depuis votre compte.",
+        "lostRacePaid": "Un autre membre l’a exécutée en premier. La tentative de votre compte a aussi atteint le réseau et a payé ses frais de réseau.",
+        "replacedFirst": "Une autre transaction au numéro {{nonce}} est passée en premier : celle-ci ne pourra jamais s’exécuter. Rien n’a été envoyé depuis votre compte.",
+        "replacedFirstPaid": "Une autre transaction au numéro {{nonce}} est passée en premier : celle-ci ne pourra jamais s’exécuter. La tentative de votre compte a atteint le réseau et a payé ses frais de réseau.",
+        "execFailed": "Elle a atteint le réseau mais ne s’est pas exécutée : son appel a échoué. Les frais de réseau ont été payés.",
+        "cantCheck": "{{network}} est injoignable : impossible de vérifier cette transaction pour le moment.",
+        "cantCheckUsed": "Le numéro de cette transaction est utilisé, mais {{network}} ne peut pas être lu pour le moment pour dire si elle a été exécutée ou remplacée.",
+        "conflict": "Une seule des transactions en attente au numéro {{nonce}} peut s’exécuter : la première exécutée remplace les autres.",
+        "queuedNoteMany": "Elle pourra s’exécuter une fois les transactions {{nonces}} exécutées ou annulées.",
+        "openNumber": "Ouvrir le n° {{nonce}}",
+        "reason": {
+          "passkeyClosed": "La demande de clé d’accès a été fermée : rien n’a été signé. Si cet appareil n’a pas de clé d’accès pour ce compte, utilisez celui qui l’a.",
+          "passkeyTimedOut": "La demande de clé d’accès a expiré : rien n’a été signé. Réessayez quand vous êtes prêt.",
+          "passkeyMissing": "Cet appareil n’a pas de clé d’accès pour ce compte : rien n’a été signé. Utilisez l’appareil qui l’a.",
+          "passkeyFailed": "La signature de la clé d’accès ne correspond pas à ce compte : rien n’a été signé ni envoyé.",
+          "serviceKept": "Le service multisig n’a pas répondu. Ce que vous avez signé est conservé sur cet appareil et sera renvoyé automatiquement.",
+          "serviceRefused": "Le service multisig l’a refusée : elle n’a pas été enregistrée. Rien n’a été envoyé.",
+          "offline": "Vous êtes hors ligne : rien n’a été envoyé. Réessayez une fois de nouveau en ligne.",
+          "chainUnreachable": "{{network}} est injoignable pour le moment : rien n’a été envoyé. Réessayez dans un instant.",
+          "unknown": "Un problème est survenu : rien n’a été envoyé. Réessayez."
+        },
         "copy": "Copier",
         "executedBy": "Exécutée par {{name}}",
         "countedThen": "{{approved}} approbations sur {{threshold}} comptaient à son exécution",
@@ -262,7 +288,8 @@
         "unavailable": "Service injoignable. Réessayez.",
         "unsupported": "Cette version de Safe n’est pas encore prise en charge.",
         "notMultisig": "Cette adresse n’est pas un multisig que Vela sait lire.",
-        "chooseNetwork": "Rien n'indique encore sur quel réseau ce multisig est utilisé. Choisissez son réseau :"
+        "chooseNetwork": "Rien n'indique encore sur quel réseau ce multisig est utilisé. Choisissez son réseau :",
+        "badLink": "Ce lien d’invitation est incomplet ou endommagé. Redemandez-le, ou saisissez l’adresse du multisig."
       },
       "authority": {
         "refusedTitle": "Vela n’utilisera pas ce multisig",
@@ -381,7 +408,10 @@
       "service": {
         "customNote": "Service multisig personnalisé utilisé ({{host}})",
         "unreachableNote": "Service multisig injoignable : les transactions en attente ne peuvent pas être chargées ; nouvelle tentative prévue.",
-        "retry": "Réessayer"
+        "retry": "Réessayer",
+        "offline": "Vous êtes hors ligne : affichage de ce qui a été chargé auparavant.",
+        "offlineSince": "Vous êtes hors ligne : affichage de ce qui a été chargé à {{time}}.",
+        "chainUnreachable": "{{network}} est injoignable : ses transactions en attente ne peuvent pas être vérifiées pour le moment."
       }
     },
     "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",
