@@ -17610,6 +17610,33 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
+ * The Vela networks out of the person's lists, in list order, from the
+ * stored `vela.shownNetworks` bytes (`""`: none — nothing is hidden).
+ */
+public func shownNetworksHidden(stored: String) -> [UInt32]  {
+    return try!  FfiConverterSequenceUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_shown_networks_hidden(
+        FfiConverterString.lower(stored),uniffiCallStatus
+    )
+})
+}
+/**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ */
+public func shownNetworksSettle(stored: String, evidenceJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_shown_networks_settle(
+        FfiConverterString.lower(stored),
+        FfiConverterString.lower(evidenceJson),uniffiCallStatus
+    )
+})
+}
+/**
  * May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
  * clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
  * no fee session) and the speed in force (`"fast"`…, `None` with no speed
@@ -19706,6 +19733,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_shown_networks_hidden() != 37232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_shown_networks_settle() != 60128) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 45936) {
