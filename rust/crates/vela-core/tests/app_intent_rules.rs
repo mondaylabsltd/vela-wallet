@@ -185,9 +185,15 @@ fn only_my_node_is_read_and_changed_only_where_the_person_has_a_node() {
     assert_eq!(examine(&on, &row(true, false)), Examined::Go);
     assert_eq!(examine(&off, &row(true, true)), Examined::Go);
     assert_eq!(examine(&on, &row(true, true)), Examined::Already);
-    assert_eq!(code(&examine(&on, &row(false, false))), Some(ReasonCode::Refused));
+    assert_eq!(
+        code(&examine(&on, &row(false, false))),
+        Some(ReasonCode::Refused)
+    );
     let elsewhere = action(json!({ "type": "set_only_my_node", "chain_id": 1, "on": true }));
-    assert_eq!(code(&examine(&elsewhere, &row(true, false))), Some(ReasonCode::NotFound));
+    assert_eq!(
+        code(&examine(&elsewhere, &row(true, false))),
+        Some(ReasonCode::NotFound)
+    );
     assert_eq!(world_needs(&on), &["networks"]);
 
     let mut base = baseline(&on, &row(true, false));
@@ -199,22 +205,6 @@ fn only_my_node_is_read_and_changed_only_where_the_person_has_a_node() {
         approval_detail(&off).as_deref(),
         Some("chain 100 · public nodes too")
     );
-}
-
-#[test]
-fn a_provider_key_holds_once_it_is_saved_and_set() {
-    let set = action(json!({ "type": "set_provider_key", "provider": "alchemy", "key": " k1 " }));
-    let with = |key: &str, has: bool| {
-        world(
-            json!({ "networks": { "providers": [{ "provider": "alchemy", "key": key, "has_key": has }] } }),
-        )
-    };
-    let mut base = baseline(&set, &with("", false));
-    assert_eq!(
-        verdict(&set, &with("k1", false), &mut base),
-        Verdict::NotYet
-    );
-    assert_eq!(verdict(&set, &with("k1", true), &mut base), Verdict::Held);
 }
 
 #[test]
@@ -466,7 +456,9 @@ fn the_agents_state_keeps_hidden_amounts_hidden_and_never_shows_a_key() {
         "balance": { "hidden": true, "display_total_usd": 20.0,
             "tokens": [{ "chain_id": 1, "symbol": "USDC", "balance": "20" }, { "chain_id": 1, "symbol": "SCAM", "spam": true }] },
         "feed": { "transactions": [{ "id": "r1", "value": "5" }] },
-        "networks": { "providers": [{ "provider": "alchemy", "key": "sk-secret", "has_key": true }] }
+        // An RPC with an API key in it — what a retired provider key became.
+        "networks": { "networks": [{ "chain_id": 1, "display_name": "Ethereum",
+            "rpc_url": "https://eth-mainnet.g.alchemy.com/v2/sk-secret", "own_rpc": true }] }
     }));
     let state = agent_state(&w, "wallet", &json!([]), &json!([]));
     assert_eq!(state["balances"]["total_usd"], Value::Null);
@@ -479,8 +471,8 @@ fn the_agents_state_keeps_hidden_amounts_hidden_and_never_shows_a_key() {
     assert_eq!(state["recent_transactions"][0]["value"], Value::Null);
     assert!(!state.to_string().contains("sk-secret"));
     assert_eq!(
-        state["networks"]["providers"][0],
-        json!({ "provider": "alchemy", "has_key": true })
+        state["networks"]["chains"][0]["rpc_url"],
+        json!("https://eth-mainnet.g.alchemy.com/…")
     );
 }
 
@@ -503,17 +495,6 @@ fn an_approval_says_which_network_url_or_record_and_hides_a_key() {
     assert_eq!(
         detail(json!({ "type": "add_network", "chain_id": 10 })).as_deref(),
         Some("chain 10")
-    );
-    assert_eq!(
-        detail(
-            json!({ "type": "set_provider_key", "provider": "alchemy", "key": "sk-secret-9f3a" })
-        )
-        .as_deref(),
-        Some("alchemy · ••••9f3a")
-    );
-    assert_eq!(
-        detail(json!({ "type": "set_provider_key", "provider": "ankr", "key": "abc" })).as_deref(),
-        Some("ankr · ••••")
     );
     assert_eq!(detail(json!({ "type": "clear_caches" })), None);
 }

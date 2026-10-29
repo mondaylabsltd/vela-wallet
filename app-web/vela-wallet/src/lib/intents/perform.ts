@@ -313,9 +313,7 @@ export async function perform(
 		case 'remove_network':
 			await networks.removeNetwork(action.chain_id);
 			return null;
-		case 'set_provider_key':
-			await networks.setProviderKey(action.provider, action.key);
-			return null;
+
 		case 'set_service_endpoint':
 			await networks.setServiceEndpoint(action.field, action.url);
 			return null;

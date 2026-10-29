@@ -12,8 +12,8 @@
  * pool and no bundler cache on web yet, so both are acknowledged no-ops.
  *
  * No branching on business meaning: the dedup gate, the candidate assembly,
- * the contract verdict and the clear-key-removes-provider rule are all
- * decided (and tested) in Rust.
+ * the contract verdict and which networks the retired provider keys become
+ * the RPC of are all decided (and tested) in Rust.
  *
  * Wire vs stored shape: the core speaks snake_case (`rpc_url`,
  * `added_at_iso`); the four storage keys hold the camelCase records the Expo
@@ -25,7 +25,7 @@
  * converted into the result variant that operation answers with.
  */
 
-import { getItem, setItem } from '$lib/services/storage';
+import { getItem, removeItem, setItem } from '$lib/services/storage';
 import { refreshCustomNetworks } from '$lib/services/networks';
 import { invalidateAllPools, refreshPool } from '$lib/services/rpc-pool';
 import { fetchRawChainData, loadSearchIndex } from '$lib/services/chain-registry';
@@ -49,7 +49,9 @@ import { dappAddSettled } from './dapp-add-settled';
 
 /** The same keys the Expo `services/storage.ts` owns; value formats unchanged.
  *  `vela.serviceEndpoints` is NOT here: it lives in localStorage with its
- *  onboarding readers (research D3a) and is reached through their module. */
+ *  onboarding readers (research D3a) and is reached through their module.
+ *  `vela.rpcProviders` is the retired provider keys' record — read only so
+ *  the core can turn them into per-network RPCs, then deleted. */
 const KEYS = {
 	customNetworks: 'vela.customNetworks',
 	networkConfig: 'vela.networkConfig',
@@ -275,13 +277,28 @@ function decodeSearchIndex(rows: unknown): NetChainIndexEntry[] {
 	return out;
 }
 
-/** Cleared keys are dropped, not stored as null — the Expo saver's shape. */
-function encodeProviderKeys(keys: NetProviderKeys): Record<string, string> {
-	const out: Record<string, string> = {};
-	if (keys.alchemy !== null) out.alchemy = keys.alchemy;
-	if (keys.drpc !== null) out.drpc = keys.drpc;
-	if (keys.ankr !== null) out.ankr = keys.ankr;
-	return out;
+/**
+ * `retire_provider_keys`: the configs first, and the keys deleted only once
+ * they are written — what really happened is the answer, so a failure keeps
+ * the keys for the next load to retry. Nothing here logs: the keys are inside
+ * those URLs.
+ */
+async function retireProviderKeys(configs: NetNetworkConfig[] | null): Promise<NetShellResult> {
+	if (configs !== null) {
+		try {
+			await setItem(KEYS.networkConfig, JSON.stringify(configs.map(encodeNetworkConfig)));
+		} catch {
+			return { type: 'provider_keys_retired', configs_written: false, keys_removed: false };
+		}
+		// The explorer links and the pool's collector read the snapshot.
+		await refreshCustomNetworks().catch(() => {});
+	}
+	try {
+		await removeItem(KEYS.rpcProviders);
+	} catch {
+		return { type: 'provider_keys_retired', configs_written: true, keys_removed: false };
+	}
+	return { type: 'provider_keys_retired', configs_written: true, keys_removed: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -465,9 +482,8 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 			return { type: 'written' };
 		}
 
-		case 'write_rpc_providers':
-			await setItem(KEYS.rpcProviders, JSON.stringify(encodeProviderKeys(operation.keys)));
-			return { type: 'written' };
+		case 'retire_provider_keys':
+			return retireProviderKeys(operation.configs);
 
 		case 'start_search_debounce':
 			await new Promise<void>((resolve) => setTimeout(resolve, operation.ms));
@@ -582,10 +598,13 @@ export function networkAdminOperationFailure(effect: NetEffect): NetShellResult 
 		case 'write_custom_networks':
 		case 'write_network_configs':
 		case 'write_service_endpoints':
-		case 'write_rpc_providers':
 			// Best-effort, as the TS savers' callers swallow storage errors; the
 			// core's in-memory ledger stays authoritative.
 			return { type: 'written' };
+		case 'retire_provider_keys':
+			// Not best-effort: nothing is known to be written, so the keys stay
+			// and the next load retries.
+			return { type: 'provider_keys_retired', configs_written: false, keys_removed: false };
 		case 'start_search_debounce':
 			return { type: 'debounce_elapsed' };
 		case 'fetch_search_index':

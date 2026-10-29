@@ -152,8 +152,6 @@ export interface SettingsMessages {
 	advanced: {
 		networksTitle: string;
 		networksSubtitle: string;
-		rpcProvidersTitle: string;
-		rpcProvidersSubtitle: string;
 		addNetworkTitle: string;
 		addNetworkSubtitle: string;
 		endpointsTitle: string;
@@ -340,24 +338,7 @@ export interface SettingsMessages {
 		/** Template with `{{count}}`. */
 		checkRemaining: string;
 	};
-	rpcProviders: {
-		description: string;
-		/** Spec 098 §5.1: the relay is sent the RPC the wallet uses, key and all. */
-		relayNotice: string;
-		getKey: string;
-		checkKey: string;
-		notSet: string;
-		/** set-9: only once a network has answered the key. */
-		connected: string;
-		/** The key is being tried on its networks. */
-		checking: string;
-		/** The key was tried and no network answered it. */
-		unavailable: string;
-		/** Template with `{{count}}` and `{{total}}`. */
-		supportsCount: string;
-		/** Template with `{{ms}}`. */
-		avgLatency: string;
-	};
+
 	endpoints: {
 		description: string;
 		chainDataLabel: string;
@@ -934,8 +915,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.currency.searchPlaceholder',
 	'settings.advanced.networksTitle',
 	'settings.advanced.networksSubtitle',
-	'settings.advanced.rpcProvidersTitle',
-	'settings.advanced.rpcProvidersSubtitle',
+
 	'settings.advanced.addNetworkTitle',
 	'settings.advanced.addNetworkSubtitle',
 	'settings.advanced.endpointsTitle',
@@ -1053,15 +1033,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.checkSafe',
 	'settingsModals.addNetwork.checkSigner',
 	'settingsModals.addNetwork.checkRemaining',
-	'settingsModals.rpcProviders.description',
-	'settingsModals.rpcProviders.relayNotice',
-	'settingsModals.rpcProviders.getKey',
-	'settingsModals.rpcProviders.checkKey',
-	'settingsModals.rpcProviders.notSet',
-	'settingsModals.rpcProviders.unavailable',
-	'activity.connected',
-	'settingsModals.rpcProviders.supportsCount',
-	'settingsModals.rpcProviders.avgLatency',
+
 	'settingsModals.endpoints.description',
 	'settingsModals.endpoints.chainDataLabel',
 	'settingsModals.endpoints.chainDataHint',

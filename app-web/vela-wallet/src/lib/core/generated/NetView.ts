@@ -2,10 +2,9 @@
 import type { NetDappAddView } from "./NetDappAddView";
 import type { NetEndpointView } from "./NetEndpointView";
 import type { NetNetworkRow } from "./NetNetworkRow";
-import type { NetProviderView } from "./NetProviderView";
 import type { NetWizardView } from "./NetWizardView";
 
-export type NetView = { loaded: boolean, networks: Array<NetNetworkRow>, wizard: NetWizardView, endpoints: Array<NetEndpointView>, providers: Array<NetProviderView>, last_added_chain_id: number | null, 
+export type NetView = { loaded: boolean, networks: Array<NetNetworkRow>, wizard: NetWizardView, endpoints: Array<NetEndpointView>, last_added_chain_id: number | null, 
 /**
  * The add-network sheet a page opened (spec 100).
  */

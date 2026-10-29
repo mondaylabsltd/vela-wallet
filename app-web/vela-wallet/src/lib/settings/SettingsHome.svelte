@@ -18,7 +18,7 @@
 	import { toastAnchor } from './report-toast.svelte';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
-	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
+
 	import type {
 		AgentPanelModel,
 		SitesPanelModel,
@@ -50,7 +50,7 @@
 	import RelayerBody from './ui/RelayerBody.svelte';
 	import RpcBanner from './ui/RpcBanner.svelte';
 	import RpcFixBody from './ui/RpcFixBody.svelte';
-	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
+
 	import SectionLabel from './ui/SectionLabel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
@@ -203,7 +203,7 @@
 	/** Rows a tap navigates from; everything else opens an overlay. */
 	const PAGE_OF: Partial<Record<string, SettingsPageId>> = {
 		networks: 'networks',
-		'rpc-providers': 'rpc-providers',
+
 		'add-network': 'add-network',
 		endpoints: 'endpoints',
 		storage: 'storage',
@@ -306,8 +306,7 @@
 				return { title: model.networkDetail.title, subtitle: model.networkDetail.subtitle };
 			case 'add-network':
 				return { title: model.addNetwork.title, subtitle: model.addNetwork.subtitle };
-			case 'rpc-providers':
-				return { title: model.rpcProviders.title, subtitle: model.rpcProviders.subtitle };
+
 			case 'endpoints':
 				return { title: model.endpoints.title, subtitle: undefined };
 			case 'storage':
@@ -563,16 +562,6 @@
 						onprimary={() => onnetevent?.({ kind: 'confirm-add' })}
 						onrecheck={() => onnetevent?.({ kind: 'recheck' })}
 						onspace={(testnet) => onnetevent?.({ kind: 'add-space', testnet })}
-					/>
-				{:else if page === 'rpc-providers'}
-					<RpcProvidersPanel
-						panel={model.rpcProviders}
-						onfield={(id, value) =>
-							onnetevent?.({ kind: 'provider-key', provider: id as NetProviderId, value })}
-						onfieldblur={(id) =>
-							onnetevent?.({ kind: 'provider-blur', provider: id as NetProviderId })}
-						onaction={(id) =>
-							onnetevent?.({ kind: 'provider-test', provider: id as NetProviderId })}
 					/>
 				{:else if page === 'endpoints'}
 					<EndpointsPanel

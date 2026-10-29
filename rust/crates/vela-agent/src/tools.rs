@@ -168,11 +168,15 @@ pub fn reply(outcome: Outcome) -> Reply {
 }
 
 /// `vela_<kind>`'s arguments as the action they ask for. One this build cannot
-/// read is refused, saying why — as the core's own check does.
+/// read is refused, saying why — as the core's own check does; one the
+/// catalog has retired, with what to do instead (`intents::retired`).
 ///
 /// # Errors
-/// The `invalid_input` reply to answer with.
+/// The `not_found` or `invalid_input` reply to answer with.
 pub fn action(kind: &str, args: Value) -> Result<Action, Reply> {
+    if let Some(reason) = intents::retired(kind) {
+        return Err(reply(Outcome::Rejected { reason }));
+    }
     let mut fields = match args {
         Value::Object(fields) => fields,
         _ => Map::new(),

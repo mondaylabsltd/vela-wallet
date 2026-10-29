@@ -2226,16 +2226,12 @@
    "totalPartial": "지금까지 총 {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC 공급자",
    "description": "API 키를 입력하면 지원되는 네트워크를 직접 운영하는 공급자를 통해 사용할 수 있습니다. 우선순위: 네트워크별 RPC, 그다음 공급자, 그다음 Vela 기본 제공, 마지막으로 체인 인덱스.",
    "getKey": "키 발급받기",
    "test": "테스트",
    "notSet": "미설정",
    "checkKey": "키 확인",
-   "activeNetworks": "네트워크 {{count}}개",
    "supportsCount": "네트워크 {{total}}개 중 {{count}}개 지원",
-   "unavailable": "사용 불가",
-   "avgLatency": "평균 {{ms}}ms",
    "relayNotice": "거래를 제출하는 릴레이에는 지갑이 각 네트워크에 쓰는 RPC 주소(포함된 API 키까지)가 전달됩니다. 사용하는 네트워크에 닿기 위해서입니다."
   },
   "endpoints": {

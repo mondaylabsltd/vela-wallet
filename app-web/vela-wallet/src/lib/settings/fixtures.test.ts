@@ -133,6 +133,15 @@ describe('Settings → Community', () => {
 		]);
 	});
 
+	it('has no RPC Providers row: a network’s own RPC is the one setting (2026-10-29)', () => {
+		const m = resolveSettingsMessages('en');
+		const advanced = buildMobileState('st1b', m, IDENTICON_STUB).sections.find(
+			(section) => section.collapsible === true
+		);
+		expect(advanced?.rows.map((row) => row.id)).toContain('networks');
+		expect(advanced?.rows.map((row) => row.id)).not.toContain('rpc-providers');
+	});
+
 	it('ends the phone list Advanced → Community → About, Send feedback', () => {
 		const m = resolveSettingsMessages('en');
 		const sections = buildMobileState('st1', m, IDENTICON_STUB).sections;
@@ -164,13 +173,14 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 		// 16 ST mocks — ST1b, ST3b, ST9b, ST10b, ST10c and ST13b are their own
 		// states, so the ST count is 22 — plus spec 102's ST17/ST17b (where you
 		// review and sign) and ST18/ST18b (signing pages): 26 — plus ST10d, the
-		// second refusal (no P-256 verifier; ST10c is missing contracts): 27.
+		// second refusal (no P-256 verifier; ST10c is missing contracts): 27 —
+		// less ST11, RPC Providers, retired 2026-10-29: 26.
 		// Then SR1, SR2, SR2b, SR3, SR4, SR5.
-		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(27);
+		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(26);
 		expect(MOBILE_STATES.filter((s) => s.startsWith('sr'))).toHaveLength(6);
 	});
 
-	it('desktop states cover DST1–DST9 plus DST4b and DSR1', () => {
+	it('desktop states cover DST1–DST9 (less the retired DST5) plus DST4b and DSR1', () => {
 		expect(DESKTOP_STATES).toEqual(DESKTOP_SETTINGS_STATES);
 		expect(DESKTOP_STATES).toEqual([
 			'dst1',
@@ -178,7 +188,6 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 			'dst3',
 			'dst4',
 			'dst4b',
-			'dst5',
 			'dst6',
 			'dst7',
 			'dst8',
@@ -244,7 +253,6 @@ describe('page / overlay shape (what each mock actually shows)', () => {
 			['st9', 'networks'],
 			['st9b', 'network-detail'],
 			['st10', 'add-network'],
-			['st11', 'rpc-providers'],
 			['st12', 'endpoints'],
 			['st13', 'storage'],
 			['st14', 'about']
@@ -378,7 +386,6 @@ describe('desktop canon', () => {
 			'appearance',
 			'localization',
 			'networks',
-			'rpc-providers',
 			'endpoints',
 			// Spec 068 — the stored default transaction speed, in the position
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
@@ -408,7 +415,6 @@ describe('desktop canon', () => {
 			['dst2', 'appearance'],
 			['dst3', 'localization'],
 			['dst4', 'networks'],
-			['dst5', 'rpc-providers'],
 			['dst6', 'endpoints'],
 			['dst7', 'storage'],
 			['dst8', 'about']
@@ -436,11 +442,8 @@ describe('desktop canon', () => {
 		expect(rows.filter((r) => r.expanded === true).map((r) => r.id)).toEqual(['ethereum']);
 	});
 
-	it('only the desktop shows the average-latency and self-hosting extras', () => {
-		const phone = buildMobileState('st11', zh, IDENTICON_STUB);
-		const desk = buildDesktopState('dst5', zh, IDENTICON_STUB);
-		expect(phone.rpcProviders.providers[0].support).not.toContain('112');
-		expect(desk.rpcProviders.providers[0].support).toContain('112');
+	it('only the desktop shows the self-hosting extras', () => {
+		const phone = buildMobileState('st12', zh, IDENTICON_STUB);
 		expect(phone.endpoints.guide).toBeUndefined();
 		expect(buildDesktopState('dst6', zh, IDENTICON_STUB).endpoints.guide).toBeDefined();
 	});

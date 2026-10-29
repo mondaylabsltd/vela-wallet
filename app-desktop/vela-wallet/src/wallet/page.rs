@@ -386,7 +386,6 @@ impl Section {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SettingsProbe {
     Endpoints,
-    Providers,
 }
 
 /// A destructive action waiting on its question (spec 072 FR-010): nothing
@@ -587,7 +586,6 @@ enum GalleryTab {
     Dst3,
     Dst4,
     Dst4b,
-    Dst5,
     Dst6,
     Dst7,
     Dst8,
@@ -615,7 +613,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 27] = [
+    const ALL: [(GalleryTab, &'static str); 26] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -631,7 +629,6 @@ impl GalleryTab {
         (GalleryTab::Dst3, "DST3"),
         (GalleryTab::Dst4, "DST4"),
         (GalleryTab::Dst4b, "DST4b"),
-        (GalleryTab::Dst5, "DST5"),
         (GalleryTab::Dst6, "DST6"),
         (GalleryTab::Dst7, "DST7"),
         (GalleryTab::Dst8, "DST8"),
@@ -685,7 +682,6 @@ impl GalleryTab {
             GalleryTab::Dst3 => Some("dst3"),
             GalleryTab::Dst4 => Some("dst4"),
             GalleryTab::Dst4b => Some("dst4b"),
-            GalleryTab::Dst5 => Some("dst5"),
             GalleryTab::Dst6 => Some("dst6"),
             GalleryTab::Dst7 => Some("dst7"),
             GalleryTab::Dst8 => Some("dst8"),
@@ -5082,7 +5078,6 @@ impl WalletPage {
             resident.dispatch(
                 match panel {
                     SettingsProbe::Endpoints => NetEvent::EndpointsOpened,
-                    SettingsProbe::Providers => NetEvent::ProvidersOpened,
                 },
                 cx,
             );
@@ -8780,7 +8775,6 @@ impl WalletPage {
             | GalleryTab::Dst3
             | GalleryTab::Dst4
             | GalleryTab::Dst4b
-            | GalleryTab::Dst5
             | GalleryTab::Dst6
             | GalleryTab::Dst7
             | GalleryTab::Dst8
@@ -8794,7 +8788,6 @@ impl WalletPage {
             GalleryTab::Dst2 => SettingsPage::Appearance,
             GalleryTab::Dst3 => SettingsPage::Localization,
             GalleryTab::Dst4 | GalleryTab::Dst4b => SettingsPage::Networks,
-            GalleryTab::Dst5 => SettingsPage::RpcProviders,
             GalleryTab::Dst6 => SettingsPage::Endpoints,
             GalleryTab::Dst7 => SettingsPage::Storage,
             GalleryTab::Dst8 => SettingsPage::About,
@@ -9452,7 +9445,6 @@ impl WalletPage {
                 self.settings.nav_networks.clone(),
                 Some(self.settings.networks_subtitle.clone()),
             ),
-            SettingsPage::RpcProviders => (self.settings.nav_rpc_providers.clone(), None),
             SettingsPage::Endpoints => (self.settings.nav_endpoints.clone(), None),
             SettingsPage::Agent => (self.settings.nav_agent.clone(), None),
             SettingsPage::FeeSpeed => (
@@ -9574,7 +9566,6 @@ impl WalletPage {
             SettingsPage::Appearance => self.settings_appearance(theme, cx),
             SettingsPage::Localization => self.settings_localization(theme, cx),
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
-            SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::Agent => self.settings_agent(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
@@ -12292,220 +12283,6 @@ impl WalletPage {
             .border_color(theme.divider)
             .child(rpc)
             .child(explorer)
-    }
-
-    /// DST5 — one card per RPC provider.
-    fn settings_providers(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        // 24 from the description to the first provider, 32 between
-        // providers, as the web's panel (078 S-11).
-        let mut col = div().flex().flex_col().gap(px(32.)).child(
-            div()
-                .mb(px(-8.))
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
-                .child(crate::ui::prose(self.settings.providers_desc.clone())),
-        );
-
-        // Live since 031. An API key is a CREDENTIAL, and the field it goes in
-        // was read-only until now — so a person with a paid Alchemy plan had no
-        // way to use it.
-        if self.identity.is_some() {
-            // Same gesture, same event: opening the panel tests the keys the
-            // person already has, so the pills are about now and not about the
-            // last time somebody typed.
-            self.settings_opened(SettingsProbe::Providers, cx);
-            let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-            let page = cx.entity();
-            for (i, provider) in view.providers.iter().enumerate() {
-                let badge = if provider.has_key {
-                    pill(Tone::Ok, self.settings.provider_connected.clone())
-                } else {
-                    pill(Tone::Neutral, self.settings.provider_not_set.clone())
-                };
-                let id = provider.provider;
-                // Index past the endpoint fields so the two panels' handles
-                // cannot collide.
-                let focus = self.endpoint_focus(ENDPOINT_FOCUS_COUNT + i, cx);
-                col = col.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(12.))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w(px(0.))
-                                        // `--text-xl`, as the web's `h3`.
-                                        .text_size(theme::text_section())
-                                        .font_weight(gpui::FontWeight::BOLD)
-                                        .text_color(theme.fg_base)
-                                        .child(settings_live::provider_name(id)),
-                                )
-                                .child(status_pill(theme, &badge))
-                                // No key yet: where to get one, as the web
-                                // offers — the page opens in the browser.
-                                .when(!provider.has_key, |el| {
-                                    let url = settings_live::provider_key_url(id);
-                                    el.child(
-                                        div()
-                                            .id(ElementId::from(("provider-get-key", i)))
-                                            .cursor_pointer()
-                                            .text_size(theme::text_row_sub())
-                                            .text_color(theme.info_base)
-                                            .on_click(move |_, _, cx| cx.open_url(url))
-                                            .child(SharedString::from(format!(
-                                                "{} →",
-                                                self.settings.provider_get_key
-                                            ))),
-                                    )
-                                })
-                                // The explicit re-run, on the row that carries
-                                // the verdict it rewrites. A key blur already
-                                // tests; this is for the person who changed
-                                // nothing and wants to know whether it works
-                                // NOW — the only question this page is ever
-                                // opened to answer.
-                                .child(
-                                    div()
-                                        .id(ElementId::from(("provider-test", i)))
-                                        .px(px(12.))
-                                        .py(px(6.))
-                                        .rounded(px(8.))
-                                        .cursor_pointer()
-                                        .border_1()
-                                        .border_color(theme.divider)
-                                        .hover(|el| el.border_color(theme.outline_strong))
-                                        .text_size(theme::text_row_sub())
-                                        .text_color(theme.fg_base)
-                                        .child(self.settings.provider_test.clone())
-                                        .on_click(cx.listener(move |_, _, _, cx| {
-                                            resident::resident::<NetworkAdmin>(cx).update(
-                                                cx,
-                                                |resident, cx| {
-                                                    resident.dispatch(
-                                                        NetEvent::ProviderTestRequested {
-                                                            provider: id,
-                                                        },
-                                                        cx,
-                                                    );
-                                                },
-                                            );
-                                            cx.notify();
-                                        })),
-                                ),
-                        )
-                        .child(editable_url_field(
-                            ElementId::from(("provider", i)),
-                            theme,
-                            None,
-                            &provider.key,
-                            self.settings.provider_not_set.clone(),
-                            None,
-                            settings_live::provider_support(provider, &self.settings),
-                            None,
-                            &focus,
-                            window,
-                            {
-                                // A keystroke is a draft; leaving the field is
-                                // what persists it — and what DROPS a provider
-                                // whose key was cleared (invariant ⑦).
-                                let page = page.clone();
-                                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                                    Self::edit_field(
-                                        &page,
-                                        ENDPOINT_FOCUS_COUNT + i,
-                                        settings_live::FieldCommit::ProviderKey(id),
-                                        text,
-                                        cx,
-                                    );
-                                }
-                            },
-                            Self::enter_leaves(&page),
-                        )),
-                );
-            }
-            return col;
-        }
-
-        for p in &settings_fixtures::PROVIDERS {
-            let connected = !p.key.is_empty();
-            let badge = if connected {
-                pill(Tone::Ok, self.settings.provider_connected.clone())
-            } else {
-                pill(Tone::Neutral, self.settings.provider_not_set.clone())
-            };
-            let value = if connected {
-                gpui::SharedString::from(p.key)
-            } else {
-                self.settings.provider_not_set.clone()
-            };
-            let support = settings_fixtures::provider_support(&self.settings, p);
-            let mut card = div()
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .text_size(theme::text_section())
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme.fg_base)
-                                .child(p.name),
-                        )
-                        .child(status_pill(theme, &badge)),
-                )
-                .child(url_field(
-                    theme,
-                    None,
-                    value,
-                    None,
-                    None,
-                    None,
-                    Some(if connected {
-                        self.settings.provider_check_key.clone()
-                    } else {
-                        self.settings.provider_get_key.clone()
-                    }),
-                ));
-            if let Some(support) = support {
-                card = card.child(
-                    div()
-                        .text_size(theme::text_label())
-                        .text_color(theme.fg_subtle)
-                        .child(support),
-                );
-            } else {
-                // A provider with nothing set up: where to get a key, under
-                // the card, as the web's `.link` (078 T067).
-                card = card.child(
-                    div()
-                        .pt(px(8.))
-                        .text_size(theme::text_label())
-                        .text_color(theme.info_base)
-                        .child(SharedString::from(format!(
-                            "{} →",
-                            self.settings.provider_get_key
-                        ))),
-                );
-            }
-            col = col.child(card);
-        }
-        col
     }
 
     /// DST6 — the four services the wallet leans on.

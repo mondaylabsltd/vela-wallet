@@ -217,6 +217,22 @@ describe('the person and an agent, one way in (spec 103)', () => {
 		const outcome = await h.intents.invoke('agent', { type: 'delete_contact', address: '0x1' });
 		expect(code(outcome)).toBe('invalid_input');
 	});
+
+	it('refuses a retired action by name, saying what to use instead (2026-10-29)', async () => {
+		const h = harness();
+		// An agent that learned the old catalog: the bridge routes the tool it
+		// no longer offers here (`unknownTool`).
+		const outcome = await h.intents.invoke('agent', {
+			type: 'set_provider_key',
+			provider: 'alchemy',
+			key: 'fake-key'
+		} as unknown as IntentAction);
+		expect(code(outcome)).toBe('not_found');
+		expect(outcome.status === 'rejected' && outcome.reason.detail).toContain(
+			'set_network_endpoint'
+		);
+		expect(h.performed).toEqual([]);
+	});
 });
 
 describe('who may ask', () => {
@@ -362,7 +378,6 @@ function networks(rows: NetNetworkRow[]): NetView {
 		networks: rows,
 		wizard: { phase: 'idle', error: null },
 		endpoints: [],
-		providers: [{ provider: 'alchemy', key: 'sk-secret', has_key: true, test: null }],
 		last_added_chain_id: null
 	} as unknown as NetView;
 }
@@ -480,9 +495,11 @@ describe('the rest of what the person can do (spec 103)', () => {
 		expect(code(await pending)).toBe('completed');
 	});
 
-	it('never shows the agent a provider’s key — only that one is set', () => {
+	it('never shows the agent an API key riding in a network’s RPC — only where it goes', () => {
+		// What a retired provider key became (2026-10-29): the network's own RPC.
+		const keyed = net(1, false, 'https://eth-mainnet.g.alchemy.com/v2/sk-secret');
 		const state = agentState({
-			world: { ...world(), networks: networks([net(1, false)]) },
+			world: { ...world(), networks: networks([keyed]) },
 			balance: null,
 			feed: null,
 			page: 'settings',
@@ -490,9 +507,10 @@ describe('the rest of what the person can do (spec 103)', () => {
 			activity: []
 		});
 		expect(JSON.stringify(state)).not.toContain('sk-secret');
-		expect((state.networks as { providers: unknown }).providers).toEqual([
-			{ provider: 'alchemy', has_key: true }
-		]);
+		expect((state.networks as { chains: { rpc_url: string }[] }).chains[0].rpc_url).toBe(
+			'https://eth-mainnet.g.alchemy.com/…'
+		);
+		expect(state.networks).not.toHaveProperty('providers');
 	});
 });
 

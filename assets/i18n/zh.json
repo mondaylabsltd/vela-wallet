@@ -2226,16 +2226,12 @@
    "totalPartial": "目前合计 {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC 供应商",
    "description": "填入 API 密钥，即可让支持的网络通过你自己的供应商访问 RPC。优先级：各网络单独设置的 RPC，其次是你的供应商，然后是 Vela 内置，最后是链索引。",
    "getKey": "获取密钥",
    "test": "测试",
    "notSet": "未设置",
    "checkKey": "检查密钥",
-   "activeNetworks": "{{count}} 个网络",
    "supportsCount": "支持 {{count}} 个网络，共 {{total}} 个",
-   "unavailable": "不可用",
-   "avgLatency": "平均 {{ms}}ms",
    "relayNotice": "提交你交易的中继会收到钱包为每条网络使用的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
   },
   "endpoints": {

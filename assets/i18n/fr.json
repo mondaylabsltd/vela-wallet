@@ -2233,16 +2233,12 @@
    "totalPartial": "Total à ce stade {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Fournisseurs RPC",
    "description": "Ajoutez une clé API pour acheminer les réseaux pris en charge via votre propre fournisseur. Priorité : RPC par réseau, puis vos fournisseurs, ensuite l’intégré Vela, et enfin l’index des chaînes.",
    "getKey": "Obtenir une clé",
    "test": "Tester",
    "notSet": "Non défini",
    "checkKey": "Vérifier la clé",
-   "activeNetworks": "{{count}} réseaux",
    "supportsCount": "Prend en charge {{count}} réseaux sur {{total}}",
-   "unavailable": "Indisponible",
-   "avgLatency": "moy. {{ms}}ms",
    "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC que votre portefeuille utilise pour chaque réseau — clé d'API comprise — pour atteindre les réseaux que vous utilisez."
   },
   "endpoints": {

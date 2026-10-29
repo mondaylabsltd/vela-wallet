@@ -45,9 +45,6 @@ function short(address: string): string {
 	return a.length <= 12 ? a : `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-/** RPC providers are products: their names are not translated. */
-const PROVIDERS: Record<string, string> = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' };
-
 /** The number and date formats, shown as Settings shows them: by example. */
 const EXAMPLES: Record<string, string> = {
 	'number_format.comma_dot': '1,234.56',
@@ -160,12 +157,7 @@ export function approvalDetail(action: IntentAction, ctx: DetailContext): string
 			})}`;
 		case 'set_service_endpoint':
 			return `${m.services[action.field] ?? action.field}${to(action.url)}`;
-		case 'set_provider_key': {
-			// The core keeps only the key's last four: its words, the product's name.
-			const name = PROVIDERS[action.provider] ?? action.provider;
-			const masked = ctx.core(action)?.split(' · ')[1];
-			return masked ? `${name} · ${masked}` : name;
-		}
+
 		case 'delete_activity': {
 			const record = ctx.records.find((r) => r.id === action.id || same(r.user_op_hash, action.id));
 			if (!record) return short(action.id);

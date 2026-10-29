@@ -525,15 +525,7 @@
               }
             ]
           },
-          "networks": {
-            "providers": [
-              {
-                "provider": "alchemy",
-                "key": "sk-secret",
-                "has_key": true
-              }
-            ]
-          }
+          "networks": {}
         },
         "page": "wallet",
         "approvals": [],
@@ -581,12 +573,6 @@
         },
         "networks": {
           "chains": [],
-          "providers": [
-            {
-              "provider": "alchemy",
-              "has_key": true
-            }
-          ],
           "services": []
         },
         "transfers": [],

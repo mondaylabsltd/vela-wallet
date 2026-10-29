@@ -138,13 +138,13 @@ describe('removing a custom network', () => {
 });
 
 describe('what the phone already did', () => {
-	it('opening the providers page raises providers-open', async () => {
+	it('opening the endpoints page raises endpoints-open', async () => {
 		const view = await drawn('st1b');
 		const row = [...view.root.querySelectorAll('button')].find((b) =>
-			b.textContent?.includes(String(m.advanced.rpcProvidersTitle))
+			b.textContent?.includes(String(m.advanced.endpointsTitle))
 		);
 		await view.click(row);
-		expect(view.net).toEqual([{ kind: 'providers-open' }]);
+		expect(view.net).toEqual([{ kind: 'endpoints-open' }]);
 	});
 
 	it('a storage row asks first, naming itself', async () => {

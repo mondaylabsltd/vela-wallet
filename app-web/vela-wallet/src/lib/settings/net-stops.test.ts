@@ -121,7 +121,6 @@ function answer(operation: NetOperation, chain: Chain): NetShellResult | undefin
 		case 'write_custom_networks':
 		case 'write_network_configs':
 		case 'write_service_endpoints':
-		case 'write_rpc_providers':
 			return { type: 'written' };
 		case 'invalidate_pools':
 			return { type: 'invalidated' };

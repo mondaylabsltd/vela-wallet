@@ -2,7 +2,7 @@
 	/**
 	 * A labelled mono text field (spec 023).
 	 *
-	 * Every endpoint on ST9b / ST11 / ST12 / SR2 / SR5 is one of these: a label
+	 * Every endpoint on ST9b / ST12 / SR2 / SR5 is one of these: a label
 	 * row that may carry a latency pill, a mono input, and an optional hint
 	 * under it. The tone outlines the box when a state has something to say
 	 * about the value in it.

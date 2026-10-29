@@ -2226,16 +2226,12 @@
    "totalPartial": "Tổng tạm tính {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Nhà cung cấp RPC",
    "description": "Thêm khóa API để định tuyến các mạng được hỗ trợ qua nhà cung cấp của riêng bạn. Ưu tiên: RPC theo từng mạng, rồi đến nhà cung cấp của bạn, sau đó là tích hợp sẵn của Vela, cuối cùng là chỉ mục chuỗi.",
    "getKey": "Lấy khóa",
    "test": "Kiểm tra",
    "notSet": "Chưa đặt",
    "checkKey": "Kiểm tra khóa",
-   "activeNetworks": "{{count}} mạng",
    "supportsCount": "Hỗ trợ {{count}}/{{total}} mạng",
-   "unavailable": "Không khả dụng",
-   "avgLatency": "TB {{ms}}ms",
    "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC mà ví dùng cho từng mạng — kể cả khóa API trong đó — để kết nối được tới các mạng bạn dùng."
   },
   "endpoints": {

@@ -74,3 +74,53 @@ describe('answerAll', () => {
 		client.close();
 	});
 });
+
+describe('a call to a tool that is not exposed', () => {
+	async function online(client: ClientMCP): Promise<FakeSocket> {
+		void client.connect();
+		await tick();
+		const socket = FakeSocket.last!;
+		socket.open();
+		socket.receive({ type: 'registered' });
+		socket.sent.length = 0;
+		return socket;
+	}
+
+	it('is answered by `unknownTool` — a retired action says what to use instead', async () => {
+		const client = new ClientMCP({
+			url: 'ws://bridge.example/connect',
+			token: 'tok',
+			WebSocket: FakeSocket as unknown as typeof WebSocket
+		});
+		const asked: string[] = [];
+		client.unknownTool = (name) => {
+			asked.push(name);
+			return rejected('not_found', 'use set_network_endpoint');
+		};
+		const socket = await online(client);
+		socket.receive({ type: 'call', id: 'c1', name: 'vela_set_provider_key', arguments: {} });
+		await tick();
+		expect(asked).toEqual(['vela_set_provider_key']);
+		const message = JSON.parse(socket.sent[0]);
+		expect(message.result.structuredContent).toMatchObject({
+			status: 'rejected',
+			reason: { code: 'not_found', detail: 'use set_network_endpoint' }
+		});
+		client.close();
+	});
+
+	it('is "Unknown tool" without one', async () => {
+		const client = new ClientMCP({
+			url: 'ws://bridge.example/connect',
+			token: 'tok',
+			WebSocket: FakeSocket as unknown as typeof WebSocket
+		});
+		const socket = await online(client);
+		socket.receive({ type: 'call', id: 'c2', name: 'vela_nothing', arguments: {} });
+		await tick();
+		const message = JSON.parse(socket.sent[0]);
+		expect(message.result).toMatchObject({ isError: true });
+		expect(JSON.stringify(message.result)).toContain('Unknown tool: vela_nothing');
+		client.close();
+	});
+});

@@ -23,9 +23,8 @@
 	 *   wizard (024); the display currency (024); the connected sites (027);
 	 *   and, since 028, the theme, the language row, the number / date / time
 	 *   presets and "erase this device".
-	 * - **Still canon data**: the latency figures, the storage accounting and
-	 *   the RPC-provider panel's health — those wait for the features that
-	 *   measure them.
+	 * - **Still canon data**: the latency figures and the storage accounting
+	 *   — those wait for the features that measure them.
 	 */
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
@@ -1291,22 +1290,6 @@
 				return;
 			case 'endpoints-reset':
 				void intents.invoke('person', { type: 'reset_service_endpoints' });
-				return;
-			case 'providers-open':
-				networkAdmin.dispatch({ type: 'providers_opened' });
-				return;
-			case 'provider-key':
-				networkAdmin.dispatch({
-					type: 'provider_key_edited',
-					provider: event.provider,
-					value: event.value
-				});
-				return;
-			case 'provider-blur':
-				networkAdmin.dispatch({ type: 'provider_key_blurred', provider: event.provider });
-				return;
-			case 'provider-test':
-				networkAdmin.dispatch({ type: 'provider_test_requested', provider: event.provider });
 				return;
 		}
 	}

@@ -217,6 +217,14 @@ async function exposeTools(client: ClientMCP): Promise<void> {
 				signal
 			)
 	});
+	// A tool this wallet does not offer — one an agent knows from an older
+	// list. The core's check answers it, as on desktop: a retired action says
+	// what to do instead (`intents::retired`), anything else what is wrong.
+	client.unknownTool = async (name, args) => {
+		if (!name.startsWith('vela_')) throw new Error(`Unknown tool: ${name}`);
+		const type = name.slice('vela_'.length);
+		return answer(await intents.invoke('agent', { ...args, type } as IntentAction));
+	};
 	for (const entry of catalog) {
 		// The person's own settings are no tool at all: the check refuses them
 		// anyway, and an agent should not be offered what it may never do.

@@ -240,7 +240,6 @@ fn loaded(now: f64) -> Sut {
 #[test]
 fn source_priority_table_is_verbatim() {
     assert_eq!(source_priority(RpcSource::User), 10_000.0);
-    assert_eq!(source_priority(RpcSource::Provider), 9_000.0);
     assert_eq!(source_priority(RpcSource::Default), 1_000.0);
     assert_eq!(source_priority(RpcSource::Public), 500.0);
     assert_eq!(source_priority(RpcSource::Builtin), 100.0);

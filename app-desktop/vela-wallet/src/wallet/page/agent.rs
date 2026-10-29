@@ -21,7 +21,6 @@ fn settings_page(name: &str) -> Option<SettingsPage> {
         "appearance" => SettingsPage::Appearance,
         "localization" => SettingsPage::Localization,
         "networks" => SettingsPage::Networks,
-        "rpc-providers" => SettingsPage::RpcProviders,
         "endpoints" => SettingsPage::Endpoints,
         "storage" => SettingsPage::Storage,
         "fee-speed" => SettingsPage::FeeSpeed,

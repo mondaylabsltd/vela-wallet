@@ -31,7 +31,7 @@ pub struct SettingsStrings {
     pub nav_appearance: SharedString,
     pub nav_localization: SharedString,
     pub nav_networks: SharedString,
-    pub nav_rpc_providers: SharedString,
+
     pub nav_endpoints: SharedString,
     pub nav_storage: SharedString,
     /// The default transaction speed (spec 069): the nav row, and the page's
@@ -215,17 +215,7 @@ pub struct SettingsStrings {
     pub custom_rpc_title: SharedString,
     pub custom_rpc_placeholder: SharedString,
     pub best_rpc: String,
-    // rpc providers panel
-    pub providers_desc: SharedString,
-    pub provider_connected: SharedString,
-    pub provider_not_set: SharedString,
-    pub provider_check_key: SharedString,
-    /// The explicit re-run. A key blur already tests, so this is for the
-    /// person who changed nothing and wants to know whether it works NOW.
-    pub provider_test: SharedString,
-    pub provider_get_key: SharedString,
-    pub provider_supports: String,
-    pub provider_avg_latency: String,
+
     // endpoints panel
     pub endpoints_desc: SharedString,
     pub endpoint_chain_data: SharedString,
@@ -371,7 +361,7 @@ impl SettingsStrings {
             nav_appearance: s("settings.sections.appearance"),
             nav_localization: s("settings.sections.localization"),
             nav_networks: s("settings.advanced.networksTitle"),
-            nav_rpc_providers: s("settings.advanced.rpcProvidersTitle"),
+
             nav_endpoints: s("settings.advanced.endpointsTitle"),
             nav_storage: s("settings.storage.title"),
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
@@ -508,20 +498,7 @@ impl SettingsStrings {
             custom_rpc_title: s("settingsModals.addNetwork.customRpcTitle"),
             custom_rpc_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
             best_rpc: raw("settingsModals.addNetwork.bestRpc"),
-            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is
-            // sent, and that is said where the key is set.
-            providers_desc: SharedString::from(format!(
-                "{} {}",
-                s("settingsModals.rpcProviders.description"),
-                s("settingsModals.rpcProviders.relayNotice")
-            )),
-            provider_connected: s("activity.connected"),
-            provider_not_set: s("settingsModals.rpcProviders.notSet"),
-            provider_test: s("settingsModals.rpcProviders.test"),
-            provider_check_key: s("settingsModals.rpcProviders.checkKey"),
-            provider_get_key: s("settingsModals.rpcProviders.getKey"),
-            provider_supports: raw("settingsModals.rpcProviders.supportsCount"),
-            provider_avg_latency: raw("settingsModals.rpcProviders.avgLatency"),
+
             endpoints_desc: s("settingsModals.endpoints.description"),
             endpoint_chain_data: s("settingsModals.endpoints.chainDataLabel"),
             endpoint_chain_data_hint: s("settingsModals.endpoints.chainDataHint"),
@@ -708,7 +685,6 @@ mod tests {
                     &s.network_remove_confirm,
                     "settingsModals.network.removeConfirm",
                 ),
-                (&s.provider_test, "settingsModals.rpcProviders.test"),
             ] {
                 assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
                 assert!(!value.is_empty(), "`{key}` resolved empty");

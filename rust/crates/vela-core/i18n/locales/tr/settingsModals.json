@@ -24,16 +24,12 @@
       "totalPartial": "Şimdilik toplam {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC Sağlayıcıları",
       "description": "Desteklenen ağları kendi sağlayıcınız üzerinden yönlendirmek için bir API anahtarı ekleyin. Öncelik: ağa özel RPC, ardından sağlayıcılarınız, sonra Vela yerleşik, en son zincir dizini.",
       "getKey": "Anahtar al",
       "test": "Test",
       "notSet": "Ayarlanmadı",
       "checkKey": "Anahtarı kontrol et",
-      "activeNetworks": "{{count}} ağ",
       "supportsCount": "{{total}} ağdan {{count}} tanesini destekliyor",
-      "unavailable": "Kullanılamıyor",
-      "avgLatency": "ort. {{ms}}ms",
       "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağlara ulaşabilmesi için cüzdanınızın her ağda kullandığı RPC adresi — içindeki API anahtarı dahil — iletilir."
     },
     "endpoints": {

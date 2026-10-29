@@ -2226,16 +2226,12 @@
    "totalPartial": "Total sejauh ini {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Penyedia RPC",
    "description": "Tambahkan kunci API untuk mengarahkan jaringan yang didukung melalui penyedia Anda sendiri. Prioritas: RPC per jaringan, lalu penyedia Anda, kemudian bawaan Vela, terakhir indeks chain.",
    "getKey": "Dapatkan kunci",
    "test": "Uji",
    "notSet": "Belum diatur",
    "checkKey": "Periksa kunci",
-   "activeNetworks": "{{count}} jaringan",
    "supportsCount": "Mendukung {{count}} dari {{total}} jaringan",
-   "unavailable": "Tidak tersedia",
-   "avgLatency": "rata-rata {{ms}}ms",
    "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC yang dipakai dompet untuk tiap jaringan — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
   },
   "endpoints": {

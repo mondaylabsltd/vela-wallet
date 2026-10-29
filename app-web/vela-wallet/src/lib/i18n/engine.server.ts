@@ -568,8 +568,6 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		advanced: {
 			networksTitle: k('settings.advanced.networksTitle'),
 			networksSubtitle: k('settings.advanced.networksSubtitle'),
-			rpcProvidersTitle: k('settings.advanced.rpcProvidersTitle'),
-			rpcProvidersSubtitle: k('settings.advanced.rpcProvidersSubtitle'),
 			addNetworkTitle: k('settings.advanced.addNetworkTitle'),
 			addNetworkSubtitle: k('settings.advanced.addNetworkSubtitle'),
 			endpointsTitle: k('settings.advanced.endpointsTitle'),
@@ -694,18 +692,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			checkSigner: k('settingsModals.addNetwork.checkSigner'),
 			checkRemaining: k('settingsModals.addNetwork.checkRemaining')
 		},
-		rpcProviders: {
-			description: k('settingsModals.rpcProviders.description'),
-			relayNotice: k('settingsModals.rpcProviders.relayNotice'),
-			getKey: k('settingsModals.rpcProviders.getKey'),
-			checkKey: k('settingsModals.rpcProviders.checkKey'),
-			notSet: k('settingsModals.rpcProviders.notSet'),
-			connected: k('activity.connected'),
-			checking: k('componentsUi.funding.checking'),
-			unavailable: k('settingsModals.rpcProviders.unavailable'),
-			supportsCount: k('settingsModals.rpcProviders.supportsCount'),
-			avgLatency: k('settingsModals.rpcProviders.avgLatency')
-		},
+
 		endpoints: {
 			description: k('settingsModals.endpoints.description'),
 			chainDataLabel: k('settingsModals.endpoints.chainDataLabel'),
@@ -1188,7 +1175,7 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			set_network_endpoint: action('setNetworkEndpoint'),
 			set_only_my_node: action('setOnlyMyNode'),
 			remove_network: action('removeNetwork'),
-			set_provider_key: action('setProviderKey'),
+
 			set_service_endpoint: action('setServiceEndpoint'),
 			reset_service_endpoints: action('resetServiceEndpoints'),
 			open_site: action('openSite'),

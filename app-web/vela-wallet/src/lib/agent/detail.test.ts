@@ -30,11 +30,9 @@ function context(locale: 'en' | 'zh' = 'en', over: Partial<DetailContext> = {}):
 		],
 		space: { mainnet: 'Mainnet', testnet: 'Testnet' },
 		core: (action) =>
-			action.type === 'set_provider_key'
-				? 'alchemy · ••••1234'
-				: action.type === 'switch_account'
-					? `Main (0xaaaa…aaaa) → Team (${SAFE.slice(0, 6)}…${SAFE.slice(-4)})`
-					: null,
+			action.type === 'switch_account'
+				? `Main (0xaaaa…aaaa) → Team (${SAFE.slice(0, 6)}…${SAFE.slice(-4)})`
+				: null,
 		...over
 	};
 }
@@ -114,10 +112,7 @@ describe('an approval’s detail, in the person’s words', () => {
 		).toBe('Linea');
 	});
 
-	it('names a provider as a product, a record by what it moved, a contact and group by name', () => {
-		expect(detail({ type: 'set_provider_key', provider: 'alchemy', key: 'k-1234' })).toBe(
-			'Alchemy · ••••1234'
-		);
+	it('names a record by what it moved, a contact and group by name', () => {
 		expect(detail({ type: 'delete_activity', id: 'r1' })).toBe('5 xDAI · 0x1111…1111');
 		expect(
 			detail({ type: 'delete_contact', address: '0x00000000219AB540356cBB839Cbe05303d7705Fa' })

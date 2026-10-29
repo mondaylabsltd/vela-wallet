@@ -24,19 +24,18 @@ use ts_rs::TS;
 
 use super::fee_policy::FeeTier;
 use super::fee_tier_pref;
-use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
+use super::network_admin::{NetEndpointField, NetOverrideField};
 use super::send::BATCH_MAX_RECIPIENTS;
 use crate::l10n::currency::OFFERED_CURRENCIES;
 use crate::{i18n, prefs, storage_catalog};
 
 /// The settings pages a [`Screen::Settings`] may name (each shell lays out
 /// the ones it has).
-pub const SETTINGS_PAGES: [&str; 14] = [
+pub const SETTINGS_PAGES: [&str; 13] = [
     "account",
     "appearance",
     "localization",
     "networks",
-    "rpc-providers",
     "endpoints",
     "storage",
     "fee-speed",
@@ -313,11 +312,7 @@ pub enum Action {
     RemoveNetwork {
         chain_id: u32,
     },
-    /// An RPC provider's API key; empty removes it.
-    SetProviderKey {
-        provider: NetProviderId,
-        key: String,
-    },
+
     /// One of the services the wallet relies on.
     SetServiceEndpoint {
         field: NetEndpointField,
@@ -416,7 +411,7 @@ const fn person_only(action: &'static str, description: &'static str) -> Entry {
 /// Every action, in one place: name, risk, and who may ask for it. The risk of
 /// an [`Action`] value is read from here, so a scale and its catalog cannot
 /// disagree.
-const CATALOG: [Entry; 43] = [
+const CATALOG: [Entry; 42] = [
     entry(
         "show",
         Risk::Operate,
@@ -556,11 +551,7 @@ const CATALOG: [Entry; 43] = [
         Risk::Manage,
         "Remove a network the person added.",
     ),
-    entry(
-        "set_provider_key",
-        Risk::Manage,
-        "Set an RPC provider's API key (alchemy, drpc or ankr); empty removes it.",
-    ),
+
     entry(
         "set_service_endpoint",
         Risk::Manage,
@@ -861,13 +852,7 @@ fn input_schema(kind: &str) -> serde_json::Value {
             json!({ "chain_id": { "type": "integer", "minimum": 1 } }),
             &["chain_id"],
         ),
-        "set_provider_key" => object(
-            json!({
-                "provider": strings(&["alchemy", "drpc", "ankr"]),
-                "key": { "type": "string" }
-            }),
-            &["provider", "key"],
-        ),
+
         "set_service_endpoint" => object(
             json!({
                 "field": strings(&["ethereum_data", "passkey_index", "bundler_service", "fiat_rates"]),
@@ -951,7 +936,7 @@ impl Action {
             Self::SetNetworkEndpoint { .. } => "set_network_endpoint",
             Self::SetOnlyMyNode { .. } => "set_only_my_node",
             Self::RemoveNetwork { .. } => "remove_network",
-            Self::SetProviderKey { .. } => "set_provider_key",
+
             Self::SetServiceEndpoint { .. } => "set_service_endpoint",
             Self::ResetServiceEndpoints => "reset_service_endpoints",
             Self::OpenSite { .. } => "open_site",
@@ -1188,7 +1173,10 @@ fn contact_note(value: &str) -> Result<(), Reason> {
             "a contact's note must not contain characters that reorder the text (bidirectional controls)",
         );
     }
-    if note.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+    if note
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
         return invalid("a contact's note must not contain control characters");
     }
     Ok(())
@@ -1361,13 +1349,7 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         Action::RemoveNetwork { chain_id } | Action::SetOnlyMyNode { chain_id, .. } => {
             chain_named(*chain_id)
         }
-        Action::SetProviderKey { key, .. } => {
-            if key.chars().any(char::is_whitespace) && !key.trim().is_empty() {
-                invalid("a key has no spaces in it")
-            } else {
-                Ok(())
-            }
-        }
+
         // Empty is the field cleared: the service's default again.
         Action::SetServiceEndpoint { url, .. } => {
             if url.trim().is_empty() {
@@ -1722,7 +1704,7 @@ pub fn shows(action: &Action) -> Option<Screen> {
         | Action::SetNetworkEndpoint { .. }
         | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. } => settings("networks"),
-        Action::SetProviderKey { .. } => settings("rpc-providers"),
+
         Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => settings("endpoints"),
         // Explore shows itself: the page, the tabs, the lists.
         Action::OpenSite { .. }
@@ -1746,10 +1728,38 @@ pub fn shows(action: &Action) -> Option<Screen> {
     }
 }
 
+/// Actions the catalog once offered and no longer does, each with what to do
+/// instead. An agent that learned the old catalog is told this, by name,
+/// rather than handed a parse error about a variant it cannot see.
+pub const RETIRED_ACTIONS: [(&str, &str); 1] = [(
+    "set_provider_key",
+    "RPC provider keys are no longer a setting: Vela turned every saved key into the RPC of the networks it served. Set a network's own RPC with set_network_endpoint instead.",
+)];
+
+/// Why `kind` is no longer an action, when it is a retired one
+/// ([`RETIRED_ACTIONS`]) — what every shell answers an agent that asks for it.
+#[must_use]
+pub fn retired(kind: &str) -> Option<Reason> {
+    RETIRED_ACTIONS
+        .iter()
+        .find(|(name, _)| *name == kind)
+        .map(|(_, detail)| reason(ReasonCode::NotFound, *detail))
+}
+
 /// [`check`] for an action that arrives as JSON (an agent wrote it): one that
-/// does not parse is refused, saying why.
+/// does not parse is refused, saying why — a retired one by name.
 #[must_use]
 pub fn check_json(actor: Actor, action_json: &str, grants: &Grants) -> Check {
+    let kind = serde_json::from_str::<serde_json::Value>(action_json)
+        .ok()
+        .and_then(|value| value.get("type")?.as_str().map(str::to_owned));
+    if let Some(reason) = kind.as_deref().and_then(retired) {
+        return Check {
+            kind: None,
+            risk: None,
+            decision: Decision::Deny { reason },
+        };
+    }
     match serde_json::from_str::<Action>(action_json) {
         Ok(action) => check(actor, &action, grants),
         Err(error) => Check {

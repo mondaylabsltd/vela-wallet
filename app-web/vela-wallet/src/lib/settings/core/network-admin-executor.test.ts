@@ -182,12 +182,75 @@ describe('writes', () => {
 			genesisServiceURL: 'http://127.0.0.1:8788'
 		});
 	});
+});
 
-	it('write_rpc_providers drops cleared keys instead of storing null', async () => {
-		await executeNetworkAdminOperation(
-			effect({ type: 'write_rpc_providers', keys: { alchemy: 'k', drpc: null, ankr: null } })
+describe('retire_provider_keys (owner decision 2026-10-29)', () => {
+	const config = {
+		chain_id: 1,
+		rpc_url: 'https://eth-mainnet.g.alchemy.com/v2/fake-key',
+		explorer_url: 'https://etherscan.io',
+		bundler_url: '',
+		only_mine: false
+	};
+
+	it('writes the configs, then deletes the keys, and says so', async () => {
+		kv.set('vela.rpcProviders', JSON.stringify({ alchemy: 'fake-key' }));
+		const result = await executeNetworkAdminOperation(
+			effect({ type: 'retire_provider_keys', configs: [config] })
 		);
-		expect(JSON.parse(kv.get('vela.rpcProviders')!)).toEqual({ alchemy: 'k' });
+		expect(result).toEqual({
+			type: 'provider_keys_retired',
+			configs_written: true,
+			keys_removed: true
+		});
+		expect(kv.has('vela.rpcProviders')).toBe(false);
+		expect(JSON.parse(kv.get('vela.networkConfig')!)).toEqual([
+			{
+				chainId: 1,
+				rpcURL: 'https://eth-mainnet.g.alchemy.com/v2/fake-key',
+				explorerURL: 'https://etherscan.io',
+				bundlerURL: ''
+			}
+		]);
+	});
+
+	it('with nothing to write, only deletes the keys', async () => {
+		kv.set('vela.rpcProviders', JSON.stringify({ ankr: 'fake-key' }));
+		const result = await executeNetworkAdminOperation(
+			effect({ type: 'retire_provider_keys', configs: null })
+		);
+		expect(result).toMatchObject({ configs_written: true, keys_removed: true });
+		expect(kv.has('vela.networkConfig')).toBe(false);
+	});
+
+	it('keeps the keys when the configs could not be written', async () => {
+		const { setItem } = await import('$lib/services/storage');
+		vi.mocked(setItem).mockRejectedValueOnce(new Error('quota'));
+		kv.set('vela.rpcProviders', JSON.stringify({ alchemy: 'fake-key' }));
+		const result = await executeNetworkAdminOperation(
+			effect({ type: 'retire_provider_keys', configs: [config] })
+		);
+		expect(result).toEqual({
+			type: 'provider_keys_retired',
+			configs_written: false,
+			keys_removed: false
+		});
+		expect(kv.has('vela.rpcProviders')).toBe(true);
+	});
+
+	it('says the keys are still there when only their delete failed', async () => {
+		const { removeItem } = await import('$lib/services/storage');
+		vi.mocked(removeItem).mockRejectedValueOnce(new Error('blocked'));
+		const result = await executeNetworkAdminOperation(
+			effect({ type: 'retire_provider_keys', configs: [config] })
+		);
+		expect(result).toMatchObject({ configs_written: true, keys_removed: false });
+	});
+
+	it('its failure twin claims nothing was done', () => {
+		expect(
+			networkAdminOperationFailure(effect({ type: 'retire_provider_keys', configs: [config] }))
+		).toEqual({ type: 'provider_keys_retired', configs_written: false, keys_removed: false });
 	});
 });
 

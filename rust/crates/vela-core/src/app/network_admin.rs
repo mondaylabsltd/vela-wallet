@@ -7,7 +7,7 @@
 //!   CheckingContracts (getCode ×11 ∥ P256 call) ─► Checked ─► AddConfirmed ─► saved
 //! OverrideBlurred ─► upsert config (bundler preserved) ─► pool + bundler-cache flush
 //! EndpointBlurred ─► trim/CRLF-strip ─► persist ─► pool flush ─► re-probe all 4
-//! ProviderKeyBlurred ─► persist cleaned keys ─► pool flush ─► per-chain probe
+//! StoreLoaded + saved provider keys ─► keys as per-network RPCs ─► keys deleted
 //! ```
 //!
 //! Faithful port of the TypeScript sources, line-aligned:
@@ -22,14 +22,13 @@
 //! - `src/services/chain-registry.ts:84-176` — search ranking + RPC/explorer
 //!   extraction (placeholder filtering)
 //! - `src/models/network.ts:70-78` — `explorerBaseURL` (unknown chain ⇒ NO link)
-//! - `src/screens/settings/RpcProvidersModal.tsx` + `src/services/rpc-providers.ts`
-//!   — provider key management and the per-chain capability probe
-//! - `src/services/storage.ts:218-340` — persistence shapes and the
-//!   clear-key-removes-provider rule
+//! - `src/services/rpc-providers.ts` — the provider slug maps, kept only to
+//!   turn saved provider keys into per-network RPCs ([`retire_provider_keys`])
+//! - `src/services/storage.ts:218-340` — persistence shapes
 //!
-//! The four near-identical `eth_chainId` probes (`checkEndpointHealth`,
-//! `testRpcLatency`, `probeRpcChainId`, the provider modal's probe) are ONE
-//! operation here: [`NetOperation::ProbeRpc`]. Their timeout differences
+//! The near-identical `eth_chainId` probes (`checkEndpointHealth`,
+//! `testRpcLatency`, `probeRpcChainId`) are ONE operation here:
+//! [`NetOperation::ProbeRpc`]. Their timeout differences
 //! (6s/10s) and the ws:// vs https:// transport split stay in the shell, as
 //! the inventory prescribes.
 //!
@@ -66,15 +65,18 @@
 //!   the wizard keeps the invariant-③ distinction via `rpc_failure`.
 //! - The wizard's fastest-RPC pick counts any JSON-RPC answer as responsive
 //!   without matching the reported chain id (`testRpcLatency` checks only
-//!   `json.result`) — verbatim. Only the provider probe matches ids
-//!   (invariant ⑦, rpc-providers modal:78). On the unified vocabulary an
-//!   unparseable id reports as failed — fail-closed vs TS's "truthy garbage
-//!   counts", the only tightening.
-//! - Alchemy's slug map carries X Layer (196) which is not in the canonical
-//!   `CHAINS` table, so `provider_chain_ids` never surfaces it — dead data,
-//!   ported verbatim so the maps stay diffable against the source.
-//! - Provider key storage is plaintext AsyncStorage (storage.ts:289-297 says
-//!   so itself) — a recorded security debt, owned by the shell.
+//!   `json.result`) — verbatim. On the unified vocabulary an unparseable id
+//!   reports as failed — fail-closed vs TS's "truthy garbage counts", the
+//!   only tightening.
+//! - **RPC providers are gone** (owner decision 2026-10-29). Settings › RPC
+//!   Providers kept one Alchemy/dRPC/Ankr key each and slotted the URLs they
+//!   built between a network's own RPC and Vela's: a priority level nobody
+//!   could see, beside a per-network RPC that already does the job. A person
+//!   who saved keys keeps exactly the RPC each network was using: on load,
+//!   every network the provider tier was serving (no RPC of its own, a slug
+//!   for the chain) gets that URL as its own RPC, and only once that is
+//!   written are the keys deleted ([`retire_provider_keys`]). Nothing else
+//!   reads the keys any more.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -845,15 +847,18 @@ pub fn is_builtin_chain(chain_id: u32) -> bool {
     builtin(chain_id).is_some()
 }
 
-/// `PROVIDER_ORDER` (rpc-providers.ts:37).
-pub const PROVIDER_ORDER: [NetProviderId; 3] = [
+/// `PROVIDER_ORDER` (rpc-providers.ts:37): the retired provider tier's
+/// cold-start order — on a chain more than one key served, the first is the
+/// one the network keeps ([`retire_provider_keys`]).
+const PROVIDER_ORDER: [NetProviderId; 3] = [
     NetProviderId::Alchemy,
     NetProviderId::Drpc,
     NetProviderId::Ankr,
 ];
 
-/// `PROVIDER_CHAIN_SLUGS` (rpc-providers.ts:74-118), verbatim — including
-/// Alchemy's X Layer (196) entry that the canonical chain table filters out.
+/// `PROVIDER_CHAIN_SLUGS` (rpc-providers.ts:74-118), verbatim — the URLs the
+/// retired provider tier built, rebuilt once to keep them
+/// ([`retire_provider_keys`]).
 fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
     match id {
         NetProviderId::Alchemy => match chain_id {
@@ -924,8 +929,9 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
     }
 }
 
-/// `buildProviderRpcUrl` (rpc-providers.ts:121-132).
-pub fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Option<String> {
+/// `buildProviderRpcUrl` (rpc-providers.ts:121-132): the URL the pool's
+/// provider tier asked, byte for byte.
+fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Option<String> {
     let slug = provider_slug(id, chain_id)?;
     if key.is_empty() {
         return None;
@@ -937,24 +943,13 @@ pub fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Op
     })
 }
 
-/// `providerChainIds` (rpc-providers.ts:135-138) — canonical CHAINS order,
-/// filtered to chains the provider has a slug for.
-pub fn provider_chain_ids(id: NetProviderId) -> Vec<u32> {
-    BUILTIN_CHAINS
-        .iter()
-        .filter(|c| provider_slug(id, c.chain_id).is_some())
-        .map(|c| c.chain_id)
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
 // Wire value types
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub enum NetProviderId {
+/// The retired providers — on no wire any more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NetProviderId {
     Alchemy,
     Drpc,
     Ankr,
@@ -1119,8 +1114,10 @@ pub struct NetStoredEndpoints {
     pub genesis_service_url: Option<String>,
 }
 
-/// One API key per provider — 1:1 `RpcProviderKeys` under `vela.rpcProviders`.
-/// `None` = provider not configured (a cleared key is REMOVED, invariant ⑦).
+/// One API key per provider — 1:1 `RpcProviderKeys` under `vela.rpcProviders`,
+/// as a wallet from before 2026-10-29 may still hold it. `None` = provider not
+/// configured. Read only to be retired ([`retire_provider_keys`]); nothing
+/// writes it any more.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetProviderKeys {
@@ -1138,12 +1135,10 @@ impl NetProviderKeys {
         }
     }
 
-    fn set(&mut self, id: NetProviderId, value: Option<String>) {
-        match id {
-            NetProviderId::Alchemy => self.alchemy = value,
-            NetProviderId::Drpc => self.drpc = value,
-            NetProviderId::Ankr => self.ankr = value,
-        }
+    /// Any key saved at all — an empty one too: the record is still there
+    /// to delete.
+    fn any(&self) -> bool {
+        self.alchemy.is_some() || self.drpc.is_some() || self.ankr.is_some()
     }
 }
 
@@ -1380,8 +1375,9 @@ pub struct NetChainMismatch {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum NetOperation {
     /// Read all four stores (`vela.customNetworks`, `vela.networkConfig`,
-    /// `vela.serviceEndpoints`, `vela.rpcProviders`) at once. Unreadable or
-    /// corrupt answers as empty/absent, as the TS loaders' `catch` does.
+    /// `vela.serviceEndpoints`, and the retired `vela.rpcProviders`) at once.
+    /// Unreadable or corrupt answers as empty/absent, as the TS loaders'
+    /// `catch` does.
     ReadStore,
     /// Best-effort persists — the shell swallows storage errors; the
     /// in-memory ledger stays authoritative.
@@ -1394,8 +1390,16 @@ pub enum NetOperation {
     WriteServiceEndpoints {
         endpoints: NetServiceEndpoints,
     },
-    WriteRpcProviders {
-        keys: NetProviderKeys,
+    /// Retire the saved provider keys ([`retire_provider_keys`]), in this
+    /// order: write `configs` to `vela.networkConfig` (when `Some` — networks
+    /// the keys were serving get that URL as their own RPC), and ONLY once
+    /// that write went through, delete `vela.rpcProviders`. NOT best-effort:
+    /// answer [`NetShellResult::ProviderKeysRetired`] with what really
+    /// happened, so a failure keeps the keys and the next load tries again.
+    /// The keys ride inside `configs`' URLs: to storage and nowhere else —
+    /// never a log line.
+    RetireProviderKeys {
+        configs: Option<Vec<NetNetworkConfig>>,
     },
     /// The 300ms search debounce (a plain timer).
     StartSearchDebounce {
@@ -1496,6 +1500,13 @@ pub enum NetShellResult {
     },
     /// A best-effort write acknowledged. Never changes state.
     Written,
+    /// [`NetOperation::RetireProviderKeys`]'s answer: whether `configs` were
+    /// written (`true` too when there were none to write), and whether
+    /// `vela.rpcProviders` is gone — never `true` unless the configs were.
+    ProviderKeysRetired {
+        configs_written: bool,
+        keys_removed: bool,
+    },
     DebounceElapsed,
     SearchIndex {
         chains: Vec<NetChainIndexEntry>,
@@ -1692,26 +1703,6 @@ pub enum Event {
     /// the pools on reset (SettingsScreen.tsx:509), unlike a field blur.
     ResetEndpointsToDefaults,
 
-    // -- RPC providers ------------------------------------------------------
-    /// The provider modal opened — seed drafts from the saved keys and
-    /// auto-test every configured provider.
-    ProvidersOpened,
-    /// A keystroke in a key field — drops that provider's stale test results
-    /// (RpcProvidersModal.tsx:111-115).
-    ProviderKeyEdited {
-        provider: NetProviderId,
-        value: String,
-    },
-    /// Blur — persist ALL drafts (trimmed, empties dropped — a cleared key
-    /// fully removes the provider, invariant ⑦), flush pools, re-test.
-    ProviderKeyBlurred {
-        provider: NetProviderId,
-    },
-    /// The explicit "Test" button.
-    ProviderTestRequested {
-        provider: NetProviderId,
-    },
-
     /// Internal: an effect resolved. `attempt` is the issuing wave's
     /// generation (drawn from one machine-wide counter, so values never
     /// collide across subsystems); a result carrying a superseded generation
@@ -1871,27 +1862,12 @@ struct OverrideCard {
     mismatch: Option<NetChainMismatch>,
 }
 
-/// One provider's per-chain probe run.
+/// One network's RPC a provider-key retirement is writing, and what it had
+/// before — put back if the write does not go through.
 #[derive(Clone, Debug, PartialEq)]
-struct ProviderTest {
-    done: bool,
-    rows: Vec<ProviderRow>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct ProviderRow {
-    chain_id: u32,
-    /// `None` = no URL buildable (unsupported chain/empty key) — the row
-    /// reads unavailable immediately, verbatim (RpcProvidersModal.tsx:75).
-    url: Option<String>,
-    /// `None` = probe pending.
-    outcome: Option<ProviderOutcome>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct ProviderOutcome {
-    ok: bool,
-    latency_ms: f64,
+struct Retiring {
+    before: Option<NetNetworkConfig>,
+    after: NetNetworkConfig,
 }
 
 #[derive(Default)]
@@ -1911,9 +1887,12 @@ pub struct Model {
     /// The shell keeps multisig accounts: the multisig service is one of its
     /// endpoints ([`NetShellResult::StoreLoaded`]).
     multisig_service: bool,
+    /// Saved provider keys not yet retired — read only to become
+    /// per-network RPCs, then deleted ([`retire_provider_keys`]).
     provider_keys: NetProviderKeys,
-    provider_drafts: BTreeMap<NetProviderId, String>,
-    provider_tests: BTreeMap<NetProviderId, ProviderTest>,
+    /// The per-network RPCs a retirement in flight is writing — already in
+    /// `overrides`, and taken back out if the write does not go through.
+    retiring: Vec<Retiring>,
     override_cards: BTreeMap<u32, OverrideCard>,
     wizard: Wizard,
     last_added_chain_id: Option<u32>,
@@ -1929,7 +1908,6 @@ pub struct Model {
     dapp_gen: u64,
     endpoint_gen: u64,
     override_gens: BTreeMap<u32, u64>,
-    provider_gens: BTreeMap<NetProviderId, u64>,
     /// Somebody opened Service Endpoints before the store answered, so the
     /// probes are owed and will run the moment the real URLs land.
     probe_when_loaded: bool,
@@ -2131,38 +2109,11 @@ pub struct NetEndpointView {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderNetRow {
-    pub chain_id: u32,
-    pub ok: bool,
-    pub latency_ms: f64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderTestView {
-    pub done: bool,
-    pub results: Vec<NetProviderNetRow>,
-    pub ok_count: u32,
-    pub total: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderView {
-    pub provider: NetProviderId,
-    pub key: String,
-    pub has_key: bool,
-    pub test: Option<NetProviderTestView>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetView {
     pub loaded: bool,
     pub networks: Vec<NetNetworkRow>,
     pub wizard: NetWizardView,
     pub endpoints: Vec<NetEndpointView>,
-    pub providers: Vec<NetProviderView>,
     pub last_added_chain_id: Option<u32>,
     /// The add-network sheet a page opened (spec 100).
     #[serde(default)]
@@ -2336,28 +2287,6 @@ impl App for NetworkAdmin {
             Event::EndpointBlurred { field } => endpoint_blurred(model, field),
             Event::ResetEndpointsToDefaults => reset_endpoints(model),
 
-            // -- providers ---------------------------------------------------
-            Event::ProvidersOpened => providers_opened(model),
-            Event::ProviderKeyEdited { provider, value } => {
-                model.provider_drafts.insert(provider, value);
-                model.provider_tests.remove(&provider);
-                // Orphan the in-flight wave — a stale latency must never be
-                // shown against the new key (RpcProvidersModal.tsx:113-114).
-                let gen = next_gen(model);
-                model.provider_gens.insert(provider, gen);
-                render()
-            }
-            Event::ProviderKeyBlurred { provider } => provider_blurred(model, provider),
-            Event::ProviderTestRequested { provider } => {
-                let raw = model
-                    .provider_drafts
-                    .get(&provider)
-                    .cloned()
-                    .unwrap_or_default();
-                let (cmd, _) = run_provider_test(model, provider, &raw);
-                cmd
-            }
-
             Event::ShellCompleted { attempt, result } => accept(model, attempt, result),
         }
     }
@@ -2379,10 +2308,6 @@ impl App for NetworkAdmin {
                         .unwrap_or(NetServiceHealth::Checking),
                     refused: model.endpoint_refused.contains(&field),
                 })
-                .collect(),
-            providers: PROVIDER_ORDER
-                .iter()
-                .map(|&provider| provider_view(model, provider))
                 .collect(),
             last_added_chain_id: model.last_added_chain_id,
             dapp_add: model.dapp_add.as_ref().map(dapp_add_view),
@@ -4083,143 +4008,131 @@ fn fiat_health_result(
 }
 
 // ---------------------------------------------------------------------------
-// RPC providers
+// RPC providers, retired
 // ---------------------------------------------------------------------------
 
-fn providers_opened(model: &mut Model) -> Command<NetEffect, Event> {
-    // Seed drafts from the saved keys; drop stale test results; auto-test
-    // every configured provider (RpcProvidersModal.tsx:85-96).
-    model.provider_drafts.clear();
-    model.provider_tests.clear();
-    let mut commands: Vec<Command<NetEffect, Event>> = Vec::new();
-    for &provider in &PROVIDER_ORDER {
-        let saved = model.provider_keys.get(provider).cloned();
-        if let Some(key) = saved {
-            model.provider_drafts.insert(provider, key.clone());
-            let (cmd, _) = run_provider_test(model, provider, &key);
-            commands.push(cmd);
-        }
-    }
-    commands.push(render());
-    Command::all(commands)
-}
-
-fn provider_blurred(model: &mut Model, provider: NetProviderId) -> Command<NetEffect, Event> {
-    if !model.loaded {
+/// Retire the saved RPC provider keys (owner decision 2026-10-29), once, on
+/// the load that finds them — and again on every later load until it has
+/// gone through.
+///
+/// The pool used to slot a URL built from each key between a network's own
+/// RPC and Vela's built-in one. That tier is gone, so a network it was
+/// serving would quietly move to Vela's node: instead it gets that URL as its
+/// own RPC, and asks the same endpoint as before. "Was serving" is exactly the
+/// collector's rule: the network is in the wallet (built in, or added), has no
+/// RPC of its own ([`has_own_rpc`]), and a provider with a key has a slug for
+/// it. Where several did, the first in [`PROVIDER_ORDER`] — the tier's own
+/// cold-start pick — is the one kept. A network with an RPC of its own never
+/// asked the provider first, and keeps what it has.
+///
+/// The ledger takes the new RPCs at once, so an edit the person makes while
+/// the write is in flight is saved on top of them, not instead of them. The
+/// configs are written first and the keys deleted only once they are
+/// ([`NetOperation::RetireProviderKeys`]). A failure keeps the keys and puts
+/// the ledger back; the next load computes the same answer again, and a
+/// network migrated by an earlier, partly finished run already has an RPC of
+/// its own, so nothing is written twice.
+fn retire_provider_keys(model: &mut Model) -> Command<NetEffect, Event> {
+    if !model.provider_keys.any() {
         return Command::done();
     }
-    // A field never edited since the page opened — or on a shell that never
-    // raised `ProvidersOpened` — showed the SAVED key, so leaving it keeps
-    // that key: an absent draft is "unchanged", never "cleared" (spec 072,
-    // found by the web's wide-layout test after FR-001).
-    let trimmed = match model.provider_drafts.get(&provider) {
-        Some(draft) => draft.trim().to_owned(),
-        None => model
-            .provider_keys
-            .get(provider)
-            .cloned()
-            .unwrap_or_default(),
-    };
-    model.provider_drafts.insert(provider, trimmed.clone());
-
-    // `saveRpcProviders`: trim every entry, DROP empties — a cleared key
-    // fully removes the provider (invariant ⑦, storage.ts:323-335). Other
-    // providers' in-progress drafts persist too, verbatim. A provider with NO
-    // draft keeps its saved key: rebuilding the map from drafts alone wiped
-    // every saved key the moment a shell that never seeded them (no
-    // `ProvidersOpened`) saw one field lose focus (spec 072, P0).
-    let mut cleaned = model.provider_keys.clone();
-    for &id in &PROVIDER_ORDER {
-        if let Some(draft) = model.provider_drafts.get(&id) {
-            let value = draft.trim().to_owned();
-            cleaned.set(id, (!value.is_empty()).then_some(value));
+    let mut chains: Vec<u32> = BUILTIN_CHAINS.iter().map(|b| b.chain_id).collect();
+    for n in &model.custom_networks {
+        if !chains.contains(&n.chain_id) {
+            chains.push(n.chain_id);
         }
     }
-    model.provider_keys = cleaned;
-
-    // Key change ⇒ every chain's pool must rebuild (invariant ⑦).
-    let write = requests_with(
-        model.load_gen,
-        vec![
-            NetOperation::WriteRpcProviders {
-                keys: model.provider_keys.clone(),
-            },
-            NetOperation::InvalidatePools { chain_id: None },
-        ],
-    );
-    let (test, _) = run_provider_test(model, provider, &trimmed);
-    Command::all([write, test])
-}
-
-/// `runTest` (RpcProvidersModal.tsx:51-82): probe every supported chain in
-/// parallel; a row is ok only when the REPORTED id equals the target
-/// (invariant ⑦ — the one probe site that matches ids).
-fn run_provider_test(
-    model: &mut Model,
-    provider: NetProviderId,
-    raw_key: &str,
-) -> (Command<NetEffect, Event>, bool) {
-    let key = raw_key.trim().to_owned();
-    let gen = next_gen(model);
-    model.provider_gens.insert(provider, gen);
-    if key.is_empty() {
-        model.provider_tests.remove(&provider);
-        return (render(), false);
-    }
-    let rows: Vec<ProviderRow> = provider_chain_ids(provider)
+    let retiring: Vec<Retiring> = chains
         .into_iter()
-        .map(|chain_id| {
-            let url = build_provider_rpc_url(provider, chain_id, &key);
-            let outcome = url.is_none().then_some(ProviderOutcome {
-                ok: false,
-                latency_ms: 0.0,
-            });
-            ProviderRow {
+        .filter(|&chain_id| !has_own_rpc(model, chain_id))
+        .filter_map(|chain_id| {
+            let url = PROVIDER_ORDER.iter().find_map(|&id| {
+                let key = model.provider_keys.get(id)?;
+                build_provider_rpc_url(id, chain_id, key)
+            })?;
+            let defaults = network_defaults(model, chain_id)?;
+            // Everything else the network had saved stays as it was — an
+            // explorer of the person's, a custom network's bundler.
+            let before = override_for(model, chain_id).cloned();
+            let after = NetNetworkConfig {
                 chain_id,
-                url,
-                outcome,
-            }
+                rpc_url: url,
+                explorer_url: before
+                    .as_ref()
+                    .map_or(defaults.explorer_url, |c| c.explorer_url.clone()),
+                bundler_url: before
+                    .as_ref()
+                    .map_or(defaults.bundler_url, |c| c.bundler_url.clone()),
+                only_mine: before.as_ref().is_some_and(|c| c.only_mine),
+            };
+            Some(Retiring { before, after })
         })
         .collect();
-    let ops: Vec<NetOperation> = rows
-        .iter()
-        .filter_map(|r| r.url.clone())
-        .map(|url| NetOperation::ProbeRpc { url })
-        .collect();
-    let done = ops.is_empty();
-    model
-        .provider_tests
-        .insert(provider, ProviderTest { done, rows });
-    (requests_with(gen, ops), done)
+    for entry in &retiring {
+        match model
+            .overrides
+            .iter_mut()
+            .find(|c| c.chain_id == entry.after.chain_id)
+        {
+            Some(slot) => *slot = entry.after.clone(),
+            None => model.overrides.push(entry.after.clone()),
+        }
+    }
+    let configs = (!retiring.is_empty()).then(|| model.overrides.clone());
+    model.retiring = retiring;
+    requests_with(
+        model.load_gen,
+        vec![NetOperation::RetireProviderKeys { configs }],
+    )
 }
 
-fn provider_probed(
+/// What the retirement's write really did. Written, every pool re-reads: the
+/// networks it names now ask their own RPC, which is the endpoint they asked
+/// before. Not written, the ledger goes back to what storage still holds —
+/// except where the person has saved something of their own since. Keys
+/// gone, they are forgotten; still there, the next load retries.
+fn provider_keys_retired(
     model: &mut Model,
-    provider: NetProviderId,
-    url: &str,
-    reported: Option<u32>,
-    latency_ms: f64,
+    configs_written: bool,
+    keys_removed: bool,
 ) -> Command<NetEffect, Event> {
-    let Some(test) = model.provider_tests.get_mut(&provider) else {
-        return Command::done();
-    };
-    let Some(row) = test
-        .rows
-        .iter_mut()
-        .find(|r| r.outcome.is_none() && r.url.as_deref() == Some(url))
-    else {
-        return Command::done();
-    };
-    row.outcome = Some(ProviderOutcome {
-        // `ok: reported === r.chainId` (rpc-providers modal:78) — a probe
-        // reporting the WRONG chain is unavailable, never "fast".
-        ok: reported == Some(row.chain_id),
-        latency_ms,
-    });
-    if test.rows.iter().all(|r| r.outcome.is_some()) {
-        test.done = true;
+    let retiring = std::mem::take(&mut model.retiring);
+    if !configs_written {
+        for entry in &retiring {
+            let chain_id = entry.after.chain_id;
+            let untouched = override_for(model, chain_id).is_some_and(|c| *c == entry.after);
+            if !untouched {
+                continue;
+            }
+            match &entry.before {
+                Some(before) => {
+                    if let Some(slot) = model.overrides.iter_mut().find(|c| c.chain_id == chain_id)
+                    {
+                        *slot = before.clone();
+                    }
+                }
+                None => model.overrides.retain(|c| c.chain_id != chain_id),
+            }
+        }
+        return if retiring.is_empty() {
+            Command::done()
+        } else {
+            render()
+        };
     }
-    render()
+    if keys_removed {
+        model.provider_keys = NetProviderKeys::default();
+    }
+    if retiring.is_empty() {
+        return Command::done();
+    }
+    Command::all([
+        render(),
+        requests_with(
+            model.load_gen,
+            vec![NetOperation::InvalidatePools { chain_id: None }],
+        ),
+    ])
 }
 
 // ---------------------------------------------------------------------------
@@ -4288,6 +4201,7 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
+            let retire = retire_provider_keys(model);
             // A page asked before the ledger was read: its check begins now.
             let owed_add = model
                 .dapp_add
@@ -4301,9 +4215,9 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             if model.probe_when_loaded {
                 // The page is already on screen, waiting. Now we know what to
                 // ask about, so ask.
-                return Command::all([endpoint_probe_wave(model), add]);
+                return Command::all([endpoint_probe_wave(model), add, retire]);
             }
-            Command::all([render(), add])
+            Command::all([render(), add, retire])
         }
 
         NetShellResult::DebounceElapsed => {
@@ -4405,11 +4319,6 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
                 }
                 return Command::done();
             }
-            if let Some((&provider, _)) =
-                model.provider_gens.iter().find(|(_, &gen)| gen == attempt)
-            {
-                return provider_probed(model, provider, &url, reported_chain_id, latency_ms);
-            }
             Command::done()
         }
         NetShellResult::Reachable {
@@ -4447,6 +4356,16 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
                 return Command::done();
             }
             fiat_health_result(model, body, latency_ms)
+        }
+
+        NetShellResult::ProviderKeysRetired {
+            configs_written,
+            keys_removed,
+        } => {
+            if attempt != model.load_gen {
+                return Command::done();
+            }
+            provider_keys_retired(model, configs_written, keys_removed)
         }
 
         // Best-effort acknowledgements — never change state.
@@ -4679,48 +4598,6 @@ pub fn wizard_error_key<'a>(
             .and_then(|compat| compat.hint_key.as_deref())
             .unwrap_or(WIZARD_NOT_COMPATIBLE),
         NetWizardErrorKind::CheckFailed { .. } => WIZARD_CHECK_FAILED,
-    }
-}
-
-fn provider_view(model: &Model, provider: NetProviderId) -> NetProviderView {
-    // The draft when one is being typed, else the SAVED key: a shell that
-    // never raised `ProvidersOpened` (spec 072: web's wide layout, Android)
-    // showed every saved key as "Not set".
-    let key = model
-        .provider_drafts
-        .get(&provider)
-        .cloned()
-        .or_else(|| model.provider_keys.get(provider).cloned())
-        .unwrap_or_default();
-    let test = model.provider_tests.get(&provider).map(|t| {
-        let results: Vec<NetProviderNetRow> = t
-            .rows
-            .iter()
-            .map(|r| {
-                let outcome = r.outcome.unwrap_or(ProviderOutcome {
-                    ok: false,
-                    latency_ms: 0.0,
-                });
-                NetProviderNetRow {
-                    chain_id: r.chain_id,
-                    ok: outcome.ok,
-                    latency_ms: outcome.latency_ms,
-                }
-            })
-            .collect();
-        let ok_count = results.iter().filter(|r| r.ok).count();
-        NetProviderTestView {
-            done: t.done,
-            total: u32::try_from(results.len()).unwrap_or(u32::MAX),
-            ok_count: u32::try_from(ok_count).unwrap_or(u32::MAX),
-            results,
-        }
-    });
-    NetProviderView {
-        provider,
-        has_key: !key.trim().is_empty(),
-        key,
-        test,
     }
 }
 

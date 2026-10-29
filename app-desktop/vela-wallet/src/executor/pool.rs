@@ -48,9 +48,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use vela_core::app::net_health::{NetEdge, NetHealth, net_health_step};
-use vela_core::app::network_admin::{
-    BUILTIN_CHAINS, NetProviderId, PROVIDER_ORDER, build_provider_rpc_url,
-};
+use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::rpc_pool::{
     Event, HEDGE_AFTER_MS, RPC_READ_TIMEOUT_MS, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed,
     RpcKind, RpcOperation, RpcPoolView, RpcShellResult, RpcSource, RpcTransportOutcome,
@@ -1554,6 +1552,9 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
     let builtin = BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id);
 
     // 1. a per-network override, but only when it differs from the default.
+    //    The keyed provider tier that came next is gone (owner decision
+    //    2026-10-29): saved keys became exactly such overrides
+    //    (`network_admin::retire_provider_keys`).
     if let Some(config) = stored_network_config(chain_id)
         && !config.is_empty()
         && builtin.is_none_or(|c| c.rpc_url != config)
@@ -1561,17 +1562,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(config, RpcSource::User, &mut rpc);
     }
 
-    // 2. configured providers, in the canonical order.
-    let keys = stored_provider_keys();
-    for id in PROVIDER_ORDER {
-        if let Some((_, key)) = keys.iter().find(|(provider, _)| *provider == id)
-            && let Some(url) = build_provider_rpc_url(id, chain_id, key)
-        {
-            add(url, RpcSource::Provider, &mut rpc);
-        }
-    }
-
-    // 3. the built-in default, then a custom network's own endpoint.
+    // 2. the built-in default, then a custom network's own endpoint.
     if let Some(chain) = builtin {
         add(chain.rpc_url.to_owned(), RpcSource::Default, &mut rpc);
     }
@@ -1579,7 +1570,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(custom, RpcSource::Default, &mut rpc);
     }
 
-    // 4. the curated public fallbacks — the CORE's list
+    // 3. the curated public fallbacks — the CORE's list
     // (`network_admin::PUBLIC_RPCS`), one table for every shell. The desktop
     // kept its own copy, and that copy still named `1rpc.io`, which timed
     // out on every call (issue 483's research): a fallback that never
@@ -1588,7 +1579,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(url, RpcSource::Public, &mut rpc);
     }
 
-    // Tiers 5 and 6 are the chain index, which this cut does not fetch here:
+    // Tiers 4 and 5 are the chain index, which this cut does not fetch here:
     // `LoadPoolConfig` is answered synchronously on the pool thread and an
     // index round trip would stall every first call on a chain behind it. The
     // index tiers are a recorded debt, not an oversight — the core orders
@@ -1681,25 +1672,6 @@ fn stored_array(key: &str, chain_id: u32, field: &str) -> Option<String> {
             .flatten()
             .filter(|url| !url.is_empty())
     })
-}
-
-fn stored_provider_keys() -> Vec<(NetProviderId, String)> {
-    let mut out = Vec::new();
-    let Ok(Some(Value::Object(map))) = storage::read_value(storage::KEY_RPC_PROVIDERS) else {
-        return out;
-    };
-    for (id, field) in [
-        (NetProviderId::Alchemy, "alchemy"),
-        (NetProviderId::Drpc, "drpc"),
-        (NetProviderId::Ankr, "ankr"),
-    ] {
-        if let Some(key) = map.get(field).and_then(Value::as_str)
-            && !key.is_empty()
-        {
-            out.push((id, key.to_owned()));
-        }
-    }
-    out
 }
 
 #[cfg(test)]
@@ -2112,13 +2084,12 @@ mod tests {
 
     /// PR 4 item 9: what the desktop has for a chain that is not one of the
     /// wallet's networks — 1625, where the `.g` name service's registry
-    /// lives. NOTHING: no override, no provider slug, no built-in, no curated
-    /// public endpoint, and the chain index is not consulted here at all. So
-    /// a call for it has no node to be sent to; the core concludes it at
-    /// once, with no request, and counts the chain in none of the lists the
-    /// "can't reach" notices and the problem report read. With every
-    /// provider key configured it is still nothing. Once the person adds the
-    /// network, its own endpoint is the pool.
+    /// lives. NOTHING: no override, no built-in, no curated public endpoint,
+    /// and the chain index is not consulted here at all. So a call for it has
+    /// no node to be sent to; the core concludes it at once, with no request,
+    /// and counts the chain in none of the lists the "can't reach" notices
+    /// and the problem report read. Once the person adds the network, its
+    /// own endpoint is the pool.
     ///
     /// (The relay's per-chain base is the BUNDLER tier — it is built for any
     /// chain id and asked only by a user operation, never by a read.)
@@ -2136,20 +2107,6 @@ mod tests {
                 bundler
                     .iter()
                     .all(|endpoint| endpoint.url.ends_with("/1625"))
-            );
-
-            // Every provider key the settings can hold changes nothing: no
-            // provider has a slug for a chain the wallet does not list.
-            let keyed = storage::write_value(
-                storage::KEY_RPC_PROVIDERS,
-                json!({ "alchemy": "key-a", "drpc": "key-d", "ankr": "key-k" }),
-            );
-            assert!(keyed.is_ok());
-            assert_eq!(stored_provider_keys().len(), 3);
-            assert!(collect_endpoints(GRAVITY).0.is_empty());
-            assert!(
-                !collect_endpoints(1).0.is_empty(),
-                "the same keys do reach a chain the wallet has"
             );
 
             // The call itself, through the real pool thread and the core:
@@ -2183,15 +2140,15 @@ mod tests {
         });
     }
 
-    /// The six tiers, in order, with bans deliberately NOT filtered.
+    /// The tiers, in order, with bans deliberately NOT filtered.
     #[test]
     fn endpoints_are_collected_in_source_order() {
         storage::tests::with_temp_state("pool-tiers", || {
             let (rpc, bundler) = collect_endpoints(100);
             let sources: Vec<RpcSource> = rpc.iter().map(|e| e.source).collect();
 
-            // With no override and no provider key, the first tier present is
-            // the built-in default, then the curated public list.
+            // With no override, the first tier present is the built-in
+            // default, then the curated public list.
             assert_eq!(sources.first(), Some(&RpcSource::Default));
             assert!(
                 sources.iter().any(|s| *s == RpcSource::Public),

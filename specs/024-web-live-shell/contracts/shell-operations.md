@@ -43,7 +43,8 @@ core's too — a shell shows `importFailTitle/Body` and acknowledges.
 | Operation | 024 web behaviour | Answers |
 | --- | --- | --- |
 | `read_store` | KV reads; `serviceEndpoints` via the onboarding localStorage helper (D3a); unreadable → "nothing configured" | `store_loaded` |
-| `write_custom_networks` / `write_network_configs` / `write_rpc_providers` | KV write, best-effort | `written` |
+| `write_custom_networks` / `write_network_configs` | KV write, best-effort | `written` |
+| `retire_provider_keys { configs }` (2026-10-29, replaces `write_rpc_providers`) | write `configs` to `vela.networkConfig` when present, then — only if that went through — remove `vela.rpcProviders`. NOT best-effort; never logs (the keys are in the URLs) | `provider_keys_retired { configs_written, keys_removed }` |
 | `write_service_endpoints` | localStorage helper (D3a), best-effort | `written` |
 | `start_search_debounce` | real `setTimeout` | `debounce_elapsed` |
 | `fetch_search_index` | fail-closed | `search_index { chains: [] }` |

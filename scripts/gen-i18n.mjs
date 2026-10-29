@@ -1028,8 +1028,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   payload, and the note over a string drawn as the JSON it holds (typed
 //   data). 2254 + 3 = 2257 leaves, 120 branches.
 // 2398 (Raw JSON view, 2026-10-28): 2277 leaves, 121 branches.
-if (PATHS.length !== 2398) fail(`expected 2398 paths (2277 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2277) fail(`expected 2277 leaf paths, got ${leafSet.size}`);
+// 2369 (RPC providers retired, owner decision 2026-10-29): − 4
+//   `settingsModals.rpcProviders.{modalTitle, activeNetworks, unavailable,
+//   avgLatency}`, which nothing reads once web and desktop drop the page.
+//   The rest of that namespace and `settings.advanced.rpcProviders{Title,
+//   Subtitle}` stay while iOS and Android still draw the page;
+//   `settings.agent.action.setProviderKey` stays to name an old agent's
+//   refused call in the activity. 2253 − 4 = 2249 leaves, 120 branches.
+// 2394 (RPC providers removal, 2026-10-28): 2273 leaves, 121 branches.
+if (PATHS.length !== 2394) fail(`expected 2394 paths (2273 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2273) fail(`expected 2273 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
