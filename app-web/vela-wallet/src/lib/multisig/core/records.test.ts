@@ -42,6 +42,12 @@ function item(safeTxHash: string, action: unknown, nonce = 3n) {
 	} as never;
 }
 
+// A loaded full run (both projects at once, `pnpm test:unit`) overran the
+// default 5 s here: a first test pays for compiling its module graph (the
+// real core, where one loads), not its own time (the house pattern,
+// bridge.test.ts).
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
 	store.saved = [];
 });
