@@ -45,6 +45,7 @@ vi.mock('./balance-resident', async (original) => {
 vi.mock('$lib/core/client', () => ({ loadCore: async () => {} }));
 vi.mock('$lib/services/networks', () => ({
 	ensureCustomNetworks: async () => {},
+	ensureShownNetworks: async () => {},
 	inSpace: () => true
 }));
 vi.mock('$lib/services/holdings-cache', () => ({
