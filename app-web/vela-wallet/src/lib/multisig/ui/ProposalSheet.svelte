@@ -46,9 +46,17 @@
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
-	import { GenesisRefusedError } from '../core/refusal';
+	import { GenesisRefusedError, type Finding } from '../core/refusal';
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
+	import {
+		gateOf,
+		signingGate,
+		SigningRefusedError,
+		SigningUncheckedError
+	} from '../core/gate.svelte';
+	import { checkOn } from '../core/recheck';
 	import { refusalText } from './findings';
+	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
 	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
@@ -130,9 +138,25 @@
 		}
 	}
 
+	/** This session's check of this network, once it has answered. */
+	let checked = $state<Finding[] | null>(null);
+
 	onMount(() => {
 		if (draft && !draft.safeTxHash) void loadDraft();
+		// §3.5: who can act for it on this network, read now (once a session)
+		// — so a refusal or a risk is said before anyone taps.
+		void checkOn(account, chainId).then((found) => {
+			if (found) checked = found;
+		});
 	});
+
+	/**
+	 * Whether this device signs here: not at all where its genesis is
+	 * refused (read-only), only after a confirmation naming the risk where
+	 * more than its members can act for it — every signature asks.
+	 */
+	const gate = $derived(checked ? gateOf(checked, chainId) : signingGate(account, chainId));
+	const readOnly = $derived(gate.kind === 'refused');
 
 	const item = $derived(
 		drafting
@@ -267,6 +291,18 @@
 			});
 		}
 		if (error instanceof MailboxUnreadableError) return m.proposal.mailboxDown;
+		if (error instanceof SigningRefusedError) {
+			const why = error.findings.map((f) =>
+				f.from === 'genesis' ? refusalText(m, f.reason, f.chainId) : ''
+			);
+			return [
+				fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) }),
+				...new Set(why.filter(Boolean))
+			].join(' ');
+		}
+		if (error instanceof SigningUncheckedError) {
+			return fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) });
+		}
 		// §3.5: the executor deploys only a genesis the core finds Verified there.
 		if (error instanceof GenesisRefusedError) {
 			const network = chainName(error.chainId);
@@ -371,7 +407,7 @@
 	 * it approves in Vela, from the link.
 	 */
 	const outside = $derived(
-		!item || item.status === 'done' || item.review.action === null
+		!item || item.status === 'done' || item.review.action === null || readOnly
 			? []
 			: (members?.owners ?? []).filter(
 					(o) =>
@@ -622,6 +658,14 @@
 			{/if}
 		</header>
 
+		{#if gate.kind === 'refused'}
+			<!-- §3.5: its genesis refused here — read-only, nothing to sign. -->
+			<AuthorityNotice {m} kind="refused" findings={gate.findings} readOnlyOn={[chainId]} />
+		{:else if gate.kind === 'risk'}
+			<!-- §3.5: more than its members can act for it here — each signature asks. -->
+			<AuthorityNotice {m} kind="risk" findings={gate.findings} />
+		{/if}
+
 		{#if item.review.action === null}
 			<p class="warn" role="alert">
 				<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
@@ -801,7 +845,7 @@
 				<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => draft?.decline()}
 					>{m.external.decline}</Button
 				>
-				{#if item.review.action !== null}
+				{#if item.review.action !== null && !readOnly}
 					<Button
 						variant="value"
 						shape="rounded"
@@ -811,7 +855,7 @@
 					>
 				{/if}
 			</div>
-			{#if executeNow && item.review.action !== null}
+			{#if executeNow && item.review.action !== null && !readOnly}
 				<p class="fine">{m.proposal.feeNote}</p>
 			{/if}
 		{:else if phase.kind === 'sent'}
@@ -826,7 +870,7 @@
 					>
 				{/if}
 			</div>
-		{:else if item.status !== 'done' && item.review.action !== null}
+		{:else if item.status !== 'done' && item.review.action !== null && !readOnly}
 			{#if candidates.length > 1}
 				<fieldset class="actor">
 					<legend>{m.proposal.as}</legend>
@@ -938,7 +982,7 @@
 		{/if}
 
 		<!-- Any member here may withdraw it, the proposer included, approved or not. -->
-		{#if !drafting && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent'}
+		{#if !drafting && !readOnly && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent'}
 			<div class="reject">
 				{#if rejecting}
 					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>

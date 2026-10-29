@@ -60,6 +60,11 @@ vi.mock('$lib/services/networks', () => ({
 }));
 vi.mock('../core/display', () => ({ chainName: (id: number) => `Chain ${id}` }));
 vi.mock('../core/chain', () => ({ hasCode: async () => seams.deployed }));
+// A rename's signature passes the gate in `proposeRename` (stood in above).
+vi.mock('../core/gate.svelte', () => ({
+	SigningRefusedError: class extends Error {},
+	SigningUncheckedError: class extends Error {}
+}));
 vi.mock('../core/kernel', () => {
 	const same = (a?: string | null, b?: string | null) =>
 		!!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -268,5 +273,37 @@ describe('original and current members', () => {
 		await tick();
 		expect(screen.container.querySelectorAll('[data-testid="members-current"]')).toHaveLength(0);
 		expect(screen.container.querySelectorAll('[data-testid="members-original"]')).toHaveLength(1);
+	});
+});
+
+describe('who can act for it (§3.5)', () => {
+	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
+
+	it('says a refused network as read-only, and a risk found on another, each in its own notice', async () => {
+		const screen = render(MultisigSettings, {
+			props: {
+				m: words(),
+				account: {
+					address: SAFE,
+					genesis: {},
+					owners: [ME, OTHER],
+					threshold: 2,
+					chainIds: [100, 8453],
+					findings: [
+						{ from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } },
+						{ from: 'genesis', chainId: 8453, reason: { kind: 'module', address: MODULE } }
+					]
+				} as never,
+				payer: null,
+				cancelLabel: 'Cancel'
+			}
+		});
+		const refused = screen.getByTestId('authority-refused');
+		await expect.element(refused).toHaveTextContent('authority.refusedTitle');
+		await expect.element(refused).toHaveTextContent('authority.refusedOn');
+		await expect.element(refused).toHaveTextContent('authority.module');
+		const risk = screen.getByTestId('authority-risk');
+		await expect.element(risk).toHaveTextContent('authority.riskModule');
+		await expect.element(risk).not.toHaveTextContent('authority.module');
 	});
 });

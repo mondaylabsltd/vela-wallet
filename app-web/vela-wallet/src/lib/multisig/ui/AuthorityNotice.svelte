@@ -4,7 +4,11 @@
 	 * plainly: `refused` — a genesis Vela will not deploy or sign for, and
 	 * why; `risk` — a deployed one that something besides its members can act
 	 * for, each module, guard, handler or singleton named. Never folded away.
+	 * `readOnlyOn`: the networks where it is read-only for that (the re-check
+	 * refused its genesis there), said first.
 	 */
+	import { fillTemplate } from '$lib/i18n/fill';
+	import { chainName } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { Finding } from '../core/refusal';
@@ -15,11 +19,15 @@
 		m: MultisigMessages;
 		kind: 'refused' | 'risk';
 		findings: Finding[];
+		readOnlyOn?: number[];
 	}
 
-	let { m, kind, findings }: Props = $props();
+	let { m, kind, findings, readOnlyOn = [] }: Props = $props();
 
-	const lines = $derived(findingLines(m, findings));
+	const lines = $derived([
+		...readOnlyOn.map((id) => fillTemplate(m.authority.refusedOn, { network: chainName(id) })),
+		...findingLines(m, findings)
+	]);
 </script>
 
 <div class="notice" role="alert" data-testid="authority-{kind}">

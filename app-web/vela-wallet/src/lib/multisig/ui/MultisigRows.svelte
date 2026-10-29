@@ -60,7 +60,14 @@
 			<span class="text">
 				<span class="name" class:active={selected}>{multisigName(account, m)}</span>
 				<span class="address"
-					>{shortenAddress(account.address)}{#if account.findings?.length}<span class="flag risk">
+					>{shortenAddress(
+						account.address
+					)}{#if account.findings?.some((f) => f.from === 'genesis')}<span
+							class="flag risk"
+							data-testid="flag-refused"
+						>
+							· {m.authority.refusedFlag}</span
+						>{:else if account.findings?.length}<span class="flag risk" data-testid="flag-risk">
 							· {m.authority.riskFlag}</span
 						>{:else if !isShared(account)}<span class="flag">
 							· {m.switcher.notShared}</span

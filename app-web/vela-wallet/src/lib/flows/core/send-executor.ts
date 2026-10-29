@@ -40,6 +40,8 @@
  */
 
 import { proposeTransfers } from '$lib/multisig/core/proposals.svelte';
+import { SigningRefusedError, SigningUncheckedError } from '$lib/multisig/core/gate.svelte';
+import { multisigUi } from '$lib/multisig/core/ui.svelte';
 import {
 	fromHex,
 	userOpNotSentDetail,
@@ -640,6 +642,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				} catch (error) {
 					const name = error instanceof DOMException ? error.name : '';
 					console.warn('[send] proposal not made:', error);
+					// §3.5: nothing signed on a network read-only for it (or not
+					// checked yet) — the send says it failed, the multisig why.
+					if (error instanceof SigningRefusedError || error instanceof SigningUncheckedError) {
+						multisigUi.open({ kind: 'authority', error });
+					}
 					return {
 						type: 'propose_failed',
 						cancelled: name === 'NotAllowedError' || name === 'AbortError'

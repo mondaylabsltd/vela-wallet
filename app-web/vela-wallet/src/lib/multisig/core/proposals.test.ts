@@ -174,8 +174,26 @@ vi.mock('./owners', () => ({
 }));
 vi.mock('$lib/onboarding/core/storage', () => ({ loadAccounts: () => [] }));
 vi.mock('./records', () => ({ recordRemoteExecutions: async () => false }));
-vi.mock('./execute', () => ({ submitExecution: async () => ({}) }));
+const executions = vi.hoisted(() => ({ count: 0 }));
+vi.mock('./execute', () => ({
+	submitExecution: async () => {
+		executions.count += 1;
+		return {};
+	}
+}));
 vi.mock('../external/signing.svelte', () => ({ externalSigning: { approve: async () => ({}) } }));
+/**
+ * §3.5: whether this device signs for it on a network — the gate's own rules
+ * are `gate.test.ts`'s; here, only that every signature passes it first.
+ * `refuse`: the gate throws (a refused network, or the risk declined).
+ */
+const gate = vi.hoisted(() => ({ asked: [] as number[], refuse: null as Error | null }));
+vi.mock('./gate.svelte', () => ({
+	authorizeSigning: async (_account: unknown, chainId: number) => {
+		gate.asked.push(chainId);
+		if (gate.refuse) throw gate.refuse;
+	}
+}));
 const account = {
 	address: SAFE,
 	genesis: { factory: '', singleton: '', saltNonce: '0x1', initializer: '0x' },
@@ -191,6 +209,9 @@ vi.mock('./store.svelte', () => ({
 }));
 
 const {
+	approve,
+	approveExternally,
+	execute,
 	proposals,
 	proposeTransfers,
 	proposeCalls,
@@ -245,7 +266,56 @@ beforeEach(() => {
 	storage.clear();
 	signed.length = 0;
 	submitted.length = 0;
+	gate.asked.length = 0;
+	gate.refuse = null;
 	proposals.follow(null, []);
+});
+
+describe('every signature passes the gate first (§3.5)', () => {
+	it('asks it for the network before the passkey, and signs nothing it stops', async () => {
+		await proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }]);
+		expect(gate.asked).toEqual([100]);
+		expect(signed).toHaveLength(1);
+
+		gate.refuse = new DOMException('declined', 'AbortError');
+		await expect(
+			proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }])
+		).rejects.toMatchObject({ name: 'AbortError' });
+		expect(gate.asked).toEqual([100, 100]);
+		// Nothing signed, nothing sent: the passkey was never asked.
+		expect(signed).toHaveLength(1);
+		expect(submitted).toHaveLength(1);
+	});
+
+	it('approve, execute and an outside wallet’s approval: each asks it for the item’s network', async () => {
+		const item = {
+			chainId: 8453,
+			safeTxHash: `0x${'11'.repeat(32)}`,
+			tx: stored(1).safeTx,
+			approvals: []
+		};
+		const owner = { address: OWNER, name: 'Mine', account: { address: OWNER } };
+		gate.refuse = new Error('refused here');
+		const multisigAccount = account as Parameters<typeof approve>[0];
+		const proposal = item as unknown as Parameters<typeof approve>[1];
+		const local = owner as unknown as Parameters<typeof approve>[2];
+		await expect(approve(multisigAccount, proposal, local)).rejects.toThrow('refused here');
+		await expect(
+			execute(multisigAccount, proposal, local, {
+				deployed: true,
+				owners: [OWNER],
+				threshold: 1,
+				nonce: 0n
+			})
+		).rejects.toThrow('refused here');
+		await expect(
+			approveExternally(multisigAccount, 8453, stored(1).safeTx, [OWNER])
+		).rejects.toThrow('refused here');
+		expect(gate.asked).toEqual([8453, 8453, 8453]);
+		expect(signed).toEqual([]);
+		expect(executions.count).toBe(0);
+		expect(submitted).toEqual([]);
+	});
 });
 
 describe('a mailbox that cannot be read', () => {

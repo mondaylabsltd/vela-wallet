@@ -267,7 +267,14 @@
         "riskConfirm": "I understand — add it anyway",
         "riskFlag": "High risk",
         "deployRefused": "Vela won't deploy this multisig on {{network}}:",
-        "deployUnverified": "Vela couldn't check the Safe contracts on {{network}}, so it won't deploy this multisig there yet. Try again in a moment."
+        "deployUnverified": "Vela couldn't check the Safe contracts on {{network}}, so it won't deploy this multisig there yet. Try again in a moment.",
+        "refusedFlag": "Refused",
+        "refusedOn": "Read-only on {{network}}: Vela won't deploy it or sign for it there.",
+        "signRiskTitle": "Sign for a high-risk multisig?",
+        "signRiskBody": "On {{network}}, something besides its members can act for this multisig. Whoever controls it can move its funds or block it, whatever you sign. Sign only if you know exactly why it has it.",
+        "signRiskConfirm": "I understand the risk — sign",
+        "signRiskCancel": "Don't sign",
+        "signUnchecked": "Vela couldn't check who can act for this multisig on {{network}}, so it won't sign there yet. Try again in a moment."
       },
       "external": {
         "pageTitle": "Sign with your wallet for Vela",

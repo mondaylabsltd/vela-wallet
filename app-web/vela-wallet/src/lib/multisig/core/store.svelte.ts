@@ -46,7 +46,10 @@ export interface MultisigAccount {
 	/**
 	 * What else can act for it, as the chain showed when the person added it
 	 * anyway (§3.5: a module, a guard, a handler or singleton that is not
-	 * Safe's) — kept to be shown wherever it is, never hidden.
+	 * Safe's) — kept to be shown wherever it is, never hidden. The re-check
+	 * (`recheck.ts`) keeps each network's current: a risk found there since,
+	 * or its genesis refused on a network it is not deployed on (read-only
+	 * there).
 	 */
 	findings?: Finding[];
 }
@@ -225,6 +228,20 @@ class MultisigStore {
 			sameAddress(a.address, address) ? { ...a, findings } : a
 		);
 		write(this.accounts);
+	}
+
+	/**
+	 * What the chain says now about `chainId` (the re-check, §3.5): that
+	 * network's findings are replaced by `found`, every other network's kept.
+	 * Written only when something changed.
+	 */
+	setFindingsOn(address: string, chainId: number, found: Finding[]): void {
+		const row = this.find(address);
+		if (!row) return;
+		const kept = (row.findings ?? []).filter((f) => f.chainId !== chainId);
+		const next = [...kept, ...found];
+		if (JSON.stringify(next) === JSON.stringify(row.findings ?? [])) return;
+		this.setFindings(address, next);
 	}
 
 	markShared(address: string): void {

@@ -6,6 +6,7 @@
 import type { DappCall } from './proposals.svelte';
 import type { LinkedProposals } from './linked.svelte';
 import type { ProposalLink } from './link';
+import type { SigningRefusedError, SigningUncheckedError } from './gate.svelte';
 
 /**
  * A dApp's transaction from a multisig, owned by the request it came with
@@ -59,7 +60,13 @@ export type MultisigSheet =
 	 * it is added. `link`: the link that named it, opened again once it is.
 	 */
 	| { kind: 'missing'; chainId: number; link?: ProposalLink }
-	| { kind: 'dapp'; request: DappProposal };
+	| { kind: 'dapp'; request: DappProposal }
+	/**
+	 * §3.5: a signature asked where this device signs nothing for it (its
+	 * genesis refused there, or who can act for it not read yet) by a flow
+	 * that cannot say why itself (the send flow): said here.
+	 */
+	| { kind: 'authority'; error: SigningRefusedError | SigningUncheckedError };
 
 class MultisigUi {
 	sheet = $state<MultisigSheet | null>(null);

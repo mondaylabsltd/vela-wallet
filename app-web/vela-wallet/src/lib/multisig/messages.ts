@@ -327,6 +327,17 @@ export interface MultisigMessages {
 		riskFlag: string;
 		deployRefused: string;
 		deployUnverified: string;
+		/** The switcher's flag for a multisig whose genesis a network refused. */
+		refusedFlag: string;
+		/** A network the re-check refused its genesis on (`{{network}}`): read-only there. */
+		refusedOn: string;
+		/** Each signature on a high-risk network asks first, naming what was found. */
+		signRiskTitle: string;
+		signRiskBody: string;
+		signRiskConfirm: string;
+		signRiskCancel: string;
+		/** Who can act for it on `{{network}}` could not be read: nothing is signed yet. */
+		signUnchecked: string;
 	};
 }
 
@@ -609,6 +620,13 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		riskConfirm: '',
 		riskFlag: '',
 		deployRefused: '',
-		deployUnverified: ''
+		deployUnverified: '',
+		refusedFlag: '',
+		refusedOn: '',
+		signRiskTitle: '',
+		signRiskBody: '',
+		signRiskConfirm: '',
+		signRiskCancel: '',
+		signUnchecked: ''
 	}
 };

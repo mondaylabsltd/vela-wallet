@@ -14,7 +14,7 @@
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { checkRecords, discoverChains, followUnrecorded, keepMultisig } from '../core/accounts';
-	import { spaceNetworksSync } from '$lib/services/networks';
+	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
 	import { goto } from '$app/navigation';
@@ -26,10 +26,15 @@
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { externalSigning } from '../external/signing.svelte';
+	import { riskConfirmation, SigningRefusedError } from '../core/gate.svelte';
+	import { fillTemplate } from '$lib/i18n/fill';
+	import AuthorityNotice from './AuthorityNotice.svelte';
+	import { recheckStored } from '../core/recheck';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
+	import RiskConfirmSheet from './RiskConfirmSheet.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -77,6 +82,8 @@
 
 	onMount(() => {
 		multisig.boot();
+		// §3.5: a signature on a high-risk network asks here, on top of any sheet.
+		const detachRisk = riskConfirmation.attach();
 		// ms-9: an executed cancellation's Activity row is titled as its proposal.
 		useCancelTitle(m.action.cancel);
 		proposals.onrecorded = () => onchanged?.();
@@ -97,10 +104,26 @@
 		const onhash = () => void answerLink();
 		window.addEventListener('hashchange', onhash);
 		return () => {
+			detachRisk();
 			stopRecords();
 			window.removeEventListener('hashchange', onhash);
 			proposals.follow(null, []);
 		};
+	});
+
+	/*
+	 * §3.5: every multisig on this device is checked again — once a session,
+	 * and on each network it comes to be used on (or this device comes to
+	 * have): one added before the counterfactual rule was never vetted, and a
+	 * deployed one can gain a module since. What is found is kept on it and
+	 * shown (Settings, the switcher, its transactions); nothing is silent.
+	 */
+	const recheckKey = $derived(
+		multisig.accounts.map((a) => `${a.address}:${a.chainIds.join(',')}`).join(';')
+	);
+	$effect(() => {
+		if (!recheckKey) return;
+		void recheckStored();
 	});
 
 	// Follow the active multisig's proposals on the networks it is used on.
@@ -365,6 +388,21 @@
 			>{m.proposal.addNetwork}</Button
 		>
 	</Sheet>
+{:else if sheet?.kind === 'authority'}
+	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
+		{#if sheet.error instanceof SigningRefusedError}
+			<AuthorityNotice
+				{m}
+				kind="refused"
+				findings={sheet.error.findings}
+				readOnlyOn={[sheet.error.chainId]}
+			/>
+		{:else}
+			<p class="notice" role="alert">
+				{fillTemplate(m.authority.signUnchecked, { network: chainName(sheet.error.chainId) })}
+			</p>
+		{/if}
+	</Sheet>
 {:else if sheet?.kind === 'notice'}
 	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
 		<p class="notice" role="alert">{sheet.text}</p>
@@ -378,6 +416,13 @@
 		{closeLabel}
 		onclose={() => multisigUi.close()}
 	/>
+{/if}
+
+<!-- A signature on a high-risk network, asked from any sheet or the send flow: on top of them. -->
+{#if riskConfirmation.request}
+	{#key riskConfirmation.request}
+		<RiskConfirmSheet {m} request={riskConfirmation.request} {wide} {closeLabel} />
+	{/key}
 {/if}
 
 <!-- An outside owner's wallet, asked from any sheet or from the send flow: on top of them. -->

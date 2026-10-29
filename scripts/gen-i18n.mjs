@@ -1095,8 +1095,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   only (it says what is checked). 2297 + 24 = 2321 leaves, 122 branches (on 2418).
 // 2464 (both of the above, merged): 2297 − 2 + 23 + 24 = 2342 leaves, 122
 //   branches.
-if (PATHS.length !== 2464) fail(`expected 2464 paths (2342 leaf + 122 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2342) fail(`expected 2342 leaf paths, got ${leafSet.size}`);
+// 2471 (a multisig on this device is checked again, and a risky network's
+//   signing asks each time, 2026-10-29): + `home.multisig.authority.
+//   {refusedFlag, refusedOn}` (the switcher's flag and the per-network line
+//   of a genesis the re-check refused), + `{signRiskTitle, signRiskBody,
+//   signRiskConfirm, signRiskCancel}` (the confirmation each signature on a
+//   high-risk network asks), + `signUnchecked` (who can act for it there
+//   could not be read: nothing is signed yet). 2342 + 7 = 2349 leaves, 122
+//   branches.
+if (PATHS.length !== 2471) fail(`expected 2471 paths (2349 leaf + 122 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2349) fail(`expected 2349 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 122) fail(`expected 122 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

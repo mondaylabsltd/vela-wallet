@@ -267,7 +267,14 @@
         "riskConfirm": "이해했습니다. 그래도 추가하기",
         "riskFlag": "고위험",
         "deployRefused": "Vela는 이 멀티시그를 {{network}}에 배포하지 않습니다:",
-        "deployUnverified": "{{network}}의 Safe 컨트랙트를 확인하지 못해, Vela는 아직 이 멀티시그를 그곳에 배포하지 않습니다. 잠시 후 다시 시도하세요."
+        "deployUnverified": "{{network}}의 Safe 컨트랙트를 확인하지 못해, Vela는 아직 이 멀티시그를 그곳에 배포하지 않습니다. 잠시 후 다시 시도하세요.",
+        "refusedFlag": "거부됨",
+        "refusedOn": "{{network}}에서는 읽기 전용: Vela는 그곳에서 이 멀티시그를 배포하거나 서명하지 않습니다.",
+        "signRiskTitle": "고위험 멀티시그에 서명할까요?",
+        "signRiskBody": "{{network}}에서는 멤버 외에도 이 멀티시그를 움직일 수 있는 것이 있습니다. 그것을 제어하는 쪽은 무엇에 서명하든 자금을 옮기거나 막을 수 있습니다. 그 이유를 정확히 알 때만 서명하세요.",
+        "signRiskConfirm": "위험을 이해했습니다. 서명하기",
+        "signRiskCancel": "서명하지 않기",
+        "signUnchecked": "{{network}}에서 이 멀티시그를 움직일 수 있는 대상을 확인하지 못해 Vela는 아직 그곳에서 서명하지 않습니다. 잠시 후 다시 시도하세요."
       },
       "external": {
         "pageTitle": "Vela용 서명",

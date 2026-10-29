@@ -43,7 +43,9 @@ const fake = vi.hoisted(() => ({
 	followed: null as string | null,
 	/** Where an approval signed here stands, while the mailbox lacks it. */
 	kept: null as any,
-	sentAgain: 0
+	sentAgain: 0,
+	/** §3.5: what this session's check of the network found (`[]`: only its members act). */
+	checked: [] as any[]
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -75,6 +77,11 @@ vi.mock('../core/proposals.svelte', () => ({
 	proposeCancel: async () => void fake.calls.push('reject'),
 	draftCalls: async () => fake.draft,
 	MailboxUnreadableError: class extends Error {}
+}));
+// §3.5: the network's check, as the chain would answer it (`recheck.test.ts` reads it).
+vi.mock('../core/recheck', () => ({
+	checkOn: async () => fake.checked,
+	findingsOn: () => []
 }));
 vi.mock('../core/execute', () => ({
 	ExecutorCannotPayError: class extends Error {},
@@ -217,6 +224,7 @@ beforeEach(() => {
 	fake.followed = null;
 	fake.kept = null;
 	fake.sentAgain = 0;
+	fake.checked = [];
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -779,5 +787,53 @@ describe('what was signed here and the mailbox has not taken', () => {
 		expect(fake.sentAgain).toBe(1);
 		// Never a second signature: no approve, no passkey.
 		expect(fake.calls).toEqual([]);
+	});
+});
+
+describe('who can act for it on this network (§3.5)', () => {
+	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
+
+	it('its genesis refused here: read-only — the reasons said, nothing to sign or withdraw', async () => {
+		fake.checked = [{ from: 'genesis', chainId: 100, reason: { kind: 'module', address: MODULE } }];
+		fake.chain = {
+			chainId: 100,
+			members,
+			items: [item({ canExecute: [local], approved: 1 })],
+			mailbox: true
+		};
+		show();
+		await settle();
+		const notice = document.querySelector('[data-testid="authority-refused"]');
+		expect(notice?.textContent).toContain('authority.refusedOn');
+		expect(notice?.textContent).toContain('authority.module');
+		expect(buttons()).not.toContain('proposal.approve');
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+		expect(buttons()).not.toContain('proposal.reject');
+		expect(buttons()).not.toContain('external.signWithWallet');
+	});
+
+	it('a risk found here: said on the sheet, and signing still offered (each signature asks)', async () => {
+		fake.checked = [{ from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } }];
+		show();
+		await settle();
+		expect(document.querySelector('[data-testid="authority-risk"]')?.textContent).toContain(
+			'authority.riskModule'
+		);
+		expect(buttons()).toContain('proposal.approve');
+		press('proposal.approve');
+		await settle();
+		expect(fake.calls).toEqual(['approve']);
+	});
+
+	it("another network's findings say nothing here", async () => {
+		fake.checked = [
+			{ from: 'genesis', chainId: 8453, reason: { kind: 'module', address: MODULE } }
+		];
+		show();
+		await settle();
+		expect(document.querySelector('[data-testid="authority-refused"]')).toBeNull();
+		expect(document.querySelector('[data-testid="authority-risk"]')).toBeNull();
+		expect(buttons()).toContain('proposal.approve');
 	});
 });

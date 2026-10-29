@@ -267,7 +267,14 @@
         "riskConfirm": "我已了解，仍然添加",
         "riskFlag": "高风险",
         "deployRefused": "Vela 不会在 {{network}} 上部署这个多签账户：",
-        "deployUnverified": "Vela 无法核对 {{network}} 上的 Safe 合约，所以暂不在那里部署这个多签账户。请稍后再试。"
+        "deployUnverified": "Vela 无法核对 {{network}} 上的 Safe 合约，所以暂不在那里部署这个多签账户。请稍后再试。",
+        "refusedFlag": "已拒绝",
+        "refusedOn": "在 {{network}} 上只读：Vela 不会在那里部署它，也不会为它签名。",
+        "signRiskTitle": "要为高风险多签账户签名吗？",
+        "signRiskBody": "在 {{network}} 上，除了成员，还有别的东西能操作这个多签账户。无论你签什么，控制它的人都能转走资金或阻止它。只有在你清楚知道它为什么有这个时才签名。",
+        "signRiskConfirm": "我了解风险，签名",
+        "signRiskCancel": "不签名",
+        "signUnchecked": "Vela 无法核对 {{network}} 上谁能操作这个多签账户，所以暂时不会在那里签名。请稍后再试。"
       },
       "external": {
         "pageTitle": "为 Vela 签名",

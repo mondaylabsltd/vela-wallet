@@ -53,6 +53,7 @@ import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
 import { networkForChainId, networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
+import { authorizeSigning } from './gate.svelte';
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */
@@ -579,6 +580,9 @@ export async function propose(
 	if (Number(tx.operation) === 1 && !(await hasCode(chainId, tx.to))) {
 		throw new Error(`${tx.to} has no code on chain ${chainId}`);
 	}
+	// §3.5: read-only where its genesis is refused; asked, every time, where
+	// more than its members can act for it — before the passkey.
+	await authorizeSigning(account, chainId);
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await signApproval(owner.account, chainId, hash);
 	return submitProposal(account, chainId, tx, approval);
@@ -807,6 +811,7 @@ export async function approveExternally(
 	tx: SafeTx,
 	owners: string[]
 ) {
+	await authorizeSigning(account, chainId);
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await externalSigning.approve({
 		chainId,
@@ -967,6 +972,7 @@ async function proposeBuilt(
 
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
+	await authorizeSigning(account, item.chainId);
 	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash);
 	const answer = await submitKept({
 		chainId: item.chainId,
@@ -987,6 +993,7 @@ export async function execute(
 	executor: LocalOwner,
 	members: ChainMembers
 ) {
+	await authorizeSigning(account, item.chainId);
 	const result = await submitExecution({
 		chainId: item.chainId,
 		multisig: account.address,

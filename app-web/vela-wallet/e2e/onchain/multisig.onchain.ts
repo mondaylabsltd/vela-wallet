@@ -981,7 +981,10 @@ test('the canonical Safe contracts on the fork hold exactly the code the core pi
  * enables an attacker's module. The address derives — and the wallet says
  * no: undeployed, the core refuses it (nothing adds it, nothing deploys it);
  * deployed with its module, the chain shows it, said plainly, and it is added
- * only on the person's explicit tap, flagged from then on.
+ * only on the person's explicit tap, flagged from then on. Every signature
+ * for it on Gnosis then asks first, naming the module; and multisigs kept
+ * before the check are checked again on the next visit — a refused genesis
+ * read-only, a deployed one's module found again.
  */
 test('a genesis that hands the multisig to a module: refused; deployed, said and added only on a tap', async ({
 	browser
@@ -1073,6 +1076,105 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		await page.goto('/en/settings');
 		await expect(page.getByTestId('authority-risk')).toContainText(module, { timeout: 30_000 });
 		await shot(page, 'h3-settings');
+	});
+
+	await test.step('each signature on Gnosis asks first, naming the module — every time', async () => {
+		await setBalance(hooked.address, 2n * 10n ** 18n);
+		await page.goto('/en/wallet');
+		await page
+			.getByRole('button', { name: en('componentsUi.dock.send') })
+			.first()
+			.click();
+		await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
+		await page
+			.getByRole('button', { name: /^xDAI Gnosis/ })
+			.last()
+			.click({ timeout: 60_000 });
+		await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
+		await page.getByRole('textbox', { name: 'xDAI' }).fill('0.5');
+		const advance = page.getByRole('button', { name: en('send.continueBtn') });
+		await expect(advance).toBeEnabled({ timeout: 30_000 });
+		await advance.click();
+		const propose = page.getByRole('button', { name: 'Propose and approve' });
+		const confirm = page.getByTestId('risk-confirm');
+		await propose.click();
+		await expect(confirm).toBeVisible({ timeout: 30_000 });
+		await expect(confirm).toContainText(module);
+		await shot(page, 'h4-sign-asks');
+		await page.getByRole('button', { name: "Don't sign" }).click();
+		await expect(confirm).toHaveCount(0);
+		// Nothing signed: the review stands, to be confirmed again — and asked again.
+		await expect(propose).toBeEnabled();
+		await propose.click();
+		await expect(confirm).toBeVisible({ timeout: 30_000 });
+		await page.getByRole('button', { name: 'I understand the risk — sign' }).click();
+		await expect(page.getByText('1/1 approved').first()).toBeVisible({ timeout: 60_000 });
+		// Executing is a signature of its own: asked again, before its passkey.
+		const before = await balanceOf(RECIPIENT);
+		await page.getByRole('button', { name: /^Execute/ }).click();
+		await expect(confirm).toBeVisible({ timeout: 30_000 });
+		await page.getByRole('button', { name: 'I understand the risk — sign' }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		expect((await balanceOf(RECIPIENT)) - before).toBe(5n * 10n ** 17n);
+		await shot(page, 'h5-executed');
+	});
+
+	await test.step('kept here before the check: checked again on the next visit, and said', async () => {
+		// One kept with nothing found (a build before the rule), and one not
+		// deployed whose genesis hands it to the module, never vetted.
+		const older = await hookedSafe([FIXTURES.one], ATTACKER_MODULE, String(Date.now() + 1));
+		await page.evaluate(
+			({ owner, extra }) => {
+				const rows = JSON.parse(localStorage.getItem('vela.multisigAccounts')!) as Record<
+					string,
+					unknown
+				>[];
+				for (const r of rows) delete r.findings;
+				rows.push({
+					address: extra.address,
+					genesis: { ...extra.genesis, name: 'Old vault' },
+					owners: [owner],
+					threshold: 1,
+					recorded: true,
+					shared: true,
+					chainIds: [100],
+					addedMs: 1
+				});
+				localStorage.setItem('vela.multisigAccounts', JSON.stringify(rows));
+				localStorage.setItem('vela.activeMultisig', extra.address);
+			},
+			{ owner: FIXTURES.one, extra: { address: older.address, genesis: older.genesis } }
+		);
+		await page.goto('/en/settings');
+		const refused = page.getByTestId('authority-refused');
+		await expect(refused).toContainText('Read-only on Gnosis', { timeout: 60_000 });
+		await expect(refused).toContainText(module);
+		await shot(page, 'h6-refused-kept');
+		// The deployed one's module, found again and kept on it.
+		await expect
+			.poll(
+				async () =>
+					(
+						JSON.parse(
+							(await page.evaluate(() => localStorage.getItem('vela.multisigAccounts')))!
+						) as { address: string; findings?: unknown[] }[]
+					).find((r) => r.address === hooked.address)?.findings,
+				{ timeout: 60_000 }
+			)
+			.toEqual([
+				{ from: 'chain', chainId: 100, risk: { kind: 'module', address: ATTACKER_MODULE } }
+			]);
+		// The switcher says both, each as what it is.
+		await page.goto('/en/wallet');
+		await page
+			.getByRole('button', { name: /Old vault/ })
+			.first()
+			.click();
+		await expect(page.getByTestId('flag-refused')).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByTestId('flag-risk')).toBeVisible();
+		await shot(page, 'h7-switcher');
 	});
 	expect(thrown).toEqual([]);
 	await ctx.close();

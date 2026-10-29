@@ -267,7 +267,14 @@
         "riskConfirm": "我已了解，仍然加入",
         "riskFlag": "高風險",
         "deployRefused": "Vela 不會在 {{network}} 上部署這個多簽帳戶：",
-        "deployUnverified": "Vela 無法核對 {{network}} 上的 Safe 合約，所以暫不在那裡部署這個多簽帳戶。請稍後再試。"
+        "deployUnverified": "Vela 無法核對 {{network}} 上的 Safe 合約，所以暫不在那裡部署這個多簽帳戶。請稍後再試。",
+        "refusedFlag": "已拒絕",
+        "refusedOn": "在 {{network}} 上僅供檢視：Vela 不會在那裡部署它，也不會為它簽署。",
+        "signRiskTitle": "要為高風險多簽帳戶簽署嗎？",
+        "signRiskBody": "在 {{network}} 上，除了成員，還有其他東西能操作這個多簽帳戶。無論你簽署什麼，控制它的人都能轉走資金或阻止它。只有在你清楚知道它為什麼有這個時才簽署。",
+        "signRiskConfirm": "我了解風險，簽署",
+        "signRiskCancel": "不簽署",
+        "signUnchecked": "Vela 無法核對 {{network}} 上誰能操作這個多簽帳戶，所以暫時不會在那裡簽署。請稍後再試。"
       },
       "external": {
         "pageTitle": "為 Vela 簽署",

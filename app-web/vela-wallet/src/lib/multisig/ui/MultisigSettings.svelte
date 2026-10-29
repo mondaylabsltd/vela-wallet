@@ -34,6 +34,7 @@
 		proposeRename
 	} from '../core/proposals.svelte';
 	import { fetchGenesis } from '../core/service';
+	import { SigningRefusedError, SigningUncheckedError } from '../core/gate.svelte';
 	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -73,6 +74,12 @@
 	 * the original ones wherever it is not (or nothing is read yet).
 	 */
 	const local = $derived(localOwners(membersAnywhere(account)));
+	/** §3.5: what the chain says, split: a genesis refused on a network, and a risk where it is deployed. */
+	const findings = $derived((multisig.find(account.address) ?? account).findings ?? []);
+	const refusedFindings = $derived(findings.filter((f) => f.from === 'genesis'));
+	const refusedOn = $derived([...new Set(refusedFindings.map((f) => f.chainId))]);
+	const riskFindings = $derived(findings.filter((f) => f.from === 'chain'));
+
 	/** Who proves an owner asks to share it: an original member (the service checks the genesis). */
 	const founders = $derived(localOwners(original.owners));
 
@@ -147,12 +154,19 @@
 			renaming = false;
 			multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
 		} catch (error) {
+			// Declined (the passkey, or a high-risk network's confirmation): nothing to say.
+			if (error instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(error.name))
+				return;
 			renameFailure =
 				error instanceof MailboxUnreadableError
 					? m.proposal.mailboxDown
-					: fillTemplate(m.proposal.failed, {
-							reason: error instanceof Error ? error.message : String(error)
-						});
+					: error instanceof SigningRefusedError
+						? fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) })
+						: error instanceof SigningUncheckedError
+							? fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) })
+							: fillTemplate(m.proposal.failed, {
+									reason: error instanceof Error ? error.message : String(error)
+								});
 		} finally {
 			renameBusy = false;
 		}
@@ -239,10 +253,15 @@
 		<h2 id="multisig-members">{m.panel.members}</h2>
 	</header>
 	<CustomServiceNote {m} />
-	{#if account.findings?.length}
-		<!-- §3.5: added on the person's tap though more than its members can act
-		     for it — said here for as long as it is on this device. -->
-		<AuthorityNotice {m} kind="risk" findings={account.findings} />
+	{#if refusedFindings.length > 0}
+		<!-- §3.5: the re-check refused its genesis on these networks — read-only
+		     there, said for as long as the chain says so. -->
+		<AuthorityNotice {m} kind="refused" findings={refusedFindings} readOnlyOn={refusedOn} />
+	{/if}
+	{#if riskFindings.length > 0}
+		<!-- §3.5: more than its members can act for it (accepted when it was added,
+		     or found since) — said here for as long as it is on this device. -->
+		<AuthorityNotice {m} kind="risk" findings={riskFindings} />
 	{/if}
 	<div class="set" data-testid="members-original">
 		<div class="set-head">
