@@ -33,7 +33,10 @@ async function drawn(state: FlowStateId) {
 	const host = document.createElement('div');
 	host.style.cssText = 'position: relative; width: 390px; height: 844px; overflow: hidden;';
 	document.body.appendChild(host);
-	const screen = render(FlowsMobile, { target: host, props: { model: build(state), onsheetclose } });
+	const screen = render(FlowsMobile, {
+		target: host,
+		props: { model: build(state), onsheetclose }
+	});
 	await tick();
 	await pause(300);
 	const dialog = () => host.querySelector<HTMLElement>('[role="dialog"]');

@@ -284,7 +284,12 @@ describe('debug mode: the script and the gate offer the wallet to the same pages
 	/** Run the injected script in a page at `url`; `true` when it said hello. */
 	function installs(script: string, url: URL, secure: boolean): boolean {
 		const posts: { t?: string }[] = [];
-		const location = { href: url.href, protocol: url.protocol, hostname: url.hostname, origin: url.origin };
+		const location = {
+			href: url.href,
+			protocol: url.protocol,
+			hostname: url.hostname,
+			origin: url.origin
+		};
 		const win: Record<string, unknown> = {
 			location,
 			isSecureContext: secure,

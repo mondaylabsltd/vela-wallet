@@ -69,7 +69,8 @@ const standInVerifier = (
 
 	const addrAnswer = at('addr');
 	if (!addrAnswer) return call('addr', resolver, '3b3b57de');
-	if (addrAnswer.outcome !== 'ok' || (addrAnswer.body?.length ?? 0) < 66) return done('unavailable');
+	if (addrAnswer.outcome !== 'ok' || (addrAnswer.body?.length ?? 0) < 66)
+		return done('unavailable');
 	const found = '0x' + (addrAnswer.body ?? '').slice(-40);
 	if (/^0x0+$/.test(found)) return done('mismatch');
 	return found.toLowerCase() === address.toLowerCase()
