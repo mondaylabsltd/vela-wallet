@@ -455,7 +455,8 @@
     "yourTurn": "Necesita tu aprobación",
     "waiting": "Esperando a otros",
     "queued": "En cola",
-    "progress": "{{approved}}/{{threshold}} aprobadas"
+    "progress": "{{approved}}/{{threshold}} aprobadas",
+    "unsent": "Aún no se envía"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -519,13 +520,24 @@
     "voidedNote": "Reemplazada por una cancelación con el número #{{nonce}}: esta transacción ya nunca podrá ejecutarse.",
     "voidedByOther": "Reemplazada por otra transacción con el número #{{nonce}}: esta ya nunca podrá ejecutarse.",
     "notInMailbox": "Esta transacción no está en el buzón de esta multifirma. Pide a quien te envió el enlace que lo revise.",
-    "unknownNetwork": "Este enlace es de una red que Vela no tiene (cadena {{chainId}}). Agrega la red en Ajustes y vuelve a abrir el enlace.",
     "badLink": "Este enlace a una transacción multifirma está incompleto o dañado. Pídelo de nuevo.",
     "previewNote": "Ninguna cuenta de este dispositivo es miembro de esta multifirma. Abrir este enlace no la agregó ni cambió de cuenta.",
     "watch": "Agregar a este dispositivo",
     "watching": "En este dispositivo: está en tu lista de cuentas. La cuenta que se muestra no cambió.",
     "renameRuns": "Esto se ejecuta en {{network}}, donde el registro guarda su entrada: solo el propio multisig puede cambiarle el nombre ahí.",
-    "renameDeploys": "El multisig aún no está desplegado en {{network}}. Al ejecutar esto, primero se despliega ahí, con los miembros con los que se creó, y el miembro que ejecuta también paga eso."
+    "renameUndeployed": "El multisig no está desplegado en {{network}}, así que esto no se puede ejecutar ahí: solo el multisig desplegado puede cambiar el nombre de su entrada, y un cambio de nombre nunca lo despliega.",
+    "startsOriginal": "Esta red empieza con los miembros originales",
+    "startsOriginalNote": "Al ejecutar esto, el multisig se despliega aquí con los miembros con los que se creó (aprueban {{m}} de {{n}}), no con los que tiene ahora en {{networks}}.",
+    "notCounted": "No cuenta (ahora no es miembro en {{network}}): {{names}}",
+    "missingNetworkNamed": "En {{name}} (cadena {{chainId}}), una red que este dispositivo no tiene",
+    "missingNetwork": "En la cadena {{chainId}}, una red que este dispositivo no tiene",
+    "missingNetworkBody": "Un miembro propuso esta transacción en una red que este dispositivo no tiene. Agrega la red para leerla y aprobarla aquí; mientras tanto, no se verifica ni se cuenta.",
+    "missingCount": "Esperando ahí: {{n}}",
+    "addNetwork": "Agregar red",
+    "outboxBusy": "El servicio multifirma está ocupado: se volverá a enviar en {{seconds}} s.",
+    "outboxAway": "No se pudo conectar con el servicio multifirma: se volverá a enviar en {{seconds}} s.",
+    "outboxNotSent": "Aún no se envía: el servicio multifirma no la aceptó. Se guarda en este dispositivo, y los demás miembros no la ven hasta que se envíe.",
+    "outboxSendAgain": "Enviar de nuevo"
    },
    "send": {
     "propose": "Proponer y aprobar",
@@ -648,11 +660,20 @@
     "backupNote": "Su configuración también queda en Ethereum, para poder encontrar y desplegar el multisig desde ahí. Una cuenta de este dispositivo paga la comisión.",
     "remove": "Quitar de este dispositivo",
     "renameTitle": "Nombre en el registro",
-    "renameNote": "Los miembros, y cualquiera que busque este multisig, ven este nombre. Cambiarlo es una de sus transacciones en {{network}}, donde se guarda su registro: los miembros la aprueban como cualquier otra, y al ejecutarla se despliega el multisig en {{network}} si aún no está ahí.",
+    "renameNote": "Los miembros, y cualquiera que busque este multisig, ven este nombre. Cambiarlo es una de sus transacciones en {{network}}, donde se guarda su registro: los miembros la aprueban como cualquier otra.",
     "renameAction": "Cambiar el nombre en la cadena",
     "renameUnavailable": "Su registro no está en una red de esta billetera, así que no se puede cambiar el nombre desde aquí.",
     "shareAgain": "Compartir de nuevo",
-    "shareAgainNote": "El servicio de multisig no tiene su configuración; tal vez se guardó en un registro anterior. Compartirla de nuevo requiere una confirmación con tu passkey."
+    "shareAgainNote": "El servicio de multisig no tiene su configuración; tal vez se guardó en un registro anterior. Compartirla de nuevo requiere una confirmación con tu passkey.",
+    "renameNotDeployed": "Solo el propio multisig puede cambiar el nombre de su registro en {{network}}, y ahí no está desplegado.",
+    "originalMembers": "Miembros originales",
+    "originalNote": "Los miembros con los que se creó. Una red en la que no está desplegado empieza con ellos.",
+    "currentOn": "Miembros actuales en {{network}}",
+    "sameAsOriginal": "Los mismos que los miembros originales.",
+    "added": "Agregados",
+    "removed": "Eliminados",
+    "thresholdChanged": "Aprobaciones necesarias: {{was}} originalmente, {{is}} ahora.",
+    "undeployedOn": "Aún no está desplegado en {{network}}: ahí empezará con los miembros originales."
    },
    "service": {
     "customNote": "Usando un servicio multifirma propio ({{host}})",

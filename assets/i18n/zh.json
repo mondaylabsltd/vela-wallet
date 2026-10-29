@@ -454,7 +454,8 @@
     "yourTurn": "待你批准",
     "waiting": "等待其他成员",
     "queued": "排队中",
-    "progress": "已批准 {{approved}}/{{threshold}}"
+    "progress": "已批准 {{approved}}/{{threshold}}",
+    "unsent": "尚未发出"
    },
    "action": {
     "send": "发送 {{amount}} {{symbol}}",
@@ -518,13 +519,24 @@
     "voidedNote": "已被序号 #{{nonce}} 上的作废交易替代，这笔交易永远不会执行。",
     "voidedByOther": "已被序号 #{{nonce}} 上的另一笔交易替代，这笔交易永远不会执行。",
     "notInMailbox": "这笔交易不在这个多签的信箱里。请让发链接的人核对一下。",
-    "unknownNetwork": "这个链接对应的网络 Vela 里没有（链 {{chainId}}）。请先在设置中添加该网络，再重新打开链接。",
     "badLink": "这个多签交易链接不完整或已损坏。请重新索要。",
     "previewNote": "本设备上没有这个多签账户的成员账户。打开此链接没有添加它，也没有切换账户。",
     "watch": "添加到本设备",
     "watching": "已在本设备上：它在你的账户列表中。当前显示的账户没有改变。",
     "renameRuns": "这笔交易在 {{network}} 上执行，注册表在那里保存它的记录：只有多签自己能在那里改名。",
-    "renameDeploys": "这个多签还没有部署在 {{network}} 上。执行时会先按创建时的成员把它部署到那里，这部分费用也由执行的成员支付。"
+    "renameUndeployed": "这个多签没有部署在 {{network}} 上，因此这笔交易无法在那里执行：只有已部署的多签才能为它的记录改名，而改名永远不会部署它。",
+    "startsOriginal": "这个网络将以初始成员开始",
+    "startsOriginalNote": "执行后会以创建时的成员（{{n}} 位成员中需 {{m}} 位批准）把多签部署到这里，而不是它现在在 {{networks}} 上的成员。",
+    "notCounted": "不计入——当前不是 {{network}} 上的成员：{{names}}",
+    "missingNetworkNamed": "在 {{name}}（链 {{chainId}}）上——本设备没有这个网络",
+    "missingNetwork": "在链 {{chainId}} 上——本设备没有这个网络",
+    "missingNetworkBody": "有成员在本设备没有的网络上发起了这笔交易。添加该网络后才能在这里查看和批准；在此之前，它不会被核对，也不会被计入。",
+    "missingCount": "在那里等待：{{n}}",
+    "addNetwork": "添加网络",
+    "outboxBusy": "多签服务繁忙——{{seconds}} 秒后重新发送。",
+    "outboxAway": "无法连接多签服务——{{seconds}} 秒后重新发送。",
+    "outboxNotSent": "尚未发出：多签服务没有接收。它保存在本设备上，发出之前其他成员看不到。",
+    "outboxSendAgain": "重新发送"
    },
    "send": {
     "propose": "发起并批准",
@@ -646,11 +658,20 @@
     "backupNote": "把这个多签的配置也保存在 Ethereum 上，以后从那里也能找到并部署它。手续费由本设备上的一个账户支付。",
     "remove": "从本设备移除",
     "renameTitle": "注册表中的名称",
-    "renameNote": "成员和任何查询这个多签的人都会看到这个名称。改名是它在 {{network}}（保存它记录的网络）上的一笔交易，和其他交易一样由成员批准；如果它还没部署在 {{network}} 上，执行时会顺带部署。",
+    "renameNote": "成员和任何查询这个多签的人都会看到这个名称。改名是它在 {{network}}（保存它记录的网络）上的一笔交易，和其他交易一样由成员批准。",
     "renameAction": "在链上改名",
     "renameUnavailable": "它的记录不在这个钱包已有的网络上，无法从这里改名。",
     "shareAgain": "重新共享",
-    "shareAgainNote": "多签服务里没有它的配置，可能是保存到了旧版注册表。重新共享需要用通行密钥确认一次。"
+    "shareAgainNote": "多签服务里没有它的配置，可能是保存到了旧版注册表。重新共享需要用通行密钥确认一次。",
+    "renameNotDeployed": "注册表中的记录只能由多签自己在 {{network}} 上改名，而它没有部署在那里。",
+    "originalMembers": "初始成员",
+    "originalNote": "创建它时的成员。在它未部署的网络上，会以这些成员开始。",
+    "currentOn": "{{network}} 上的当前成员",
+    "sameAsOriginal": "与初始成员相同。",
+    "added": "已添加",
+    "removed": "已移除",
+    "thresholdChanged": "所需批准数：最初 {{was}}，现在 {{is}}。",
+    "undeployedOn": "尚未部署在 {{network}} 上：在那里将以初始成员开始。"
    },
    "service": {
     "customNote": "正在使用自定义多签服务（{{host}}）",

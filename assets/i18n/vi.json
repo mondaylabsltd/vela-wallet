@@ -454,7 +454,8 @@
     "yourTurn": "Cần bạn duyệt",
     "waiting": "Đang chờ người khác",
     "queued": "Đang xếp hàng",
-    "progress": "Đã duyệt {{approved}}/{{threshold}}"
+    "progress": "Đã duyệt {{approved}}/{{threshold}}",
+    "unsent": "Chưa gửi"
    },
    "action": {
     "send": "Gửi {{amount}} {{symbol}}",
@@ -518,13 +519,24 @@
     "voidedNote": "Đã bị thay thế bởi một giao dịch hủy ở số #{{nonce}}: giao dịch này sẽ không bao giờ chạy.",
     "voidedByOther": "Đã bị thay thế bởi một giao dịch khác ở số #{{nonce}}: giao dịch này sẽ không bao giờ chạy.",
     "notInMailbox": "Giao dịch này không có trong hộp thư của multisig. Hãy nhờ người gửi liên kết kiểm tra lại.",
-    "unknownNetwork": "Liên kết này dành cho mạng Vela chưa có (chain {{chainId}}). Hãy thêm mạng trong Cài đặt rồi mở lại liên kết.",
     "badLink": "Liên kết tới giao dịch multisig này bị thiếu hoặc hỏng. Hãy xin lại liên kết.",
     "previewNote": "Không tài khoản nào trên thiết bị này là thành viên của ví đa chữ ký này. Mở liên kết này không thêm ví và không chuyển tài khoản.",
     "watch": "Thêm vào thiết bị này",
     "watching": "Đã có trên thiết bị này: ví nằm trong danh sách tài khoản của bạn. Tài khoản đang hiển thị không thay đổi.",
     "renameRuns": "Giao dịch này chạy trên {{network}}, nơi registry lưu bản ghi của nó: chỉ chính multisig mới đổi được tên ở đó.",
-    "renameDeploys": "Multisig chưa được triển khai trên {{network}}. Thực thi giao dịch này sẽ triển khai nó ở đó trước, với các thành viên lúc tạo, và thành viên thực thi trả cả phí cho việc đó."
+    "renameUndeployed": "Multisig chưa được triển khai trên {{network}}, nên không thể thực thi giao dịch này ở đó: chỉ multisig đã triển khai mới đổi được tên bản ghi của nó, và việc đổi tên không bao giờ triển khai nó.",
+    "startsOriginal": "Mạng này bắt đầu với các thành viên ban đầu",
+    "startsOriginalNote": "Thực thi giao dịch này sẽ triển khai multisig ở đây với các thành viên lúc tạo — cần {{m}} trong {{n}} thành viên duyệt — chứ không phải các thành viên hiện có trên {{networks}}.",
+    "notCounted": "Không được tính — hiện không phải thành viên trên {{network}}: {{names}}",
+    "missingNetworkNamed": "Trên {{name}} (chain {{chainId}}) — mạng mà thiết bị này chưa có",
+    "missingNetwork": "Trên chain {{chainId}} — mạng mà thiết bị này chưa có",
+    "missingNetworkBody": "Một thành viên đã đề xuất giao dịch này trên mạng mà thiết bị này chưa có. Hãy thêm mạng để xem và duyệt ở đây; trước đó, giao dịch không được kiểm tra hay tính.",
+    "missingCount": "Đang chờ ở đó: {{n}}",
+    "addNetwork": "Thêm mạng",
+    "outboxBusy": "Dịch vụ multisig đang bận — sẽ gửi lại sau {{seconds}} giây.",
+    "outboxAway": "Không kết nối được dịch vụ multisig — sẽ gửi lại sau {{seconds}} giây.",
+    "outboxNotSent": "Chưa gửi: dịch vụ multisig không nhận giao dịch. Giao dịch được giữ trên thiết bị này, và các thành viên khác không thấy được cho đến khi nó được gửi.",
+    "outboxSendAgain": "Gửi lại"
    },
    "send": {
     "propose": "Đề xuất và duyệt",
@@ -646,11 +658,20 @@
     "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
     "remove": "Xóa khỏi thiết bị này",
     "renameTitle": "Tên trong sổ đăng ký",
-    "renameNote": "Thành viên và bất kỳ ai tra cứu multisig này đều thấy tên này. Đổi tên là một giao dịch của nó trên {{network}}, nơi lưu bản ghi của nó: thành viên duyệt như mọi giao dịch khác, và khi thực thi sẽ triển khai multisig trên {{network}} nếu nó chưa có ở đó.",
+    "renameNote": "Thành viên và bất kỳ ai tra cứu multisig này đều thấy tên này. Đổi tên là một giao dịch của nó trên {{network}}, nơi lưu bản ghi của nó: thành viên duyệt như mọi giao dịch khác.",
     "renameAction": "Đổi tên trên chuỗi",
     "renameUnavailable": "Bản ghi của nó không nằm trên mạng nào của ví này, nên không thể đổi tên từ đây.",
     "shareAgain": "Chia sẻ lại",
-    "shareAgainNote": "Dịch vụ multisig không có thiết lập của nó; có thể thiết lập đã được lưu vào sổ đăng ký cũ. Chia sẻ lại cần một lần xác nhận bằng passkey."
+    "shareAgainNote": "Dịch vụ multisig không có thiết lập của nó; có thể thiết lập đã được lưu vào sổ đăng ký cũ. Chia sẻ lại cần một lần xác nhận bằng passkey.",
+    "renameNotDeployed": "Chỉ chính multisig trên {{network}} mới đổi được tên bản ghi trong sổ đăng ký, mà multisig không được triển khai ở đó.",
+    "originalMembers": "Thành viên ban đầu",
+    "originalNote": "Các thành viên lúc tạo. Mạng nào multisig chưa được triển khai sẽ bắt đầu với các thành viên này.",
+    "currentOn": "Thành viên hiện tại trên {{network}}",
+    "sameAsOriginal": "Giống với thành viên ban đầu.",
+    "added": "Đã thêm",
+    "removed": "Đã xóa",
+    "thresholdChanged": "Số lượt duyệt cần: ban đầu {{was}}, hiện tại {{is}}.",
+    "undeployedOn": "Chưa được triển khai trên {{network}}: ở đó nó sẽ bắt đầu với các thành viên ban đầu."
    },
    "service": {
     "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",

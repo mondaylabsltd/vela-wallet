@@ -454,7 +454,8 @@
     "yourTurn": "내 승인 필요",
     "waiting": "다른 멤버 대기 중",
     "queued": "순서 대기 중",
-    "progress": "승인 {{approved}}/{{threshold}}"
+    "progress": "승인 {{approved}}/{{threshold}}",
+    "unsent": "아직 전송되지 않음"
    },
    "action": {
     "send": "{{amount}} {{symbol}} 보내기",
@@ -518,13 +519,24 @@
     "voidedNote": "#{{nonce}}번의 취소 거래로 대체되었습니다. 이 거래는 실행될 수 없습니다.",
     "voidedByOther": "#{{nonce}}번의 다른 거래로 대체되었습니다. 이 거래는 실행될 수 없습니다.",
     "notInMailbox": "이 거래는 이 멀티시그의 메일함에 없습니다. 링크를 보낸 사람에게 확인을 요청하세요.",
-    "unknownNetwork": "이 링크는 Vela에 없는 네트워크(체인 {{chainId}})용입니다. 설정에서 네트워크를 추가한 뒤 링크를 다시 여세요.",
     "badLink": "이 멀티시그 거래 링크가 불완전하거나 손상되었습니다. 다시 요청하세요.",
     "previewNote": "이 기기에는 이 멀티시그의 멤버 계정이 없습니다. 링크를 열어도 추가되거나 계정이 전환되지 않았습니다.",
     "watch": "이 기기에 추가",
     "watching": "이 기기에 있습니다. 계정 목록에서 볼 수 있으며, 표시 중인 계정은 바뀌지 않았습니다.",
     "renameRuns": "이 트랜잭션은 레지스트리가 기록을 보관하는 {{network}}에서 실행됩니다. 그곳에서 이름을 바꿀 수 있는 것은 멀티시그 자신뿐입니다.",
-    "renameDeploys": "이 멀티시그는 아직 {{network}}에 배포되지 않았습니다. 실행하면 생성 당시의 멤버로 먼저 그곳에 배포되며, 그 비용도 실행하는 멤버가 냅니다."
+    "renameUndeployed": "이 멀티시그는 {{network}}에 배포되지 않았으므로 그곳에서 실행할 수 없습니다. 기록의 이름은 배포된 멀티시그만 바꿀 수 있으며, 이름 변경으로 배포되는 일은 없습니다.",
+    "startsOriginal": "이 네트워크는 원래 멤버로 시작합니다",
+    "startsOriginalNote": "실행하면 이 멀티시그가 생성 당시의 멤버({{n}}명 중 {{m}}명 승인)로 이곳에 배포됩니다. {{networks}}의 현재 멤버가 아닙니다.",
+    "notCounted": "집계되지 않음(현재 {{network}}의 멤버가 아님): {{names}}",
+    "missingNetworkNamed": "{{name}}(체인 {{chainId}})에서: 이 기기에 없는 네트워크",
+    "missingNetwork": "체인 {{chainId}}에서: 이 기기에 없는 네트워크",
+    "missingNetworkBody": "한 멤버가 이 기기에 없는 네트워크에서 이 거래를 제안했습니다. 여기서 읽고 승인하려면 네트워크를 추가하세요. 그전까지는 확인되거나 집계되지 않습니다.",
+    "missingCount": "그곳에서 대기 중: {{n}}",
+    "addNetwork": "네트워크 추가",
+    "outboxBusy": "멀티시그 서비스가 혼잡합니다. {{seconds}}초 후 다시 보냅니다.",
+    "outboxAway": "멀티시그 서비스에 연결하지 못했습니다. {{seconds}}초 후 다시 보냅니다.",
+    "outboxNotSent": "아직 전송되지 않음: 멀티시그 서비스가 받아들이지 않았습니다. 이 기기에 보관되며, 전송되기 전까지 다른 멤버는 볼 수 없습니다.",
+    "outboxSendAgain": "다시 보내기"
    },
    "send": {
     "propose": "제안하고 승인",
@@ -646,11 +658,20 @@
     "backupNote": "이 멀티시그의 설정을 Ethereum에도 저장해 그곳에서도 찾고 배포할 수 있게 합니다. 수수료는 이 기기의 계정이 냅니다.",
     "remove": "이 기기에서 제거",
     "renameTitle": "레지스트리의 이름",
-    "renameNote": "멤버와 이 멀티시그를 조회하는 누구나 이 이름을 봅니다. 이름 변경은 기록이 보관된 {{network}}에서 이 멀티시그가 보내는 트랜잭션이며, 다른 트랜잭션처럼 멤버가 승인합니다. {{network}}에 아직 배포되지 않았다면 실행할 때 배포됩니다.",
+    "renameNote": "멤버와 이 멀티시그를 조회하는 누구나 이 이름을 봅니다. 이름 변경은 기록이 보관된 {{network}}에서 이 멀티시그가 보내는 트랜잭션이며, 다른 트랜잭션처럼 멤버가 승인합니다.",
     "renameAction": "온체인에서 이름 변경",
     "renameUnavailable": "기록이 이 지갑의 네트워크에 없어 여기서 이름을 바꿀 수 없습니다.",
     "shareAgain": "다시 공유",
-    "shareAgainNote": "멀티시그 서비스에 설정이 없습니다. 이전 레지스트리에 저장되었을 수 있습니다. 다시 공유하려면 패스키로 한 번 확인합니다."
+    "shareAgainNote": "멀티시그 서비스에 설정이 없습니다. 이전 레지스트리에 저장되었을 수 있습니다. 다시 공유하려면 패스키로 한 번 확인합니다.",
+    "renameNotDeployed": "레지스트리 기록은 {{network}}에서 멀티시그 자신만 이름을 바꿀 수 있는데, 그곳에는 배포되어 있지 않습니다.",
+    "originalMembers": "원래 멤버",
+    "originalNote": "생성 당시의 멤버입니다. 배포되지 않은 네트워크는 이 멤버로 시작합니다.",
+    "currentOn": "{{network}}의 현재 멤버",
+    "sameAsOriginal": "원래 멤버와 같습니다.",
+    "added": "추가됨",
+    "removed": "제거됨",
+    "thresholdChanged": "필요한 승인 수: 원래 {{was}}, 현재 {{is}}.",
+    "undeployedOn": "아직 {{network}}에 배포되지 않았습니다. 그곳에서는 원래 멤버로 시작합니다."
    },
    "service": {
     "customNote": "사용자 지정 멀티시그 서비스 사용 중({{host}})",

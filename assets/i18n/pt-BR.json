@@ -455,7 +455,8 @@
     "yourTurn": "Precisa da sua aprovação",
     "waiting": "Aguardando os outros",
     "queued": "Na fila",
-    "progress": "{{approved}}/{{threshold}} aprovações"
+    "progress": "{{approved}}/{{threshold}} aprovações",
+    "unsent": "Ainda não enviada"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -519,13 +520,24 @@
     "voidedNote": "Substituída por um cancelamento no número #{{nonce}}: esta transação nunca poderá ser executada.",
     "voidedByOther": "Substituída por outra transação no número #{{nonce}}: esta nunca poderá ser executada.",
     "notInMailbox": "Esta transação não está na caixa deste multisig. Peça a quem enviou o link para conferir.",
-    "unknownNetwork": "Este link é de uma rede que a Vela não tem (chain {{chainId}}). Adicione a rede nos Ajustes e abra o link de novo.",
     "badLink": "Este link para uma transação multisig está incompleto ou danificado. Peça de novo.",
     "previewNote": "Nenhuma conta deste dispositivo é membro deste multisig. Abrir este link não o adicionou nem trocou de conta.",
     "watch": "Adicionar a este dispositivo",
     "watching": "Neste dispositivo: está na sua lista de contas. A conta exibida não mudou.",
     "renameRuns": "Isto é executado na {{network}}, onde o registro guarda a entrada dele: só o próprio multisig pode renomeá-la lá.",
-    "renameDeploys": "O multisig ainda não foi implantado na {{network}}. Executar isto o implanta lá primeiro, com os membros com que foi criado, e o membro que executa também paga por isso."
+    "renameUndeployed": "O multisig não está implantado na {{network}}, então isto não pode ser executado lá: só o multisig implantado pode renomear a entrada dele, e uma renomeação nunca o implanta.",
+    "startsOriginal": "Esta rede começa com os membros originais",
+    "startsOriginalNote": "Executar isto implanta o multisig aqui com os membros com que foi criado — {{m}} de {{n}} membros aprovam — e não com os que ele tem agora em {{networks}}.",
+    "notCounted": "Não conta — não é membro na {{network}} agora: {{names}}",
+    "missingNetworkNamed": "Na {{name}} (chain {{chainId}}) — uma rede que este dispositivo não tem",
+    "missingNetwork": "Na chain {{chainId}} — uma rede que este dispositivo não tem",
+    "missingNetworkBody": "Um membro propôs esta transação em uma rede que este dispositivo não tem. Adicione a rede para lê-la e aprová-la aqui; até lá, ela não é verificada nem contada.",
+    "missingCount": "Aguardando lá: {{n}}",
+    "addNetwork": "Adicionar rede",
+    "outboxBusy": "O serviço multisig está ocupado — enviando de novo em {{seconds}} s.",
+    "outboxAway": "Não foi possível acessar o serviço multisig — enviando de novo em {{seconds}} s.",
+    "outboxNotSent": "Ainda não enviada: o serviço multisig não a aceitou. Ela fica guardada neste dispositivo, e os outros membros não a veem até que seja enviada.",
+    "outboxSendAgain": "Enviar de novo"
    },
    "send": {
     "propose": "Propor e aprovar",
@@ -648,11 +660,20 @@
     "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
     "remove": "Remover deste dispositivo",
     "renameTitle": "Nome no registro",
-    "renameNote": "Os membros, e qualquer pessoa que consulte este multisig, veem este nome. Renomeá-lo é uma das transações dele na {{network}}, onde o registro dele é guardado: os membros aprovam como qualquer outra, e executá-la implanta o multisig na {{network}} se ele ainda não estiver lá.",
+    "renameNote": "Os membros, e qualquer pessoa que consulte este multisig, veem este nome. Renomeá-lo é uma das transações dele na {{network}}, onde o registro dele é guardado: os membros aprovam como qualquer outra.",
     "renameAction": "Renomear na rede",
     "renameUnavailable": "O registro dele não está em nenhuma rede desta carteira, então não dá para renomeá-lo daqui.",
     "shareAgain": "Compartilhar de novo",
-    "shareAgainNote": "O serviço de multisig não tem a configuração dele; talvez ela tenha sido salva em um registro antigo. Compartilhar de novo pede uma confirmação com a passkey."
+    "shareAgainNote": "O serviço de multisig não tem a configuração dele; talvez ela tenha sido salva em um registro antigo. Compartilhar de novo pede uma confirmação com a passkey.",
+    "renameNotDeployed": "A entrada do registro só pode ser renomeada pelo próprio multisig na {{network}}, onde ele não está implantado.",
+    "originalMembers": "Membros originais",
+    "originalNote": "Os membros com que ele foi criado. Uma rede em que ele não está implantado começa com eles.",
+    "currentOn": "Membros atuais na {{network}}",
+    "sameAsOriginal": "Os mesmos dos membros originais.",
+    "added": "Adicionados",
+    "removed": "Removidos",
+    "thresholdChanged": "Aprovações necessárias: {{was}} originalmente, {{is}} agora.",
+    "undeployedOn": "Ainda não implantado na {{network}}: lá ele vai começar com os membros originais."
    },
    "service": {
     "customNote": "Usando um serviço multisig próprio ({{host}})",

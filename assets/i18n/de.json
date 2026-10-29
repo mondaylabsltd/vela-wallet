@@ -454,7 +454,8 @@
     "yourTurn": "Braucht deine Genehmigung",
     "waiting": "Wartet auf andere",
     "queued": "In der Warteschlange",
-    "progress": "{{approved}}/{{threshold}} genehmigt"
+    "progress": "{{approved}}/{{threshold}} genehmigt",
+    "unsent": "Noch nicht gesendet"
    },
    "action": {
     "send": "{{amount}} {{symbol}} senden",
@@ -518,13 +519,24 @@
     "voidedNote": "Ersetzt durch eine Stornierung mit Nummer #{{nonce}}: Diese Transaktion kann nie mehr ausgeführt werden.",
     "voidedByOther": "Ersetzt durch eine andere Transaktion mit Nummer #{{nonce}}: Diese kann nie mehr ausgeführt werden.",
     "notInMailbox": "Diese Transaktion ist nicht im Postfach dieses Multisigs. Bitte die Person, die den Link geschickt hat, ihn zu prüfen.",
-    "unknownNetwork": "Dieser Link gehört zu einem Netzwerk, das Vela nicht hat (Chain {{chainId}}). Füge das Netzwerk in den Einstellungen hinzu und öffne den Link erneut.",
     "badLink": "Dieser Link zu einer Multisig-Transaktion ist unvollständig oder beschädigt. Bitte um einen neuen.",
     "previewNote": "Kein Konto auf diesem Gerät ist Mitglied dieses Multisig. Das Öffnen des Links hat nichts hinzugefügt und kein Konto gewechselt.",
     "watch": "Zu diesem Gerät hinzufügen",
     "watching": "Auf diesem Gerät: Es steht in deiner Kontenliste. Das angezeigte Konto ist unverändert.",
     "renameRuns": "Das läuft auf {{network}}, wo das Register seinen Eintrag führt: Nur das Multisig selbst kann ihn dort umbenennen.",
-    "renameDeploys": "Das Multisig ist auf {{network}} noch nicht bereitgestellt. Die Ausführung stellt es dort zuerst bereit, mit den Mitgliedern, mit denen es erstellt wurde, und das ausführende Mitglied zahlt auch dafür."
+    "renameUndeployed": "Das Multisig ist auf {{network}} nicht bereitgestellt, daher lässt sich das dort nicht ausführen: Nur das bereitgestellte Multisig kann seinen Eintrag umbenennen, und eine Umbenennung stellt es nie bereit.",
+    "startsOriginal": "Dieses Netzwerk beginnt mit den ursprünglichen Mitgliedern",
+    "startsOriginalNote": "Die Ausführung stellt das Multisig hier mit den Mitgliedern bereit, mit denen es erstellt wurde – {{m}} von {{n}} genehmigen –, nicht mit denen, die es jetzt auf {{networks}} hat.",
+    "notCounted": "Nicht gezählt – derzeit kein Mitglied auf {{network}}: {{names}}",
+    "missingNetworkNamed": "Auf {{name}} (Chain {{chainId}}) – ein Netzwerk, das dieses Gerät nicht hat",
+    "missingNetwork": "Auf Chain {{chainId}} – ein Netzwerk, das dieses Gerät nicht hat",
+    "missingNetworkBody": "Ein Mitglied hat diese Transaktion auf einem Netzwerk vorgeschlagen, das dieses Gerät nicht hat. Füge das Netzwerk hinzu, um sie hier zu lesen und zu genehmigen; bis dahin wird sie weder geprüft noch gezählt.",
+    "missingCount": "Wartet dort: {{n}}",
+    "addNetwork": "Netzwerk hinzufügen",
+    "outboxBusy": "Der Multisig-Dienst ist ausgelastet – erneutes Senden in {{seconds}} s.",
+    "outboxAway": "Der Multisig-Dienst war nicht erreichbar – erneutes Senden in {{seconds}} s.",
+    "outboxNotSent": "Noch nicht gesendet: Der Multisig-Dienst hat sie nicht angenommen. Sie bleibt auf diesem Gerät, und andere Mitglieder sehen sie erst, wenn sie gesendet ist.",
+    "outboxSendAgain": "Erneut senden"
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -646,11 +658,20 @@
     "backupNote": "Die Einrichtung des Multisigs liegt dann auch auf Ethereum, sodass es von dort gefunden und bereitgestellt werden kann. Ein Konto auf diesem Gerät zahlt die Gebühr.",
     "remove": "Von diesem Gerät entfernen",
     "renameTitle": "Name im Register",
-    "renameNote": "Mitglieder und alle, die dieses Multisig nachschlagen, sehen diesen Namen. Umbenennen ist eine seiner Transaktionen auf {{network}}, wo sein Eintrag geführt wird: Die Mitglieder genehmigen sie wie jede andere, und die Ausführung stellt das Multisig auf {{network}} bereit, falls es dort noch nicht ist.",
+    "renameNote": "Mitglieder und alle, die dieses Multisig nachschlagen, sehen diesen Namen. Umbenennen ist eine seiner Transaktionen auf {{network}}, wo sein Eintrag geführt wird: Die Mitglieder genehmigen sie wie jede andere.",
     "renameAction": "On-Chain umbenennen",
     "renameUnavailable": "Sein Eintrag liegt in keinem Netzwerk dieser Wallet, daher lässt es sich hier nicht umbenennen.",
     "shareAgain": "Erneut teilen",
-    "shareAgainNote": "Der Multisig-Dienst hat seine Einrichtung nicht; vielleicht wurde sie in einem älteren Register gespeichert. Erneutes Teilen braucht eine Passkey-Bestätigung."
+    "shareAgainNote": "Der Multisig-Dienst hat seine Einrichtung nicht; vielleicht wurde sie in einem älteren Register gespeichert. Erneutes Teilen braucht eine Passkey-Bestätigung.",
+    "renameNotDeployed": "Den Registereintrag kann nur das Multisig selbst auf {{network}} umbenennen, und dort ist es nicht bereitgestellt.",
+    "originalMembers": "Ursprüngliche Mitglieder",
+    "originalNote": "Die Mitglieder, mit denen es erstellt wurde. Ein Netzwerk, auf dem es nicht bereitgestellt ist, beginnt mit diesen.",
+    "currentOn": "Aktuelle Mitglieder auf {{network}}",
+    "sameAsOriginal": "Dieselben wie die ursprünglichen Mitglieder.",
+    "added": "Hinzugefügt",
+    "removed": "Entfernt",
+    "thresholdChanged": "Nötige Genehmigungen: ursprünglich {{was}}, jetzt {{is}}.",
+    "undeployedOn": "Auf {{network}} noch nicht bereitgestellt: Dort beginnt es mit den ursprünglichen Mitgliedern."
    },
    "service": {
     "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",

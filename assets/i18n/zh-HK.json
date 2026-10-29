@@ -454,7 +454,8 @@
     "yourTurn": "待你批准",
     "waiting": "等待其他成員",
     "queued": "排隊中",
-    "progress": "已批准 {{approved}}/{{threshold}}"
+    "progress": "已批准 {{approved}}/{{threshold}}",
+    "unsent": "尚未發出"
    },
    "action": {
     "send": "傳送 {{amount}} {{symbol}}",
@@ -518,13 +519,24 @@
     "voidedNote": "已被序號 #{{nonce}} 上的作廢交易取代，這筆交易永遠不會執行。",
     "voidedByOther": "已被序號 #{{nonce}} 上的另一筆交易取代，這筆交易永遠不會執行。",
     "notInMailbox": "這筆交易不在這個多簽的信箱裡。請讓發連結的人核對一下。",
-    "unknownNetwork": "這個連結對應的網絡 Vela 裡沒有（鏈 {{chainId}}）。請先在設定中加入該網絡，再重新打開連結。",
     "badLink": "這個多簽交易連結不完整或已損壞。請重新索取。",
     "previewNote": "此裝置上沒有這個多簽帳戶的成員帳戶。開啟此連結並沒有加入它，也沒有切換帳戶。",
     "watch": "加入此裝置",
     "watching": "已在此裝置上：它在你的帳戶列表中。目前顯示的帳戶沒有改變。",
     "renameRuns": "這筆交易在 {{network}} 上執行，註冊表在那裡保存它的記錄：只有多簽自己能在那裡改名。",
-    "renameDeploys": "這個多簽還沒有部署在 {{network}} 上。執行時會先按建立時的成員把它部署到那裡，這部分費用也由執行的成員支付。"
+    "renameUndeployed": "這個多簽沒有部署在 {{network}} 上，因此這筆交易無法在那裡執行：只有已部署的多簽才能為它的記錄改名，而改名永遠不會部署它。",
+    "startsOriginal": "這個網絡將以初始成員開始",
+    "startsOriginalNote": "執行後會以建立時的成員（{{n}} 位成員中需 {{m}} 位批准）把多簽部署到這裡，而不是它現在在 {{networks}} 上的成員。",
+    "notCounted": "不計入——目前不是 {{network}} 上的成員：{{names}}",
+    "missingNetworkNamed": "在 {{name}}（鏈 {{chainId}}）上——此裝置沒有這個網絡",
+    "missingNetwork": "在鏈 {{chainId}} 上——此裝置沒有這個網絡",
+    "missingNetworkBody": "有成員在此裝置沒有的網絡上發起了這筆交易。加入該網絡後才能在這裡查看和批准；在此之前，它不會被核對，也不會被計入。",
+    "missingCount": "在那裡等待：{{n}}",
+    "addNetwork": "新增網絡",
+    "outboxBusy": "多簽服務繁忙——{{seconds}} 秒後重新發送。",
+    "outboxAway": "無法連接多簽服務——{{seconds}} 秒後重新發送。",
+    "outboxNotSent": "尚未發出：多簽服務沒有接收。它儲存在此裝置上，發出之前其他成員看不到。",
+    "outboxSendAgain": "重新發送"
    },
    "send": {
     "propose": "發起並批准",
@@ -646,11 +658,20 @@
     "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裏也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
     "remove": "從此裝置移除",
     "renameTitle": "登記冊中的名稱",
-    "renameNote": "成員和任何查詢這個多簽的人都會看到這個名稱。改名是它在 {{network}}（保存它記錄的網絡）上的一筆交易，和其他交易一樣由成員批准；如果它還沒部署在 {{network}} 上，執行時會順帶部署。",
+    "renameNote": "成員和任何查詢這個多簽的人都會看到這個名稱。改名是它在 {{network}}（保存它記錄的網絡）上的一筆交易，和其他交易一樣由成員批准。",
     "renameAction": "在鏈上改名",
     "renameUnavailable": "它的記錄不在這個錢包已有的網絡上，無法從這裏改名。",
     "shareAgain": "重新共享",
-    "shareAgainNote": "多簽服務裏沒有它的設定，可能是儲存到了舊版登記冊。重新共享需要用通行密鑰確認一次。"
+    "shareAgainNote": "多簽服務裏沒有它的設定，可能是儲存到了舊版登記冊。重新共享需要用通行密鑰確認一次。",
+    "renameNotDeployed": "登記冊中的記錄只能由多簽自己在 {{network}} 上改名，而它沒有部署在那裏。",
+    "originalMembers": "初始成員",
+    "originalNote": "建立它時的成員。在它未部署的網絡上，會以這些成員開始。",
+    "currentOn": "{{network}} 上的目前成員",
+    "sameAsOriginal": "與初始成員相同。",
+    "added": "已新增",
+    "removed": "已移除",
+    "thresholdChanged": "所需批准數：最初 {{was}}，現在 {{is}}。",
+    "undeployedOn": "尚未部署在 {{network}} 上：在那裏將以初始成員開始。"
    },
    "service": {
     "customNote": "現正使用自訂多簽服務（{{host}}）",
