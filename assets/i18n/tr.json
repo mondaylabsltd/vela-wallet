@@ -470,7 +470,8 @@
     "number": "İşlem #",
     "call": "Sözleşme çağrısı",
     "callWithValue": "{{amount}} {{symbol}} ile sözleşme çağrısı",
-    "batchCalls": "Tek işlemde {{total}} çağrı"
+    "batchCalls": "Tek işlemde {{total}} çağrı",
+    "rename": "Bu multisig'i kayıt defterinde “{{name}}” olarak yeniden adlandır"
    },
    "proposal": {
     "title": "Çoklu imza işlemi",
@@ -559,7 +560,7 @@
     "done": "Bitti",
     "name": "Ad",
     "namePlaceholder": "ör. Ekip fonu",
-    "nameHint": "Tüm üyeler bu adı görür. Multisig ile birlikte kaydedilir ve sonradan değiştirilemez.",
+    "nameHint": "Tüm üyeler bu adı görür. Multisig ile birlikte kaydedilir; sonradan değiştirmek üyelerin onayını gerektirir.",
     "nameInvalid": "Daha kısa bir ad kullanın; kontrol ya da görünmez karakter, başta veya sonda boşluk olmasın.",
     "fewer": "Daha az onay",
     "more": "Daha fazla onay",
@@ -640,7 +641,13 @@
     "unavailable": "Ethereum'da henüz yok",
     "couldNotCheck": "Kontrol edilemedi",
     "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
-    "remove": "Bu cihazdan kaldır"
+    "remove": "Bu cihazdan kaldır",
+    "renameTitle": "Kayıt defterindeki adı",
+    "renameNote": "Üyeler ve bu multisig'e bakan herkes bu adı görür. Yeniden adlandırmak, {{network}} üzerindeki işlemlerinden biridir: üyeler diğerleri gibi onaylar.",
+    "renameAction": "Zincirde yeniden adlandır",
+    "renameUnavailable": "Kaydı bu cüzdandaki hiçbir ağda değil, bu yüzden buradan yeniden adlandırılamaz.",
+    "shareAgain": "Yeniden paylaş",
+    "shareAgainNote": "Multisig hizmetinde kurulumu yok; eski bir kayıt defterine kaydedilmiş olabilir. Yeniden paylaşmak bir passkey onayı gerektirir."
    },
    "service": {
     "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
@@ -1919,7 +1926,10 @@
     "feeChanged": "Bu görüşten sonra ücret değişti"
    },
    "passkeyClosed": "Geçiş anahtarı istemi kapatıldı, hiçbir şey imzalanmadı. Bu cihazda bu hesabın geçiş anahtarı yoksa, anahtarın olduğu cihazı kullanın.",
-   "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin."
+   "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin.",
+   "intentSaveMultisigSetup": "Bu multisig'in kurulumunu kaydet",
+   "intentRenameInRegistry": "Kayıt defterinde yeniden adlandır",
+   "labelName": "Ad"
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",

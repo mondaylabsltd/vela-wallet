@@ -470,7 +470,8 @@
     "number": "Transaktion #",
     "call": "Vertragsaufruf",
     "callWithValue": "Vertragsaufruf mit {{amount}} {{symbol}}",
-    "batchCalls": "{{total}} Aufrufe in einer Transaktion"
+    "batchCalls": "{{total}} Aufrufe in einer Transaktion",
+    "rename": "Dieses Multisig im Register in „{{name}}“ umbenennen"
    },
    "proposal": {
     "title": "Multisig-Transaktion",
@@ -559,7 +560,7 @@
     "done": "Fertig",
     "name": "Name",
     "namePlaceholder": "z. B. Teamkasse",
-    "nameHint": "Alle Mitglieder sehen diesen Namen. Er wird mit dem Multisig gespeichert und kann später nicht geändert werden.",
+    "nameHint": "Alle Mitglieder sehen diesen Namen. Er wird mit dem Multisig gespeichert; ihn später zu ändern, braucht die Genehmigung der Mitglieder.",
     "nameInvalid": "Wähle einen kürzeren Namen, ohne Steuerzeichen oder unsichtbare Zeichen und ohne Leerzeichen am Anfang oder Ende.",
     "fewer": "Weniger Genehmigungen",
     "more": "Mehr Genehmigungen",
@@ -640,7 +641,13 @@
     "unavailable": "Auf Ethereum noch nicht verfügbar",
     "couldNotCheck": "Konnte nicht prüfen",
     "backupNote": "Die Einrichtung des Multisigs liegt dann auch auf Ethereum, sodass es von dort gefunden und bereitgestellt werden kann. Ein Konto auf diesem Gerät zahlt die Gebühr.",
-    "remove": "Von diesem Gerät entfernen"
+    "remove": "Von diesem Gerät entfernen",
+    "renameTitle": "Name im Register",
+    "renameNote": "Mitglieder und alle, die dieses Multisig nachschlagen, sehen diesen Namen. Umbenennen ist eine seiner Transaktionen auf {{network}}: Die Mitglieder genehmigen sie wie jede andere.",
+    "renameAction": "On-Chain umbenennen",
+    "renameUnavailable": "Sein Eintrag liegt in keinem Netzwerk dieser Wallet, daher lässt es sich hier nicht umbenennen.",
+    "shareAgain": "Erneut teilen",
+    "shareAgainNote": "Der Multisig-Dienst hat seine Einrichtung nicht; vielleicht wurde sie in einem älteren Register gespeichert. Erneutes Teilen braucht eine Passkey-Bestätigung."
    },
    "service": {
     "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",
@@ -1919,7 +1926,10 @@
     "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
    },
    "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, es wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nimm das Gerät, auf dem er liegt.",
-   "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist."
+   "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist.",
+   "intentSaveMultisigSetup": "Einrichtung dieses Multisig speichern",
+   "intentRenameInRegistry": "Im Register umbenennen",
+   "labelName": "Name"
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",

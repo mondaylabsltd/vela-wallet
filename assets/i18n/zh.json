@@ -470,7 +470,8 @@
     "number": "交易序号",
     "call": "合约调用",
     "callWithValue": "合约调用，附带 {{amount}} {{symbol}}",
-    "batchCalls": "一笔交易中的 {{total}} 个调用"
+    "batchCalls": "一笔交易中的 {{total}} 个调用",
+    "rename": "把这个多签在注册表中的名称改为“{{name}}”"
    },
    "proposal": {
     "title": "多签交易",
@@ -559,7 +560,7 @@
     "done": "完成",
     "name": "名称",
     "namePlaceholder": "例如：团队资金",
-    "nameHint": "所有成员都会看到这个名字。它和多签一起保存，之后不能修改。",
+    "nameHint": "所有成员都会看到这个名字。它和多签一起保存；之后修改需要成员批准。",
     "nameInvalid": "请用更短的名称，不能包含控制字符或不可见字符，首尾不能有空格。",
     "fewer": "减少所需批准",
     "more": "增加所需批准",
@@ -640,7 +641,13 @@
     "unavailable": "Ethereum 上暂不可用",
     "couldNotCheck": "无法检查",
     "backupNote": "把这个多签的配置也保存在 Ethereum 上，以后从那里也能找到并部署它。手续费由本设备上的一个账户支付。",
-    "remove": "从本设备移除"
+    "remove": "从本设备移除",
+    "renameTitle": "注册表中的名称",
+    "renameNote": "成员和任何查询这个多签的人都会看到这个名称。改名是它在 {{network}} 上的一笔交易，和其他交易一样由成员批准。",
+    "renameAction": "在链上改名",
+    "renameUnavailable": "它的记录不在这个钱包已有的网络上，无法从这里改名。",
+    "shareAgain": "重新共享",
+    "shareAgainNote": "多签服务里没有它的配置，可能是保存到了旧版注册表。重新共享需要用通行密钥确认一次。"
    },
    "service": {
     "customNote": "正在使用自定义多签服务（{{host}}）",
@@ -1919,7 +1926,10 @@
     "feeChanged": "此看法给出后手续费已变化"
    },
    "passkeyClosed": "通行密钥窗口已关闭，所以没有签署任何内容。如果这台设备上没有这个账户的通行密钥，请换用有密钥的设备。",
-   "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。"
+   "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。",
+   "intentSaveMultisigSetup": "保存这个多签的配置",
+   "intentRenameInRegistry": "在注册表中改名",
+   "labelName": "名称"
   },
   "currency": {
    "title": "显示货币",
