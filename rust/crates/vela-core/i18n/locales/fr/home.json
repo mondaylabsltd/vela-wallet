@@ -174,7 +174,9 @@
         "badLink": "Ce lien vers une transaction multisig est incomplet ou abîmé. Redemandez-le.",
         "previewNote": "Aucun compte de cet appareil n’est membre de ce multisig. Ouvrir ce lien ne l’a pas ajouté et n’a pas changé de compte.",
         "watch": "Ajouter à cet appareil",
-        "watching": "Sur cet appareil : il figure dans votre liste de comptes. Le compte affiché n’a pas changé."
+        "watching": "Sur cet appareil : il figure dans votre liste de comptes. Le compte affiché n’a pas changé.",
+        "renameRuns": "Cela s’exécute sur {{network}}, où le registre conserve son enregistrement : seul le multisig lui-même peut l’y renommer.",
+        "renameDeploys": "Le multisig n’est pas encore déployé sur {{network}}. L’exécuter l’y déploie d’abord, avec les membres de sa création, et le membre qui exécute paie aussi pour cela."
       },
       "send": {
         "propose": "Proposer et approuver",
@@ -217,7 +219,8 @@
         "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni invisibles, ni espace au début ou à la fin.",
         "fewer": "Moins d’approbations",
         "more": "Plus d’approbations",
-        "copyAddress": "Copier l’adresse"
+        "copyAddress": "Copier l’adresse",
+        "noSafeNetworks": "Aucun de vos réseaux n’a les contrats Safe dont un multisig a besoin. Ajoutez-en un qui les a dans Réglages → Réseaux."
       },
       "add": {
         "title": "Ajouter un multisig",
@@ -296,7 +299,7 @@
         "backupNote": "Sa configuration est aussi conservée sur Ethereum, pour qu'on puisse y retrouver et déployer le multisig. Un compte de cet appareil paie les frais.",
         "remove": "Retirer de cet appareil",
         "renameTitle": "Nom dans le registre",
-        "renameNote": "Les membres, et toute personne qui consulte ce multisig, voient ce nom. Le renommer est l’une de ses transactions sur {{network}} : les membres l’approuvent comme les autres.",
+        "renameNote": "Les membres, et toute personne qui consulte ce multisig, voient ce nom. Le renommer est l’une de ses transactions sur {{network}}, où son enregistrement est conservé : les membres l’approuvent comme les autres, et l’exécuter déploie le multisig sur {{network}} s’il n’y est pas encore.",
         "renameAction": "Renommer sur la chaîne",
         "renameUnavailable": "Son enregistrement n’est sur aucun réseau de ce portefeuille, il ne peut donc pas être renommé d’ici.",
         "shareAgain": "Partager à nouveau",
@@ -305,8 +308,7 @@
       "service": {
         "customNote": "Service multisig personnalisé utilisé ({{host}})",
         "unreachableNote": "Service multisig injoignable : les transactions en attente ne peuvent pas être chargées ; nouvelle tentative prévue.",
-        "retry": "Réessayer",
-        "noNetworks": "Le service multisig ne dessert aucun de vos réseaux."
+        "retry": "Réessayer"
       }
     },
     "balanceDetailStatusOwnNode": "Votre nœud ne répond pas",

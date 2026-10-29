@@ -150,21 +150,15 @@ export async function probeService(): Promise<boolean> {
 	return (await checkService(genesisServiceURL())).kind === 'genesis';
 }
 
-/**
- * The networks a new multisig may be created on: those the service reads
- * (the first one is where its proposals are looked for; its record goes to
- * the service's home chain), all of them while that is not known.
- */
-export function servedOnly<T extends { chainId: number }>(
-	networks: T[],
-	served: Set<number> | null
-): T[] {
-	return served === null ? networks : networks.filter((n) => served.has(n.chainId));
-}
-
 const SERVED_TTL_MS = 60_000;
 
-/** What the service in use says of itself (`/api/health`), as far as it says. */
+/**
+ * What the service in use says of itself (`/api/health`), as far as it says.
+ * Its chains are the ones IT reads and indexes — never a bound on where a
+ * multisig may live: the registry is an index, the multisig the same on
+ * every chain with the Safe v1.4.1 contracts, and the mailbox takes
+ * proposals on any chain.
+ */
 export interface ServiceTable {
 	/** The chains it reads; `null`: it lists none. */
 	chains: Set<number> | null;
@@ -209,9 +203,10 @@ export function serviceTable(): Promise<ServiceTable | null> {
 }
 
 /**
- * The chains the service in use records on, by its own table, or `null` when
- * that is not known (it could not be read, or lists none) — nothing is then
- * narrowed.
+ * The chains the service in use reads, by its own table, or `null` when that
+ * is not known (it could not be read, or lists none). Only for asking it to
+ * resolve a deployed Safe from a chain it reads; nothing a person may pick is
+ * narrowed by it.
  */
 export async function servedChains(): Promise<Set<number> | null> {
 	return (await serviceTable())?.chains ?? null;
@@ -312,6 +307,12 @@ export async function fetchTask(id: string): Promise<{ status: string; error?: s
 
 // -- the proposal mailbox -------------------------------------------------------
 
+/**
+ * Who the MAILBOX judges approvals by — never what this wallet signs or
+ * counts by (it reads the chain itself, `chain.ts` `readMembers`). On a chain
+ * the service does not read it is always the genesis's owners at nonce 0,
+ * deployed or not: the service cannot see that chain.
+ */
 export interface Members {
 	deployed: boolean;
 	owners: string[];
@@ -340,8 +341,10 @@ export interface ProposalsAnswer {
 }
 
 /**
- * A multisig's proposals on a chain, with who may approve them there.
- * `null`: the service knows nothing of this multisig on that chain.
+ * A multisig's proposals on a chain — any chain: the mailbox stores them
+ * whether or not the service reads that chain — with who the mailbox lets
+ * approve them there ({@link Members}). `null`: the service knows nothing of
+ * this multisig.
  */
 export async function fetchProposals(
 	chainId: number,

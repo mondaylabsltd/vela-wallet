@@ -23,15 +23,31 @@ vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
 		{ address: TWO, name: 'Two' }
 	]
 }));
+const seams = vi.hoisted(() => ({
+	networks: [{ chainId: 100, displayName: 'Gnosis' }] as { chainId: number; displayName: string }[],
+	/** The core's verdict per chain on the Safe v1.4.1 contracts. */
+	contracts: {} as Record<number, 'present' | 'missing' | 'unknown'>,
+	created: [] as { chainId: number }[]
+}));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
-	spaceNetworksSync: () => [{ chainId: 100, displayName: 'Gnosis' }]
+	spaceNetworksSync: () => seams.networks
+}));
+vi.mock('../core/chain', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/chain')>()),
+	safeContractsOn: async (chainId: number) => {
+		const kind = seams.contracts[chainId] ?? 'present';
+		return kind === 'missing' ? { kind, names: ['Safe L2'] } : { kind };
+	}
 }));
 vi.mock('../core/accounts', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../core/accounts')>()),
 	newSaltNonce: () => '1',
 	draftGenesis: () => ({ address: SAFE }),
-	createMultisig: async () => ({ address: SAFE })
+	createMultisig: async (choice: { chainId: number }) => {
+		seams.created.push(choice);
+		return { address: SAFE };
+	}
 }));
 vi.mock('../core/owners', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../core/owners')>()),
@@ -81,7 +97,12 @@ const press = (label: string) =>
 		.find((b) => b.textContent?.trim() === label)
 		?.click();
 
-afterEach(() => identiconViewer.close());
+afterEach(() => {
+	identiconViewer.close();
+	seams.networks = [{ chainId: 100, displayName: 'Gnosis' }];
+	seams.contracts = {};
+	seams.created = [];
+});
 
 describe('creating a multisig', () => {
 	it('opens the viewer from every artwork but the picker row, which stays a picture', async () => {
@@ -139,6 +160,111 @@ describe('creating a multisig', () => {
 		expect(document.body.textContent).toContain('create.created');
 		document.body.querySelector<HTMLButtonElement>('.hero button.identicon')?.click();
 		expect(identiconViewer.current?.address).toBe(SAFE);
+		await screen.unmount();
+	});
+});
+
+/**
+ * The registry is an index, not a home: the multisig's record goes to the
+ * index chain whatever network is picked, so every network the person has is
+ * offered — not only those the service's health table lists — but one the
+ * core finds without the Safe v1.4.1 contracts.
+ */
+describe("the create sheet's networks", () => {
+	it('offers every network with the Safe contracts, whatever the service reads', async () => {
+		seams.networks = [
+			{ chainId: 100, displayName: 'Gnosis' },
+			{ chainId: 42161, displayName: 'Arbitrum' },
+			{ chainId: 8453, displayName: 'Base' },
+			{ chainId: 999, displayName: 'No Safe' }
+		];
+		// Base did not answer: nothing says it lacks them, so it stays offered.
+		seams.contracts = { 8453: 'unknown', 999: 'missing' };
+		// The service reads Gnosis only; nothing here asks it.
+		const fetches: string[] = [];
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			fetches.push(String(input));
+			return new Response(
+				JSON.stringify({ service: 'safe-genesis-registry', chains: [{ chainId: 100 }] })
+			);
+		}) as typeof fetch;
+		try {
+			const screen = render(CreateMultisigSheet, {
+				props: {
+					m: words(),
+					locale: 'en',
+					current: ME,
+					wide: true,
+					closeLabel: 'Close',
+					onclose: () => {},
+					oncreated: () => {}
+				}
+			});
+			await settle();
+			document.body.querySelectorAll<HTMLInputElement>('.choices input')[1]?.click();
+			const name = document.body.querySelector<HTMLInputElement>('.name-field');
+			if (name) {
+				name.value = 'Team';
+				name.dispatchEvent(new Event('input', { bubbles: true }));
+			}
+			await settle();
+			press('create.next');
+			await settle();
+			press('create.next');
+			await settle();
+			document.body.querySelector<HTMLButtonElement>('.select [aria-haspopup="listbox"]')?.click();
+			await settle();
+			const rows = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')]
+				.map((r) => r.textContent?.trim())
+				.filter(Boolean);
+			expect(rows).toEqual(['Gnosis', 'Arbitrum', 'Base']);
+			expect(document.body.textContent).not.toContain('create.noSafeNetworks');
+			// Arbitrum, a network the service does not read, is picked and created on.
+			[...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')]
+				.find((r) => r.textContent?.trim() === 'Arbitrum')
+				?.click();
+			await settle();
+			press('create.create');
+			await settle();
+			expect(seams.created).toEqual([expect.objectContaining({ chainId: 42161 })]);
+			expect(fetches.filter((u) => u.includes('/api/health'))).toEqual([]);
+			await screen.unmount();
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
+	it('says so when none of the networks has them, and creates nothing', async () => {
+		seams.networks = [{ chainId: 999, displayName: 'No Safe' }];
+		seams.contracts = { 999: 'missing' };
+		const screen = render(CreateMultisigSheet, {
+			props: {
+				m: words(),
+				locale: 'en',
+				current: ME,
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				oncreated: () => {}
+			}
+		});
+		await settle();
+		document.body.querySelectorAll<HTMLInputElement>('.choices input')[1]?.click();
+		const name = document.body.querySelector<HTMLInputElement>('.name-field');
+		if (name) {
+			name.value = 'Team';
+			name.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+		await settle();
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		expect(document.body.textContent).toContain('create.noSafeNetworks');
+		press('create.create');
+		await settle();
+		expect(seams.created).toEqual([]);
 		await screen.unmount();
 	});
 });

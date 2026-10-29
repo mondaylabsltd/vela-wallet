@@ -20,6 +20,14 @@
  * service reads only v4: a multisig recorded in an earlier registry (v1–v3,
  * testnets and local forks only) is one it no longer has, and is shown as not
  * shared — never silently as shared — until it is shared again.
+ *
+ * The registry is an INDEX, not a home (owner, 2026-10-29): a genesis is
+ * recorded on the index chain (the service's home chain, Gnosis; Ethereum on
+ * the person's own fee) whatever network the multisig is used on, and the
+ * multisig is the same on every chain with the Safe v1.4.1 contracts. Which
+ * networks it is used on is what says so — deployed there, proposals there,
+ * a link naming one, the creator's pick (the core's `multisigNetworks`) —
+ * never the chain its record is on.
  */
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { hasCode } from './chain';
@@ -30,6 +38,7 @@ import {
 	genesisMembers,
 	genesisOfCall,
 	multisigGenesis,
+	multisigNetworks,
 	namedGenesis,
 	readGenesisOf,
 	safeWalletPropsGenesis,
@@ -41,8 +50,10 @@ import {
 import { signOwnerProof, type LocalOwner } from './owners';
 import {
 	fetchGenesis,
+	fetchProposals,
 	fetchTask,
 	importGenesis,
+	servedChains,
 	serviceTable,
 	ServiceUnavailableError,
 	type OwnerProof
@@ -52,18 +63,18 @@ import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 
 /**
- * The default service's home chain (Gnosis): where its registry lives. Only a
- * fallback — the service in use names its own (`/api/health`'s `homeChainId`,
+ * The default service's home chain (Gnosis): the index chain its registry
+ * records on. Only a fallback — the service in use names its own (`/api/health`'s `homeChainId`,
  * {@link recordHomeChain}); this is used when it does not say.
  */
 export const REGISTRY_HOME_CHAIN_ID = 100;
 
 /**
- * Where a record goes when the multisig's first network is not one the
- * service records on: the service's own home chain, as it says
+ * Where every record the service writes goes — the index chain, whatever
+ * network the multisig is used on: the service's own home chain, as it says
  * (`homeChainId`); {@link REGISTRY_HOME_CHAIN_ID} only when it says nothing
  * (its table could not be read, or carries no home chain). A local service
- * homed on Arc Testnet was asked to record on Gnosis, which it does not serve.
+ * homed on Arc Testnet records there.
  */
 export async function recordHomeChain(): Promise<number> {
 	const table = await serviceTable().catch(() => null);
@@ -98,7 +109,10 @@ function writeProofs(proofs: Record<string, OwnerProof>): void {
 export interface CreateChoice {
 	owners: string[];
 	threshold: number;
-	/** The network it is first used on. */
+	/**
+	 * The network it is first used on, kept on this device as its first
+	 * network. Its record goes to the index chain whatever this is.
+	 */
 	chainId: number;
 	/** The owner on this device whose passkey asks the service to record it. */
 	creator: LocalOwner;
@@ -120,30 +134,26 @@ export function newSaltNonce(): string {
 }
 
 /**
- * Record `genesis` through the service; `true` once the registry holds it (or
- * will). Sent named (`namedGenesis`): v4 records every Safe with a name, and
- * a genesis without one is the service's to name. Without `proof` the service
- * pays only for a Safe deployed somewhere; anything else comes back as a call
- * for someone to send, and is not recorded here.
+ * Record `genesis` through the service, on the index chain; `true` once the
+ * registry holds it (or will). Never the network the multisig is used on: the
+ * service reads its own chains only, and the record is one index entry
+ * wherever the multisig lives. Sent named (`namedGenesis`): v4 records every
+ * Safe with a name, and a genesis without one is the service's to name.
+ * Without `proof` the service pays only for a Safe deployed where it reads;
+ * anything else comes back as a call for someone to send, and is not
+ * recorded here.
  */
 async function record(
 	address: string,
 	genesis: Genesis,
-	proof: OwnerProof | undefined,
-	chainId: number
+	proof: OwnerProof | undefined
 ): Promise<boolean> {
-	const named = namedGenesis(genesis);
-	let answer = await importGenesis({ chainId, safe: address, genesis: named, ownerProof: proof });
-	// A chain the service does not serve: its home chain reads the same factory.
-	const home = answer.status === 'error' ? await recordHomeChain() : chainId;
-	if (answer.status === 'error' && chainId !== home) {
-		answer = await importGenesis({
-			chainId: home,
-			safe: address,
-			genesis: named,
-			ownerProof: proof
-		});
-	}
+	const answer = await importGenesis({
+		chainId: await recordHomeChain(),
+		safe: address,
+		genesis: namedGenesis(genesis),
+		ownerProof: proof
+	});
 	return answer.status === 'recorded' || answer.status === 'queued';
 }
 
@@ -163,7 +173,7 @@ export async function createMultisig(
 	const proof = await signOwnerProof(choice.creator.account, draft.address, choice.chainId);
 	let recorded = false;
 	try {
-		recorded = await record(draft.address, draft.genesis, proof, choice.chainId);
+		recorded = await record(draft.address, draft.genesis, proof);
 	} catch (error) {
 		if (!(error instanceof ServiceUnavailableError)) throw error;
 	}
@@ -197,14 +207,7 @@ export async function retryUnrecorded(): Promise<void> {
 			// somewhere; anything else waits for "Share it again".
 			if (!proof && askedWithoutProof.has(key)) continue;
 			if (!proof) askedWithoutProof.add(key);
-			if (
-				await record(
-					account.address,
-					account.genesis,
-					proof,
-					account.chainIds[0] ?? (await recordHomeChain())
-				)
-			) {
+			if (await record(account.address, account.genesis, proof)) {
 				// Queued: confirmed by a later `fetchGenesis`.
 				multisig.markShared(account.address);
 			}
@@ -224,11 +227,15 @@ export async function retryUnrecorded(): Promise<void> {
  * it on its home chain. Resolves `true` once the service holds it.
  */
 export async function shareAgain(account: MultisigAccount, owner: LocalOwner): Promise<boolean> {
-	const chainId = account.chainIds[0] ?? (await recordHomeChain());
-	const proof = await signOwnerProof(owner.account, account.address, chainId);
+	// Nothing awaited before the passkey: its prompt needs the person's tap.
+	const proof = await signOwnerProof(
+		owner.account,
+		account.address,
+		account.chainIds[0] ?? REGISTRY_HOME_CHAIN_ID
+	);
 	let recorded = false;
 	try {
-		recorded = await record(account.address, account.genesis, proof, chainId);
+		recorded = await record(account.address, account.genesis, proof);
 	} catch (error) {
 		if (!(error instanceof ServiceUnavailableError)) throw error;
 	}
@@ -434,7 +441,11 @@ export async function findMultisig(
 		return { ok: false, reason: 'unavailable' };
 	}
 	if (!answer.found) {
-		const deployedOn = (await onChain).deployed[0] ?? null;
+		// The service resolves a deployed Safe from a chain it reads: one of
+		// those it is deployed on, if any; else it is asked of the first.
+		const deployed = (await onChain).deployed;
+		const served = await servedChains().catch(() => null);
+		const deployedOn = deployed.find((id) => served?.has(id)) ?? deployed[0] ?? null;
 		if (deployedOn === null) return { ok: false, reason: 'notFound' };
 		try {
 			const imported = await importGenesis({ chainId: deployedOn, safe: address });
@@ -455,13 +466,15 @@ export async function findMultisig(
 		return { ok: false, reason: 'unsupported' };
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
-	const used = await deployedChains(address, chainIds);
-	// Where it is used, from what says so: the chains it is deployed on, then
-	// the ones its record is on (the service's `recordedOn`), on networks this
-	// wallet has — then the network the person (or a link) names. Never the
-	// first network of the space shown: its proposals are read where it is.
-	const recorded = (answer.recordedOn ?? []).filter((id) => networkForChainId(id) !== null);
-	const where = [...new Set([...used, ...recorded, ...(network === undefined ? [] : [network])])];
+	const [used, proposed] = await Promise.all([
+		deployedChains(address, chainIds),
+		proposalChains(address, chainIds)
+	]);
+	// Where it is used, from what says so (the core's rule): the chains it is
+	// deployed on, those the mailbox holds proposals of it for, then the
+	// network the person (or a link) names. Never the chain its record is on
+	// — the registry is an index — nor the first network of the space shown.
+	const where = multisigNetworks({ deployed: used, proposals: proposed, named: network ?? null });
 	if (where.length === 0) return { ok: false, reason: 'chooseNetwork' };
 	const { owners, threshold } = genesisMembers(genesis);
 	return {
@@ -528,6 +541,47 @@ async function deployedChains(address: string, chainIds: number[]): Promise<numb
 		chainIds.map(async (id) => ((await hasCode(id, address).catch(() => false)) ? id : null))
 	);
 	return results.filter((id): id is number => id !== null);
+}
+
+/**
+ * Which of `chainIds` the mailbox holds proposals of `address` for. The
+ * mailbox takes proposals on any chain, so this is asked per network the
+ * wallet has; one that cannot be read says nothing (it is not a "no").
+ */
+async function proposalChains(address: string, chainIds: number[]): Promise<number[]> {
+	const results = await Promise.all(
+		chainIds.map(async (id) => {
+			const answer = await fetchProposals(id, address, { background: true }).catch(() => null);
+			return answer && answer.proposals.length > 0 ? id : null;
+		})
+	);
+	return results.filter((id): id is number => id !== null);
+}
+
+/** Multisigs whose networks were looked for this session. */
+const discovered = new Set<string>();
+
+/**
+ * Once a session, look on every network of `chainIds` for what says the
+ * multisig is used there that this device did not see (another member
+ * deployed it, or proposed on a network of their own): such a network
+ * becomes one of its networks here (the core's rule, over what was kept).
+ * Quiet on failure; a network that cannot be read adds nothing.
+ */
+export async function discoverChains(account: MultisigAccount, chainIds: number[]): Promise<void> {
+	const key = account.address.toLowerCase();
+	if (discovered.has(key)) return;
+	discovered.add(key);
+	const unseen = chainIds.filter((id) => !account.chainIds.includes(id));
+	if (unseen.length === 0) return;
+	const [deployed, proposals] = await Promise.all([
+		deployedChains(account.address, unseen),
+		proposalChains(account.address, unseen)
+	]);
+	const where = multisigNetworks({ deployed, proposals, kept: account.chainIds });
+	for (const id of where) {
+		if (!account.chainIds.includes(id)) multisig.useChain(account.address, id);
+	}
 }
 
 async function waitForTask(id: string): Promise<void> {
@@ -623,10 +677,18 @@ export async function importExported(safe: ExportedSafe): Promise<ImportOutcome>
 	if (safe.name) multisig.setLabel(account.address, safe.name);
 	if (recorded) multisig.markShared(account.address);
 	else {
-		// The genesis service, if it is there, records it for other devices.
-		const deployedOn = safe.chains.find((c) => c.deployed)?.chainId;
-		if (deployedOn !== undefined) {
-			void importGenesis({ chainId: deployedOn, safe: safe.address }).catch(() => {});
+		// The genesis service, if it is there, records it for other devices: a
+		// deployment on a chain it reads is its evidence (it pays); on another
+		// chain it is the genesis read here, sent to its index chain.
+		const deployedOn = safe.chains.filter((c) => c.deployed).map((c) => c.chainId);
+		if (deployedOn.length > 0) {
+			const named = genesis;
+			void (async () => {
+				const served = await servedChains().catch(() => null);
+				const read = deployedOn.find((id) => served?.has(id));
+				if (read === undefined) await record(safe.address, named, undefined);
+				else await importGenesis({ chainId: read, safe: safe.address });
+			})().catch(() => {});
 		}
 	}
 	return { ok: true, account: multisig.find(account.address) ?? account };

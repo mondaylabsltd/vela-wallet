@@ -13,7 +13,8 @@
 	import { onMount } from 'svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { checkRecords, followUnrecorded, keepMultisig } from '../core/accounts';
+	import { checkRecords, discoverChains, followUnrecorded, keepMultisig } from '../core/accounts';
+	import { spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
 	import { chainMeta } from '$lib/services/chains';
@@ -106,6 +107,14 @@
 		void followKey;
 		const account = multisig.active;
 		proposals.follow(account, account?.chainIds ?? []);
+		// Once a session: networks another member made it used on (deployed
+		// there, or proposed there) become its networks here too.
+		if (account) {
+			void discoverChains(
+				account,
+				spaceNetworksSync().map((n) => n.chainId)
+			).catch(() => {});
+		}
 	});
 
 	function clearHash() {

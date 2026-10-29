@@ -4,14 +4,22 @@
  * switches nothing. Keeping it is a tap of its own, and does not show it;
  * the add sheet's Add still adds and shows.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const OWNERS = ['0x00000000000000000000000000000000000000aa'];
 
 const seams = vi.hoisted(() => ({
-	deployed: true,
+	/** The chains it has code on; `null`: every one asked. */
+	deployedOn: null as number[] | null,
 	recordedOn: undefined as number[] | undefined,
+	/** The chains the mailbox holds proposals of it for. */
+	proposedOn: [] as number[],
+	/** Chains whose mailbox read fails. */
+	mailboxDown: [] as number[],
 	table: null as { chains: Set<number> | null; homeChainId: number | null } | null
 }));
 const store = vi.hoisted(() => ({
@@ -39,12 +47,19 @@ vi.mock('./store.svelte', () => ({
 		activate: (address: string | null) => {
 			store.calls.push('activate');
 			store.active = address;
-		}
+		},
+		useChain: (address: string, chainId: number) => store.calls.push(`useChain:${chainId}`)
 	}
 }));
-vi.mock('./chain', () => ({ hasCode: async () => seams.deployed }));
+vi.mock('./chain', () => ({
+	hasCode: async (chainId: number) =>
+		seams.deployedOn === null || seams.deployedOn.includes(chainId)
+}));
 vi.mock('./safe-service', () => ({}));
-vi.mock('./kernel', () => ({
+// The core's own rule for which networks it is on (`multisigNetworks`); the
+// genesis is taken as deriving the address.
+vi.mock('./kernel', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./kernel')>()),
 	genesisAddress: () => SAFE,
 	genesisMembers: () => ({ owners: OWNERS, threshold: 1 }),
 	sameAddress: (a?: string | null, b?: string | null) =>
@@ -59,6 +74,14 @@ vi.mock('./service', () => ({
 		genesis: { owners: OWNERS },
 		recordedOn: seams.recordedOn
 	}),
+	fetchProposals: async (chainId: number) => {
+		if (seams.mailboxDown.includes(chainId)) throw new Error('away');
+		return {
+			members: {},
+			proposals: seams.proposedOn.includes(chainId) ? [{ chainId }] : []
+		};
+	},
+	servedChains: async () => seams.table?.chains ?? null,
 	serviceTable: async () => seams.table
 }));
 // The wallet's networks: Gnosis, Arc Testnet and Sepolia; chain 999 is none of them.
@@ -68,12 +91,24 @@ vi.mock('$lib/services/networks', () => ({
 }));
 vi.mock('$lib/services/rpc-pool', () => ({ poolRpcCall: async () => ({ result: '0x0' }) }));
 
-const { addMultisig, findMultisig, keepMultisig, recordHomeChain, REGISTRY_HOME_CHAIN_ID } =
-	await import('./accounts');
+const {
+	addMultisig,
+	discoverChains,
+	findMultisig,
+	keepMultisig,
+	recordHomeChain,
+	REGISTRY_HOME_CHAIN_ID
+} = await import('./accounts');
+
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 beforeEach(() => {
-	seams.deployed = true;
+	seams.deployedOn = null;
 	seams.recordedOn = undefined;
+	seams.proposedOn = [];
+	seams.mailboxDown = [];
 	seams.table = null;
 	store.rows = [];
 	store.active = null;
@@ -111,28 +146,45 @@ describe('reading a multisig by its address (ms-21)', () => {
 
 /**
  * Where a multisig added by address is used comes from what says so — the
- * chains it is deployed on, then the ones its record is on — never the first
- * network of the space shown; when nothing says, the person is asked.
+ * chains it is deployed on, those the mailbox holds proposals of it for, the
+ * network a link or the person names — never the chain its record is on (the
+ * registry is an index, not a home), nor the first network of the space
+ * shown. When nothing says, the person is asked.
  */
 describe('the networks of a multisig added by address', () => {
-	const SPACE = [11155111, 5042002];
+	const ARBITRUM = 42161;
+	const SPACE = [11155111, 5042002, ARBITRUM];
 
-	it('an undeployed one is used where its record is, not on the first network shown', async () => {
-		seams.deployed = false;
-		seams.recordedOn = [5042002];
+	it('deployed on Arbitrum: Arbitrum — though its record is on Gnosis', async () => {
+		seams.deployedOn = [ARBITRUM];
+		seams.recordedOn = [100];
+		const found = await findMultisig(SAFE, SPACE);
+		expect(found).toMatchObject({ ok: true, account: { chainIds: [ARBITRUM] } });
+	});
+
+	it('undeployed, with proposals in the mailbox on a network: that network', async () => {
+		seams.deployedOn = [];
+		seams.recordedOn = [100];
+		seams.proposedOn = [5042002];
 		const found = await findMultisig(SAFE, SPACE);
 		expect(found).toMatchObject({ ok: true, account: { chainIds: [5042002] } });
 	});
 
-	it('a deployed one is used where it is deployed, then where it is recorded', async () => {
-		seams.recordedOn = [100];
-		const found = await findMultisig(SAFE, SPACE);
-		expect(found).toMatchObject({ ok: true, account: { chainIds: [11155111, 5042002, 100] } });
+	it('deployed, proposed on, and named: each once, in that order', async () => {
+		seams.deployedOn = [ARBITRUM];
+		seams.proposedOn = [5042002, ARBITRUM];
+		const found = await findMultisig(SAFE, SPACE, 11155111);
+		expect(found).toMatchObject({
+			ok: true,
+			account: { chainIds: [ARBITRUM, 5042002, 11155111] }
+		});
 	});
 
-	it('when nothing says (a record on its way, or on a network this wallet lacks), asks', async () => {
-		seams.deployed = false;
-		for (const recordedOn of [[], undefined, [999]]) {
+	it('when nothing says (its record on the registry chain is not a home), asks', async () => {
+		seams.deployedOn = [];
+		// A mailbox that cannot be read on a network says nothing of it.
+		seams.mailboxDown = [ARBITRUM];
+		for (const recordedOn of [[100], [], undefined, [1, 100]]) {
 			seams.recordedOn = recordedOn;
 			expect(await findMultisig(SAFE, SPACE)).toEqual({ ok: false, reason: 'chooseNetwork' });
 		}
@@ -148,8 +200,8 @@ describe('the networks of a multisig added by address', () => {
 	});
 });
 
-/** A record on a chain the service does not serve goes to the service's own home chain. */
-describe('where a record falls back to', () => {
+/** Every record goes to the index chain: the service's own home chain. */
+describe('where a record goes', () => {
 	it("is the service's home chain, as it says", async () => {
 		seams.table = { chains: new Set([5042002]), homeChainId: 5042002 };
 		expect(await recordHomeChain()).toBe(5042002);
@@ -160,5 +212,23 @@ describe('where a record falls back to', () => {
 		expect(await recordHomeChain()).toBe(REGISTRY_HOME_CHAIN_ID);
 		seams.table = null;
 		expect(await recordHomeChain()).toBe(REGISTRY_HOME_CHAIN_ID);
+	});
+});
+
+/**
+ * A multisig this device has: another member may have deployed it, or
+ * proposed, on a network this device never used it on. Once a session the
+ * wallet looks, and such a network becomes one of its networks here.
+ */
+describe('networks another member made it used on', () => {
+	it('are found once a session: deployed there, or proposals there', async () => {
+		seams.deployedOn = [42161];
+		seams.proposedOn = [8453];
+		const account = { address: SAFE, chainIds: [100] };
+		await discoverChains(account as never, [100, 42161, 8453, 10]);
+		expect(store.calls).toEqual(['useChain:42161', 'useChain:8453']);
+		store.calls = [];
+		await discoverChains(account as never, [100, 42161, 8453, 10]);
+		expect(store.calls).toEqual([]);
 	});
 });

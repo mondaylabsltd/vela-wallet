@@ -32,8 +32,7 @@ const {
 	importGenesis,
 	retryAfterMs,
 	serviceTable,
-	servedChains,
-	servedOnly
+	servedChains
 } = await import('./service');
 
 const RECORD = 'vela.serviceEndpoints';
@@ -121,7 +120,7 @@ describe('the health answer (the core reads it)', () => {
 		expect(await checkService('http://127.0.0.1:1')).toEqual({ kind: 'unreachable' });
 	});
 
-	it("gives the create sheet the service's chains, asked once a minute", async () => {
+	it("gives the service's own chains, asked once a minute", async () => {
 		storage.set(RECORD, JSON.stringify({ genesisServiceURL: 'http://127.0.0.1:8788' }));
 		const fetch = answering(200, HEALTH);
 		vi.stubGlobal('fetch', fetch);
@@ -280,16 +279,8 @@ describe('the v4 service', () => {
 	});
 });
 
-describe("the create sheet's networks", () => {
-	const networks = [{ chainId: 100 }, { chainId: 5042002 }, { chainId: 1 }];
-
-	it("are the ones the service serves, by its own table; all while that isn't known", () => {
-		expect(servedOnly(networks, new Set([5042002]))).toEqual([{ chainId: 5042002 }]);
-		expect(servedOnly(networks, new Set([42]))).toEqual([]);
-		expect(servedOnly(networks, null)).toEqual(networks);
-	});
-
-	it("are not narrowed by a service that lists no chains, or can't be read", async () => {
+describe('the chains the service reads', () => {
+	it("are not known from a service that lists no chains, or can't be read", async () => {
 		vi.stubGlobal('fetch', answering(200, JSON.stringify({ service: 'safe-genesis-registry' })));
 		expect(await servedChains()).toBeNull();
 		vi.stubGlobal(

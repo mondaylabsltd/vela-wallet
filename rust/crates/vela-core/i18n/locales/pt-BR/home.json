@@ -174,7 +174,9 @@
         "badLink": "Este link para uma transação multisig está incompleto ou danificado. Peça de novo.",
         "previewNote": "Nenhuma conta deste dispositivo é membro deste multisig. Abrir este link não o adicionou nem trocou de conta.",
         "watch": "Adicionar a este dispositivo",
-        "watching": "Neste dispositivo: está na sua lista de contas. A conta exibida não mudou."
+        "watching": "Neste dispositivo: está na sua lista de contas. A conta exibida não mudou.",
+        "renameRuns": "Isto é executado na {{network}}, onde o registro guarda a entrada dele: só o próprio multisig pode renomeá-la lá.",
+        "renameDeploys": "O multisig ainda não foi implantado na {{network}}. Executar isto o implanta lá primeiro, com os membros com que foi criado, e o membro que executa também paga por isso."
       },
       "send": {
         "propose": "Propor e aprovar",
@@ -217,7 +219,8 @@
         "nameInvalid": "Use um nome mais curto, sem caracteres de controle ou invisíveis nem espaços no início ou no fim.",
         "fewer": "Menos aprovações",
         "more": "Mais aprovações",
-        "copyAddress": "Copiar endereço"
+        "copyAddress": "Copiar endereço",
+        "noSafeNetworks": "Nenhuma das suas redes tem os contratos Safe de que um multisig precisa. Adicione uma que tenha em Configurações → Redes."
       },
       "add": {
         "title": "Adicionar uma multisig",
@@ -296,7 +299,7 @@
         "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
         "remove": "Remover deste dispositivo",
         "renameTitle": "Nome no registro",
-        "renameNote": "Os membros, e qualquer pessoa que consulte este multisig, veem este nome. Renomeá-lo é uma das transações dele na {{network}}: os membros aprovam como qualquer outra.",
+        "renameNote": "Os membros, e qualquer pessoa que consulte este multisig, veem este nome. Renomeá-lo é uma das transações dele na {{network}}, onde o registro dele é guardado: os membros aprovam como qualquer outra, e executá-la implanta o multisig na {{network}} se ele ainda não estiver lá.",
         "renameAction": "Renomear na rede",
         "renameUnavailable": "O registro dele não está em nenhuma rede desta carteira, então não dá para renomeá-lo daqui.",
         "shareAgain": "Compartilhar de novo",
@@ -305,8 +308,7 @@
       "service": {
         "customNote": "Usando um serviço multisig próprio ({{host}})",
         "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
-        "retry": "Tentar de novo",
-        "noNetworks": "O serviço multisig não atende nenhuma das suas redes."
+        "retry": "Tentar de novo"
       }
     },
     "balanceDetailStatusOwnNode": "Seu nó não está respondendo",

@@ -3,8 +3,9 @@
 	 * Adding a multisig by its address — all another member needs. The
 	 * genesis comes from the service and is accepted only if the core
 	 * re-derives the address from it (`addMultisig`). Its networks are where
-	 * it is deployed or recorded; when nothing says, the person picks one here
-	 * (`chooseNetwork`) — never the first network of the space, silently.
+	 * it is deployed or has proposals in the mailbox — never where its record
+	 * is (the registry is an index); when nothing says, the person picks one
+	 * here (`chooseNetwork`) — never the first network of the space, silently.
 	 *
 	 * Or importing Safes from a Safe{Wallet} export: the file is read by the
 	 * core on this device, the person picks the Safes, and each is imported

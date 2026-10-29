@@ -173,7 +173,9 @@
         "badLink": "Bu çoklu imza işlemi bağlantısı eksik ya da bozuk. Yeniden iste.",
         "previewNote": "Bu cihazdaki hiçbir hesap bu çoklu imzanın üyesi değil. Bağlantıyı açmak onu eklemedi ve hesap değiştirmedi.",
         "watch": "Bu cihaza ekle",
-        "watching": "Bu cihazda: hesap listesinde. Gösterilen hesap değişmedi."
+        "watching": "Bu cihazda: hesap listesinde. Gösterilen hesap değişmedi.",
+        "renameRuns": "Bu, kayıt defterinin kaydını tuttuğu {{network}} üzerinde çalışır: orada adını yalnızca multisig'in kendisi değiştirebilir.",
+        "renameDeploys": "Multisig henüz {{network}} üzerinde dağıtılmadı. Bunu yürütmek onu önce oluşturulduğu üyelerle oraya dağıtır ve bunun ücretini de yürüten üye öder."
       },
       "send": {
         "propose": "Öner ve onayla",
@@ -215,7 +217,8 @@
         "nameInvalid": "Daha kısa bir ad kullanın; kontrol ya da görünmez karakter, başta veya sonda boşluk olmasın.",
         "fewer": "Daha az onay",
         "more": "Daha fazla onay",
-        "copyAddress": "Adresi kopyala"
+        "copyAddress": "Adresi kopyala",
+        "noSafeNetworks": "Ağlarınızın hiçbirinde bir multisig'in ihtiyaç duyduğu Safe sözleşmeleri yok. Ayarlar → Ağlar'dan bunlara sahip bir ağ ekleyin."
       },
       "add": {
         "title": "Çoklu imza ekle",
@@ -294,7 +297,7 @@
         "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
         "remove": "Bu cihazdan kaldır",
         "renameTitle": "Kayıt defterindeki adı",
-        "renameNote": "Üyeler ve bu multisig'e bakan herkes bu adı görür. Yeniden adlandırmak, {{network}} üzerindeki işlemlerinden biridir: üyeler diğerleri gibi onaylar.",
+        "renameNote": "Üyeler ve bu multisig'e bakan herkes bu adı görür. Yeniden adlandırmak, kaydının tutulduğu {{network}} üzerindeki işlemlerinden biridir: üyeler diğerleri gibi onaylar ve yürütüldüğünde multisig henüz yoksa {{network}} üzerinde dağıtılır.",
         "renameAction": "Zincirde yeniden adlandır",
         "renameUnavailable": "Kaydı bu cüzdandaki hiçbir ağda değil, bu yüzden buradan yeniden adlandırılamaz.",
         "shareAgain": "Yeniden paylaş",
@@ -303,8 +306,7 @@
       "service": {
         "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
         "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
-        "retry": "Tekrar dene",
-        "noNetworks": "Çoklu imza hizmeti ağlarınızın hiçbirine hizmet vermiyor."
+        "retry": "Tekrar dene"
       }
     },
     "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",

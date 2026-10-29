@@ -1983,6 +1983,103 @@ pub fn sponsor_challenge(multisig: &str) -> Result<String, CoreError> {
     Ok(hex(keccak256(p).as_slice()))
 }
 
+// -- where a multisig can live, and where it does -------------------------------------
+
+/// The Safe v1.4.1 contracts a multisig Vela creates names in its genesis
+/// ([`multisig_genesis`]): the factory that deploys it, the singleton its
+/// proxy runs, and the fallback handler its setup installs. A chain with
+/// code at all three can deploy it at its one address; the Safe Genesis
+/// Registry plays no part — it is only the index where the genesis is
+/// recorded (Gnosis, or Ethereum), not a bound on where the multisig lives.
+pub const MULTISIG_CONTRACTS: [(&str, &str); 3] = [
+    ("Safe Proxy Factory", safe::SAFE_PROXY_FACTORY),
+    ("Safe L2", safe::SAFE_SINGLETON),
+    (
+        "Compatibility Fallback Handler",
+        COMPATIBILITY_FALLBACK_HANDLER,
+    ),
+];
+
+/// Whether a chain holds the Safe v1.4.1 contracts a new multisig needs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SafeContracts {
+    /// Every one has code there.
+    Present,
+    /// These have no code there: it cannot be deployed on this chain.
+    Missing { names: Vec<String> },
+    /// The chain did not answer for some, and none of those it answered for
+    /// is missing: nothing can be said either way.
+    Unknown,
+}
+
+/// The verdict on one chain from `eth_getCode` of each of
+/// [`MULTISIG_CONTRACTS`], in that order: `Some(code)` as the chain answered,
+/// `None` where it did not. A missing contract is a verdict even while
+/// another went unanswered; an empty code (`0x`) is a missing one.
+pub fn safe_contracts(codes: &[Option<String>]) -> SafeContracts {
+    let mut missing = Vec::new();
+    let mut unanswered = codes.len() < MULTISIG_CONTRACTS.len();
+    for (i, (name, _)) in MULTISIG_CONTRACTS.iter().enumerate() {
+        match codes.get(i).and_then(|c| c.as_deref()) {
+            None => unanswered = true,
+            Some(code) => {
+                let body = code.strip_prefix("0x").unwrap_or(code);
+                if body.trim_start_matches('0').is_empty() {
+                    missing.push((*name).to_owned());
+                }
+            }
+        }
+    }
+    if !missing.is_empty() {
+        SafeContracts::Missing { names: missing }
+    } else if unanswered {
+        SafeContracts::Unknown
+    } else {
+        SafeContracts::Present
+    }
+}
+
+/// What says which networks a multisig is used on. A multisig is the same on
+/// every chain that has the Safe v1.4.1 contracts; it is "on" a network only
+/// because something there or here says so.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NetworkEvidence {
+    /// Chains it has code on, read through the wallet's own RPC.
+    pub deployed: Vec<u64>,
+    /// Chains the proposal mailbox holds proposals of it for.
+    pub proposals: Vec<u64>,
+    /// The network a proposal link names, or the one the person picked when
+    /// asked.
+    pub named: Option<u64>,
+    /// What this device already keeps for it: the network its creator
+    /// picked, and every one it was used on here since.
+    pub kept: Vec<u64>,
+}
+
+/// The networks a multisig is used on: where it is deployed, then where the
+/// mailbox holds proposals of it, then the network named for it (a link, or
+/// the person's pick), then what this device kept — each once, in that
+/// order. Never the chain its genesis is recorded on: the registry is an
+/// index, not a home. Empty: nothing says, and the person is asked — no
+/// network is guessed.
+pub fn multisig_networks(e: &NetworkEvidence) -> Vec<u64> {
+    let mut out: Vec<u64> = Vec::new();
+    for id in e
+        .deployed
+        .iter()
+        .chain(&e.proposals)
+        .chain(e.named.iter())
+        .chain(&e.kept)
+    {
+        if *id > 0 && !out.contains(id) {
+            out.push(*id);
+        }
+    }
+    out
+}
+
 /// The one door the shells use: `method` and its arguments as a JSON object,
 /// the answer as JSON. Every rule stays here; the shell only moves JSON.
 pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
@@ -2117,6 +2214,16 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "multisig")?,
             &arg::<String>(&args, "nonce")?,
         )?)),
+        "multisigContracts" => out(serde_json::json!(MULTISIG_CONTRACTS
+            .iter()
+            .map(|(name, address)| serde_json::json!({"name": name, "address": address}))
+            .collect::<Vec<_>>())),
+        "safeContracts" => out(json(&safe_contracts(&arg::<Vec<Option<String>>>(
+            &args, "codes",
+        )?))),
+        "multisigNetworks" => out(serde_json::json!(multisig_networks(&arg(
+            &args, "evidence"
+        )?))),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]
         "serviceAnswer" => out(json(&crate::app::genesis_service::service_answer(
@@ -2187,6 +2294,98 @@ mod tests {
             answer,
             serde_json::json!({"kind":"genesis","chains":[{"chainId":100,"name":null,"registry":false}],"homeChainId":null,"ok":true})
         );
+    }
+
+    /// The contracts a chain must hold are exactly the ones a new multisig's
+    /// genesis names: its factory, its singleton, the handler its setup sets.
+    #[test]
+    fn the_safe_contracts_are_the_ones_its_genesis_names() {
+        let g = multisig_genesis(&[A.into(), B.into()], 2, "Team", "0x7").unwrap();
+        let [(_, factory), (_, singleton), (_, handler)] = MULTISIG_CONTRACTS;
+        assert_eq!(g.genesis.factory.to_lowercase(), factory.to_lowercase());
+        assert_eq!(g.genesis.singleton.to_lowercase(), singleton.to_lowercase());
+        assert!(g
+            .genesis
+            .initializer
+            .to_lowercase()
+            .contains(&handler[2..].to_lowercase()));
+    }
+
+    #[test]
+    fn a_chain_with_every_safe_contract_can_hold_a_multisig() {
+        let code = Some("0x6080".to_owned());
+        assert_eq!(
+            safe_contracts(&[code.clone(), code.clone(), code.clone()]),
+            SafeContracts::Present
+        );
+        // One without code: missing, named — even while another went unanswered.
+        assert_eq!(
+            safe_contracts(&[code.clone(), None, Some("0x".into())]),
+            SafeContracts::Missing {
+                names: vec!["Compatibility Fallback Handler".into()]
+            }
+        );
+        assert_eq!(
+            safe_contracts(&[Some("0x0".into()), code.clone(), code.clone()]),
+            SafeContracts::Missing {
+                names: vec!["Safe Proxy Factory".into()]
+            }
+        );
+        // The chain did not answer: nothing said either way.
+        assert_eq!(
+            safe_contracts(&[code.clone(), None, code.clone()]),
+            SafeContracts::Unknown
+        );
+        assert_eq!(safe_contracts(&[code]), SafeContracts::Unknown);
+        // Through the door, as the shells read it.
+        let answer = call_json("safeContracts", r#"{"codes":["0x60","0x","0x60"]}"#).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&answer).unwrap(),
+            serde_json::json!({"kind": "missing", "names": ["Safe L2"]})
+        );
+        let listed: serde_json::Value =
+            serde_json::from_str(&call_json("multisigContracts", "{}").unwrap()).unwrap();
+        assert_eq!(listed[0]["address"], safe::SAFE_PROXY_FACTORY);
+        assert_eq!(listed.as_array().unwrap().len(), 3);
+    }
+
+    /// A multisig is on a network because something says so: deployed there,
+    /// proposals there, a link or the person naming it, what this device
+    /// kept. Nothing says: empty, and the person is asked.
+    #[test]
+    fn a_multisig_is_on_the_networks_something_says() {
+        let on = |e: NetworkEvidence| multisig_networks(&e);
+        assert_eq!(
+            on(NetworkEvidence {
+                deployed: vec![42161],
+                ..Default::default()
+            }),
+            vec![42161]
+        );
+        assert_eq!(
+            on(NetworkEvidence {
+                deployed: vec![42161, 8453],
+                proposals: vec![8453, 10],
+                named: Some(137),
+                kept: vec![137, 1],
+            }),
+            vec![42161, 8453, 10, 137, 1]
+        );
+        // Nothing says: no network — never the registry's chain.
+        assert_eq!(on(NetworkEvidence::default()), Vec::<u64>::new());
+        assert_eq!(
+            on(NetworkEvidence {
+                named: Some(0),
+                ..Default::default()
+            }),
+            Vec::<u64>::new()
+        );
+        let answer = call_json(
+            "multisigNetworks",
+            r#"{"evidence":{"proposals":[10],"named":42161}}"#,
+        )
+        .unwrap();
+        assert_eq!(answer, "[10,42161]");
     }
 
     #[test]

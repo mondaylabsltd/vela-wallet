@@ -173,7 +173,9 @@
         "badLink": "This link to a multisig transaction is incomplete or damaged. Ask for it again.",
         "previewNote": "No account on this device is a member of this multisig. Opening this link didn't add it or switch accounts.",
         "watch": "Add to this device",
-        "watching": "On this device: it's in your accounts list. The account shown hasn't changed."
+        "watching": "On this device: it's in your accounts list. The account shown hasn't changed.",
+        "renameRuns": "This runs on {{network}}, where the registry keeps its record: only the multisig itself can rename it there.",
+        "renameDeploys": "The multisig isn’t deployed on {{network}} yet. Executing this deploys it there first, with the members it was created with, and the executing member pays for that too."
       },
       "send": {
         "propose": "Propose and approve",
@@ -215,7 +217,8 @@
         "nameInvalid": "Use a shorter name, without control or invisible characters or spaces at either end.",
         "fewer": "Fewer approvals",
         "more": "More approvals",
-        "copyAddress": "Copy address"
+        "copyAddress": "Copy address",
+        "noSafeNetworks": "None of your networks has the Safe contracts a multisig needs. Add one that does in Settings → Networks."
       },
       "add": {
         "title": "Add a multisig",
@@ -294,7 +297,7 @@
         "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
         "remove": "Remove from this device",
         "renameTitle": "Name in the registry",
-        "renameNote": "Members, and anyone who looks this multisig up, see this name. Renaming it is one of its transactions on {{network}}: members approve it like any other.",
+        "renameNote": "Members, and anyone who looks this multisig up, see this name. Renaming it is one of its transactions on {{network}}, where its record is kept: members approve it like any other, and executing it deploys the multisig on {{network}} if it isn’t there yet.",
         "renameAction": "Rename on chain",
         "renameUnavailable": "Its record isn't on a network this wallet has, so it can't be renamed from here.",
         "shareAgain": "Share it again",
@@ -303,8 +306,7 @@
       "service": {
         "customNote": "Using a custom multisig service ({{host}})",
         "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
-        "retry": "Retry",
-        "noNetworks": "The multisig service serves none of your networks."
+        "retry": "Retry"
       }
     },
     "balanceDetailStatusOwnNode": "Your node isn't answering",
