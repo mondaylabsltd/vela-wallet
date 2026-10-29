@@ -996,8 +996,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the side panel stands aside while its window has Vela open in a tab)
 //   and `home.networkFilterOnly` (the phone home says when it is narrowed to
 //   one network). 2254 + 5 = 2259 leaves, 120 branches.
-if (PATHS.length !== 2379) fail(`expected 2379 paths (2259 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2259) fail(`expected 2259 leaf paths, got ${leafSet.size}`);
+// 2382 (the tab steps aside too, 2026-10-29): + `connect.ext.{openInPanelTitle,
+//   openInPanelBody, goToPanel}` — "Use here instead" in the panel closes
+//   nothing; the tab says Vela is open in the side panel, its wallet kept
+//   beneath. 2259 + 3 = 2262 leaves, 120 branches.
+if (PATHS.length !== 2382) fail(`expected 2382 paths (2262 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2262) fail(`expected 2262 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

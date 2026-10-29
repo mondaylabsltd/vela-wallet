@@ -10,8 +10,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	closeSidePanel,
 	isWalletPageUrl,
+	OWNER_PREFIX,
+	ownerKey,
 	panelMayClose,
 	panelStanding,
+	tabStanding,
 	toolbarTarget,
 	walletTabsIn
 } from '../../../extension/lib/one-surface.js';
@@ -121,9 +124,35 @@ describe('what the side panel shows', () => {
 		expect(panelStanding({ walletTabs, busy: true })).toEqual({ kind: 'live' });
 	});
 
-	it('the wallet once the person chose it over every such tab', () => {
-		expect(panelStanding({ walletTabs, usedHere: [1, 2] })).toEqual({ kind: 'live' });
-		expect(panelStanding({ walletTabs, usedHere: [2] })).toEqual({ kind: 'elsewhere', tabId: 1 });
+	it('the wallet once the person chose the panel for this window ("Use here instead")', () => {
+		expect(panelStanding({ walletTabs, owner: 'panel' })).toEqual({ kind: 'live' });
+		expect(panelStanding({ walletTabs, owner: null })).toEqual({ kind: 'elsewhere', tabId: 2 });
+	});
+});
+
+describe('what a wallet tab shows — the panel’s rule the other way round', () => {
+	it('the wallet by default: the tab is a window’s wallet', () => {
+		expect(tabStanding({})).toEqual({ kind: 'live' });
+		expect(tabStanding({ owner: null, panelUp: true })).toEqual({ kind: 'live' });
+	});
+
+	it('"Vela is open in the side panel" once the person chose the panel there', () => {
+		expect(tabStanding({ owner: 'panel', panelUp: true })).toEqual({ kind: 'aside' });
+		// Chrome could not say whether a panel is up: the choice stands.
+		expect(tabStanding({ owner: 'panel', panelUp: null })).toEqual({ kind: 'aside' });
+	});
+
+	it('the wallet when no side panel is up anywhere — a choice left behind never strands it', () => {
+		expect(tabStanding({ owner: 'panel', panelUp: false })).toEqual({ kind: 'live' });
+	});
+
+	it('the wallet while a send or a signature is in flight in it', () => {
+		expect(tabStanding({ owner: 'panel', panelUp: true, busy: true })).toEqual({ kind: 'live' });
+	});
+
+	it('names each window’s choice under its own key', () => {
+		expect(ownerKey(3)).toBe('vela.surface.window.3');
+		expect(ownerKey(3).startsWith(OWNER_PREFIX)).toBe(true);
 	});
 });
 

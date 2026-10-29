@@ -18,15 +18,16 @@
 	import { installChunkRecovery } from '$lib/services/chunk-recovery';
 	import { ensureCustomNetworks } from '$lib/services/networks';
 	import { invalidateAllPools } from '$lib/services/rpc-pool';
-	import { normalizePackagedUrl } from '$lib/extension/page-url';
+	import { isPackagedApp, normalizePackagedUrl } from '$lib/extension/page-url';
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import ExtensionNotices from '$lib/extension/ExtensionNotices.svelte';
 	import type { ExtensionMessages } from '$lib/extension/messages';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
-	import { oneSurface } from '$lib/extension/one-surface.svelte';
-	import OpenInTab from '$lib/extension/OpenInTab.svelte';
+	import { oneSurface, type SurfaceRole } from '$lib/extension/one-surface.svelte';
+	import StepAside from '$lib/extension/StepAside.svelte';
+	import { isWalletPageUrl } from '../../extension/lib/one-surface.js';
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
 	import { agentSettings } from '$lib/agent/settings.svelte';
@@ -267,24 +268,35 @@
 	/**
 	 * One wallet per window (`one-surface.svelte.ts`): the side panel of a
 	 * window that has Vela open in a tab stands aside for it — unless a dApp's
-	 * request is owed here, which rises over the wallet as spec 082 routes it.
+	 * request is owed here, which rises over the wallet as spec 082 routes it —
+	 * and a wallet tab stands aside the same way once the person chose the
+	 * panel there ("Use here instead", which closes nothing).
 	 */
-	let inPanel = $state(false);
+	let surfaceRole = $state<SurfaceRole | null>(null);
 	const extensionMessages = $derived(
 		(page.data as { extension?: ExtensionMessages } | undefined)?.extension
 	);
-	const standAside = $derived(
-		inPanel &&
-			extensionMessages !== undefined &&
-			oneSurface.elsewhere !== null &&
-			panelSurface.current === null
+	const panelAside = $derived(
+		surfaceRole === 'panel' && oneSurface.elsewhere !== null && panelSurface.current === null
 	);
+	const tabAside = $derived(surfaceRole === 'tab' && oneSurface.tabAside);
+	const standAside = $derived(extensionMessages !== undefined && (panelAside || tabAside));
+
+	/** A wallet page in a tab of the packaged extension (not a request window). */
+	function inWalletTab(): boolean {
+		const getURL = (globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } })
+			.chrome?.runtime?.getURL;
+		return isPackagedApp() && !!getURL && isWalletPageUrl(location.href, getURL(''));
+	}
 
 	onMount(() => {
 		if (isPanelDocument()) {
-			inPanel = true;
+			surfaceRole = 'panel';
 			void panelSurface.start();
-			void oneSurface.start();
+			void oneSurface.start('panel');
+		} else if (inWalletTab()) {
+			surfaceRole = 'tab';
+			void oneSurface.start('tab');
 		}
 		// The custom-network snapshot, warmed once per document (spec 038 #E9)
 		// so send, signing and the RPC pool see an added network on a fresh
@@ -382,11 +394,25 @@
 		{@render children()}
 	</div>
 
-	{#if standAside && extensionMessages !== undefined}
-		<OpenInTab
-			messages={extensionMessages}
-			ongototab={() => void oneSurface.goToTab()}
-			onusehere={() => void oneSurface.useHere()}
+	{#if panelAside && extensionMessages !== undefined}
+		<StepAside
+			testid="panel-open-in-tab"
+			title={extensionMessages.openInTabTitle}
+			body={extensionMessages.openInTabBody}
+			go={extensionMessages.goToTab}
+			here={extensionMessages.useHereInstead}
+			ongo={() => void oneSurface.goToTab()}
+			onhere={() => void oneSurface.useHere()}
+		/>
+	{:else if tabAside && extensionMessages !== undefined}
+		<StepAside
+			testid="tab-open-in-panel"
+			title={extensionMessages.openInPanelTitle}
+			body={extensionMessages.openInPanelBody}
+			go={extensionMessages.goToPanel}
+			here={extensionMessages.useHereInstead}
+			ongo={() => oneSurface.goToPanel()}
+			onhere={() => void oneSurface.useHere()}
 		/>
 	{/if}
 

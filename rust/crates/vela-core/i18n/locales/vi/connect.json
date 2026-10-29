@@ -128,9 +128,12 @@
       "accessNote": "Quyền truy cập trang web bị giới hạn: các trang không thấy Vela và không dùng được passkey.",
       "accessAllow": "Cho phép truy cập",
       "openInTabTitle": "Vela đang mở trong một thẻ",
-      "openInTabBody": "Mỗi cửa sổ một ví: bảng bên tạm lui khi thẻ đó còn mở. Dùng ở đây thì thẻ đó sẽ đóng.",
+      "openInTabBody": "Mỗi cửa sổ một ví: bảng bên tạm lui khi thẻ đó còn mở. Mọi thứ ở đây vẫn giữ nguyên như bạn để lại.",
       "goToTab": "Đến thẻ",
-      "useHereInstead": "Dùng ở đây"
+      "useHereInstead": "Dùng ở đây",
+      "openInPanelTitle": "Vela đang mở trong bảng bên",
+      "openInPanelBody": "Mỗi cửa sổ một ví: thẻ này tạm lui khi bạn đang dùng bảng bên. Mọi thứ ở đây vẫn giữ nguyên như bạn để lại.",
+      "goToPanel": "Đến bảng bên"
     }
   },
   "signHandoff": {

@@ -128,9 +128,12 @@
       "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
       "accessAllow": "Allow access",
       "openInTabTitle": "Vela is open in a tab",
-      "openInTabBody": "One wallet per window: the side panel steps aside while that tab is open. Using it here instead closes the tab.",
+      "openInTabBody": "One wallet per window: the side panel steps aside while that tab is open. Everything here stays as you left it.",
       "goToTab": "Go to tab",
-      "useHereInstead": "Use here instead"
+      "useHereInstead": "Use here instead",
+      "openInPanelTitle": "Vela is open in the side panel",
+      "openInPanelBody": "One wallet per window: this tab steps aside while the side panel is in use. Everything here stays as you left it.",
+      "goToPanel": "Go to side panel"
     }
   },
   "signHandoff": {

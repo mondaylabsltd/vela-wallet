@@ -128,9 +128,12 @@
       "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
       "accessAllow": "Zugriff erlauben",
       "openInTabTitle": "Vela ist in einem Tab geöffnet",
-      "openInTabBody": "Eine Wallet pro Fenster: Die Seitenleiste tritt zurück, solange dieser Tab geöffnet ist. Wenn Sie sie stattdessen hier verwenden, wird der Tab geschlossen.",
+      "openInTabBody": "Eine Wallet pro Fenster: Die Seitenleiste tritt zurück, solange dieser Tab geöffnet ist. Hier bleibt alles, wie Sie es verlassen haben.",
       "goToTab": "Zum Tab",
-      "useHereInstead": "Stattdessen hier verwenden"
+      "useHereInstead": "Stattdessen hier verwenden",
+      "openInPanelTitle": "Vela ist in der Seitenleiste geöffnet",
+      "openInPanelBody": "Eine Wallet pro Fenster: Dieser Tab tritt zurück, solange die Seitenleiste verwendet wird. Hier bleibt alles, wie Sie es verlassen haben.",
+      "goToPanel": "Zur Seitenleiste"
     }
   },
   "signHandoff": {

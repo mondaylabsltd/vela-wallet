@@ -128,9 +128,12 @@
       "accessNote": "網站存取權受限：網站找不到 Vela，通行密鑰也無法使用。",
       "accessAllow": "允許存取",
       "openInTabTitle": "Vela 已在分頁中開啟",
-      "openInTabBody": "一個視窗只開一個錢包：該分頁開著時，側邊欄會讓位。改在這裡使用會關閉那個分頁。",
+      "openInTabBody": "一個視窗只開一個錢包：該分頁開著時，側邊欄會讓位。這裡的內容會原樣保留。",
       "goToTab": "前往分頁",
-      "useHereInstead": "改在這裡使用"
+      "useHereInstead": "改在這裡使用",
+      "openInPanelTitle": "Vela 已在側邊欄中開啟",
+      "openInPanelBody": "一個視窗只開一個錢包：使用側邊欄期間，此分頁會讓位。這裡的內容會原樣保留。",
+      "goToPanel": "前往側邊欄"
     }
   },
   "signHandoff": {

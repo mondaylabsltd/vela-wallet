@@ -18,4 +18,8 @@ export interface ExtensionMessages {
 	openInTabBody: string;
 	goToTab: string;
 	useHereInstead: string;
+	/** A wallet tab while its window's side panel is the wallet (the person chose it there). */
+	openInPanelTitle: string;
+	openInPanelBody: string;
+	goToPanel: string;
 }

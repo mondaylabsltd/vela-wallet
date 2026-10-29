@@ -128,9 +128,12 @@
       "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
       "accessAllow": "Autoriser l'accès",
       "openInTabTitle": "Vela est ouvert dans un onglet",
-      "openInTabBody": "Un wallet par fenêtre : le panneau latéral s'efface tant que cet onglet est ouvert. L'utiliser ici ferme l'onglet.",
+      "openInTabBody": "Un wallet par fenêtre : le panneau latéral s'efface tant que cet onglet est ouvert. Tout reste ici comme vous l'avez laissé.",
       "goToTab": "Aller à l'onglet",
-      "useHereInstead": "Utiliser ici à la place"
+      "useHereInstead": "Utiliser ici à la place",
+      "openInPanelTitle": "Vela est ouvert dans le panneau latéral",
+      "openInPanelBody": "Un wallet par fenêtre : cet onglet s'efface tant que le panneau latéral est utilisé. Tout reste ici comme vous l'avez laissé.",
+      "goToPanel": "Aller au panneau latéral"
     }
   },
   "signHandoff": {

@@ -128,9 +128,12 @@
       "accessNote": "O acesso aos sites está limitado: os sites não veem a Vela e a passkey não funciona.",
       "accessAllow": "Permitir acesso",
       "openInTabTitle": "A Vela está aberta em uma aba",
-      "openInTabBody": "Uma carteira por janela: o painel lateral sai de cena enquanto essa aba estiver aberta. Usar aqui fecha a aba.",
+      "openInTabBody": "Uma carteira por janela: o painel lateral sai de cena enquanto essa aba estiver aberta. Tudo aqui fica como você deixou.",
       "goToTab": "Ir para a aba",
-      "useHereInstead": "Usar aqui"
+      "useHereInstead": "Usar aqui",
+      "openInPanelTitle": "A Vela está aberta no painel lateral",
+      "openInPanelBody": "Uma carteira por janela: esta aba sai de cena enquanto o painel lateral estiver em uso. Tudo aqui fica como você deixou.",
+      "goToPanel": "Ir para o painel lateral"
     }
   },
   "signHandoff": {

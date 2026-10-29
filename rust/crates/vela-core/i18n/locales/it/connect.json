@@ -128,9 +128,12 @@
       "accessNote": "L'accesso ai siti è limitato: i siti non vedono Vela e la passkey non funziona.",
       "accessAllow": "Consenti accesso",
       "openInTabTitle": "Vela è aperto in una scheda",
-      "openInTabBody": "Un wallet per finestra: il pannello laterale si fa da parte finché quella scheda è aperta. Usarlo qui chiude la scheda.",
+      "openInTabBody": "Un wallet per finestra: il pannello laterale si fa da parte finché quella scheda è aperta. Qui tutto resta come l'hai lasciato.",
       "goToTab": "Vai alla scheda",
-      "useHereInstead": "Usa qui invece"
+      "useHereInstead": "Usa qui invece",
+      "openInPanelTitle": "Vela è aperto nel pannello laterale",
+      "openInPanelBody": "Un wallet per finestra: questa scheda si fa da parte mentre usi il pannello laterale. Qui tutto resta come l'hai lasciato.",
+      "goToPanel": "Vai al pannello laterale"
     }
   },
   "signHandoff": {

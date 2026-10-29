@@ -84,6 +84,7 @@
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import {
@@ -293,6 +294,24 @@
 	let sendView = $state<SendView | null>(null);
 	let sendSession: SendSession | null = null;
 	const feeQuote = new FeeQuote();
+
+	/**
+	 * One wallet per window (`one-surface.svelte.ts`): a surface with a send
+	 * or a signature in flight never steps aside for the other one — the
+	 * person is watching it go.
+	 */
+	const signingInFlight = $derived(
+		(sendView !== null &&
+			(sendView.sending ||
+				sendView.tx_status === 'preparing' ||
+				sendView.tx_status === 'signing' ||
+				sendView.tx_status === 'submitting')) ||
+			signRequest.view.phase !== 'idle'
+	);
+	$effect(() => {
+		if (!signingInFlight) return;
+		return oneSurface.hold();
+	});
 	/**
 	 * The signing sheet's OWN fee session. It used to be handed Send's, which was
 	 * harmless only while nothing priced a signing request; now the host asks for

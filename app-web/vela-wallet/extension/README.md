@@ -79,7 +79,8 @@ lib/locales.js     the packaged locales, and the ONE rule every surface opens by
                    the pinned language, else Chrome's (the worker never picks)
 lib/one-surface.js one wallet per window: the toolbar focuses the window's wallet
                    tab, and a side panel whose window has one stands aside for it
-                   (a dApp's request still rises in the panel)
+                   — or the tab for the panel, once the person chose it there;
+                   nothing is closed (a dApp's request still rises in the panel)
 build.mjs          assembles the app's client build + these scripts into dist/,
                    then derives dist-release/ and dist-store/; `--zip` zips them
 dist/              the DEVELOPMENT package: `key` (the e2e computes the id from

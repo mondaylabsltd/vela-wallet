@@ -118,7 +118,7 @@ import {
 	receiptLookupHash
 } from './lib/op-receipt.js';
 import { installDoor, openDoor } from './lib/locales.js';
-import { closeSidePanel, panelMayClose, toolbarTarget } from './lib/one-surface.js';
+import { closeSidePanel, ownerKey, panelMayClose, toolbarTarget } from './lib/one-surface.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -265,6 +265,8 @@ async function openWallet(windowId) {
 	}
 	const walletWindow = target.kind === 'focus' ? target.windowId : windowId;
 	if (typeof walletWindow !== 'number') return;
+	// The person chose the tab: a "use the panel here" of that window is over.
+	await sessionArea.remove(ownerKey(walletWindow)).catch(() => {});
 	await loaded;
 	if (!panelMayClose([...records.values()], walletWindow)) return;
 	if (await closeSidePanel(chrome.sidePanel, walletWindow)) {

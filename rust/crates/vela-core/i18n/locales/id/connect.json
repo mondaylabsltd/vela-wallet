@@ -128,9 +128,12 @@
       "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
       "accessAllow": "Izinkan akses",
       "openInTabTitle": "Vela terbuka di sebuah tab",
-      "openInTabBody": "Satu dompet per jendela: panel samping mengalah selama tab itu terbuka. Memakainya di sini akan menutup tab tersebut.",
+      "openInTabBody": "Satu dompet per jendela: panel samping mengalah selama tab itu terbuka. Semua di sini tetap seperti yang Anda tinggalkan.",
       "goToTab": "Buka tab",
-      "useHereInstead": "Pakai di sini saja"
+      "useHereInstead": "Pakai di sini saja",
+      "openInPanelTitle": "Vela terbuka di panel samping",
+      "openInPanelBody": "Satu dompet per jendela: tab ini mengalah selama panel samping dipakai. Semua di sini tetap seperti yang Anda tinggalkan.",
+      "goToPanel": "Buka panel samping"
     }
   },
   "signHandoff": {

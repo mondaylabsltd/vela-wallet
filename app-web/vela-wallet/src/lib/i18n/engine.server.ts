@@ -1226,7 +1226,10 @@ export function resolveExtensionMessages(locale: Locale): ExtensionMessages {
 		openInTabTitle: k('connect.ext.openInTabTitle'),
 		openInTabBody: k('connect.ext.openInTabBody'),
 		goToTab: k('connect.ext.goToTab'),
-		useHereInstead: k('connect.ext.useHereInstead')
+		useHereInstead: k('connect.ext.useHereInstead'),
+		openInPanelTitle: k('connect.ext.openInPanelTitle'),
+		openInPanelBody: k('connect.ext.openInPanelBody'),
+		goToPanel: k('connect.ext.goToPanel')
 	};
 }
 
