@@ -1,0 +1,132 @@
+/**
+ * What waits on this device, per multisig (r4D-7): how many transactions
+ * need an approval from a member here, and how many are ready to execute —
+ * for the home's strip, the switcher's rows, and the dot on the switcher's
+ * button when another account has something waiting.
+ *
+ * The shown multisig's counts are its followed proposals' (`proposals`,
+ * re-read every 12 s). The others are read here, now and then — the
+ * mailbox's cross-chain list, then each network it has proposals on through
+ * this wallet's RPC (`readChain`, the same checks the shown one gets) — and
+ * only while a page is shown. A count is what this device read; a multisig
+ * not read yet has none, never a zero it did not see.
+ */
+import { fillTemplate } from '$lib/i18n/fill';
+import { pluralForm } from '$lib/i18n/plural';
+import type { MultisigMessages } from '../messages';
+import { proposals, readChain, splitListed, type ProposalItem } from './proposals.svelte';
+import { fetchAllProposals } from './service';
+import { serviceOutage } from './service-state.svelte';
+import { multisig, type MultisigAccount } from './store.svelte';
+import { sameAddress } from './kernel';
+
+export interface Waiting {
+	/** Open, short of approvals, and a member on this device has not approved. */
+	needsYou: number;
+	/** Enough approvals, its nonce next: it can be executed now. */
+	ready: number;
+	/** The first of them, to open: the one needing an approval first, else the first ready. */
+	first: { chainId: number; safeTxHash: string } | null;
+}
+
+export const NOTHING_WAITING: Waiting = { needsYou: 0, ready: 0, first: null };
+
+/** What `items` (one multisig's, as this device reads them) ask of this device. */
+export function waitingOf(items: ProposalItem[]): Waiting {
+	const open = items.filter((i) => i.status !== 'done' && !i.cancelledBy);
+	const needs = open.filter(
+		(i) => i.status !== 'ready' && i.approved < i.threshold && i.canApprove.length > 0
+	);
+	const ready = open.filter((i) => i.status === 'ready');
+	const first = needs[0] ?? ready[0] ?? null;
+	return {
+		needsYou: needs.length,
+		ready: ready.length,
+		first: first ? { chainId: first.chainId, safeTxHash: first.safeTxHash } : null
+	};
+}
+
+/** "1 needs your approval · 1 ready to execute" — '' when nothing waits. */
+export function waitingWords(w: Waiting, m: MultisigMessages): string {
+	const parts: string[] = [];
+	if (w.needsYou > 0) {
+		parts.push(fillTemplate(pluralForm(m.presence.needsYou, w.needsYou), { count: w.needsYou }));
+	}
+	if (w.ready > 0) {
+		parts.push(fillTemplate(pluralForm(m.presence.ready, w.ready), { count: w.ready }));
+	}
+	return parts.join(' · ');
+}
+
+/** How often the multisigs not shown are read again while a page is up. */
+export const OTHERS_EVERY_MS = 60_000;
+
+class Presence {
+	/** The multisigs not shown, as last read, by lowercase address. */
+	#others = $state<Record<string, Waiting>>({});
+	#reading: Promise<void> | null = null;
+
+	/** What waits on `address` here, or `null` when it was not read yet. */
+	of(address: string): Waiting | null {
+		if (sameAddress(proposals.followed, address)) return waitingOf(proposals.items);
+		return this.#others[address.toLowerCase()] ?? null;
+	}
+
+	/** Whether a multisig other than `shown` (the address on screen) has something waiting. */
+	othersWaiting(shown: string | null): boolean {
+		return multisig.accounts.some((a) => {
+			if (shown && sameAddress(a.address, shown)) return false;
+			const w = this.of(a.address);
+			return !!w && w.needsYou + w.ready > 0;
+		});
+	}
+
+	/** Read every multisig not shown again (one round at a time). Quiet on failure. */
+	refreshOthers(): Promise<void> {
+		if (this.#reading) return this.#reading;
+		this.#reading = (async () => {
+			if (serviceOutage.blocked()) return;
+			for (const account of multisig.accounts) {
+				if (sameAddress(proposals.followed, account.address)) continue;
+				const read = await readOther(account).catch(() => null);
+				if (read) this.#others = { ...this.#others, [account.address.toLowerCase()]: read };
+			}
+		})().finally(() => (this.#reading = null));
+		return this.#reading;
+	}
+
+	/**
+	 * Read the others now and every {@link OTHERS_EVERY_MS} while the page is
+	 * shown. Returns the stop.
+	 */
+	follow(): () => void {
+		const run = () => {
+			if (document.visibilityState === 'visible') void this.refreshOthers();
+		};
+		run();
+		const timer = setInterval(run, OTHERS_EVERY_MS);
+		document.addEventListener('visibilitychange', run);
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', run);
+		};
+	}
+}
+
+/** One multisig not shown: its proposals on every network it has some on, read as the shown one's are. */
+async function readOther(account: MultisigAccount): Promise<Waiting | null> {
+	const all = await fetchAllProposals(account.address, { background: true });
+	// An older service has no cross-chain list: nothing is said rather than a guess.
+	if (!all) return null;
+	if (all.proposals.length === 0) return NOTHING_WAITING;
+	const split = splitListed(all.proposals, account.chainIds);
+	const items: ProposalItem[] = [];
+	for (const [chainId, listed] of split.lists) {
+		if (!split.used.includes(chainId)) continue;
+		const chain = await readChain(account, chainId, null, { background: true, listed });
+		items.push(...chain.items);
+	}
+	return waitingOf(items);
+}
+
+export const presence = new Presence();

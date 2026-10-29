@@ -22,6 +22,8 @@ export interface WalletIdentity {
 	identiconSvg: string;
 	/** A multisig's approval rule, linking to its settings. */
 	rule?: { label: string; title: string; href: string };
+	/** r4D-7: another account has something waiting — the switcher's button says so (these words). */
+	waiting?: string;
 }
 
 /** The header a page carries before the session has answered. */
@@ -51,7 +53,8 @@ export function identityHeader(identity: WalletIdentity): WalletHeaderModel {
 		addressDisplay: shortenAddress(identity.address),
 		addressFull: identity.address,
 		identiconSvg: identity.identiconSvg,
-		...(identity.rule ? { rule: identity.rule } : {})
+		...(identity.rule ? { rule: identity.rule } : {}),
+		...(identity.waiting ? { waiting: identity.waiting } : {})
 	};
 }
 

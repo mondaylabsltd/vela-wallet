@@ -210,7 +210,7 @@
       "statusComputingAddress": "Cüzdan adresi hesaplanıyor...",
       "statusExtractingKey": "Açık anahtar çıkarılıyor...",
       "statusSettingUpIdentity": "Güvenli kimlik kuruluyor...",
-      "statusSetupCancelled": "Kurulum iptal edildi.",
+      "statusSetupCancelled": "Passkey oluşturulmadı. İstemi kapatmadıysanız bu cihaz reddetmiş olabilir — örneğin passkey depolama alanı dolu. Tekrar deneyin veya anahtar için başka bir yer seçin.",
       "statusSyncingKey": "Açık anahtar eşitleniyor...",
       "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
       "statusVerifyingIdentity": "Kimlik doğrulanıyor...",

@@ -210,7 +210,7 @@
       "statusComputingAddress": "Wallet-Adresse wird berechnet ...",
       "statusExtractingKey": "Öffentlicher Schlüssel wird extrahiert ...",
       "statusSettingUpIdentity": "Sichere Identität wird eingerichtet ...",
-      "statusSetupCancelled": "Einrichtung wurde abgebrochen.",
+      "statusSetupCancelled": "Der Passkey wurde nicht erstellt. Wenn Sie die Abfrage nicht geschlossen haben, hat dieses Gerät ihn womöglich abgelehnt – etwa weil sein Passkey-Speicher voll ist. Versuchen Sie es erneut oder wählen Sie einen anderen Ort für den Schlüssel.",
       "statusSyncingKey": "Öffentlicher Schlüssel wird synchronisiert ...",
       "statusVerifyCancelled": "Überprüfung wurde abgebrochen. Bitte versuchen Sie es erneut.",
       "statusVerifyingIdentity": "Identität wird geprüft ...",

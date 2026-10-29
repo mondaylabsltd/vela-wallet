@@ -210,7 +210,7 @@
       "statusComputingAddress": "Đang tính toán địa chỉ ví...",
       "statusExtractingKey": "Đang trích xuất khóa công khai...",
       "statusSettingUpIdentity": "Đang thiết lập danh tính bảo mật...",
-      "statusSetupCancelled": "Quá trình thiết lập đã bị hủy.",
+      "statusSetupCancelled": "Passkey chưa được tạo. Nếu bạn không đóng lời nhắc, có thể thiết bị này đã từ chối — ví dụ bộ nhớ passkey đã đầy. Hãy thử lại hoặc chọn nơi khác cho khóa.",
       "statusSyncingKey": "Đang đồng bộ khóa công khai...",
       "statusVerifyCancelled": "Quá trình xác minh đã bị hủy. Vui lòng thử lại.",
       "statusVerifyingIdentity": "Đang xác minh danh tính...",

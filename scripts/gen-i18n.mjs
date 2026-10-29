@@ -1083,9 +1083,25 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
+// 2488 (round 4: invites carry everything, create keeps it here first,
+//   presence, 2026-10-29): − `home.multisig.create.needTwo` (one member is
+//   a 1 of 1 multisig now), + `home.multisig.create.{nameBytes, nameTooLong,
+//   nameNeeded, memberName, memberNamePlaceholder, ensResolved, ensNotFound,
+//   ensUnavailable, ensUnsupported, fromContacts, solo, networkHint,
+//   networkNeeded, savedSharing, savedLater, shared, refused, copyInvite,
+//   firstRunTitle, firstRunInvite, firstRunInviteNote, firstRunFund,
+//   firstRunFundNote, firstRunCost, firstRunDismiss}` (25), + the
+//   `home.multisig.invite` branch `{body, shareText, qrLabel, outsideHint}`,
+//   + the `home.multisig.presence` branch `{needsYou_*, ready_*, ruleDiffers,
+//   othersWaiting}` (one/few/many/other each: 10), + `home.multisig.settings.
+//   renameNotRecorded`, + `home.multisig.add.{badInvite, usedOn,
+//   networkMissing, moreNetworks, invitedMembers, kindPasskey, kindWallet,
+//   labelsNote}`. `create.createdBody`, `settings.shareAgainNote`,
+//   `add.chooseNetwork` and `onboarding.create.statusSetupCancelled` change
+//   value only. 2318 − 1 + 25 + 4 + 10 + 1 + 8 = 2365 leaves, 123 branches.
+if (PATHS.length !== 2488) fail(`expected 2488 paths (2365 leaf + 123 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2365) fail(`expected 2365 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

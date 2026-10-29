@@ -13,8 +13,9 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 
 vi.mock('../core/store.svelte', () => ({
 	isShared: () => true,
-	multisig: { find: () => null }
+	multisig: { find: () => null, accounts: [] }
 }));
+vi.mock('$lib/services/public-key-index', () => ({ queryWalletName: async () => null }));
 vi.mock('$lib/wallet/identicon', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
@@ -37,7 +38,7 @@ describe('the invite sheet', () => {
 		render(InviteSheet, {
 			props: {
 				m: words(),
-				account: { address: SAFE, genesis: {}, owners: [], threshold: 1 } as never,
+				account: { address: SAFE, genesis: {}, owners: [], threshold: 1, chainIds: [] } as never,
 				locale: 'en',
 				wide: true,
 				closeLabel: 'Close',
@@ -49,5 +50,40 @@ describe('the invite sheet', () => {
 		expect(art).not.toBeNull();
 		art?.click();
 		expect(identiconViewer.current?.address).toBe(SAFE);
+	});
+
+	it('r4D-16: a code to scan, the network, the outside-wallet hint, and a link that carries them', async () => {
+		let copied = '';
+		const clip = vi
+			.spyOn(navigator.clipboard, 'writeText')
+			.mockImplementation(async (t: string) => void (copied = t));
+		render(InviteSheet, {
+			props: {
+				m: words(),
+				account: {
+					address: SAFE,
+					genesis: {},
+					owners: ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8'],
+					threshold: 1,
+					chainIds: [5042002]
+				} as never,
+				locale: 'en',
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {}
+			}
+		});
+		await tick();
+		expect(document.body.querySelector('[data-testid="invite-qr"] path')).not.toBeNull();
+		expect(document.body.querySelector('[data-testid="invite-network"]')?.textContent).toContain(
+			'add.usedOn'
+		);
+		expect(document.body.textContent).toContain('invite.outsideHint');
+		[...document.body.querySelectorAll('button')]
+			.find((b) => b.textContent?.trim() === 'proposal.copyLink')
+			?.click();
+		await vi.waitFor(() => expect(copied).not.toBe(''));
+		expect(new URL(copied).hash.startsWith(`#msa=5042002:${SAFE}`)).toBe(true);
+		clip.mockRestore();
 	});
 });

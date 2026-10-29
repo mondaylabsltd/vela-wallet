@@ -210,7 +210,7 @@
       "statusComputingAddress": "Menghitung alamat dompet...",
       "statusExtractingKey": "Mengekstrak kunci publik...",
       "statusSettingUpIdentity": "Menyiapkan identitas aman...",
-      "statusSetupCancelled": "Penyiapan dibatalkan.",
+      "statusSetupCancelled": "Passkey tidak dibuat. Jika Anda tidak menutup permintaannya, perangkat ini mungkin menolaknya — misalnya penyimpanan passkey-nya penuh. Coba lagi, atau pilih tempat lain untuk kuncinya.",
       "statusSyncingKey": "Menyinkronkan kunci publik...",
       "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
       "statusVerifyingIdentity": "Memverifikasi identitas...",

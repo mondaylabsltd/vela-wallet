@@ -210,7 +210,7 @@
       "statusComputingAddress": "正在計算錢包地址⋯",
       "statusExtractingKey": "正在擷取公鑰⋯",
       "statusSettingUpIdentity": "正在設定安全身份⋯",
-      "statusSetupCancelled": "設定已取消。",
+      "statusSetupCancelled": "通行密鑰未有建立。如你沒有關閉提示，可能是此裝置拒絕了它——例如通行密鑰儲存空間已滿。請重試，或為密鑰選擇其他位置。",
       "statusSyncingKey": "正在同步公鑰⋯",
       "statusVerifyCancelled": "驗證已取消。請重試。",
       "statusVerifyingIdentity": "正在驗證身份⋯",

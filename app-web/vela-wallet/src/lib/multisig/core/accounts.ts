@@ -61,7 +61,7 @@ import {
 } from './service';
 import { networkForChainId } from '$lib/services/networks';
 import { serviceOutage } from './service-state.svelte';
-import { multisig, type MultisigAccount } from './store.svelte';
+import { multisig, type MemberInfo, type MultisigAccount } from './store.svelte';
 
 /**
  * The default service's home chain (Gnosis): the index chain its registry
@@ -119,6 +119,8 @@ export interface CreateChoice {
 	creator: LocalOwner;
 	/** Its name, written with its record: a label, not part of the address. */
 	name: string;
+	/** What the creator knows of the members (r4D-5): kept on this device, carried by its invite. */
+	members?: Record<string, MemberInfo>;
 }
 
 /** The address a choice gives, for the review screen (the salt is fixed per draft). */
@@ -161,31 +163,62 @@ async function record(
 /** Multisigs asked about without a proof this session: once each, not every minute. */
 const askedWithoutProof = new Set<string>();
 
+/** Multisigs whose first record is being asked for right now: the retry loop leaves them be. */
+const recording = new Set<string>();
+
+/** Whether a creator's proof is kept here for `address`: its record is on its way (r4a-12). */
+export function recordWaiting(address: string): boolean {
+	return readProofs()[address.toLowerCase()] !== undefined;
+}
+
 /**
  * Create the multisig: one passkey prompt (the creator's proof), then the
- * service records it. The account exists — and is shown — even if the
- * service is unreachable right now; the record is retried.
+ * service records it. Kept on this device FIRST (r4a-13), as the proposal
+ * outbox keeps what was signed: the moment the passkey answers, the account
+ * and the proof are stored, so a reload, a closed tab or a service that is
+ * down loses nothing — the record is asked for again (`followUnrecorded`).
+ * `onsaved` is told once it is kept, before the service is asked.
  */
 export async function createMultisig(
 	choice: CreateChoice,
-	saltNonce: string
-): Promise<MultisigAccount> {
+	saltNonce: string,
+	onsaved?: (account: MultisigAccount) => void
+): Promise<{ account: MultisigAccount; refused: string | null }> {
 	const draft = multisigGenesis(choice.owners, choice.threshold, choice.name, saltNonce);
 	const proof = await signOwnerProof(choice.creator.account, draft.address, choice.chainId);
-	let recorded = false;
+	const key = draft.address.toLowerCase();
+	recording.add(key);
+	writeProofs({ ...readProofs(), [key]: proof });
+	const kept = multisig.add(draft.address, draft.genesis, false, [choice.chainId]);
+	if (choice.members) multisig.nameMembers(kept.address, choice.members);
+	multisig.setFirstRun(kept.address, true);
+	multisig.activate(kept.address);
+	onsaved?.(multisig.find(kept.address) ?? kept);
+	let refused: string | null = null;
 	try {
-		recorded = await record(draft.address, draft.genesis, proof);
-	} catch (error) {
-		if (!(error instanceof ServiceUnavailableError)) throw error;
+		let recorded = false;
+		try {
+			recorded = await record(draft.address, draft.genesis, proof);
+		} catch (error) {
+			// Kept here whatever the service said; a service away is asked
+			// again by the loop, a refusal is said on the created screen.
+			if (!(error instanceof ServiceUnavailableError)) {
+				refused = error instanceof Error ? error.message : String(error);
+			}
+		}
+		if (recorded) {
+			multisig.markRecorded(draft.address);
+			const left = readProofs();
+			delete left[key];
+			writeProofs(left);
+		} else if ((await fetchGenesis(draft.address).catch(() => ({ found: false }))).found) {
+			// Whatever the record's fate, the service may already hand it out.
+			multisig.markShared(draft.address);
+		}
+	} finally {
+		recording.delete(key);
 	}
-	if (!recorded) writeProofs({ ...readProofs(), [draft.address.toLowerCase()]: proof });
-	const account = multisig.add(draft.address, draft.genesis, recorded, [choice.chainId]);
-	// Whatever the record's fate, the service may already hand it out.
-	if (!recorded && (await fetchGenesis(draft.address).catch(() => ({ found: false }))).found) {
-		multisig.markShared(draft.address);
-	}
-	multisig.activate(account.address);
-	return multisig.find(account.address) ?? account;
+	return { account: multisig.find(kept.address) ?? kept, refused };
 }
 
 /** Ask again for every multisig the registry has not confirmed. Quiet on failure. */
@@ -194,6 +227,8 @@ export async function retryUnrecorded(): Promise<void> {
 	if (serviceOutage.blocked()) return;
 	const proofs = readProofs();
 	for (const account of multisig.accounts.filter((a) => !a.recorded)) {
+		// Its creation is asking right now.
+		if (recording.has(account.address.toLowerCase())) continue;
 		try {
 			const known = await fetchGenesis(account.address, { background: true });
 			if (known.found && !known.pending) {

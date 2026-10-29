@@ -211,7 +211,7 @@
       "statusComputingAddress": "Calculando endereço da carteira...",
       "statusExtractingKey": "Extraindo chave pública...",
       "statusSettingUpIdentity": "Configurando identidade segura...",
-      "statusSetupCancelled": "A configuração foi cancelada.",
+      "statusSetupCancelled": "A passkey não foi criada. Se você não fechou a solicitação, este dispositivo pode tê-la recusado — por exemplo, porque o armazenamento de passkeys está cheio. Tente de novo ou escolha outro lugar para a chave.",
       "statusSyncingKey": "Sincronizando chave pública...",
       "statusVerifyCancelled": "A verificação foi cancelada. Tente de novo.",
       "statusVerifyingIdentity": "Verificando identidade...",

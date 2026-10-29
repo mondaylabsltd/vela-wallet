@@ -101,6 +101,8 @@
 		onethereumbackup?: () => void;
 		/** More rows in the account list: the multisigs on this device. */
 		accountMore?: import('svelte').Snippet;
+		/** Under the account list's own buttons: more ways to add one (r4D-19: a multisig). */
+		accountExtra?: import('svelte').Snippet;
 		/** In place of the keys block: a multisig's own settings, while one is shown. */
 		accountKeys?: import('svelte').Snippet;
 		/** A storage row's action, by its own id (the phone's `onstorageclear`). */
@@ -137,6 +139,7 @@
 		onaccountsopen,
 		onethereumbackup,
 		accountMore,
+		accountExtra,
 		accountKeys,
 		onstorageclear,
 		onclearcaches,
@@ -349,6 +352,7 @@
 					onsignin={onaccountsignin}
 					more={accountMore}
 				/>
+				{#if accountExtra}{@render accountExtra()}{/if}
 
 				{#if accountKeys || model.account.keys !== undefined}
 					<!-- Which keys control this wallet, and their Ethereum backup beneath

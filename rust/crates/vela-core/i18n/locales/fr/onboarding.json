@@ -211,7 +211,7 @@
       "statusComputingAddress": "Calcul de l'adresse du portefeuille...",
       "statusExtractingKey": "Extraction de la clé publique...",
       "statusSettingUpIdentity": "Configuration de l'identité sécurisée...",
-      "statusSetupCancelled": "La configuration a été annulée.",
+      "statusSetupCancelled": "La passkey n’a pas été créée. Si vous n’avez pas fermé la demande, cet appareil l’a peut-être refusée, par exemple parce que son stockage de passkeys est plein. Réessayez ou choisissez un autre emplacement pour la clé.",
       "statusSyncingKey": "Synchronisation de la clé publique...",
       "statusVerifyCancelled": "La vérification a été annulée. Veuillez réessayer.",
       "statusVerifyingIdentity": "Vérification de l'identité...",

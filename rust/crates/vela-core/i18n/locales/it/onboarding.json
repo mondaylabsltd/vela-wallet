@@ -211,7 +211,7 @@
       "statusComputingAddress": "Calcolo dell'indirizzo del wallet…",
       "statusExtractingKey": "Estrazione della chiave pubblica…",
       "statusSettingUpIdentity": "Configurazione dell'identità sicura…",
-      "statusSetupCancelled": "Configurazione annullata.",
+      "statusSetupCancelled": "La passkey non è stata creata. Se non hai chiuso la richiesta, questo dispositivo potrebbe averla rifiutata, ad esempio perché lo spazio per le passkey è pieno. Riprova o scegli un altro posto per la chiave.",
       "statusSyncingKey": "Sincronizzazione della chiave pubblica…",
       "statusVerifyCancelled": "Verifica annullata. Riprova.",
       "statusVerifyingIdentity": "Verifica dell'identità…",

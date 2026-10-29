@@ -26,6 +26,8 @@ const seams = vi.hoisted(() => ({
 	renamed: [] as [string, number, string][],
 	opened: [] as unknown[],
 	sharedAgain: 0,
+	/** A creation's proof is kept here: its record is on its way (r4a-12). */
+	waiting: false,
 	/** Whether it is deployed on the chain holding its record (this wallet's RPC). */
 	deployed: true,
 	/** Each network's members now, read through this wallet's RPC. */
@@ -46,6 +48,7 @@ vi.mock('../core/proposals.svelte', () => ({
 }));
 vi.mock('../core/accounts', () => ({
 	recordHomeChain: async () => 100,
+	recordWaiting: () => seams.waiting,
 	shareAgain: async () => {
 		seams.sharedAgain += 1;
 		return true;
@@ -121,6 +124,10 @@ afterEach(() => {
 	identiconViewer.openLabel = '';
 	seams.chains = [];
 	seams.deployed = true;
+	seams.waiting = false;
+	seams.shared = true;
+	seams.recordedOn = [100];
+	seams.networks = [100];
 });
 
 describe('the members list (Settings → Account)', () => {
@@ -220,6 +227,19 @@ describe('the name in the registry (v4)', () => {
 		await expect.element(screen.getByText('settings.shareAgainNote')).toBeVisible();
 		await screen.getByRole('button', { name: 'settings.shareAgain' }).click();
 		await vi.waitFor(() => expect(seams.sharedAgain).toBe(1));
+	});
+
+	it('r4a-12: a creation still sharing says so — no "older registry", no "not on a network"', async () => {
+		seams.shared = false;
+		seams.recordedOn = [];
+		seams.waiting = true;
+		const screen = render(MultisigSettings, { props: props() });
+		await expect.element(screen.getByText('create.savedLater')).toBeVisible();
+		expect(screen.getByText('settings.shareAgainNote').elements()).toHaveLength(0);
+		await expect
+			.element(screen.getByTestId('rename-blocked'))
+			.toHaveTextContent('settings.renameNotRecorded');
+		expect(screen.getByText('settings.renameUnavailable').elements()).toHaveLength(0);
 	});
 });
 

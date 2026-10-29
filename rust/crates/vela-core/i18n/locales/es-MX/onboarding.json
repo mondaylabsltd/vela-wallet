@@ -211,7 +211,7 @@
       "statusComputingAddress": "Calculando la dirección de la billetera...",
       "statusExtractingKey": "Extrayendo la llave pública...",
       "statusSettingUpIdentity": "Configurando una identidad segura...",
-      "statusSetupCancelled": "Se canceló la configuración.",
+      "statusSetupCancelled": "No se creó la passkey. Si no cerraste la solicitud, es posible que este dispositivo la haya rechazado, por ejemplo porque su almacenamiento de passkeys está lleno. Inténtalo de nuevo o elige otro lugar para la clave.",
       "statusSyncingKey": "Sincronizando la llave pública...",
       "statusVerifyCancelled": "Se canceló la verificación. Inténtalo de nuevo.",
       "statusVerifyingIdentity": "Verificando la identidad...",

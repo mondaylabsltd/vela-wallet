@@ -41,7 +41,25 @@ export interface MultisigAccount {
 	 * its genesis comes first.
 	 */
 	label?: string;
+	/**
+	 * What this device knows of its members (r4D-5), by lowercase address: a
+	 * name and a kind, typed by its creator or carried by an invite. Labels
+	 * only — who may act is the genesis's and each chain's, never this.
+	 */
+	members?: Record<string, MemberInfo>;
+	/**
+	 * r4D-8: created on this device, its first steps (invite, fund, what the
+	 * first transfer costs) not dismissed yet.
+	 */
+	firstRun?: boolean;
 	addedMs: number;
+}
+
+/** A member's label and kind, as one device knows it (never authority). */
+export interface MemberInfo {
+	name?: string;
+	/** A Vela account (its key a passkey), or an outside wallet. */
+	kind?: 'passkey' | 'wallet';
 }
 
 /**
@@ -164,6 +182,42 @@ class MultisigStore {
 		const clean = label?.trim() || undefined;
 		this.accounts = this.accounts.map((a) =>
 			sameAddress(a.address, address) ? { ...a, label: clean } : a
+		);
+		write(this.accounts);
+	}
+
+	/**
+	 * Keep what is known of its members (r4D-5). What this device already
+	 * holds stays: a field is only filled where it is empty — the person's own
+	 * names over a link's. `known` is keyed by address, any case.
+	 */
+	nameMembers(address: string, known: Record<string, MemberInfo>): void {
+		const row = this.find(address);
+		if (!row) return;
+		const members = { ...(row.members ?? {}) };
+		let changed = false;
+		for (const [member, info] of Object.entries(known)) {
+			const key = member.toLowerCase();
+			const was = members[key] ?? {};
+			const name = was.name ?? (info.name?.trim() || undefined);
+			const kind = was.kind ?? info.kind;
+			if (name === was.name && kind === was.kind) continue;
+			members[key] = { ...(name ? { name } : {}), ...(kind ? { kind } : {}) };
+			changed = true;
+		}
+		if (!changed) return;
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, members } : a
+		);
+		write(this.accounts);
+	}
+
+	/** r4D-8: show (or, `false`, stop showing) its first steps on the home. */
+	setFirstRun(address: string, on: boolean): void {
+		const row = this.find(address);
+		if (!row || !!row.firstRun === on) return;
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, firstRun: on || undefined } : a
 		);
 		write(this.accounts);
 	}

@@ -10,12 +10,52 @@ import { identiconSvgForClient } from '$lib/wallet/identicon';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import type { MultisigMessages } from '../messages';
 import { multisigName } from './display';
-import { multisig } from './store.svelte';
+import { sameAddress } from './kernel';
+import { presence } from './presence.svelte';
+import { proposals } from './proposals.svelte';
+import { multisig, type MultisigAccount } from './store.svelte';
 
 interface SessionLike {
 	address: string;
 	active_index: number;
 	accounts: { account: { name: string } }[];
+}
+
+/**
+ * The rule in force on each network the multisig is used on (r4D-7): its
+ * members there now where it is deployed (read for the multisig shown), its
+ * original ones where it is not — or for one not read yet. Distinct rules,
+ * in the networks' order.
+ */
+export function currentRules(
+	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>
+): { m: number; n: number }[] {
+	const original = { m: account.threshold, n: account.owners.length };
+	if (!sameAddress(proposals.followed, account.address) || proposals.chains.length === 0) {
+		return [original];
+	}
+	const rules = proposals.chains.map((c) =>
+		c.members.deployed ? { m: c.members.threshold, n: c.members.owners.length } : original
+	);
+	return rules.filter((r, i) => rules.findIndex((o) => o.m === r.m && o.n === r.n) === i);
+}
+
+/** The rule chip's words: "2 of 3", or that it differs by network. */
+export function ruleChip(
+	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>,
+	m: MultisigMessages
+): { label: string; title: string } {
+	const rules = currentRules(account);
+	if (rules.length === 1) {
+		return {
+			label: fillTemplate(m.create.thresholdValue, rules[0]),
+			title: fillTemplate(m.panel.title, rules[0])
+		};
+	}
+	return {
+		label: m.presence.ruleDiffers,
+		title: rules.map((r) => fillTemplate(m.panel.title, r)).join(' · ')
+	};
 }
 
 export function shownIdentity(
@@ -24,23 +64,24 @@ export function shownIdentity(
 	locale: string
 ): WalletIdentity {
 	const shown = multisig.active;
+	// r4D-7: a dot on the switcher's button while another account has something waiting.
+	const waiting = presence.othersWaiting(shown?.address ?? null)
+		? { waiting: m.presence.othersWaiting }
+		: {};
 	if (shown) {
-		const n = shown.owners.length;
 		return {
 			name: multisigName(shown, m),
 			address: shown.address,
 			identiconSvg: identiconSvgForClient(shown.address),
-			rule: {
-				label: `${shown.threshold}/${n}`,
-				title: fillTemplate(m.panel.title, { m: shown.threshold, n }),
-				href: resolve('/[locale]/settings', { locale })
-			}
+			rule: { ...ruleChip(shown, m), href: resolve('/[locale]/settings', { locale }) },
+			...waiting
 		};
 	}
 	return {
 		name: view.accounts[view.active_index]?.account.name ?? '',
 		address: view.address,
-		identiconSvg: identiconSvgForClient(view.address)
+		identiconSvg: identiconSvgForClient(view.address),
+		...waiting
 	};
 }
 

@@ -5,7 +5,9 @@
 	 * name, address, total (its rule is its settings' to say). `<li>`s, drawn
 	 * inside `AccountsSheetBody`'s list and styled as its rows are.
 	 */
+	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { presence, waitingWords } from '../core/presence.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
@@ -33,6 +35,17 @@
 
 	let removing = $state<string | null>(null);
 	const active = $derived(multisig.active);
+
+	/** "1 needs your approval · 1 ready to execute", or nothing (none, or not read yet). */
+	function waitingLine(address: string): string {
+		const w = presence.of(address);
+		return w ? waitingWords(w, m) : '';
+	}
+
+	// The rows are on screen: the multisigs not shown are read now, and again a while later.
+	onMount(() => {
+		void presence.refreshOthers();
+	});
 </script>
 
 {#each multisig.accounts as account (account.address)}
@@ -66,6 +79,10 @@
 							· {m.switcher.readOnly}</span
 						>{/if}</span
 				>
+				{#if waitingLine(account.address)}
+					<!-- r4D-7: what waits here for this device, on the row itself. -->
+					<span class="waiting" data-testid="row-waiting">{waitingLine(account.address)}</span>
+				{/if}
 			</span>
 			{#if loading?.(account.address)}
 				<span class="amount"><SkeletonRow kind="figure" /></span>
@@ -157,6 +174,12 @@
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.waiting {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 	}
 
 	/* What this row's account cannot do yet, said where it is picked. */
