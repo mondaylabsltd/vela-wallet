@@ -175,7 +175,18 @@ describe('information never drawn in fg.subtle on the multisig screens (r4D-11)'
 		'lib/multisig/ui/CustomServiceNote.svelte',
 		'lib/multisig/ui/MultisigRows.svelte',
 		'lib/multisig/ui/MultisigSettings.svelte',
-		'lib/multisig/ui/ProposalSheet.svelte'
+		'lib/multisig/ui/ProposalSheet.svelte',
+		// The round-4 merge: the other branches' new multisig surfaces, held to the same rule.
+		'lib/flows/ui/ProvenanceNote.svelte',
+		'lib/multisig/external/TxReview.svelte',
+		'lib/multisig/ui/AuthorityNotice.svelte',
+		'lib/multisig/ui/ExternalSignSheet.svelte',
+		'lib/multisig/ui/InviteSheet.svelte',
+		'lib/multisig/ui/MemberChanges.svelte',
+		'lib/multisig/ui/MultisigHomeCard.svelte',
+		'lib/multisig/ui/NetworkChoice.svelte',
+		'lib/multisig/ui/RiskConfirmSheet.svelte',
+		'routes/[locale]/connect/+page.svelte'
 	];
 	/** Rules that colour a glyph or a placeholder, not information. */
 	const GLYPH =

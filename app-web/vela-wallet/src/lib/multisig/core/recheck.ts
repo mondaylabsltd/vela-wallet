@@ -12,7 +12,7 @@
  * again.
  */
 import { networkForChainId } from '$lib/services/networks';
-import { counterfactualOn, deployedOn } from './authority';
+import { judgeOn } from './judge';
 import { hasCode } from './chain';
 import { sameAddress } from './kernel';
 import type { Finding } from './refusal';
@@ -39,19 +39,7 @@ async function judge(account: MultisigAccount, chainId: number): Promise<Finding
 	} catch {
 		return null;
 	}
-	if (deployed) {
-		const check = await deployedOn(chainId, account.address).catch(() => null);
-		if (!check || check.unread) return null;
-		return check.risks.map((risk) => ({ from: 'chain' as const, chainId, risk }));
-	}
-	const authority = await counterfactualOn(chainId, account.address, account.genesis).catch(
-		() => null
-	);
-	if (!authority || authority.kind === 'unknown') return null;
-	if (authority.kind === 'refused') {
-		return authority.reasons.map((reason) => ({ from: 'genesis' as const, chainId, reason }));
-	}
-	return [];
+	return judgeOn(chainId, account.address, account.genesis, deployed);
 }
 
 /**

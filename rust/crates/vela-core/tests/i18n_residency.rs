@@ -69,7 +69,15 @@ const CORPUS_BYTES: usize = 990_499;
 /// the agent's words are coming (the in-wallet approval, the agent's status).
 /// The owner raised the line by half rather than by ~1 KB per step, knowing it
 /// warns later for it: 「预算可以加50%」 (145,400 × 1.5).
-const SC005_BUDGET: usize = 218_100;
+///
+/// 2026-10-29 (round-4 multisig, seven branches merged): member changes read
+/// in full, token provenance, executions watched, the fee before the passkey,
+/// Settings' member changes, invites and presence, the copy pass and the
+/// connect page's outside owners — 290 leaves in every locale — put the
+/// runtime route at 246,278, 28,178 over; each branch alone fitted. Same
+/// rule: ~1 KB above the measurement. PROPOSED, NOT YET APPROVED: moving the
+/// line is the owner's call; until then this is the reviewed proposal.
+const SC005_BUDGET: usize = 247_300;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
 ///
@@ -81,7 +89,11 @@ const SC005_BUDGET: usize = 218_100;
 /// 2026-10-20 (103): moved with the budget again, to the reduction the new
 /// budget itself allows (100 − 218,100 / 990,499 ≈ 77.98%), so the two checks
 /// guard one line rather than the percentage firing first.
-const SC005_REDUCTION_PERCENT: f64 = 77.9;
+///
+/// 2026-10-29 (round-4 multisig, merged): moved with the proposed budget, the
+/// same way (100 − 247,300 / 990,499 ≈ 75.03%) — proposed with it, the
+/// owner's call.
+const SC005_REDUCTION_PERCENT: f64 = 75.0;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

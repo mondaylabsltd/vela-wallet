@@ -7,8 +7,17 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MultisigMessages } from '../messages';
 import type { ProposalItem } from './proposals.svelte';
 
+const seams = vi.hoisted(() => ({
+	/** r4b-11: the waiting list kept from an earlier page, by multisig. */
+	kept: {} as Record<string, unknown[]>,
+	accounts: [] as { address: string }[]
+}));
 vi.mock('./proposals.svelte', () => ({
 	proposals: { followed: null, items: [] },
+	keptChains: (account: { address: string }) => {
+		const items = seams.kept[account.address.toLowerCase()];
+		return items ? { chains: [{ chainId: 100, items }], lists: new Map(), at: 1 } : null;
+	},
 	readChain: async () => ({ items: [] }),
 	splitListed: () => ({ lists: new Map(), used: [], missing: [] })
 }));
@@ -18,13 +27,20 @@ vi.mock('$lib/core/client', () => ({
 }));
 vi.mock('./service', () => ({ fetchAllProposals: async () => null }));
 vi.mock('./service-state.svelte', () => ({ serviceOutage: { blocked: () => false } }));
-vi.mock('./store.svelte', () => ({ multisig: { accounts: [] } }));
+vi.mock('./store.svelte', () => ({
+	multisig: {
+		get accounts() {
+			return seams.accounts;
+		},
+		find: (a: string) => seams.accounts.find((x) => x.address.toLowerCase() === a.toLowerCase())
+	}
+}));
 vi.mock('./kernel', () => ({
 	sameAddress: (a: string | null, b: string | null) =>
 		!!a && !!b && a.toLowerCase() === b.toLowerCase()
 }));
 
-const { waitingOf, waitingWords } = await import('./presence.svelte');
+const { presence, waitingOf, waitingWords } = await import('./presence.svelte');
 
 const item = (over: Partial<ProposalItem>): ProposalItem =>
 	({
@@ -74,5 +90,20 @@ describe('what waits here (r4D-7)', () => {
 		);
 		expect(waitingWords({ needsYou: 2, ready: 0, first: null }, m)).toBe('2 need your approval');
 		expect(waitingWords({ needsYou: 0, ready: 0, first: null }, m)).toBe('');
+	});
+});
+
+/**
+ * r4b-11 × r4D-7: a multisig not read yet on this page counts what its kept
+ * waiting list says — the list its home shows at once — never a zero it did
+ * not see, and nothing at all when none is kept.
+ */
+describe('a multisig not read yet on this page', () => {
+	it('counts its kept waiting list, the same one its home shows', () => {
+		seams.accounts = [{ address: '0xBB' }, { address: '0xCC' }];
+		seams.kept = { '0xbb': [item({ nonce: 1n, canApprove: [ME], approved: 1 })] };
+		expect(presence.of('0xBB')).toMatchObject({ needsYou: 1, ready: 0 });
+		expect(presence.of('0xCC')).toBeNull();
+		expect(presence.othersWaiting(null)).toBe(true);
 	});
 });

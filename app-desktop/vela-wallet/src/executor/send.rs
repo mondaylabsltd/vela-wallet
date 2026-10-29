@@ -747,9 +747,10 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
 
         // Multisig accounts are web-only for now: the desktop never opens a
         // send for one, so no proposal is ever asked of it.
-        SendOperation::ProposeSafeTx { .. } => {
-            SendAnswer::Now(SendShellResult::ProposeFailed { cancelled: false })
-        }
+        SendOperation::ProposeSafeTx { .. } => SendAnswer::Now(SendShellResult::ProposeFailed {
+            cancelled: false,
+            reason: None,
+        }),
 
         SendOperation::PersistTxRecords { records } => {
             // Best effort, like the TS `.catch(() => {})` — and the core must

@@ -9,12 +9,20 @@
  * mailbox's cross-chain list, then each network it has proposals on through
  * this wallet's RPC (`readChain`, the same checks the shown one gets) — and
  * only while a page is shown. A count is what this device read; a multisig
- * not read yet has none, never a zero it did not see.
+ * not read yet on this page counts what the waiting list kept from an earlier
+ * one says (r4b-11, the list its home shows at once), else has none — never
+ * a zero it did not see.
  */
 import { fillTemplate } from '$lib/i18n/fill';
 import { pluralForm } from '$lib/i18n/plural';
 import type { MultisigMessages } from '../messages';
-import { proposals, readChain, splitListed, type ProposalItem } from './proposals.svelte';
+import {
+	keptChains,
+	proposals,
+	readChain,
+	splitListed,
+	type ProposalItem
+} from './proposals.svelte';
 import { fetchAllProposals } from './service';
 import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
@@ -66,10 +74,30 @@ class Presence {
 	#others = $state<Record<string, Waiting>>({});
 	#reading: Promise<void> | null = null;
 
+	/** The kept list's counts, by lowercase address: read once a page, not reactive. */
+	#kept = new Map<string, Waiting | null>();
+
 	/** What waits on `address` here, or `null` when it was not read yet. */
 	of(address: string): Waiting | null {
 		if (sameAddress(proposals.followed, address)) return waitingOf(proposals.items);
-		return this.#others[address.toLowerCase()] ?? null;
+		const key = address.toLowerCase();
+		return this.#others[key] ?? this.#fromKept(key);
+	}
+
+	/** r4b-11: the list kept from an earlier page — the same one the home shows at once. */
+	#fromKept(key: string): Waiting | null {
+		if (this.#kept.has(key)) return this.#kept.get(key) ?? null;
+		const account = multisig.find(key);
+		if (!account) return null;
+		try {
+			const kept = keptChains(account);
+			const read = kept ? waitingOf(kept.chains.flatMap((c) => c.items)) : null;
+			this.#kept.set(key, read);
+			return read;
+		} catch {
+			// the core is not loaded yet: asked again on the next draw
+			return null;
+		}
 	}
 
 	/** Whether a multisig other than `shown` (the address on screen) has something waiting. */

@@ -22,11 +22,24 @@
  *
  * Proposing a new transaction from here is not offered: it needs the send
  * flow (token, amount, recipient, the next free number), which is Vela's.
+ *
+ * Who can act for the multisig on that network is judged here as in Vela
+ * (§3.5, `judgeOn`): a genesis the core refuses there makes it read-only —
+ * nothing is approved, executed or rejected from here — and a deploy is
+ * built only from a genesis Verified on code read right before it; a network
+ * where something besides its members can act is said, and each action asks
+ * first (the page's own confirmation); one that cannot be checked yet acts
+ * on nothing.
  */
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { hasCode, readMembers, type ChainMembers } from '../core/chain';
+import { counterfactualFacts } from '../core/authority';
+import { gateOf, type SigningGate } from '../core/gate.svelte';
+import { judgeOn } from '../core/judge';
+import { GenesisRefusedError, type Finding } from '../core/refusal';
 import {
 	cancelTx,
+	counterfactualAuthority,
 	ecdsaForm,
 	executionCalls,
 	genesisAddress,
@@ -69,7 +82,12 @@ export interface OutsideView {
 	hashes: SafeTxHashes;
 	/** The multisig's genesis, derived to its address by the core; `null` when the registry has none. */
 	genesis: Genesis | null;
+	/** §3.5: who can act for it on this network, as the chain says now; `null`: not checkable yet. */
+	findings: Finding[] | null;
 }
+
+/** §3.5 on this page: the core's verdict for the network, or that it could not be read yet. */
+export type OutsideGate = SigningGate | { kind: 'unchecked' };
 
 export type OutsideLoad =
 	| { kind: 'loading' }
@@ -214,6 +232,7 @@ export class OutsideTransaction {
 			this.load = { kind: 'mismatch' };
 			return;
 		}
+		const findings = await judgeOn(chainId, safe, genesis, members.deployed).catch(() => null);
 		this.load = {
 			kind: 'ready',
 			view: {
@@ -223,7 +242,8 @@ export class OutsideTransaction {
 				item,
 				members,
 				hashes: safeTxHashes(chainId, safe, p.safeTx),
-				genesis
+				genesis,
+				findings
 			}
 		};
 	}
@@ -258,10 +278,23 @@ export class OutsideTransaction {
 		);
 	}
 
-	/** Open, readable by the core, at the next number or later. */
+	/** §3.5: the network's verdict — refused (read-only), a risk (each action asks), open. */
+	get gate(): OutsideGate | null {
+		const v = this.view;
+		if (!v) return null;
+		return v.findings === null ? { kind: 'unchecked' } : gateOf(v.findings, v.chainId);
+	}
+
+	/** Open, readable by the core, at the next number or later — and acted on here (§3.5). */
 	get open(): boolean {
 		const v = this.view;
-		return !!v && v.item.status !== 'done' && v.item.review.action !== null;
+		const gate = this.gate;
+		return (
+			!!v &&
+			v.item.status !== 'done' &&
+			v.item.review.action !== null &&
+			(gate?.kind === 'open' || gate?.kind === 'risk')
+		);
 	}
 
 	canApprove(account: string | null): boolean {
@@ -303,7 +336,7 @@ export class OutsideTransaction {
 		form: 'typedData' | 'ethSign' = 'typedData'
 	): Promise<void> {
 		const v = this.view;
-		if (!v) return;
+		if (!v || !this.open) return;
 		const signal = this.#controller.signal;
 		try {
 			const approval = await this.#sign(provider, account, v.chainId, v.safe, v.tx, form, signal);
@@ -326,7 +359,7 @@ export class OutsideTransaction {
 	/** Approve on chain: `approveHash(safeTxHash)` sent by the wallet (it pays the fee). */
 	async approveOnChain(provider: Eip1193Provider, account: string): Promise<void> {
 		const v = this.view;
-		if (!v || !v.members.deployed) return;
+		if (!v || !this.open || !v.members.deployed) return;
 		const signal = this.#controller.signal;
 		try {
 			const call = { to: v.safe, value: '0x0', data: approveHashCall(v.item.safeTxHash) };
@@ -355,7 +388,7 @@ export class OutsideTransaction {
 	/** Propose the cancellation at its number, approved at once by `account`. */
 	async reject(provider: Eip1193Provider, account: string): Promise<void> {
 		const v = this.view;
-		if (!v) return;
+		if (!v || !this.open) return;
 		const signal = this.#controller.signal;
 		try {
 			const cancel = cancelTx(v.safe, v.item.nonce.toString());
@@ -395,13 +428,22 @@ export class OutsideTransaction {
 				deployOwners.push(a.ownerGenesis);
 			}
 		}
+		// §3.5: deploying it: its genesis must be Verified here, on code read now.
+		const deployMultisig = v.members.deployed ? null : v.genesis;
+		let deployFacts = null;
+		if (deployMultisig) {
+			deployFacts = await counterfactualFacts(v.chainId, v.safe, deployMultisig);
+			const authority = counterfactualAuthority(deployMultisig, v.safe, deployFacts);
+			if (authority.kind !== 'verified') throw new GenesisRefusedError(v.chainId, authority);
+		}
 		return executionCalls({
 			multisig: v.safe,
-			deployMultisig: v.members.deployed ? null : v.genesis,
+			deployMultisig,
 			deployOwners,
 			tx: v.tx,
 			approvals,
-			executor: owner ? account : null
+			executor: owner ? account : null,
+			deployFacts
 		});
 	}
 
@@ -433,7 +475,7 @@ export class OutsideTransaction {
 
 	async execute(provider: Eip1193Provider, account: string): Promise<void> {
 		const v = this.view;
-		if (!v) return;
+		if (!v || !this.open) return;
 		const signal = this.#controller.signal;
 		try {
 			const calls = await this.executionCalls(account);
@@ -584,6 +626,16 @@ export class OutsideTransaction {
 		}
 		if (error instanceof TypedDataUnsupported) {
 			this.step = { kind: 'unsupported' };
+			return;
+		}
+		if (error instanceof GenesisRefusedError) {
+			this.step = {
+				kind: 'failed',
+				what,
+				problem: null,
+				reason: error.authority.kind === 'unknown' ? 'deployUnverified' : 'deployRefused',
+				unsent: false
+			};
 			return;
 		}
 		const ours =

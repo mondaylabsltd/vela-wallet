@@ -56,7 +56,9 @@ function ready() {
 		status: 'ready',
 		approvals: [],
 		canApprove: [],
-		canExecute: [{ address: ME, name: 'Mine', account: { address: ME } }]
+		canExecute: [{ address: ME, name: 'Mine', account: { address: ME } }],
+		sameNonce: [],
+		executing: false
 	};
 }
 

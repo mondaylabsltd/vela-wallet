@@ -123,5 +123,17 @@ export async function authorizeSigning(account: MultisigAccount, chainId: number
 		safe: account.address,
 		findings: gate.findings
 	});
-	if (!signs) throw new DOMException('The person did not sign for the risk', 'AbortError');
+	if (!signs) throw new DOMException(RISK_DECLINED, 'AbortError');
+}
+
+/** What the gate throws when the person chose "Don't sign" (an `AbortError`, so a cancel). */
+const RISK_DECLINED = 'The person did not sign for the risk';
+
+/**
+ * The person declined to sign on a high-risk network: nothing was asked of
+ * a passkey — a screen goes back to where it was, never "the passkey prompt
+ * was closed".
+ */
+export function declinedRisk(error: unknown): boolean {
+	return error instanceof DOMException && error.message === RISK_DECLINED;
 }

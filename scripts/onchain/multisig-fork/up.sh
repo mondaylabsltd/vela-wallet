@@ -2,9 +2,11 @@
 # The multisig fork harness: a Gnosis fork, the genesis service and a local
 # relay, wired so the web wallet's multisig flows run against real contracts.
 #
-#   GENESIS_REPO   path to safe-genesis-registry (default ../../../../production3/safe-genesis-registry)
-#   PEERCONNECT_REPO  path to peerconnect (default ../../../../production3/peerconnect): its relay carries
+#   GENESIS_REPO   path to safe-genesis-registry (default <checkout>/../../production3/safe-genesis-registry)
+#   PEERCONNECT_REPO  path to peerconnect (default <checkout>/../../production3/peerconnect): its relay carries
 #                  an outside owner's session (ws://127.0.0.1:8792)
+#                  <checkout> is the main checkout (git's common dir), so a git
+#                  worktree of the wallet, however deep, finds the same repos.
 #   PEERCONNECT_BIN   a peerconnect-relay already built: run it instead of building PEERCONNECT_REPO
 #   STATE          where logs and the service's database go (default ./.state)
 #   FORK_PORT UNREAD_PORT GENESIS_PORT RELAY_PORT PEERCONNECT_PORT
@@ -27,8 +29,16 @@
 #                                              {"chainId":8453,"rpcURL":"http://127.0.0.1:8546"}]'
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
-GENESIS_REPO=${GENESIS_REPO:-"$here/../../../../../production3/safe-genesis-registry"}
-PEERCONNECT_REPO=${PEERCONNECT_REPO:-"$here/../../../../../production3/peerconnect"}
+# The main checkout: git's common dir is its .git, from a worktree too (a
+# worktree's own top level sits under .claude/worktrees/…). Without git, this
+# script's own repository.
+checkout=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+case "$checkout" in
+  */.git) checkout=${checkout%/.git} ;;
+  *) checkout=$(git -C "$here" rev-parse --show-toplevel 2>/dev/null || (cd "$here/../../.." && pwd)) ;;
+esac
+GENESIS_REPO=${GENESIS_REPO:-"$checkout/../../production3/safe-genesis-registry"}
+PEERCONNECT_REPO=${PEERCONNECT_REPO:-"$checkout/../../production3/peerconnect"}
 STATE=${STATE:-"$here/.state"}
 FORK_PORT=${FORK_PORT:-8545}
 UNREAD_PORT=${UNREAD_PORT:-8546}

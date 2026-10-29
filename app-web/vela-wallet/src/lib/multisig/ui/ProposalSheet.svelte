@@ -67,6 +67,7 @@
 	import { preflight, PREVIEW_FRESH_MS } from '../core/preflight.svelte';
 	import { signers } from '../core/signers.svelte';
 	import {
+		declinedRisk,
 		gateOf,
 		signingGate,
 		SigningRefusedError,
@@ -400,6 +401,15 @@
 	 * device: the browser tells the two apart for nobody), one that timed out,
 	 * one whose signature did not check out; an approval kept and resent.
 	 */
+	/**
+	 * Where a failed action leaves the sheet: back where it was when the
+	 * person declined to sign on a high-risk network (§3.5) — nothing was
+	 * asked of a passkey — else its reason.
+	 */
+	function failedPhase(error: unknown): Phase {
+		return declinedRisk(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+	}
+
 	function reasonOf(error: unknown): string {
 		console.warn('[multisig] not done:', error);
 		return reasonText(error);
@@ -489,7 +499,7 @@
 			await draft.propose();
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = { kind: 'failed', reason: reasonOf(error) };
+			phase = failedPhase(error);
 			return;
 		}
 		// The proposal as the mailbox has it now: executed if it is ready.
@@ -505,7 +515,7 @@
 			await store.refresh(account, account.chainIds);
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = { kind: 'failed', reason: reasonOf(error) };
+			phase = failedPhase(error);
 		}
 	}
 
@@ -549,11 +559,11 @@
 					await store.refresh(account, account.chainIds);
 					phase = { kind: 'partial', reason };
 				} catch (again) {
-					phase = { kind: 'failed', reason: reasonOf(again) };
+					phase = failedPhase(again);
 				}
 				return;
 			}
-			phase = { kind: 'failed', reason: reasonOf(error) };
+			phase = failedPhase(error);
 			return;
 		}
 		// r4b-7: written down the moment the relay has it — a reload resumes
@@ -726,7 +736,7 @@
 			await store.refresh(account, account.chainIds);
 		} catch (error) {
 			// The outside wallet's own refusal is its sheet's to say.
-			if (!cancelled(error)) phase = { kind: 'failed', reason: reasonOf(error) };
+			if (!cancelled(error)) phase = failedPhase(error);
 		}
 	}
 
@@ -739,7 +749,7 @@
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = { kind: 'failed', reason: reasonOf(error) };
+			phase = failedPhase(error);
 		}
 	}
 

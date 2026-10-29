@@ -18,6 +18,7 @@ const call = (data: string, value = '0') => ({
 	threshold: 2,
 	status: 'waiting',
 	canApprove: [],
+	canExecute: [],
 	sameNonce: [] as string[],
 	executing: false
 });
@@ -294,8 +295,11 @@ describe('a waiting row (r4b-6, r4b-7, r4b-17, r4a-4)', () => {
 		waitingRows.follow(m, signing, MULTISIG);
 		await settle();
 		const [first, second] = waitingRows.group(m)!.rows;
-		expect(first.subtitle).toBe('Ready · Only one can run · 2/2 · Gnosis');
-		expect(second.subtitle).toBe('Executing · Only one can run · 1/2 · Gnosis');
+		// r4D-13: one word on where it stands — a ready or executing row says no
+		// count at all, so none can read "3/2" (a plain wait's goes through
+		// progressLine, capped).
+		expect(first.subtitle).toBe('Ready · Only one can run · Gnosis');
+		expect(second.subtitle).toBe('Executing · Only one can run · Gnosis');
 	});
 
 	it('its id opens the transaction — an executed row’s too', () => {

@@ -369,7 +369,7 @@ describe("Vela's side, said when it is not there (r4C-4, r4C-15)", () => {
 describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 	const link = `#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.0x${'ab'.repeat(32)}`;
 
-	function ready(approved: number, owners = [MEMBER, STRANGER]) {
+	function ready(approved: number, owners = [MEMBER, STRANGER], findings: unknown[] = []) {
 		const hashes = safeTxHashes(5042002, SAFE, TX);
 		fake.outside.load = {
 			kind: 'ready',
@@ -379,6 +379,7 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 				tx: TX,
 				hashes,
 				genesis: null,
+				findings,
 				members: { deployed: true, owners, threshold: 2, nonce: 3n },
 				item: {
 					safeTxHash: hashes.safeTxHash,
@@ -418,6 +419,48 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 		await vi.waitFor(() => expect(button('Execute with MetaMask')).toBeDefined());
 		await vi.waitFor(() => expect(testid('outside-fee')?.textContent).toContain('fee 0.000021'));
 		expect(button('external.approveOnly')).toBeDefined();
+		await screen.unmount();
+	});
+
+	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
+
+	it('§3.5: a genesis refused on that network — said, and nothing is offered', async () => {
+		const screen = await open([MEMBER], link);
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		ready(
+			1,
+			[MEMBER, STRANGER],
+			[{ from: 'genesis', chainId: 5042002, reason: { kind: 'module', address: MODULE } }]
+		);
+		await vi.waitFor(() => expect(testid('authority-refused')).not.toBeNull());
+		expect(button('Execute with MetaMask')).toBeUndefined();
+		expect(button('Sign with MetaMask')).toBeUndefined();
+		expect(button('external.approveOnly')).toBeUndefined();
+		await screen.unmount();
+	});
+
+	it('§3.5: a risk on that network — said, and each action asks first', async () => {
+		const screen = await open([MEMBER], link);
+		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		let approved = 0;
+		fake.outside.approve = async () => void (approved += 1);
+		ready(
+			0,
+			[MEMBER, STRANGER],
+			[{ from: 'chain', chainId: 5042002, risk: { kind: 'module', address: MODULE } }]
+		);
+		await vi.waitFor(() => expect(testid('authority-risk')).not.toBeNull());
+		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
+		button('Sign with MetaMask')!.click();
+		await vi.waitFor(() => expect(testid('outside-risk-confirm')).not.toBeNull());
+		expect(approved, 'nothing asked of the wallet before the tap').toBe(0);
+		button('authority.signRiskCancel')!.click();
+		await vi.waitFor(() => expect(testid('outside-risk-confirm')).toBeNull());
+		expect(approved).toBe(0);
+		button('Sign with MetaMask')!.click();
+		await vi.waitFor(() => expect(button('authority.signRiskConfirm')).toBeDefined());
+		button('authority.signRiskConfirm')!.click();
+		await vi.waitFor(() => expect(approved).toBe(1));
 		await screen.unmount();
 	});
 

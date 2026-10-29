@@ -100,6 +100,7 @@ vi.mock('./kernel', () => ({
 	],
 	counterfactualAuthority: () => authority.verdict,
 	isEcdsaApproval: (a: { signature?: string }) => 'signature' in a,
+	isPasskeyApproval: (a: { ownerGenesis?: unknown }) => 'ownerGenesis' in a,
 	sameAddress: (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 }));
 

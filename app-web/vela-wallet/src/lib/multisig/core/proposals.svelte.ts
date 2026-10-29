@@ -465,6 +465,30 @@ export function keptWaiting(address: string, service: string): KeptList | null {
 	return kept && kept.service === service ? kept : null;
 }
 
+/**
+ * r4b-11: the waiting transactions kept for `account` from an earlier page
+ * (this service's), each re-read against the members kept with it — what the
+ * home shows at once, and what the switcher counts (r4D-7) before this page
+ * has read it. `null`: none is kept.
+ */
+export function keptChains(
+	account: MultisigAccount
+): { chains: ChainState[]; lists: Map<number, Proposal[]>; at: number } | null {
+	const kept = keptWaiting(account.address, genesisServiceURL());
+	if (!kept) return null;
+	const lists = new Map<number, Proposal[]>();
+	const chains: ChainState[] = kept.chains.map((c) => {
+		const members: ChainMembers = { ...c.members, nonce: BigInt(c.members.nonce) };
+		const items = c.proposals
+			.map((p) => readProposal(account, members, p))
+			.filter((i): i is ProposalItem => i !== null);
+		markCancellations(account.address, items);
+		lists.set(c.chainId, c.proposals);
+		return { chainId: c.chainId, members, items, mailbox: false };
+	});
+	return { chains, lists, at: kept.at };
+}
+
 function keepWaiting(address: string, list: KeptList): void {
 	try {
 		const all = { ...readWaiting(), [address.toLowerCase()]: list };
@@ -583,19 +607,11 @@ class Proposals {
 	 * read — each proposal re-read here against the members kept with it.
 	 */
 	#seed(account: MultisigAccount): void {
-		const kept = keptWaiting(account.address, genesisServiceURL());
-		if (!kept) return;
 		try {
-			const chains: ChainState[] = kept.chains.map((c) => {
-				const members: ChainMembers = { ...c.members, nonce: BigInt(c.members.nonce) };
-				const items = c.proposals
-					.map((p) => readProposal(account, members, p))
-					.filter((i): i is ProposalItem => i !== null);
-				markCancellations(account.address, items);
-				this.#lists.set(c.chainId, c.proposals);
-				return { chainId: c.chainId, members, items, mailbox: false };
-			});
-			this.chains = chains.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
+			const kept = keptChains(account);
+			if (!kept) return;
+			for (const [chainId, list] of kept.lists) this.#lists.set(chainId, list);
+			this.chains = kept.chains.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
 			this.#source = genesisServiceURL();
 			this.cached = { at: kept.at };
 			this.readAt = kept.at;

@@ -241,7 +241,7 @@ test.describe('the connected account follows the signed-in account (#315)', () =
 			.click();
 		await wallet
 			.getByRole('dialog')
-			.getByRole('button', { name: /Parallel Two/ })
+			.getByRole('button', { name: /^Parallel Two/ })
 			.click();
 		await snapshotSays(wallet, two.address);
 		// Site A was granted Parallel One: it hears `[]`, never Parallel Two.

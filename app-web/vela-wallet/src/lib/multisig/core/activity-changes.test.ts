@@ -27,7 +27,13 @@ vi.mock('./proposals.svelte', () => ({
 		},
 		missing: [],
 		stale: false,
-		unreachable: false
+		unreachable: false,
+		offline: false,
+		unreadable: [],
+		historyUnreadable: [],
+		cached: null,
+		loading: false,
+		readAt: null
 	}
 }));
 vi.mock('./names.svelte', () => ({ names: { label: (a: string) => shortenAddress(a) } }));
@@ -61,6 +67,9 @@ function waiting(tx: ReturnType<typeof callsTx>, id: string) {
 		threshold: 2,
 		status: 'pending',
 		canApprove: [],
+		canExecute: [],
+		sameNonce: [],
+		executing: false,
 		unsent: false
 	};
 }
@@ -74,7 +83,8 @@ describe('a waiting member change on Home', () => {
 		const row = waitingRows.group(m)!.rows[0];
 		expect(row.title).toBe(`Add ${shortenAddress(D)}`);
 		expect(row.subtitle).toBe(
-			'Waiting for others · 1/2 approved · Approvals: 2 of 3 → 2 of 4 · Arc Testnet'
+			// r4D-13: a plain wait says its count alone ("waiting for others" by itself).
+			'1/2 approved · Approvals: 2 of 3 → 2 of 4 · Arc Testnet'
 		);
 		expect(row.caution).toBe('Changes who controls this multisig');
 	});

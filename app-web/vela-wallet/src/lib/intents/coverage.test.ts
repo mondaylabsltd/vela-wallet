@@ -247,6 +247,8 @@ const CALLED: Record<string, Place> = {
 	'chainFilter.select': { view: 'the network filter' },
 	'contactsBook.setAccount': { machine: 'the account' },
 	'contactsBook.dispatch': { machine: 'its events are placed above' },
+	// r4-create: the address book read once, for the create sheet's contacts picker.
+	'contactsBook.ensure': { machine: 'the address book, read' },
 	'networkAdmin.dispatch': { machine: 'its events are placed above' },
 	'networkAdmin.boot': { machine: 'boot' },
 	'signRequest.dispatch': { machine: 'its events are placed above' },

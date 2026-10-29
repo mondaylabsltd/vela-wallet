@@ -59,12 +59,12 @@ test('the sheet lists every signed-in account, and a tap switches — durably', 
 		.click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet.getByText('Second Wallet')).toBeVisible();
-	await expect(sheet.getByRole('button', { name: /First Wallet/ })).toHaveAttribute(
+	await expect(sheet.getByRole('button', { name: /^First Wallet/ })).toHaveAttribute(
 		'aria-current',
 		'true'
 	);
 
-	await sheet.getByRole('button', { name: /Second Wallet/ }).click();
+	await sheet.getByRole('button', { name: /^Second Wallet/ }).click();
 
 	// The header now names the second account, and the sheet is gone.
 	await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -112,12 +112,12 @@ test('the wallet header opens the switcher, and a pick switches', async ({ page 
 	await page.getByRole('button', { name: /First Wallet/ }).click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet.getByText('Second Wallet')).toBeVisible();
-	await expect(sheet.getByRole('button', { name: /First Wallet/ })).toHaveAttribute(
+	await expect(sheet.getByRole('button', { name: /^First Wallet/ })).toHaveAttribute(
 		'aria-current',
 		'true'
 	);
 
-	await sheet.getByRole('button', { name: /Second Wallet/ }).click();
+	await sheet.getByRole('button', { name: /^Second Wallet/ }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page.getByText('Second Wallet').first()).toBeVisible();
 	await expect(page.getByText('First Wallet')).toHaveCount(0);
@@ -231,11 +231,11 @@ test.describe('two records deriving one address', () => {
 		await page.getByRole('button', { name: 'Account', exact: true }).click();
 		const main = page.getByRole('main');
 		await expect(main.getByRole('button', { name: /^Twice Signed In 0x/ })).toHaveCount(1);
-		await expect(main.getByRole('button', { name: /Another Wallet/ })).toHaveCount(1);
+		await expect(main.getByRole('button', { name: /^Another Wallet/ })).toHaveCount(1);
 		await expect(main.getByText(/^2 accounts · /)).toBeVisible();
 
 		// The other wallet is its own row, and choosing it is persisted.
-		await main.getByRole('button', { name: /Another Wallet/ }).click();
+		await main.getByRole('button', { name: /^Another Wallet/ }).click();
 		await expect
 			.poll(() => page.evaluate(() => window.localStorage.getItem('vela.activeAccountIndex')))
 			.toBe('0');

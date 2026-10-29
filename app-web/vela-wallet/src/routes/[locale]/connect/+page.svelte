@@ -44,6 +44,8 @@
 	} from '$lib/multisig/external/outside.svelte';
 	import type { RelayStatus } from '$lib/multisig/external/relay';
 	import TxReview from '$lib/multisig/external/TxReview.svelte';
+	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
+	import { findingLines } from '$lib/multisig/ui/findings';
 	import { explorerTxUrl, formatUnits } from '$lib/multisig/core/display';
 	import { safeTxHashes, verifyEcdsaApproval } from '$lib/multisig/core/kernel';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -358,6 +360,21 @@
 	});
 
 	let rejecting = $state(false);
+	/**
+	 * §3.5: on a network where something besides its members can act for the
+	 * multisig, each action from here asks first — named what was found — and
+	 * nothing is remembered; "Don't sign" leaves it undone.
+	 */
+	let riskAsk = $state<(() => Promise<void>) | null>(null);
+	function act(run: () => Promise<void>) {
+		if (outside?.gate?.kind === 'risk') riskAsk = run;
+		else void run();
+	}
+	async function riskAnswer(yes: boolean) {
+		const run = riskAsk;
+		riskAsk = null;
+		if (yes && run) await run();
+	}
 
 	function stepFailure(s: Extract<OutsideStep, { kind: 'failed' }>): string {
 		if (s.problem)
@@ -371,6 +388,13 @@
 		if (s.reason === 'badSignature') return m.badSignature;
 		if (s.reason === 'notSent') return m.notSent;
 		if (s.reason === 'noEthSign') return m.mailboxNoEthSign;
+		// §3.5: no deploy from a genesis the core does not find Verified there.
+		if (s.reason === 'deployRefused' || s.reason === 'deployUnverified') {
+			const network = view ? chainName(view.chainId) : '';
+			return s.reason === 'deployRefused'
+				? fillTemplate(all.authority.deployRefused, { network })
+				: fillTemplate(all.authority.deployUnverified, { network });
+		}
 		if (s.reason.startsWith('reverted')) return m.reverted;
 		if (s.reason.startsWith('refused')) {
 			return fillTemplate(m.mailboxRefused, { reason: s.reason.replace(/^refused: /, '') });
@@ -650,6 +674,22 @@
 				genesis={view.genesis}
 				chainNonce={view.members.nonce}
 			/>
+			<!-- §3.5: who can act for it on this network, as Vela judges it. -->
+			{#if tx.gate?.kind === 'refused'}
+				<AuthorityNotice
+					m={all}
+					kind="refused"
+					findings={tx.gate.findings}
+					readOnlyOn={[view.chainId]}
+				/>
+			{:else if tx.gate?.kind === 'risk'}
+				<AuthorityNotice m={all} kind="risk" findings={tx.gate.findings} />
+			{:else if tx.gate?.kind === 'unchecked' && view.item.status !== 'done'}
+				<p class="error" role="alert" data-testid="outside-unchecked">
+					{fillTemplate(all.authority.signUnchecked, { network: chainName(view.chainId) })}
+				</p>
+				<Button variant="secondary" shape="rounded" onclick={() => tx.refresh()}>{m.retry}</Button>
+			{/if}
 			<!-- Counted while it is open; once its number is used, what happened is said instead. -->
 			{#if view.item.status !== 'done' && step.kind !== 'executed'}
 				<p class="approvals" data-testid="outside-approvals">
@@ -664,6 +704,24 @@
 				<p class="muted" data-testid="outside-done">{m.doneTx}</p>
 			{/if}
 
+			{#if riskAsk && tx.gate?.kind === 'risk'}
+				<div class="risk-ask" role="alert" data-testid="outside-risk-confirm">
+					<p>{fillTemplate(all.authority.signRiskBody, { network: chainName(view.chainId) })}</p>
+					<ul>
+						{#each findingLines(all, tx.gate.findings) as line (line)}
+							<li class="mono">{line}</li>
+						{/each}
+					</ul>
+					<div class="row">
+						<Button variant="secondary" shape="rounded" onclick={() => riskAnswer(false)}
+							>{all.authority.signRiskCancel}</Button
+						>
+						<Button variant="danger" shape="rounded" onclick={() => riskAnswer(true)}
+							>{all.authority.signRiskConfirm}</Button
+						>
+					</div>
+				</div>
+			{/if}
 			{#if step.kind === 'approved'}
 				<p class="lead ok" data-testid="outside-approved">
 					{m.approvedClose}
@@ -746,7 +804,8 @@
 					<Button
 						variant="value"
 						shape="rounded"
-						onclick={() => tx.approveOnChain(chosen!.provider, account)}>{m.approveOnChain}</Button
+						onclick={() => act(() => tx.approveOnChain(chosen!.provider, account))}
+						>{m.approveOnChain}</Button
 					>
 				{:else if !account}
 					<Button variant="primary" shape="rounded" loading={connecting} onclick={connectWallet}
@@ -768,14 +827,15 @@
 					<Button
 						variant="value"
 						shape="rounded"
-						onclick={() => tx.approve(chosen!.provider, account, 'ethSign')}>{m.signHash}</Button
+						onclick={() => act(() => tx.approve(chosen!.provider, account, 'ethSign'))}
+						>{m.signHash}</Button
 					>
 					{#if view.members.deployed}
 						<p class="muted">{m.approveOnChainOffer}</p>
 						<Button
 							variant="secondary"
 							shape="rounded"
-							onclick={() => tx.approveOnChain(chosen!.provider, account)}
+							onclick={() => act(() => tx.approveOnChain(chosen!.provider, account))}
 							>{m.approveOnChain}</Button
 						>
 					{/if}
@@ -801,7 +861,7 @@
 						<Button
 							variant="value"
 							shape="rounded"
-							onclick={() => tx.execute(chosen!.provider, account)}
+							onclick={() => act(() => tx.execute(chosen!.provider, account))}
 							>{fillTemplate(m.executeWith, { wallet: walletName })}</Button
 						>
 					{/if}
@@ -809,14 +869,15 @@
 						<Button
 							variant="value"
 							shape="rounded"
-							onclick={() => tx.approve(chosen!.provider, account)}
+							onclick={() => act(() => tx.approve(chosen!.provider, account))}
 							>{fillTemplate(m.signInWallet, { wallet: walletName })}</Button
 						>
 					{:else if tx.canApprove(account)}
 						<Button
 							variant="secondary"
 							shape="rounded"
-							onclick={() => tx.approve(chosen!.provider, account)}>{m.approveOnly}</Button
+							onclick={() => act(() => tx.approve(chosen!.provider, account))}
+							>{m.approveOnly}</Button
 						>
 					{/if}
 					{#if tx.canReject(account)}
@@ -831,7 +892,8 @@
 								<Button
 									variant="danger"
 									shape="rounded"
-									onclick={() => tx.reject(chosen!.provider, account)}>{all.proposal.reject}</Button
+									onclick={() => act(() => tx.reject(chosen!.provider, account))}
+									>{all.proposal.reject}</Button
 								>
 							</div>
 						{:else}
@@ -847,6 +909,21 @@
 {/snippet}
 
 <style>
+	.risk-ask {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		padding: var(--space-lg);
+		border-radius: var(--radius-lg);
+		border: var(--border-hairline) solid var(--color-error-base);
+		background: var(--color-bg-sunken);
+	}
+
+	.risk-ask p,
+	.risk-ask ul {
+		margin: 0;
+	}
+
 	/* vis-20: the app's screen gutter and type scale — the page had a gutter
 	   half the app's and body copy smaller than anything else Vela draws. */
 	.page {

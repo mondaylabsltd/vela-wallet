@@ -3925,6 +3925,10 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
                 |block| s.venue_blocks.say(block),
             )
         }
+        // A multisig's proposal: the desktop never makes one (multisig
+        // accounts are web-only), so these are never set here.
+        vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
+        | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
     })
 }
 

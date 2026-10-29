@@ -19,6 +19,7 @@ vi.stubGlobal('localStorage', {
 	removeItem: (k: string) => void storage.delete(k)
 });
 
+const SAFE_ADDRESS = vi.hoisted(() => '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83');
 const world = vi.hoisted(() => ({
 	proposals: [] as unknown[],
 	submitted: [] as { safeTx: { to: string; nonce: string }; approval: { signature: string } }[],
@@ -26,7 +27,21 @@ const world = vi.hoisted(() => ({
 	/** A mailbox that takes only typed data (as the service does today): v 31/32 refused. */
 	typedOnly: false,
 	owners: [] as string[],
-	sent: [] as { from: string; to: string; data: string }[]
+	sent: [] as { from: string; to: string; data: string }[],
+	/** §3.5: the network's verdict as the chain would give it (`null`: not checkable). */
+	findings: [] as unknown[] | null,
+	/** Not deployed yet: deployed by an execution from here, from the registry's genesis. */
+	deployed: true,
+	/** The core's verdict on the code read right before a deploy. */
+	authority: { kind: 'verified', owners: [], threshold: 2 } as unknown
+}));
+vi.mock('../core/judge', () => ({ judgeOn: async () => world.findings }));
+vi.mock('../core/authority', () => ({ counterfactualFacts: async () => ({ codes: {} }) }));
+vi.mock('../core/kernel', async (original) => ({
+	...(await original<typeof import('../core/kernel')>()),
+	// The registry's genesis stands for this multisig (the core's derivation is its own test's).
+	genesisAddress: () => SAFE_ADDRESS,
+	counterfactualAuthority: () => world.authority
 }));
 
 vi.mock('../core/service', () => {
@@ -39,7 +54,8 @@ vi.mock('../core/service', () => {
 	return {
 		ServiceUnavailableError,
 		ServiceBusyError,
-		fetchGenesis: async () => ({ found: false }),
+		fetchGenesis: async () =>
+			world.deployed ? { found: false } : { found: true, genesis: { name: 'Fixture' } },
 		fetchProposals: async () => ({ members: {}, proposals: world.proposals }),
 		submitApproval: async (req: (typeof world.submitted)[number]) => {
 			if (world.typedOnly && /(1f|20)$/.test(req.approval.signature)) {
@@ -59,7 +75,12 @@ vi.mock('../core/service', () => {
 });
 vi.mock('../core/chain', () => ({
 	hasCode: async () => true,
-	readMembers: async () => ({ deployed: true, owners: world.owners, threshold: 2, nonce: 3n })
+	readMembers: async () => ({
+		deployed: world.deployed,
+		owners: world.owners,
+		threshold: 2,
+		nonce: 3n
+	})
 }));
 vi.mock('./onchain', async (original) => ({
 	...(await original<typeof import('./onchain')>()),
@@ -78,7 +99,7 @@ const kernel = await import('../core/kernel');
 const { OutsideTransaction } = await import('./outside.svelte');
 
 const CHAIN = 5042002;
-const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
+const SAFE = SAFE_ADDRESS;
 const hexOf = (b: Uint8Array) => `0x${Buffer.from(b).toString('hex')}`;
 const bytesOf = (h: string) => Uint8Array.from(Buffer.from(h.replace(/^0x/, ''), 'hex'));
 
@@ -176,6 +197,9 @@ beforeEach(() => {
 	world.sent = [];
 	world.busy = 0;
 	world.typedOnly = false;
+	world.findings = [];
+	world.deployed = true;
+	world.authority = { kind: 'verified', owners: [], threshold: 2 };
 	world.proposals = [
 		stored([{ owner: A.address, signature: A.sign(bytesOf(HASH())), createdMs: 1 }])
 	];
@@ -317,6 +341,60 @@ describe('executing and rejecting from the page (r4C-9)', () => {
 		const cancel = world.submitted[0].safeTx;
 		expect(cancel.to.toLowerCase()).toBe(SAFE.toLowerCase());
 		expect(BigInt(cancel.nonce)).toBe(3n);
+	});
+});
+
+/**
+ * §3.5 on the page: who can act for the multisig on that network is judged
+ * as in Vela. A refused genesis makes it read-only (nothing approved,
+ * executed or rejected from here); a network that cannot be checked acts on
+ * nothing yet; a deploy is built only from a genesis Verified on code read
+ * right before it.
+ */
+describe('who can act for it on this network (§3.5)', () => {
+	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
+
+	it('a refused genesis: read-only — nothing to approve, execute or reject', async () => {
+		world.findings = [
+			{ from: 'genesis', chainId: CHAIN, reason: { kind: 'module', address: MODULE } }
+		];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.gate?.kind).toBe('refused');
+		expect(tx.canApprove(B.address)).toBe(false);
+		expect(tx.canExecute(B.address)).toBe(false);
+		expect(tx.canReject(B.address)).toBe(false);
+		await tx.approve(walletOf(B), B.address);
+		await tx.execute(walletOf(B), B.address);
+		expect(world.submitted).toEqual([]);
+		expect(world.sent).toEqual([]);
+	});
+
+	it('not checkable yet: nothing acts', async () => {
+		world.findings = null;
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.gate).toEqual({ kind: 'unchecked' });
+		expect(tx.canApprove(B.address)).toBe(false);
+	});
+
+	it('a risk found there: said, and the owner may still act (the page asks each time)', async () => {
+		world.findings = [{ from: 'chain', chainId: CHAIN, risk: { kind: 'module', address: MODULE } }];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.gate?.kind).toBe('risk');
+		expect(tx.canApprove(B.address)).toBe(true);
+	});
+
+	it('a deploy from a genesis the code read just then does not verify: never sent', async () => {
+		world.deployed = false;
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.canExecute(B.address)).toBe(true);
+		world.authority = { kind: 'refused', reasons: [{ kind: 'module', address: MODULE }] };
+		await tx.execute(walletOf(B), B.address);
+		expect(tx.step).toMatchObject({ kind: 'failed', reason: 'deployRefused' });
+		expect(world.sent).toEqual([]);
 	});
 });
 

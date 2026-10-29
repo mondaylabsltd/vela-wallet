@@ -990,6 +990,18 @@ describe('who can act for it on this network (§3.5)', () => {
 		expect(fake.calls).toEqual(['approve']);
 	});
 
+	it('"Don\'t sign" on the risk: back where it was — never "the passkey prompt was closed"', async () => {
+		fake.checked = [{ from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } }];
+		fake.approveError = new DOMException('The person did not sign for the risk', 'AbortError');
+		show();
+		await settle();
+		press('proposal.approve');
+		await settle();
+		expect(document.querySelector('[data-testid="proposal-failed"]')).toBeNull();
+		expect(document.body.textContent).not.toContain('reason.passkeyClosed');
+		expect(buttons()).toContain('proposal.approve');
+	});
+
 	it("another network's findings say nothing here", async () => {
 		fake.checked = [
 			{ from: 'genesis', chainId: 8453, reason: { kind: 'module', address: MODULE } }
