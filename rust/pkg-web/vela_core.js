@@ -6353,6 +6353,36 @@ export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, na
 }
 
 /**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin. Synchronous, so a view model can call
+ * it while it builds a row.
+ * @param {number} chain_id
+ * @param {string} token
+ * @param {string} symbol
+ * @param {string} native_symbol
+ * @returns {string}
+ */
+export function tokenProvenance(chain_id, token, symbol, native_symbol) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(token, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(native_symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.tokenProvenance(chain_id, ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's

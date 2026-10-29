@@ -474,6 +474,21 @@
     "batchCalls": "一筆交易中的 {{total}} 個調用",
     "rename": "將這個多簽在登記冊中的名稱改為「{{name}}」"
    },
+   "change": {
+    "add": "新增 {{member}}",
+    "remove": "移除 {{member}}",
+    "replace": "將 {{old}} 更換為 {{new}}",
+    "threshold": "修改需要的批准數",
+    "rule": "批准：{{before}} → {{after}}",
+    "caution": "這會改變 {{network}} 上由誰控制這個多簽。只有在所有成員都知情時才批准。",
+    "rowCaution": "會改變由誰控制這個多簽",
+    "doesNotFit": "這與它現在在 {{network}} 上的成員不符：執行會失敗。"
+   },
+   "token": {
+    "unverified": "未驗證的代幣",
+    "lookalike": "不是真正的 {{symbol}}——另一個合約用了這個名字",
+    "contract": "代幣合約"
+   },
    "proposal": {
     "title": "多簽交易",
     "approvals": "批准情況",
@@ -536,7 +551,11 @@
     "outboxBusy": "多簽服務繁忙——{{seconds}} 秒後重新發送。",
     "outboxAway": "無法連接多簽服務——{{seconds}} 秒後重新發送。",
     "outboxNotSent": "尚未發出：多簽服務沒有接收。它儲存在此裝置上，發出之前其他成員看不到。",
-    "outboxSendAgain": "重新發送"
+    "outboxSendAgain": "重新發送",
+    "copy": "複製",
+    "executedBy": "由 {{name}} 執行",
+    "countedThen": "執行時計入的批准：{{threshold}} 位中的 {{approved}} 位",
+    "approvalsSigned": "這些成員批准了它。執行時計入了哪些批准，這部裝置上沒有記錄。"
    },
    "send": {
     "propose": "發起並批准",
@@ -1952,7 +1971,14 @@
    "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。",
    "intentSaveMultisigSetup": "儲存這個多簽的設定",
    "intentRenameInRegistry": "在登記冊中改名",
-   "labelName": "名稱"
+   "labelName": "名稱",
+   "intentAddMember": "新增成員",
+   "intentRemoveMember": "移除成員",
+   "intentReplaceMember": "更換成員",
+   "intentChangeThreshold": "修改需要的批准數",
+   "labelMember": "成員",
+   "labelNewMember": "新成員",
+   "labelApprovalsRequired": "需要的批准數"
   },
   "currency": {
    "title": "顯示貨幣",

@@ -1643,6 +1643,14 @@ export function toQuantity(value: string): string;
 export function tokenMark(ethereum_data_url: string, chain_id: number, symbol: string, token_address: string | null | undefined, named: string[]): any;
 
 /**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin. Synchronous, so a view model can call
+ * it while it builds a row.
+ */
+export function tokenProvenance(chain_id: number, token: string, symbol: string, native_symbol: string): string;
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's
@@ -2148,6 +2156,7 @@ export interface InitOutput {
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];
     readonly tokenMark: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
+    readonly tokenProvenance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly tokentrustcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

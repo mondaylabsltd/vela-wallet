@@ -474,6 +474,21 @@
     "batchCalls": "1 件の取引に {{total}} 件の呼び出し",
     "rename": "レジストリでこのマルチシグの名前を「{{name}}」に変更"
    },
+   "change": {
+    "add": "{{member}} を追加",
+    "remove": "{{member}} を削除",
+    "replace": "{{old}} を {{new}} に入れ替え",
+    "threshold": "必要な承認数を変更",
+    "rule": "承認：{{before}} → {{after}}",
+    "caution": "{{network}} でこのマルチシグを管理するメンバーが変わります。メンバー全員が想定している場合のみ承認してください。",
+    "rowCaution": "このマルチシグを管理するメンバーが変わります",
+    "doesNotFit": "{{network}} の現在のメンバーと合わないため、実行すると失敗します。"
+   },
+   "token": {
+    "unverified": "未確認のトークン",
+    "lookalike": "本物の {{symbol}} ではありません。別のコントラクトがこの名前を使っています",
+    "contract": "トークンのコントラクト"
+   },
    "proposal": {
     "title": "マルチシグ取引",
     "approvals": "承認状況",
@@ -536,7 +551,11 @@
     "outboxBusy": "マルチシグサービスが混み合っています。{{seconds}} 秒後に再送信します。",
     "outboxAway": "マルチシグサービスに接続できませんでした。{{seconds}} 秒後に再送信します。",
     "outboxNotSent": "まだ送信されていません。マルチシグサービスに受け付けられませんでした。この端末に保管されており、送信されるまで他のメンバーには見えません。",
-    "outboxSendAgain": "もう一度送信"
+    "outboxSendAgain": "もう一度送信",
+    "copy": "コピー",
+    "executedBy": "{{name}} が実行",
+    "countedThen": "実行時に数えられた承認：{{threshold}} 件中 {{approved}} 件",
+    "approvalsSigned": "これらのメンバーが承認しました。実行時にどの承認が数えられたかは、このデバイスに記録されていません。"
    },
    "send": {
     "propose": "提案して承認",
@@ -1952,7 +1971,14 @@
    "passkeyTimedOut": "パスキーの確認が時間切れになったため、何も署名されていません。準備ができたらもう一度お試しください。",
    "intentSaveMultisigSetup": "このマルチシグの設定を保存",
    "intentRenameInRegistry": "レジストリで名前を変更",
-   "labelName": "名前"
+   "labelName": "名前",
+   "intentAddMember": "メンバーを追加",
+   "intentRemoveMember": "メンバーを削除",
+   "intentReplaceMember": "メンバーを入れ替え",
+   "intentChangeThreshold": "必要な承認数を変更",
+   "labelMember": "メンバー",
+   "labelNewMember": "新しいメンバー",
+   "labelApprovalsRequired": "必要な承認数"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",
