@@ -106,6 +106,7 @@
 		</ul>
 	{/if}
 
+	{#if venue.webNote !== undefined}<p class="web-note">{venue.webNote}</p>{/if}
 	{#if showDomain}<p class="domain">{venue.domainLine}</p>{/if}
 </div>
 
@@ -225,6 +226,14 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-subtle);
+	}
+
+	.web-note {
+		margin: 0;
+		padding-block: var(--space-xl) 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
 	}
 
 	.domain {

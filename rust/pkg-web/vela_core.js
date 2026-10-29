@@ -4989,6 +4989,26 @@ export function minGasPriceWei(chain_id) {
 }
 
 /**
+ * Where a multisig member's approval goes on the web
+ * (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
+ * this build cannot read. `account_json` is the member's record as stored.
+ * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function multisigApprovalRoute(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.multisigApprovalRoute(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
  * arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
  * the executor's calls and the review. The shell moves JSON; the rules are
@@ -6414,6 +6434,63 @@ export function tokenProvenance(chain_id, token, symbol, native_symbol) {
 }
 
 /**
+ * The page's answer as the member's approval (`PasskeyApproval`, JSON), or
+ * an error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `malformed`) — accepted
+ * only as `trusted_signer::approval::accept` accepts it.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerApprovalAccept(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerApprovalAccept(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`): the method, the raw SafeTx, the
+ * core's safeTxHash, the member, its keys and route, the multisig's name.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerApprovalRequest(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerApprovalRequest(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's
@@ -6451,6 +6528,81 @@ export function trustedSignerCeremonyTitleKey(operation_json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
+ * served (`launch::admit`): `{line, launch, versionToTrust}` — the integrity
+ * line (`IntegrityLine`), the address to open with the request handed over
+ * by `postMessage` (`CheckedPage::post_launch`; `null` unless the page was
+ * admitted and the check is fresh), and the version a self-hosted page asks
+ * to be trusted. `observed` is the sha256 of the body (`null` when it could
+ * not be fetched); `now_ms` the shell's clock.
+ * @param {string} base
+ * @param {string | null | undefined} index_json
+ * @param {string} trusted_json
+ * @param {string | null | undefined} observed
+ * @param {number} now_ms
+ * @param {string} lang
+ * @returns {string}
+ */
+export function trustedSignerPageAdmit(base, index_json, trusted_json, observed, now_ms, lang) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(base, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(index_json) ? 0 : passStringToWasm0(index_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(trusted_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(observed) ? 0 : passStringToWasm0(observed, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(lang, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerPageAdmit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, now_ms, ptr4, len4);
+        deferred6_0 = ret[0];
+        deferred6_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * R6 for the web: which version of the page at `base` to check and open
+ * (`launch::target`) — `{url, version, shortVersion}`, or an error naming
+ * why there is none (`nothing_published` | `all_blocked`). `index_json` is
+ * the body of the deployment's `index.json`, `null` when it could not be
+ * read; `trusted_json` the versions the person trusted for this page.
+ * @param {string} base
+ * @param {string | null | undefined} index_json
+ * @param {string} trusted_json
+ * @returns {string}
+ */
+export function trustedSignerPageTarget(base, index_json, trusted_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(base, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(index_json) ? 0 : passStringToWasm0(index_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(trusted_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerPageTarget(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
 }
 
 /**

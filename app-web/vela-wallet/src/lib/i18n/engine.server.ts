@@ -644,6 +644,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			inVelaBody: k('settings.venue.inVelaBody'),
 			page: k('settings.venue.page'),
 			pageBody: k('settings.venue.pageBody'),
+			webApprovals: k('settings.venue.webApprovals'),
 			blocked: venueBlockWords(k)
 		},
 		integrity: {
@@ -1651,8 +1652,10 @@ export function resolveMultisigMessages(locale: Locale): MultisigMessages {
 						: walk(value as Record<string, unknown>, `${prefix}.${key}`)
 			])
 		);
-	return walk(
+	const words = walk(
 		MULTISIG_SHAPE as unknown as Record<string, unknown>,
 		'home.multisig'
 	) as unknown as MultisigMessages;
+	// A member who approves on a trusted signing page sees the apps' hand-off card.
+	return { ...words, handoff: resolveHandoffMessages(locale) };
 }

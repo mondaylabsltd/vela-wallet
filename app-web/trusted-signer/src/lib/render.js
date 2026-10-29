@@ -150,6 +150,63 @@ window.VelaCS = window.VelaCS || {};
     return panel;
   }
 
+  /** A button that copies `text`, saying so for a moment once it has. */
+  function copyButton(text, labelKey) {
+    var copy = el('button', 'copy-button', t(labelKey));
+    copy.type = 'button';
+    copy.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var done = function () {
+        copy.textContent = t('ui.copied');
+        setTimeout(function () { copy.textContent = t(labelKey); }, 1600);
+      };
+      var fallback = function () {
+        var field = document.createElement('textarea');
+        field.value = text;
+        document.body.appendChild(field);
+        field.select();
+        try { document.execCommand('copy'); done(); } catch (e) { /* give up quietly */ }
+        document.body.removeChild(field);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else {
+        fallback();
+      }
+    });
+    return copy;
+  }
+
+  /**
+   * A multisig approval's three hashes, computed by this page from the
+   * SafeTx (lib/multisig.js): the safeTxHash, and the domain and message
+   * hashes a hardware wallet shows for it — in full, each with a copy
+   * button, so a member can match them on another screen before approving.
+   */
+  function hashesBlock(view) {
+    var m = view.multisig;
+    if (!m || !m.hashes) return null;
+    var box = el('section', 'ms-hashes');
+    box.appendChild(el('div', 'ms-hashes-title', t('ui.msHashes')));
+    [
+      ['ui.msSafeTxHash', m.hashes.safeTxHash],
+      ['ui.msDomainHash', m.hashes.domainHash],
+      ['ui.msMessageHash', m.hashes.messageHash],
+    ].forEach(function (pair) {
+      var row = el('div', 'ms-hash');
+      var head = el('div', 'ms-hash-head');
+      head.appendChild(el('span', 'ms-hash-label', t(pair[0])));
+      var button = copyButton(pair[1], 'ui.copy');
+      button.classList.add('copy-button-small');
+      head.appendChild(button);
+      row.appendChild(head);
+      row.appendChild(el('code', 'ms-hash-value', pair[1]));
+      box.appendChild(row);
+    });
+    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? 'ui.msHashesNote' : 'ui.msHashesMismatch')));
+    return box;
+  }
+
   function expandableIdentity(identity, size) {
     var wrap = el('div', 'identity-wrap');
     var button = el('button', 'identity');
@@ -719,6 +776,9 @@ window.VelaCS = window.VelaCS || {};
     view.fields.filter(function (f) { return !f.detail && !f.consumedByHero; })
       .forEach(function (field) { rows.appendChild(fieldRow(field)); });
     if (rows.children.length) blocks.appendChild(rows);
+
+    var hashes = hashesBlock(view);
+    if (hashes) blocks.appendChild(hashes);
 
     if (view.balance) blocks.appendChild(balanceCard(view.balance));
     warningsOf(view, false).forEach(function (w) { blocks.appendChild(warningBanner(w)); });

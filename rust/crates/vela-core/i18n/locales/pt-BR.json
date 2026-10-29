@@ -87,7 +87,8 @@
       "pageBody": "Uma página independente que assina exatamente o que mostra",
       "blockedApp": "As chaves de acesso desta conta só assinam para {{domain}}, então a Vela não pode usá-las aqui.",
       "blockedPage": "Esta página está em {{pageDomain}}, mas as chaves de acesso desta conta só assinam para {{domain}}.",
-      "blockedWeb": "Indisponível na web. Abra pelo app da Vela."
+      "blockedWeb": "Indisponível na web. Abra pelo app da Vela.",
+      "webApprovals": "Na web, uma página de assinatura revisa e assina suas aprovações multisig. As outras transações e mensagens são confirmadas na Vela."
     },
     "advanced": {
       "networksTitle": "Redes",

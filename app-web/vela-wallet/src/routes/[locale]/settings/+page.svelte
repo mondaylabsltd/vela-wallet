@@ -59,7 +59,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { signingPlan, signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
+	import { signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
@@ -566,8 +566,8 @@
 					track('setting_fee_speed_changed', { speed: event.id });
 				}
 				return;
-			// Spec 102: never raised here — the web's venue is a statement (it
-			// opens no page) — but the core is the one to rule if it ever is.
+			// Spec 102: where the account reviews and signs — on the web, where
+			// its multisig approvals go (2026-10-29). The core rules (R1).
 			case 'signing-venue':
 				if (view.address !== '') session.chooseVenue(view.address, event.venue);
 				return;
@@ -993,23 +993,25 @@
 
 	/**
 	 * Spec 102: where the active account reviews and signs, from the SESSION's
-	 * record (the core's reader migrated it), never the raw store. Read-only on
-	 * the web (P2-09, D-16): it opens no signing page, so every page row is
-	 * shown disabled with the core's reason, and the row marked is where the
-	 * web's plan signs — Vela's own sheet (a page venue signs here natively,
-	 * P2-11) — or none, for an account on its own signing domain, with why.
-	 * The web saves no signing pages, so the core is asked with none.
+	 * record (the core's reader migrated it), never the raw store.
+	 *
+	 * 2026-10-29: a choice on the web too. The web still opens no page for a
+	 * transaction or a message (P2-11: those sign in Vela, `SigningPlan::on_web`)
+	 * — but a multisig member's approval goes to the page the account chose
+	 * (`multisigApprovalRoute`, the owner's Bybit lesson), so the rows are an
+	 * app's (R1 alone decides which can be picked) and the screen says what a
+	 * page does here (`settings.venue.webApprovals`). The web saves no signing
+	 * pages of its own: the official page, and the account's own.
 	 */
 	const activeAccount = $derived(view.accounts[view.active_index]?.account);
 	const liveVenue = $derived.by(() => {
 		if (!activeAccount) return undefined;
 		const domain = activeAccount.signing_domain;
-		const plan = signingPlan(activeAccount, 'web');
 		return venueModel(
 			{
 				domain,
-				choices: signingVenueChoices(domain, activeAccount.signing_venue, [], 'web'),
-				web: plan ?? { venue: { type: 'in_vela' }, blocked: null }
+				choices: signingVenueChoices(domain, activeAccount.signing_venue, []),
+				webApprovals: true
 			},
 			m
 		);

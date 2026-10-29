@@ -40,8 +40,17 @@ scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，�
 框架里运行（托管方另发 `frame-ancestors 'none'` / `X-Frame-Options: DENY`）。理由与
 测试例外见 [PROTOCOL.md](PROTOCOL.md) 第 0 节「答复只交给钱包」。
 
+**多签成员的批准（2026-10-29，`vela_multisigApprove`）**：网页钱包的成员选了签名页时，批准交到这一页。
+本页从原始 SafeTx 字段自己算 safeTxHash（以及域哈希、消息哈希），App 给的哈希不一致就拒签；按 vela-core
+`review` 的同一套规则读出转账 / 成员变更 / 批量的每一腿 / 拒绝 / 改名，拒绝 MultiSendCallOnly 以外的
+delegatecall、改模块 / guard / handler / singleton 的自调用和 gas 退款；成员的 passkey 签
+`SafeMessage(safeTxHash)`（成员自己的域）。答复经 postMessage 只交给浏览器报告的网页钱包 origin
+（`https://wallet.getvela.app`、`https://getvela.app`），且只限这一种请求。见 [PROTOCOL.md](PROTOCOL.md) 第 12 节。
+
 ```sh
-bun samples/answer-test.mjs     # 31 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上
+node samples/multisig-test.mjs  # 199 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
+bun samples/serve-dist.mjs      # 本机按托管方的样子提供 dist/（含 _headers 的规则与 /b/<hash>/sign），部署前先试
+bun samples/answer-test.mjs     # 37 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：多签批准只答网页钱包
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
 node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
 node samples/claims-test.mjs    # 62 项：谁的说法 —— 「本账户」、网络费的币种、本页不认识的链上 App 给的币名（标「币名由 App 提供」、显示链 ID）、法币与币种、看不见的字符、读不了的钥匙 id
@@ -146,6 +155,7 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 | `lib/intake.js` | 通道归一成一个形状（App 用 URL 片段，另有 `postMessage`），并标注来源是否可验证 |
 | `lib/digest.js` | 算得出就签，算不出就拒 |
 | `lib/safeop.js` | SafeOp / SafeMessage 摘要 + 读回操作 calldata |
+| `lib/multisig.js` | 多签批准：严格读 SafeTx、三个哈希、成员的批准字节、按 vela-core `review` 读法与拒签 |
 | `lib/signer.js` | 签名的 passkey 断言；钥匙路线（只问那一把钥匙，带 transports 与 hints，规格 102 R5） |
 | `lib/ceremony.js` | 钥匙仪式：本页的挑战码、创建与断言（按钥匙所在位置） |
 | `sign.html` + `sign.js` | 真正的签名入口：点按确认（WebAuthn 在点按里同步发起）、拒签即关闭、页面版本那一行 |

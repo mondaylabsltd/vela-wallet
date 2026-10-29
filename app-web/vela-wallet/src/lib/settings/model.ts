@@ -997,6 +997,12 @@ export interface VenueModel {
 	 * that opens pages — every reachable row is a choice.
 	 */
 	readOnly?: boolean;
+	/**
+	 * 2026-10-29, the web: what a page venue does there — the account's
+	 * multisig approvals are reviewed and signed on the page; its other
+	 * transactions and messages stay in Vela.
+	 */
+	webNote?: string;
 }
 
 /** One row of Settings → Signing pages. */

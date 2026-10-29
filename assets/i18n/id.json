@@ -87,7 +87,8 @@
    "pageBody": "Halaman mandiri yang menandatangani persis apa yang ditampilkannya",
    "blockedApp": "Passkey akun ini hanya menandatangani untuk {{domain}}, jadi Vela tidak bisa memakainya di sini.",
    "blockedPage": "Halaman ini ada di {{pageDomain}}, tetapi passkey akun ini hanya menandatangani untuk {{domain}}.",
-   "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela."
+   "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela.",
+   "webApprovals": "Di web, halaman penandatanganan meninjau dan menandatangani persetujuan multisig Anda. Transaksi dan pesan lain dikonfirmasi di Vela."
   },
   "advanced": {
    "networksTitle": "Jaringan",

@@ -212,7 +212,10 @@
     if (digest.refuse) {
       view.refuse = true;
       view.confirmKey = 'button.cannotSign';
-      view.warnings.push({ tone: 'danger', key: digest.refuse });
+      // Said once: resolve.js may already have said it, with its facts.
+      if (!view.warnings.some(function (w) { return w.key === digest.refuse; })) {
+        view.warnings.push({ tone: 'danger', key: digest.refuse });
+      }
     }
     if (digest.warn) view.warnings.push({ tone: 'danger', key: digest.warn });
     if (digest.hash) {
@@ -409,6 +412,9 @@
       // the page can say about the other end truthfully.
       callback: session.callback || '',
       rpId: ns.signer.relyingPartyId(),
+      // The answer rule asks what is being signed (a multisig approval may be
+      // answered to the web wallet over postMessage): the intent's own method.
+      method: request.intent && typeof request.intent.method === 'string' ? request.intent.method : '',
     });
     var view = ns.resolve(request.intent, context);
     state.kind = view.kind === 'ceremony' ? view.ceremony.kind : 'sign';

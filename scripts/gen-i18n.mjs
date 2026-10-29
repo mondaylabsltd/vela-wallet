@@ -1235,7 +1235,8 @@ for (let i = 1; i < PATHS.length; i++) {
 //   121 branches.
 // 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
 // 2776 (round 5, parity, on 2740 — its pin never landed, see the merge note
-//   below; signing parity and the state-diff guard): + the `home.multisig.review` branch (35 leaves) — what the one review every
+//   below; signing parity and the state-diff guard): + the
+//   `home.multisig.review` branch (35 leaves) — what the one review every
 //   member signs from says beside the call's reading: "This changes who
 //   controls this multisig" and each undeclared write (singleton, module,
 //   guard, module guard, handler, members added/removed, a signing right
@@ -1258,12 +1259,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   itself) loads on demand (`ON_DEMAND`, top of this file) and leaves the
 //   compiled tables: 2621 − 527 = 2094 leaves, 130 − 22 = 108 branches. Its
 //   own pin is below; the corpus (`home.json`) did not change.
+// 2741 (round 5, trusted, on 2740 — its pin never landed; the trusted
+//   signing page approves multisig members):
+//   + `settings.venue.webApprovals` — on the web, a member whose account
+//   reviews and signs on a page approves its multisig transactions there;
+//   everything else stays in Vela. 2612 leaves, 129 branches.
 // Merged (round-5 integration, 2026-10-30): parity's `home.multisig.review`
 //   (35 leaves, 1 branch) lands in the on-demand multisig namespace with the
 //   rest of `home.multisig`, so the compiled pin stays 2202 and the on-demand
-//   pin goes 527 + 35 = 562.
-if (PATHS.length !== 2202) fail(`expected 2202 paths (2094 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2094) fail(`expected 2094 leaf paths, got ${leafSet.size}`);
+//   pin goes 527 + 35 = 562. Trusted's `settings.venue.webApprovals` (1
+//   leaf) stays compiled: 2202 + 1 = 2203 paths, 2095 leaves, 108 branches.
+if (PATHS.length !== 2203) fail(`expected 2203 paths (2095 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2095) fail(`expected 2095 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

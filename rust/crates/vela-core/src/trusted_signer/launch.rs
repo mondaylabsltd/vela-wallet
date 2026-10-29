@@ -606,6 +606,22 @@ impl CheckedPage {
         ))
     }
 
+    /// The page, opened by the web wallet's own window and handed the request
+    /// over `postMessage` (PROTOCOL.md §7.1, §12) — the checked address, in the
+    /// wallet's language as for [`Self::url_launch`]. The web wallet's one use:
+    /// a multisig member's approval ([`super::approval`]); the page answers it
+    /// to the web wallet's origin, as the browser reports it, and to nobody else.
+    ///
+    /// # Errors
+    ///
+    /// [`LaunchRefused::Stale`], as [`Self::url_launch`].
+    pub fn post_launch(&self, lang: &str, now_ms: u64) -> Result<String, LaunchRefused> {
+        if !self.is_fresh(now_ms) {
+            return Err(LaunchRefused::Stale);
+        }
+        Ok(super::post_launch(self.target.url(), lang))
+    }
+
     /// The page, told to connect to the wallet's loopback WebSocket (spec 071)
     /// — the same checked address, in the app's language as for
     /// [`Self::url_launch`].

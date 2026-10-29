@@ -19,6 +19,10 @@
 //!   verified, the credential is one of this wallet's, and the P-256 signature
 //!   verifies under that credential's key. It returns the DER signature the
 //!   existing Safe envelope takes, so nothing downstream changes.
+//! - [`approval`] — a multisig member's approval (2026-10-29): the SafeTx
+//!   handed to the page, which recomputes its hash and reads it itself; the
+//!   answer accepted only over the member's approval bytes; and where an
+//!   approval goes on the web wallet, the one hand-off the web makes.
 //! - The channels: [`launch::CheckedPage::url_launch`] with [`parse_callback`]
 //!   (URL fragment in, `velawallet://` out), and
 //!   [`launch::CheckedPage::ws_launch`] with [`ws`] (a WebSocket on the
@@ -38,6 +42,9 @@ use crate::types::ClientDataKind;
 use crate::user_op::{UserOperation, WalletKey};
 use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
+/// A multisig member's approval on the page (2026-10-29): the request, the
+/// answer, and where an approval goes on the web.
+pub mod approval;
 #[cfg(feature = "crux")]
 pub mod ceremony;
 /// Spec 076: whether the page may be opened at all — one decision, every shell.
@@ -834,6 +841,14 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, TrustedSignerEr
 /// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
 /// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
 /// this.
+/// `<page>?ch=post` (PROTOCOL.md §7.1, §12): the page opened by the web
+/// wallet's own window, which hands the request over by `postMessage` once the
+/// page says it is ready, and receives the answer the same way. Nothing rides
+/// in the address: the browser tells the page which window opened it.
+pub(crate) fn post_launch(page: &str, lang: &str) -> String {
+    format!("{page}?ch=post{}", lang_param(lang))
+}
+
 pub(crate) fn socket_launch(page: &str, port: u16, token: &str, lang: &str) -> String {
     format!(
         "{page}?ch=ws{}#p={port}&t={}",

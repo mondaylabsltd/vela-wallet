@@ -87,7 +87,8 @@
       "pageBody": "Eine eigenständige Seite, die genau das signiert, was sie zeigt",
       "blockedApp": "Die Passkeys dieses Kontos signieren nur für {{domain}}, daher kann Vela sie hier nicht verwenden.",
       "blockedPage": "Diese Seite liegt auf {{pageDomain}}, aber die Passkeys dieses Kontos signieren nur für {{domain}}.",
-      "blockedWeb": "Im Web nicht verfügbar. Öffnen Sie es in der Vela-App."
+      "blockedWeb": "Im Web nicht verfügbar. Öffnen Sie es in der Vela-App.",
+      "webApprovals": "Im Web prüft und signiert eine Signaturseite Ihre Multisig-Freigaben. Andere Transaktionen und Nachrichten bestätigen Sie in Vela."
     },
     "advanced": {
       "networksTitle": "Netzwerke",

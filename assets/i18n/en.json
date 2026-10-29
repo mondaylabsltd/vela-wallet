@@ -87,7 +87,8 @@
    "pageBody": "A standalone page that signs exactly what it shows",
    "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
    "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
-   "blockedWeb": "Not available on the web. Open it from the Vela app."
+   "blockedWeb": "Not available on the web. Open it from the Vela app.",
+   "webApprovals": "On the web, a signing page reviews and signs your multisig approvals. Other transactions and messages are confirmed in Vela."
   },
   "advanced": {
    "networksTitle": "Networks",

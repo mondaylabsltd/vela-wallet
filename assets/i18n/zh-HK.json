@@ -87,7 +87,8 @@
    "pageBody": "獨立的單頁網頁，顯示甚麼便簽署甚麼",
    "blockedApp": "此帳戶的通行密鑰只會為 {{domain}} 簽署，因此 Vela 無法在此使用。",
    "blockedPage": "此頁面位於 {{pageDomain}}，但此帳戶的通行密鑰只會為 {{domain}} 簽署。",
-   "blockedWeb": "網頁版無法使用，請在 Vela App 中開啟。"
+   "blockedWeb": "網頁版無法使用，請在 Vela App 中開啟。",
+   "webApprovals": "喺網頁版，簽名頁負責審閱同簽署你嘅多簽批准；其他交易同訊息喺 Vela 度確認。"
   },
   "advanced": {
    "networksTitle": "網絡",

@@ -16,7 +16,12 @@
  * may have been sent is followed rather than sent again.
  */
 import { hasCode, readMembers, type ChainMembers } from './chain';
-import { submitExecution, type ExecutionInput, type ExecutionPreview } from './execute';
+import {
+	submitExecution,
+	throwIfStopped,
+	type ExecutionInput,
+	type ExecutionPreview
+} from './execute';
 import {
 	callsTx,
 	cancelTx,
@@ -40,6 +45,7 @@ import {
 } from './kernel';
 import { MemberChangeRefusedError, memberStateOf } from './member-changes';
 import { loadAccounts } from '$lib/onboarding/core/storage';
+import { multisigApprovalRoute } from '$lib/core/kernels';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
 import {
@@ -887,7 +893,12 @@ export async function propose(
 	await authorizeSigning(account, chainId, tx);
 	const hash = safeTxHash(chainId, account.address, tx);
 	stopIfWithdrawn(signal);
-	const approval = await signApproval(owner.account, chainId, hash);
+	const approval = await signApproval(owner.account, chainId, hash, {
+		multisig: account.address,
+		name: account.genesis.name ?? account.label ?? null,
+		tx,
+		signal
+	});
 	// r4b-5: withdrawn while the passkey was up: what it signed goes nowhere.
 	stopIfWithdrawn(signal);
 	return submitProposal(account, chainId, tx, approval);
@@ -1355,7 +1366,16 @@ async function proposeBuilt(
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
 	await authorizeSigning(account, item.chainId, item.tx);
-	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash);
+	return approveAuthorized(account, item, owner);
+}
+
+/** `approve` once the signing gate has let it through (one gate per signature asked). */
+async function approveAuthorized(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
+	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash, {
+		multisig: account.address,
+		name: account.genesis.name ?? account.label ?? null,
+		tx: item.tx
+	});
 	const answer = await submitKept({
 		chainId: item.chainId,
 		safe: account.address,
@@ -1399,7 +1419,28 @@ export async function execute(
 	preview?: ExecutionPreview
 ) {
 	// §3.5: the signing gate before the executor's passkey, as every signature.
+	// A look that already says it stops before the passkey (it would fail, it
+	// has no price, it could not be checked in time, the executor cannot pay)
+	// stops here, before the gate asks anything — the approval a caller may
+	// give instead goes through the gate once, as its own signature.
+	if (preview) throwIfStopped(preview);
+	// §3.5, §3.6: the signing gate before the executor's passkey, as every
+	// signature — the core's rule over the chain read now.
 	await authorizeSigning(account, item.chainId, item.tx);
+	// 2026-10-29: an executor that reviews and signs on a page approves THERE
+	// first — its operation counts as its approval (`msg.sender`), and that
+	// approval must be one it read on the page, not only in Vela. Posted like
+	// any approval; a second ask for the same transaction is not made
+	// (`approveOnPage` keeps what the page answered for this page's life).
+	// The gate above already let this transaction through: not asked twice.
+	const record = loadAccounts().find((a) => sameAddress(a.address, executor.address));
+	const route = record ? multisigApprovalRoute(record) : null;
+	if (
+		route?.type === 'page' &&
+		item.canApprove.some((o) => sameAddress(o.address, executor.address))
+	) {
+		await approveAuthorized(account, item, executor);
+	}
 	return submitExecution(executionInput(account, item, executor, members), preview);
 }
 

@@ -87,7 +87,8 @@
       "pageBody": "Une page autonome qui signe exactement ce qu'elle affiche",
       "blockedApp": "Les clés d'accès de ce compte ne signent que pour {{domain}}, donc Vela ne peut pas les utiliser ici.",
       "blockedPage": "Cette page est sur {{pageDomain}}, mais les clés d'accès de ce compte ne signent que pour {{domain}}.",
-      "blockedWeb": "Indisponible sur le web. Ouvrez-le depuis l'appli Vela."
+      "blockedWeb": "Indisponible sur le web. Ouvrez-le depuis l'appli Vela.",
+      "webApprovals": "Sur le web, une page de signature examine et signe vos approbations multisig. Les autres transactions et messages se confirment dans Vela."
     },
     "advanced": {
       "networksTitle": "Réseaux",

@@ -949,6 +949,37 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   cursor: pointer;
 }
 
+.copy-button-small { padding: 2px var(--space-md); font-size: var(--text-sm); }
+
+/* A multisig approval's hashes, in full, each with its copy button: what a
+   member matches on another screen (a hardware wallet, another device). */
+.ms-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-sunken);
+}
+.ms-hashes-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--letterSpacing-sectionLabel);
+  text-transform: uppercase;
+  color: var(--color-fg-muted);
+}
+.ms-hash { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ms-hash-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.ms-hash-label { font-size: var(--text-base); color: var(--color-fg-muted); }
+.ms-hash-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--color-fg-base);
+  overflow-wrap: anywhere;
+}
+.ms-hashes-note { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--color-fg-muted); }
+
 /* The one control, and the one accent: the app's primary button, full
    width, pill. Spec 079: it stays in reach on a phone, however long the
    sheet. */

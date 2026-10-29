@@ -16,6 +16,7 @@ import type { RpcKind } from '$lib/core/generated/RpcKind';
 import type { RpcTransportOutcome } from '$lib/core/generated/RpcTransportOutcome';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
+import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
@@ -690,6 +691,94 @@ export function attestSafeMessageHash(
 // ---------------------------------------------------------------------------
 // Where a signature goes (spec 102)
 // ---------------------------------------------------------------------------
+
+/**
+ * Where a multisig member's approval goes on the web
+ * (`trusted_signer::approval::approval_route`, 2026-10-29): the member's own
+ * passkey prompt, the trusted signing page the member chose to review and
+ * sign on, or nowhere and why. `account` is the member's record as STORED —
+ * the plan an app would follow, not the web's (`SigningPlan::on_web` keeps
+ * transactions and messages in Vela; an approval honours the venue).
+ */
+export type ApprovalRoute =
+	{ type: 'in_vela' } | { type: 'page'; url: string } | { type: 'blocked'; block: VenueBlock };
+
+export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
+	const route = wasm.multisigApprovalRoute(JSON.stringify(account));
+	return route === undefined ? null : (JSON.parse(route) as ApprovalRoute);
+}
+
+/** The page's `{intent, context}` for a member's approval (`trusted_signer::approval::request`). */
+export function trustedSignerApprovalRequest(args: {
+	chainId: number;
+	chainName?: string | null;
+	nativeSymbol?: string | null;
+	multisig: string;
+	multisigName?: string | null;
+	tx: unknown;
+	member: string;
+	memberName?: string | null;
+	credentialIdsHex: string[];
+	keyRoute?: unknown;
+}): { intent: unknown; context: unknown } {
+	return JSON.parse(wasm.trustedSignerApprovalRequest(JSON.stringify(args))) as {
+		intent: unknown;
+		context: unknown;
+	};
+}
+
+/**
+ * The page's answer as the member's approval — or a throw whose message is
+ * the refusal's code (`wrong_challenge`, `foreign_key`, `bad_signature`,
+ * `not_verified`, `malformed`). Accepted only as the core accepts it: a
+ * user-verified assertion over exactly the approval bytes the core computed,
+ * by one of the member's keys, that verifies the way the chain will.
+ */
+export function trustedSignerApprovalAccept<T>(args: {
+	result: unknown;
+	chainId: number;
+	member: string;
+	safeTxHash: string;
+	keys: { credentialId: string; publicKeyHex: string }[];
+}): T {
+	return JSON.parse(wasm.trustedSignerApprovalAccept(JSON.stringify(args))) as T;
+}
+
+/** R6: which version of the page at `base` is checked and opened (`launch::target`). */
+export function trustedSignerPageTarget(
+	base: string,
+	indexJson: string | null,
+	trusted: string[] = []
+): { url: string; version: string; shortVersion: string } {
+	return JSON.parse(
+		wasm.trustedSignerPageTarget(base, indexJson ?? undefined, JSON.stringify(trusted))
+	) as { url: string; version: string; shortVersion: string };
+}
+
+/**
+ * R6's ruling on what the target's URL served (`launch::admit`): the line to
+ * draw, and the address to open (handed the request by `postMessage`) — `null`
+ * unless the page was admitted.
+ */
+export function trustedSignerPageAdmit(
+	base: string,
+	indexJson: string | null,
+	observed: string | null,
+	nowMs: number,
+	lang: string,
+	trusted: string[] = []
+): { line: IntegrityLine; launch: string | null; versionToTrust: string | null } {
+	return JSON.parse(
+		wasm.trustedSignerPageAdmit(
+			base,
+			indexJson ?? undefined,
+			JSON.stringify(trusted),
+			observed ?? undefined,
+			nowMs,
+			lang
+		)
+	) as { line: IntegrityLine; launch: string | null; versionToTrust: string | null };
+}
 
 /**
  * How an account signs on this device — `vela_core::app::Account::

@@ -577,6 +577,23 @@ function unreachable(error: unknown): boolean {
 export const RELAY_RETRY_MS = 1_500;
 
 /**
+ * Throws what stops `preview` before any passkey: refused, it would fail, no
+ * price, not checked in time, or a fee the executor cannot pay. Returns the
+ * priced look that may be signed.
+ */
+export function throwIfStopped(
+	preview: ExecutionPreview
+): asserts preview is Extract<ExecutionPreview, { kind: 'priced' }> {
+	if (preview.kind === 'refused') throw preview.error;
+	if (preview.kind === 'fails') throw new ExecutionWouldFailError(preview.why);
+	if (preview.kind === 'unpriced') throw new ExecutionUnpricedError();
+	if (preview.kind === 'unchecked') throw new ExecutionUncheckedError();
+	if (!preview.canPay && preview.balance !== null) {
+		throw new ExecutorCannotPayError(preview.fee.amount, preview.balance);
+	}
+}
+
+/**
  * Send the execution. Resolves once the relay has the operation.
  *
  * `preview` is the one the person was shown: its calls and its fee are
@@ -593,13 +610,7 @@ export async function submitExecution(
 	const walletSigner =
 		stored.keys && stored.keys.length > 1 ? keySetOf(stored) : stored.publicKeyHex;
 	const ready = preview ?? (await previewExecution(input));
-	if (ready.kind === 'refused') throw ready.error;
-	if (ready.kind === 'fails') throw new ExecutionWouldFailError(ready.why);
-	if (ready.kind === 'unpriced') throw new ExecutionUnpricedError();
-	if (ready.kind === 'unchecked') throw new ExecutionUncheckedError();
-	if (!ready.canPay && ready.balance !== null) {
-		throw new ExecutorCannotPayError(ready.fee.amount, ready.balance);
-	}
+	throwIfStopped(ready);
 	// §3.5: a preview shown a while ago deploys only what the chain's code
 	// says now — read again right before the passkey, never from that look.
 	if (preview && !input.members.deployed) await verifiedDeployFacts(input);

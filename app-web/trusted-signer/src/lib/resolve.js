@@ -155,7 +155,7 @@ window.VelaCS = window.VelaCS || {};
     var tag = null;
     var self = ctx.selfAccount;
 
-    if (self && lower === String(self).toLowerCase()) tag = 'tag.self';
+    if (self && lower === String(self).toLowerCase()) tag = ctx.selfTag || 'tag.self';
     else if (hints.isCallTarget) tag = 'tag.calledContract';
     else if (known && known.descriptor) tag = 'tag.localDescriptor';
     else if (known && known.verified) tag = 'tag.sourceVerified';
@@ -166,7 +166,7 @@ window.VelaCS = window.VelaCS || {};
       // Local, deterministic, and impossible for a requester to influence.
       identicon: address ? ns.identicon.forAddress(address) : null,
       tag: tag,
-      kind: tag === 'tag.self' ? 'own' : known ? 'contract' : 'unknown',
+      kind: tag === 'tag.self' || (tag && tag === ctx.selfTag) ? 'own' : known ? 'contract' : 'unknown',
       // Kept for guards; never rendered as a name.
       contractName: known && known.name ? known.name : null,
     };
@@ -1422,6 +1422,7 @@ window.VelaCS = window.VelaCS || {};
     'intent.create': 'button.create',
     'intent.proofVerify': 'button.confirm', 'intent.proofRecover': 'button.confirm',
     'intent.memberProof': 'button.confirm',
+    'intent.msReject': 'button.msReject',
   };
 
   function confirmKey(view) {
@@ -1487,10 +1488,16 @@ window.VelaCS = window.VelaCS || {};
    * Will this request's answer reach the Vela wallet on this device, and
    * nothing else? (spec 102 R7)
    *
-   * Only the URL channel can say yes, and only when its answer address is
-   * exactly the wallet's. postMessage answers whoever opened this page — any
-   * site can — and the loopback socket is retired (the published page's
-   * `default-src 'none'` cannot open it).
+   * The URL channel can say yes when its answer address is exactly the
+   * wallet's. postMessage answers whoever opened this page — any site can —
+   * so it says yes for ONE request only: a multisig member's approval
+   * (`vela_multisigApprove`), and only when the browser reports the opener as
+   * Vela's web wallet (`isWebWallet`). The web wallet is where multisigs live
+   * and it cannot receive `velawallet://`; the browser's own `event.origin`
+   * names the window the answer goes to, which is a stronger fact than any
+   * callback address. Every other signature over postMessage stays refused,
+   * whoever opened the page. The loopback socket is retired (the published
+   * page's `default-src 'none'` cannot open it).
    *
    * ONE rule, used everywhere the answer's destination matters: a signature
    * is refused without it (`resolve`), so is every key ceremony on the URL
@@ -1503,7 +1510,32 @@ window.VelaCS = window.VelaCS || {};
    * (`build-single.mjs` reads only what `src/sign.html` names).
    */
   function answersToWallet(ctx) {
-    return !!ctx && ctx.channel === 'url' && ctx.callback === WALLET_CALLBACK;
+    if (!ctx) return false;
+    if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
+    return ctx.channel === 'post' && ctx.method === MULTISIG_APPROVE && ctx.originVerified === true &&
+      isWebWallet(ctx.requester);
+  }
+
+  /**
+   * The web wallet, by the origin the BROWSER reports for the window that
+   * opened this page (postMessage's `event.origin` — not a claim): Vela's own
+   * web wallet, and nothing else on `getvela.app` (a subdomain is not the
+   * wallet). A page served from this machine's loopback — a developer's — is
+   * also answered by a wallet on the loopback: such a page can only use the
+   * loopback's own passkeys, never `getvela.app`'s, so nothing it signs is of
+   * use to anyone but that developer.
+   */
+  var WEB_WALLETS = ['https://wallet.getvela.app', 'https://getvela.app'];
+  var MULTISIG_APPROVE = 'vela_multisigApprove';
+
+  function isWebWallet(origin) {
+    if (typeof origin !== 'string') return false;
+    if (WEB_WALLETS.indexOf(origin) >= 0) return true;
+    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var parsed = null;
+    try { parsed = new URL(origin); } catch (e) { return false; }
+    return LOOPBACK_HOST.test(here) && parsed.protocol === 'http:' && LOOPBACK_HOST.test(parsed.hostname) &&
+      origin === parsed.origin;
   }
 
   /**
@@ -1954,9 +1986,237 @@ window.VelaCS = window.VelaCS || {};
       : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: shown }] };
   }
 
+  // --- a multisig member's approval (vela_multisigApprove) -----------------
+  //
+  // The app hands over a SafeTx, the multisig and the chain. Everything on
+  // the card is read here from those bytes (lib/multisig.js, the core's own
+  // rules): the hashes are recomputed, the reading is the core's `review`,
+  // and the passkey signs the approval bytes lib/digest.js derives from the
+  // hash THIS page computed. The app's words — the multisig's name, the
+  // member's name, the network's name on a chain this page does not know —
+  // are drawn as the app's.
+
+  var MEMBER_INTENTS = {
+    addOwner: 'intent.msAddOwner',
+    removeOwner: 'intent.msRemoveOwner',
+    swapOwner: 'intent.msSwapOwner',
+    changeThreshold: 'intent.msThreshold',
+  };
+
+  function refuseWith(view, key, params) {
+    view.refuse = true;
+    raise(view, 'danger');
+    view.warnings.push({ tone: 'danger', key: key, params: params });
+  }
+
+  /** A member, by its address and the avatar derived from it — never a name. */
+  function memberIdentity(address, ctx) {
+    return identify(address, ctx, {});
+  }
+
+  /** The rows and words of a member change, the multisig's own call. */
+  function memberChange(action, ctx, view) {
+    view.intentKey = MEMBER_INTENTS[action.kind];
+    provenance(view, 'read');
+    raise(view, 'caution');
+    if (action.kind === 'addOwner' || action.kind === 'removeOwner') {
+      var who = memberIdentity(action.owner, ctx);
+      view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
+      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      view.sentence = text(action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner',
+        { owner: who.short, threshold: action.threshold });
+    } else if (action.kind === 'swapOwner') {
+      var gone = memberIdentity(action.oldOwner, ctx);
+      var next = memberIdentity(action.newOwner, ctx);
+      view.fields.push({ label: 'field.newMember', identity: next });
+      view.fields.push({ label: 'field.oldMember', identity: gone });
+      view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
+    } else {
+      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      view.sentence = text('sentence.msThreshold', { threshold: action.threshold });
+    }
+    if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
+      view.warnings.push({ tone: 'caution', key: 'warn.msMembers' });
+    }
+  }
+
+  /**
+   * One action of the core's reading, drawn onto `view`: a transfer or a
+   * call through the page's own call ladder (the same as a transaction's —
+   * token standards are read, descriptors described, the rest a contract
+   * call), a member change, a rename. `call` is the call as packed.
+   */
+  function multisigAction(action, call, ctx, view, isLeg) {
+    if (MEMBER_INTENTS[action.kind]) return memberChange(action, ctx, view);
+    if (action.kind === 'rename') {
+      view.intentKey = 'intent.msRename';
+      provenance(view, 'read');
+      view.fields.push({ label: 'field.newName', value: visible(action.name, view), emphasis: true });
+      view.sentence = text('sentence.msRename', { name: visible(action.name, view) });
+      return view;
+    }
+    // A transfer (native or ERC-20) or a call to another contract.
+    return resolveCall(call, ctx, view, isLeg);
+  }
+
+  function hexValue(decimal) {
+    return '0x' + BigInt(decimal).toString(16);
+  }
+
+  function resolveMultisig(intent, ctx) {
+    var request = ns.multisig.request(intent);
+    // The chain the approval is for is the request's own (it is in the
+    // digest's domain): the card names that one, whatever else the context says.
+    var named = ctx.chainId;
+    if (!request.error) ctx.chainId = request.chainId;
+    ctx.selfAccount = request.error ? null : request.safe;
+    ctx.selfTag = 'tag.thisMultisig';
+    ctx.coin = coinOf(ctx);
+    var view = baseView(intent, ctx);
+    view.method = intent.method;
+    view.intentKey = 'intent.msApprove';
+    view.badge = 'tag.multisig';
+    view.hero = null;
+
+    if (request.error) {
+      refuseWith(view, request.error);
+      view.account = null;
+      return finishSigning(view, ctx);
+    }
+    var tx = request.tx;
+    view.account = request.member;
+    if (named !== undefined && named !== null && Number(named) !== request.chainId) {
+      refuseWith(view, 'refuse.msChainMismatch');
+    }
+    // The member the approval is made as is in the digest (its domain): the
+    // context's account — whose keys the browser is asked for — must be it.
+    if (typeof ctx.account === 'string' && ctx.account.toLowerCase() !== request.member.toLowerCase()) {
+      refuseWith(view, 'refuse.msMemberMismatch');
+    }
+
+    var hashes = ns.multisig.hashes(request.chainId, request.safe, tx);
+    var matches = hashes.safeTxHash === request.claimed;
+    if (!matches) {
+      // Loud and first: the app describes one transaction and hands over the
+      // fields of another (or a hash of something else entirely).
+      view.refuse = true;
+      view.risk = 'hard-danger';
+      view.warnings.unshift({
+        tone: 'danger', key: 'refuse.msHashMismatch',
+        params: { claimed: request.claimed, computed: hashes.safeTxHash },
+      });
+    }
+
+    // The multisig: its address and avatar are facts (the address is in the
+    // safeTxHash's domain); its name is the app's.
+    var name = ctx.multisig && typeof ctx.multisig.name === 'string' && ctx.multisig.name.trim()
+      ? visible(ctx.multisig.name.trim().slice(0, 64), view) : null;
+    var safeIdentity = identify(request.safe, ctx, {});
+    safeIdentity.contractName = name;
+    safeIdentity.tag = name ? 'tag.nameByApp' : null;
+    view.multisig = {
+      address: request.safe,
+      name: name,
+      nonce: tx.nonce.toString(),
+      hashes: hashes,
+      hashMatches: matches,
+    };
+
+    var reading = ns.multisig.read(request.safe, tx);
+    var call = { to: tx.to, value: hexValue(tx.value), data: tx.data };
+    if (reading.refusal) {
+      refuseWith(view, reading.refusal, reading.params);
+      view.tech = techFor('SafeTx (EIP-712)', null, tx.data, {
+        addresses: [{ roleKey: 'field.target', name: shortAddress(tx.to), address: tx.to }],
+      });
+    } else if (reading.action.kind === 'cancel') {
+      view.intentKey = 'intent.msReject';
+      provenance(view, 'read');
+      view.sentence = text('sentence.msReject', { nonce: tx.nonce.toString() });
+    } else if (reading.action.kind === 'batch') {
+      view.intentKey = 'intent.batch';
+      view.legs = reading.action.calls.map(function (leg, i) {
+        var legView = baseView(intent, ctx);
+        multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, ctx, legView, true);
+        return { index: i + 1, view: legView };
+      });
+      view.sentence = text('sentence.msBatch', { count: reading.action.calls.length });
+      view.risk = view.legs.reduce(function (worst, leg) {
+        return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
+      }, view.risk);
+      view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
+      liftLegWarnings(view);
+      provenance(view, 'read');
+      view.tech = techFor('multiSend(bytes) · MultiSendCallOnly (delegatecall)', null, tx.data, {
+        addresses: [{ roleKey: 'field.target', name: 'MultiSendCallOnly', address: tx.to }],
+      });
+    } else {
+      var badge = view.badge;
+      multisigAction(reading.action, call, ctx, view, false);
+      view.badge = badge;
+      if (!view.tech) view.tech = techFor('SafeTx (EIP-712)', null, tx.data, {});
+    }
+
+    // The rows every approval carries: which multisig, at which nonce.
+    view.fields.unshift({ label: 'field.multisig', identity: safeIdentity });
+    view.fields.push({ label: 'field.nonce', value: tx.nonce.toString(), mono: true });
+
+    var finished = finishSigning(view, ctx);
+    if (!finished.refuse) {
+      finished.confirmKey = reading.action && reading.action.kind === 'cancel' ? 'button.msReject' : 'button.msApprove';
+    }
+    return finished;
+  }
+
+  /**
+   * What every signature card ends with, whatever it signs: the answer must
+   * reach the wallet (R7), the keys must be readable, and the key route and
+   * the button are this page's own.
+   */
+  function finishSigning(view, ctx) {
+    // Spec 102 R7: a signature goes to the Vela wallet on this device and
+    // nowhere else. Any site can open this page with an operation of its
+    // choosing and its own answer address; the card would describe that
+    // operation truthfully, and a person who tapped would hand a usable
+    // signature to whoever named the address. So nothing is offered — the
+    // button is off, no passkey prompt — and the card says where the answer would
+    // have gone. Fails closed: a context that does not say the answer
+    // reaches the wallet is refused, previews included (they pass the
+    // address the apps send).
+    if (!ns.resolve.answersToWallet(ctx)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      var destination = answerDestination(ctx);
+      view.warnings.unshift(destination
+        ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
+        : { tone: 'danger', key: 'refuse.answerNotToWallet' });
+    }
+
+    // The account's keys, as the browser will be asked for them. One that
+    // cannot be read cannot be asked for: refused here, with the reason,
+    // rather than failing inside the tap.
+    var allow = ctx.allowCredentials;
+    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
+    }
+
+    // The key that signs, and where it lives (spec 102 R5). sign.js asks for
+    // this one credential; the card says where the person will confirm.
+    view.key = keyRoute(ctx.keyRoute, ctx.allowCredentials);
+    view.keyLabel = 'field.confirmWith';
+    view.confirmKey = confirmKey(view);
+    return view;
+  }
+
   function resolve(requested, ctx) {
     // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
     ctx = Object.assign({}, ctx || {});
+    // What is being asked, for the answer rule (`answersToWallet`): never the
+    // requester's word for it, the intent's own method.
+    ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
+    if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
@@ -2026,40 +2286,7 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin', near: 'requester' });
     }
 
-    // Spec 102 R7: a signature goes to the Vela wallet on this device and
-    // nowhere else. Any site can open this page with an operation of its
-    // choosing and its own answer address; the card would describe that
-    // operation truthfully, and a person who tapped would hand a usable
-    // signature to whoever named the address. So nothing is offered — the
-    // button is off, no passkey prompt — and the card says where the answer would
-    // have gone. Fails closed: a context that does not say the answer
-    // reaches the wallet is refused, previews included (they pass the
-    // address the apps send).
-    if (!ns.resolve.answersToWallet(ctx)) {
-      view.refuse = true;
-      view.risk = 'danger';
-      var destination = answerDestination(ctx);
-      view.warnings.unshift(destination
-        ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
-        : { tone: 'danger', key: 'refuse.answerNotToWallet' });
-    }
-
-    // The account's keys, as the browser will be asked for them. One that
-    // cannot be read cannot be asked for: refused here, with the reason,
-    // rather than failing inside the tap.
-    var allow = ctx.allowCredentials;
-    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
-      view.refuse = true;
-      view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
-    }
-
-    // The key that signs, and where it lives (spec 102 R5). sign.js asks for
-    // this one credential; the card says where the person will confirm.
-    view.key = keyRoute(ctx.keyRoute, ctx.allowCredentials);
-    view.keyLabel = 'field.confirmWith';
-    view.confirmKey = confirmKey(view);
-    return view;
+    return finishSigning(view, ctx);
   }
 
   ns.resolve = resolve;

@@ -307,6 +307,15 @@ function main() {
  * `/b/*` — spec 079: a version never changes, so the browser may keep it for
  * a year and open it with no network. Pages joins this `Cache-Control` with
  * the one under `/*`.
+ *
+ * `/b/*` and `/index.json` also say `Access-Control-Allow-Origin: *`
+ * (2026-10-29): the web wallet checks a page before it opens it for a
+ * multisig member's approval, as every app does (spec 076/102 R6) — it fetches
+ * the index and the version's bytes and hashes them — and a browser hands
+ * those bytes to a script on another origin only when the host says it may.
+ * The bytes are public and carry no credential (the check sends none), so
+ * `*` gives nobody anything they could not already fetch; without it the web's
+ * check could never complete, and a check that cannot complete opens nothing.
  */
 export const HEADERS = [
 	'/*',
@@ -316,6 +325,10 @@ export const HEADERS = [
 	'',
 	'/b/*',
 	'  Cache-Control: public, max-age=31536000, immutable',
+	'  Access-Control-Allow-Origin: *',
+	'',
+	'/index.json',
+	'  Access-Control-Allow-Origin: *',
 	'',
 ].join('\n');
 

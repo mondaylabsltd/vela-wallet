@@ -99,6 +99,8 @@
 	import { progressLine } from '../core/progress';
 	import { multisigUi } from '../core/ui.svelte';
 	import { PasskeyCheckError } from '../core/owners';
+	import { PageApprovalError } from '../core/page-approval.svelte';
+	import { integrityLineModel } from '$lib/settings/venue';
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
@@ -565,6 +567,17 @@
 			}
 			const why = error.authority.reasons.map((r) => refusalText(m, r, error.chainId));
 			return [fillTemplate(m.authority.deployRefused, { network }), ...new Set(why)].join(' ');
+		}
+		// 2026-10-29: the member approves on its trusted signing page.
+		if (error instanceof PageApprovalError) {
+			if (error.failure === 'not_opened' && error.line && m.handoff) {
+				return (
+					integrityLineModel(error.line, '', m.handoff)?.text ?? m.proposal.reason.passkeyFailed
+				);
+			}
+			return error.failure === 'unverified'
+				? m.proposal.reason.passkeyFailed
+				: m.proposal.reason.passkeyClosed;
 		}
 		if (error instanceof PasskeyError) {
 			if (error.kind === 'cancelled') {
