@@ -51,11 +51,11 @@ async function drawn(
 		result?: FeedbackResult;
 		sending?: boolean;
 		ondone?: () => void;
-		onsend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onsend?: (report: { what: string; screenshots: string[] }) => void;
 		draft?: ReportDraft;
 	} = {}
 ) {
-	const sent: { what: string; steps: string; screenshots: string[] }[] = [];
+	const sent: { what: string; screenshots: string[] }[] = [];
 	const screen = render(FeedbackBody, {
 		props: { panel: panel(), onsend: (report) => sent.push(report), ...props }
 	});
@@ -80,13 +80,91 @@ async function drawn(
 	return { screen, root, input, pick, tiles, settled, note, sent };
 }
 
+describe('FeedbackBody — the first screen', () => {
+	it('is one box with a label and the example placeholder, and no steps control', async () => {
+		const { root } = await drawn();
+		const fields = root.querySelectorAll('textarea');
+		expect(fields).toHaveLength(1);
+		expect(fields[0].getAttribute('aria-label')).toBe(String(panel().label));
+		expect(fields[0].getAttribute('placeholder')).toBe(String(panel().placeholder));
+		expect(fields[0].rows).toBe(3);
+		expect(root.querySelector('.steps')).toBeNull();
+	});
+
+	it('Send is the neutral primary, enabled once there are words', async () => {
+		const { root } = await drawn();
+		const send = [...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === String(panel().send)
+		) as HTMLButtonElement;
+		expect(send.classList.contains('primary')).toBe(true);
+		expect(send.classList.contains('value')).toBe(false);
+		expect(send.disabled).toBe(true);
+		const field = root.querySelector('textarea') as HTMLTextAreaElement;
+		field.value = 'Nothing happened after I tapped Send';
+		field.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		expect(send.disabled).toBe(false);
+	});
+
+	it('the focus order is the box, the attach button, View, then Send', async () => {
+		const { root } = await drawn();
+		const field = root.querySelector('textarea') as HTMLTextAreaElement;
+		field.value = 'x';
+		field.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		const order = [
+			...root.querySelectorAll<HTMLElement>('textarea, button:not([tabindex="-1"]), a[href]')
+		]
+			.filter((el) => !el.closest('[hidden]'))
+			.map((el) =>
+				el.tagName === 'TEXTAREA'
+					? 'box'
+					: el.classList.contains('attach')
+						? 'attach'
+						: el.classList.contains('details-toggle')
+							? 'view'
+							: el.textContent?.trim()
+			);
+		expect(order).toEqual(['box', 'attach', 'view', String(panel().send)]);
+	});
+});
+
 describe('FeedbackBody — screenshots', () => {
-	it('starts with one add target and the "up to 5" hint, and no public line', async () => {
+	it('starts with one small attach button — no cap said, no counter, no public line', async () => {
 		const { root, tiles, note } = await drawn();
-		expect(root.querySelector('.add-target')).not.toBeNull();
-		expect(root.querySelector('.shots-count')?.textContent?.trim()).toBe(panel().screenshots.hint);
+		const attach = root.querySelector('button.attach') as HTMLButtonElement;
+		expect(attach.textContent?.trim()).toBe(String(panel().screenshots.add));
+		// An icon from the app's set, never an emoji.
+		expect(attach.querySelector('svg')).not.toBeNull();
+		// Small: a control's height, not the old 56 drop zone.
+		expect(attach.getBoundingClientRect().height).toBeLessThan(44);
+		expect(root.querySelector('.shots-count')).toBeNull();
+		expect(root.textContent).not.toContain(String(panel().screenshots.full));
+		expect(root.textContent).not.toContain(String(panel().screenshots.limit));
 		expect(tiles()).toHaveLength(0);
 		expect(note()).toBeNull();
+	});
+
+	it('the attach button opens the picker', async () => {
+		const { root, input } = await drawn();
+		const opened = vi.spyOn(input, 'click').mockImplementation(() => {});
+		(root.querySelector('button.attach') as HTMLButtonElement).click();
+		expect(opened).toHaveBeenCalledOnce();
+	});
+
+	it('takes an image dropped anywhere on the sheet, not only on the attach button', async () => {
+		const { root, tiles, settled } = await drawn();
+		const transfer = new DataTransfer();
+		transfer.items.add(await image('dropped.png'));
+		const field = root.querySelector('textarea') as HTMLTextAreaElement;
+		field.dispatchEvent(new DragEvent('dragover', { dataTransfer: transfer, bubbles: true }));
+		await tick();
+		expect(root.querySelector('.feedback')?.classList.contains('dropping')).toBe(true);
+		field.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
+		await tick();
+		expect(tiles()).toHaveLength(1);
+		expect(root.querySelector('.feedback')?.classList.contains('dropping')).toBe(false);
+		await settled();
 	});
 
 	it('shows picked images as tiles, the count, and says they will be public', async () => {
@@ -94,7 +172,10 @@ describe('FeedbackBody — screenshots', () => {
 		await pick([await image('a.png'), await image('b.png')]);
 		expect(tiles()).toHaveLength(2);
 		await settled();
-		expect(root.querySelector('.shots-count')?.textContent?.trim()).toBe('2 / 5');
+		// Thumbnails, and no counter or cap while there is room.
+		expect(root.querySelector('.shots-count')).toBeNull();
+		expect(root.querySelector('.shots-note.full')).toBeNull();
+		expect(root.querySelector('button.attach')).toBeNull();
 		expect(note()?.textContent?.trim()).toBe(String(panel().screenshots.public));
 		// The add tile stays while there is room.
 		expect(root.querySelector('.add-tile')).not.toBeNull();
@@ -115,6 +196,22 @@ describe('FeedbackBody — screenshots', () => {
 		]);
 		expect(note()?.classList.contains('refused')).toBe(true);
 		expect(root.querySelector('.add-tile')).toBeNull();
+	});
+
+	it('says the cap once it is reached — at five, and not before', async () => {
+		const { root, pick, settled } = await drawn();
+		await pick(await Promise.all([...'abcd'].map((c) => image(`${c}.png`))));
+		await settled();
+		expect(root.querySelector('.shots-note.full')).toBeNull();
+		await pick([await image('e.png')]);
+		await settled();
+		const notes = [...root.querySelectorAll<HTMLElement>('.shots-note')];
+		expect(notes.map((n) => n.textContent?.trim())).toEqual([
+			String(panel().screenshots.full),
+			String(panel().screenshots.public)
+		]);
+		// (The add tile leaves on its 150 ms fade.)
+		await vi.waitFor(() => expect(root.querySelector('.add-tile')).toBeNull());
 	});
 
 	it('keeps all five tiles in one row, shrinking them together on a narrow column', async () => {
@@ -161,11 +258,11 @@ describe('FeedbackBody — screenshots', () => {
 			expect(inside).toBeLessThanOrEqual(23 * 23);
 		}
 		// The last badge ends on the column edge (only its 4 overhang is kept
-		// as padding), under the "n / 5" counter.
-		const count = screen.container.querySelector('.shots-count') as HTMLElement;
+		// as padding), flush with the box above.
+		const box = screen.container.querySelector('textarea') as HTMLElement;
 		const lastBadge = tiles()[4].querySelector('.badge') as HTMLElement;
 		expect(
-			Math.abs(lastBadge.getBoundingClientRect().right - count.getBoundingClientRect().right)
+			Math.abs(lastBadge.getBoundingClientRect().right - box.getBoundingClientRect().right)
 		).toBeLessThanOrEqual(1);
 		// A tap in the gap-and-corner an area reaches over lands on THAT
 		// area, not on the next tile's picture painted after it.
@@ -174,25 +271,25 @@ describe('FeedbackBody — screenshots', () => {
 		expect(hit?.closest('.remove')).toBe(tiles()[0].querySelector('.remove'));
 	});
 
-	it('writes the hint and the counter in fg-muted, not the failing fg-subtle', async () => {
+	it('writes the drop hint and the cap in fg-muted, not the failing fg-subtle', async () => {
 		const { root, pick, settled } = await drawn();
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--color-fg-muted)';
 		document.body.appendChild(probe);
 		const muted = getComputedStyle(probe).color;
 		probe.remove();
-		const count = () => getComputedStyle(root.querySelector('.shots-count') as HTMLElement).color;
-		expect(count()).toBe(muted);
 		expect(getComputedStyle(root.querySelector('.drop-hint') as HTMLElement).color).toBe(muted);
-		await pick([await image('a.png')]);
+		await pick(await Promise.all([...'abcde'].map((c) => image(`${c}.png`))));
 		await settled();
-		expect(count()).toBe(muted);
+		expect(getComputedStyle(root.querySelector('.shots-note.full') as HTMLElement).color).toBe(
+			muted
+		);
 	});
 
 	it('holds the form still while sending — fields, tiles and paste', async () => {
 		const { root, tiles } = await drawn({ sending: true });
 		expect((root.querySelector('textarea') as HTMLTextAreaElement).inert).toBe(true);
-		expect((root.querySelector('section.shots') as HTMLElement).inert).toBe(true);
+		expect((root.querySelector('.shots') as HTMLElement).inert).toBe(true);
 		const transfer = new DataTransfer();
 		transfer.items.add(await image('pasted.png'));
 		window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer }));
@@ -358,8 +455,55 @@ describe('FeedbackBody — screenshots', () => {
 });
 
 describe('FeedbackBody — what will be sent', () => {
+	const toggle = (root: HTMLElement) =>
+		root.querySelector('button.details-toggle') as HTMLButtonElement;
+
+	it('folds into one quiet line, "included · View", that opens the rows and the consent', async () => {
+		const { root } = await drawn();
+		const line = root.querySelector('.details-line') as HTMLElement;
+		expect(line.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			`${panel().details.included} · ${panel().details.view}`
+		);
+		const body = root.querySelector('.details-body') as HTMLElement;
+		expect(body.hidden).toBe(true);
+		expect(body.getBoundingClientRect().height).toBe(0);
+		expect(toggle(root).getAttribute('aria-expanded')).toBe('false');
+		expect(toggle(root).getAttribute('aria-controls')).toBe(body.id);
+		// The consent (passkeys never sent) is folded WITH the rows it is about.
+		expect(body.querySelector('.consent')?.textContent?.trim()).toBe(String(panel().consent));
+		toggle(root).click();
+		await tick();
+		expect(body.hidden).toBe(false);
+		expect(toggle(root).getAttribute('aria-expanded')).toBe('true');
+		expect(toggle(root).textContent?.trim()).toBe(String(panel().details.hide));
+		expect(body.querySelectorAll('.env dt')).toHaveLength(panel().previewLines.length);
+		toggle(root).click();
+		await tick();
+		expect(body.hidden).toBe(true);
+	});
+
+	it('draws the toggle and the consent’s icon in neutral ink, never the info blue', async () => {
+		const { root } = await drawn();
+		toggle(root).click();
+		await tick();
+		const probe = (color: string) => {
+			const el = document.createElement('span');
+			el.style.color = color;
+			document.body.appendChild(el);
+			const value = getComputedStyle(el).color;
+			el.remove();
+			return value;
+		};
+		expect(getComputedStyle(toggle(root)).color).toBe(probe('var(--color-fg-base)'));
+		const icon = root.querySelector('.consent svg') as SVGElement;
+		expect(getComputedStyle(icon).color).toBe(probe('var(--color-fg-muted)'));
+		expect(getComputedStyle(icon).color).not.toBe(probe('var(--color-info-base)'));
+	});
+
 	it('lays each environment line out as a label and its value, split at the first ": "', async () => {
 		const { root } = await drawn();
+		toggle(root).click();
+		await tick();
 		const labels = [...root.querySelectorAll('.env dt')].map((n) => n.textContent);
 		const values = [...root.querySelectorAll('.env dd')].map((n) => n.textContent);
 		const lines = panel().previewLines;
@@ -382,7 +526,7 @@ describe('FeedbackBody — what will be sent', () => {
 });
 
 describe('FeedbackBody — the endings', () => {
-	it('filed: the centred state, the dropped line when images could not be stored, and Done', async () => {
+	it('filed: the thank-you, the dropped line when images could not be stored, and Done', async () => {
 		const ondone = vi.fn();
 		const { screen, root } = await drawn({ ondone });
 		// The outcome ARRIVES while the sheet is open.
@@ -396,23 +540,39 @@ describe('FeedbackBody — the endings', () => {
 		});
 		const title = root.querySelector('.filed-title') as HTMLElement;
 		expect(title.textContent?.trim()).toBe(String(panel().success.title));
+		expect(root.querySelector('.filed-body')?.textContent?.trim()).toBe(
+			String(panel().success.body)
+		);
 		// Focused (v3 B7): focus never falls back to the body. A labelled
-		// group, not a live region — the focus move is the announcement.
+		// group; the rest is said by the polite region mounted from the start.
 		const block = root.querySelector('.filed-block') as HTMLElement;
 		expect(block.getAttribute('role')).toBe('group');
 		expect(block.getAttribute('aria-labelledby')).toBe(title.id);
 		await vi.waitFor(() => expect(document.activeElement).toBe(title));
+		const status = root.querySelector('.visually-hidden[role="status"]') as HTMLElement;
+		expect(status.textContent?.trim()).toBe(`${panel().success.body} ${panel().success.dropped}`);
 		expect(root.querySelector('.filed-dropped')?.textContent).toBe(String(panel().success.dropped));
-		// Images lost: the issue page is where they get added, so View leads.
-		const view = root.querySelector('a[href="https://github.com/x/y/issues/12"]') as HTMLElement;
-		expect(view.classList.contains('primary')).toBe(true);
-		// Done is the plain text button (v3 B3): no pill, no border.
-		const done = root.querySelector('button.done') as HTMLButtonElement;
-		expect(done.textContent?.trim()).toBe(String(panel().success.done));
-		expect(done.classList.contains('button')).toBe(false);
-		expect(getComputedStyle(done).borderTopStyle).toBe('none');
+		// The issue it became: a quiet link, "follow up on GitHub" — where lost
+		// images get added.
+		const follow = root.querySelector('a[href="https://github.com/x/y/issues/12"]') as HTMLElement;
+		expect(follow.classList.contains('github')).toBe(true);
+		expect(follow.textContent?.trim()).toBe(String(panel().success.followUp));
+		const done = [...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === String(panel().success.done)
+		) as HTMLButtonElement;
 		done.click();
 		expect(ondone).toHaveBeenCalledOnce();
+	});
+
+	it('the polite region is there before the outcome, so the thank-you is announced', async () => {
+		const { screen, root } = await drawn();
+		const status = root.querySelector('.visually-hidden[role="status"]') as HTMLElement;
+		expect(status.textContent?.trim()).toBe('');
+		await screen.rerender({
+			result: { filed: true, number: 4, url: 'https://github.com/x/y/issues/4' }
+		});
+		expect(root.querySelector('.visually-hidden[role="status"]')).toBe(status);
+		expect(status.textContent?.trim()).toBe(String(panel().success.body));
 	});
 
 	it('filed without trouble says nothing about screenshots, and uses no accent', async () => {
@@ -425,10 +585,14 @@ describe('FeedbackBody — the endings', () => {
 			}
 		});
 		expect(root.querySelector('.filed-dropped')).toBeNull();
-		expect(root.querySelector('.filed .primary')).toBeNull();
-		// View outlined, Done the quiet text under it (v3 B3).
-		expect(root.querySelectorAll('.filed .secondary')).toHaveLength(1);
-		expect(root.querySelector('.filed button.done')).not.toBeNull();
+		expect(root.querySelector('.filed .value')).toBeNull();
+		// Done, the one action, is the neutral primary — full ink, never the
+		// muted outline that read as disabled; the issue a quiet link above it.
+		const done = root.querySelector('.filed .button') as HTMLElement;
+		expect(done.classList.contains('primary')).toBe(true);
+		expect(done.textContent?.trim()).toBe(String(panel().success.done));
+		expect(root.querySelectorAll('.filed .secondary')).toHaveLength(0);
+		expect(root.querySelector('.filed a.github')).not.toBeNull();
 	});
 
 	it('fell back with screenshots: three parts, the form cannot carry them, and that is said', async () => {
@@ -466,7 +630,7 @@ describe('FeedbackBody — the endings', () => {
 	it('reopened on a fallback (B6): the form’s road is brought into view and its title focused', async () => {
 		// A sheet-sized scroller, the form taller than it: the road starts below the fold.
 		const host = document.createElement('div');
-		host.style.cssText = 'height: 420px; overflow-y: auto; width: 360px';
+		host.style.cssText = 'height: 260px; overflow-y: auto; width: 360px';
 		document.body.appendChild(host);
 		try {
 			render(FeedbackBody, {
@@ -517,17 +681,23 @@ describe('FeedbackBody — the endings', () => {
 		}
 	});
 
-	it('fell back: the send button reads "try again", and the bottom GitHub link steps aside', async () => {
+	it('fell back: the send button reads "try again", and the words stay in the box', async () => {
+		const draft = new ReportDraft();
+		draft.what = 'Nothing happened';
 		const { root } = await drawn({
+			draft,
 			result: { filed: false, fallbackUrl: 'https://github.com/new?x' }
 		});
 		const labels = [...root.querySelectorAll('button')].map((b) => b.textContent?.trim());
 		expect(labels).toContain(String(panel().fallback.retry));
 		expect(labels).not.toContain(String(panel().send));
-		expect(root.querySelector('a.github')).toBeNull();
-		// Before any send, the link is there.
+		expect((root.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Nothing happened');
+	});
+
+	it('the first screen offers no GitHub link — the endings do', async () => {
 		const fresh = await drawn();
-		expect(fresh.root.querySelector('a.github')).not.toBeNull();
+		expect(fresh.root.querySelector('a.github')).toBeNull();
+		expect(fresh.root.querySelector('a[href*="github.com"]')).toBeNull();
 	});
 });
 
@@ -671,13 +841,11 @@ describe('FeedbackBody — the viewer', () => {
 		expect(shown()).toBe(srcs[0]);
 		// One image: no counter.
 		expect(counter()).toBeUndefined();
-		// The only one: the viewer closes, and focus lands on the add target.
+		// The only one: the viewer closes, and focus lands on the attach button.
 		remove();
 		await gone();
 		await vi.waitFor(() => expect(tiles()).toHaveLength(0));
-		await vi.waitFor(() =>
-			expect(document.activeElement?.classList.contains('add-target')).toBe(true)
-		);
+		await vi.waitFor(() => expect(document.activeElement?.classList.contains('attach')).toBe(true));
 	});
 
 	it('closing returns focus to the tile that opened it — or the tile now in its place', async () => {
@@ -1012,27 +1180,29 @@ describe('FeedbackBody — review fixes', () => {
 		);
 	});
 
-	it('the thank-you sits at the 2:3 optical centre of the pane it is seen in', async () => {
-		const host = document.createElement('div');
-		host.style.cssText = 'height: 900px; overflow-y: auto; width: 560px';
-		document.body.appendChild(host);
-		try {
-			render(FeedbackBody, {
-				target: host,
-				props: { panel: panel(), result: { filed: true, number: 3, screenshotsDropped: 0 } }
-			});
-			await tick();
-			const block = host.querySelector('.filed-block') as HTMLElement;
-			const frame = host.getBoundingClientRect();
-			const box = block.getBoundingClientRect();
-			const free = frame.height - box.height;
-			const above = box.top - frame.top;
-			// Two parts of the free room above, three below.
-			expect(above / free).toBeGreaterThan(0.35);
-			expect(above / free).toBeLessThan(0.45);
-		} finally {
-			host.remove();
-		}
+	it('the thank-you takes its own height, not the form’s — the sheet shrinks to it', async () => {
+		const { screen, root } = await drawn();
+		const field = root.querySelector('textarea') as HTMLTextAreaElement;
+		field.value = 'The send froze';
+		field.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		const send = [...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === String(panel().send)
+		) as HTMLButtonElement;
+		send.click();
+		await tick();
+		await screen.rerender({ result: { filed: true, number: 3, url: 'https://x/3' } });
+		const filed = root.querySelector('.filed') as HTMLElement;
+		const block = root.querySelector('.filed-block') as HTMLElement;
+		const style = getComputedStyle(filed);
+		// No held frame: the box is its block plus its own padding, nothing more.
+		expect(style.minHeight).toMatch(/^(0px|auto)$/);
+		expect(
+			filed.getBoundingClientRect().height -
+				block.getBoundingClientRect().height -
+				parseFloat(style.paddingTop) -
+				parseFloat(style.paddingBottom)
+		).toBeLessThanOrEqual(1);
 	});
 });
 
@@ -1065,27 +1235,31 @@ describe('FeedbackBody — a seeded report is read whole', () => {
 		);
 	};
 
-	it('shows the whole seeded report at phone width, with no scroll inside the boxes', async () => {
+	it('shows the whole seeded report — steps folded in — in one box, with no scroll inside it', async () => {
 		const draft = new ReportDraft();
-		draft.what = WHAT;
-		draft.steps = STEPS;
-		draft.stepsOpen = true;
-		const { root } = await drawn({ draft });
-		const [what, steps] = fields(root);
-		expect(what.value).toBe(WHAT);
-		expect(steps.value).toBe(STEPS);
-		for (const field of [what, steps]) {
-			expect(field.scrollHeight - field.clientHeight).toBeLessThanOrEqual(1);
-		}
-		// It really did grow: four rows could not hold it.
-		expect(what.getBoundingClientRect().height).toBeGreaterThan(rowsTall(what, 4) + 1);
+		draft.seed(WHAT, STEPS);
+		const { root, sent } = await drawn({ draft });
+		// One box: the steps follow the words after a blank line.
+		expect(fields(root)).toHaveLength(1);
+		const [what] = fields(root);
+		expect(what.value).toBe(`${WHAT}\n\n${STEPS}`);
+		expect(what.scrollHeight - what.clientHeight).toBeLessThanOrEqual(1);
+		// It really did grow: three rows could not hold it.
+		expect(what.getBoundingClientRect().height).toBeGreaterThan(rowsTall(what, 3) + 1);
+		// And what is read is what is sent.
+		const send = [...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === String(panel().send)
+		) as HTMLButtonElement;
+		send.click();
+		await tick();
+		expect(sent[0]).toEqual({ what: `${WHAT}\n\n${STEPS}`, screenshots: [] });
 	});
 
-	it('keeps an empty box at its rows, and grows as the person writes', async () => {
+	it('keeps an empty box at three rows, and grows as the person writes', async () => {
 		const { root } = await drawn();
 		const [what] = fields(root);
 		const empty = what.getBoundingClientRect().height;
-		expect(Math.abs(empty - rowsTall(what, 4))).toBeLessThan(1);
+		expect(Math.abs(empty - rowsTall(what, 3))).toBeLessThan(1);
 		what.value = WHAT;
 		what.dispatchEvent(new Event('input', { bubbles: true }));
 		await tick();

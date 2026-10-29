@@ -282,23 +282,20 @@
 	 * URL — by the form's FIELD IDS, because `template=bug.yml` makes GitHub
 	 * ignore `&body=` entirely.
 	 */
-	async function sendFeedback(report: {
-		what: string;
-		steps: string;
-		screenshots: string[];
-	}): Promise<void> {
+	async function sendFeedback(report: { what: string; screenshots: string[] }): Promise<void> {
 		// Read now: the words of the page that sent, for a toast that may be
 		// shown on another page.
 		const copy = {
-			filed: m.bugReport.successTitle,
+			filed: m.bugReport.thanksTitle,
 			view: m.bugReport.viewIssue,
 			fellBack: m.bugReport.fallbackTitle,
 			open: m.bugReport.openGithub,
 			close: m.common.close
 		};
 		const payload = buildBugReport({
+			// One box since round 3: the steps, if any, are in the words —
+			// the payload's `steps` goes as the empty string it always could be.
 			what: report.what,
-			steps: report.steps,
 			area: AREA_OTHER,
 			labels: feedbackLabels(m),
 			facts: deviceFacts,

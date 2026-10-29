@@ -713,14 +713,18 @@ export interface FeedbackModel {
 	title: string;
 	subtitle: string;
 	placeholder: string;
-	addSteps: string;
-	/** Spec 081: the steps box the 添加步骤 button reveals. */
-	stepsPlaceholder: string;
-	previewToggle: string;
+	/** The box's accessible name: the placeholder goes as soon as typing starts. */
+	label: string;
 	/**
-	 * What the disclosure shows — and, since spec 081, literally the payload's
-	 * `environment` field. The consent note under it says "only what you see is
-	 * sent"; these lines are the only reason that sentence is true.
+	 * The diagnostics, folded into one quiet line (round 3, owner): "Version
+	 * and device info are included · View". `view` opens the rows below and
+	 * the consent with them; `hide` folds them again.
+	 */
+	details: { included: string; view: string; hide: string };
+	/**
+	 * What the folded rows show — and, since spec 081, literally the payload's
+	 * `environment` field. The consent note with them says "only what you see
+	 * is sent"; these lines are the only reason that sentence is true.
 	 */
 	previewLines: string[];
 	consent: string;
@@ -728,40 +732,38 @@ export interface FeedbackModel {
 	/** The button's own busy label — busy is never disabled (founder's rule). */
 	sending: string;
 	/**
-	 * Filed: the two bodies carry `{{number}}`. `dropped` is said when the
-	 * report filed but some screenshots could not be stored; `done` closes.
+	 * Filed: a thank-you (`title`, `body`), the issue it became as a quiet
+	 * link (`followUp`), `dropped` when some screenshots could not be stored,
+	 * and `done`, which closes.
 	 */
 	success: {
 		title: string;
-		bodyNew: string;
-		bodyDeduped: string;
-		view: string;
+		body: string;
+		followUp: string;
 		dropped: string;
 		done: string;
 	};
 	/**
-	 * The endpoint could not; the prefilled form still can. `screenshots` is
-	 * the line added when images were attached — the form cannot carry them.
-	 */
-	/**
 	 * The endpoint could not file it: `title` and `body` are separate lines
-	 * (never glued with a dash), `screenshots` a paragraph of its own, and
-	 * `retry` (common.tryAgain) is what the send button reads in this state.
+	 * (never glued with a dash), `screenshots` a paragraph of its own — the
+	 * form cannot carry them — and `retry` (common.tryAgain) is what the send
+	 * button reads in this state.
 	 */
 	fallback: { title: string; body: string; open: string; screenshots: string; retry: string };
-	githubLink: string;
 	/**
 	 * Screenshots (078 round 3). Copy only; which images are attached is the
-	 * sheet's own state until Send. `hint` and `limit` are filled with the
-	 * cap; `remove` keeps `{{index}}` (1-based) for each tile.
+	 * sheet's own state until Send. `limit` (a sixth refused) and `full` (five
+	 * attached) are filled with the cap; `remove` keeps `{{index}}` (1-based)
+	 * for each tile.
 	 */
 	screenshots: {
+		/** The tiles' list, for assistive tech. */
 		label: string;
 		add: string;
-		hint: string;
 		public: string;
 		remove: string;
 		limit: string;
+		full: string;
 		unsupported: string;
 		dropHint: string;
 		max: number;

@@ -999,8 +999,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   desktop app still read every one of those keys, so none is removed.
 //   2253 + 2 = 2255 leaves, 120 branches.
 // 2376 (About page, 2026-10-28): 2256 leaves, 120 branches.
-if (PATHS.length !== 2376) fail(`expected 2376 paths (2256 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2256) fail(`expected 2256 leaf paths, got ${leafSet.size}`);
+// 2383 (the report reads as asking for help, round 3 feedback): + 12
+//   `componentsUi.bugReport.{helpTitle, helpSubtitle, helpPlaceholder,
+//   attachScreenshot, screenshotsFull, detailsIncluded, detailsView,
+//   detailsHide, sendHelp, thanksTitle, thanksBody, followUpGithub}` (the web
+//   sheet's new words; iOS, Android and desktop still read the old ones), − 2
+//   orphans no client read (`bugReport.{stepsLabel, cancel}`).
+//   2253 + 10 = 2263 leaves, 120 branches.
+// 2386 (Feedback page, 2026-10-28): 2266 leaves, 120 branches.
+if (PATHS.length !== 2386) fail(`expected 2386 paths (2266 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2266) fail(`expected 2266 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
