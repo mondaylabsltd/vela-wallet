@@ -2245,12 +2245,8 @@ fn remember_reads(model: &mut Model, live: &[BalanceToken], failed: &[u32], read
 
 /// Where a chain sits in the wallet's own network list: the built-ins in
 /// their shipped order, then any added network by id.
-fn network_rank(chain_id: u32) -> (usize, u32) {
-    let index = super::network_admin::BUILTIN_CHAINS
-        .iter()
-        .position(|c| c.chain_id == chain_id)
-        .unwrap_or(usize::MAX);
-    (index, chain_id)
+fn network_rank(chain_id: u32) -> u64 {
+    super::network_admin::builtin_rank(chain_id)
 }
 
 /// The list behind the home line (spec 092): every failed chain that is not
@@ -2316,12 +2312,17 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
 }
 
 /// `.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a))` — stable in both
-/// runtimes; the totals contain no NaN by construction.
+/// runtimes; the totals contain no NaN by construction. Equal worth is broken
+/// by the wallet's network order (owner decision 2026-10-29), so rows of the
+/// same worth on different networks stand in the order every list shows the
+/// networks, whichever network answered first; within one network they keep
+/// their order.
 fn sort_by_usd_desc(tokens: &mut [BalanceToken]) {
     tokens.sort_by(|a, b| {
         token_usd_value(b)
             .partial_cmp(&token_usd_value(a))
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| network_rank(a.chain_id).cmp(&network_rank(b.chain_id)))
     });
 }
 

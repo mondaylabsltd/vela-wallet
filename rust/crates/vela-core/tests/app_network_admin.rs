@@ -22,12 +22,12 @@ use vela_core::app::network_admin::{
     build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
     explorer_base_url, is_allowed_endpoint_url, is_builtin_chain, is_code_deployed,
     is_localhost_http, net_blocker, p256_call_indicates_support, parse_chain_data,
-    provider_chain_ids, public_rpc_urls, rank_search, registry_says_testnet, Event, NetBlocker, NetChainIndexEntry,
-    NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op,
-    NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData,
-    NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth, NetShellResult as Res,
-    NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
-    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    provider_chain_ids, public_rpc_urls, rank_search, registry_says_testnet, Event, NetBlocker,
+    NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig,
+    NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys,
+    NetRawChainData, NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth,
+    NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
+    BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
     DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS,
     REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
@@ -50,6 +50,7 @@ fn store_loaded(customs: Vec<NetCustomNetwork>, overrides: Vec<NetNetworkConfig>
         network_configs: overrides,
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     }
 }
 
@@ -265,6 +266,7 @@ fn a_partially_stored_endpoints_blob_merges_with_the_defaults() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     let view = sut.view();
     assert_eq!(view.endpoints[0].value, "https://my-data.example");
@@ -380,6 +382,7 @@ fn index_entry(chain_id: u32, name: &str, short: &str, symbol: &str) -> NetChain
         short_name: short.to_owned(),
         native_currency_symbol: symbol.to_owned(),
         has_logo: true,
+        vela: false,
     }
 }
 
@@ -938,6 +941,7 @@ fn custom_service_endpoints_feed_the_new_network_record() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -996,6 +1000,7 @@ fn a_new_networks_logo_is_the_marks_one_rule() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -1478,6 +1483,7 @@ fn a_builtin_rows_bundler_follows_the_configured_relay() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     let row = &sut.view().networks[0];
     assert_eq!(row.chain_id, 1);
@@ -1519,6 +1525,7 @@ fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1545,6 +1552,7 @@ fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1681,6 +1689,7 @@ fn a_page_opened_before_the_store_answers_probes_the_stored_urls() {
             ..NetStoredEndpoints::default()
         },
         provider_keys: NetProviderKeys::default(),
+        shown_networks: None,
     });
     assert!(
         ops.contains(&Op::FetchServiceHealth {
@@ -2128,6 +2137,7 @@ fn sut_with_alchemy_key() -> Sut {
             alchemy: Some("abc".to_owned()),
             ..Default::default()
         },
+        shown_networks: None,
     });
     sut
 }
@@ -2537,12 +2547,13 @@ fn provider_urls_follow_the_slug_maps() {
     // Ankr has no Tempo; nobody has a URL without a key.
     assert_eq!(build_provider_rpc_url(NetProviderId::Ankr, 4217, "k"), None);
     assert_eq!(build_provider_rpc_url(NetProviderId::Alchemy, 1, ""), None);
-    // Canonical order, filtered per provider.
+    // Canonical order (the lists' order, owner decision 2026-10-29),
+    // filtered per provider.
     assert_eq!(provider_chain_ids(NetProviderId::Alchemy).len(), 23);
     assert_eq!(provider_chain_ids(NetProviderId::Drpc).len(), 23);
     assert_eq!(
         provider_chain_ids(NetProviderId::Ankr),
-        vec![1, 56, 137, 42161, 10, 8453, 43114, 100]
+        vec![1, 56, 8453, 137, 42161, 43114, 10, 100]
     );
 }
 

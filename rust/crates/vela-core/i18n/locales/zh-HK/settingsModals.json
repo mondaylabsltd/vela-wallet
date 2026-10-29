@@ -14,7 +14,9 @@
       "relayNotice": "提交你交易的中繼會收到此網絡的 RPC 地址（包括其中的 API 金鑰），以便連接你所使用的網絡。",
       "fallback": "你的節點沒有回應——暫時改用公共節點",
       "onlyMine": "只使用我的節點",
-      "onlyMineHint": "不會向公共節點傳送任何與你帳戶相關的資料。如你的節點停止回應，此網絡將無法讀取，直至節點恢復。"
+      "onlyMineHint": "不會向公共節點傳送任何與你帳戶相關的資料。如你的節點停止回應，此網絡將無法讀取，直至節點恢復。",
+      "hideBody": "它會從你的網絡清單中移除。它的設定會保留，隨時可透過「新增網絡」加回來。",
+      "moreNetworks": "同樣支援、但不在你清單中的網絡：{{names}}。可在「新增網絡」中新增。"
     },
     "account": {
       "modalTitle": "帳戶",
@@ -86,7 +88,9 @@
       "discardTitle": "放棄新增此網絡？",
       "discardBody": "你在這裏輸入的內容將會遺失。",
       "discardConfirm": "放棄",
-      "discardCancel": "繼續編輯"
+      "discardCancel": "繼續編輯",
+      "velaNetwork": "Vela 網絡",
+      "velaNetworkHint": "Vela 支援此網絡。新增後它會回到你的網絡清單，你之前的設定都仍然保留。"
     },
     "treasury": {
       "modalTitle": "資金庫",

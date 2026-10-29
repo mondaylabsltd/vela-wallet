@@ -15,7 +15,7 @@
  */
 import {
 	DEFAULT_NETWORKS,
-	ensureCustomNetworks,
+	ensureShownNetworks,
 	explorerBaseURL,
 	networkConfigSync,
 	spaceNetworksSync,
@@ -176,7 +176,7 @@ export async function publishExtChains(): Promise<ExtChainCatalog | null> {
 	if (!store) return null;
 	// A failed read leaves the built-in table, which is still the right one
 	// to publish rather than none.
-	await ensureCustomNetworks().catch(() => undefined);
+	await ensureShownNetworks();
 	const catalog = buildExtChainCatalog();
 	const table = JSON.stringify({ ...catalog, updatedAtMs: 0 });
 	if (table === lastPublished) return catalog;

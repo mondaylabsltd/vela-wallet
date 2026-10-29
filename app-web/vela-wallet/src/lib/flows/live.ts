@@ -662,7 +662,10 @@ function liveAddNetworkTab(
 							id: String(s.chain_id),
 							mark: wizardMark(s.chain_id, s.native_currency_symbol, s.has_logo),
 							name: s.name,
-							meta: `${m['addToken.labelChainId']} ${s.chain_id}`
+							// One of Vela's own networks, out of the list: said so.
+							meta: s.vela
+								? `${m['addToken.labelChainId']} ${s.chain_id} · ${m['settingsModals.addNetwork.velaNetwork']}`
+								: `${m['addToken.labelChainId']} ${s.chain_id}`
 						}))
 					};
 	} else if (wizard.phase === 'resolving' || wizard.phase === 'checking') {
@@ -702,7 +705,15 @@ function liveAddNetworkTab(
 	} else {
 		// Checked: the verdict.
 		const compat = wizard.compat;
-		if (compat === null || compat.rpc_failure !== null) {
+		if (wizard.vela_network) {
+			// A Vela network out of the person's list (owner decision
+			// 2026-10-29): nothing was checked; adding it shows it again.
+			result = card(
+				{ text: m['settingsModals.addNetwork.velaNetwork'], tone: 'success' },
+				{ note: m['settingsModals.addNetwork.velaNetworkHint'] }
+			);
+			canAdd = wizard.can_add;
+		} else if (compat === null || compat.rpc_failure !== null) {
 			result = card({ text: m['settingsModals.addNetwork.unableToVerify'], tone: 'warning' });
 		} else if (compat.compatible) {
 			result = card({ text: m['addToken.compatible'], tone: 'success' });

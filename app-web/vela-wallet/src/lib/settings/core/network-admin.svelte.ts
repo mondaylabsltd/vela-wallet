@@ -40,12 +40,14 @@ const EMPTY_VIEW: NetView = {
 		rpc_field: 'none',
 		rpc_field_label_key: null,
 		can_add: false,
-		testnet: true
+		testnet: true,
+		vela_network: false
 	},
 	endpoints: [],
 	providers: [],
 	last_added_chain_id: null,
-	dapp_add: null
+	dapp_add: null,
+	hidden_vela_chain_ids: []
 };
 
 class NetworkAdmin {

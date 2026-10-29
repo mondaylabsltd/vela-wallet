@@ -1497,8 +1497,9 @@ fn each_unreachable_network_says_what_was_last_read_there() {
         vec![
             (56, LAST_SEEN),
             (137, LAST_SEEN_UNPRICED),
-            (10, LAST_SEEN_EMPTY),
+            // Nothing held: the wallet's network order — Base before Optimism.
             (8453, NOT_READ_YET),
+            (10, LAST_SEEN_EMPTY),
         ]
     );
     let bnb = &view.unreachable_networks[0];
@@ -1506,12 +1507,12 @@ fn each_unreachable_network_says_what_was_last_read_there() {
     assert_eq!(bnb.last_seen_usd, Some(600.0));
     assert_eq!(view.unreachable_networks[1].last_known, LastKnown::Held);
     assert_eq!(view.unreachable_networks[1].last_seen_usd, None);
-    assert_eq!(view.unreachable_networks[2].last_known, LastKnown::Empty);
-    assert_eq!(view.unreachable_networks[3].last_known, LastKnown::NotRead);
+    assert_eq!(view.unreachable_networks[2].last_known, LastKnown::NotRead);
+    assert_eq!(view.unreachable_networks[3].last_known, LastKnown::Empty);
 }
 
 /// Holdings first, by their worth; then the rest in the wallet's network
-/// order (Ethereum, BNB Chain, Polygon, … then added networks by id) —
+/// order (Ethereum, BNB Chain, Base, … then added networks by id) —
 /// whatever order the shell reported them in.
 #[test]
 fn held_networks_come_first_then_the_rest_in_network_order() {

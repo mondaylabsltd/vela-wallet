@@ -87,6 +87,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::dapp_rpc::{url_host, DappAddOutcome, DappChainAsk};
+use super::shown_networks::{self, NetShownNetworks};
 
 // ---------------------------------------------------------------------------
 // Constants — every value mirrors the TS source it is named after
@@ -408,6 +409,11 @@ pub struct NetBuiltinChain {
     /// A testnet: its coins have no real value, and it belongs to the testnet
     /// space (spec 105).
     pub testnet: bool,
+    /// In every person's lists from the start. `false`: a Vela network all
+    /// the same — relay, fees, logos and clear signing intact — that a person's
+    /// lists show only once they show it ([`super::shown_networks`]), or once
+    /// the wallet finds them using it there.
+    pub shown_by_default: bool,
 }
 
 /// How the wallet writes a built-in chain's own coin — the registry's
@@ -448,6 +454,12 @@ pub fn display_native_symbol(chain_id: u32, token_address: Option<&str>, symbol:
     }
 }
 
+/// Every network Vela ships, IN THE ORDER every list of networks shows them
+/// (owner decision 2026-10-29) — Settings, the pickers, receive, the dApps'
+/// chains, the agent's facts. A list sorted by something else (assets by
+/// value) breaks its ties by this order ([`builtin_rank`]). The networks
+/// shown by default come first, then the ones shown on the person's word,
+/// then the testnet space.
 pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
     NetBuiltinChain {
         id: "ethereum",
@@ -458,6 +470,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://etherscan.io",
         typical_inclusion_s: 24,
         testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "bnb",
@@ -468,36 +481,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://bscscan.com",
         typical_inclusion_s: 9,
         testnet: false,
-    },
-    NetBuiltinChain {
-        id: "polygon",
-        display_name: "Polygon",
-        chain_id: 137,
-        native_symbol: "POL",
-        rpc_url: "https://polygon-bor-rpc.publicnode.com",
-        explorer_url: "https://polygonscan.com",
-        typical_inclusion_s: 6,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "arbitrum",
-        display_name: "Arbitrum",
-        chain_id: 42161,
-        native_symbol: "ETH",
-        rpc_url: "https://arb1.arbitrum.io/rpc",
-        explorer_url: "https://arbiscan.io",
-        typical_inclusion_s: 4,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "optimism",
-        display_name: "Optimism",
-        chain_id: 10,
-        native_symbol: "ETH",
-        rpc_url: "https://mainnet.optimism.io",
-        explorer_url: "https://optimistic.etherscan.io",
-        typical_inclusion_s: 4,
-        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "base",
@@ -508,6 +492,29 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://basescan.org",
         typical_inclusion_s: 4,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "polygon",
+        display_name: "Polygon",
+        chain_id: 137,
+        native_symbol: "POL",
+        rpc_url: "https://polygon-bor-rpc.publicnode.com",
+        explorer_url: "https://polygonscan.com",
+        typical_inclusion_s: 6,
+        testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "arbitrum",
+        display_name: "Arbitrum",
+        chain_id: 42161,
+        native_symbol: "ETH",
+        rpc_url: "https://arb1.arbitrum.io/rpc",
+        explorer_url: "https://arbiscan.io",
+        typical_inclusion_s: 4,
+        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "avalanche",
@@ -518,36 +525,18 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://snowtrace.io",
         typical_inclusion_s: 4,
         testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
-        id: "gnosis",
-        display_name: "Gnosis",
-        chain_id: 100,
-        native_symbol: "xDAI",
-        rpc_url: "https://rpc.gnosischain.com",
-        explorer_url: "https://gnosisscan.io",
-        typical_inclusion_s: 15,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "unichain",
-        display_name: "Unichain",
-        chain_id: 130,
+        id: "optimism",
+        display_name: "Optimism",
+        chain_id: 10,
         native_symbol: "ETH",
-        rpc_url: "https://mainnet.unichain.org",
-        explorer_url: "https://uniscan.xyz",
-        typical_inclusion_s: 3,
+        rpc_url: "https://mainnet.optimism.io",
+        explorer_url: "https://optimistic.etherscan.io",
+        typical_inclusion_s: 4,
         testnet: false,
-    },
-    NetBuiltinChain {
-        id: "tempo",
-        display_name: "Tempo",
-        chain_id: 4217,
-        native_symbol: "USD",
-        rpc_url: "https://rpc.mainnet.tempo.xyz",
-        explorer_url: "https://explore.tempo.xyz",
-        typical_inclusion_s: 5,
-        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "monad",
@@ -558,16 +547,19 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://monadscan.com",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
     },
+    // Arbitrum Orbit L2; ~0.1 s blocks.
     NetBuiltinChain {
-        id: "worldchain",
-        display_name: "World Chain",
-        chain_id: 480,
+        id: "robinhood",
+        display_name: "Robinhood Chain",
+        chain_id: 4663,
         native_symbol: "ETH",
-        rpc_url: "https://worldchain.drpc.org",
-        explorer_url: "https://worldscan.org",
-        typical_inclusion_s: 4,
+        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
+        explorer_url: "https://robinhoodchain.blockscout.com",
+        typical_inclusion_s: 2,
         testnet: false,
+        shown_by_default: true,
     },
     // Circle's USDC-native L1 (spec 060). The native coin IS USDC — 18 decimals
     // on-chain, with a 6-decimal ERC-20 view of the SAME balance at
@@ -582,8 +574,8 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.arc.io",
         typical_inclusion_s: 2,
         testnet: false,
-    }, // The eleven admitted together (spec 061): every one probed live for all
-    // eleven required contracts and the RIP-7212 precompile before it was listed.
+        shown_by_default: true,
+    },
     // Polygon CDK zk-rollup; OKB is the gas coin.
     NetBuiltinChain {
         id: "xlayer",
@@ -594,50 +586,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://www.oklink.com/xlayer",
         typical_inclusion_s: 3,
         testnet: false,
-    },
-    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
-    NetBuiltinChain {
-        id: "stable",
-        display_name: "Stable",
-        chain_id: 988,
-        native_symbol: "USDT0",
-        rpc_url: "https://rpc.stable.xyz",
-        explorer_url: "https://stablescan.xyz",
-        typical_inclusion_s: 2,
-        testnet: false,
-    },
-    // OP-stack L2 (Sony).
-    NetBuiltinChain {
-        id: "soneium",
-        display_name: "Soneium",
-        chain_id: 1868,
-        native_symbol: "ETH",
-        rpc_url: "https://rpc.soneium.org",
-        explorer_url: "https://soneium.blockscout.com",
-        typical_inclusion_s: 6,
-        testnet: false,
-    },
-    // Real-time L2; ~1 s blocks at the RPC boundary.
-    NetBuiltinChain {
-        id: "megaeth",
-        display_name: "MegaETH",
-        chain_id: 4326,
-        native_symbol: "ETH",
-        rpc_url: "https://megaeth.drpc.org",
-        explorer_url: "https://megaeth.blockscout.com",
-        typical_inclusion_s: 3,
-        testnet: false,
-    },
-    // Arbitrum Orbit L2; ~0.1 s blocks.
-    NetBuiltinChain {
-        id: "robinhood",
-        display_name: "Robinhood Chain",
-        chain_id: 4663,
-        native_symbol: "ETH",
-        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
-        explorer_url: "https://robinhoodchain.blockscout.com",
-        typical_inclusion_s: 2,
-        testnet: false,
+        shown_by_default: true,
     },
     // OP-derived L2 with its own token-ratio gas metering; MNT is the gas coin.
     NetBuiltinChain {
@@ -649,17 +598,40 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://mantlescan.xyz",
         typical_inclusion_s: 6,
         testnet: false,
+        shown_by_default: true,
     },
-    // Kaia (ex-Klaytn) L1, 1 s blocks.
     NetBuiltinChain {
-        id: "kaia",
-        display_name: "Kaia",
-        chain_id: 8217,
-        native_symbol: "KAIA",
-        rpc_url: "https://public-en.node.kaia.io",
-        explorer_url: "https://kaiascope.com",
-        typical_inclusion_s: 3,
+        id: "gnosis",
+        display_name: "Gnosis",
+        chain_id: 100,
+        native_symbol: "xDAI",
+        rpc_url: "https://rpc.gnosischain.com",
+        explorer_url: "https://gnosisscan.io",
+        typical_inclusion_s: 15,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "tempo",
+        display_name: "Tempo",
+        chain_id: 4217,
+        native_symbol: "USD",
+        rpc_url: "https://rpc.mainnet.tempo.xyz",
+        explorer_url: "https://explore.tempo.xyz",
+        typical_inclusion_s: 5,
+        testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "worldchain",
+        display_name: "World Chain",
+        chain_id: 480,
+        native_symbol: "ETH",
+        rpc_url: "https://worldchain.drpc.org",
+        explorer_url: "https://worldscan.org",
+        typical_inclusion_s: 4,
+        testnet: false,
+        shown_by_default: true,
     },
     // OP-stack L2 since 2025; CELO is the gas coin.
     NetBuiltinChain {
@@ -671,6 +643,18 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://celoscan.io",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "unichain",
+        display_name: "Unichain",
+        chain_id: 130,
+        native_symbol: "ETH",
+        rpc_url: "https://mainnet.unichain.org",
+        explorer_url: "https://uniscan.xyz",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: true,
     },
     // OP-stack L2 (Kraken).
     NetBuiltinChain {
@@ -682,6 +666,59 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.inkonchain.com",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
+    },
+    // OP-stack L2 (Sony).
+    NetBuiltinChain {
+        id: "soneium",
+        display_name: "Soneium",
+        chain_id: 1868,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.soneium.org",
+        explorer_url: "https://soneium.blockscout.com",
+        typical_inclusion_s: 6,
+        testnet: false,
+        shown_by_default: true,
+    },
+    // Kaia (ex-Klaytn) L1, 1 s blocks.
+    NetBuiltinChain {
+        id: "kaia",
+        display_name: "Kaia",
+        chain_id: 8217,
+        native_symbol: "KAIA",
+        rpc_url: "https://public-en.node.kaia.io",
+        explorer_url: "https://kaiascope.com",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: true,
+    },
+    // Shown on the person's word only (owner decision 2026-10-29): Vela
+    // networks like every other — logos, relay, fees, clear signing — kept
+    // out of the default list for their low activity
+    // ([`NetBuiltinChain::shown_by_default`]).
+    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
+    NetBuiltinChain {
+        id: "stable",
+        display_name: "Stable",
+        chain_id: 988,
+        native_symbol: "USDT0",
+        rpc_url: "https://rpc.stable.xyz",
+        explorer_url: "https://stablescan.xyz",
+        typical_inclusion_s: 2,
+        testnet: false,
+        shown_by_default: false,
+    },
+    // Real-time L2; ~1 s blocks at the RPC boundary.
+    NetBuiltinChain {
+        id: "megaeth",
+        display_name: "MegaETH",
+        chain_id: 4326,
+        native_symbol: "ETH",
+        rpc_url: "https://megaeth.drpc.org",
+        explorer_url: "https://megaeth.blockscout.com",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: false,
     },
     // Arbitrum Orbit L2; PLUME is the gas coin.
     NetBuiltinChain {
@@ -693,6 +730,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.plume.org",
         typical_inclusion_s: 2,
         testnet: false,
+        shown_by_default: false,
     },
     // Cosmos-EVM sidechain, ~6 s blocks; XRP is the gas coin. No provider serves it.
     NetBuiltinChain {
@@ -704,6 +742,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.xrplevm.org",
         typical_inclusion_s: 18,
         testnet: false,
+        shown_by_default: false,
     },
     // The testnet space (spec 105): common public testnets where this wallet
     // works — the Safe, 4337 and passkey-signer contracts deployed and the
@@ -717,6 +756,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.etherscan.io",
         typical_inclusion_s: 24,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "base-sepolia",
@@ -727,6 +767,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.basescan.org",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "arbitrum-sepolia",
@@ -737,6 +778,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.arbiscan.io",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "optimism-sepolia",
@@ -747,6 +789,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia-optimism.etherscan.io",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "polygon-amoy",
@@ -757,6 +800,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://amoy.polygonscan.com",
         typical_inclusion_s: 6,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "bnb-testnet",
@@ -767,6 +811,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://testnet.bscscan.com",
         typical_inclusion_s: 9,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "avalanche-fuji",
@@ -777,6 +822,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://testnet.snowscan.xyz",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "arc-testnet",
@@ -787,6 +833,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://testnet.arcscan.app",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "tempo-moderato",
@@ -797,11 +844,26 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explore.testnet.tempo.xyz",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
 ];
 
 fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
+}
+
+/// Where a network stands in every list ([`BUILTIN_CHAINS`]' order): a
+/// built-in network's place in the table; a network the person added after
+/// every built-in one, by chain id — so a list sorted by something else (the
+/// assets, by value) breaks its ties the same way on every shell.
+#[must_use]
+pub fn builtin_rank(chain_id: u32) -> u64 {
+    BUILTIN_CHAINS
+        .iter()
+        .position(|c| c.chain_id == chain_id)
+        .map_or(BUILTIN_CHAINS.len() as u64 + u64::from(chain_id), |at| {
+            at as u64
+        })
 }
 
 /// How long a submitted operation USUALLY takes to land on this chain, in
@@ -1127,6 +1189,10 @@ pub struct NetChainIndexEntry {
     pub native_currency_symbol: String,
     #[serde(default)]
     pub has_logo: bool,
+    /// One of Vela's own networks, out of the person's lists — the core put
+    /// it there, never the chain index ([`shown_networks`]).
+    #[serde(default)]
+    pub vela: bool,
 }
 
 /// The raw shape of `/chains/eip155-{id}.json`, as the shell hands it over.
@@ -1350,6 +1416,11 @@ pub enum NetOperation {
     WriteRpcProviders {
         keys: NetProviderKeys,
     },
+    /// `vela.shownNetworks` ([`shown_networks::KEY`]): a Vela network shown
+    /// or taken out of the lists. The lists the shell builds re-read it.
+    WriteShownNetworks {
+        record: NetShownNetworks,
+    },
     /// The 300ms search debounce (a plain timer).
     StartSearchDebounce {
         ms: u32,
@@ -1442,6 +1513,11 @@ pub enum NetShellResult {
         network_configs: Vec<NetNetworkConfig>,
         endpoints: NetStoredEndpoints,
         provider_keys: NetProviderKeys,
+        /// `vela.shownNetworks`, as settled ([`shown_networks::settle`]);
+        /// `None`: none stored, or unreadable — every network is shown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_networks: Option<NetShownNetworks>,
     },
     /// A best-effort write acknowledged. Never changes state.
     Written,
@@ -1767,6 +1843,9 @@ struct Wizard {
     /// The person's choice of space for the network (spec 105); `None` until
     /// they make one, read as what the registry says the chain is (set-5).
     testnet: Option<bool>,
+    /// The pick is a Vela network out of the person's lists
+    /// ([`shown_networks`]): nothing to check — adding it shows it again.
+    vela_network: bool,
 }
 
 /// A page's add-network request (spec 100) — beside the wizard, never in it:
@@ -1793,6 +1872,9 @@ struct DappAdd {
     compat: Option<NetCompatibility>,
     /// The last chain id an RPC answered that was not the one asked for.
     reported_other: Option<u32>,
+    /// The chain is a Vela network out of the person's lists: nothing to
+    /// check, and adding it shows it again ([`shown_networks`]).
+    vela_network: bool,
 }
 
 /// One expanded network card's editing + health state.
@@ -1851,6 +1933,9 @@ pub struct Model {
     custom_networks: Vec<NetCustomNetwork>,
     /// Storage order preserved (`vela.networkConfig` is an array).
     overrides: Vec<NetNetworkConfig>,
+    /// Which Vela networks shown on the person's word they show
+    /// (`vela.shownNetworks`). `None`: no record — every one is shown.
+    shown: Option<NetShownNetworks>,
     endpoints: NetServiceEndpoints,
     endpoint_drafts: NetServiceEndpoints,
     endpoint_health: BTreeMap<NetEndpointField, NetServiceHealth>,
@@ -2005,6 +2090,11 @@ pub struct NetWizardView {
     /// chain is (set-5), else a testnet.
     #[serde(default)]
     pub testnet: bool,
+    /// The pick is a Vela network out of the person's lists: Vela supports
+    /// it, so there is nothing to check, and "Add network" shows it again —
+    /// as the Vela network it is, with whatever was stored for it.
+    #[serde(default)]
+    pub vela_network: bool,
 }
 
 /// One row of the network editor (defaults first, then customs — the
@@ -2018,6 +2108,11 @@ pub struct NetNetworkRow {
     pub native_symbol: String,
     /// Custom networks get the delete affordance.
     pub is_custom: bool,
+    /// A Vela network shown on the person's word ([`shown_networks`]): it
+    /// gets the remove affordance too, which takes it out of the lists and
+    /// keeps everything stored for it — Add network shows it again.
+    #[serde(default)]
+    pub optional: bool,
     /// Its space (spec 105): a testnet's coins have no real value.
     #[serde(default)]
     pub is_testnet: bool,
@@ -2113,6 +2208,10 @@ pub struct NetView {
     /// The add-network sheet a page opened (spec 100).
     #[serde(default)]
     pub dapp_add: Option<NetDappAddView>,
+    /// The Vela networks out of the person's lists, in list order — what
+    /// Add network can show again ([`shown_networks::hidden_chain_ids`]).
+    #[serde(default)]
+    pub hidden_vela_chain_ids: Vec<u32>,
 }
 
 /// Where a page's add-network request stands — what the sheet shows.
@@ -2169,6 +2268,10 @@ pub struct NetDappAddView {
     /// ([`Event::DappAddApprovedUnverified`]). A local node a probe cannot
     /// reach is not a dead end.
     pub can_add_unverified: bool,
+    /// A Vela network out of the person's lists: supported, nothing was
+    /// checked, and "Add Network" shows it again ([`shown_networks`]).
+    #[serde(default)]
+    pub vela_network: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2326,6 +2429,7 @@ impl App for NetworkAdmin {
                 .collect(),
             last_added_chain_id: model.last_added_chain_id,
             dapp_add: model.dapp_add.as_ref().map(dapp_add_view),
+            hidden_vela_chain_ids: shown_networks::hidden_chain_ids(model.shown.as_ref()),
         }
     }
 }
@@ -2341,6 +2445,7 @@ fn search_input(model: &mut Model, query: String) -> Command<NetEffect, Event> {
     model.wizard.chain_info = None;
     model.wizard.compat = None;
     model.wizard.auto = false;
+    model.wizard.vela_network = false;
     // Any in-flight resolve/check belongs to the cleared selection.
     model.wizard_gen = next_gen(model);
     if query.trim().is_empty() {
@@ -2442,7 +2547,24 @@ fn select_chain(
     model.wizard.compat = None;
     model.wizard.auto = auto;
     model.wizard.auto_now_iso = now_iso;
+    model.wizard.vela_network = false;
     model.wizard_gen = next_gen(model);
+
+    // A Vela network out of the person's lists is not a chain to check: Vela
+    // supports it (every one was probed for all of it before it shipped).
+    // The pick is the network as Vela ships it, and adding it shows it again.
+    if let Some(chain) = hidden_builtin(model, chain_id) {
+        if auto {
+            // The scan path saves what it finds, with no confirm step.
+            model.wizard = Wizard::default();
+            return show_network(model, chain_id, true);
+        }
+        model.wizard.chain_info = Some(vela_chain_info(chain));
+        model.wizard.compat = Some(vela_compat(chain));
+        model.wizard.vela_network = true;
+        model.wizard.phase = WizardPhase::Checked;
+        return render();
+    }
 
     // Invariant ① — ONE dedup implementation for both callers. (Today the
     // modal checks and the scan path does not; the inventory collapses the
@@ -3020,6 +3142,14 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
     if !compat.compatible {
         return Command::done();
     }
+    if model.wizard.vela_network {
+        // Shown again, as Vela ships it — never saved as a custom network.
+        model.wizard = Wizard::default();
+        if hidden_builtin(model, info.chain_id).is_none() {
+            return render();
+        }
+        return show_network(model, info.chain_id, true);
+    }
     let record = build_custom_network(
         model,
         &info,
@@ -3030,6 +3160,98 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
     // `onAdded(); reset(); onClose();`
     model.wizard = Wizard::default();
     save_custom_network(model, record)
+}
+
+/// Is `chain_id` in the person's lists? A network shown by default and one
+/// they added always are; a Vela network shown on their word when they
+/// showed it ([`shown_networks`]).
+fn shown(model: &Model, chain_id: u32) -> bool {
+    shown_networks::is_shown(chain_id, model.shown.as_ref())
+}
+
+/// The Vela network `chain_id` when it is out of the person's lists.
+fn hidden_builtin(model: &Model, chain_id: u32) -> Option<&'static NetBuiltinChain> {
+    builtin(chain_id).filter(|_| !shown(model, chain_id))
+}
+
+/// Show (`on`) or hide a Vela network shown on the person's word. Nothing
+/// stored for it — its RPC, its explorer, "Only use my node" — is touched:
+/// shown again, it is as it was.
+fn show_network(model: &mut Model, chain_id: u32, on: bool) -> Command<NetEffect, Event> {
+    let record = shown_networks::with_shown(model.shown.as_ref(), chain_id, on);
+    model.shown = Some(record.clone());
+    if on {
+        model.last_added_chain_id = Some(chain_id);
+    } else {
+        model.override_cards.remove(&chain_id);
+    }
+    requests_with(
+        model.load_gen,
+        vec![NetOperation::WriteShownNetworks { record }],
+    )
+}
+
+/// A Vela network as the wizard and the add sheet name it — the table's
+/// words, never a registry's or a page's.
+fn vela_chain_info(chain: &NetBuiltinChain) -> NetChainInfo {
+    NetChainInfo {
+        chain_id: chain.chain_id,
+        name: chain.display_name.to_owned(),
+        short_name: chain.id.to_owned(),
+        native_name: chain.native_symbol.to_owned(),
+        native_symbol: chain.native_symbol.to_owned(),
+        native_decimals: 18,
+        rpc_url: chain.rpc_url.to_owned(),
+        rpc_urls: vec![chain.rpc_url.to_owned()],
+        explorer_url: chain.explorer_url.to_owned(),
+        logo_url: String::new(),
+        is_testnet: chain.testnet,
+    }
+}
+
+/// A Vela network's verdict: supported, on Vela's word. Nothing was probed
+/// now, so no contract rows are claimed and no latency is reported.
+fn vela_compat(chain: &NetBuiltinChain) -> NetCompatibility {
+    NetCompatibility {
+        chain_id: chain.chain_id,
+        compatible: true,
+        multi_key_ready: true,
+        contracts: Vec::new(),
+        p256_available: Some(true),
+        best_rpc_url: None,
+        best_rpc_latency_ms: None,
+        rpc_failure: None,
+        blocker: None,
+        hint_key: None,
+        setup_url: None,
+    }
+}
+
+/// The Vela networks out of the person's lists that `query` names (name,
+/// id, coin or chain id), for the top of the search's answer: Add network
+/// finds them whether or not the chain index answers, and as what they are.
+fn vela_suggestions(model: &Model, query: &str) -> Vec<NetChainIndexEntry> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    shown_networks::opt_in_chains()
+        .filter(|c| !shown(model, c.chain_id))
+        .filter(|c| {
+            c.display_name.to_lowercase().contains(&q)
+                || c.id.contains(&q)
+                || c.native_symbol.to_lowercase().contains(&q)
+                || c.chain_id.to_string().contains(&q)
+        })
+        .map(|c| NetChainIndexEntry {
+            chain_id: c.chain_id,
+            name: c.display_name.to_owned(),
+            short_name: c.id.to_owned(),
+            native_currency_symbol: c.native_symbol.to_owned(),
+            has_logo: true,
+            vela: true,
+        })
+        .collect()
 }
 
 /// The `CustomNetwork` record both entry points build (SettingsScreen.tsx:
@@ -3111,6 +3333,17 @@ fn delete_custom(model: &mut Model, id: &str) -> Command<NetEffect, Event> {
     if !model.loaded {
         return Command::done();
     }
+    // A Vela network shown on the person's word leaves the lists; what is
+    // stored for it stays, for the day it is shown again.
+    if let Some(chain) = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.id == id && !c.shown_by_default)
+    {
+        if !shown(model, chain.chain_id) {
+            return Command::done();
+        }
+        return show_network(model, chain.chain_id, false);
+    }
     model.custom_networks.retain(|n| n.id != id);
     // `removeCustomNetwork` + `invalidateAllPools()` — the removed chain's
     // cached endpoints must not keep serving (invariant ⑤). The chain's
@@ -3133,7 +3366,10 @@ fn delete_custom(model: &mut Model, id: &str) -> Command<NetEffect, Event> {
 
 /// A network the wallet has already: built in, or added before.
 fn has_network(model: &Model, chain_id: u32) -> bool {
-    builtin(chain_id).is_some() || model.custom_networks.iter().any(|n| n.chain_id == chain_id)
+    match builtin(chain_id) {
+        Some(_) => shown(model, chain_id),
+        None => model.custom_networks.iter().any(|n| n.chain_id == chain_id),
+    }
 }
 
 /// The one way a page's request ends: the shell hands it to the browser.
@@ -3174,6 +3410,7 @@ fn dapp_add_requested(
         phase: NetDappAddPhase::Checking,
         compat: None,
         reported_other: None,
+        vela_network: false,
     });
     if !model.loaded {
         // The dedup gate reads the custom-network ledger: begin when it lands.
@@ -3201,6 +3438,23 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
             DappAddOutcome::Added { chain_id },
         );
     }
+    if let Some(chain) = hidden_builtin(model, chain_id) {
+        // A Vela network out of the person's lists: nothing to check. The
+        // sheet names it as Vela ships it, and adding it shows it again —
+        // still the person's call, as any network a page asks for.
+        if let Some(add) = model.dapp_add.as_mut() {
+            add.info = Some(vela_chain_info(chain));
+            add.from_site = false;
+            add.rpc_from_site = false;
+            add.rpc_url = Some(chain.rpc_url.to_owned());
+            add.compat = Some(vela_compat(chain));
+            add.reported_other = None;
+            add.phase = NetDappAddPhase::Ready;
+            add.check = WizardPhase::Checked;
+            add.vela_network = true;
+        }
+        return render();
+    }
     if let Some(add) = model.dapp_add.as_mut() {
         add.info = None;
         add.from_site = false;
@@ -3208,6 +3462,7 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
         add.rpc_url = None;
         add.compat = None;
         add.reported_other = None;
+        add.vela_network = false;
         add.phase = NetDappAddPhase::Checking;
         add.check = WizardPhase::Resolving { chain_id };
     }
@@ -3372,6 +3627,9 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
     let chain_id = info.chain_id;
     let saved = if has_network(model, chain_id) {
         Command::done()
+    } else if add.vela_network {
+        // Shown again, as Vela ships it (and in its own space).
+        show_network(model, chain_id, true)
     } else {
         let record = build_custom_network(
             model,
@@ -3479,6 +3737,7 @@ fn dapp_add_view(add: &DappAdd) -> NetDappAddView {
         can_add: add.phase == NetDappAddPhase::Ready,
         rpc_from_site: add.rpc_from_site,
         can_add_unverified: dapp_add_can_add_unverified(add),
+        vela_network: add.vela_network,
     }
 }
 
@@ -4199,12 +4458,14 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             network_configs,
             endpoints,
             provider_keys,
+            shown_networks,
         } => {
             if attempt != model.load_gen {
                 return Command::done();
             }
             model.custom_networks = custom_networks;
             model.overrides = network_configs;
+            model.shown = shown_networks;
             model.endpoints = NetServiceEndpoints {
                 ethereum_data_url: endpoints
                     .ethereum_data_url
@@ -4252,7 +4513,18 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             if attempt != model.search_gen {
                 return Command::done();
             }
-            model.wizard.suggestions = rank_search(&chains, &model.wizard.query);
+            // Vela's own networks out of the lists first, as what they are;
+            // the index's entry for the same chain is not listed twice.
+            let mut suggestions = vela_suggestions(model, &model.wizard.query);
+            for entry in rank_search(&chains, &model.wizard.query) {
+                if suggestions.len() >= 10 {
+                    break;
+                }
+                if !suggestions.iter().any(|s| s.chain_id == entry.chain_id) {
+                    suggestions.push(entry);
+                }
+            }
+            model.wizard.suggestions = suggestions;
             model.wizard.phase = WizardPhase::Suggested;
             render()
         }
@@ -4396,7 +4668,7 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
 
 fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
     let mut rows: Vec<NetNetworkRow> = Vec::new();
-    for b in &BUILTIN_CHAINS {
+    for b in BUILTIN_CHAINS.iter().filter(|b| shown(model, b.chain_id)) {
         let mut row = network_row(
             model,
             b.id.to_owned(),
@@ -4409,6 +4681,7 @@ fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
             format!("{}/{}", effective_bundler_service_url(model), b.chain_id),
         );
         row.is_testnet = b.testnet;
+        row.optional = !b.shown_by_default;
         rows.push(row);
     }
     // A network the person added that is now built in (Arc Testnet, say) is
@@ -4474,6 +4747,7 @@ fn network_row(
         display_name,
         native_symbol,
         is_custom,
+        optional: false,
         is_testnet: false,
         rpc_url,
         explorer_url,
@@ -4552,7 +4826,12 @@ fn wizard_view(model: &Model) -> NetWizardView {
     let error_key = error
         .as_ref()
         .map(|kind| wizard_error_key(kind, model.wizard.compat.as_ref()).to_owned());
-    let rpc_field = wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref());
+    // A Vela network is added as it ships; its RPC is set on its own card.
+    let rpc_field = if model.wizard.vela_network {
+        NetRpcField::None
+    } else {
+        wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref())
+    };
     let rpc_field_label_key = match rpc_field {
         NetRpcField::None => None,
         NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
@@ -4571,6 +4850,7 @@ fn wizard_view(model: &Model) -> NetWizardView {
         rpc_field_label_key,
         can_add,
         testnet: wizard_testnet(model),
+        vela_network: model.wizard.vela_network,
     }
 }
 

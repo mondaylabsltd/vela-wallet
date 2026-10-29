@@ -33,6 +33,7 @@ import { localOwners, signApproval, type LocalOwner } from './owners';
 import { fetchProposals, submitApproval, type Proposal } from './service';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
+import { networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 
 export type ProposalStatus =
@@ -283,7 +284,8 @@ class Proposals {
 			);
 			clearTimeout(slow);
 			if (followed()) {
-				this.chains = next.sort((a, b) => a.chainId - b.chainId);
+				// The wallet's network order (owner decision 2026-10-29).
+				this.chains = next.sort((a, b) => networkRank(a.chainId) - networkRank(b.chainId));
 				this.stale = failed;
 				// Executed on another member's device: into this device's activity too.
 				void recordRemoteExecutions(account.address, this.items).then((wrote) => {

@@ -135,7 +135,15 @@ export function abiWord(n: number | bigint): string {
 	return BigInt(n).toString(16).padStart(64, '0');
 }
 
-/** Seed the settings editor's per-network RPC overrides (its stored shape). */
+/**
+ * Seed the settings editor's per-network RPC overrides (its stored shape).
+ *
+ * A stub RPC on every chain is the test's plumbing, not the person's own
+ * node: on a device not settled yet it would keep every Vela network shown
+ * on the person's word in the lists (owner decision 2026-10-29). So the
+ * device is settled first, as a fresh profile — the twenty shown by default
+ * — unless the test settled it already.
+ */
 export async function seedNetworkOverrides(
 	page: Page,
 	entries: { chainId: number; rpcURL: string }[]
@@ -147,7 +155,13 @@ export async function seedNetworkOverrides(
 			open.onerror = () => reject(open.error);
 			open.onsuccess = () => {
 				const tx = open.result.transaction('kv', 'readwrite');
-				tx.objectStore('kv').put(JSON.stringify(rows), 'vela.networkConfig');
+				const kv = tx.objectStore('kv');
+				kv.put(JSON.stringify(rows), 'vela.networkConfig');
+				const shown = kv.get('vela.shownNetworks');
+				shown.onsuccess = () => {
+					if (shown.result === undefined)
+						kv.put(JSON.stringify({ version: 1, shown: [] }), 'vela.shownNetworks');
+				};
 				tx.oncomplete = () => resolve();
 				tx.onerror = () => reject(tx.error);
 			};

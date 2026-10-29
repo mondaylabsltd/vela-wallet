@@ -26,7 +26,8 @@
  */
 
 import { getItem, setItem } from '$lib/services/storage';
-import { refreshCustomNetworks } from '$lib/services/networks';
+import { ensureShownNetworks, refreshCustomNetworks } from '$lib/services/networks';
+import { loadShownNetworks, SHOWN_NETWORKS_KEY } from '$lib/services/shown-networks';
 import { invalidateAllPools, refreshPool } from '$lib/services/rpc-pool';
 import { fetchRawChainData, loadSearchIndex } from '$lib/services/chain-registry';
 import { fetchWithTimeout, NET_TIMEOUTS } from '$lib/services/net';
@@ -268,7 +269,9 @@ function decodeSearchIndex(rows: unknown): NetChainIndexEntry[] {
 			name: asString(r.name),
 			short_name: asString(r.shortName),
 			native_currency_symbol: asString(r.nativeCurrencySymbol),
-			has_logo: r.hasLogo === true
+			has_logo: r.hasLogo === true,
+			// Only the core marks one of Vela's own networks; the index never does.
+			vela: false
 		});
 	}
 	return out;
@@ -416,19 +419,31 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_store': {
-			const [customNetworks, networkConfigs, providers] = await Promise.all([
+			// The device's shown Vela networks are settled (once, by the core)
+			// before the ledger reads them: never a list drawn before it.
+			await ensureShownNetworks();
+			const [customNetworks, networkConfigs, providers, shown] = await Promise.all([
 				getItem(KEYS.customNetworks),
 				getItem(KEYS.networkConfig),
-				getItem(KEYS.rpcProviders)
+				getItem(KEYS.rpcProviders),
+				loadShownNetworks()
 			]);
 			return {
 				type: 'store_loaded',
 				custom_networks: decodeArray(customNetworks, decodeCustomNetwork),
 				network_configs: decodeArray(networkConfigs, decodeNetworkConfig),
 				endpoints: decodeStoredEndpoints(loadServiceEndpoints()),
-				provider_keys: decodeProviderKeys(providers)
+				provider_keys: decodeProviderKeys(providers),
+				...(shown === null ? {} : { shown_networks: shown })
 			};
 		}
+
+		case 'write_shown_networks':
+			await setItem(SHOWN_NETWORKS_KEY, JSON.stringify(operation.record));
+			// The lists the person sees re-read it: a network shown again is
+			// read and offered at once, one taken out is no longer.
+			await refreshCustomNetworks();
+			return { type: 'written' };
 
 		case 'write_custom_networks':
 			await setItem(
@@ -575,6 +590,7 @@ export function networkAdminOperationFailure(effect: NetEffect): NetShellResult 
 			};
 		case 'write_custom_networks':
 		case 'write_network_configs':
+		case 'write_shown_networks':
 		case 'write_service_endpoints':
 		case 'write_rpc_providers':
 			// Best-effort, as the TS savers' callers swallow storage errors; the

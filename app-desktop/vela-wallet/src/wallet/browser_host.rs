@@ -2812,6 +2812,7 @@ mod tests {
                             network_configs: Vec::new(),
                             endpoints: NetStoredEndpoints::default(),
                             provider_keys: NetProviderKeys::default(),
+                            shown_networks: None,
                         },
                     );
                 }

@@ -16,6 +16,16 @@ Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM** — plus **user-adde
 Each entry carries chainId, native coin, logos, and per-chain config that the rest of the app keys off.
 (Source of truth: `BUILTIN_CHAINS` in `rust/crates/vela-core/src/app/network_admin.rs`; the site's list is checked against it by `app-web/getvela.app/src/lib/networks.test.ts`.)
 
+**Shown by default: 20** (owner decision 2026-10-29). The table's order is the order every list shows
+them: Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc,
+X Layer, Mantle, Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium, Kaia. **Stable, MegaETH,
+Plume and XRPL EVM** stay Vela networks (relay, fees, logos, clear signing) but are in a person's lists
+only on their word (`shown_by_default: false`; `shown_networks.rs`, stored as `vela.shownNetworks`):
+Settings → Add network (or a site's `wallet_addEthereumChain`) shows one again as a Vela network in one
+step, and removing one keeps its settings. A device with no record is settled once, by the core: each
+of the four stays shown where the device finds the person using it — a last-known balance, activity, a
+multisig, a token added there, an RPC/explorer of their own, the network added by hand earlier.
+
 ## 2. Background & context
 
 The account model (B06) and address (B07) are chain-independent, so "supporting a chain" is mostly
@@ -29,7 +39,7 @@ a contract-suite check (F02). Tempo is special: no native coin, gas in stablecoi
 
 ## 4. Functional requirements
 
-- **FR-1** — Provide the 24 built-in chains with chainId, native symbol/decimals, display name, and logo.
+- **FR-1** — Provide the 24 built-in chains with chainId, native symbol/decimals, display name, and logo; 20 of them shown by default, in the table's order, the other four on the person's word (§1).
 - **FR-2** — Mark chain-specific traits: Tempo has no native coin (stablecoin gas, G10); L2 gas bumps (G03).
 - **FR-3** — Allow user-added custom chains, persisted locally (A06) after validation (F02).
 - **FR-4** — Expose the active/selected network to balances (D02), pricing (E01), send (H01), and dApp capability advertisement (K04).
@@ -45,7 +55,7 @@ Network filter/selection surfaces (NetworkFilterSheet) let users scope views per
 
 ## 7. Acceptance criteria
 
-- [ ] **AC-1** — All 24 chains appear with correct native coin and logo.
+- [ ] **AC-1** — All 24 chains are known with correct native coin and logo; a fresh profile lists the 20 shown by default, in order; a profile holding money on one of the other four keeps it listed.
 - [ ] **AC-2** — Tempo is flagged as stablecoin-gas (no native coin).
 - [ ] **AC-3** — A validated custom chain persists and participates in balances/send.
 

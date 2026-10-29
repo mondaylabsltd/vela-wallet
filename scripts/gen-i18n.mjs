@@ -991,8 +991,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.eraseDevice.failedHeld` — everything was deleted but the empty
 //   database, which another tab still holds open: close Vela there, then try
 //   again. 2253 + 1 = 2254 leaves, 120 branches.
-if (PATHS.length !== 2374) fail(`expected 2374 paths (2254 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2254) fail(`expected 2254 leaf paths, got ${leafSet.size}`);
+// 2378 (four Vela networks shown on the person's word, 2026-10-29): +
+//   `settingsModals.addNetwork.{velaNetwork, velaNetworkHint}` (Add network
+//   and a site's sheet name one as Vela's) and
+//   `settingsModals.network.{hideBody, moreNetworks}` (taking one out keeps
+//   its settings; the list says which can be added). 2254 + 4 = 2258 leaves,
+//   120 branches.
+if (PATHS.length !== 2378) fail(`expected 2378 paths (2258 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2258) fail(`expected 2258 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -1393,6 +1393,7 @@ mod wizard_tests {
                         network_configs: Vec::new(),
                         endpoints: NetStoredEndpoints::default(),
                         provider_keys: NetProviderKeys::default(),
+                        shown_networks: None,
                     },
                 );
             }
@@ -2511,6 +2512,7 @@ mod parity_tests {
                         network_configs: Vec::new(),
                         endpoints: NetStoredEndpoints::default(),
                         provider_keys: NetProviderKeys::default(),
+                        shown_networks: None,
                     },
                 );
             }

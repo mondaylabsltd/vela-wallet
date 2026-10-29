@@ -246,7 +246,8 @@ describe('fetch_search_index', () => {
 			name: 'Ethereum',
 			short_name: 'eth',
 			native_currency_symbol: 'ETH',
-			has_logo: true
+			has_logo: true,
+			vela: false
 		});
 	});
 });

@@ -14,7 +14,9 @@
       "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir.",
       "fallback": "Düğümünüz yanıt vermiyor — şimdilik herkese açık düğümler kullanılıyor",
       "onlyMine": "Yalnızca kendi düğümümü kullan",
-      "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz."
+      "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz.",
+      "hideBody": "Ağ listenizden çıkar. Ayarları korunur ve Ağ Ekle ile istediğiniz zaman geri getirebilirsiniz.",
+      "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz."
     },
     "account": {
       "modalTitle": "Hesaplar",
@@ -86,7 +88,9 @@
       "discardTitle": "Bu ağdan vazgeçilsin mi?",
       "discardBody": "Burada girdikleriniz kaybolacak.",
       "discardConfirm": "Vazgeç",
-      "discardCancel": "Düzenlemeye devam et"
+      "discardCancel": "Düzenlemeye devam et",
+      "velaNetwork": "Vela ağı",
+      "velaNetworkHint": "Vela bu ağı destekliyor. Eklemek, onu daha önceki ayarlarıyla birlikte ağ listenize geri getirir."
     },
     "treasury": {
       "modalTitle": "Hazine",

@@ -17,7 +17,9 @@ import {
 	type CustomNetworkRecord,
 	type NetworkConfigRecord
 } from './records';
+import { loadShownNetworks, settleShownNetworks } from './shown-networks';
 import { allowedOrNull } from './url-policy';
+import type { NetShownNetworks } from '$lib/core/generated/NetShownNetworks';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
@@ -60,6 +62,21 @@ export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
 
 const BUILTIN_IDS = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 
+/** The Vela networks shown only on the person's word (`shownByDefault: false`). */
+const OPT_IN_IDS = new Set(CHAINS.filter((c) => c.shownByDefault === false).map((c) => c.chainId));
+
+/**
+ * The opt-in networks out of the person's lists, from the core-settled
+ * record (`shown-networks.ts`). Empty while there is no record: nothing is
+ * ever hidden before the device is settled.
+ */
+let _hidden = new Set<number>();
+
+function hiddenOf(record: NetShownNetworks | null): Set<number> {
+	if (record === null) return new Set();
+	return new Set([...OPT_IN_IDS].filter((id) => !record.shown.includes(id)));
+}
+
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetworkRecord[] = [];
 /** The per-network overrides Settings writes (`vela.networkConfig`) — the
@@ -80,7 +97,9 @@ function rebuildNetworkSnapshot(): void {
 
 function rebuildSpaceSnapshot(): void {
 	const testnet = networkSpace.testnet;
-	_spaceSnapshot = _allNetworksSnapshot.filter((n) => n.isTestnet === testnet);
+	_spaceSnapshot = _allNetworksSnapshot.filter(
+		(n) => n.isTestnet === testnet && !_hidden.has(n.chainId)
+	);
 }
 rebuildSpaceSnapshot();
 
@@ -100,10 +119,13 @@ export function subscribeNetworks(listener: () => void): () => void {
  * executor does — restoring the invalidation 024 had to leave out).
  */
 export async function refreshCustomNetworks(): Promise<void> {
-	[_customNetworkCache, _networkConfigCache] = await Promise.all([
+	let shown: NetShownNetworks | null;
+	[_customNetworkCache, _networkConfigCache, shown] = await Promise.all([
 		loadCustomNetworks(),
-		loadNetworkConfigs()
+		loadNetworkConfigs(),
+		loadShownNetworks()
 	]);
+	_hidden = hiddenOf(shown);
 	rebuildNetworkSnapshot();
 	for (const l of _networkListeners) l();
 }
@@ -122,6 +144,50 @@ let _firstLoad: Promise<void> | null = null;
 export function ensureCustomNetworks(): Promise<void> {
 	_firstLoad ??= refreshCustomNetworks();
 	return _firstLoad;
+}
+
+let _settled: Promise<void> | null = null;
+
+/**
+ * The stored networks AND the device's shown Vela networks, settled — once
+ * per document, by the core (`shown-networks.ts`), the first time something
+ * that lists networks for the person boots (the balances, Settings' network
+ * ledger). Kept apart from {@link ensureCustomNetworks}, which the root
+ * layout runs on Welcome: settling a device that has no record loads the
+ * core, and Welcome loads none. Never rejects; a settling that fails hides
+ * nothing (and the next load tries again).
+ */
+export function ensureShownNetworks(): Promise<void> {
+	_settled ??= (async () => {
+		await ensureCustomNetworks().catch(() => undefined);
+		try {
+			const record = await settleShownNetworks({
+				custom: _customNetworkCache,
+				configs: _networkConfigCache
+			});
+			const hidden = hiddenOf(record);
+			if ([...hidden].join() === [..._hidden].join()) return;
+			_hidden = hidden;
+			rebuildSpaceSnapshot();
+			for (const l of _networkListeners) l();
+		} catch {
+			// Nothing hidden: every network stays in the lists.
+		}
+	})();
+	return _settled;
+}
+
+/** Test seam: forget the first loads, so a test can boot a fresh document. */
+export function resetNetworksForTests(): void {
+	_firstLoad = null;
+	_settled = null;
+	_hidden = new Set();
+	rebuildSpaceSnapshot();
+}
+
+/** Whether `chainId` is a Vela network out of the person's lists. */
+export function isHiddenNetwork(chainId: number): boolean {
+	return _hidden.has(chainId);
 }
 
 export function customToNetwork(cn: CustomNetworkRecord): Network {
@@ -178,6 +244,18 @@ export function getCustomChainIdsSync(): number[] {
 export async function getAllNetworks(): Promise<Network[]> {
 	await refreshCustomNetworks();
 	return getAllNetworksSync();
+}
+
+/**
+ * Where a network stands in every list (owner decision 2026-10-29): a
+ * built-in network's place in the table, a network the person added after
+ * every built-in one by chain id — the core's `builtin_rank`. For a list
+ * sorted by something else, as its tie-breaker; for a list of chains, as
+ * its order.
+ */
+export function networkRank(chainId: number): number {
+	const at = DEFAULT_NETWORKS.findIndex((n) => n.chainId === chainId);
+	return at === -1 ? DEFAULT_NETWORKS.length + chainId : at;
 }
 
 export function chainName(chainId: number): string {

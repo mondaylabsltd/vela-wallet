@@ -6625,6 +6625,7 @@ mod tests {
             short_name: "avax".to_owned(),
             native_currency_symbol: "AVAX".to_owned(),
             has_logo: true,
+            vela: false,
         }];
         match add_network_tab(&wizard, "aval", None, &s).result {
             AddTokenResult::Suggestions(rows) => {
@@ -6815,6 +6816,7 @@ mod tests {
                 short_name: "base".to_owned(),
                 native_currency_symbol: "ETH".to_owned(),
                 has_logo: true,
+                vela: false,
             }];
             match add_network_tab(&wizard, "base", None, &s).result {
                 AddTokenResult::Suggestions(rows) => {

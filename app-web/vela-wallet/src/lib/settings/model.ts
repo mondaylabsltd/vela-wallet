@@ -394,6 +394,11 @@ export interface NetworkRowModel {
 	/** ST9: custom networks carry a 自定义 tag and a delete affordance. */
 	tag?: string;
 	removable?: boolean;
+	/**
+	 * What removing it asks, when not the custom network's question — a Vela
+	 * network shown on the person's word leaves the list and keeps its settings.
+	 */
+	removeBody?: string;
 	/** DST4: the desktop list expands in place instead of pushing a page. */
 	expanded?: boolean;
 	/** Spec 105: a network the person added moves to the other space — the control's words. */

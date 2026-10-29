@@ -66,6 +66,7 @@ import init, {
 	networkChainIsTestnet,
 	networkSpaceChainIds,
 	networkSpaceRead,
+	shownNetworksSettle,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
 	passkeyFallbackIconDataUri,
@@ -157,6 +158,9 @@ export { minGasPriceWei, peggedNativeUsd };
 // The mainnet and testnet spaces (spec 105): which space a stored value names,
 // which chains a space holds, whether a chain is a testnet.
 export { networkChainIsTestnet, networkSpaceChainIds, networkSpaceRead };
+// Which of Vela's networks a person's lists show (owner decision 2026-10-29):
+// a device's one-time settling of `vela.shownNetworks` from what it holds.
+export { shownNetworksSettle };
 // A hidden amount as balance privacy draws it — the mask, and the unit kept:
 // "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
 // kept a mirror of it (`maskedFigure`) until the core exported its own.

@@ -645,7 +645,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fallback: k('settingsModals.network.fallback'),
 			ownNodeDown: k('assets.ownNodeUnreachable'),
 			onlyMine: k('settingsModals.network.onlyMine'),
-			onlyMineHint: k('settingsModals.network.onlyMineHint')
+			onlyMineHint: k('settingsModals.network.onlyMineHint'),
+			hideBody: k('settingsModals.network.hideBody'),
+			moreNetworks: k('settingsModals.network.moreNetworks')
 		},
 		addNetwork: {
 			description: k('settingsModals.addNetwork.description'),
@@ -675,6 +677,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
+			velaNetwork: k('settingsModals.addNetwork.velaNetwork'),
+			velaNetworkHint: k('settingsModals.addNetwork.velaNetworkHint'),
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
 			testnet: k('settingsModals.addNetwork.testnet'),
@@ -1048,6 +1052,8 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
+			velaNetwork: k('settingsModals.addNetwork.velaNetwork'),
+			velaNetworkHint: k('settingsModals.addNetwork.velaNetworkHint'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
 			rpcFromSite: k('connect.browser.addRpcFromSite'),
 			whyNoRpc: k('connect.browser.addWhyNoRpc'),

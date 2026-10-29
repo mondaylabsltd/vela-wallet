@@ -14,7 +14,9 @@
       "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan.",
       "fallback": "Node Anda tidak merespons — sementara memakai node publik",
       "onlyMine": "Hanya pakai node saya",
-      "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali."
+      "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali.",
+      "hideBody": "Jaringan ini keluar dari daftar Anda. Pengaturannya tetap disimpan, dan Tambah Jaringan bisa mengembalikannya kapan saja.",
+      "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan."
     },
     "account": {
       "modalTitle": "Akun",
@@ -86,7 +88,9 @@
       "discardTitle": "Buang jaringan ini?",
       "discardBody": "Yang Anda masukkan di sini akan hilang.",
       "discardConfirm": "Buang",
-      "discardCancel": "Lanjut mengedit"
+      "discardCancel": "Lanjut mengedit",
+      "velaNetwork": "Jaringan Vela",
+      "velaNetworkHint": "Vela mendukung jaringan ini. Menambahkannya mengembalikannya ke daftar jaringan Anda, beserta pengaturan yang pernah Anda buat."
     },
     "treasury": {
       "modalTitle": "Treasury",

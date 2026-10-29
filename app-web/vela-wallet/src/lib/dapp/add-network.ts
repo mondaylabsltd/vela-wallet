@@ -62,12 +62,15 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 
 	const verdict = view.phase === 'ready' || view.phase === 'not_compatible';
 	const compat = verdict && view.compat && view.compat.rpc_failure === null ? view.compat : null;
-	const checks: CheckItemModel[] = compat
-		? [
-				...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
-				{ label: m.checkSigner, ok: compat.p256_available === true }
-			]
-		: [];
+	// A Vela network out of the person's list (owner decision 2026-10-29):
+	// supported, and nothing was checked — no rows that would say it was.
+	const checks: CheckItemModel[] =
+		compat && !view.vela_network
+			? [
+					...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
+					{ label: m.checkSigner, ok: compat.p256_available === true }
+				]
+			: [];
 
 	const refusal = view.phase === 'not_compatible' ? netRefusal(view.compat, m.hints) : {};
 	let pill: StatusPillModel | null = null;
@@ -77,6 +80,11 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 			pill = { tone: 'neutral', label: m.checking, dot: true };
 			break;
 		case 'ready':
+			if (view.vela_network) {
+				pill = { tone: 'ok', label: m.velaNetwork, dot: true };
+				note = m.velaNetworkHint;
+				break;
+			}
 			pill = { tone: 'ok', label: m.compatible, dot: true };
 			note = view.compat && !view.compat.multi_key_ready ? m.singleKeyOnly : null;
 			break;
