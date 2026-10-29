@@ -2024,7 +2024,12 @@
 
 	.hash-copy {
 		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		flex: none;
+		/* r4D-12: never smaller than --size-targetMin (the icon alone was 14). */
+		min-width: var(--size-targetMin);
+		min-height: var(--size-targetMin);
 		padding: 0;
 		border: none;
 		background: none;
