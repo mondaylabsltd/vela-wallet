@@ -360,7 +360,14 @@ pub struct SimVerdict {
 /// [`classify`] and what the sheet says for it, in one record.
 #[must_use]
 pub fn verdict(reply: SimReply, user: &str) -> SimVerdict {
-    let outcome = classify(reply, user);
+    verdict_of(classify(reply, user))
+}
+
+/// The verdict record of an outcome another reading made — a multisig's
+/// state probe reads the Safe's balances before and after its execution
+/// (`multisig_review`), the same outcome a simulation's logs give.
+#[must_use]
+pub fn verdict_of(outcome: SimOutcome) -> SimVerdict {
     let notice = notice(&outcome);
     let no_change_key = outcome.no_change_key().map(str::to_owned);
     let kind = match &outcome {

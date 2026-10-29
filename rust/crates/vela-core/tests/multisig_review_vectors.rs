@@ -1,0 +1,76 @@
+//! The state-diff guard on real chain answers: each vector under
+//! `tests/vectors/multisig-review/` is what the core asked
+//! (`reviewReads`) and what anvil on the Gnosis fork answered — the
+//! `debug_traceCall` prestate diff, the `simulateAndRevert` + SafeStateProbe
+//! revert payload, `eth_simulateV1` — for a 1.4.1 Safe, owners 0x1111…,
+//! 0x2222…, 1 of 2. `-probe` vectors had the trace answered "not supported"
+//! (as Arc answers it), `-probe-only` the simulation too.
+//!
+//! Re-capture with the fork harness up (`scripts/onchain/multisig-fork`):
+//! the scratch script `live-review.mjs` drives the wasm's `multisigCall`.
+#![cfg(feature = "crux")]
+
+use serde_json::{json, Value};
+use vela_core::multisig::call_json;
+
+fn run(name: &str) -> (Value, Value) {
+    let path = format!(
+        "{}/tests/vectors/multisig-review/{name}.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let out = call_json(
+        "multisigReview",
+        &json!({ "input": v["input"] }).to_string(),
+    )
+    .unwrap();
+    (serde_json::from_str(&out).unwrap(), v["expect"].clone())
+}
+
+#[test]
+fn a_declared_add_owner_passes_on_both_sources() {
+    for (name, source) in [
+        ("fork-add-owner-trace", "trace"),
+        ("fork-add-owner-probe", "probe"),
+    ] {
+        let (got, expect) = run(name);
+        assert_eq!(got["state"], expect["state"], "{name}");
+        assert_eq!(got["state"]["source"], json!(source), "{name}");
+        assert_eq!(got["state"]["verdict"]["kind"], json!("declared"), "{name}");
+        assert_eq!(got["sign"]["allowed"], json!(true), "{name}");
+    }
+}
+
+#[test]
+fn bybit_slot_zero_write_is_refused_on_both_sources() {
+    for name in ["fork-bybit-trace", "fork-bybit-probe"] {
+        let (got, expect) = run(name);
+        assert_eq!(got["state"], expect["state"], "{name}");
+        let writes = &got["state"]["verdict"]["writes"];
+        assert_eq!(writes[0]["kind"], json!("singleton"), "{name}");
+        assert_eq!(
+            writes[0]["after"],
+            json!("0xBAd00000000000000000000000000000000000ba"),
+            "{name}"
+        );
+        assert_eq!(got["tone"], json!("refused"), "{name}");
+        assert_eq!(
+            got["sign"],
+            json!({ "allowed": false, "anyway": false }),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn what_moves_from_the_probe_where_nothing_else_answers() {
+    let (got, expect) = run("fork-transfer-probe-only");
+    assert_eq!(got["simulationSource"], json!("probe"));
+    assert_eq!(got["simulationSource"], expect["simulationSource"]);
+    assert_eq!(
+        got["simulation"]["deltas"][0]["delta"],
+        json!("-100000000000000000")
+    );
+    assert_eq!(got["simulation"]["deltas"][0]["kind"], json!("native"));
+    assert_eq!(got["state"]["verdict"]["kind"], json!("unchanged"));
+}

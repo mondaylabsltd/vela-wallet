@@ -57,6 +57,31 @@ export function readableCalls(action: Action | null): InnerCall[] | null {
 	return action.calls.map((c) => ({ to: c.to, value: c.value, data: c.data }));
 }
 
+/**
+ * §3.6: the calls the one review reads as the signing sheet would — every
+ * call and every transfer, alone or in a batch, as a site would have sent
+ * it from the multisig — so a member sees the same blocks a Vela account
+ * would for the same intent. A member change, a rename or a cancellation is
+ * the multisig's own reading (`null`).
+ */
+export function reviewedCalls(
+	action: Action | null,
+	tx: { to: string; value: string; data: string }
+): InnerCall[] | null {
+	if (action?.kind === 'call') return [action];
+	if (action?.kind === 'batch')
+		return action.calls.map((c) => ({ to: c.to, value: c.value, data: c.data }));
+	if (action?.kind === 'transfer') {
+		try {
+			const value = BigInt(tx.value || '0').toString();
+			return [{ to: tx.to, value, data: tx.data || '0x' }];
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
 /** A value as a site sends one: a hex quantity (the core reads one that is not hex as unreadable, RC4). */
 function hexValue(value: string): string {
 	try {

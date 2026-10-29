@@ -60,6 +60,7 @@ import { executions } from './execution-watch.svelte';
 import { networkForChainId, networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 import { authorizeSigning } from './gate.svelte';
+import { reviewFirst } from './review-first.svelte';
 import { onChainApprovals } from '../external/onchain';
 
 export type ProposalStatus =
@@ -834,7 +835,7 @@ export async function propose(
 	}
 	// §3.5: read-only where its genesis is refused; asked, every time, where
 	// more than its members can act for it — before the passkey.
-	await authorizeSigning(account, chainId);
+	await authorizeSigning(account, chainId, tx);
 	const hash = safeTxHash(chainId, account.address, tx);
 	stopIfWithdrawn(signal);
 	const approval = await signApproval(owner.account, chainId, hash);
@@ -1071,7 +1072,7 @@ export async function approveExternally(
 	tx: SafeTx,
 	owners: string[]
 ) {
-	await authorizeSigning(account, chainId);
+	await authorizeSigning(account, chainId, tx);
 	const hash = safeTxHash(chainId, account.address, tx);
 	const approval = await externalSigning.approve({
 		chainId,
@@ -1222,11 +1223,35 @@ export async function proposeCalls(
 	calls: DappCall[]
 ): Promise<{ safeTxHash: string; nonce: string }> {
 	let nonce = '0x0';
-	const { safeTxHash } = await proposeBuilt(address, chainId, (n) => {
-		nonce = `0x${n.toString(16)}`;
-		return dappTx(calls, n);
-	});
+	const { safeTxHash } = await proposeBuilt(
+		address,
+		chainId,
+		(n) => {
+			nonce = `0x${n.toString(16)}`;
+			return dappTx(calls, n);
+		},
+		undefined,
+		// Its review was drawn and confirmed on its draft.
+		{ reviewed: true }
+	);
 	return { safeTxHash, nonce };
+}
+
+/** `tx` as the proposal it will be, at its number on `chain`, with no approval yet. */
+function draftItem(account: MultisigAccount, chain: ChainState, tx: SafeTx): ProposalItem {
+	const now = Date.now();
+	const item = readProposal(account, chain.members, {
+		chainId: chain.chainId,
+		safe: account.address,
+		safeTxHash: safeTxHash(chain.chainId, account.address, tx),
+		safeTx: tx,
+		proposer: '',
+		approvals: [],
+		createdMs: now,
+		updatedMs: now
+	});
+	if (!item) throw new Error('the transaction does not hash as itself');
+	return item;
 }
 
 /**
@@ -1238,7 +1263,9 @@ async function proposeBuilt(
 	address: string,
 	chainId: number,
 	build: (nonce: bigint, chain: ChainState) => SafeTx,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	/** Its review was drawn and confirmed already (a dApp's calls, on their draft). */
+	opts: { reviewed?: boolean } = {}
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
 	if (!account) throw new Error('not a multisig on this device');
@@ -1256,6 +1283,12 @@ async function proposeBuilt(
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
 	stopIfWithdrawn(signal);
+	// §3.6: the one review before the proposer's own passkey, as every member
+	// gets it: drawn at its number, signed only after "Propose and approve".
+	if (!opts.reviewed) {
+		await reviewFirst(fresh.address, chainId, chain, draftItem(fresh, chain, tx));
+		stopIfWithdrawn(signal);
+	}
 	// No member here: an outside wallet proposes it — only a plain account's
 	// can; a Vela member approves in Vela, never on a wallet page (r4C-10).
 	let outside: string[] = [];
@@ -1272,7 +1305,7 @@ async function proposeBuilt(
 
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
-	await authorizeSigning(account, item.chainId);
+	await authorizeSigning(account, item.chainId, item.tx);
 	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash);
 	const answer = await submitKept({
 		chainId: item.chainId,
@@ -1317,7 +1350,7 @@ export async function execute(
 	preview?: ExecutionPreview
 ) {
 	// §3.5: the signing gate before the executor's passkey, as every signature.
-	await authorizeSigning(account, item.chainId);
+	await authorizeSigning(account, item.chainId, item.tx);
 	return submitExecution(executionInput(account, item, executor, members), preview);
 }
 

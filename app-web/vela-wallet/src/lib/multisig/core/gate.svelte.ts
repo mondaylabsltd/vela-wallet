@@ -1,21 +1,30 @@
 /**
- * Whether this device signs for a multisig on a network (§3.5), asked
- * before every passkey — approve, propose (a transfer, a rename, a dApp's
- * calls, a cancellation), execute, or an outside wallet's approval:
+ * Whether this device signs for a multisig on a network (§3.5, §3.6), asked
+ * right before every passkey — approve, propose (a transfer, a rename, a
+ * member change, a dApp's calls, a cancellation), execute, or an outside
+ * wallet's approval. The rule is the core's (`multisig_review::signing_gate`);
+ * this file reads what it needs and acts on its answer:
  *
  * - its genesis refused there (`refused`): nothing is signed, ever — the
  *   network is read-only for it;
+ * - the transaction itself is one Vela does not sign (`blocked`): it cannot
+ *   be read in full, or executing it changes who controls the multisig in a
+ *   way it does not declare (the state-diff guard) — no override;
  * - something besides its members can act for it there (`risk`): the person
  *   is asked, naming what was found, every time — one confirmation per
  *   signature, never remembered;
  * - neither: signed as always.
  *
- * What is known comes from the chain, checked this session (`recheck.ts`):
- * a network not checked yet is checked first, and one that does not answer
- * signs nothing yet (`SigningUncheckedError`).
+ * Read from the chain right before each signature, never this session's
+ * verdict (`checkNow`): who can act for it there, its members now, and the
+ * execution's state diff. A chain that does not answer signs nothing yet
+ * (`SigningUncheckedError`).
  */
 import type { Finding } from './refusal';
-import { checkOn, findingsOn } from './recheck';
+import { checkNow, findingsOn } from './recheck';
+import { readMembers } from './chain';
+import { signingGateRule, type MultisigReviewOut, type SafeTx, type SignRule } from './kernel';
+import { gatherReview, reviewOf } from './proposal-review.svelte';
 import type { MultisigAccount } from './store.svelte';
 
 export type SigningGate =
@@ -23,23 +32,32 @@ export type SigningGate =
 	/** Its genesis refused on this network: read-only here. */
 	| { kind: 'refused'; chainId: number; findings: Finding[] }
 	/** Something besides its members can act for it here: each signature asks. */
-	| { kind: 'risk'; chainId: number; findings: Finding[] };
+	| { kind: 'risk'; chainId: number; findings: Finding[] }
+	/** This transaction is not one Vela signs: no button, no override. */
+	| { kind: 'blocked'; chainId: number };
 
-/** The gate `findings` make on `chainId`. */
-export function gateOf(findings: Finding[], chainId: number): SigningGate {
-	const here = findings.filter((f) => f.chainId === chainId);
-	const refused = here.filter((f) => f.from === 'genesis');
-	if (refused.length > 0) return { kind: 'refused', chainId, findings: refused };
-	const risks = here.filter((f) => f.from === 'chain');
-	return risks.length > 0 ? { kind: 'risk', chainId, findings: risks } : { kind: 'open' };
+/** The core's gate over `findings` on `chainId` and, for a transaction, its review's `sign`. */
+export function gateOf(findings: Finding[], chainId: number, sign?: SignRule | null): SigningGate {
+	const gate = signingGateRule({ chainId, findings, sign: sign ?? null });
+	switch (gate.kind) {
+		case 'refused':
+			return { kind: 'refused', chainId, findings: gate.findings as Finding[] };
+		case 'risk':
+			return { kind: 'risk', chainId, findings: gate.findings as Finding[] };
+		case 'blocked':
+			return { kind: 'blocked', chainId };
+		default:
+			return { kind: 'open' };
+	}
 }
 
 /** The gate on `chainId` as this device knows it now (the screens draw it). */
 export function signingGate(
 	account: Pick<MultisigAccount, 'address' | 'findings'>,
-	chainId: number
+	chainId: number,
+	sign?: SignRule | null
 ): SigningGate {
-	return gateOf(findingsOn(account, chainId), chainId);
+	return gateOf(findingsOn(account, chainId), chainId, sign);
 }
 
 /** Its genesis is refused on `chainId`: Vela signs nothing for it there. */
@@ -58,6 +76,21 @@ export class SigningUncheckedError extends Error {
 	constructor(readonly chainId: number) {
 		super(`who can act for this multisig on chain ${chainId} could not be checked`);
 		this.name = 'SigningUncheckedError';
+	}
+}
+
+/**
+ * The transaction is not one Vela signs, read right before the signature:
+ * its execution changes who controls the multisig without declaring it, or
+ * it cannot be read in full. `review` says what was found.
+ */
+export class SigningBlockedError extends Error {
+	constructor(
+		readonly chainId: number,
+		readonly review: MultisigReviewOut
+	) {
+		super(`Vela does not sign this transaction on chain ${chainId}`);
+		this.name = 'SigningBlockedError';
 	}
 }
 
@@ -107,21 +140,57 @@ class RiskConfirmation {
 export const riskConfirmation = new RiskConfirmation();
 
 /**
- * Before any signature for `account` on `chainId`: throws
- * `SigningRefusedError` (read-only there), `SigningUncheckedError` (not
- * known yet), or — the person declined the risk — an `AbortError`, read by
- * every caller as a cancel. Resolves when signing may go on.
+ * The review's sign rule for `tx` as the chain stands now: its members read
+ * again, the execution's state diff read again — the part of the review a
+ * signature depends on. `null`: the chain did not answer (nothing is signed).
  */
-export async function authorizeSigning(account: MultisigAccount, chainId: number): Promise<void> {
-	const found = await checkOn(account, chainId);
-	if (found === null) throw new SigningUncheckedError(chainId);
-	const gate = gateOf(found, chainId);
+async function signRuleNow(
+	account: MultisigAccount,
+	chainId: number,
+	tx: SafeTx
+): Promise<{ sign: SignRule; review: MultisigReviewOut } | null> {
+	try {
+		const members = await readMembers(chainId, account.address, account.genesis);
+		const input = await gatherReview({
+			safe: account.address,
+			chainId,
+			tx,
+			members,
+			genesis: account.genesis
+		});
+		const review = reviewOf(input, false);
+		return { sign: review.sign, review };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Before any signature for `account` on `chainId` over `tx`: throws
+ * `SigningRefusedError` (read-only there), `SigningBlockedError` (Vela does
+ * not sign this transaction), `SigningUncheckedError` (not known yet), or —
+ * the person declined the risk — an `AbortError`, read by every caller as a
+ * cancel. Resolves when signing may go on.
+ */
+export async function authorizeSigning(
+	account: MultisigAccount,
+	chainId: number,
+	tx: SafeTx
+): Promise<void> {
+	const [found, rule] = await Promise.all([
+		checkNow(account, chainId),
+		signRuleNow(account, chainId, tx)
+	]);
+	if (found === null || rule === null) throw new SigningUncheckedError(chainId);
+	const gate = signingGateRule({ chainId, findings: found, sign: rule.sign });
 	if (gate.kind === 'open') return;
-	if (gate.kind === 'refused') throw new SigningRefusedError(chainId, gate.findings);
+	if (gate.kind === 'unchecked') throw new SigningUncheckedError(chainId);
+	if (gate.kind === 'refused') throw new SigningRefusedError(chainId, gate.findings as Finding[]);
+	if (gate.kind === 'blocked') throw new SigningBlockedError(chainId, rule.review);
 	const signs = await riskConfirmation.ask({
 		chainId,
 		safe: account.address,
-		findings: gate.findings
+		findings: gate.findings as Finding[]
 	});
 	if (!signs) throw new DOMException(RISK_DECLINED, 'AbortError');
 }

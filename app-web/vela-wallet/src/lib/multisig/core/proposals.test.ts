@@ -209,6 +209,26 @@ vi.mock('./gate.svelte', () => ({
 		if (gate.refuse) throw gate.refuse;
 	}
 }));
+/**
+ * §3.6: the proposer's own review before its passkey (`review-first`'s own
+ * rules are its test's); here it is confirmed, and each one asked is kept.
+ * `decline`: the person declines it.
+ */
+const firstReview = vi.hoisted(() => ({
+	asked: [] as { chainId: number; safeTxHash: string }[],
+	decline: false
+}));
+vi.mock('./review-first.svelte', () => ({
+	reviewFirst: async (
+		_address: string,
+		chainId: number,
+		_chain: unknown,
+		item: { safeTxHash: string }
+	) => {
+		firstReview.asked.push({ chainId, safeTxHash: item.safeTxHash });
+		if (firstReview.decline) throw new DOMException('declined', 'AbortError');
+	}
+}));
 const account = {
 	address: SAFE,
 	genesis: { factory: '', singleton: '', saltNonce: '0x1', initializer: '0x' },
@@ -288,6 +308,35 @@ beforeEach(() => {
 	rpc.down = [];
 	executions.resetForTests();
 	proposals.follow(null, []);
+});
+
+describe('the proposer reviews it in full before its passkey (§3.6)', () => {
+	it('a transfer from the send flow: its review at its number first; declined, nothing signed', async () => {
+		firstReview.asked = [];
+		const before = signed.length;
+		await proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }]);
+		expect(firstReview.asked).toHaveLength(1);
+		expect(firstReview.asked[0].chainId).toBe(100);
+		expect(signed).toHaveLength(before + 1);
+
+		firstReview.decline = true;
+		try {
+			await expect(
+				proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }])
+			).rejects.toMatchObject({ name: 'AbortError' });
+		} finally {
+			firstReview.decline = false;
+		}
+		expect(firstReview.asked).toHaveLength(2);
+		// The passkey was never asked.
+		expect(signed).toHaveLength(before + 1);
+	});
+
+	it('a dApp’s calls were reviewed on their draft: not asked again', async () => {
+		firstReview.asked = [];
+		await proposeCalls(SAFE, 100, [{ to: TO, value: '0x0', data: '0x' }]);
+		expect(firstReview.asked).toHaveLength(0);
+	});
 });
 
 describe('every signature passes the gate first (§3.5)', () => {

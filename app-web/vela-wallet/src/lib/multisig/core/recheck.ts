@@ -66,6 +66,24 @@ export function checkOn(account: MultisigAccount, chainId: number): Promise<Find
 }
 
 /**
+ * `account` on `chainId`, read from the chain NOW — never this session's
+ * verdict (§3.6): what the signing gate asks right before every signature,
+ * so a module added since the sheet opened is caught before the next
+ * passkey. A verdict is kept and written to the stored account as
+ * `checkOn`'s is; `null` (the chain did not answer) changes nothing.
+ */
+export async function checkNow(
+	account: MultisigAccount,
+	chainId: number
+): Promise<Finding[] | null> {
+	const found = await judge(account, chainId);
+	if (found === null) return null;
+	verdicts.set(keyOf(account.address, chainId), found);
+	if (multisig.find(account.address)) multisig.setFindingsOn(account.address, chainId, found);
+	return found;
+}
+
+/**
  * Every multisig on this device, on each of its networks this device has,
  * that this session has not checked yet — one multisig at a time, so a
  * device with many does not spend the RPCs' budget at once.

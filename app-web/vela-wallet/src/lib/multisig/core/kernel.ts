@@ -4,6 +4,7 @@
  * this file only names the JSON. Callers run after `loadCore()`.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 
 /** A Safe's creation parameters, as the Safe Genesis Registry stores them. */
 export interface Genesis {
@@ -723,3 +724,160 @@ export const executionVerdict = (facts: {
 	elapsedMs: number;
 	limitMs: number;
 }) => call<ExecutionVerdict>('executionVerdict', { facts });
+
+// -- the one review, its reads, the gate (`multisig_review`, §3.6) ------------------
+
+/** One inner call, as the signing sheet simulates calls (`value` a hex quantity). */
+export interface SimCall {
+	to: string;
+	value: string;
+	data: string;
+}
+
+/** A JSON-RPC request to send as it is. */
+export interface RpcRequest {
+	method: string;
+	params: unknown[];
+}
+
+/** What a review starts from: the Safe on its chain, its members there now. */
+export interface ReviewReadsInput {
+	chainId: number;
+	safe: string;
+	tx: SafeTx;
+	owners: string[];
+	threshold: number;
+	deployed: boolean;
+	genesis?: Genesis | null;
+	/** `eth_getCode` of what an earlier answer named in `needCode`. */
+	codes?: Record<string, string | null>;
+	/** Tokens whose balances the probe reads (the transaction's own are added). */
+	tokens?: string[];
+}
+
+/** The reads a review needs (the core's `Reads`). */
+export interface ReviewReads {
+	needCode: string[];
+	simCalls: SimCall[];
+	trace: RpcRequest | null;
+	probe: RpcRequest | null;
+	unavailable: string | null;
+	recipients: string[];
+	tokens: string[];
+}
+
+/** One change to what decides who controls the multisig (`CriticalWrite`). */
+export type CriticalWrite =
+	| { kind: 'singleton'; before: string; after: string }
+	| { kind: 'module'; address: string; enabled: boolean }
+	| { kind: 'guard'; before: string; after: string }
+	| { kind: 'moduleGuard'; before: string; after: string }
+	| { kind: 'handler'; before: string; after: string }
+	| { kind: 'owners'; added: string[]; removed: string[] }
+	| { kind: 'ownerEntry'; address: string }
+	| { kind: 'threshold'; before: string; after: string }
+	| { kind: 'ownerCount'; before: string; after: string }
+	| { kind: 'nonce' }
+	| { kind: 'storage'; slot: string };
+
+export type StateVerdict =
+	| { kind: 'unchanged' }
+	| { kind: 'declared' }
+	| { kind: 'undeclared'; writes: CriticalWrite[] }
+	| { kind: 'reverts' }
+	| { kind: 'unavailable'; reason: string };
+
+/** The state-diff guard's reading: from a trace, the probe, or nothing. */
+export interface StateGuard {
+	source: 'trace' | 'probe' | 'none';
+	verdict: StateVerdict;
+}
+
+export interface RecipientFacts {
+	address: string;
+	isContract: boolean | null;
+	firstTime: boolean | null;
+}
+
+/** An address the person knows (a contact, an account, a member). */
+export interface KnownAddress {
+	address: string;
+	label: string;
+}
+
+export interface ReviewRecipient {
+	call: number | null;
+	role: 'recipient' | 'contract' | 'member';
+	address: string;
+	isContract: boolean | null;
+	firstTime: boolean | null;
+	lookalike: KnownAddress | null;
+}
+
+export type ReviewConcern =
+	| { kind: 'notSigned'; why: string }
+	| { kind: 'stateChange' }
+	| { kind: 'stateUnread'; reason: string }
+	| { kind: 'reverts' }
+	| { kind: 'unsimulated' }
+	| { kind: 'lookalike'; address: string; of: string; label: string }
+	| { kind: 'firstTime'; address: string }
+	| { kind: 'toContract'; address: string }
+	| { kind: 'blind' };
+
+export type ReviewTone = 'ok' | 'caution' | 'danger' | 'refused';
+
+/** Whether a signature may be given: `anyway` — the signing sheet's "Sign anyway" friction. */
+export interface SignRule {
+	allowed: boolean;
+	anyway: boolean;
+}
+
+/** What the shell read for `multisigReview`. */
+export interface ReviewInput extends ReviewReadsInput {
+	simReply?: string | null;
+	trace?: unknown;
+	probe?: unknown;
+	recipientFacts?: RecipientFacts[];
+	known?: KnownAddress[];
+	blind?: boolean;
+	origin?: string | null;
+}
+
+/** The one review (the core's `MultisigReview`). */
+export interface MultisigReviewOut {
+	review: Review;
+	memberChanges: MemberChanges | null;
+	hashes: SafeTxHashes;
+	fields: { name: string; value: string }[];
+	typedData: unknown;
+	recipients: ReviewRecipient[];
+	state: StateGuard;
+	/** The core's `SimVerdict` (snake_case, as the signing sheet's). */
+	simulation: SimVerdict;
+	simulationSource: 'simulate' | 'probe' | 'none';
+	concerns: ReviewConcern[];
+	tone: ReviewTone;
+	sign: SignRule;
+	/** What the agent reads as the request on screen: bound to this proposal. */
+	adviceRequest: Record<string, unknown>;
+}
+
+export const reviewReads = (input: ReviewReadsInput) => call<ReviewReads>('reviewReads', { input });
+
+export const multisigReview = (input: ReviewInput) =>
+	call<MultisigReviewOut>('multisigReview', { input });
+
+/** Whether this device signs, right now (the core's `Gate`). */
+export type CoreGate =
+	| { kind: 'open' }
+	| { kind: 'unchecked' }
+	| { kind: 'refused'; findings: unknown[] }
+	| { kind: 'blocked' }
+	| { kind: 'risk'; findings: unknown[] };
+
+export const signingGateRule = (input: {
+	chainId: number;
+	findings: unknown[] | null;
+	sign?: SignRule | null;
+}) => call<CoreGate>('signingGate', { input });

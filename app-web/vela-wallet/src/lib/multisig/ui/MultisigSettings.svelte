@@ -34,7 +34,11 @@
 		proposeRename
 	} from '../core/proposals.svelte';
 	import { fetchGenesis } from '../core/service';
-	import { SigningRefusedError, SigningUncheckedError } from '../core/gate.svelte';
+	import {
+		SigningBlockedError,
+		SigningRefusedError,
+		SigningUncheckedError
+	} from '../core/gate.svelte';
 	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -175,9 +179,11 @@
 						? fillTemplate(m.authority.refusedOn, { network: chainName(error.chainId) })
 						: error instanceof SigningUncheckedError
 							? fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) })
-							: fillTemplate(m.proposal.failed, {
-									reason: error instanceof Error ? error.message : String(error)
-								});
+							: error instanceof SigningBlockedError
+								? m.review.blocked
+								: fillTemplate(m.proposal.failed, {
+										reason: error instanceof Error ? error.message : String(error)
+									});
 		} finally {
 			renameBusy = false;
 		}

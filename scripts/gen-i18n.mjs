@@ -1192,9 +1192,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
 //   121 branches.
 // 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
-if (PATHS.length !== 2740) fail(`expected 2740 paths (2611 leaf + 129 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2611) fail(`expected 2611 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
+// 2776 (signing parity and the state-diff guard, round 5, 2026-10-29): + the
+//   `home.multisig.review` branch (35 leaves) — what the one review every
+//   member signs from says beside the call's reading: "This changes who
+//   controls this multisig" and each undeclared write (singleton, module,
+//   guard, module guard, handler, members added/removed, a signing right
+//   outside the list, threshold, member count, nonce, an unnamed slot), the
+//   guard's checked / declared / could-not-check lines and its two sources,
+//   what moves read from the probe's balances, each address a leg reaches
+//   (to / calls / new member, call n, looks like a known address, sent to a
+//   contract), the typed data and technical details, the hashes signed, the
+//   four "… anyway" confirms and the gate's refusal before a signature.
+//   2611 + 35 = 2646 leaves, 129 + 1 = 130 branches.
+if (PATHS.length !== 2776) fail(`expected 2776 paths (2646 leaf + 130 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2646) fail(`expected 2646 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 130) fail(`expected 130 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

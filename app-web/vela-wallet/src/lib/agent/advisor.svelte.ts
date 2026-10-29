@@ -11,11 +11,10 @@
  */
 import { intentAdvice } from '$lib/core/client';
 import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 import { world } from '$lib/intents/index.svelte';
 import { worldJson } from '$lib/intents/world';
 import { completed, rejected, type ClientMCP } from './clientmcp';
-import { adviceStanding, openReview, reviewFee, sheetBeside } from './advice.svelte';
+import { adviceStanding, openRequestId, openReview, reviewFee, sheetBeside } from './advice.svelte';
 import {
 	ADVICE_VERDICTS,
 	WATCH_MAX_MS,
@@ -52,8 +51,9 @@ export function advise(args: Record<string, unknown>) {
 	const open = openReview(networks());
 	const answer = ask(open, args);
 	if (!answer.ok) return rejected(answer.code, answer.detail);
-	const requestId = signRequest.view.request?.id;
-	if (!answer.advice || requestId === undefined) {
+	// A dApp's request on its sheet, else a multisig proposal's review (§3.6).
+	const requestId = openRequestId();
+	if (!answer.advice || requestId === null) {
 		return rejected('not_found', 'no signing review is open');
 	}
 	const advice = answer.advice as AcceptedAdvice;

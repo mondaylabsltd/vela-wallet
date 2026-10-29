@@ -6,7 +6,11 @@
 import type { DappCall } from './proposals.svelte';
 import type { LinkedProposals } from './linked.svelte';
 import type { AddLink, ProposalLink } from './link';
-import type { SigningRefusedError, SigningUncheckedError } from './gate.svelte';
+import type {
+	SigningBlockedError,
+	SigningRefusedError,
+	SigningUncheckedError
+} from './gate.svelte';
 
 /**
  * A dApp's transaction from a multisig, owned by the request it came with
@@ -71,7 +75,10 @@ export type MultisigSheet =
 	 * genesis refused there, or who can act for it not read yet) by a flow
 	 * that cannot say why itself (the send flow): said here.
 	 */
-	| { kind: 'authority'; error: SigningRefusedError | SigningUncheckedError };
+	| {
+			kind: 'authority';
+			error: SigningRefusedError | SigningUncheckedError | SigningBlockedError;
+	  };
 
 class MultisigUi {
 	sheet = $state<MultisigSheet | null>(null);

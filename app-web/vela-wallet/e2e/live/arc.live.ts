@@ -20,6 +20,20 @@ import {
 test.skip(!live, 'needs ARC_FUNDER and ARC_FUNDER_KEY');
 
 /** Reload, as a person pulls to refresh, until the USDC holding is on the home. */
+/**
+ * §3.6: the proposer's own review before its passkey (what moves, who it
+ * reaches, the state-diff guard, the hashes), confirmed with its own
+ * "Propose and approve".
+ */
+async function confirmReview(page: Page): Promise<void> {
+	const hashes = page.getByTestId('review-hashes');
+	await expect(hashes).toBeVisible({ timeout: 90_000 });
+	await hashes
+		.locator('xpath=ancestor::*[@role="dialog"][1]')
+		.getByRole('button', { name: /^Propose( and approve)?$/ })
+		.click();
+}
+
 async function seeHolding(page: Page): Promise<void> {
 	const row = page.getByRole('button', { name: /^USDC Arc Testnet/ });
 	for (let attempt = 0; attempt < 6; attempt++) {
@@ -146,6 +160,7 @@ test('a multisig on Arc Testnet: two passkey members, propose, approve, execute'
 		await seeHolding(page);
 		await sendUsdc(page, FUNDER, '0.1', 'm2');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		await confirmReview(page);
 		await expect(page.getByText('1/2 approved').first()).toBeVisible({ timeout: 120_000 });
 		await shot(page, 'm3-proposal');
 	});
@@ -199,6 +214,7 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 		await seeHolding(page);
 		await sendUsdc(page, FUNDER, '0.1', 'x1');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		await confirmReview(page);
 		await expect(page.getByText('1/2 approved').first()).toBeVisible({ timeout: 120_000 });
 	});
 

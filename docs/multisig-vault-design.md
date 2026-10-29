@@ -253,6 +253,61 @@ MultisigAccount {
   "不签名"或关掉 = 取消，从不记住；没有界面能问时视同拒绝。核对不了 → 暂不签名（`SigningUncheckedError`，"请稍后再试"）。
   执行时的部署闸门照旧。
 
+### 3.6 签名对等与状态差异守卫（2026-10-29，round 5）
+
+- **原则**（owner，binding）：多签的每个签名者，得到的清晰签名必须和 Vela 账户**一样、一样好**；
+  不能因为"别的成员会看"就放松。Bybit（2025，约 15 亿美元）：签名者信任了被篡改的 Safe{Wallet} 前端，
+  盲签了一笔 delegatecall，把 Safe 的实现（槽 0）换掉。签名前，尽一切可能让签名者明白自己在签什么。
+- **一份审阅，每个签名者**（`multisig_review::multisig_review`，wasm `multisigCall('multisigReview')`）。
+  提案页（ProposalSheet）在**每个成员的设备上、每一种操作**都画同一份审阅：发起（发送流程、改名、成员变更
+  现在都先打开审阅，"发起并批准"之后才要 passkey，`review-first.svelte.ts`；dApp 调用原本就先审阅）、批准、
+  执行、拒绝、批量。块和签名页一样（同一个 `BlockList`、`requestBlocks`、`landedVerdict`、`TechDetails`/`RawData`、
+  `AgentAdviceCard`），由 core 决定：
+  - 解读与出处：转账、调用、批量现在都走签名页的 clear-signing 机器（`reviewedCalls`），成员变更、改名、作废是多签自己的解读；
+  - **资产变动**：内层调用按 Safe 身份模拟（`eth_simulateV1`，from = Safe，和签名页给 Vela 账户的同一条路径，
+    `rpcSimulateReply` → `sim_outcome::verdict`）；网络不提供时，用下面状态探针读到的 Safe 执行前后余额
+    （原生币 + 交易涉及的代币，标明来源"由多签执行前后的余额读出"）；都没有就如实说"无法核对"；
+  - **收款方风险**：每条腿的每个地址（收款、被调用的合约、新成员）——首次、是合约、**相似地址**
+    （开头 4 位和结尾 4 位相同但不是同一地址，`looks_like`，对照联系人、本机账户、多签、成员）；
+  - **AI 意见**：`adviceRequest` 是一份 `SignFacts`（id `multisig:<chain>:<safeTxHash>`，params 含 safeTx、
+    safeTxHash、解读、状态守卫），`agent_review` 照常读、照常绑定摘要；standing 规则与签名页相同（当前 / 早期版本）；
+  - **技术细节**：SafeTx 十个字段原样、EIP-712 typed data（`RawData` 高亮 JSON、原样复制）、
+    **domain hash / message hash / safeTxHash** 各自复制——Vela 成员也有（像硬件钱包那样核对）；
+  - **签名规则**（`SignRule`）：`allowed=false` → 不给任何签名按钮，没有"仍然"；`anyway` → 和签名页一样的摩擦：
+    调用读不懂（`ClearSigningView.sign_anyway`）或有危险（执行会失败、相似地址）时，按钮变成危险样式的
+    "仍然批准 / 仍然批准并执行 / 仍然执行 / 仍然发起并批准"；审阅没到之前按钮保持不可点（同签名页等模拟结果）。
+- **状态差异守卫**（core，独立于任何解码）：在 Safe 当前状态上执行这笔交易，比较决定"谁控制多签"的状态——
+  槽 0（singleton）、模块链表、guard 槽、fallback handler 槽、v1.5.0 module guard 槽、owner 链表与阈值、
+  owner 数——**只允许**解码出的成员变更所声明的那一种变化（及其规则）。任何未声明的关键写入 →
+  红色"这会改变谁控制这个多签"，列出每一条写入，**不签名、没有覆盖**（`Concern::StateChange`，`Tone::Refused`）。两个来源：
+  1. **trace**：`debug_traceCall` + `prestateTracer`（`diffMode`）跟踪**真实的** `execTransaction`；签名用状态覆盖放进
+     `approvedHashes[owner][safeTxHash]`（前 threshold 个成员按地址排序，`v=1`），nonce 覆盖为提案自己的编号
+     （排队中的提案按它将来运行的样子跟踪）。能看到对 Safe 存储的**每一次**写入：命名不了的槽 → `Storage{slot}`，也是红色。
+     跟踪到的调用若回滚，diff 是空的——**空 diff 绝不等于"没有变化"**：只有 Safe 至少被写了一次（nonce）才采信，否则听探针的。
+  2. **probe**：`eth_call` 调 Safe 自己的 `simulateAndRevert(probe, …)`（StorageAccessible，v1.3.0–v1.5.0），
+     `SafeStateProbe`（`rust/crates/vela-core/contracts/SafeStateProbe.sol`，`contracts/build.sh` 生成运行时代码）
+     的代码由状态覆盖放到一个空地址——**不部署**。它在 Safe 的存储里读一次关键状态、像 `execTransaction`
+     （`safeTxGas=0`）那样执行内层调用（CALL 或 DELEGATECALL）、再读一次，随回滚带回。它看到命名的状态，
+     以及交易里出现的每个地址（任何偏移处的地址形字）的 `owners[a]` / `modules[a]` 项——不在链表里的签名权
+     （`OwnerEntry`）也能抓到；它看不到任意槽，这点写在旁边。
+  未部署的链：core 按已核对的 genesis（`counterfactual_start`）放置 setup 之后的状态（singleton 代码取自链上并核对代码哈希、
+  owner 链表、阈值、模块哨兵、handler）。两个来源都没有 → 说"无法在 <网络> 上核对"，只剩解码规则（§5.2），标明如此。
+- **各网络的来源**（2026-10-29 实测）：Arc Testnet（`rpc.testnet.arc.network`，`arc/v1`）：没有 `debug_traceCall`、
+  `trace_call`、`eth_simulateV1`；`eth_call` 的状态覆盖可用 → **probe**（资产变动也由 probe 的余额读出；Vela 账户在 Arc 上
+  的签名页只能说"无法核对"）。Gnosis 分叉（anvil 1.5.1）：`debug_traceCall` 的 prestate diff 和 `stateOverrides`、
+  `eth_simulateV1` 都有 → **trace** + 模拟。web 两个都问（并行），core 选。
+- **签名闸门移到 core**（`multisig_review::signing_gate`，`multisigCall('signingGate')`）：顺序是 读不到 → `unchecked`；
+  genesis 被拒 → `refused`；这笔交易不签 → `blocked`（新：`SigningBlockedError`）；有风险 → `risk`（每次签名都问）；否则 `open`。
+  `authorizeSigning(account, chainId, tx)` 在**每一次**签名前**重新读链**（`checkNow`，不用会话缓存）：谁能代表它
+  （deployed check / 反事实规则）、它在该链现在的成员、以及这笔交易的状态差异——会话中途被加上的模块，下一次 passkey 之前就会被拦下。
+- **已知限制**：模拟与真实执行可能不同（恶意代码可以识别 `eth_call`）；解码规则（delegatecall 只给 MultiSendCallOnly、
+  不签对多签自身的未知调用）仍然是第一道门。作废（拒绝）不单独弹审阅：它是 0 值、空 data 的自调用，闸门照样核对其状态差异。
+- **测试**：core `multisig_review_tests.rs`（Bybit 读起来是转账却写槽 0、嵌套调用里未声明的 addOwner、声明的成员变更通过、
+  guard / 模块、回滚的 trace 不算干净、排队提案按自己的 nonce 跟踪、闸门顺序），`tests/multisig_review_vectors.rs`
+  （分叉上 anvil 的真实回答：trace 和 probe 两种来源）；web `review-blocks.test.ts`（块、文字、对等：同一笔转账 / approve / 调用，
+  Vela 账户的签名页和多签审阅画出同样的块种类）、`gate.test.ts`（core 规则、每次签名前重读）、`ProposalSheet.svelte.test.ts`
+  （每种操作都画出守卫、资产、三个哈希、技术细节；Bybit 无按钮；"仍然"）。
+
 ## 4. 创建与登录
 
 ### 4.1 创建（不部署）

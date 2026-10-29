@@ -40,7 +40,11 @@
  */
 
 import { MailboxUnreadableError, proposeTransfers } from '$lib/multisig/core/proposals.svelte';
-import { SigningRefusedError, SigningUncheckedError } from '$lib/multisig/core/gate.svelte';
+import {
+	SigningBlockedError,
+	SigningRefusedError,
+	SigningUncheckedError
+} from '$lib/multisig/core/gate.svelte';
 import { multisigUi } from '$lib/multisig/core/ui.svelte';
 import {
 	fromHex,
@@ -655,7 +659,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					console.warn('[send] proposal not made:', error);
 					// §3.5: nothing signed on a network read-only for it (or not
 					// checked yet) — the send says it failed, the multisig why.
-					if (error instanceof SigningRefusedError || error instanceof SigningUncheckedError) {
+					if (
+						error instanceof SigningRefusedError ||
+						error instanceof SigningUncheckedError ||
+						error instanceof SigningBlockedError
+					) {
 						multisigUi.open({ kind: 'authority', error });
 					}
 					// r4D-10: one cause, one message — the mailbox down, offline.

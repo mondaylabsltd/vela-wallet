@@ -74,6 +74,24 @@ async function proposeSend(
 	await shot(page, `${name}-confirm`);
 	// r4C-10: with no member on this device, nobody here approves: "Propose".
 	await page.getByRole('button', { name: /^Propose( and approve)?$/ }).click();
+	await confirmReview(page);
+}
+
+/**
+ * §3.6: the proposer's own review before its passkey — the one review every
+ * member gets (what moves, who it reaches, the state-diff guard, the hashes) —
+ * confirmed with its "Propose and approve". `count`: one per network.
+ */
+async function confirmReview(page: Page, count = 1): Promise<void> {
+	for (let i = 0; i < count; i++) {
+		const hashes = page.getByTestId('review-hashes');
+		await expect(hashes).toBeVisible({ timeout: 60_000 });
+		await hashes
+			.locator('xpath=ancestor::*[@role="dialog"][1]')
+			.getByRole('button', { name: /^Propose( and approve)?$/ })
+			.click();
+		if (i + 1 < count) await expect(hashes).toBeHidden({ timeout: 60_000 });
+	}
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -667,6 +685,7 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 		await page.getByRole('textbox', { name: /^Name/ }).fill('Team treasury');
 		await shot(page, 'r1-rename');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		await confirmReview(page);
 		// The members read it as what it is.
 		await expect(page.getByText('Change the shared name to “Team treasury”').first()).toBeVisible({
 			timeout: 60_000
@@ -1136,6 +1155,7 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		const propose = page.getByRole('button', { name: 'Propose and approve' });
 		const confirm = page.getByTestId('risk-confirm');
 		await propose.click();
+		await confirmReview(page);
 		await expect(confirm).toBeVisible({ timeout: 30_000 });
 		await expect(confirm).toContainText(module);
 		await shot(page, 'h4-sign-asks');
@@ -1315,6 +1335,7 @@ test('members changed from Settings: one proposal per deployed network, executed
 		await expect(page.getByTestId('member-plan')).toContainText('Base: 2 of 3 → 2 of 4');
 		await shot(page, 'mc1-add-plan');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		await confirmReview(page, 2);
 		// One change, two networks (in the wallet's network order), each 1 of 2 so far.
 		await expect(page.getByTestId('member-group')).toHaveAttribute(
 			'data-progress',

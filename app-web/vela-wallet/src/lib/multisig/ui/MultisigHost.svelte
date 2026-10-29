@@ -36,7 +36,7 @@
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { externalSigning } from '../external/signing.svelte';
-	import { riskConfirmation, SigningRefusedError } from '../core/gate.svelte';
+	import { riskConfirmation, SigningBlockedError, SigningRefusedError } from '../core/gate.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { recheckStored } from '../core/recheck';
@@ -45,6 +45,7 @@
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
 	import RiskConfirmSheet from './RiskConfirmSheet.svelte';
+	import { reviewFirstHost } from '../core/review-first.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -111,6 +112,8 @@
 		multisig.boot();
 		// §3.5: a signature on a high-risk network asks here, on top of any sheet.
 		const detachRisk = riskConfirmation.attach();
+		// §3.6: the proposer's own review before its first passkey, on top of any sheet.
+		const detachReview = reviewFirstHost.attach();
 		// ms-9, r4a-3: an executed transaction's Activity row is titled as its proposal.
 		useRecordWords(m);
 		proposals.onrecorded = () => onchanged?.();
@@ -141,6 +144,7 @@
 		window.addEventListener('hashchange', onhash);
 		return () => {
 			detachRisk();
+			detachReview();
 			stopRecords();
 			window.removeEventListener('hashchange', onhash);
 			proposals.follow(null, []);
@@ -460,7 +464,10 @@
 	</Sheet>
 {:else if sheet?.kind === 'authority'}
 	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
-		{#if sheet.error instanceof SigningRefusedError}
+		{#if sheet.error instanceof SigningBlockedError}
+			<!-- §3.6: read right before the passkey, it changes who controls the multisig. -->
+			<p class="notice" role="alert">{m.review.blocked}</p>
+		{:else if sheet.error instanceof SigningRefusedError}
 			<AuthorityNotice
 				{m}
 				kind="refused"
@@ -486,6 +493,28 @@
 		{closeLabel}
 		onclose={() => multisigUi.close()}
 	/>
+{/if}
+
+<!-- §3.6: a proposal's review before the proposer signs it (send, rename, members): on top. -->
+{#if reviewFirstHost.request}
+	{@const first = reviewFirstHost.request}
+	{@const firstAccount = multisig.find(first.address)}
+	{#if firstAccount}
+		{#key first}
+			<ProposalSheet
+				{signing}
+				{m}
+				account={firstAccount}
+				chainId={first.chainId}
+				safeTxHash={first.item.safeTxHash}
+				prebuilt={first}
+				{locale}
+				{wide}
+				{closeLabel}
+				onclose={() => first.decline()}
+			/>
+		{/key}
+	{/if}
 {/if}
 
 <!-- A signature on a high-risk network, asked from any sheet or the send flow: on top of them. -->

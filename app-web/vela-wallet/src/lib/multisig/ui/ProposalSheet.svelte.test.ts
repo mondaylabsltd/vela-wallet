@@ -121,6 +121,92 @@ vi.mock('../core/recheck', () => ({
 	checkOn: async () => fake.checked,
 	findingsOn: () => []
 }));
+// §3.5, §3.6: the gate, its rule as the core's (`gate.test.ts` drives the real one).
+vi.mock('../core/gate.svelte', () => {
+	class SigningRefusedError extends Error {
+		constructor(
+			readonly chainId: number,
+			readonly findings: unknown[]
+		) {
+			super('refused');
+		}
+	}
+	class SigningUncheckedError extends Error {
+		constructor(readonly chainId: number) {
+			super('unchecked');
+		}
+	}
+	class SigningBlockedError extends Error {
+		constructor(readonly chainId: number) {
+			super('blocked');
+		}
+	}
+	const gateOf = (found: any[], chainId: number) => {
+		const here = found.filter((f) => f.chainId === chainId);
+		const refused = here.filter((f) => f.from === 'genesis');
+		if (refused.length > 0) return { kind: 'refused', chainId, findings: refused };
+		const risks = here.filter((f) => f.from === 'chain');
+		return risks.length > 0 ? { kind: 'risk', chainId, findings: risks } : { kind: 'open' };
+	};
+	return {
+		gateOf,
+		signingGate: () => ({ kind: 'open' }),
+		declinedRisk: (e: unknown) =>
+			e instanceof DOMException && e.message === 'The person did not sign for the risk',
+		SigningRefusedError,
+		SigningUncheckedError,
+		SigningBlockedError
+	};
+});
+/**
+ * §3.6: the one review, as the core would give it (`multisig_review`'s suites
+ * and `review-blocks.test.ts` drive the real one) — `fake.review` overrides.
+ */
+const REVIEW = vi.hoisted(() => ({
+	sign: { allowed: true, anyway: false },
+	state: { source: 'trace', verdict: { kind: 'unchanged' } },
+	recipients: [],
+	hashes: {
+		domainHash: `0x${'d0'.repeat(32)}`,
+		messageHash: `0x${'e0'.repeat(32)}`,
+		safeTxHash: `0x${'ab'.repeat(32)}`,
+		ethSignHash: `0x${'f0'.repeat(32)}`
+	},
+	fields: [
+		{ name: 'to', value: '0x000000000000000000000000000000000000dEaD' },
+		{ name: 'operation', value: '0' },
+		{ name: 'nonce', value: '0' }
+	],
+	typedData: { primaryType: 'SafeTx', domain: { chainId: 100 }, message: {} },
+	simulation: { kind: 'not_offered', deltas: [] },
+	simulationSource: 'none',
+	concerns: [],
+	tone: 'ok',
+	adviceRequest: { id: 'multisig:100:0xab' },
+	review: null,
+	memberChanges: null
+}));
+const reviewSeam = vi.hoisted(() => ({ review: null as any, refreshed: 0 }));
+vi.mock('../core/proposal-review.svelte', () => ({
+	REVIEW_FRESH_MS: 60_000,
+	ProposalReview: class {
+		sim = null;
+		failed = false;
+		async refresh() {
+			reviewSeam.refreshed += 1;
+		}
+		read() {
+			return reviewSeam.review ?? REVIEW;
+		}
+		dispose() {}
+	}
+}));
+vi.mock('$lib/agent/advice.svelte', () => ({
+	sheetBeside: { advice: null },
+	proposalBeside: { publish: () => {}, withdraw: () => {} },
+	openReview: () => null,
+	adviceStanding: () => ({ standing: 'current' })
+}));
 vi.mock('../core/execute', () => {
 	class ExecutorCannotPayError extends Error {}
 	class ExecutionWouldFailError extends Error {
@@ -363,6 +449,93 @@ beforeEach(() => {
 	fake.executeThrows = null;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
+	reviewSeam.review = null;
+	reviewSeam.refreshed = 0;
+});
+
+describe('one review, every signer, every action (§3.6)', () => {
+	const ACTIONS: [string, Record<string, unknown>][] = [
+		['a transfer', { kind: 'transfer', token: null, to: TO, amount: '1' }],
+		['a contract call', { kind: 'call', to: TO, value: '0', data: '0x095ea7b3' }],
+		[
+			'a batch',
+			{
+				kind: 'batch',
+				calls: [
+					{
+						to: TO,
+						value: '1',
+						data: '0x',
+						action: { kind: 'transfer', token: null, to: TO, amount: '1' }
+					}
+				]
+			}
+		],
+		['a member change', { kind: 'addOwner', owner: OTHER, threshold: '2' }],
+		['a rename', { kind: 'rename', name: 'Treasury' }],
+		['a cancellation', { kind: 'cancel' }]
+	];
+	for (const [name, action] of ACTIONS) {
+		it(`${name}: the guard, what moves, the three hashes and the technical details`, async () => {
+			fake.chain = {
+				chainId: 100,
+				members,
+				items: [item({ review: { action, refusal: null } })],
+				mailbox: true
+			};
+			show();
+			await settle();
+			expect(document.querySelector('[data-testid="review-checks"]')).not.toBeNull();
+			const hashes = [...document.querySelectorAll('[data-testid="review-hash"]')].map(
+				(h) => h.textContent
+			);
+			expect(hashes).toEqual([REVIEW.hashes.domainHash, REVIEW.hashes.messageHash, HASH]);
+			expect(document.querySelector('[data-testid="review-tech"]')).not.toBeNull();
+			expect(document.body.textContent).toContain('review.hashesTitle');
+		});
+	}
+
+	it('Bybit: the execution changes who controls it — red, and no approve, execute or override', async () => {
+		reviewSeam.review = {
+			...REVIEW,
+			sign: { allowed: false, anyway: false },
+			tone: 'refused',
+			state: {
+				source: 'probe',
+				verdict: {
+					kind: 'undeclared',
+					writes: [{ kind: 'singleton', before: '0xSafe', after: '0xBad' }]
+				}
+			},
+			concerns: [{ kind: 'stateChange' }]
+		};
+		fake.chain = {
+			chainId: 100,
+			members,
+			items: [item({ canExecute: [local] })],
+			mailbox: true
+		};
+		show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('review.stateTitle');
+		expect(text).toContain('review.writeSingleton');
+		expect(buttons()).not.toContain('proposal.approve');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(buttons().some((b) => b.includes('anyway') || b.includes('Anyway'))).toBe(false);
+	});
+
+	it('a danger (a lookalike, a call that fails): the signing sheet’s friction — "… anyway", danger-styled', async () => {
+		reviewSeam.review = { ...REVIEW, sign: { allowed: true, anyway: true }, tone: 'danger' };
+		show();
+		await settle();
+		expect(buttons()).toContain('review.approveAnyway');
+		const anyway = [...document.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === 'review.approveAnyway'
+		);
+		expect(anyway?.className).toContain('danger');
+	});
 });
 
 describe("a dApp's transaction from a multisig (dapp-1)", () => {

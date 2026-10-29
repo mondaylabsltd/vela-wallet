@@ -77,7 +77,15 @@ const CORPUS_BYTES: usize = 990_499;
 /// runtime route at 246,278, 28,178 over; each branch alone fitted. Same
 /// rule: ~1 KB above the measurement. PROPOSED, NOT YET APPROVED: moving the
 /// line is the owner's call; until then this is the reviewed proposal.
-const SC005_BUDGET: usize = 247_300;
+///
+/// 2026-10-29 (round 5, signing parity and the state-diff guard): the one
+/// review every multisig member signs from — "This changes who controls this
+/// multisig" and each undeclared write, the guard's three lines, who each leg
+/// reaches, the hashes signed, the four "… anyway" confirms (35 leaves in
+/// every locale) — put the runtime route at 250,672, 3,372 over. Same rule:
+/// ~1 KB above the measurement. PROPOSED, NOT YET APPROVED, like the line
+/// before it: the owner's call.
+const SC005_BUDGET: usize = 251_700;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
 ///
@@ -93,7 +101,10 @@ const SC005_BUDGET: usize = 247_300;
 /// 2026-10-29 (round-4 multisig, merged): moved with the proposed budget, the
 /// same way (100 − 247,300 / 990,499 ≈ 75.03%) — proposed with it, the
 /// owner's call.
-const SC005_REDUCTION_PERCENT: f64 = 75.0;
+///
+/// 2026-10-29 (round 5, signing parity): moved with the proposed budget again
+/// (100 − 251,700 / 990,499 ≈ 74.59%) — proposed with it, the owner's call.
+const SC005_REDUCTION_PERCENT: f64 = 74.5;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {
