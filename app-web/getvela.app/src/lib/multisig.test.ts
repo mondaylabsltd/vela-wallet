@@ -249,8 +249,7 @@ describe('not deployed', () => {
 	const word = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
 	const chains = [
 		{ ...MULTISIG_CHAINS[0], rpcs: ['g1', 'g2'] },
-		{ ...MULTISIG_CHAINS[1], rpcs: ['e1'] },
-		{ ...MULTISIG_CHAINS[2], rpcs: ['t1'] }
+		{ ...MULTISIG_CHAINS[1], rpcs: ['e1'] }
 	];
 
 	it('counts a chain with the registry, says "not deployed" for one without', async () => {
@@ -259,12 +258,8 @@ describe('not deployed', () => {
 		expect(await readChainCount(chains[1], f)).toEqual({ state: 'not-deployed' });
 	});
 
-	it('homepage: not deployed anywhere in production, ignoring the testnet', async () => {
-		const f = fakeFetch({
-			g1: { code: '0x' },
-			e1: { code: '0x' },
-			t1: { code: '0x60', total: word(32) }
-		});
+	it('homepage: not deployed anywhere in production', async () => {
+		const f = fakeFetch({ g1: { code: '0x' }, e1: { code: '0x' } });
 		expect(await readMultisigCount(f, chains)).toEqual({ state: 'not-deployed' });
 	});
 
@@ -282,8 +277,14 @@ describe('not deployed', () => {
 		expect(await readMultisigCount(half, chains)).toBeNull();
 	});
 
+	it('offers production chains only (owner, 2026-10-29: no testnet on the site)', () => {
+		expect(MULTISIG_CHAINS.map((c) => c.key)).toEqual(['gnosis', 'ethereum']);
+		expect(MULTISIG_CHAINS.some((c) => c.testnet)).toBe(false);
+	});
+
 	it('reads ?chain= and falls back to the production default', () => {
-		expect(readMultisigChain('arc-testnet')).toBe('arc-testnet');
+		// The site offers no testnet: an old ?chain=arc-testnet link opens production.
+		expect(readMultisigChain('arc-testnet')).toBe('gnosis');
 		expect(readMultisigChain('ethereum')).toBe('ethereum');
 		expect(readMultisigChain('<script>')).toBe('gnosis');
 		expect(readMultisigChain(null)).toBe('gnosis');

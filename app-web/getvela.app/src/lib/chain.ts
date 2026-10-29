@@ -10,7 +10,7 @@
  * single dead endpoint never breaks a read.
  */
 import { createPublicClient, fallback, http, type Abi, type PublicClient } from 'viem';
-import { arcTestnet, gnosis, mainnet } from 'viem/chains';
+import { gnosis, mainnet } from 'viem/chains';
 import { GNOSIS_RPCS, multisigChain, type MultisigChainKey } from './registry-chains';
 
 /**
@@ -234,7 +234,7 @@ export const GENESIS_REGISTRY_ABI = [
 	}
 ] as const satisfies Abi;
 
-const VIEM_CHAINS = { gnosis, ethereum: mainnet, 'arc-testnet': arcTestnet } as const;
+const VIEM_CHAINS = { gnosis, ethereum: mainnet } as const;
 
 /** A failover client for one multisig chain. JSON-RPC batching is on so a
  *  page's block-timestamp lookups go out as one request, not a hundred. */

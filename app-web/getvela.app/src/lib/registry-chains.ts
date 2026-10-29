@@ -36,7 +36,7 @@ export const GNOSIS_RPCS = [
  */
 export const GENESIS_REGISTRY_ADDRESS = '0xF412388bF908E510066d3Be5c704bd9A327f945d' as const;
 
-export type MultisigChainKey = 'gnosis' | 'ethereum' | 'arc-testnet';
+export type MultisigChainKey = 'gnosis' | 'ethereum';
 
 export interface MultisigChain {
 	key: MultisigChainKey;
@@ -50,9 +50,9 @@ export interface MultisigChain {
 	rpcs: readonly string[];
 }
 
-/** Production first (Gnosis is where Vela's service writes; Ethereum is where a
- *  wallet's user may write at their own cost), then the testnet that holds a
- *  seeded set today. */
+/** Production only (owner, 2026-10-29: the site shows no testnet). Gnosis is
+ *  where Vela's service writes; Ethereum is where a wallet's user may write at
+ *  their own cost. */
 export const MULTISIG_CHAINS: readonly MultisigChain[] = [
 	{
 		key: 'gnosis',
@@ -76,14 +76,6 @@ export const MULTISIG_CHAINS: readonly MultisigChain[] = [
 			'https://eth.blockrazor.xyz',
 			'https://1rpc.io/eth'
 		]
-	},
-	{
-		key: 'arc-testnet',
-		chainId: 5042002,
-		label: 'Arc Testnet',
-		testnet: true,
-		explorer: 'https://explorer.testnet.arc.io',
-		rpcs: ['https://rpc.testnet.arc.network', 'https://arc-testnet.drpc.org']
 	}
 ];
 
