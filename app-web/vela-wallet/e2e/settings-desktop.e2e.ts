@@ -90,12 +90,16 @@ test('saved RPC provider keys become the networks’ own RPCs, once (2026-10-29)
 }) => {
 	await openSettings(page);
 	// A wallet from before: an Alchemy key, and Ethereum on a node of its own.
-	await kvPut(page, 'vela.rpcProviders', JSON.stringify({ alchemy: 'fake-e2e-key' }));
+	// The node first, the key last: the page seeded here may still be booting
+	// its network ledger, and a ledger that reads the key must read the node
+	// with it — a key seen over an empty record was retired over it, then
+	// the record's seed overwrote what the retirement wrote (webkit, 2 in 8).
 	await kvPut(
 		page,
 		'vela.networkConfig',
 		JSON.stringify([{ chainId: 1, rpcURL: 'https://my-node.example' }])
 	);
+	await kvPut(page, 'vela.rpcProviders', JSON.stringify({ alchemy: 'fake-e2e-key' }));
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 
