@@ -1,13 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
+
+/** The vendored client, as far as the token goes: what `connect` was given, and its events. */
+const vendored = vi.hoisted(() => ({
+	last: null as null | {
+		token?: () => Promise<string>;
+		connection: EventTarget & { state: string; room: { relay: string } };
+	}
+}));
+vi.mock('$lib/vendor/peerconnect/index.js', () => ({
+	connect: (room: { relay: string }, options: { token?: () => Promise<string> } = {}) => {
+		const connection = Object.assign(new EventTarget(), { state: 'offline', room });
+		vendored.last = { token: options.token, connection };
+		return connection;
+	}
+}));
+
+const {
+	BACKOFF_MS,
 	DEFAULT_RELAY,
 	TOKEN_ENDPOINT,
 	TRIAL_ENDPOINT,
+	UNREACHABLE_AFTER_MS,
+	connectRoom,
 	forgetRelayToken,
 	needsToken,
 	relayToken,
 	relayUrl
-} from './relay';
+} = await import('./relay');
 
 const YEAR = () => Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
 
@@ -61,8 +80,8 @@ describe('which relay asks for a token', () => {
 describe('relayToken', () => {
 	it('asks Vela’s site under one device ID, then keeps the token', async () => {
 		answers[TOKEN_ENDPOINT] = ok('t-site');
-		expect(await relayToken()).toBe('t-site');
-		expect(await relayToken()).toBe('t-site');
+		expect((await relayToken()).token).toBe('t-site');
+		expect((await relayToken()).token).toBe('t-site');
 		expect(calls).toHaveLength(1);
 		const device = (calls[0].body as { device: string }).device;
 		expect(device).toMatch(/^[0-9a-f]{32}$/);
@@ -74,7 +93,7 @@ describe('relayToken', () => {
 	it('falls back to a trial token when the site cannot issue one', async () => {
 		answers[TOKEN_ENDPOINT] = () => new Response('{"error":"not_configured"}', { status: 503 });
 		answers[TRIAL_ENDPOINT] = ok('t-trial', Math.floor(Date.now() / 1000) + 7200);
-		expect(await relayToken()).toBe('t-trial');
+		expect((await relayToken()).token).toBe('t-trial');
 		expect(calls.map((c) => c.url)).toEqual([TOKEN_ENDPOINT, TRIAL_ENDPOINT]);
 	});
 
@@ -82,13 +101,13 @@ describe('relayToken', () => {
 		answers[TOKEN_ENDPOINT] = ok('t-old', Math.floor(Date.now() / 1000) + 60);
 		await relayToken();
 		answers[TOKEN_ENDPOINT] = ok('t-new');
-		expect(await relayToken()).toBe('t-new');
+		expect((await relayToken()).token).toBe('t-new');
 	});
 
 	it('shares one request between rooms opening at once', async () => {
 		answers[TOKEN_ENDPOINT] = ok('t-site');
 		const [a, b] = await Promise.all([relayToken(), relayToken()]);
-		expect([a, b]).toEqual(['t-site', 't-site']);
+		expect([a.token, b.token]).toEqual(['t-site', 't-site']);
 		expect(calls).toHaveLength(1);
 	});
 
@@ -97,9 +116,105 @@ describe('relayToken', () => {
 		answers[TOKEN_ENDPOINT] = ok('t-1');
 		await relayToken();
 		forgetRelayToken('t-other');
-		expect(await relayToken()).toBe('t-1');
+		expect((await relayToken()).token).toBe('t-1');
 		forgetRelayToken('t-1');
 		answers[TOKEN_ENDPOINT] = ok('t-2');
-		expect(await relayToken()).toBe('t-2');
+		expect((await relayToken()).token).toBe('t-2');
+	});
+});
+
+/**
+ * r4C-1: a token the relay refuses is never followed by another at once.
+ * The vendored client asks for one on every `unauthorized`; this side waits
+ * (2 s, then 4 s), takes a fresh one from the site, then the trial's once,
+ * and stops — said as failed, until Retry. r4C-4: no token at all backs off
+ * to 30 s, then stops, said with what each place answered.
+ */
+describe('a connection refused by the relay', () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => vi.useRealTimers());
+
+	function open() {
+		const watched = connectRoom({ relay: DEFAULT_RELAY } as never);
+		const { token, connection } = vendored.last!;
+		const refuse = () => connection.dispatchEvent(new Event('unauthorized'));
+		return { watched, token: token!, refuse, connection };
+	}
+
+	it('waits before each new token, falls back to the trial once, then stops and says so', async () => {
+		let n = 0;
+		answers[TOKEN_ENDPOINT] = () => ok(`bogus-${++n}`)();
+		answers[TRIAL_ENDPOINT] = ok('trial-1', Math.floor(Date.now() / 1000) + 7200);
+		const { watched, token, refuse } = open();
+		expect(await token()).toBe('bogus-1');
+
+		refuse();
+		let next = token();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(watched.relay.status).toMatchObject({ kind: 'retrying', why: 'refused' });
+		// Nothing asked during the wait.
+		const asked = calls.length;
+		await vi.advanceTimersByTimeAsync(BACKOFF_MS[0] - 10);
+		expect(calls.length).toBe(asked);
+		await vi.advanceTimersByTimeAsync(20);
+		expect(await next).toBe('bogus-2');
+
+		refuse();
+		next = token();
+		await vi.advanceTimersByTimeAsync(BACKOFF_MS[1] + 10);
+		// The trial's, once.
+		expect(await next).toBe('trial-1');
+		expect(calls.at(-1)?.url).toBe(TRIAL_ENDPOINT);
+
+		refuse();
+		let settled = false;
+		next = token().then((t) => ((settled = true), t));
+		await vi.advanceTimersByTimeAsync(120_000);
+		// Stopped: no loop, said as failed, nothing more asked.
+		expect(settled).toBe(false);
+		expect(watched.relay.status).toEqual({ kind: 'failed', why: 'refused', detail: 'HTTP 4403' });
+		const stopped = calls.length;
+		await vi.advanceTimersByTimeAsync(600_000);
+		expect(calls.length).toBe(stopped);
+
+		// Retry: asked again, from the site.
+		watched.relay.retry();
+		expect(await next).toBe('bogus-3');
+		expect(calls.length).toBe(stopped + 1);
+	});
+
+	it('getting no token backs off to 30 s, then stops with what each place answered', async () => {
+		answers[TOKEN_ENDPOINT] = () => new Response('{}', { status: 429 });
+		answers[TRIAL_ENDPOINT] = () => new Response('{}', { status: 429 });
+		const { watched, token } = open();
+		let settled = false;
+		const first = token().then((t) => ((settled = true), t));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(watched.relay.status).toMatchObject({
+			kind: 'retrying',
+			why: 'noToken',
+			detail: 'getvela.app: HTTP 429 · peerconnect.dev: HTTP 429'
+		});
+		const status = watched.relay.status as { at: number };
+		expect(status.at - Date.now()).toBe(BACKOFF_MS[0]);
+		await vi.advanceTimersByTimeAsync(BACKOFF_MS.reduce((a, b) => a + b, 0) + 100);
+		expect(watched.relay.status).toMatchObject({ kind: 'failed', why: 'noToken' });
+		expect(settled).toBe(false);
+		// Asked once per wait, plus the first: 6 pairs, never a loop.
+		expect(calls.length).toBe(2 * (BACKOFF_MS.length + 1));
+		answers[TOKEN_ENDPOINT] = ok('t-back');
+		watched.relay.retry();
+		expect(await first).toBe('t-back');
+	});
+
+	it('is said as up once on the relay, and as unreachable when a token does not get it there', async () => {
+		answers[TOKEN_ENDPOINT] = ok('t-1');
+		const { watched, token, connection } = open();
+		await token();
+		await vi.advanceTimersByTimeAsync(UNREACHABLE_AFTER_MS + 10);
+		expect(watched.relay.status).toMatchObject({ kind: 'retrying', why: 'unreachable' });
+		connection.state = 'waiting';
+		connection.dispatchEvent(new Event('state'));
+		expect(watched.relay.status).toEqual({ kind: 'up' });
 	});
 });

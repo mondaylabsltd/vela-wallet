@@ -13,6 +13,13 @@
  * A paired room is kept on this device (its record, and the accounts it last
  * reported), so the same wallet signs again without a new code: the page
  * resumes its rooms when it is opened again.
+ *
+ * r4C-1/r4C-4: where this side's connection to the relay stands is said
+ * ({@link ExternalWallet.relay}): "Vela can't reach the signing relay", never
+ * "Waiting for the wallet page…" while it is Vela that is not there. r4C-3:
+ * each wait is timed ({@link ExternalWallet.since}), so the sheet says how
+ * long, and that the wallet may be waiting in another window. r4C-6: the
+ * pairing is the person's to change — another wallet (a new room), or ended.
  */
 import { Room } from '$lib/vendor/peerconnect/index.js';
 import { CallError, WalletPairClient } from '$lib/walletpair/client';
@@ -20,7 +27,8 @@ import { namespaceRules } from '$lib/walletpair/networks';
 import { chainIdOf } from '$lib/walletpair/networks/evm';
 import { ErrorCode, type Json } from '$lib/walletpair/protocol';
 import { sameAddress } from '../core/kernel';
-import { connectRoom, relayUrl } from './relay';
+import type { ProposalLink } from '../core/link';
+import { connectRoom, relayUrl, type RelayStatus } from './relay';
 import { connectLink } from './connect-link';
 
 const SAVED_KEY = 'vela.multisig.externalWallets.v1';
@@ -104,18 +112,31 @@ export class ExternalWallet {
 	 * phone asleep) — the request is not "in your wallet" any more.
 	 */
 	away = $state(false);
+	/** r4C-4: this side's way onto the relay — said when it is Vela that is not there. */
+	relay = $state<RelayStatus>({ kind: 'connecting' });
+	/** r4C-3: when the current phase began (ms since epoch), for "for 0:23". */
+	since = $state(Date.now());
 
 	readonly #connection: ReturnType<typeof connectRoom>;
 	readonly #client: WalletPairClient;
 	readonly #saved: Saved;
 
-	private constructor(saved: Saved, page: string, fresh: boolean, owners: string[]) {
+	private constructor(
+		saved: Saved,
+		page: string,
+		fresh: boolean,
+		owners: string[],
+		tx: ProposalLink | null
+	) {
 		this.#saved = saved;
 		const room = Room.parse(saved.record);
 		this.#connection = connectRoom(room);
 		this.#client = new WalletPairClient(this.#connection, namespaceRules);
 		const invite = fresh && room.invite ? room.invite : null;
-		this.link = connectLink(page, invite, owners);
+		this.link = connectLink(page, invite, owners, tx);
+		const relay = this.#connection.relay;
+		this.relay = relay.status;
+		relay.addEventListener('change', () => (this.relay = relay.status));
 		this.resumed = invite === null;
 		this.accounts = saved.accounts;
 		// A name this page once gave itself is no wallet's (ms-13).
@@ -127,7 +148,7 @@ export class ExternalWallet {
 		this.#connection.addEventListener('state', () => {
 			const connected = this.#connection.state === 'connected';
 			if (connected && this.phase === 'waiting') {
-				this.phase = 'connecting';
+				this.to('connecting');
 			}
 			// The page left mid-request: said, until it is back.
 			this.away =
@@ -153,11 +174,19 @@ export class ExternalWallet {
 	 * before with such an account, else a new room. `page` is Vela's
 	 * `/connect` page for the person's language.
 	 */
-	static for(owners: string[], page: string): ExternalWallet {
+	static for(owners: string[], page: string, tx: ProposalLink | null = null): ExternalWallet {
 		const known = readSaved()
 			.reverse()
 			.find((s) => s.accounts.some((a) => owners.some((o) => sameAddress(o, a))));
-		if (known) return new ExternalWallet(known, page, false, owners);
+		if (known) return new ExternalWallet(known, page, false, owners, tx);
+		return ExternalWallet.fresh(owners, page, tx);
+	}
+
+	/**
+	 * r4C-6: a new room whatever this device paired before — another wallet,
+	 * or the same one in another browser: a fresh code and link.
+	 */
+	static fresh(owners: string[], page: string, tx: ProposalLink | null = null): ExternalWallet {
 		const room = Room.create(relayUrl());
 		const saved: Saved = {
 			id: crypto.randomUUID(),
@@ -165,7 +194,23 @@ export class ExternalWallet {
 			accounts: [],
 			savedMs: Date.now()
 		};
-		return new ExternalWallet(saved, page, true, owners);
+		return new ExternalWallet(saved, page, true, owners, tx);
+	}
+
+	/** The account the paired wallet last reported, if any (r4C-6: "Paired with 0x…"). */
+	get pairedAccount(): string | null {
+		return this.accounts[0] ?? null;
+	}
+
+	/** r4C-1: try the relay again now (a wait cut short, a stop undone). */
+	retryRelay(): void {
+		this.#connection.relay.retry();
+	}
+
+	/** The phase, with when it began. */
+	to(phase: Phase): void {
+		if (this.phase !== phase) this.since = Date.now();
+		this.phase = phase;
 	}
 
 	/** The accounts the wallet reports, among `owners`. */
@@ -205,7 +250,7 @@ export class ExternalWallet {
 		await this.ready(signal);
 		const owner = await this.#ownerAmong(owners, signal);
 		await this.#onChain(chainId, signal);
-		this.phase = 'confirming';
+		this.to('confirming');
 		const signature = await this.#settle(
 			this.#client.start(
 				'eth_signTypedData_v4',
@@ -227,7 +272,7 @@ export class ExternalWallet {
 		await this.ready(signal);
 		await this.#ownerAmong([tx.from], signal);
 		await this.#onChain(chainId, signal);
-		this.phase = 'confirming';
+		this.to('confirming');
 		const hash = await this.#settle(
 			this.#client.start(
 				'eth_sendTransaction',
@@ -256,7 +301,7 @@ export class ExternalWallet {
 		for (;;) {
 			const found = this.signers(owners)[0];
 			if (found) return found;
-			this.phase = 'wrongAccount';
+			this.to('wrongAccount');
 			// Wait for the wallet to switch accounts (a `state` event), or a cancel.
 			await new Promise<void>((resolve, reject) => {
 				const done = () => {
@@ -276,7 +321,7 @@ export class ExternalWallet {
 
 	async #onChain(chainId: number, signal: AbortSignal): Promise<void> {
 		if (this.chain === `eip155:${chainId}`) return;
-		this.phase = 'switching';
+		this.to('switching');
 		await this.#settle(
 			this.#client.start(
 				'wallet_switchEthereumChain',
@@ -318,7 +363,7 @@ export class ExternalWallet {
 		const named = this.#client.wallet?.name;
 		this.wallet = named && named !== 'Vela connect' ? named : this.wallet;
 		if (this.#client.approved && (this.phase === 'waiting' || this.phase === 'connecting')) {
-			this.phase = 'connecting';
+			this.to('connecting');
 		}
 		this.#save();
 	}

@@ -62,10 +62,22 @@ export interface EcdsaApproval {
 	signature: string;
 }
 
-/** One owner's approval, either kind (told apart by their fields). */
-export type Approval = PasskeyApproval | EcdsaApproval;
+/**
+ * An owner that approved on chain (`approveHash(safeTxHash)`, read back as
+ * `approvedHashes(owner, hash) != 0`): it sits in the signatures as the
+ * executor does (`v = 1`). Read from the chain, never sent to the mailbox.
+ */
+export interface OnChainApproval {
+	owner: string;
+	onChain: true;
+}
+
+/** One owner's approval, any kind (told apart by their fields). */
+export type Approval = PasskeyApproval | EcdsaApproval | OnChainApproval;
 
 export const isEcdsaApproval = (a: Approval): a is EcdsaApproval => 'signature' in a;
+export const isPasskeyApproval = (a: Approval): a is PasskeyApproval => 'ownerGenesis' in a;
+export const isOnChainApproval = (a: Approval): a is OnChainApproval => 'onChain' in a;
 
 export interface Call {
 	to: string;
@@ -262,9 +274,35 @@ export function sameAddress(a: string | null | undefined, b: string | null | und
 	return !!a && !!b && a.toLowerCase() === b.toLowerCase();
 }
 
-/** A plain account's approval, checked as the Safe checks it; `v` comes back as 27/28. */
+/**
+ * A plain account's approval, checked as the Safe checks it; `v` comes back
+ * as 27/28 (typed data), or 31/32 (the `eth_sign` form).
+ */
 export const verifyEcdsaApproval = (safeTxHash: string, approval: EcdsaApproval) =>
 	call<EcdsaApproval>('verifyEcdsaApproval', { safeTxHash, approval });
+
+/**
+ * How a plain account signed: EIP-712 typed data (`v` 27/28), or Safe's
+ * `eth_sign` form (`v` 31/32: `personal_sign` over the safeTxHash, for a
+ * wallet that cannot sign typed data). Throws for anything else.
+ */
+export const ecdsaForm = (signature: string) =>
+	call<'typedData' | 'ethSign'>('ecdsaForm', { signature });
+
+/**
+ * The hashes a hardware wallet shows for the SafeTx's typed data — domain
+ * hash, message hash, and the safeTxHash they make — and what `personal_sign`
+ * signs in the `eth_sign` form, for the owner to match on the device.
+ */
+export interface SafeTxHashes {
+	domainHash: string;
+	messageHash: string;
+	safeTxHash: string;
+	ethSignHash: string;
+}
+
+export const safeTxHashes = (chainId: number, safe: string, tx: SafeTx) =>
+	call<SafeTxHashes>('safeTxHashes', { chainId, safe, tx });
 
 /** The SafeTx as `eth_signTypedData_v4` takes it (its EIP-712 hash is the safeTxHash). */
 export const safeTxTypedData = (chainId: number, safe: string, tx: SafeTx) =>

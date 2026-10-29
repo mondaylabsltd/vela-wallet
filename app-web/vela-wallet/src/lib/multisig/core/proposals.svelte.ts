@@ -28,6 +28,7 @@ import {
 	transfersTx,
 	safeTxHash,
 	isEcdsaApproval,
+	isOnChainApproval,
 	sameAddress,
 	verifyApproval,
 	verifyEcdsaApproval,
@@ -59,6 +60,7 @@ import { executions } from './execution-watch.svelte';
 import { networkForChainId, networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 import { authorizeSigning } from './gate.svelte';
+import { onChainApprovals } from '../external/onchain';
 
 export type ProposalStatus =
 	/** Enough approvals, and its nonce is next: it can be executed now. */
@@ -141,11 +143,16 @@ function sortKey(a: ProposalItem, b: ProposalItem): number {
 	return a.createdMs - b.createdMs;
 }
 
-/** What one stored proposal is, as this device reads it. */
+/**
+ * What one stored proposal is, as this device reads it. `onChain`: owners
+ * this device read from the chain as having approved it there
+ * (`approveHash`) — never one the mailbox says did.
+ */
 export function readProposal(
-	account: MultisigAccount,
+	account: Pick<MultisigAccount, 'address'>,
 	members: ChainMembers,
-	p: Proposal
+	p: Proposal,
+	onChain: string[] = []
 ): ProposalItem | null {
 	const hash = safeTxHash(p.chainId, account.address, p.safeTx);
 	if (hash.toLowerCase() !== p.safeTxHash.toLowerCase()) return null;
@@ -156,9 +163,12 @@ export function readProposal(
 		if (approvals.some((r) => sameAddress(r.owner, a.owner))) continue;
 		let valid: boolean;
 		try {
-			valid = isEcdsaApproval(a)
-				? sameAddress(verifyEcdsaApproval(hash, a).owner, a.owner)
-				: verifyApproval(p.chainId, hash, a);
+			// An on-chain approval is the chain's to say, read here — never the mailbox's.
+			valid = isOnChainApproval(a)
+				? false
+				: isEcdsaApproval(a)
+					? sameAddress(verifyEcdsaApproval(hash, a).owner, a.owner)
+					: verifyApproval(p.chainId, hash, a);
 		} catch {
 			valid = false;
 		}
@@ -168,6 +178,18 @@ export function readProposal(
 			approval: a,
 			createdMs: a.createdMs
 		});
+	}
+	for (const owner of onChain) {
+		const at = approvals.findIndex((r) => sameAddress(r.owner, owner));
+		if (at >= 0 && approvals[at].counts) continue;
+		const row: ApprovalRow = {
+			owner,
+			counts: members.owners.some((o) => sameAddress(o, owner)),
+			approval: { owner, onChain: true },
+			createdMs: p.createdMs
+		};
+		if (at >= 0) approvals[at] = row;
+		else approvals.push(row);
 	}
 	const approved = approvals.filter((a) => a.counts).length;
 	const local = localOwners(members.owners);
@@ -310,9 +332,10 @@ export async function readChain(
 	const mailbox = answer !== false;
 	const list = answer === false ? (previous ?? []) : (answer?.proposals ?? []);
 	const shown = withKept(account, chainId, list);
+	const onChain = await approvedOnChain(account.address, chainId, members, shown.list);
 	const items = shown.list
 		.map((p) => {
-			const item = readProposal(account, members, p);
+			const item = readProposal(account, members, p, onChain.get(p.safeTxHash.toLowerCase()));
 			const owners = shown.unsent.get(p.safeTxHash.toLowerCase());
 			if (item && owners) {
 				item.unsent = true;
@@ -323,6 +346,39 @@ export async function readChain(
 		.filter((i): i is ProposalItem => i !== null);
 	markCancellations(account.address, items);
 	return { chainId, members, items, mailbox, proposals: list };
+}
+
+/**
+ * r4C-16: per open proposal of a deployed multisig, the members with no
+ * approval in the mailbox that approved it on chain (`approveHash`).
+ */
+async function approvedOnChain(
+	safe: string,
+	chainId: number,
+	members: ChainMembers,
+	list: Proposal[]
+): Promise<Map<string, string[]>> {
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
+	const out = new Map<string, string[]>();
+	if (!members.deployed) return out;
+	await Promise.all(
+		list.map(async (p) => {
+			let nonce: bigint;
+			try {
+				nonce = BigInt(p.safeTx.nonce);
+			} catch {
+				return;
+			}
+			if (nonce < members.nonce) return;
+			const ask = members.owners.filter(
+				(o) => !p.approvals.some((a) => sameAddress(a.owner, o) && !isOnChainApproval(a))
+			);
+			if (ask.length === 0) return;
+			const found = await onChainApprovals(chainId, safe, p.safeTxHash, ask);
+			if (found.length > 0) out.set(p.safeTxHash.toLowerCase(), found);
+		})
+	);
+	return out;
 }
 
 /** The nonce a new proposal on `chain` takes: after every open one. */

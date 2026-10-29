@@ -1181,8 +1181,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `panel.readOnly` change value only. 2318 + 3 = 2321 leaves, 121 branches.
 // 2651 (the above on 2649, merged): r4-create added `create.networkHint` too
 //   (one key, r4-a11y's words), so 2520 + 2 = 2522 leaves, 129 branches.
-if (PATHS.length !== 2651) fail(`expected 2651 paths (2522 leaf + 129 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2522) fail(`expected 2522 leaf paths, got ${leafSet.size}`);
+// 2528 (outside owners, round 4, 2026-10-29): + 89 `home.multisig.external`
+//   leaves — the connect page's review (multisig, network, what it does,
+//   number, the hashes a hardware wallet shows), its waits and outcomes, the
+//   relay said on both sides (refused, no pass, unreachable — Retry), the
+//   eth_sign / approveHash fallbacks, approving, executing and rejecting
+//   from the link alone, wallet errors in words, and the sheet's pairing
+//   (Paired with, Use another wallet) and the outside member's own link;
+//   + `mailboxNoEthSign` (a mailbox that takes only typed data refused the
+//   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
+//   121 branches.
+// 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
+if (PATHS.length !== 2740) fail(`expected 2740 paths (2611 leaf + 129 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2611) fail(`expected 2611 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

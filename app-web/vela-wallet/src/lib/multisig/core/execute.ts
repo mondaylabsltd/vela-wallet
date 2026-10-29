@@ -41,7 +41,7 @@ import { quoteExecutionFee, type ExecutionQuote } from './execution-fee';
 import {
 	counterfactualAuthority,
 	executionCalls,
-	isEcdsaApproval,
+	isPasskeyApproval,
 	sameAddress,
 	type Action,
 	type Approval,
@@ -102,7 +102,7 @@ export async function planExecution(input: ExecutionInput): Promise<PlannedExecu
 		: input.approvals;
 	// A passkey owner's check needs its wallet's code; a plain account signs as it is.
 	const ready = await Promise.all(
-		others.map(async (a) => isEcdsaApproval(a) || (await hasCode(input.chainId, a.owner)))
+		others.map(async (a) => !isPasskeyApproval(a) || (await hasCode(input.chainId, a.owner)))
 	);
 	const needed = Math.max(0, input.members.threshold - (owner ? 1 : 0));
 	const chosen = others
@@ -112,7 +112,9 @@ export async function planExecution(input: ExecutionInput): Promise<PlannedExecu
 	const deployOwners: Genesis[] = [];
 	const activates: string[] = [];
 	for (const { approval, ready } of chosen) {
-		if (!ready && !isEcdsaApproval(approval)) {
+		// Only a passkey member's approval is checked through its account (an
+		// outside wallet's ECDSA, eth_sign or on-chain approval needs nothing).
+		if (!ready && isPasskeyApproval(approval)) {
 			deployOwners.push(approval.ownerGenesis);
 			activates.push(approval.owner);
 		}
