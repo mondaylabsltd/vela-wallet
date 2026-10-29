@@ -122,7 +122,8 @@
         "number": "Transazione n.",
         "call": "Chiamata a contratto",
         "callWithValue": "Chiamata a contratto con {{amount}} {{symbol}}",
-        "batchCalls": "{{total}} chiamate in una transazione"
+        "batchCalls": "{{total}} chiamate in una transazione",
+        "rename": "Rinomina questo multisig nel registro in “{{name}}”"
       },
       "proposal": {
         "title": "Transazione multisig",
@@ -212,7 +213,7 @@
         "done": "Fatto",
         "name": "Nome",
         "namePlaceholder": "es. Cassa del team",
-        "nameHint": "Tutti i membri vedono questo nome. Viene salvato con il multisig e non potrà essere cambiato in seguito.",
+        "nameHint": "Tutti i membri vedono questo nome. Viene salvato con il multisig; cambiarlo in seguito richiede l’approvazione dei membri.",
         "nameInvalid": "Usa un nome più corto, senza caratteri di controllo o invisibili né spazi all'inizio o alla fine.",
         "fewer": "Meno approvazioni",
         "more": "Più approvazioni",
@@ -293,7 +294,13 @@
         "unavailable": "Non ancora disponibile su Ethereum",
         "couldNotCheck": "Impossibile verificare",
         "backupNote": "La sua configurazione resta anche su Ethereum, così il multisig si può trovare e distribuire da lì. Un account di questo dispositivo paga la commissione.",
-        "remove": "Rimuovi da questo dispositivo"
+        "remove": "Rimuovi da questo dispositivo",
+        "renameTitle": "Nome nel registro",
+        "renameNote": "I membri, e chiunque cerchi questo multisig, vedono questo nome. Rinominarlo è una delle sue transazioni su {{network}}: i membri la approvano come le altre.",
+        "renameAction": "Rinomina on-chain",
+        "renameUnavailable": "Il suo record non è su una rete di questo wallet, quindi non si può rinominare da qui.",
+        "shareAgain": "Condividi di nuovo",
+        "shareAgainNote": "Il servizio multisig non ha la sua configurazione; forse è stata salvata in un registro precedente. Condividerla di nuovo richiede una conferma con la passkey."
       },
       "service": {
         "customNote": "In uso un servizio multisig personalizzato ({{host}})",

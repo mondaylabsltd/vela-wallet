@@ -362,7 +362,10 @@
         "feeChanged": "The fee changed since this opinion"
       },
       "passkeyClosed": "The passkey prompt was closed, so nothing was signed. If this device has no passkey for this account, use the device that has it.",
-      "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready."
+      "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready.",
+      "intentSaveMultisigSetup": "Save this multisig's setup",
+      "intentRenameInRegistry": "Rename in the registry",
+      "labelName": "Name"
     },
     "currency": {
       "title": "Display currency",

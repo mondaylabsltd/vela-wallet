@@ -6,18 +6,24 @@
  */
 import type { BrowserContext, Page } from '@playwright/test';
 
-export const FORK_RPC = 'http://127.0.0.1:8545';
+/**
+ * The harness's ports: up.sh's defaults, or the same names up.sh took them
+ * from — a second harness beside a running one listens elsewhere.
+ */
+const port = (name: string, fallback: number) => Number(process.env[name] ?? fallback);
+
+export const FORK_RPC = `http://127.0.0.1:${port('FORK_PORT', 8545)}`;
 /**
  * The second fork, answering as Base (8453): a network the wallet has and the
  * genesis service is not configured to read.
  */
 export const UNREAD_CHAIN = 8453;
-export const UNREAD_RPC = 'http://127.0.0.1:8546';
+export const UNREAD_RPC = `http://127.0.0.1:${port('UNREAD_PORT', 8546)}`;
 const RPCS: Record<number, string> = { 100: FORK_RPC, [UNREAD_CHAIN]: UNREAD_RPC };
-export const GENESIS = 'http://127.0.0.1:8787';
-export const RELAY = 'http://127.0.0.1:8790';
+export const GENESIS = `http://127.0.0.1:${port('GENESIS_PORT', 8787)}`;
+export const RELAY = `http://127.0.0.1:${port('RELAY_PORT', 8790)}`;
 /** The PeerConnect relay (up.sh): Vela and an outside owner's wallet page meet through it. */
-export const PEERCONNECT = 'ws://127.0.0.1:8792';
+export const PEERCONNECT = `ws://127.0.0.1:${port('PEERCONNECT_PORT', 8792)}`;
 
 /** anvil's unlocked dev account #1: an outside owner whose wallet signs through anvil. */
 export const EOA_ONE = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
@@ -187,7 +193,12 @@ export async function undeployedSafe(
 	owners: string[],
 	threshold: number,
 	saltNonce: string
-): Promise<{ address: string; props: Record<string, unknown> }> {
+): Promise<{
+	address: string;
+	props: Record<string, unknown>;
+	/** Its genesis as the wallet stores one (no name: as a Safe{Wallet} Safe comes). */
+	genesis: { factory: string; singleton: string; saltNonce: string; initializer: string };
+}> {
 	const { execFileSync } = await import('node:child_process');
 	const cast = (...args: string[]) => execFileSync('cast', args, { encoding: 'utf8' }).trim();
 	const initializer = cast(
@@ -214,6 +225,12 @@ export async function undeployedSafe(
 	);
 	return {
 		address,
+		genesis: {
+			factory: FACTORY_141,
+			singleton: SAFE_L2_141,
+			saltNonce: `0x${BigInt(saltNonce).toString(16)}`,
+			initializer
+		},
 		props: {
 			factoryAddress: FACTORY_141,
 			masterCopy: SAFE_L2_141,
@@ -229,4 +246,50 @@ export async function undeployedSafe(
 			saltNonce
 		}
 	};
+}
+
+/** The registry (v4) on the fork: the address the wallet knows. */
+export const REGISTRY = '0xF412388bF908E510066d3Be5c704bd9A327f945d';
+
+/**
+ * What the registry on the fork holds for `safe`, read straight from the
+ * chain (`genesisOf`): its name and the block of its last rename, or `null`.
+ */
+export async function recordOnChain(
+	safe: string
+): Promise<{ name: string; renamedAt: number } | null> {
+	const { execFileSync } = await import('node:child_process');
+	const out = execFileSync(
+		'cast',
+		[
+			'call',
+			REGISTRY,
+			'genesisOf(address)(bool,(address,address,uint64,uint256,bytes,bytes32,address,uint64,uint32,string))',
+			safe,
+			'--rpc-url',
+			FORK_RPC
+		],
+		{ encoding: 'utf8' }
+	).trim();
+	if (!out.startsWith('true')) return null;
+	const name = /, "((?:[^"\\]|\\.)*)"\)$/.exec(out)?.[1] ?? '';
+	const renamedAt = Number(
+		/^true\s+\(0x[0-9a-fA-F]{40}, 0x[0-9a-fA-F]{40}, (\d+)/.exec(out)?.[1] ?? 'NaN'
+	);
+	return { name, renamedAt };
+}
+
+/** The genesis service's answer for `safe` once it holds a landed record (it polls). */
+export async function landedRecord(safe: string): Promise<{ genesis: { name?: string } }> {
+	for (let i = 0; i < 60; i += 1) {
+		const r = await fetch(`${GENESIS}/api/genesis/${safe}`);
+		const body = (await r.json()) as {
+			found?: boolean;
+			pending?: boolean;
+			genesis: { name?: string };
+		};
+		if (r.status === 200 && body.found && !body.pending) return body;
+		await new Promise((done) => setTimeout(done, 1000));
+	}
+	throw new Error(`no landed record for ${safe}`);
 }

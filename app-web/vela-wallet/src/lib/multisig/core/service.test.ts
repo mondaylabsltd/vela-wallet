@@ -24,8 +24,17 @@ const { LEGACY_GENESIS_SERVICE_KEY, saveServiceEndpoints } =
 	await import('$lib/onboarding/core/storage');
 const { DEFAULT_GENESIS_SERVICE_URL, RETRY_STEPS_MS, genesisService, serviceHost, serviceOutage } =
 	await import('./service-state.svelte');
-const { checkService, fetchProposals, genesisServiceURL, servedChains, servedOnly } =
-	await import('./service');
+const {
+	checkService,
+	fetchGenesis,
+	fetchProposals,
+	genesisServiceURL,
+	importGenesis,
+	retryAfterMs,
+	serviceTable,
+	servedChains,
+	servedOnly
+} = await import('./service');
 
 const RECORD = 'vela.serviceEndpoints';
 const record = () => JSON.parse(storage.get(RECORD) ?? '{}') as Record<string, string>;
@@ -95,8 +104,9 @@ describe('the health answer (the core reads it)', () => {
 	it('is the service, with its chains, or something else, or nothing', async () => {
 		expect(serviceAnswer(200, HEALTH)).toEqual({
 			kind: 'genesis',
-			chains: [{ chainId: 5042002, name: 'Arc Testnet' }],
-			homeChainId: 5042002
+			chains: [{ chainId: 5042002, name: 'Arc Testnet', registry: true }],
+			homeChainId: 5042002,
+			ok: true
 		});
 		vi.stubGlobal('fetch', answering(200, JSON.stringify({ service: 'vela-relay' })));
 		expect(await checkService('http://127.0.0.1:1')).toEqual({ kind: 'other' });
@@ -122,6 +132,151 @@ describe('the health answer (the core reads it)', () => {
 			'http://127.0.0.1:8788/api/health',
 			expect.objectContaining({ cache: 'no-store' })
 		]);
+	});
+});
+
+/** The v4 service's own health body (genesis-server, 2026-10-29), as it answers it. */
+const V4_HEALTH = {
+	service: 'safe-genesis-registry',
+	ok: true,
+	shell: 'docker',
+	registry: '0xf412388bf908e510066d3be5c704bd9a327f945d',
+	homeChainId: 100,
+	chains: [
+		{ chainId: 100, name: 'Gnosis', registry: true },
+		{ chainId: 1, name: 'Ethereum', registry: true },
+		{ chainId: 8453, name: 'Base', registry: false }
+	],
+	registries: [{ chainId: 100, error: null, status: 'ok' }]
+};
+
+describe('the v4 service', () => {
+	it('marks the chains its registry is on, and names its home chain', async () => {
+		storage.set(RECORD, JSON.stringify({ genesisServiceURL: 'http://127.0.0.1:8781' }));
+		vi.stubGlobal('fetch', answering(200, JSON.stringify(V4_HEALTH)));
+		expect(await serviceTable()).toEqual({
+			chains: new Set([100, 1, 8453]),
+			registryChains: new Set([100, 1]),
+			homeChainId: 100
+		});
+	});
+
+	it('is there, degraded, when it answers its own 503 (`ok: false`): never taken for away', async () => {
+		const body = JSON.stringify({ ...V4_HEALTH, ok: false });
+		expect(serviceAnswer(503, body)).toMatchObject({
+			kind: 'genesis',
+			ok: false,
+			homeChainId: 100
+		});
+		vi.stubGlobal('fetch', answering(503, body));
+		expect((await checkService('http://127.0.0.1:1')).kind).toBe('genesis');
+		// A gateway's 503 is still nothing answering.
+		vi.stubGlobal('fetch', answering(503, 'Service Unavailable'));
+		expect(await checkService('http://127.0.0.1:1')).toEqual({ kind: 'unreachable' });
+	});
+
+	it("reads a genesis answer's names per registry, and a 404 as no record", async () => {
+		const found = {
+			safe: '0x4851114Fca55f17B1a5fC76BcE6c59107D003359',
+			found: true,
+			recordedOn: [100],
+			readFrom: 100,
+			verified: true,
+			genesis: {
+				factory: '0x1',
+				singleton: '0x2',
+				saltNonce: '0x7',
+				initializer: '0x',
+				name: 'Renamed'
+			},
+			renamedAt: 42,
+			nameBySafe: true,
+			registries: [
+				{
+					chainId: 100,
+					name: 'Renamed',
+					nameBySafe: true,
+					renamedAt: 42,
+					index: 3,
+					recorder: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+					recordedAt: 7
+				}
+			]
+		};
+		vi.stubGlobal('fetch', answering(200, JSON.stringify(found)));
+		const answer = await fetchGenesis(found.safe);
+		expect(answer.genesis?.name).toBe('Renamed');
+		expect(answer.readFrom).toBe(100);
+		expect(answer.registries?.[0]).toMatchObject({ chainId: 100, nameBySafe: true, renamedAt: 42 });
+		vi.stubGlobal(
+			'fetch',
+			answering(404, JSON.stringify({ safe: found.safe, found: false, unreachable: [] }))
+		);
+		expect(await fetchGenesis(found.safe)).toEqual({ found: false });
+	});
+
+	it('sends a name with an import, and reads a refused one as refused', async () => {
+		const fetch = vi.fn(
+			async () =>
+				new Response(JSON.stringify({ safe: '0x1', refusal: { kind: 'unrecordable' } }), {
+					status: 422
+				})
+		);
+		vi.stubGlobal('fetch', fetch);
+		const answer = await importGenesis({ chainId: 100, safe: '0x1', name: 'x'.repeat(65) });
+		expect(answer).toEqual({ status: 'refused', refusal: { kind: 'unrecordable' } });
+		const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+		expect(JSON.parse(String(init.body))).toEqual({
+			chainId: 100,
+			safe: '0x1',
+			name: 'x'.repeat(65)
+		});
+	});
+
+	it('waits out a short 429 once more, and takes a long one as the answer', async () => {
+		expect(retryAfterMs('2')).toBe(2000);
+		expect(retryAfterMs(null)).toBeNull();
+		expect(retryAfterMs('Wed, 21 Oct 2026 07:28:00 GMT')).toBeNull();
+		// Cross-origin, the header is not readable unless exposed: the body says it too.
+		expect(retryAfterMs(null, '{"error":"too many requests; retry in 3 s"}')).toBe(3000);
+		expect(retryAfterMs(null, '{"error":"too many requests"}')).toBeNull();
+		vi.useFakeTimers();
+		try {
+			let calls = 0;
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => {
+					calls += 1;
+					return calls === 1
+						? new Response(JSON.stringify({ error: 'too many requests; retry in 1 s' }), {
+								status: 429,
+								headers: { 'retry-after': '1' }
+							})
+						: new Response(JSON.stringify({ found: false }), { status: 404 });
+				})
+			);
+			const asked = fetchGenesis('0x1');
+			// The wait it asked for, then the retry's own step back.
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(await asked).toEqual({ found: false });
+			expect(calls).toBe(2);
+
+			calls = 0;
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => {
+					calls += 1;
+					return new Response(JSON.stringify({ error: 'too many requests; retry in 40 s' }), {
+						status: 429,
+						headers: { 'retry-after': '40' }
+					});
+				})
+			);
+			await expect(fetchGenesis('0x1')).rejects.toThrow('HTTP 429');
+			expect(calls).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
 

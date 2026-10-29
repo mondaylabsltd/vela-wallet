@@ -43,6 +43,25 @@ interface Answer<T> {
 
 const TIMEOUT_MS = 15_000;
 const ATTEMPTS = 3;
+/**
+ * The longest wait a request over the service's per-client limit (`429`,
+ * one-minute windows) waits out before asking once more: a person is waiting
+ * on most calls — a longer wait is an answer of its own, not a pause.
+ */
+export const RETRY_AFTER_MAX_MS = 10_000;
+
+/**
+ * How long a `429` says to wait, in milliseconds: its `Retry-After` seconds,
+ * else the seconds its body names ("too many requests; retry in 3 s") — a
+ * page on another origin cannot read the header unless the service exposes
+ * it. `null` when neither says.
+ */
+export function retryAfterMs(header: string | null, body = ''): number | null {
+	const seconds = /^\d+$/.test(header?.trim() ?? '')
+		? header!.trim()
+		: (/retry in (\d+) ?s\b/.exec(body)?.[1] ?? null);
+	return seconds === null ? null : Number(seconds) * 1000;
+}
 
 /**
  * `background`: a read nobody is waiting on (the 12 s refresh, a record
@@ -82,7 +101,17 @@ async function request<T>(
 				last = `HTTP ${response.status}`;
 				continue;
 			}
-			const body = (await response.json()) as T;
+			const text = await response.text();
+			// Over the service's per-client limit: a short wait is waited out
+			// once more; a long one is the answer (`429`), said as it is.
+			const wait =
+				response.status === 429 ? retryAfterMs(response.headers.get('retry-after'), text) : null;
+			if (wait !== null && wait <= RETRY_AFTER_MAX_MS && attempt < ATTEMPTS - 1) {
+				last = 'HTTP 429';
+				await new Promise((r) => setTimeout(r, wait));
+				continue;
+			}
+			const body = JSON.parse(text) as T;
 			return { status: response.status, body };
 		} catch (error) {
 			last = error instanceof Error ? error.message : String(error);
@@ -122,9 +151,9 @@ export async function probeService(): Promise<boolean> {
 }
 
 /**
- * The networks a new multisig may be created on: those the service serves
- * (its record is written on the first one), all of them while that is not
- * known.
+ * The networks a new multisig may be created on: those the service reads
+ * (the first one is where its proposals are looked for; its record goes to
+ * the service's home chain), all of them while that is not known.
  */
 export function servedOnly<T extends { chainId: number }>(
 	networks: T[],
@@ -137,9 +166,14 @@ const SERVED_TTL_MS = 60_000;
 
 /** What the service in use says of itself (`/api/health`), as far as it says. */
 export interface ServiceTable {
-	/** The chains it records on and reads; `null`: it lists none. */
+	/** The chains it reads; `null`: it lists none. */
 	chains: Set<number> | null;
-	/** The chain its registry lives on; `null`: it does not say. */
+	/**
+	 * The chains its registry is on, where a record can be looked up (Gnosis
+	 * and Ethereum; its home chain always); `null`: it lists none.
+	 */
+	registryChains: Set<number> | null;
+	/** The chain its registry lives on — where it writes records; `null`: it does not say. */
 	homeChainId: number | null;
 }
 
@@ -157,6 +191,10 @@ export function serviceTable(): Promise<ServiceTable | null> {
 			answer.kind === 'genesis'
 				? {
 						chains: answer.chains === null ? null : new Set(answer.chains.map((c) => c.chainId)),
+						registryChains:
+							answer.chains === null
+								? null
+								: new Set(answer.chains.filter((c) => c.registry).map((c) => c.chainId)),
 						homeChainId: answer.homeChainId
 					}
 				: null
@@ -181,13 +219,39 @@ export async function servedChains(): Promise<Set<number> | null> {
 
 // -- genesis ---------------------------------------------------------------------
 
+/** What one registry holds for a Safe beyond its genesis: its own name, place and dates. */
+export interface RegistryEntry {
+	chainId: number;
+	name: string | null;
+	/** The name is the Safe's own (it renamed itself, or wrote the record). */
+	nameBySafe: boolean;
+	/** Block of its last rename on that chain; 0: never. */
+	renamedAt: number;
+	index: number;
+	recorder: string;
+	recordedAt: number;
+}
+
+/**
+ * `GET /api/genesis/{safe}` (registry v4). The genesis is the same in every
+ * registry; the name is each registry's own (`registries`), and `genesis.name`
+ * is the one read from `readFrom` (the home chain's when it holds it). None
+ * of it is trusted: the core re-derives the address from the genesis, and a
+ * name is read from the chain itself where this wallet can.
+ */
 export interface GenesisAnswer {
 	found: boolean;
 	/** Proven but not recorded on chain yet (the service's mailbox holds it). */
 	pending?: boolean;
 	genesis?: Genesis;
+	/** The registry chains that hold the record. */
 	recordedOn?: number[];
+	/** The chain the served record was read from. */
+	readFrom?: number;
 	verified?: boolean | null;
+	nameBySafe?: boolean;
+	renamedAt?: number;
+	registries?: RegistryEntry[];
 }
 
 /** The genesis recorded for `safe`, from whichever chain holds it. */
@@ -218,12 +282,19 @@ export type ImportAnswer =
 	| { status: 'refused'; refusal: unknown }
 	| { status: 'error'; error: string };
 
-/** Ask the service to record a genesis (idempotent). */
+/**
+ * Ask the service to record a genesis (idempotent). Registry v4 records every
+ * Safe with a name: a `genesis` carries its own (send it named,
+ * `namedGenesis`); `name` is for one the service resolves itself, and without
+ * either it names the record from the address. A name the registry would not
+ * take is refused (`unrecordable`), never replaced.
+ */
 export async function importGenesis(req: {
 	chainId: number;
 	safe: string;
 	genesis?: Genesis;
 	ownerProof?: OwnerProof;
+	name?: string;
 }): Promise<ImportAnswer> {
 	const { status, body } = await request<Record<string, unknown>>('/api/import', {
 		method: 'POST',

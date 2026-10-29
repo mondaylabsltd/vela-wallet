@@ -310,7 +310,10 @@
         "feeChanged": "이 의견 이후 수수료가 바뀌었습니다"
       },
       "passkeyClosed": "패스키 확인 창이 닫혀 아무것도 서명되지 않았습니다. 이 기기에 이 계정의 패스키가 없다면 패스키가 있는 기기를 사용하세요.",
-      "passkeyTimedOut": "패스키 확인 시간이 초과되어 아무것도 서명되지 않았습니다. 준비되면 다시 시도하세요."
+      "passkeyTimedOut": "패스키 확인 시간이 초과되어 아무것도 서명되지 않았습니다. 준비되면 다시 시도하세요.",
+      "intentSaveMultisigSetup": "이 멀티시그의 설정 저장",
+      "intentRenameInRegistry": "레지스트리에서 이름 변경",
+      "labelName": "이름"
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

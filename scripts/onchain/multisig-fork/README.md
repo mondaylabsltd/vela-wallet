@@ -6,7 +6,7 @@ genesis service (`safe-genesis-registry`'s docker shell) and a local relay.
 | Piece | Where | What |
 | --- | --- | --- |
 | anvil | `127.0.0.1:8545` | Gnosis fork, `--hardfork osaka` (the P-256 precompile at `0x100` that passkey signatures need) |
-| genesis service | `127.0.0.1:8787` | `genesis-server`: the registry (v2, deployed on the fork at start), sponsored records, the proposal mailbox |
+| genesis service | `127.0.0.1:8787` | `genesis-server`: the registry (v4, deployed on the fork at start at `0xF412…945d`, the address the wallet knows — up.sh stops if the build lands elsewhere), sponsored records, the proposal mailbox |
 | second anvil | `127.0.0.1:8546` | the same Gnosis state answering as Base (8453): a network the wallet has and the service is NOT configured to read |
 | relay | `127.0.0.1:8790` | `relay.py`: the ERC-4337 methods and REST endpoints the wallet asks the Vela relay; bundles each operation with `EntryPoint.handleOps` |
 
@@ -24,6 +24,18 @@ npx playwright test -c playwright.onchain.config.ts
 scripts/onchain/multisig-fork/down.sh
 ```
 
+A second harness beside a running one takes other ports — up.sh and the
+Playwright harness read the same names (`FORK_PORT`, `UNREAD_PORT`,
+`GENESIS_PORT`, `RELAY_PORT`, `PEERCONNECT_PORT`), with its own `STATE`;
+`PEERCONNECT_BIN` runs a relay already built instead of building one:
+
+```shell
+export FORK_PORT=8645 UNREAD_PORT=8646 GENESIS_PORT=8887 RELAY_PORT=8890 PEERCONNECT_PORT=8892
+STATE=/tmp/harness-2 scripts/onchain/multisig-fork/up.sh
+VELA_ONCHAIN_URL=http://127.0.0.1:5291 npx playwright test -c playwright.onchain.config.ts
+STATE=/tmp/harness-2 scripts/onchain/multisig-fork/down.sh
+```
+
 `e2e/onchain/` drives the parallel space (committed throwaway passkeys) through:
 
 - one device, 2-of-3: create, fund, propose, approve and execute;
@@ -31,7 +43,14 @@ scripts/onchain/multisig-fork/down.sh
   executes; the first finds the execution on chain and shows it;
 - the desktop layout;
 - a network the service does not read (the second fork, as Base): propose,
-  approve and execute there.
+  approve and execute there;
+- an outside owner signing through the connect page, and Safes imported from
+  a Safe{Wallet} export (one deployed, one not) signed by two outside wallets;
+- registry v4: a multisig renames its record on chain — a proposal of its
+  own, approved and executed (deploying it on Gnosis) — and the registry and
+  the wallet show the new name;
+- a multisig the service holds no record of (as one recorded in an earlier
+  registry is): said as not shared, and shared again on a member's passkey.
 
 Screenshots land in `e2e/onchain/.shots/`.
 

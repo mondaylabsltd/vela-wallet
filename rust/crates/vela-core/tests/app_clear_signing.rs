@@ -3676,3 +3676,129 @@ fn a_batch_headline_sets_its_approvals_aside() {
     );
     assert_eq!(view.record_intent, None);
 }
+
+// ---------------------------------------------------------------------------
+// The Safe Genesis Registry (v4) — a multisig's setup, and a Safe's rename
+// ---------------------------------------------------------------------------
+
+/// The sheet of a call to the Safe Genesis Registry, as Vela's own request
+/// carries it (EIP-55 `to`).
+fn genesis_registry_sheet(data: String, chain_id: u32) -> (Vec<Op>, ClearSigningView) {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: Some(vela_core::multisig::GENESIS_REGISTRY.to_owned()),
+        data: Some(data),
+        value: Some("0x0".to_owned()),
+        chain_id,
+        locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
+    });
+    (ops, sut.view())
+}
+
+/// "Save its setup to Ethereum": the multisig's `record(...)`, read in full
+/// by this build — the address the registry will file it under (derived from
+/// the call's own proxy code) and the name it carries.
+#[test]
+fn a_multisig_setup_record_is_drawn_as_what_it_is_with_nothing_to_fetch() {
+    let ms = vela_core::multisig::multisig_genesis(
+        &[
+            "0x1111111111111111111111111111111111111111".to_owned(),
+            "0x2222222222222222222222222222222222222222".to_owned(),
+        ],
+        2,
+        "Team fund",
+        "0x7",
+    )
+    .unwrap();
+    let call = vela_core::multisig::record_call(&ms.genesis).unwrap();
+    let (ops, view) = genesis_registry_sheet(call.data, 1);
+    assert!(
+        ops.is_empty(),
+        "no clock, no descriptor, no signature database"
+    );
+    assert!(view.resolved);
+    let result = view.result.expect("a first-party result");
+    assert_eq!(result.intent, "Save this multisig's setup");
+    assert_eq!(
+        result.contract_name.as_deref(),
+        Some("Safe Genesis Registry")
+    );
+    assert_eq!(result.owner.as_deref(), Some("Vela"));
+    assert!(
+        result.verified,
+        "our contract, read from the call's own bytes"
+    );
+    assert_eq!(result.risk, ClearRisk::Safe);
+    let rows: Vec<(&str, &str)> = result
+        .fields
+        .iter()
+        .map(|f| (f.label.as_str(), f.value.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("Network", "Ethereum"),
+            ("Address", "0x485111…003359"),
+            ("Name", "Team fund"),
+        ]
+    );
+    assert_eq!(
+        result.fields[1].address.as_deref(),
+        Some(ms.address.to_lowercase().as_str())
+    );
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentSaveMultisigSetup));
+    let terms: Vec<Option<ClearTerm>> = result.fields.iter().map(|f| f.label_term).collect();
+    assert_eq!(
+        terms,
+        vec![
+            Some(ClearTerm::LabelNetwork),
+            Some(ClearTerm::LabelAddress),
+            Some(ClearTerm::LabelName),
+        ]
+    );
+    assert_eq!(
+        ClearTerm::IntentSaveMultisigSetup.leaf(),
+        "intentSaveMultisigSetup"
+    );
+    assert_eq!(ClearTerm::LabelName.leaf(), "labelName");
+    assert_eq!(
+        view.confirm,
+        ClearConfirm::ConfirmIntent {
+            intent: "Save this multisig's setup".to_owned(),
+            intent_term: Some(ClearTerm::IntentSaveMultisigSetup),
+        }
+    );
+}
+
+/// A `rename(string)` to the registry: the calling account's own record gets
+/// the name — the one row the call carries.
+#[test]
+fn a_registry_rename_is_drawn_as_what_it_is() {
+    let call = vela_core::multisig::rename_call("Team fund").unwrap();
+    let (ops, view) = genesis_registry_sheet(call.data, 100);
+    assert!(ops.is_empty());
+    let result = view.result.expect("a first-party result");
+    assert_eq!(result.intent, "Rename in the registry");
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentRenameInRegistry));
+    assert_eq!(
+        ClearTerm::IntentRenameInRegistry.leaf(),
+        "intentRenameInRegistry"
+    );
+    let rows: Vec<(&str, &str)> = result
+        .fields
+        .iter()
+        .map(|f| (f.label.as_str(), f.value.as_str()))
+        .collect();
+    assert_eq!(rows, vec![("Network", "Gnosis"), ("Name", "Team fund")]);
+}
+
+/// Anything else to the registry address is no first-party reading: it takes
+/// the ordinary ladder (asks for the clock first, as every unknown call does).
+#[test]
+fn another_call_to_the_registry_takes_the_ordinary_ladder() {
+    let (ops, view) = genesis_registry_sheet("0xf6913a5d".to_owned() + &"0".repeat(64), 1);
+    assert!(!ops.is_empty(), "the ordinary reading asks for something");
+    assert!(view.result.is_none());
+}

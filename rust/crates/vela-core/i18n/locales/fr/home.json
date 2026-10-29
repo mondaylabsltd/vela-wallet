@@ -122,7 +122,8 @@
         "number": "Transaction n°",
         "call": "Appel de contrat",
         "callWithValue": "Appel de contrat avec {{amount}} {{symbol}}",
-        "batchCalls": "{{total}} appels en une transaction"
+        "batchCalls": "{{total}} appels en une transaction",
+        "rename": "Renommer ce multisig dans le registre en « {{name}} »"
       },
       "proposal": {
         "title": "Transaction multisig",
@@ -212,7 +213,7 @@
         "done": "Terminé",
         "name": "Nom",
         "namePlaceholder": "p. ex. Caisse de l'équipe",
-        "nameHint": "Tous les membres voient ce nom. Il est enregistré avec le multisig et ne pourra plus être modifié.",
+        "nameHint": "Tous les membres voient ce nom. Il est enregistré avec le multisig ; le modifier plus tard demande l’approbation des membres.",
         "nameInvalid": "Choisissez un nom plus court, sans caractères de contrôle ni invisibles, ni espace au début ou à la fin.",
         "fewer": "Moins d’approbations",
         "more": "Plus d’approbations",
@@ -293,7 +294,13 @@
         "unavailable": "Pas encore disponible sur Ethereum",
         "couldNotCheck": "Vérification impossible",
         "backupNote": "Sa configuration est aussi conservée sur Ethereum, pour qu'on puisse y retrouver et déployer le multisig. Un compte de cet appareil paie les frais.",
-        "remove": "Retirer de cet appareil"
+        "remove": "Retirer de cet appareil",
+        "renameTitle": "Nom dans le registre",
+        "renameNote": "Les membres, et toute personne qui consulte ce multisig, voient ce nom. Le renommer est l’une de ses transactions sur {{network}} : les membres l’approuvent comme les autres.",
+        "renameAction": "Renommer sur la chaîne",
+        "renameUnavailable": "Son enregistrement n’est sur aucun réseau de ce portefeuille, il ne peut donc pas être renommé d’ici.",
+        "shareAgain": "Partager à nouveau",
+        "shareAgainNote": "Le service multisig n’a pas sa configuration ; elle a peut-être été enregistrée dans un ancien registre. La partager à nouveau demande une confirmation par passkey."
       },
       "service": {
         "customNote": "Service multisig personnalisé utilisé ({{host}})",

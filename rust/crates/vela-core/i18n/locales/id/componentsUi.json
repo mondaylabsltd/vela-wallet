@@ -310,7 +310,10 @@
         "feeChanged": "Biaya berubah sejak pendapat ini"
       },
       "passkeyClosed": "Permintaan passkey ditutup, jadi tidak ada yang ditandatangani. Jika perangkat ini tidak punya passkey untuk akun ini, gunakan perangkat yang punya.",
-      "passkeyTimedOut": "Waktu permintaan passkey habis, jadi tidak ada yang ditandatangani. Coba lagi saat Anda siap."
+      "passkeyTimedOut": "Waktu permintaan passkey habis, jadi tidak ada yang ditandatangani. Coba lagi saat Anda siap.",
+      "intentSaveMultisigSetup": "Simpan pengaturan multisig ini",
+      "intentRenameInRegistry": "Ganti nama di registri",
+      "labelName": "Nama"
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

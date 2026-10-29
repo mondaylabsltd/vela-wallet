@@ -310,7 +310,10 @@
         "feeChanged": "此看法给出后手续费已变化"
       },
       "passkeyClosed": "通行密钥窗口已关闭，所以没有签署任何内容。如果这台设备上没有这个账户的通行密钥，请换用有密钥的设备。",
-      "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。"
+      "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。",
+      "intentSaveMultisigSetup": "保存这个多签的配置",
+      "intentRenameInRegistry": "在注册表中改名",
+      "labelName": "名称"
     },
     "currency": {
       "title": "显示货币",

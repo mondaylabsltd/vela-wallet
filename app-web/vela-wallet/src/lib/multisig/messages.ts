@@ -53,6 +53,8 @@ export interface MultisigMessages {
 		call: string;
 		callWithValue: string;
 		batchCalls: string;
+		/** A rename of its record in the registry (`{{name}}`). */
+		rename: string;
 	};
 	proposal: {
 		title: string;
@@ -224,6 +226,16 @@ export interface MultisigMessages {
 		couldNotCheck: string;
 		backupNote: string;
 		remove: string;
+		/** Its record's name, renamed on chain by a proposal. */
+		renameTitle: string;
+		/** Who sees the name, and that renaming is one of its transactions (`{{network}}`). */
+		renameNote: string;
+		renameAction: string;
+		/** No network this wallet has holds its record. */
+		renameUnavailable: string;
+		/** The service lacks its setup: shared again with one passkey. */
+		shareAgain: string;
+		shareAgainNote: string;
 	};
 	/** What the multisig area says of its service (set in Settings → Service Endpoints). */
 	service: {
@@ -297,7 +309,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		number: '',
 		call: '',
 		callWithValue: '',
-		batchCalls: ''
+		batchCalls: '',
+		rename: ''
 	},
 	proposal: {
 		title: '',
@@ -455,7 +468,13 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unavailable: '',
 		couldNotCheck: '',
 		backupNote: '',
-		remove: ''
+		remove: '',
+		renameTitle: '',
+		renameNote: '',
+		renameAction: '',
+		renameUnavailable: '',
+		shareAgain: '',
+		shareAgainNote: ''
 	},
 	service: {
 		customNote: '',

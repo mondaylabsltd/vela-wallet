@@ -310,7 +310,10 @@
         "feeChanged": "Les frais ont changé depuis cet avis"
       },
       "passkeyClosed": "La demande de passkey a été fermée : rien n'a été signé. Si cet appareil n'a pas de passkey pour ce compte, utilisez celui qui l'a.",
-      "passkeyTimedOut": "La demande de passkey a expiré : rien n'a été signé. Réessayez quand vous êtes prêt."
+      "passkeyTimedOut": "La demande de passkey a expiré : rien n'a été signé. Réessayez quand vous êtes prêt.",
+      "intentSaveMultisigSetup": "Enregistrer la configuration de ce multisig",
+      "intentRenameInRegistry": "Renommer dans le registre",
+      "labelName": "Nom"
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

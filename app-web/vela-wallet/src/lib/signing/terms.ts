@@ -20,6 +20,11 @@ const ALL = {
 	// included) are core terms, so they translate here like any other — no
 	// index relabel in the shell. The term keeps its first name on the wire.
 	intentBackUpPublicKeys: true,
+	// Vela's other contract, the Safe Genesis Registry: a multisig's setup
+	// saved there ("Save its setup to Ethereum"), and a Safe's rename. The
+	// record's rows are the network, the multisig's address and its name.
+	intentSaveMultisigSetup: true,
+	intentRenameInRegistry: true,
 	intentBorrow: true,
 	intentBridge: true,
 	intentBurn: true,
@@ -76,6 +81,8 @@ const ALL = {
 	labelValidUntil: true,
 	// The record's name, which the copy makes public on Ethereum too.
 	labelWalletName: true,
+	// The name a multisig's registry record carries.
+	labelName: true,
 	labelYouPay: true,
 	labelYouPayMax: true,
 	labelYouReceive: true,

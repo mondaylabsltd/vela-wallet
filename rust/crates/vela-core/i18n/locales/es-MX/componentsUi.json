@@ -310,7 +310,10 @@
         "feeChanged": "La comisión cambió desde esta opinión"
       },
       "passkeyClosed": "Se cerró la solicitud de la passkey, así que no se firmó nada. Si este dispositivo no tiene una passkey para esta cuenta, usa el dispositivo que sí la tiene.",
-      "passkeyTimedOut": "La solicitud de la passkey expiró, así que no se firmó nada. Inténtalo de nuevo cuando estés listo."
+      "passkeyTimedOut": "La solicitud de la passkey expiró, así que no se firmó nada. Inténtalo de nuevo cuando estés listo.",
+      "intentSaveMultisigSetup": "Guardar la configuración de este multisig",
+      "intentRenameInRegistry": "Cambiar el nombre en el registro",
+      "labelName": "Nombre"
     },
     "signingApprove": {
       "resultingTotal": "Nuevo límite total",

@@ -127,8 +127,11 @@ pub struct Genesis {
     /// Hex quantity.
     pub salt_nonce: String,
     pub initializer: String,
-    /// A name written with the record (the registry's `recordNamed`): a
-    /// label, not part of the address, never changed, not unique.
+    /// The record's name: a label, not part of the address, not unique.
+    /// The registry requires one (1 to 64 bytes): whoever writes the record
+    /// first chooses it, and the Safe itself may replace it (`rename`). A
+    /// genesis read from chain history has none until one is given
+    /// ([`named_genesis`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
@@ -617,13 +620,74 @@ pub fn genesis_from_calldata(input: &str, safe: &str) -> Result<Option<Genesis>,
     Ok(None)
 }
 
-/// The genesis registry (v2): the same address on every chain.
-pub const GENESIS_REGISTRY: &str = "0x70b35C0FC8885019ff938542CD4E431725874802";
+/// The Safe Genesis Registry (v4: every record named, a Safe renames itself),
+/// deployed through the deterministic deployer with the salt
+/// `keccak256("safe-genesis-registry/v4")`: the same address on every chain
+/// it is on. Earlier versions (v1 `0xdA88…fb89`, v2 `0x70b3…4802`, v3
+/// `0x535f…801E`) are retired: the service reads only this one.
+pub const GENESIS_REGISTRY: &str = "0xF412388bF908E510066d3Be5c704bd9A327f945d";
 
-/// The registry call that records `g` on any chain — `recordNamed` with its
-/// name, else `record` — with its factory's proxy creation code (the
-/// registry re-derives the address from it). Anyone may send it.
+/// Whether the registry takes `name` with a record or a rename: 1 to
+/// [`MAX_NAME_BYTES`] bytes — its `EmptyName` and `NameTooLong` checks, and
+/// nothing more (it does not read UTF-8). [`valid_name`] is the stricter rule
+/// for a name this wallet writes or shows; every name it allows, the registry
+/// takes.
+pub fn recordable_name(name: &str) -> bool {
+    (1..=MAX_NAME_BYTES).contains(&name.len())
+}
+
+const NAME_ADJECTIVES: [&str; 32] = [
+    "Amber", "Brave", "Bright", "Calm", "Clever", "Cosmic", "Crimson", "Daring", "Eager", "Gentle",
+    "Golden", "Hidden", "Humble", "Jolly", "Kind", "Lucky", "Mellow", "Misty", "Noble", "Proud",
+    "Quiet", "Rapid", "Silent", "Silver", "Steady", "Sunny", "Swift", "Tidy", "Velvet", "Vivid",
+    "Wild", "Wise",
+];
+const NAME_NOUNS: [&str; 32] = [
+    "Badger", "Beacon", "Brook", "Cedar", "Comet", "Falcon", "Fern", "Fox", "Glacier", "Harbor",
+    "Heron", "Island", "Lantern", "Maple", "Meadow", "Otter", "Owl", "Pebble", "Pine", "Raven",
+    "Reef", "River", "Robin", "Sparrow", "Summit", "Thistle", "Tiger", "Valley", "Willow", "Wolf",
+    "Wren", "Zephyr",
+];
+
+/// The name the genesis service records a Safe under when its genesis came
+/// with none (genesis-rules' `default_name`, "Quiet Harbor"): two words drawn
+/// from `keccak256(address)`, so every device and every service instance
+/// gives the same Safe the same one. Nothing private goes into it — an
+/// imported Safe's address-book name stays on this device.
+pub fn default_name(safe: &str) -> Result<String, CoreError> {
+    let h = keccak256(addr(safe)?.as_slice());
+    Ok(format!(
+        "{} {}",
+        NAME_ADJECTIVES[h[0] as usize % 32],
+        NAME_NOUNS[h[1] as usize % 32]
+    ))
+}
+
+/// `g` as the registry and its service take it — with a name. Its own name
+/// when the registry would take it, else [`default_name`] of the address it
+/// makes: what a record of it holds, whoever writes it. The service ignores a
+/// genesis sent without one (a proposal's) and names a record itself, so the
+/// wallet always sends this.
+pub fn named_genesis(g: &Genesis) -> Result<Genesis, CoreError> {
+    if g.name.as_deref().is_some_and(recordable_name) {
+        return Ok(g.clone());
+    }
+    Ok(Genesis {
+        name: Some(default_name(&genesis_address(g)?)?),
+        ..g.clone()
+    })
+}
+
+const RECORD_SIGNATURE: &str = "record(address,bytes,address,bytes,uint256,string)";
+const RENAME_SIGNATURE: &str = "rename(string)";
+
+/// The registry call that records `g` on any chain —
+/// `record(factory, proxyCreationCode, singleton, initializer, saltNonce, name)`,
+/// with the name of [`named_genesis`] and its factory's proxy creation code
+/// (the registry re-derives the address from it). Anyone may send it; a
+/// record that exists already stays as it is, and keeps its name.
 pub fn record_call(g: &Genesis) -> Result<Call, CoreError> {
+    let g = named_genesis(g)?;
     let factory = addr(&g.factory)?;
     let code = KNOWN_FACTORIES
         .iter()
@@ -632,36 +696,234 @@ pub fn record_call(g: &Genesis) -> Result<Call, CoreError> {
         .transpose()?
         .ok_or_else(|| err("not a proxy factory this wallet knows"))?;
     let init = unhex(&g.initializer)?;
-    let name = g.name.as_deref().filter(|n| !n.is_empty());
-    let mut data = selector(if name.is_some() {
-        "recordNamed(address,bytes,address,bytes,uint256,string)"
-    } else {
-        "record(address,bytes,address,bytes,uint256)"
-    })
-    .to_vec();
-    let head_words = if name.is_some() { 6 } else { 5 };
+    let name = g.name.unwrap_or_default();
+    let mut data = selector(RECORD_SIGNATURE).to_vec();
     let code_tail = bytes_tail(&code);
     let init_tail = bytes_tail(&init);
     data.extend_from_slice(&word_addr(factory));
-    data.extend_from_slice(&word_usize(head_words * 32)); // proxyCreationCode offset
+    data.extend_from_slice(&word_usize(6 * 32)); // proxyCreationCode offset
     data.extend_from_slice(&word_addr(addr(&g.singleton)?));
-    data.extend_from_slice(&word_usize(head_words * 32 + code_tail.len())); // initializer offset
+    data.extend_from_slice(&word_usize(6 * 32 + code_tail.len())); // initializer offset
     data.extend_from_slice(&word_u256(quantity(&g.salt_nonce)?));
-    if name.is_some() {
-        data.extend_from_slice(&word_usize(
-            head_words * 32 + code_tail.len() + init_tail.len(),
-        ));
-    }
+    data.extend_from_slice(&word_usize(6 * 32 + code_tail.len() + init_tail.len())); // name offset
     data.extend(code_tail);
     data.extend(init_tail);
-    if let Some(n) = name {
-        data.extend(bytes_tail(n.as_bytes()));
-    }
+    data.extend(bytes_tail(name.as_bytes()));
     Ok(Call {
         to: addr(GENESIS_REGISTRY)?.to_checksum(None),
         value: "0x0".into(),
         data: hex(&data),
     })
+}
+
+/// `rename(name)` to the registry: what a Safe calls to give its own record
+/// this name. Only a name this wallet can show in full ([`valid_name`]); the
+/// registry's limits are within it.
+pub fn rename_call(name: &str) -> Result<Call, CoreError> {
+    if !valid_name(name) {
+        return Err(err("not a name a multisig can have"));
+    }
+    let mut data = selector(RENAME_SIGNATURE).to_vec();
+    data.extend_from_slice(&word_usize(0x20));
+    data.extend(bytes_tail(name.as_bytes()));
+    Ok(Call {
+        to: addr(GENESIS_REGISTRY)?.to_checksum(None),
+        value: "0x0".into(),
+        data: hex(&data),
+    })
+}
+
+/// The multisig's transaction that renames its record in the registry on the
+/// chain it runs on (a plain CALL, no coin). It needs the multisig deployed
+/// there — its executor deploys it first when it is not — and that chain's
+/// registry to hold its record (else the call reverts, `NotRecorded`).
+pub fn rename_tx(name: &str, nonce: &str) -> Result<SafeTx, CoreError> {
+    let call = rename_call(name)?;
+    Ok(plain_tx(
+        addr(&call.to)?,
+        U256::ZERO,
+        unhex(&call.data)?,
+        0,
+        quantity(nonce)?,
+    ))
+}
+
+/// The name in a `rename(string)` call, if `data` is exactly one (canonical
+/// ABI: one offset word, the length, the bytes, zero padding — nothing may
+/// hide in the rest) and the name is text. Whether Vela shows it is
+/// [`valid_name`]'s to say.
+pub fn read_rename(data: &[u8]) -> Option<String> {
+    if data.get(..4)? != selector(RENAME_SIGNATURE)
+        || U256::from_be_slice(data.get(4..36)?) != U256::from(0x20)
+    {
+        return None;
+    }
+    let len: usize = U256::from_be_slice(data.get(36..68)?).try_into().ok()?;
+    let bytes = data.get(68..68usize.checked_add(len)?)?;
+    if data.len() != 68 + len + pad32(len) || data[68 + len..].iter().any(|b| *b != 0) {
+        return None;
+    }
+    String::from_utf8(bytes.to_vec()).ok()
+}
+
+/// A call to the registry, as a multisig's transaction makes it. A rename is
+/// read as one — only with a name Vela can show in full, since every member
+/// reads it and anyone who looks the multisig up sees it; anything else to
+/// the registry (a `record`) is an ordinary contract call. No coin: nothing
+/// in the registry takes any.
+fn read_registry_call(to: Address, value: U256, data: &[u8]) -> Result<Action, &'static str> {
+    if !value.is_zero() {
+        return Err("sends coins to the genesis registry");
+    }
+    if data.get(..4) == Some(&selector(RENAME_SIGNATURE)[..]) {
+        return match read_rename(data) {
+            Some(name) if valid_name(&name) => Ok(Action::Rename { name }),
+            _ => Err("renames the multisig to a name Vela cannot show in full"),
+        };
+    }
+    Ok(Action::Call {
+        to: to.to_checksum(None),
+        value: value.to_string(),
+        data: hex(data),
+    })
+}
+
+/// What a `record(...)` call to the registry files: the genesis (with the
+/// name it carries) and the address the registry files it under — derived
+/// here the registry's way, from the proxy creation code IN the call, so the
+/// address is the one the record will hold whatever factory it names. `None`
+/// for anything that is not such a call.
+pub fn read_record_call(data: &[u8]) -> Option<(String, Genesis)> {
+    if data.get(..4)? != selector(RECORD_SIGNATURE) {
+        return None;
+    }
+    let body = &data[4..];
+    let word = |at: usize| body.get(at..at.checked_add(32)?).map(U256::from_be_slice);
+    let address = |i: usize| {
+        let w = word(i * 32)?;
+        (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+    };
+    let dynamic = |i: usize| -> Option<&[u8]> {
+        let at: usize = word(i * 32)?.try_into().ok()?;
+        let len: usize = word(at)?.try_into().ok()?;
+        let from = at.checked_add(32)?;
+        body.get(from..from.checked_add(len)?)
+    };
+    let factory = address(0)?;
+    let code = dynamic(1)?;
+    let singleton = address(2)?;
+    let initializer = dynamic(3)?;
+    let salt_nonce = word(4 * 32)?;
+    let name = String::from_utf8(dynamic(5)?.to_vec()).ok()?;
+    let mut salt = keccak256(initializer).to_vec();
+    salt.extend_from_slice(&word_u256(salt_nonce));
+    let mut init_code = code.to_vec();
+    init_code.extend_from_slice(&word_addr(singleton));
+    let safe = factory.create2(keccak256(salt), keccak256(init_code));
+    Some((
+        safe.to_checksum(None),
+        Genesis {
+            factory: factory.to_checksum(None),
+            singleton: singleton.to_checksum(None),
+            salt_nonce: hex_quantity(salt_nonce),
+            initializer: hex(initializer),
+            name: Some(name),
+        },
+    ))
+}
+
+/// `genesisOf(safe)` calldata, for an `eth_call` to [`GENESIS_REGISTRY`].
+pub fn genesis_of_call(safe: &str) -> Result<String, CoreError> {
+    let mut data = selector("genesisOf(address)").to_vec();
+    data.extend_from_slice(&word_addr(addr(safe)?));
+    Ok(hex(&data))
+}
+
+/// What one chain's registry holds for a Safe (v4's `Genesis`), as
+/// [`read_genesis_of`] reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryRecord {
+    /// The genesis, with the record's name on this chain.
+    pub genesis: Genesis,
+    pub proxy_creation_code_hash: String,
+    /// Who wrote the record. Informational only.
+    pub recorder: String,
+    pub recorded_at: u64,
+    /// Its position in this registry's write order.
+    pub index: u32,
+    /// Block of the Safe's last `rename` here, 0 if it never renamed itself.
+    pub renamed_at: u64,
+    /// The name is the Safe's own: it renamed itself, or wrote the record.
+    /// Otherwise whoever wrote the record first chose it, and it proves nothing.
+    pub name_by_safe: bool,
+}
+
+/// Read a `genesisOf(safe)` answer (`(bool found, Genesis genesis)`): `None`
+/// when the registry holds nothing for `safe`. The genesis is re-derived
+/// here, as one from anywhere is, and must make `safe`: a registry files a
+/// record only under the address its own derivation gives, so an answer that
+/// does not is no registry's.
+pub fn read_genesis_of(safe: &str, ret: &str) -> Result<Option<RegistryRecord>, CoreError> {
+    let me = addr(safe)?;
+    let ret = unhex(ret)?;
+    let bad = || err("not a genesisOf answer");
+    let word = |at: usize| -> Result<U256, CoreError> {
+        ret.get(at..at.checked_add(32).ok_or_else(bad)?)
+            .map(U256::from_be_slice)
+            .ok_or_else(bad)
+    };
+    let small = |at: usize| -> Result<usize, CoreError> { word(at)?.try_into().map_err(|_| bad()) };
+    let address = |at: usize| -> Result<Address, CoreError> {
+        let w = word(at)?;
+        if w >> 160 != U256::ZERO {
+            return Err(bad());
+        }
+        Ok(Address::from_word(B256::from(w)))
+    };
+    let found = word(0)?;
+    if found > U256::from(1) {
+        return Err(bad());
+    }
+    if found.is_zero() {
+        return Ok(None);
+    }
+    // The tuple's head: factory, singleton, renamedAt, saltNonce,
+    // →initializer, proxyCreationCodeHash, recorder, recordedAt, index, →name.
+    let t = small(32)?;
+    let field = |i: usize| t.checked_add(i * 32).ok_or_else(bad);
+    let tail = |i: usize| -> Result<Vec<u8>, CoreError> {
+        let at = t.checked_add(small(field(i)?)?).ok_or_else(bad)?;
+        let len = small(at)?;
+        let from = at.checked_add(32).ok_or_else(bad)?;
+        ret.get(from..from.checked_add(len).ok_or_else(bad)?)
+            .map(<[u8]>::to_vec)
+            .ok_or_else(bad)
+    };
+    let number =
+        |i: usize| -> Result<u64, CoreError> { word(field(i)?)?.try_into().map_err(|_| bad()) };
+    let name = String::from_utf8(tail(9)?).map_err(|_| err("the record's name is not text"))?;
+    let recorder = address(field(6)?)?;
+    let renamed_at = number(2)?;
+    let record = RegistryRecord {
+        genesis: Genesis {
+            factory: address(field(0)?)?.to_checksum(None),
+            singleton: address(field(1)?)?.to_checksum(None),
+            salt_nonce: hex_quantity(word(field(3)?)?),
+            initializer: hex(&tail(4)?),
+            name: (!name.is_empty()).then_some(name),
+        },
+        proxy_creation_code_hash: hex(&word(field(5)?)?.to_be_bytes::<32>()),
+        recorder: recorder.to_checksum(None),
+        recorded_at: number(7)?,
+        index: u32::try_from(number(8)?).map_err(|_| bad())?,
+        renamed_at,
+        name_by_safe: renamed_at > 0 || recorder == me,
+    };
+    if genesis_address(&record.genesis)? != me.to_checksum(None) {
+        return Err(err("the registry's record does not make this address"));
+    }
+    Ok(Some(record))
 }
 
 /// `createProxyWithNonce(singleton, initializer, saltNonce)`: deploys a genesis.
@@ -1465,6 +1727,12 @@ pub enum Action {
     ChangeThreshold {
         threshold: String,
     },
+    /// The multisig renames its own record in the genesis registry
+    /// (`rename(name)` to [`GENESIS_REGISTRY`]): a label, read by anyone who
+    /// looks the multisig up; it changes nothing about who controls it.
+    Rename {
+        name: String,
+    },
     /// Any other call to another contract (a dApp's): `value` in base units,
     /// decimal; `data` as sent. Never a call into the multisig itself, nor a
     /// delegatecall — those can rewrite the Safe and stay refused.
@@ -1582,6 +1850,7 @@ fn read_batch(data: &[u8], me: Address) -> Result<Vec<BatchCall>, &'static str> 
         }
         U256::from_be_slice(data.get(36..68)?).try_into().ok()
     };
+    let registry: Address = GENESIS_REGISTRY.parse().map_err(|_| UNREADABLE)?;
     let len = header().ok_or(UNREADABLE)?;
     let packed = data.get(68..68 + len).ok_or(UNREADABLE)?;
     // Canonical encoding only: nothing may hide in padding or trailing bytes.
@@ -1618,6 +1887,8 @@ fn read_batch(data: &[u8], me: Address) -> Result<Vec<BatchCall>, &'static str> 
                 None
             };
             members.ok_or("a call in the batch changes the multisig in a way Vela does not sign")?
+        } else if to == registry {
+            read_registry_call(to, value, d)?
         } else {
             read_transfer(to, value, d).unwrap_or_else(|| Action::Call {
                 to: to.to_checksum(None),
@@ -1677,6 +1948,10 @@ pub fn review(chain_id: u64, multisig: &str, tx: &SafeTx) -> Result<Review, Core
                 None
             }
         }
+        0 if t.to == addr(GENESIS_REGISTRY)? => match read_registry_call(t.to, t.value, &t.data) {
+            Ok(action) => Some(action),
+            Err(why) => return Ok(refuse(why)),
+        },
         0 => read_transfer(t.to, t.value, &t.data).or_else(|| {
             Some(Action::Call {
                 to: t.to.to_checksum(None),
@@ -1694,7 +1969,7 @@ pub fn review(chain_id: u64, multisig: &str, tx: &SafeTx) -> Result<Review, Core
             refusal: None,
         },
         None => refuse(
-            "not a transaction Vela signs (only transfers, calls, member changes and cancellations)",
+            "not a transaction Vela signs (only transfers, calls, member changes, renames and cancellations)",
         ),
     })
 }
@@ -1754,6 +2029,24 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "safe")?,
         )?)),
         "recordCall" => out(json(&record_call(&arg(&args, "genesis")?)?)),
+        "recordableName" => out(serde_json::json!(recordable_name(&arg::<String>(
+            &args, "name"
+        )?))),
+        "defaultName" => out(serde_json::json!(default_name(&arg::<String>(
+            &args, "safe"
+        )?)?)),
+        "namedGenesis" => out(json(&named_genesis(&arg(&args, "genesis")?)?)),
+        "renameTx" => out(json(&rename_tx(
+            &arg::<String>(&args, "name")?,
+            &arg::<String>(&args, "nonce")?,
+        )?)),
+        "genesisOfCall" => out(serde_json::json!(genesis_of_call(&arg::<String>(
+            &args, "safe"
+        )?)?)),
+        "readGenesisOf" => out(json(&read_genesis_of(
+            &arg::<String>(&args, "safe")?,
+            &arg::<String>(&args, "ret")?,
+        )?)),
         "deployCall" => out(json(&deploy_call(&arg(&args, "genesis")?)?)),
         "safeTxHash" => out(serde_json::json!(safe_tx_hash(
             arg(&args, "chainId")?,
@@ -1892,7 +2185,7 @@ mod tests {
             serde_json::from_str(&call_json("serviceAnswer", &body.to_string()).unwrap()).unwrap();
         assert_eq!(
             answer,
-            serde_json::json!({"kind":"genesis","chains":[{"chainId":100,"name":null}],"homeChainId":null})
+            serde_json::json!({"kind":"genesis","chains":[{"chainId":100,"name":null,"registry":false}],"homeChainId":null,"ok":true})
         );
     }
 
@@ -2611,26 +2904,309 @@ mod tests {
         );
     }
 
-    /// The record call, as the registry decodes it: checked against
-    /// `cast calldata` of the same arguments.
+    /// The record call, as registry v4 decodes it — one `record`, the name
+    /// required: checked against `cast calldata` of the same arguments
+    /// (`tests/vectors/multisig-record-v4.hex`), and sent on a Gnosis fork to
+    /// the deployed v4 code, where it recorded the Safe whose `genesisOf`
+    /// answer is `multisig-genesis-of.hex`.
     #[test]
     fn the_record_call_is_the_registrys() {
         let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
         let call = record_call(&ms.genesis).unwrap();
         assert_eq!(call.to, GENESIS_REGISTRY);
+        assert_eq!(call.value, "0x0");
         assert!(call.data.starts_with(&hex(&selector(
-            "recordNamed(address,bytes,address,bytes,uint256,string)"
+            "record(address,bytes,address,bytes,uint256,string)"
         ))));
         assert_eq!(
             call.data,
-            include_str!("../tests/vectors/multisig-record-named.hex").trim()
+            include_str!("../tests/vectors/multisig-record-v4.hex").trim()
         );
+        // A genesis with no name (an imported Safe's) is recorded under the
+        // name the service would give it: never an empty one the registry
+        // refuses (`EmptyName`), never the device's own label.
         let mut unnamed = ms.genesis.clone();
         unnamed.name = None;
         let plain = record_call(&unnamed).unwrap();
-        assert!(plain.data.starts_with(&hex(&selector(
-            "record(address,bytes,address,bytes,uint256)"
-        ))));
+        let named = Genesis {
+            name: Some(default_name(&ms.address).unwrap()),
+            ..unnamed.clone()
+        };
+        assert_eq!(plain, record_call(&named).unwrap());
+        unnamed.name = Some(String::new());
+        assert_eq!(plain, record_call(&unnamed).unwrap());
+    }
+
+    /// v4's address: the deterministic deployer, `keccak256("safe-genesis-registry/v4")`
+    /// and the registry's init code hash (`forge script script/Deploy.s.sol`).
+    #[test]
+    fn the_registry_is_v4_at_its_deterministic_address() {
+        let deployer: Address = "0x4e59b44847b379578588920cA78FbF26c0B4956C"
+            .parse()
+            .unwrap();
+        let salt = keccak256("safe-genesis-registry/v4");
+        let init_code_hash: B256 =
+            "0x0cda7b2c51511808f74be8b6b67914b0c9eadff5455dee95f57b357c288aeb83"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            deployer.create2(salt, init_code_hash).to_checksum(None),
+            GENESIS_REGISTRY
+        );
+    }
+
+    /// The registry's own limits (`EmptyName`, `NameTooLong`: 1 to 64 bytes,
+    /// UTF-8 unchecked) hold every name the wallet allows.
+    #[test]
+    fn every_name_the_wallet_writes_the_registry_takes() {
+        assert!(!recordable_name(""));
+        assert!(recordable_name(&"x".repeat(64)));
+        assert!(!recordable_name(&"x".repeat(65)));
+        assert!(recordable_name(&"多".repeat(21)), "63 bytes");
+        assert!(!recordable_name(&"多".repeat(22)), "66 bytes");
+        // Bytes, not characters: 16 four-byte emoji are 64 bytes; one more is not.
+        assert!(recordable_name(&"🦊".repeat(16)));
+        assert!(!recordable_name(&"🦊".repeat(17)));
+        assert!(valid_name(&"🦊".repeat(16)));
+        assert!(!valid_name(&"🦊".repeat(17)));
+        // The registry takes what Vela would not show; the wallet's rule is the narrower one.
+        assert!(recordable_name(" Team"));
+        assert!(!valid_name(" Team"));
+        for name in ["Team fund", "家庭基金", "👨‍👩‍👧 fund", &"x".repeat(64)] {
+            assert!(valid_name(name) && recordable_name(name), "{name}");
+        }
+    }
+
+    /// The service's default name (genesis-rules `default_name`): the same two
+    /// words from `keccak256(address)` — 0x1111…1111 hashes to 0xe2c0…, so
+    /// adjective 0xe2 % 32 = 2 and noun 0xc0 % 32 = 0.
+    #[test]
+    fn the_default_name_is_the_services() {
+        assert_eq!(default_name(A).unwrap(), "Bright Badger");
+        assert!(valid_name(&default_name(B).unwrap()));
+        // Case does not matter: it is the address that is hashed.
+        assert_eq!(
+            default_name(&A.to_uppercase().replace("0X", "0x")).unwrap(),
+            "Bright Badger"
+        );
+        // What the v4 service named these unnamed geneses (salt nonces 8, 9,
+        // 10 of the A/B 2-of-2): its `POST /api/import` answer's `genesis.name`.
+        for (nonce, name) in [
+            ("0x8", "Bright Harbor"),
+            ("0x9", "Brave Cedar"),
+            ("0xa", "Vivid Thistle"),
+        ] {
+            let ms = salted(&[A.into(), B.into()], 2, nonce).unwrap();
+            assert_eq!(default_name(&ms.address).unwrap(), name, "{nonce}");
+            assert_eq!(
+                named_genesis(&ms.genesis).unwrap().name.as_deref(),
+                Some(name)
+            );
+        }
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap();
+        let named = named_genesis(&ms.genesis).unwrap();
+        assert_eq!(named.name, Some(default_name(&ms.address).unwrap()));
+        // A name it has stays; the address does not move.
+        let own = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        assert_eq!(named_genesis(&own.genesis).unwrap(), own.genesis);
+        assert_eq!(genesis_address(&named).unwrap(), ms.address);
+    }
+
+    /// `rename(string)` as the registry decodes it (`cast calldata
+    /// 'rename(string)' 'Team fund'`), and the multisig's transaction for it.
+    #[test]
+    fn a_rename_is_the_registrys_call() {
+        let call = rename_call("Team fund").unwrap();
+        assert_eq!(call.to, GENESIS_REGISTRY);
+        assert_eq!(
+            call.data,
+            include_str!("../tests/vectors/multisig-rename.hex").trim()
+        );
+        for refused in ["", " Team", "Team\u{202E}dnuf", &"x".repeat(65)] {
+            assert!(rename_call(refused).is_err(), "{refused:?}");
+        }
+        let tx = rename_tx("Team fund", "0x3").unwrap();
+        assert_eq!(tx.to, GENESIS_REGISTRY);
+        assert_eq!(
+            (tx.value.as_str(), tx.operation, tx.nonce.as_str()),
+            ("0x0", 0, "0x3")
+        );
+        assert_eq!(tx.data, call.data);
+        assert_eq!(
+            read_rename(&unhex(&call.data).unwrap()).as_deref(),
+            Some("Team fund")
+        );
+    }
+
+    /// A rename reads as one, for every member, alone or in a batch — and only
+    /// with a name Vela shows in full and an encoding with nothing hidden in it.
+    #[test]
+    fn a_rename_reads_as_a_rename() {
+        let me = "0x4851114Fca55f17B1a5fC76BcE6c59107D003359";
+        let tx = rename_tx("Team fund", "0x0").unwrap();
+        let r = review(100, me, &tx).unwrap();
+        assert_eq!(
+            r.action,
+            Some(Action::Rename {
+                name: "Team fund".into()
+            })
+        );
+        let json = serde_json::to_value(&r.action).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"kind": "rename", "name": "Team fund"})
+        );
+
+        let raw = |name: &str| {
+            let mut d = selector("rename(string)").to_vec();
+            d.extend_from_slice(&word_usize(0x20));
+            d.extend(bytes_tail(name.as_bytes()));
+            SafeTx {
+                data: hex(&d),
+                ..tx.clone()
+            }
+        };
+        // A name that hides or turns text around: refused, not read as a plain call.
+        for hidden in ["Team\u{202E}dnuf", "Team\u{200B}fund", " Team"] {
+            let r = review(100, me, &raw(hidden)).unwrap();
+            assert_eq!(r.action, None, "{hidden:?}");
+            assert!(r.refusal.unwrap().contains("cannot show"));
+        }
+        // Trailing bytes after the name: not canonical, refused.
+        let mut padded = unhex(&tx.data).unwrap();
+        padded.extend_from_slice(&[0u8; 32]);
+        let r = review(
+            100,
+            me,
+            &SafeTx {
+                data: hex(&padded),
+                ..tx.clone()
+            },
+        )
+        .unwrap();
+        assert_eq!(r.action, None);
+        // Coins to the registry: refused.
+        let r = review(
+            100,
+            me,
+            &SafeTx {
+                value: "0x1".into(),
+                ..tx.clone()
+            },
+        )
+        .unwrap();
+        assert_eq!(r.action, None);
+        // Anything else to the registry is an ordinary call (a Safe recording itself).
+        let record =
+            record_call(&salted(&[A.into(), B.into()], 2, "0x7").unwrap().genesis).unwrap();
+        let r = review(
+            100,
+            me,
+            &SafeTx {
+                data: record.data.clone(),
+                ..tx.clone()
+            },
+        )
+        .unwrap();
+        assert!(matches!(r.action, Some(Action::Call { .. })));
+        // In a batch, the rename leg reads as one too.
+        let batch = calls_tx(
+            &[
+                CallArg {
+                    to: tx.to.clone(),
+                    value: "0x0".into(),
+                    data: tx.data.clone(),
+                },
+                CallArg {
+                    to: B.into(),
+                    value: "0x1".into(),
+                    data: "0x".into(),
+                },
+            ],
+            "0x0",
+        )
+        .unwrap();
+        let Some(Action::Batch { calls }) = review(100, me, &batch).unwrap().action else {
+            panic!("a batch");
+        };
+        assert_eq!(
+            calls[0].action,
+            Action::Rename {
+                name: "Team fund".into()
+            }
+        );
+        let hidden_leg = calls_tx(
+            &[
+                CallArg {
+                    to: tx.to.clone(),
+                    value: "0x0".into(),
+                    data: raw("Team\u{202E}x").data,
+                },
+                CallArg {
+                    to: B.into(),
+                    value: "0x1".into(),
+                    data: "0x".into(),
+                },
+            ],
+            "0x0",
+        )
+        .unwrap();
+        assert_eq!(review(100, me, &hidden_leg).unwrap().action, None);
+    }
+
+    /// `genesisOf` as registry v4 answered it on a Gnosis fork for the record
+    /// of `multisig-record-v4.hex`, written by anvil's account #0.
+    #[test]
+    fn a_genesis_of_answer_is_read_and_re_derived() {
+        assert_eq!(
+            genesis_of_call("0x4851114Fca55f17B1a5fC76BcE6c59107D003359").unwrap(),
+            "0xf6913a5d0000000000000000000000004851114fca55f17b1a5fc76bce6c59107d003359"
+        );
+        let ret = include_str!("../tests/vectors/multisig-genesis-of.hex").trim();
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        assert_eq!(ms.address, "0x4851114Fca55f17B1a5fC76BcE6c59107D003359");
+        let r = read_genesis_of(&ms.address, ret).unwrap().unwrap();
+        assert_eq!(r.genesis, ms.genesis);
+        assert_eq!(r.recorder, "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+        // The fourth record on that fork (index 3), never renamed.
+        assert_eq!((r.index, r.renamed_at), (3, 0));
+        assert!(r.recorded_at > 0);
+        assert!(!r.name_by_safe, "the first writer named it, not the Safe");
+        // The same answer for another address is no registry's.
+        assert!(read_genesis_of(B, ret).is_err());
+        // Not recorded.
+        let none = format!("0x{}{}", "0".repeat(64), "0".repeat(62) + "40");
+        let mut none = none;
+        none.push_str(&"0".repeat(64 * 10));
+        assert_eq!(read_genesis_of(&ms.address, &none).unwrap(), None);
+        // Truncated or garbled: an error, never a record.
+        assert!(read_genesis_of(&ms.address, &ret[..ret.len() - 64]).is_err());
+        assert!(read_genesis_of(&ms.address, "0x").is_err());
+        assert!(read_genesis_of(&ms.address, &format!("0x{}", "f".repeat(64))).is_err());
+    }
+
+    /// The name is the Safe's own once it renamed itself, or when it wrote
+    /// the record itself.
+    #[test]
+    fn a_name_is_the_safes_own_after_a_rename() {
+        let ret = include_str!("../tests/vectors/multisig-genesis-of.hex").trim();
+        let me = "0x4851114Fca55f17B1a5fC76BcE6c59107D003359";
+        let mut bytes = unhex(ret).unwrap();
+        // renamedAt is the tuple's third word; the tuple starts at 0x40.
+        let at = 0x40 + 2 * 32;
+        bytes[at + 31] = 9;
+        let renamed = read_genesis_of(me, &hex(&bytes)).unwrap().unwrap();
+        assert_eq!(renamed.renamed_at, 9);
+        assert!(renamed.name_by_safe);
+        let mut bytes = unhex(ret).unwrap();
+        let recorder = 0x40 + 6 * 32;
+        bytes[recorder + 12..recorder + 32].copy_from_slice(addr(me).unwrap().as_slice());
+        assert!(
+            read_genesis_of(me, &hex(&bytes))
+                .unwrap()
+                .unwrap()
+                .name_by_safe
+        );
     }
 
     /// A creation buried in other calldata (here: a 4337 init code — factory

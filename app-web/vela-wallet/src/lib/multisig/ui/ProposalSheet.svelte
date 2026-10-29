@@ -47,6 +47,7 @@
 		tokenInfo
 	} from '../core/display';
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
+	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
 	import { sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
@@ -341,6 +342,8 @@
 				return;
 			}
 			phase = { kind: 'sent', txHash, by };
+			// A rename: the record's new name is read from the chain now.
+			if (item.review.action?.kind === 'rename') void recheckRecord(account.address);
 			onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
 			// A dApp's transaction: its site gets the transaction, now.
 			draft?.executed(txHash);

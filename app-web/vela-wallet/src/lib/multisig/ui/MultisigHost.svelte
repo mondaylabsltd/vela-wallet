@@ -13,7 +13,7 @@
 	import { onMount } from 'svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { followUnrecorded, keepMultisig } from '../core/accounts';
+	import { checkRecords, followUnrecorded, keepMultisig } from '../core/accounts';
 	import { openProposalLink } from '../core/linked.svelte';
 	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
 	import { chainMeta } from '$lib/services/chains';
@@ -85,6 +85,9 @@
 		});
 		// A record that has not landed is asked about again while any page is up.
 		const stopRecords = followUnrecorded();
+		// What each shared multisig's record is now (registry v4: its name may
+		// have changed; the service may have no record of an older registry's).
+		void checkRecords();
 		void answerLink();
 		const onhash = () => void answerLink();
 		window.addEventListener('hashchange', onhash);

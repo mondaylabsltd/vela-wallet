@@ -17,6 +17,8 @@ import { submitExecution } from './execute';
 import {
 	callsTx,
 	cancelTx,
+	namedGenesis,
+	renameTx,
 	reviewTx,
 	transfersTx,
 	safeTxHash,
@@ -474,7 +476,7 @@ export async function submitProposal(
 		safe: account.address,
 		safeTx: tx,
 		approval,
-		genesis: account.genesis
+		genesis: namedGenesis(account.genesis)
 	});
 	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
 	multisig.useChain(account.address, chainId);
@@ -520,6 +522,22 @@ export async function proposeTransfers(
 			`0x${nonce.toString(16)}`
 		)
 	);
+}
+
+/**
+ * Rename the multisig's record in the registry on `chainId` — a transaction
+ * of the multisig's own (`rename(name)` to the registry, which only the Safe
+ * itself can call), proposed at the next free nonce and approved at once like
+ * a transfer; the members approve it and one executes it there (deploying the
+ * multisig on that chain first if it is not yet). The core reads it back as a
+ * rename before anything is signed. Resolves its safeTxHash.
+ */
+export async function proposeRename(
+	address: string,
+	chainId: number,
+	name: string
+): Promise<{ safeTxHash: string }> {
+	return proposeBuilt(address, chainId, (nonce) => renameTx(name, `0x${nonce.toString(16)}`));
 }
 
 /**
@@ -642,7 +660,7 @@ export async function approve(account: MultisigAccount, item: ProposalItem, owne
 		safe: account.address,
 		safeTx: item.tx,
 		approval,
-		genesis: account.genesis
+		genesis: namedGenesis(account.genesis)
 	});
 	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
 	return answer.proposal;

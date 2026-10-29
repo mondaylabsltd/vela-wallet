@@ -310,7 +310,10 @@
         "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
       },
       "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, es wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nimm das Gerät, auf dem er liegt.",
-      "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist."
+      "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist.",
+      "intentSaveMultisigSetup": "Einrichtung dieses Multisig speichern",
+      "intentRenameInRegistry": "Im Register umbenennen",
+      "labelName": "Name"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

@@ -3,6 +3,8 @@
  * deployed, the genesis recorded on the creator's passkey proof), fund it,
  * propose a transfer, collect the approvals, execute — the multisig and its
  * deployment in the executor's one user operation — and see the funds arrive.
+ * Against the Safe Genesis Registry v4 (every record named; a Safe renames
+ * itself) and the service built from the registry repository's tree.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en } from '../live-helpers';
@@ -10,9 +12,14 @@ import {
 	EOA_ONE,
 	EOA_TWO,
 	FIXTURES,
+	GENESIS,
+	RELAY,
 	UNREAD_CHAIN,
 	balanceOf,
 	enterParallel,
+	landedRecord,
+	recordOnChain,
+	rpc,
 	setBalance,
 	undeployedSafe,
 	useHarness,
@@ -38,8 +45,12 @@ async function proposeSend(
 		.click();
 	await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
 	// The picker's row, not the home's: on the desktop both are on screen, and
-	// the picker (the third column) is the last.
-	await page.getByRole('button', { name: coin.row }).last().click({ timeout: 60_000 });
+	// the picker (the third column) is the last — once it has drawn its rows,
+	// which follow the balances; before that, the last one is the home's.
+	const rows = page.getByRole('button', { name: coin.row });
+	if ((page.viewportSize()?.width ?? 0) >= 1280)
+		await expect(rows).toHaveCount(2, { timeout: 60_000 });
+	await rows.last().click({ timeout: 60_000 });
 	await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
 	await page.getByRole('textbox', { name: coin.symbol }).fill(amount);
 	await expect(page.getByText('2 of', { exact: false }).first()).toBeVisible();
@@ -67,7 +78,7 @@ function errors(page: Page): string[] {
 		}
 	});
 	page.on('response', async (r) => {
-		if (!/127\.0\.0\.1:(8787|8790)/.test(r.url())) return;
+		if (!r.url().startsWith(GENESIS) && !r.url().startsWith(RELAY)) return;
 		const body = await r.text().catch(() => '');
 		console.log(
 			`[net ${r.status()}] ${r.request().method()} ${r.url().replace(/^http:\/\/127\.0\.0\.1:/, '')} ${(r.request().postData() ?? '').slice(0, 160)} → ${body.slice(0, 300)}`
@@ -534,5 +545,136 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 	expect(thrown).toEqual([]);
 	expect(thrownOne).toEqual([]);
 	expect(thrownTwo).toEqual([]);
+	await ctx.close();
+});
+
+/**
+ * Registry v4: the multisig renames its record itself — a transaction of its
+ * own, proposed from its settings, approved and executed like any other (the
+ * executor deploys it on Gnosis first). The device's label is untouched; the
+ * name shown is the record's, read back from the chain.
+ */
+test('rename on chain: a proposal of its own, approved and executed; the registry holds the new name', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	await page
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await page.getByRole('button', { name: 'Add account' }).click();
+	await page.getByRole('button', { name: /^Create multisig/ }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Old name');
+	// Two and Three, Two first: Two's passkey asks for the record, so the
+	// sponsor's per-owner budget (5 a day, spent by the tests above on One)
+	// still pays and the record lands on chain, where a rename needs it.
+	await page.locator('ul.choices').getByText('Parallel One', { exact: true }).click();
+	await page.getByText('Parallel Two', { exact: true }).click();
+	await page.getByText('Parallel Three', { exact: true }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Create', exact: true }).click();
+	await page.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	// The service wrote it on its home chain, with the name it was created with.
+	expect((await landedRecord(multisig)).genesis.name).toBe('Old name');
+	expect(await recordOnChain(multisig)).toEqual({ name: 'Old name', renamedAt: 0 });
+
+	await test.step('propose the rename from its settings', async () => {
+		await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
+		await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByTestId('registry-name')).toHaveText('Old name');
+		await page.getByRole('button', { name: 'Rename on chain' }).click();
+		await page.getByRole('textbox', { name: 'Name' }).fill('Team treasury');
+		await shot(page, 'r1-rename');
+		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		// The members read it as what it is.
+		await expect(
+			page.getByText('Rename this multisig in the registry to “Team treasury”').first()
+		).toBeVisible({ timeout: 60_000 });
+		await expect(page.getByText('1/2 approved').first()).toBeVisible();
+		await shot(page, 'r2-proposal');
+	});
+
+	await test.step('the second member approves and executes', async () => {
+		await page.getByRole('button', { name: 'Approve and execute' }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		await shot(page, 'r3-executed');
+	});
+
+	const record = await recordOnChain(multisig);
+	expect(record?.name).toBe('Team treasury');
+	expect(record?.renamedAt).toBeGreaterThan(0);
+	// Deployed on Gnosis by its executor: renaming needs the Safe itself.
+	expect(await rpc<string>('eth_getCode', [multisig, 'latest'])).not.toBe('0x');
+	// The wallet shows the record's new name, read from the chain.
+	await page.keyboard.press('Escape');
+	await expect(page.getByTestId('registry-name')).toHaveText('Team treasury', { timeout: 30_000 });
+	await page.reload();
+	await expect(page.getByText('Team treasury', { exact: true }).first()).toBeVisible({
+		timeout: 30_000
+	});
+	await shot(page, 'r4-renamed');
+	expect(thrown).toEqual([]);
+	await ctx.close();
+});
+
+/**
+ * A multisig recorded in an earlier registry (v1–v3, which the v4 service no
+ * longer reads) — here, one this device holds as shared whose record no v4
+ * registry has: said as not shared, and shared again on a member's passkey.
+ */
+test('a multisig the service has no record of: said as not shared, and shared again', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	// Three first: its passkey shares it again (a budget the tests above leave alone).
+	const old = await undeployedSafe([FIXTURES.three, FIXTURES.two], 2, String(Date.now()));
+	expect(await recordOnChain(old.address)).toBeNull();
+	await page.evaluate(
+		({ address, genesis, owners }) => {
+			localStorage.setItem(
+				'vela.multisigAccounts',
+				JSON.stringify([
+					{
+						address,
+						genesis,
+						owners,
+						threshold: 2,
+						// What a device that created it under registry v2 holds.
+						recorded: true,
+						shared: true,
+						chainIds: [100],
+						addedMs: Date.now() - 86_400_000
+					}
+				])
+			);
+			localStorage.setItem('vela.activeMultisig', address);
+		},
+		{ address: old.address, genesis: old.genesis, owners: [FIXTURES.three, FIXTURES.two] }
+	);
+	await page.goto('/en/settings');
+	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByText(/^Not shared yet/).first()).toBeVisible({ timeout: 30_000 });
+	await shot(page, 'o1-not-shared');
+	await page.getByRole('button', { name: 'Share it again' }).click();
+	await expect(page.getByText(/^Not shared yet/)).toHaveCount(0, { timeout: 60_000 });
+	await shot(page, 'o2-shared-again');
+	// Recorded on the fork's v4 registry, under the name the service would
+	// have given it (it came without one).
+	const landed = await landedRecord(old.address);
+	expect(landed.genesis.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+	expect((await recordOnChain(old.address))?.name).toBe(landed.genesis.name);
+	expect(thrown).toEqual([]);
 	await ctx.close();
 });
