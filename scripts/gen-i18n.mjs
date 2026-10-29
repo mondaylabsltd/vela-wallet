@@ -1007,8 +1007,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   orphans no client read (`bugReport.{stepsLabel, cancel}`).
 //   2253 + 10 = 2263 leaves, 120 branches.
 // 2386 (Feedback page, 2026-10-28): 2266 leaves, 120 branches.
-if (PATHS.length !== 2386) fail(`expected 2386 paths (2266 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2266) fail(`expected 2266 leaf paths, got ${leafSet.size}`);
+// 2374 (the account panel's Keys copy, 2026-10-29): + `settingsModals.keys.
+//   subtitleSingle` — one key is "This passkey signs…", several "Any one of
+//   them signs…" (the bare `subtitle`, which the shells read). A difference of
+//   meaning, chosen by exactly one key in every locale, not a plural form.
+//   2253 + 1 = 2254 leaves, 120 branches.
+// 2387 (Account panel copy, 2026-10-28): 2267 leaves, 120 branches.
+if (PATHS.length !== 2387) fail(`expected 2387 paths (2267 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2267) fail(`expected 2267 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 

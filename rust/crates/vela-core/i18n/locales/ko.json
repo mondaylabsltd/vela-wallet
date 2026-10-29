@@ -70,7 +70,7 @@
       "pageSave": "저장",
       "pageAdd": "직접 배포한 서명 페이지 추가",
       "pageDuplicate": "이미 저장된 페이지입니다.",
-      "keysOn": "키 위치: {{domain}}",
+      "keysOn": "패스키는 내 기기에 보관되며 {{domain}}에만 서명합니다",
       "pageSelfHosted": "직접 배포한 서명 페이지 · {{domain}}",
       "pageTrust": "이 버전 신뢰",
       "pageRename": "이름 변경",
@@ -78,15 +78,15 @@
       "pageName": "이름"
     },
     "venue": {
-      "title": "검토하고 서명하는 곳",
-      "subtitle": "이 계정의 거래와 메시지에 적용됩니다. 키는 바뀌지 않습니다.",
-      "inVela": "Vela에서 검토하고 서명",
-      "inVelaBody": "Vela 자체 서명 화면",
-      "page": "신뢰할 수 있는 서명 페이지에서 검토하고 서명",
-      "pageBody": "의존성 없는 페이지가 서명할 내용을 그대로 보여 줍니다",
-      "blockedApp": "Vela는 {{domain}}의 키를 사용할 수 없습니다.",
-      "blockedPage": "이 페이지는 {{pageDomain}}에 있고, 이 계정의 키는 {{domain}}에 있습니다.",
-      "blockedWeb": "서명 페이지는 웹이 아닌 Vela 앱에서만 열 수 있습니다."
+      "title": "서명 방법",
+      "subtitle": "이 계정의 거래와 메시지를 어디서 확인할지 고릅니다. 키는 그대로입니다.",
+      "inVela": "Vela에서 서명",
+      "inVelaBody": "Vela 자체 확인 화면",
+      "page": "신뢰할 수 있는 서명 페이지에서 서명",
+      "pageBody": "보여 주는 내용 그대로 서명하는 독립 페이지",
+      "blockedApp": "이 계정의 패스키는 {{domain}}에만 서명하므로 Vela에서는 여기서 사용할 수 없습니다.",
+      "blockedPage": "이 페이지는 {{pageDomain}}에 있지만, 이 계정의 패스키는 {{domain}}에만 서명합니다.",
+      "blockedWeb": "웹에서는 사용할 수 없습니다. Vela 앱에서 여세요."
     },
     "advanced": {
       "networksTitle": "네트워크",

@@ -103,16 +103,17 @@
       "urlRefused": "Nicht gespeichert – verwenden Sie eine https://-Adresse (einfaches http:// nur für diesen Computer). Die bisherige Adresse bleibt in Gebrauch."
     },
     "backup": {
-      "title": "Wallet-Eintrag auf Ethereum kopieren",
-      "backedUp": "Auf Ethereum kopiert",
-      "notBackedUp": "Noch nicht kopiert (optional)",
+      "title": "Kontoeintrag auf Ethereum sichern",
+      "backedUp": "Gesichert",
+      "notBackedUp": "Nicht gesichert (optional)",
       "couldNotCheck": "Prüfung nicht möglich. Zum Wiederholen tippen.",
-      "cannotCopy": "Dieses ältere Wallet kann nicht kopiert werden",
-      "explain": "Der Eintrag Ihres Wallets auf Gnosis ist öffentlich: Adresse und Name sowie zu jedem Schlüssel Name, öffentlicher Schlüssel, Credential-ID und Authenticator-Modell. Ein Gerät mit einem Ihrer Passkeys findet dieses Wallet darüber. Hier wird eine Kopie davon auch auf Ethereum abgelegt. Das ist eine Ethereum-Transaktion: Sie bestätigen sie mit einem Passkey und zahlen die Netzwerkgebühr mit einem Coin, den Sie auf Ethereum halten. Die Kopie kann kein Geld bewegen und keinen verlorenen Passkey zurückholen."
+      "cannotCopy": "Dieses ältere Konto kann nicht gesichert werden",
+      "explain": "Ein neues Gerät findet dieses Konto über seinen öffentlichen Eintrag auf Gnosis. Mit einer Kopie auf Ethereum findet es das Konto auch, wenn Gnosis ausfällt. Das kostet eine Ethereum-Netzwerkgebühr. Ihre Passkeys werden damit nicht gesichert, und es kann kein Geld bewegen."
     },
     "keys": {
       "title": "Schlüssel",
-      "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
+      "subtitle": "Jeder davon signiert in allen Netzwerken für dieses Konto.",
+      "subtitleSingle": "Dieser Passkey signiert in allen Netzwerken für dieses Konto.",
       "keyN": "Schlüssel {{n}}",
       "notSynced": "Gerätegebunden",
       "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat.",

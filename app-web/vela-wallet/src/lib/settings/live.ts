@@ -2106,7 +2106,10 @@ export function walletKeysModel(
 	}));
 	return {
 		title: m.keys.title,
-		subtitle: m.keys.subtitle,
+		// Exactly one key is "This passkey signs…" — a different statement from
+		// "Any one of them…", in every locale, so not a plural form. Until the
+		// list is known, and for one that came back empty, the general line.
+		subtitle: rows.length === 1 ? m.keys.subtitleSingle : m.keys.subtitle,
 		count: keys === null ? '' : String(rows.length),
 		loading: keys === null,
 		asking,

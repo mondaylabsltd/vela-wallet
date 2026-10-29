@@ -1672,7 +1672,9 @@ describe('the receipt', () => {
 				tx_venue_block: { type: 'app_cannot_reach', domain: 'sign.example.com' }
 			})
 		);
-		expect(own.captions).toEqual(["Vela can't reach keys on sign.example.com."]);
+		expect(own.captions).toEqual([
+			"This account's passkeys sign only for sign.example.com, so Vela can't use them here."
+		]);
 	});
 });
 

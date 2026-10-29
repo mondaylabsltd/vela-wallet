@@ -129,7 +129,7 @@ class SigningReceiptTest {
             app.getvela.wallet.feature.signing.core.ClearSigningView(), app.getvela.wallet.feature.signing.core.GuardView(),
             app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true), ctx,
         )
-        val said = "Vela can't reach keys on sign.example.com."
+        val said = "This account's passkeys sign only for sign.example.com, so Vela can't use them here."
         val receipt = sheet.receipt
         assertTrue("the reason is said: ${sheet.blocks} / $receipt", receipt?.captions?.contains(said) == true || sheet.blocks.any { it is SigningBlock.Warning && it.text == said })
         assertNull("no retry: nothing would change", receipt?.retry)

@@ -178,7 +178,7 @@ struct RegistryBackupTests {
         #expect(never.row != nil && never.row?.explainKey == nil)
         #expect(explain(never) == nil, "a wallet that cannot be copied is still told how to copy")
         #expect(SettingsLive.withWalletKeys(keys, backup: never, on: base, loc: loc).keys?.backup?.subtitle
-                == "This older wallet can't be copied")
+                == "This older account can't be backed up")
         // A silence this transport caused keeps the paragraph: asking again may answer.
         #expect(explain(RegistryBackup.Check(state: .couldNotCheck, call: nil, row: .couldNotCheck)) == words)
         // (That the REAL core writes the key under the name this file reads
@@ -202,18 +202,18 @@ struct RegistryBackupTests {
 
         let asking = await row(nil)
         #expect(asking?.id == SettingsLive.ethereumBackupRow)
-        #expect(asking?.title == "Copy this wallet's record to Ethereum")
+        #expect(asking?.title == "Back up the account record on Ethereum")
         #expect(asking?.subtitle == "Checking…")
         #expect(asking?.trailing == RowTrailing.none)
 
         let copied = await row("backed_up")
-        #expect(copied?.subtitle == "Copied to Ethereum")
+        #expect(copied?.subtitle == "Backed up")
         #expect(copied?.subtitleTone == .positive)
         #expect(copied?.trailing == RowTrailing.none)
 
         let notYet = await row("not_backed_up")
-        #expect(notYet?.title == "Copy this wallet's record to Ethereum")
-        #expect(notYet?.subtitle == "Not copied yet (optional)")
+        #expect(notYet?.title == "Back up the account record on Ethereum")
+        #expect(notYet?.subtitle == "Not backed up (optional)")
         #expect(notYet?.subtitleTone == .standard, "an optional, paid copy is not a warning")
         #expect(notYet?.trailing == .chevron)
 
@@ -223,15 +223,15 @@ struct RegistryBackupTests {
         #expect(silent?.trailing == .retry, "the row said to tap and had nothing to tap")
 
         let never = await row("not_copyable")
-        #expect(never?.subtitle == "This older wallet can't be copied")
+        #expect(never?.subtitle == "This older account can't be backed up")
         #expect(never?.subtitleTone == .standard)
         #expect(never?.trailing == RowTrailing.none, "a state that never changes offers nothing to retry")
 
         // The same row in the reader's language.
         let zh = Loc(overrideTag: "zh", preferredLanguages: [])
         let drawn = SettingsLive.ethereumBackupRow(await check("not_backed_up"), loc: zh)
-        #expect(drawn?.title == "把钱包记录复制到以太坊")
-        #expect(drawn?.subtitle == "尚未复制（可选）")
+        #expect(drawn?.title == "在以太坊备份账户记录")
+        #expect(drawn?.subtitle == "未备份（可选）")
         #expect(SettingsLive.ethereumBackupRow(await check("not_copyable"), loc: zh)?.subtitle
                 == "这个较早创建的钱包无法复制")
     }

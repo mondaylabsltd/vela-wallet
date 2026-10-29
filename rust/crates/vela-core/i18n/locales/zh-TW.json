@@ -70,7 +70,7 @@
       "pageSave": "儲存",
       "pageAdd": "新增自行部署的簽名頁",
       "pageDuplicate": "這個頁面已經儲存過了。",
-      "keysOn": "金鑰在 {{domain}}",
+      "keysOn": "通行密鑰保存在你的裝置上，只為 {{domain}} 簽署",
       "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
       "pageTrust": "信任這個版本",
       "pageRename": "重新命名",
@@ -78,15 +78,15 @@
       "pageName": "名稱"
     },
     "venue": {
-      "title": "在哪裡預覽並簽署",
-      "subtitle": "用於這個帳戶的交易和訊息。你的金鑰不會改變。",
-      "inVela": "在 Vela 裡預覽並簽署",
-      "inVelaBody": "Vela 內建的簽署介面",
-      "page": "在可信簽名頁預覽並簽署",
-      "pageBody": "零依賴的頁面，所見即所簽",
-      "blockedApp": "Vela 無法使用 {{domain}} 上的金鑰。",
-      "blockedPage": "這個頁面在 {{pageDomain}}，這個帳戶的金鑰在 {{domain}}。",
-      "blockedWeb": "簽名頁只能從 Vela App 開啟，網頁版不支援。"
+      "title": "簽署方式",
+      "subtitle": "選擇在哪裡確認這個帳戶的交易和訊息，金鑰不受影響。",
+      "inVela": "在 Vela 裡簽署",
+      "inVelaBody": "Vela 內建的確認介面",
+      "page": "在可信簽名頁簽署",
+      "pageBody": "獨立的單頁網頁，顯示什麼就簽什麼",
+      "blockedApp": "這個帳戶的通行密鑰只為 {{domain}} 簽署，Vela 在這裡無法使用。",
+      "blockedPage": "這個頁面在 {{pageDomain}}，而這個帳戶的通行密鑰只為 {{domain}} 簽署。",
+      "blockedWeb": "網頁版無法使用，請在 Vela App 裡開啟。"
     },
     "advanced": {
       "networksTitle": "網路",

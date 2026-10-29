@@ -70,7 +70,7 @@
    "pageSave": "儲存",
    "pageAdd": "新增自行部署的簽名頁",
    "pageDuplicate": "這個頁面已經儲存過了。",
-   "keysOn": "金鑰在 {{domain}}",
+   "keysOn": "通行密鑰保存在你的裝置上，只為 {{domain}} 簽署",
    "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
    "pageTrust": "信任這個版本",
    "pageRename": "重新命名",
@@ -78,15 +78,15 @@
    "pageName": "名稱"
   },
   "venue": {
-   "title": "在哪裡預覽並簽署",
-   "subtitle": "用於這個帳戶的交易和訊息。你的金鑰不會改變。",
-   "inVela": "在 Vela 裡預覽並簽署",
-   "inVelaBody": "Vela 內建的簽署介面",
-   "page": "在可信簽名頁預覽並簽署",
-   "pageBody": "零依賴的頁面，所見即所簽",
-   "blockedApp": "Vela 無法使用 {{domain}} 上的金鑰。",
-   "blockedPage": "這個頁面在 {{pageDomain}}，這個帳戶的金鑰在 {{domain}}。",
-   "blockedWeb": "簽名頁只能從 Vela App 開啟，網頁版不支援。"
+   "title": "簽署方式",
+   "subtitle": "選擇在哪裡確認這個帳戶的交易和訊息，金鑰不受影響。",
+   "inVela": "在 Vela 裡簽署",
+   "inVelaBody": "Vela 內建的確認介面",
+   "page": "在可信簽名頁簽署",
+   "pageBody": "獨立的單頁網頁，顯示什麼就簽什麼",
+   "blockedApp": "這個帳戶的通行密鑰只為 {{domain}} 簽署，Vela 在這裡無法使用。",
+   "blockedPage": "這個頁面在 {{pageDomain}}，而這個帳戶的通行密鑰只為 {{domain}} 簽署。",
+   "blockedWeb": "網頁版無法使用，請在 Vela App 裡開啟。"
   },
   "advanced": {
    "networksTitle": "網路",
@@ -2295,16 +2295,17 @@
    "urlRefused": "未儲存——請使用 https:// 位址（僅本機可用一般 http://）。仍在使用先前的位址。"
   },
   "backup": {
-   "title": "把錢包紀錄複製到以太坊",
-   "backedUp": "已複製到以太坊",
-   "notBackedUp": "尚未複製（可選）",
+   "title": "在以太坊備份帳戶紀錄",
+   "backedUp": "已備份",
+   "notBackedUp": "未備份（可選）",
    "couldNotCheck": "無法檢查，點按重試",
-   "cannotCopy": "這個較早建立的錢包無法複製",
-   "explain": "錢包在 Gnosis 上的紀錄是公開的：錢包的地址和名稱，以及每把金鑰的名稱、公鑰、憑證 ID 和驗證器型號。有你通行密鑰的裝置就是靠它找到這個錢包的。這裡會在以太坊上再存一份副本。這是一筆以太坊交易：由你用通行密鑰確認，並用你在以太坊上持有的幣支付網路費。副本不能動用資金，也不能找回遺失的通行密鑰。"
+   "cannotCopy": "這個較早建立的帳戶無法備份",
+   "explain": "新裝置登入時，靠 Gnosis 上的公開紀錄找到這個帳戶。在以太坊再存一份，Gnosis 無法使用時也能找到。需支付一筆以太坊網路費。它不是通行密鑰的備份，也動不了資金。"
   },
   "keys": {
    "title": "金鑰",
-   "subtitle": "其中任何一把通行密鑰都能為這個錢包簽署，所有網路通用。",
+   "subtitle": "任何一把都能在所有網路為這個帳戶簽署。",
+   "subtitleSingle": "這把通行密鑰可在所有網路為這個帳戶簽署。",
    "keyN": "金鑰 {{n}}",
    "notSynced": "裝置綁定",
    "fromDevice": "暫時連不上註冊表，僅顯示本機記得的內容。",

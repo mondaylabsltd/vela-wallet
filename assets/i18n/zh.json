@@ -70,7 +70,7 @@
    "pageSave": "保存",
    "pageAdd": "添加自己部署的签名页",
    "pageDuplicate": "这个页面已经保存过了。",
-   "keysOn": "钥匙在 {{domain}}",
+   "keysOn": "通行密钥保存在你的设备上，只为 {{domain}} 签名",
    "pageSelfHosted": "自己部署的签名页 · {{domain}}",
    "pageTrust": "信任这个版本",
    "pageRename": "重命名",
@@ -78,15 +78,15 @@
    "pageName": "名称"
   },
   "venue": {
-   "title": "在哪里预览并签名",
-   "subtitle": "用于这个账户的交易和消息。你的钥匙不会改变。",
-   "inVela": "在 Vela 里预览并签名",
-   "inVelaBody": "Vela 自带的签名界面",
-   "page": "在可信签名页预览并签名",
-   "pageBody": "零依赖的页面，所见即所签",
-   "blockedApp": "Vela 无法使用 {{domain}} 上的钥匙。",
-   "blockedPage": "这个页面在 {{pageDomain}}，这个账户的钥匙在 {{domain}}。",
-   "blockedWeb": "签名页只能从 Vela 应用打开，网页版不支持。"
+   "title": "签名方式",
+   "subtitle": "选择在哪里确认这个账户的交易和消息，钥匙不受影响。",
+   "inVela": "在 Vela 里签名",
+   "inVelaBody": "Vela 自带的确认界面",
+   "page": "在可信签名页签名",
+   "pageBody": "独立的单页网页，显示什么就签什么",
+   "blockedApp": "这个账户的通行密钥只为 {{domain}} 签名，Vela 在这里用不了。",
+   "blockedPage": "这个页面在 {{pageDomain}}，而这个账户的通行密钥只为 {{domain}} 签名。",
+   "blockedWeb": "网页版不能用，请在 Vela 应用里打开。"
   },
   "advanced": {
    "networksTitle": "网络",
@@ -2295,16 +2295,17 @@
    "urlRefused": "未保存——请使用 https:// 地址（仅本机可用普通 http://）。仍在使用之前的地址。"
   },
   "backup": {
-   "title": "把钱包记录复制到以太坊",
-   "backedUp": "已复制到以太坊",
-   "notBackedUp": "尚未复制（可选）",
+   "title": "在以太坊备份账户记录",
+   "backedUp": "已备份",
+   "notBackedUp": "未备份（可选）",
    "couldNotCheck": "无法检查，点按重试",
-   "cannotCopy": "这个较早创建的钱包无法复制",
-   "explain": "钱包在 Gnosis 上的记录是公开的：钱包的地址和名称，以及每把钥匙的名称、公钥、凭据 ID 和认证器型号。有你通行密钥的设备就是靠它找到这个钱包的。这里会在以太坊上再存一份副本。这是一笔以太坊交易：由你用通行密钥确认，并用你在以太坊上持有的币支付网络费。副本不能动用资金，也不能找回丢失的通行密钥。"
+   "cannotCopy": "这个较早创建的账户无法备份",
+   "explain": "新设备登录时，靠 Gnosis 上的公开记录找到这个账户。在以太坊再存一份，Gnosis 不可用时也能找到。需付一笔以太坊网络费。它不是通行密钥的备份，也动不了资金。"
   },
   "keys": {
    "title": "钥匙",
-   "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
+   "subtitle": "任意一把都能在所有网络为这个账户签名。",
+   "subtitleSingle": "这把通行密钥可在所有网络为这个账户签名。",
    "keyN": "钥匙 {{n}}",
    "notSynced": "设备绑定",
    "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",

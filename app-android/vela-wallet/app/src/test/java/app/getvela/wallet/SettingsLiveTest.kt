@@ -1174,7 +1174,7 @@ class SettingsLiveTest {
         // "Keys on …" only where it says something the row does not: the
         // official page keeps its keys on getvela.app, "My page" on
         // example.com; a page whose keys are its own host's says nothing more.
-        assertEquals(listOf("Keys on getvela.app", "Keys on example.com", ""), rows.map { it.domain })
+        assertEquals(listOf("Your passkeys stay on your devices and sign only for getvela.app", "Your passkeys stay on your devices and sign only for example.com", ""), rows.map { it.domain })
         assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertTrue(rows[0].integrity.opens)
         // The remove question's two answers (Android asks first, as iOS does).
@@ -1200,7 +1200,7 @@ class SettingsLiveTest {
     }
 
     /**
-     * Spec 102 (P2-09): "Where you review and sign" — the core's choices in
+     * Spec 102 (P2-09): "How you sign" — the core's choices in
      * its order, a blocked one dimmed with its reason (R1), the active one
      * marked, and the row's value the venue in force.
      */
@@ -1214,13 +1214,13 @@ class SettingsLiveTest {
         )
         val venue = SettingsLive.withVenue(base(), account, saved, { matches }, strings).venue!!
         assertEquals(strings.t("settings.venue.title"), venue.row.title)
-        assertEquals("Review and sign in Vela", venue.row.value)
+        assertEquals("Sign with Vela", venue.row.value)
         assertNull(venue.row.subtitle)
-        assertEquals("Keys on getvela.app", venue.domainLine)
+        assertEquals("Your passkeys stay on your devices and sign only for getvela.app", venue.domainLine)
         assertEquals(listOf(null, "Vela's official signing page", "My page"), venue.choices.map { it.page?.title })
         assertEquals(listOf(true, false, false), venue.choices.map { it.selected })
         // A page on another domain cannot reach this account's keys: shown, dimmed, with the reason.
-        assertEquals(listOf(null, null, "This page is on sign.example.com; this account's keys are on getvela.app."), venue.choices.map { it.reason })
+        assertEquals(listOf(null, null, "This page is on sign.example.com, but this account's passkeys sign only for getvela.app."), venue.choices.map { it.reason })
 
         // A custom-domain account is locked to its page: Vela's sheet says why it cannot.
         val own = account.copy(signingDomain = "sign.example.com", signingVenueJson = """{"type":"page","url":"https://sign.example.com/"}""")
@@ -1230,7 +1230,7 @@ class SettingsLiveTest {
         // over a bare host.
         assertEquals("My page", locked.row.value)
         assertNull(locked.row.subtitle)
-        assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
+        assertEquals("This account's passkeys sign only for sign.example.com, so Vela can't use them here.", locked.choices.first().reason)
         assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
         // Its page redeployed: the row asks, and answers ("Trust this version",
         // the check's own version) — but never on a choice that cannot reach

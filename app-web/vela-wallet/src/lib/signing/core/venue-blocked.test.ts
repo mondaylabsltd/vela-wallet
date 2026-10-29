@@ -144,7 +144,7 @@ describe('an account that cannot sign on the web (P2b-W1)', () => {
 			expect(status?.actions?.retry, locale).toBeUndefined();
 		}
 		expect(resolveSigningMessages('zh').venueBlock['settings.venue.blockedWeb']).toBe(
-			'签名页只能从 Vela 应用打开，网页版不支持。'
+			'网页版不能用，请在 Vela 应用里打开。'
 		);
 		await run.close();
 		expect(run.faults).toEqual([]);

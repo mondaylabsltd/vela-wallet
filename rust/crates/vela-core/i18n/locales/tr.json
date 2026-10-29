@@ -70,7 +70,7 @@
       "pageSave": "Kaydet",
       "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
       "pageDuplicate": "Bu sayfa zaten kayıtlı.",
-      "keysOn": "Anahtarlar: {{domain}}",
+      "keysOn": "Geçiş anahtarlarınız cihazlarınızda kalır ve yalnızca {{domain}} için imza atar",
       "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
       "pageTrust": "Bu sürüme güven",
       "pageRename": "Yeniden adlandır",
@@ -78,15 +78,15 @@
       "pageName": "İsim"
     },
     "venue": {
-      "title": "İnceleyip imzaladığınız yer",
-      "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
-      "inVela": "Vela'da inceleyin ve imzalayın",
-      "inVelaBody": "Vela'nın kendi imza ekranı",
-      "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
-      "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
-      "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
-      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
-      "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
+      "title": "İmzalama yöntemi",
+      "subtitle": "Bu hesabın işlemlerinin ve mesajlarının nerede onaylanacağını seçin. Anahtarlarınız aynı kalır.",
+      "inVela": "Vela ile imzalayın",
+      "inVelaBody": "Vela'nın kendi onay ekranı",
+      "page": "Güvenilir bir imza sayfasında imzalayın",
+      "pageBody": "Tam olarak gösterdiğini imzalayan bağımsız bir sayfa",
+      "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
+      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
+      "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın."
     },
     "advanced": {
       "networksTitle": "Ağlar",

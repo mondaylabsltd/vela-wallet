@@ -70,7 +70,7 @@
    "pageSave": "Kaydet",
    "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
    "pageDuplicate": "Bu sayfa zaten kayıtlı.",
-   "keysOn": "Anahtarlar: {{domain}}",
+   "keysOn": "Geçiş anahtarlarınız cihazlarınızda kalır ve yalnızca {{domain}} için imza atar",
    "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
    "pageTrust": "Bu sürüme güven",
    "pageRename": "Yeniden adlandır",
@@ -78,15 +78,15 @@
    "pageName": "İsim"
   },
   "venue": {
-   "title": "İnceleyip imzaladığınız yer",
-   "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
-   "inVela": "Vela'da inceleyin ve imzalayın",
-   "inVelaBody": "Vela'nın kendi imza ekranı",
-   "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
-   "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
-   "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
-   "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
-   "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
+   "title": "İmzalama yöntemi",
+   "subtitle": "Bu hesabın işlemlerinin ve mesajlarının nerede onaylanacağını seçin. Anahtarlarınız aynı kalır.",
+   "inVela": "Vela ile imzalayın",
+   "inVelaBody": "Vela'nın kendi onay ekranı",
+   "page": "Güvenilir bir imza sayfasında imzalayın",
+   "pageBody": "Tam olarak gösterdiğini imzalayan bağımsız bir sayfa",
+   "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
+   "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
+   "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın."
   },
   "advanced": {
    "networksTitle": "Ağlar",
@@ -2295,16 +2295,17 @@
    "urlRefused": "Kaydedilmedi — https:// adresi kullanın (düz http:// yalnızca bu bilgisayar için). Önceki adres kullanılmaya devam ediyor."
   },
   "backup": {
-   "title": "Cüzdan kaydını Ethereum'a kopyala",
-   "backedUp": "Ethereum'a kopyalandı",
-   "notBackedUp": "Henüz kopyalanmadı (isteğe bağlı)",
+   "title": "Hesap kaydını Ethereum'a yedekle",
+   "backedUp": "Yedeklendi",
+   "notBackedUp": "Yedeklenmedi (isteğe bağlı)",
    "couldNotCheck": "Kontrol edilemedi. Tekrar denemek için dokunun.",
-   "cannotCopy": "Bu eski cüzdan kopyalanamaz",
-   "explain": "Cüzdanınızın Gnosis'teki kaydı herkese açıktır: adresi ve adı, her anahtar için de adı, açık anahtarı, kimlik bilgisi kimliği ve doğrulayıcı modeli. Geçiş anahtarlarınızdan birine sahip bir cihaz bu cüzdanı onun sayesinde bulur. Burada bir kopyası Ethereum'a da kaydedilir. Bu tek bir Ethereum işlemidir: bir geçiş anahtarıyla onaylarsınız ve ağ ücretini Ethereum'da tuttuğunuz bir coin ile ödersiniz. Kopya para taşıyamaz ve kaybolan bir geçiş anahtarını geri getiremez."
+   "cannotCopy": "Bu eski hesap yedeklenemez",
+   "explain": "Yeni bir cihaz bu hesabı Gnosis'teki herkese açık kaydı üzerinden bulur. Ethereum'daki bir kopya, Gnosis çalışmadığında da hesabın bulunmasını sağlar. Bir Ethereum ağ ücreti tutar. Geçiş anahtarlarınızı yedeklemez ve fonları taşıyamaz."
   },
   "keys": {
    "title": "Anahtarlar",
-   "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
+   "subtitle": "Bunlardan herhangi biri, tüm ağlarda bu hesap için imza atar.",
+   "subtitleSingle": "Bu geçiş anahtarı, tüm ağlarda bu hesap için imza atar.",
    "keyN": "Anahtar {{n}}",
    "notSynced": "Cihaza bağlı",
    "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor.",

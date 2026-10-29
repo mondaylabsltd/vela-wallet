@@ -886,6 +886,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		keys: {
 			title: k('settingsModals.keys.title'),
 			subtitle: k('settingsModals.keys.subtitle'),
+			subtitleSingle: k('settingsModals.keys.subtitleSingle'),
 			keyN: k('settingsModals.keys.keyN'),
 			synced: k('onboarding.create.keySyncedBadge'),
 			notSynced: k('settingsModals.keys.notSynced'),

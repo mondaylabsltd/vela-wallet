@@ -488,7 +488,7 @@ pub enum BackupPress {
 pub struct BackupLine {
     pub title_key: String,
     pub subtitle_key: String,
-    /// The second line is good news ("Copied to Ethereum"). Everything else
+    /// The second line is good news ("Backed up"). Everything else
     /// is neutral — "not copied yet" is a state, never a warning.
     pub positive: bool,
     pub press: BackupPress,
@@ -1685,11 +1685,11 @@ mod tests {
         let en = crate::loc::Loc::for_language("en");
         assert_eq!(
             en.t(&never.title_key).as_ref(),
-            "Copy this wallet's record to Ethereum"
+            "Back up the account record on Ethereum"
         );
         assert_eq!(
             en.t(&never.subtitle_key).as_ref(),
-            "This older wallet can't be copied"
+            "This older account can't be backed up"
         );
     }
 

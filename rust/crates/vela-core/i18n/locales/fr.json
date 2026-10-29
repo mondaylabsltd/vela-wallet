@@ -70,7 +70,7 @@
       "pageSave": "Enregistrer",
       "pageAdd": "Ajouter une page de signature auto-hébergée",
       "pageDuplicate": "Cette page est déjà enregistrée.",
-      "keysOn": "Clés sur {{domain}}",
+      "keysOn": "Vos clés d'accès restent sur vos appareils et ne signent que pour {{domain}}",
       "pageSelfHosted": "Auto-hébergée · {{domain}}",
       "pageTrust": "Faire confiance à cette version",
       "pageRename": "Renommer",
@@ -78,15 +78,15 @@
       "pageName": "Nom"
     },
     "venue": {
-      "title": "Où vous vérifiez et signez",
-      "subtitle": "Pour les transactions et messages de ce compte. Vos clés ne changent pas.",
-      "inVela": "Vérifier et signer dans Vela",
-      "inVelaBody": "L'écran de signature de Vela",
-      "page": "Vérifier et signer sur une page de signature de confiance",
-      "pageBody": "Une page sans dépendances montre exactement ce que vous signez",
-      "blockedApp": "Vela ne peut pas utiliser les clés de {{domain}}.",
-      "blockedPage": "Cette page est sur {{pageDomain}} ; les clés de ce compte sont sur {{domain}}.",
-      "blockedWeb": "Les pages de signature s'ouvrent depuis les applis Vela, pas sur le web."
+      "title": "Comment vous signez",
+      "subtitle": "Choisissez où les transactions et messages de ce compte sont confirmés. Vos clés restent les mêmes.",
+      "inVela": "Signer avec Vela",
+      "inVelaBody": "L'écran de confirmation de Vela",
+      "page": "Signer sur une page de signature de confiance",
+      "pageBody": "Une page autonome qui signe exactement ce qu'elle affiche",
+      "blockedApp": "Les clés d'accès de ce compte ne signent que pour {{domain}}, donc Vela ne peut pas les utiliser ici.",
+      "blockedPage": "Cette page est sur {{pageDomain}}, mais les clés d'accès de ce compte ne signent que pour {{domain}}.",
+      "blockedWeb": "Indisponible sur le web. Ouvrez-le depuis l'appli Vela."
     },
     "advanced": {
       "networksTitle": "Réseaux",

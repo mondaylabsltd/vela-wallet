@@ -70,7 +70,7 @@
    "pageSave": "Lưu",
    "pageAdd": "Thêm trang ký tự triển khai",
    "pageDuplicate": "Trang này đã được lưu.",
-   "keysOn": "Khóa trên {{domain}}",
+   "keysOn": "Passkey nằm trên thiết bị của bạn và chỉ ký cho {{domain}}",
    "pageSelfHosted": "Tự triển khai · {{domain}}",
    "pageTrust": "Tin cậy phiên bản này",
    "pageRename": "Đổi tên",
@@ -78,15 +78,15 @@
    "pageName": "Tên"
   },
   "venue": {
-   "title": "Nơi bạn xem lại và ký",
-   "subtitle": "Áp dụng cho giao dịch và tin nhắn của tài khoản này. Khóa của bạn không đổi.",
-   "inVela": "Xem lại và ký trong Vela",
-   "inVelaBody": "Màn hình ký của chính Vela",
-   "page": "Xem lại và ký trên trang ký tin cậy",
-   "pageBody": "Trang không phụ thuộc hiển thị đúng những gì bạn ký",
-   "blockedApp": "Vela không dùng được khóa trên {{domain}}.",
-   "blockedPage": "Trang này ở {{pageDomain}}; khóa của tài khoản này ở {{domain}}.",
-   "blockedWeb": "Trang ký chỉ mở được từ ứng dụng Vela, không phải trên web."
+   "title": "Cách bạn ký",
+   "subtitle": "Chọn nơi xác nhận giao dịch và tin nhắn của tài khoản này. Khóa của bạn giữ nguyên.",
+   "inVela": "Ký bằng Vela",
+   "inVelaBody": "Màn hình xác nhận của chính Vela",
+   "page": "Ký trên trang ký tin cậy",
+   "pageBody": "Trang độc lập, ký đúng những gì nó hiển thị",
+   "blockedApp": "Passkey của tài khoản này chỉ ký cho {{domain}}, nên Vela không dùng được chúng ở đây.",
+   "blockedPage": "Trang này ở {{pageDomain}}, nhưng passkey của tài khoản này chỉ ký cho {{domain}}.",
+   "blockedWeb": "Không dùng được trên web. Hãy mở từ ứng dụng Vela."
   },
   "advanced": {
    "networksTitle": "Mạng lưới",
@@ -2295,16 +2295,17 @@
    "urlRefused": "Chưa lưu — hãy dùng địa chỉ https:// (http:// thường chỉ cho máy tính này). Địa chỉ trước đó vẫn đang được dùng."
   },
   "backup": {
-   "title": "Sao chép bản ghi của ví này sang Ethereum",
-   "backedUp": "Đã sao chép sang Ethereum",
-   "notBackedUp": "Chưa sao chép (không bắt buộc)",
+   "title": "Sao lưu bản ghi tài khoản lên Ethereum",
+   "backedUp": "Đã sao lưu",
+   "notBackedUp": "Chưa sao lưu (không bắt buộc)",
    "couldNotCheck": "Không kiểm tra được. Chạm để thử lại.",
-   "cannotCopy": "Ví cũ này không sao chép được",
-   "explain": "Bản ghi của ví trên Gnosis là công khai: địa chỉ và tên ví, cùng tên, khóa công khai, ID thông tin xác thực và kiểu trình xác thực của từng khóa. Thiết bị có một trong các passkey của bạn tìm ra ví này nhờ bản ghi đó. Tại đây, một bản sao cũng được lưu lên Ethereum. Đây là một giao dịch Ethereum: bạn xác nhận bằng passkey và trả phí mạng bằng một coin bạn có trên Ethereum. Bản sao không thể chuyển tiền và không lấy lại được passkey đã mất."
+   "cannotCopy": "Tài khoản cũ này không sao lưu được",
+   "explain": "Thiết bị mới tìm ra tài khoản này qua bản ghi công khai trên Gnosis. Một bản trên Ethereum giúp vẫn tìm được tài khoản khi Gnosis ngừng hoạt động. Tốn một lần phí mạng Ethereum. Đây không phải bản sao lưu passkey và không thể chuyển tiền."
   },
   "keys": {
    "title": "Khóa",
-   "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
+   "subtitle": "Passkey nào trong số này cũng ký được cho tài khoản này trên mọi mạng.",
+   "subtitleSingle": "Passkey này ký cho tài khoản này trên mọi mạng.",
    "keyN": "Khóa {{n}}",
    "notSynced": "Gắn với thiết bị",
    "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",

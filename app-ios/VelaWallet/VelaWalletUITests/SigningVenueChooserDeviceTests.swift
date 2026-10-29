@@ -65,7 +65,7 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["signingPagePicker"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts[Words.inVela].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts[Words.official].exists, "the official page is not listed")
-        XCTAssertTrue(app.staticTexts["钥匙在 getvela.app"].exists, "the official page's domain is not said")
+        XCTAssertTrue(app.staticTexts["通行密钥保存在你的设备上，只为 getvela.app 签名"].exists, "the official page's domain is not said")
         attach(app, "signin-picker")
         app.terminate()
     }

@@ -443,7 +443,7 @@ class SignerPageChecksTest {
     fun `a custom-domain account whose page is unknown here is blocked, with the core's reason`() {
         val plan = SigningPlan.of(record("""{"type":"in_vela"}""", domain = "sign.example.com"))!!
         assertNotNull(plan.blocked)
-        assertEquals("Vela can't reach keys on sign.example.com.", VenueWords.block(plan.blocked!!) { key, vars -> en(key, vars) })
+        assertEquals("This account's passkeys sign only for sign.example.com, so Vela can't use them here.", VenueWords.block(plan.blocked!!) { key, vars -> en(key, vars) })
     }
 
     private val strings by lazy {
@@ -498,14 +498,14 @@ class SignerPageChecksTest {
     fun `a venue refusal reads in the person's language, the web's included`() {
         val t = { key: String, vars: Map<String, String> -> strings.t(key, vars) }
         assertEquals(
-            "Vela can't reach keys on sign.example.com.",
+            "This account's passkeys sign only for sign.example.com, so Vela can't use them here.",
             app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("sign.example.com").words(t),
         )
         assertEquals(
-            "This page is on sign.example.com; this account's keys are on getvela.app.",
+            "This page is on sign.example.com, but this account's passkeys sign only for getvela.app.",
             app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app").words(t),
         )
-        assertEquals("Signing pages open from the Vela apps, not the web.", VenueWords.block(JSONObject().put("type", "not_on_web"), t))
+        assertEquals("Not available on the web. Open it from the Vela app.", VenueWords.block(JSONObject().put("type", "not_on_web"), t))
     }
 
     // --- P2-08: the signing pages machine ------------------------------------

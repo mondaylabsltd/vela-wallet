@@ -23,7 +23,7 @@ const PANEL: SigningPagesModel = {
 			url: 'https://sign.getvela.app/',
 			name: "Vela's official signing page",
 			host: 'sign.getvela.app',
-			keysOn: 'Keys on getvela.app',
+			keysOn: 'Your passkeys stay on your devices and sign only for getvela.app',
 			official: true,
 			integrity: {
 				text: "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
@@ -88,7 +88,7 @@ describe('Settings → Signing pages', () => {
 		// The official page's keys are not its host's; a self-hosted page's are,
 		// and a name that says the host leaves nothing to add.
 		expect(view.rows().map((row) => row.querySelector('.where')?.textContent)).toEqual([
-			'sign.getvela.app·Keys on getvela.app',
+			'sign.getvela.app·Your passkeys stay on your devices and sign only for getvela.app',
 			'sign.example.com',
 			undefined
 		]);

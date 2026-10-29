@@ -1276,7 +1276,7 @@ class SendLiveTest {
             tx_venue_block = app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app"),
         )
         val venue = SendLive.confirm(drawn, blocked, ctx())
-        assertEquals("This page is on sign.example.com; this account's keys are on getvela.app.", venue.notice)
+        assertEquals("This page is on sign.example.com, but this account's passkeys sign only for getvela.app.", venue.notice)
         assertNull(venue.noticeAction)
 
         val low = SendView(

@@ -623,7 +623,7 @@ final class PR3DeviceTests: XCTestCase {
     func testCopyTheRecordRowAndSheet() throws {
         let app = launchInSpace(page: false)
         openSettings(app)
-        let title = app.staticTexts["把钱包记录复制到以太坊"].firstMatch
+        let title = app.staticTexts["在以太坊备份账户记录"].firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 10), "no record row")
         reachElement(title, in: app)
         shoot(app, "copy-1-row-early")
