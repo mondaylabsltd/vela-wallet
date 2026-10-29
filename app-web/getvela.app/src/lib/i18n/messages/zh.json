@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "个钱包已在链上登记",
 			"loading": "正在读取钱包数量",
-			"verify": "每个钱包都在链上登记——查看注册表"
+			"verify": "每个钱包都在链上登记——查看注册表",
+			"multisigLabel": "个多签账户",
+			"multisigNotDeployed": "多签注册表：尚未部署",
+			"multisigVerify": "多签账户记录在链上——查看注册表"
 		},
 		"why": {
 			"heading": "我们为什么做它",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "ví đã đăng ký trên chuỗi",
 			"loading": "Đang đọc số lượng ví",
-			"verify": "Mọi ví đều được đăng ký trên chuỗi — xem sổ đăng ký"
+			"verify": "Mọi ví đều được đăng ký trên chuỗi — xem sổ đăng ký",
+			"multisigLabel": "tài khoản đa chữ ký",
+			"multisigNotDeployed": "Sổ đăng ký đa chữ ký: chưa triển khai",
+			"multisigVerify": "Tài khoản đa chữ ký được ghi trên chuỗi — xem sổ đăng ký"
 		},
 		"why": {
 			"heading": "Vì sao chúng tôi làm nó",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

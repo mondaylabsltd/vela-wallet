@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "portefeuilles enregistrés on-chain",
 			"loading": "Chargement du nombre de portefeuilles",
-			"verify": "Chaque portefeuille est enregistré on-chain — voir le registre"
+			"verify": "Chaque portefeuille est enregistré on-chain — voir le registre",
+			"multisigLabel": "comptes multisig",
+			"multisigNotDeployed": "Registre multisig : pas encore déployé",
+			"multisigVerify": "Les comptes multisig sont enregistrés on-chain — voir le registre"
 		},
 		"why": {
 			"heading": "Pourquoi nous l'avons créé",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "dompet terdaftar on-chain",
 			"loading": "Memuat jumlah dompet",
-			"verify": "Setiap dompet terdaftar on-chain — lihat registrinya"
+			"verify": "Setiap dompet terdaftar on-chain — lihat registrinya",
+			"multisigLabel": "akun multisig",
+			"multisigNotDeployed": "Registri multisig: belum di-deploy",
+			"multisigVerify": "Akun multisig tercatat on-chain — lihat registrinya"
 		},
 		"why": {
 			"heading": "Kenapa kami membuatnya",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

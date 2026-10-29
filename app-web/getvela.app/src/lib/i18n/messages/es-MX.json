@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "wallets registradas on-chain",
 			"loading": "Cargando el número de wallets",
-			"verify": "Cada wallet está registrada on-chain — consulta el registro"
+			"verify": "Cada wallet está registrada on-chain — consulta el registro",
+			"multisigLabel": "cuentas multifirma",
+			"multisigNotDeployed": "Registro multifirma: aún no desplegado",
+			"multisigVerify": "Las cuentas multifirma se registran on-chain — consulta el registro"
 		},
 		"why": {
 			"heading": "Por qué la hicimos",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

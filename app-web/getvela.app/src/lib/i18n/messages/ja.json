@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "オンチェーンに登録されたウォレット",
 			"loading": "ウォレット数を読み込み中",
-			"verify": "すべてのウォレットはオンチェーンに登録されています — レジストリを見る"
+			"verify": "すべてのウォレットはオンチェーンに登録されています — レジストリを見る",
+			"multisigLabel": "件のマルチシグアカウント",
+			"multisigNotDeployed": "マルチシグのレジストリ：未デプロイ",
+			"multisigVerify": "マルチシグアカウントはオンチェーンに記録されています — レジストリを見る"
 		},
 		"why": {
 			"heading": "作った理由",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
