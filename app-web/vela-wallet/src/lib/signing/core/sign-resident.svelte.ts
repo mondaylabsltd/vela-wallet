@@ -77,6 +77,7 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	reconcile_pending: false,
 	swipe_action: 'none',
 	tracker_handoff: null,
+	landing_closed: false,
 	tracker_withdraw: null,
 	failure_refused: false,
 	failure_retryable: false,

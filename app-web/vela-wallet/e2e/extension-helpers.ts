@@ -293,6 +293,67 @@ export function inSidePanel<T>(extensionPage: Page, body: string, arg?: unknown)
 	) as Promise<T>;
 }
 
+/**
+ * A DevTools session on the side panel itself — what the helpers above cannot
+ * do from inside it: size its viewport (`Emulation.setDeviceMetricsOverride`)
+ * or send it input through the browser (`Input.*`), as a person's hand would.
+ *
+ * The panel is no Playwright `Page`, but it is a `page` target of the browser:
+ * the extension document that is none of this context's pages. It is reached
+ * through `extensionPage`'s own session (`Target.attachToTarget`).
+ */
+export async function sidePanelSession(
+	context: BrowserContext,
+	extensionPage: Page
+): Promise<{ send(method: string, params?: object): Promise<Record<string, unknown>> }> {
+	const cdp = await context.newCDPSession(extensionPage);
+	const own = new Set<string>();
+	for (const page of context.pages()) {
+		const session = await context.newCDPSession(page);
+		const info = (await session.send('Target.getTargetInfo')) as {
+			targetInfo: { targetId: string };
+		};
+		own.add(info.targetInfo.targetId);
+		await session.detach();
+	}
+	const { targetInfos } = (await cdp.send('Target.getTargets')) as {
+		targetInfos: { targetId: string; type: string; url: string }[];
+	};
+	const panel = targetInfos.find(
+		(t) => t.type === 'page' && t.url.startsWith('chrome-extension://') && !own.has(t.targetId)
+	);
+	if (!panel) throw new Error('no side panel target');
+	const { sessionId } = (await cdp.send('Target.attachToTarget', {
+		targetId: panel.targetId,
+		flatten: false
+	})) as { sessionId: string };
+	let next = 1;
+	type Reply = { id?: number; result?: object; error?: { message: string } };
+	const waiting = new Map<number, (reply: Reply) => void>();
+	cdp.on('Target.receivedMessageFromTarget', (event) => {
+		if (event.sessionId !== sessionId) return;
+		const reply = JSON.parse(event.message) as Reply;
+		if (reply.id === undefined) return;
+		waiting.get(reply.id)?.(reply);
+		waiting.delete(reply.id);
+	});
+	return {
+		send: (method, params = {}) =>
+			new Promise((resolve, reject) => {
+				const id = next++;
+				waiting.set(id, (reply) =>
+					reply.error
+						? reject(new Error(`${method}: ${reply.error.message}`))
+						: resolve((reply.result ?? {}) as Record<string, unknown>)
+				);
+				void cdp.send('Target.sendMessageToTarget', {
+					sessionId,
+					message: JSON.stringify({ id, method, params })
+				});
+			})
+	};
+}
+
 /** The request window this extension opened, once it is showing something. */
 export async function requestWindow(context: BrowserContext, timeoutMs = 15_000): Promise<Page> {
 	const deadline = Date.now() + timeoutMs;
