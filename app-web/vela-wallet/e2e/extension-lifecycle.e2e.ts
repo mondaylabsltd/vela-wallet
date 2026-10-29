@@ -1424,12 +1424,11 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 * Round 3, the owner's side panel: the home cut at its right edge — Scan,
 	 * the Settings tab, the Assets amounts — and the landing drawn to one side.
 	 * The real panel, sized from the narrowest Chrome allows to wider than the
-	 * desktop breakpoint: on every screen nothing runs past its edge. And the
-	 * picture the owner saw — a pinch zooming the panel in — is refused: a
-	 * trackpad pinch reaches the page as `wheel` + `ctrlKey`, and none of
-	 * them is left to zoom it.
+	 * desktop breakpoint: on every screen nothing runs past its edge. (A pinch
+	 * zooms the panel the way it zooms any page — the person's zoom is theirs
+	 * to keep, WCAG 1.4.4; ⌘/Ctrl 0 resets it.)
 	 */
-	test('the panel fits at every width, and a pinch does not zoom it past its edge', async () => {
+	test('the panel fits at every width', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const wallet = await seedWallet(context, extensionId());
 		const page = await context.newPage();
@@ -1487,23 +1486,6 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 				}
 			}
 			await panel.send('Emulation.clearDeviceMetricsOverride');
-
-			// A trackpad pinch, through the browser's own input: every wheel it
-			// becomes is refused, so the panel stays at its scale.
-			await run(`(() => {
-				window.__pinch = [];
-				addEventListener('wheel', (e) => { if (e.ctrlKey) window.__pinch.push(e.defaultPrevented); });
-			})()`);
-			await panel.send('Input.synthesizePinchGesture', {
-				x: 100,
-				y: 200,
-				scaleFactor: 1.5,
-				gestureSourceType: 'mouse'
-			});
-			const pinch = await run<boolean[]>('window.__pinch');
-			expect(pinch.length).toBeGreaterThan(0);
-			expect(pinch.every(Boolean)).toBe(true);
-			expect(await run<number>('visualViewport.scale')).toBe(1);
 		} finally {
 			await context.close();
 		}
