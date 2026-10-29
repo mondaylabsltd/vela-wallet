@@ -467,6 +467,28 @@ export function landingCloseAction(
 }
 
 /**
+ * Whether the sheet stays hidden because its landing was closed (round 3):
+ * the request on the core's sheet is the one whose operation the person
+ * already closed the landing of — its answer still out (a lost relay reply,
+ * G37) — so its sheet waits hidden for that answer on EVERY host, including
+ * one mounted after the close. Read from the core's view alone
+ * (`landing_closed`, kept by `sign_request` for the hand-off's operation).
+ */
+export function closedLandingHoldsSheet(view: {
+	landing_closed: boolean;
+	pending_op_hash: string | null;
+	tracker_handoff: { user_op_hash: string } | null;
+}): boolean {
+	const op = view.tracker_handoff?.user_op_hash;
+	return (
+		view.landing_closed &&
+		!!op &&
+		!!view.pending_op_hash &&
+		view.pending_op_hash.toLowerCase() === op.toLowerCase()
+	);
+}
+
+/**
  * How much of the ring is drawn, 0–1, from when the chain accepted it and how
  * long this chain usually takes.
  *

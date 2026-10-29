@@ -1026,6 +1026,15 @@ pub enum Event {
     /// does not now). After the deadline it takes the timed-out line back
     /// off the sheet ([`SignView::sim_waited_out_key`]).
     SimSettled { id: String },
+    /// The landing raised for the operation `user_op_hash` was closed: its
+    /// Done, its own beat, or the sheet's ✕ after approving (no landing comes
+    /// back over the page then). From here [`SignView::landing_closed`] says
+    /// so for as long as the hand-off names that operation, so a surface
+    /// mounted later — the panel's Wallet → Settings → Wallet — raises
+    /// nothing for it. Nothing else changes: the answer, the tracker and the
+    /// sheet are untouched. Any other hash is recorded the same way and
+    /// simply matches no hand-off.
+    LandingClosed { user_op_hash: String },
     /// A durable transport disconnected. Owner-aware clear
     /// (`dapp-connection.tsx:420-431`). Since spec 082 (RB2) it also stops a
     /// pipeline of that transport still before the passkey (pre-check,
@@ -1614,6 +1623,8 @@ pub struct Model {
     /// The sheet's op was submitted "may have been sent" (spec 082 RA3).
     pending_op_maybe_sent: bool,
     tracker_handoff: Option<SignTrackerHandoff>,
+    /// The operation whose landing the person closed ([`Event::LandingClosed`]).
+    landing_closed: Option<String>,
     /// A write-ahead record proven never sent (RJ1), for the tracker.
     tracker_withdraw: Option<SignTrackerWithdraw>,
     notice: Option<SignNotice>,
@@ -1907,6 +1918,15 @@ pub struct SignView {
     pub reconcile_pending: bool,
     pub swipe_action: SignSwipeAction,
     pub tracker_handoff: Option<SignTrackerHandoff>,
+    /// The landing for `tracker_handoff`'s operation has been closed
+    /// ([`Event::LandingClosed`]): no surface raises it again. The hand-off
+    /// stays in the view for as long as it is the last one, so a surface
+    /// mounted after the Done — every screen that hosts the sheet mounts
+    /// its own — would otherwise read it as a landing still owed and draw
+    /// the finished transaction once more. `false` with no hand-off, and for
+    /// a new operation's. `#[serde(default)]`.
+    #[serde(default)]
+    pub landing_closed: bool,
     /// A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
     /// it to `tx_tracker::Event::Withdrawn` the moment it appears.
     #[serde(default)]
@@ -2092,6 +2112,13 @@ impl App for SignRequest {
             Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
             Event::SimStarted { id } => on_sim_started(model, &id),
             Event::SimSettled { id } => on_sim_settled(model, &id),
+            Event::LandingClosed { user_op_hash } => {
+                if model.landing_closed.as_deref() == Some(user_op_hash.as_str()) {
+                    return Command::done();
+                }
+                model.landing_closed = Some(user_op_hash);
+                render()
+            }
             Event::TransportDropped { transport_id } => {
                 let mut cleared_inflight_request = false;
                 if let Some(p) = &model.pending {
@@ -2261,6 +2288,12 @@ impl App for SignRequest {
             reconcile_pending: !model.reconciled,
             swipe_action: swipe_action(model),
             tracker_handoff: model.tracker_handoff.clone(),
+            landing_closed: model.tracker_handoff.as_ref().is_some_and(|h| {
+                model
+                    .landing_closed
+                    .as_deref()
+                    .is_some_and(|op| op.eq_ignore_ascii_case(&h.user_op_hash))
+            }),
             tracker_withdraw: model.tracker_withdraw.clone(),
             failure_refused: model.sign_error.is_some() && model.sign_error_refused,
             failure_retryable: model.failure_retryable(),

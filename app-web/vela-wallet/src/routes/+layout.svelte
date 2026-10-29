@@ -22,6 +22,7 @@
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import ExtensionNotices from '$lib/extension/ExtensionNotices.svelte';
+	import { holdPanelScale } from '$lib/extension/panel-zoom';
 	import type { ExtensionMessages } from '$lib/extension/messages';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
@@ -261,6 +262,10 @@
 			clearTimeout(retry);
 		};
 	});
+
+	// The side panel keeps its scale: a pinch there cut the panel off at its
+	// right edge with nothing to say so (round 3, `panel-zoom.ts`).
+	onMount(() => (isPanelDocument() ? holdPanelScale(window) : undefined));
 
 	onMount(() => {
 		if (isPanelDocument()) void panelSurface.start();

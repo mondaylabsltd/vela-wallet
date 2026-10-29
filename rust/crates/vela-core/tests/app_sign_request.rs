@@ -634,6 +634,70 @@ fn tx_pending_record_persists_at_submission_and_only_the_tracker_closes_it() {
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
 
+/// A landing closed stays closed (round 3, owner's side panel): the hand-off
+/// stays in the view after the answer, and a screen that mounts its own sheet
+/// host later read it as a landing still owed — Done, then Wallet → Settings,
+/// and "Confirmed" came back. The close is the core's: the view says it for
+/// that operation, and only that one — the next operation's landing rises.
+#[test]
+fn a_landing_closed_is_not_raised_again_and_the_next_one_is() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-l1", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.dispatch(Event::OpSubmitted {
+        id: "req-l1".to_owned(),
+        user_op_hash: "0xOpOne".to_owned(),
+        now_ms: 5_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    sut.resolve(Res::RecordPersisted);
+    sut.resolve(submit_ok("0xtxone"));
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Hidden, "answered");
+    assert!(view.tracker_handoff.is_some(), "the hand-off stays in the view");
+    assert!(!view.landing_closed, "its landing is still owed");
+
+    // Done — by its hash in any spelling; nothing is sent, nothing else moves.
+    let ops = sut.dispatch(Event::LandingClosed {
+        user_op_hash: "0xopone".to_owned(),
+    });
+    assert!(ops.is_empty(), "a close sends nothing: {ops:?}");
+    let view = sut.view();
+    assert!(view.landing_closed, "closed for good");
+    assert_eq!(
+        view.tracker_handoff.map(|h| h.user_op_hash).as_deref(),
+        Some("0xOpOne"),
+        "the tracker's hand-off is untouched"
+    );
+    // Said twice: the same.
+    assert!(sut
+        .dispatch(Event::LandingClosed {
+            user_op_hash: "0xopone".to_owned(),
+        })
+        .is_empty());
+    assert!(sut.view().landing_closed);
+
+    // The next transaction's landing is owed again.
+    sut.dispatch(Arrive::global("req-l2", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.dispatch(Event::OpSubmitted {
+        id: "req-l2".to_owned(),
+        user_op_hash: "0xOpTwo".to_owned(),
+        now_ms: 6_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.tracker_handoff.map(|h| h.user_op_hash).as_deref(),
+        Some("0xOpTwo")
+    );
+    assert!(!view.landing_closed, "a new operation's landing rises");
+}
+
 /// Issue 262: the receipt wait timed out. The page is told the transaction is
 /// not confirmed yet — never the op hash (083, owner ruling 2026-10-01) — and
 /// the record stays PENDING — no confirming patch — and the tracker (which

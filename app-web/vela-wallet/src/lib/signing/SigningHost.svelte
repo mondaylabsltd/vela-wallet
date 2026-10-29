@@ -37,6 +37,7 @@
 		dappReceiptModel,
 		endsOnSignedTick,
 		landingCloseAction,
+		closedLandingHoldsSheet,
 		landingFor,
 		withSheetRefusal,
 		handoffLands,
@@ -179,7 +180,10 @@
 		// rises for it, and the next approval's landing is not swallowed.
 		if (closedInFlight !== null && answer.id === closedInFlight) {
 			const handoff = signRequest.view.tracker_handoff;
-			if (handoff) landedOp = handoff.user_op_hash;
+			if (handoff) {
+				landedOp = handoff.user_op_hash;
+				landingClosed(handoff.user_op_hash);
+			}
 			closedInFlight = null;
 		}
 		if (!receipt) return;
@@ -272,6 +276,20 @@
 	let landedOp: string | null = null;
 
 	/**
+	 * Round 3 (the owner's side panel): the close is the CORE's to remember.
+	 * `landedOp` lives as long as this component, and every screen that hosts
+	 * the sheet mounts its own — Wallet → Settings → Wallet made a new host,
+	 * which found the hand-off still in the view and raised "Confirmed" again
+	 * for a transaction closed long before. Told here, the view says
+	 * `landing_closed` for that operation to every host mounted after it.
+	 */
+	function landingClosed(op: string | null): void {
+		if (op !== null) signRequest.dispatch({ type: 'landing_closed', user_op_hash: op });
+	}
+	/** The operation the landing on screen is for. */
+	let landingOp: string | null = null;
+
+	/**
 	 * Spec 082 G37 (D3): the request whose landing was raised and then closed
 	 * while its answer was still out. A lost relay reply raises the landing
 	 * before the answer; the chain check found the op, 已确认 closed itself —
@@ -282,7 +300,10 @@
 	let landingRequest: string | null = null;
 	let settledRequest = $state<string | null>(null);
 	const sheetHidden = $derived(
-		settledRequest !== null && signRequest.view.request?.id === settledRequest
+		(settledRequest !== null && signRequest.view.request?.id === settledRequest) ||
+			// The same, as the core keeps it — so a host mounted after the close
+			// does not bring that request's sheet back either.
+			closedLandingHoldsSheet(signRequest.view)
 	);
 	$effect(() => {
 		const id = signRequest.view.request?.id ?? null;
@@ -308,8 +329,15 @@
 		const op = landingToRaise(handoff?.user_op_hash, landedOp);
 		if (!op || !handoff) return;
 		landedOp = op;
+		// Closed already — here, or on a screen this one replaced: the
+		// transaction is over for the person, and nothing of it is drawn again.
+		if (signRequest.view.landing_closed) return;
 		// Closed after approving: tracked, answered — and not raised again.
-		if (closedInFlight !== null) return;
+		if (closedInFlight !== null) {
+			landingClosed(op);
+			return;
+		}
+		landingOp = op;
 		watchLanding(op, handoff.chain_id, handoff.maybe_sent);
 	});
 
@@ -330,6 +358,8 @@
 		if (action === 'dismiss_tapped') signRequest.dispatch({ type: 'dismiss_tapped' });
 		// Its request still unanswered: its sheet does not come back (G37).
 		else if (action === 'hide') settledRequest = landingRequest;
+		landingClosed(landingOp);
+		landingOp = null;
 		landingRequest = null;
 		landing = null;
 		unsubscribeTracker?.();

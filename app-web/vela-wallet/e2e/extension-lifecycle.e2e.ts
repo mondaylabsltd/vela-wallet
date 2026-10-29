@@ -31,6 +31,7 @@ import {
 	noRequestWindow,
 	requestWindow,
 	sidePanelShowsRequest,
+	sidePanelSession,
 	sidePanelUp,
 	sidePanelView,
 	confirmSigning
@@ -1038,6 +1039,110 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	});
 
 	/**
+	 * Round 3, the owner's side panel: a swap landed on "Confirmed", Done was
+	 * pressed — and every tap on the tab bar flashed that "Confirmed" again.
+	 * Each screen mounts its own sheet host, and the new one read the
+	 * hand-off still in the core's view as a landing owed. Watched across
+	 * frames, not polled: a flash is gone before a poll comes round. And the
+	 * landing is drawn in the middle of the panel, not to one side of it.
+	 */
+	test('a landing closed with Done never comes back as the panel moves between its tabs', async () => {
+		await withAnsweringNet(async (wallet, page, net) => {
+			const asked = page.evaluate(
+				([to, value]) =>
+					window.__ask('eth_sendTransaction', [
+						{ from: window.ethereum.selectedAddress, to, value }
+					]),
+				[DUST_TO, DUST_WEI] as const
+			);
+			asked.catch(() => {});
+			await sidePanelView(wallet, 30_000);
+			await confirmInPanel(wallet);
+			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
+			expect(((await asked) as AskResult).ok).toBe(true);
+
+			// The landing, confirmed — centred in the panel, nothing past its edge.
+			const RECEIPT = '.landing-over [data-testid="dapp-receipt"]';
+			await expect
+				.poll(
+					() =>
+						inSidePanel<string | null>(
+							wallet,
+							`return panel.document.querySelector(arg)?.textContent ?? null;`,
+							RECEIPT
+						),
+					{ timeout: 30_000 }
+				)
+				.toContain('Confirmed');
+			const drawn = await inSidePanel<{ left: number; right: number; width: number; over: number }>(
+				wallet,
+				`
+				const hero = panel.document.querySelector(arg).firstElementChild.getBoundingClientRect();
+				const root = panel.document.documentElement;
+				return {
+					left: hero.left,
+					right: root.clientWidth - hero.right,
+					width: root.clientWidth,
+					over: root.scrollWidth - root.clientWidth
+				};
+				`,
+				RECEIPT
+			);
+			expect(drawn.over).toBeLessThanOrEqual(0);
+			expect(Math.abs(drawn.left - drawn.right)).toBeLessThan(drawn.width * 0.05);
+
+			// Done (or its own beat, if that came first).
+			await inSidePanel(
+				wallet,
+				`panel.document.querySelector(arg)?.querySelector('.foot button')?.click();`,
+				RECEIPT
+			);
+			await expect
+				.poll(() =>
+					inSidePanel<boolean>(wallet, `return !panel.document.querySelector(arg);`, RECEIPT)
+				)
+				.toBe(true);
+
+			// Every tab, there and back, with every frame watched.
+			const seen = await inSidePanel<{ flashes: string[]; path: string }>(
+				wallet,
+				`
+				const flashes = [];
+				const look = () => {
+					if (panel.document.querySelector('[data-testid="dapp-receipt"]')) {
+						flashes.push(panel.location.pathname);
+					}
+				};
+				const watch = new panel.MutationObserver(look);
+				watch.observe(panel.document.body, { childList: true, subtree: true });
+				let frames = true;
+				const frame = () => {
+					look();
+					if (frames) panel.requestAnimationFrame(frame);
+				};
+				panel.requestAnimationFrame(frame);
+				const nav = (label) => {
+					const link = [...panel.document.querySelectorAll('a, button')].find(
+						(el) => el.getAttribute('aria-label') === label || el.textContent?.trim() === label
+					);
+					if (!link) throw new Error('no ' + label + ' in the panel');
+					link.click();
+				};
+				for (const label of ['Settings', 'Wallet', 'Contacts', 'Wallet', 'Settings', 'Contacts', 'Wallet']) {
+					nav(label);
+					await new Promise((r) => setTimeout(r, 2000));
+				}
+				frames = false;
+				watch.disconnect();
+				return { flashes, path: panel.location.pathname };
+				`
+			);
+			expect(seen.path).toMatch(/wallet/);
+			expect(seen.flashes).toEqual([]);
+		});
+	});
+
+	/**
 	 * Spec 097 G: the request declares EIP-5792 2.0.0, so the answer is the
 	 * object `{ id }`. The page reads `.id` off it exactly as Uniswap (and
 	 * viem) do — Uniswap read `.id` off the bare string it got, asked
@@ -1313,6 +1418,95 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		expect((await results(b)).eth_requestAccounts).toMatchObject({ ok: false, code: 4001 });
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
 		await context.close();
+	});
+
+	/**
+	 * Round 3, the owner's side panel: the home cut at its right edge — Scan,
+	 * the Settings tab, the Assets amounts — and the landing drawn to one side.
+	 * The real panel, sized from the narrowest Chrome allows to wider than the
+	 * desktop breakpoint: on every screen nothing runs past its edge. And the
+	 * picture the owner saw — a pinch zooming the panel in — is refused: a
+	 * trackpad pinch reaches the page as `wheel` + `ctrlKey`, and none of
+	 * them is left to zoom it.
+	 */
+	test('the panel fits at every width, and a pinch does not zoom it past its edge', async () => {
+		const context = await loadExtension({ surface: 'panel' });
+		const wallet = await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${DAPP_PORT}/`);
+		await connectInPanel(page, wallet);
+		const panel = await sidePanelSession(context, wallet);
+		const run = async <T>(expression: string): Promise<T> =>
+			(
+				(await panel.send('Runtime.evaluate', {
+					expression,
+					returnByValue: true,
+					awaitPromise: true
+				})) as { result: { value: T } }
+			).result.value;
+		const size = (width: number) =>
+			panel.send('Emulation.setDeviceMetricsOverride', {
+				width,
+				height: 800,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+		// Everything drawn that ends past the panel's edge, and how far the page
+		// would scroll sideways.
+		const CUT = `(() => {
+			const root = document.documentElement;
+			const edge = root.clientWidth;
+			const cut = [...document.querySelectorAll('body *')]
+				.filter((el) => {
+					// An icon's own art is clipped by its <svg>, which is measured.
+					if (el.parentElement?.closest('svg')) return false;
+					const r = el.getBoundingClientRect();
+					if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') return false;
+					return r.right > edge + 1 || r.left < -1;
+				})
+				.map((el) => el.tagName.toLowerCase() + '.' + (el.getAttribute('class') ?? '').split(' ')[0]);
+			return { over: root.scrollWidth - edge, cut: cut.slice(0, 8), path: location.pathname };
+		})()`;
+		try {
+			for (const tab of ['Wallet', 'Contacts', 'Settings']) {
+				await size(360);
+				await run(`(async () => {
+					const link = [...document.querySelectorAll('a, button')].find(
+						(el) => el.getAttribute('aria-label') === '${tab}' || el.textContent?.trim() === '${tab}'
+					);
+					if (!link) throw new Error('no ${tab} in the panel');
+					link.click();
+					await new Promise((r) => setTimeout(r, 2000));
+				})()`);
+				for (const width of [320, 480, 1250, 1400]) {
+					await size(width);
+					await new Promise((r) => setTimeout(r, 1000));
+					const drawn = await run<{ over: number; cut: string[]; path: string }>(CUT);
+					expect(drawn.path).toContain(tab.toLowerCase());
+					expect({ width, ...drawn }).toEqual({ width, over: 0, cut: [], path: drawn.path });
+				}
+			}
+			await panel.send('Emulation.clearDeviceMetricsOverride');
+
+			// A trackpad pinch, through the browser's own input: every wheel it
+			// becomes is refused, so the panel stays at its scale.
+			await run(`(() => {
+				window.__pinch = [];
+				addEventListener('wheel', (e) => { if (e.ctrlKey) window.__pinch.push(e.defaultPrevented); });
+			})()`);
+			await panel.send('Input.synthesizePinchGesture', {
+				x: 100,
+				y: 200,
+				scaleFactor: 1.5,
+				gestureSourceType: 'mouse'
+			});
+			const pinch = await run<boolean[]>('window.__pinch');
+			expect(pinch.length).toBeGreaterThan(0);
+			expect(pinch.every(Boolean)).toBe(true);
+			expect(await run<number>('visualViewport.scale')).toBe(1);
+		} finally {
+			await context.close();
+		}
 	});
 });
 
