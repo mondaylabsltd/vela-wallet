@@ -448,7 +448,10 @@
     "pending": "Esperando aprobación",
     "stale": "No se pudo actualizar; se muestra el último estado conocido.",
     "notShared": "Aún no se comparte: los demás miembros podrán agregarla cuando quede registrada. Vela lo sigue intentando.",
-    "invite": "Invitar miembros"
+    "invite": "Invitar miembros",
+    "lastKnown": "Última lista conocida, de las {{time}}; buscando cambios.",
+    "checking": "Buscando transacciones pendientes de aprobación…",
+    "historyUnreadable": "No se pudo leer el historial de esta multifirma en {{network}}: puede que aquí falten transacciones ejecutadas en otro lugar."
    },
    "status": {
     "ready": "Lista para ejecutar",
@@ -456,7 +459,9 @@
     "waiting": "Esperando a otros",
     "queued": "En cola",
     "progress": "{{approved}}/{{threshold}} aprobadas",
-    "unsent": "Aún no se envía"
+    "unsent": "Aún no se envía",
+    "executing": "Ejecutando…",
+    "conflict": "Solo una de estas puede ejecutarse"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -537,7 +542,28 @@
     "outboxBusy": "El servicio multifirma está ocupado: se volverá a enviar en {{seconds}} s.",
     "outboxAway": "No se pudo conectar con el servicio multifirma: se volverá a enviar en {{seconds}} s.",
     "outboxNotSent": "Aún no se envía: el servicio multifirma no la aceptó. Se guarda en este dispositivo, y los demás miembros no la ven hasta que se envíe.",
-    "outboxSendAgain": "Enviar de nuevo"
+    "outboxSendAgain": "Enviar de nuevo",
+    "lostRace": "Otro miembro la ejecutó primero. No se envió nada desde tu cuenta.",
+    "lostRacePaid": "Otro miembro la ejecutó primero. El intento de tu cuenta también llegó a la red y pagó su comisión de red.",
+    "replacedFirst": "Otra transacción con el número #{{nonce}} se ejecutó primero, así que esta ya nunca podrá ejecutarse. No se envió nada desde tu cuenta.",
+    "replacedFirstPaid": "Otra transacción con el número #{{nonce}} se ejecutó primero, así que esta ya nunca podrá ejecutarse. El intento de tu cuenta llegó a la red y pagó su comisión de red.",
+    "execFailed": "Llegó a la red pero no se ejecutó: su llamada falló. Se pagó la comisión de red.",
+    "cantCheck": "No se puede conectar con {{network}}: ahora no se puede comprobar esta transacción.",
+    "cantCheckUsed": "El número de esta transacción ya se usó, pero ahora no se puede leer {{network}} para saber si se ejecutó o se reemplazó.",
+    "conflict": "Solo una de las transacciones con el número #{{nonce}} puede ejecutarse: la primera que se ejecute reemplaza a las demás.",
+    "queuedNoteMany": "Podrá ejecutarse cuando las transacciones {{nonces}} se ejecuten o se cancelen.",
+    "openNumber": "Abrir #{{nonce}}",
+    "reason": {
+     "passkeyClosed": "Se cerró la solicitud de la llave de acceso, así que no se firmó nada. Si este dispositivo no tiene una llave de acceso para esta cuenta, usa el que la tiene.",
+     "passkeyTimedOut": "Se agotó el tiempo de la solicitud de la llave de acceso, así que no se firmó nada. Inténtalo de nuevo cuando estés listo.",
+     "passkeyMissing": "Este dispositivo no tiene una llave de acceso para esta cuenta, así que no se firmó nada. Usa el dispositivo que la tiene.",
+     "passkeyFailed": "La firma de la llave de acceso no corresponde a esta cuenta, así que no se firmó ni se envió nada.",
+     "serviceKept": "El servicio multifirma no respondió. Lo que firmaste se guarda en este dispositivo y se volverá a enviar solo.",
+     "serviceRefused": "El servicio multifirma la rechazó, así que no se guardó. No se envió nada.",
+     "offline": "No tienes conexión, así que no se envió nada. Inténtalo de nuevo cuando vuelvas a estar en línea.",
+     "chainUnreachable": "Ahora no se puede conectar con {{network}}, así que no se envió nada. Inténtalo de nuevo en un momento.",
+     "unknown": "Algo salió mal, así que no se envió nada. Inténtalo de nuevo."
+    }
    },
    "send": {
     "propose": "Proponer y aprobar",
@@ -592,7 +618,8 @@
     "unavailable": "No se pudo conectar con el servicio. Inténtalo de nuevo.",
     "unsupported": "Esta versión de Safe aún no es compatible.",
     "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer.",
-    "chooseNetwork": "Todavía nada indica en qué red se usa este multisig. Elige su red:"
+    "chooseNetwork": "Todavía nada indica en qué red se usa este multisig. Elige su red:",
+    "badLink": "Este enlace de invitación está incompleto o dañado. Pídelo de nuevo o escribe la dirección de la multifirma."
    },
    "external": {
     "pageTitle": "Firmar para Vela",
@@ -678,7 +705,10 @@
    "service": {
     "customNote": "Usando un servicio multifirma propio ({{host}})",
     "unreachableNote": "El servicio multifirma no está accesible: no se pueden cargar las transacciones pendientes; se reintentará.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "offline": "No tienes conexión; se muestra lo que se cargó antes.",
+    "offlineSince": "No tienes conexión; se muestra lo que se cargó a las {{time}}.",
+    "chainUnreachable": "No se puede conectar con {{network}}: ahora no se pueden comprobar sus transacciones pendientes."
    }
   },
   "balanceDetailStatusOwnNode": "Tu nodo no responde",

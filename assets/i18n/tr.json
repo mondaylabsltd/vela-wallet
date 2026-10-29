@@ -447,7 +447,10 @@
     "pending": "Onay bekliyor",
     "stale": "Yenilenemedi — bilinen son durum gösteriliyor.",
     "notShared": "Henüz paylaşılmadı: kaydedildiğinde diğer üyeler ekleyebilir. Vela denemeye devam ediyor.",
-    "invite": "Üye davet et"
+    "invite": "Üye davet et",
+    "lastKnown": "{{time}} itibarıyla bilinen son liste — değişiklikler kontrol ediliyor.",
+    "checking": "Onay bekleyen işlemler kontrol ediliyor…",
+    "historyUnreadable": "Bu çoklu imzanın {{network}} üzerindeki geçmişi okunamadı: başka yerde yürütülen işlemler burada eksik olabilir."
    },
    "status": {
     "ready": "Yürütülmeye hazır",
@@ -455,7 +458,9 @@
     "waiting": "Diğerleri bekleniyor",
     "queued": "Sırada",
     "progress": "{{approved}}/{{threshold}} onay",
-    "unsent": "Henüz gönderilmedi"
+    "unsent": "Henüz gönderilmedi",
+    "executing": "Yürütülüyor…",
+    "conflict": "Bunlardan yalnızca biri çalışabilir"
    },
    "action": {
     "send": "{{amount}} {{symbol}} gönder",
@@ -536,7 +541,28 @@
     "outboxBusy": "Multisig hizmeti meşgul — {{seconds}} sn sonra yeniden gönderilecek.",
     "outboxAway": "Multisig hizmetine ulaşılamadı — {{seconds}} sn sonra yeniden gönderilecek.",
     "outboxNotSent": "Henüz gönderilmedi: multisig hizmeti bunu kabul etmedi. Bu cihazda saklanıyor ve gönderilene kadar diğer üyeler onu göremez.",
-    "outboxSendAgain": "Yeniden gönder"
+    "outboxSendAgain": "Yeniden gönder",
+    "lostRace": "Başka bir üye önce yürüttü. Hesabından hiçbir şey gönderilmedi.",
+    "lostRacePaid": "Başka bir üye önce yürüttü. Hesabının denemesi de ağa ulaştı ve ağ ücretini ödedi.",
+    "replacedFirst": "#{{nonce}} numarasındaki başka bir işlem önce çalıştı, bu yüzden bu işlem artık hiç çalışamaz. Hesabından hiçbir şey gönderilmedi.",
+    "replacedFirstPaid": "#{{nonce}} numarasındaki başka bir işlem önce çalıştı, bu yüzden bu işlem artık hiç çalışamaz. Hesabının denemesi ağa ulaştı ve ağ ücretini ödedi.",
+    "execFailed": "Ağa ulaştı ama yürütülmedi: çağrısı başarısız oldu. Ağ ücreti ödendi.",
+    "cantCheck": "{{network}} ağına ulaşılamıyor — bu işlem şu anda kontrol edilemiyor.",
+    "cantCheckUsed": "Bu işlemin numarası kullanılmış, ancak yürütüldü mü yoksa değiştirildi mi söylemek için {{network}} şu anda okunamıyor.",
+    "conflict": "#{{nonce}} numarasında bekleyen işlemlerden yalnızca biri çalışabilir: önce yürütülen diğerlerinin yerini alır.",
+    "queuedNoteMany": "{{nonces}} işlemleri yürütüldüğünde ya da iptal edildiğinde çalışabilir.",
+    "openNumber": "#{{nonce}} işlemini aç",
+    "reason": {
+     "passkeyClosed": "Geçiş anahtarı penceresi kapatıldı, bu yüzden hiçbir şey imzalanmadı. Bu cihazda bu hesabın geçiş anahtarı yoksa, anahtarın olduğu cihazı kullan.",
+     "passkeyTimedOut": "Geçiş anahtarı isteğinin süresi doldu, bu yüzden hiçbir şey imzalanmadı. Hazır olduğunda yeniden dene.",
+     "passkeyMissing": "Bu cihazda bu hesabın geçiş anahtarı yok, bu yüzden hiçbir şey imzalanmadı. Anahtarın olduğu cihazı kullan.",
+     "passkeyFailed": "Geçiş anahtarının imzası bu hesapla doğrulanamadı, bu yüzden hiçbir şey imzalanmadı veya gönderilmedi.",
+     "serviceKept": "Çoklu imza hizmeti yanıt vermedi. İmzaladığın şey bu cihazda saklanıyor ve kendiliğinden yeniden gönderilecek.",
+     "serviceRefused": "Çoklu imza hizmeti reddetti, bu yüzden kaydedilmedi. Hiçbir şey gönderilmedi.",
+     "offline": "Çevrimdışısın, bu yüzden hiçbir şey gönderilmedi. Yeniden çevrimiçi olduğunda tekrar dene.",
+     "chainUnreachable": "Şu anda {{network}} ağına ulaşılamıyor, bu yüzden hiçbir şey gönderilmedi. Birazdan tekrar dene.",
+     "unknown": "Bir sorun oluştu, bu yüzden hiçbir şey gönderilmedi. Tekrar dene."
+    }
    },
    "send": {
     "propose": "Öner ve onayla",
@@ -590,7 +616,8 @@
     "unavailable": "Hizmete ulaşılamadı. Tekrar dene.",
     "unsupported": "Bu Safe sürümü henüz desteklenmiyor.",
     "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil.",
-    "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin:"
+    "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin:",
+    "badLink": "Bu davet bağlantısı eksik veya bozuk. Yeniden iste ya da çoklu imzanın adresini gir."
    },
    "external": {
     "pageTitle": "Vela için imzala",
@@ -676,7 +703,10 @@
    "service": {
     "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
     "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
-    "retry": "Tekrar dene"
+    "retry": "Tekrar dene",
+    "offline": "Çevrimdışısın — daha önce yüklenenler gösteriliyor.",
+    "offlineSince": "Çevrimdışısın — {{time}} saatinde yüklenenler gösteriliyor.",
+    "chainUnreachable": "{{network}} ağına ulaşılamıyor — bekleyen işlemleri şu anda kontrol edilemiyor."
    }
   },
   "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",

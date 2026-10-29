@@ -448,7 +448,10 @@
     "pending": "Aguardando aprovação",
     "stale": "Não foi possível atualizar — mostrando o último estado conhecido.",
     "notShared": "Ainda não compartilhada: os outros membros poderão adicioná-la quando for registrada. A Vela continua tentando.",
-    "invite": "Convidar membros"
+    "invite": "Convidar membros",
+    "lastKnown": "Última lista conhecida, das {{time}} — verificando mudanças.",
+    "checking": "Verificando transações aguardando aprovação…",
+    "historyUnreadable": "Não foi possível ler o histórico desta multisig em {{network}}: transações executadas em outro lugar podem estar faltando aqui."
    },
    "status": {
     "ready": "Pronta para executar",
@@ -456,7 +459,9 @@
     "waiting": "Aguardando os outros",
     "queued": "Na fila",
     "progress": "{{approved}}/{{threshold}} aprovações",
-    "unsent": "Ainda não enviada"
+    "unsent": "Ainda não enviada",
+    "executing": "Executando…",
+    "conflict": "Só uma destas pode ser executada"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -537,7 +542,28 @@
     "outboxBusy": "O serviço multisig está ocupado — enviando de novo em {{seconds}} s.",
     "outboxAway": "Não foi possível acessar o serviço multisig — enviando de novo em {{seconds}} s.",
     "outboxNotSent": "Ainda não enviada: o serviço multisig não a aceitou. Ela fica guardada neste dispositivo, e os outros membros não a veem até que seja enviada.",
-    "outboxSendAgain": "Enviar de novo"
+    "outboxSendAgain": "Enviar de novo",
+    "lostRace": "Outro membro executou primeiro. Nada foi enviado da sua conta.",
+    "lostRacePaid": "Outro membro executou primeiro. A tentativa da sua conta também chegou à rede e pagou a taxa de rede dela.",
+    "replacedFirst": "Outra transação no número #{{nonce}} foi executada primeiro, então esta nunca poderá ser executada. Nada foi enviado da sua conta.",
+    "replacedFirstPaid": "Outra transação no número #{{nonce}} foi executada primeiro, então esta nunca poderá ser executada. A tentativa da sua conta chegou à rede e pagou a taxa de rede dela.",
+    "execFailed": "Chegou à rede, mas não foi executada: a chamada falhou. A taxa de rede foi paga.",
+    "cantCheck": "Não foi possível acessar {{network}} — não dá para verificar esta transação agora.",
+    "cantCheckUsed": "O número desta transação já foi usado, mas não dá para ler {{network}} agora e saber se ela foi executada ou substituída.",
+    "conflict": "Só uma das transações aguardando no número #{{nonce}} pode ser executada: a primeira executada substitui as outras.",
+    "queuedNoteMany": "Ela pode ser executada quando as transações {{nonces}} forem executadas ou canceladas.",
+    "openNumber": "Abrir #{{nonce}}",
+    "reason": {
+     "passkeyClosed": "A solicitação da chave de acesso foi fechada, então nada foi assinado. Se este dispositivo não tem uma chave de acesso para esta conta, use o que tem.",
+     "passkeyTimedOut": "A solicitação da chave de acesso expirou, então nada foi assinado. Tente de novo quando estiver pronto.",
+     "passkeyMissing": "Este dispositivo não tem uma chave de acesso para esta conta, então nada foi assinado. Use o dispositivo que tem.",
+     "passkeyFailed": "A assinatura da chave de acesso não confere com esta conta, então nada foi assinado nem enviado.",
+     "serviceKept": "O serviço multisig não respondeu. O que você assinou fica guardado neste dispositivo e é reenviado automaticamente.",
+     "serviceRefused": "O serviço multisig recusou, então não foi salvo. Nada foi enviado.",
+     "offline": "Você está offline, então nada foi enviado. Tente de novo quando voltar a ficar online.",
+     "chainUnreachable": "Não foi possível acessar {{network}} agora, então nada foi enviado. Tente de novo em instantes.",
+     "unknown": "Algo deu errado, então nada foi enviado. Tente de novo."
+    }
    },
    "send": {
     "propose": "Propor e aprovar",
@@ -592,7 +618,8 @@
     "unavailable": "Não foi possível acessar o serviço. Tente novamente.",
     "unsupported": "Esta versão do Safe ainda não é compatível.",
     "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler.",
-    "chooseNetwork": "Ainda nada indica em qual rede este multisig é usado. Escolha a rede dele:"
+    "chooseNetwork": "Ainda nada indica em qual rede este multisig é usado. Escolha a rede dele:",
+    "badLink": "Este link de convite está incompleto ou danificado. Peça de novo ou digite o endereço da multisig."
    },
    "external": {
     "pageTitle": "Assinar para a Vela",
@@ -678,7 +705,10 @@
    "service": {
     "customNote": "Usando um serviço multisig próprio ({{host}})",
     "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
-    "retry": "Tentar de novo"
+    "retry": "Tentar de novo",
+    "offline": "Você está offline — mostrando o que foi carregado antes.",
+    "offlineSince": "Você está offline — mostrando o que foi carregado às {{time}}.",
+    "chainUnreachable": "Não foi possível acessar {{network}} — não dá para verificar as transações pendentes agora."
    }
   },
   "balanceDetailStatusOwnNode": "Seu nó não está respondendo",

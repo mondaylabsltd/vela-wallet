@@ -447,7 +447,10 @@
     "pending": "Menunggu persetujuan",
     "stale": "Tidak bisa memperbarui — menampilkan keadaan terakhir yang diketahui.",
     "notShared": "Belum dibagikan: anggota lain bisa menambahkannya setelah tercatat. Vela terus mencoba.",
-    "invite": "Undang anggota"
+    "invite": "Undang anggota",
+    "lastKnown": "Daftar terakhir yang diketahui, dari {{time}} — memeriksa perubahan.",
+    "checking": "Memeriksa transaksi yang menunggu persetujuan…",
+    "historyUnreadable": "Riwayat multisig ini di {{network}} tidak bisa dibaca: transaksi yang dieksekusi di tempat lain mungkin tidak tampil di sini."
    },
    "status": {
     "ready": "Siap dieksekusi",
@@ -455,7 +458,9 @@
     "waiting": "Menunggu yang lain",
     "queued": "Dalam antrean",
     "progress": "{{approved}}/{{threshold}} disetujui",
-    "unsent": "Belum terkirim"
+    "unsent": "Belum terkirim",
+    "executing": "Sedang dieksekusi…",
+    "conflict": "Hanya satu dari ini yang bisa dijalankan"
    },
    "action": {
     "send": "Kirim {{amount}} {{symbol}}",
@@ -536,7 +541,28 @@
     "outboxBusy": "Layanan multisig sedang sibuk — mengirim lagi dalam {{seconds}} detik.",
     "outboxAway": "Tidak bisa menjangkau layanan multisig — mengirim lagi dalam {{seconds}} detik.",
     "outboxNotSent": "Belum terkirim: layanan multisig tidak menerimanya. Transaksi ini disimpan di perangkat ini, dan anggota lain tidak bisa melihatnya sampai terkirim.",
-    "outboxSendAgain": "Kirim lagi"
+    "outboxSendAgain": "Kirim lagi",
+    "lostRace": "Anggota lain mengeksekusinya lebih dulu. Tidak ada yang dikirim dari akunmu.",
+    "lostRacePaid": "Anggota lain mengeksekusinya lebih dulu. Percobaan akunmu juga sampai ke jaringan dan membayar biaya jaringannya.",
+    "replacedFirst": "Transaksi lain di nomor #{{nonce}} berjalan lebih dulu, jadi transaksi ini tidak akan pernah bisa dijalankan. Tidak ada yang dikirim dari akunmu.",
+    "replacedFirstPaid": "Transaksi lain di nomor #{{nonce}} berjalan lebih dulu, jadi transaksi ini tidak akan pernah bisa dijalankan. Percobaan akunmu sampai ke jaringan dan membayar biaya jaringannya.",
+    "execFailed": "Sampai ke jaringan tetapi tidak dieksekusi: panggilannya gagal. Biaya jaringan sudah dibayar.",
+    "cantCheck": "Tidak dapat menjangkau {{network}} — transaksi ini tidak bisa diperiksa sekarang.",
+    "cantCheckUsed": "Nomor transaksi ini sudah dipakai, tetapi {{network}} tidak bisa dibaca sekarang untuk mengetahui apakah transaksi ini dieksekusi atau digantikan.",
+    "conflict": "Hanya satu transaksi yang menunggu di nomor #{{nonce}} yang bisa dijalankan: yang pertama dieksekusi menggantikan yang lain.",
+    "queuedNoteMany": "Bisa dijalankan setelah transaksi {{nonces}} dieksekusi atau dibatalkan.",
+    "openNumber": "Buka #{{nonce}}",
+    "reason": {
+     "passkeyClosed": "Permintaan passkey ditutup, jadi tidak ada yang ditandatangani. Jika perangkat ini tidak punya passkey untuk akun ini, gunakan perangkat yang punya.",
+     "passkeyTimedOut": "Permintaan passkey habis waktunya, jadi tidak ada yang ditandatangani. Coba lagi saat kamu siap.",
+     "passkeyMissing": "Perangkat ini tidak punya passkey untuk akun ini, jadi tidak ada yang ditandatangani. Gunakan perangkat yang punya.",
+     "passkeyFailed": "Tanda tangan passkey tidak cocok untuk akun ini, jadi tidak ada yang ditandatangani atau dikirim.",
+     "serviceKept": "Layanan multisig tidak menjawab. Yang kamu tanda tangani disimpan di perangkat ini dan akan dikirim ulang secara otomatis.",
+     "serviceRefused": "Layanan multisig menolaknya, jadi tidak disimpan. Tidak ada yang dikirim.",
+     "offline": "Kamu sedang offline, jadi tidak ada yang dikirim. Coba lagi setelah kembali online.",
+     "chainUnreachable": "Tidak dapat menjangkau {{network}} sekarang, jadi tidak ada yang dikirim. Coba lagi sebentar lagi.",
+     "unknown": "Terjadi kesalahan, jadi tidak ada yang dikirim. Coba lagi."
+    }
    },
    "send": {
     "propose": "Usulkan dan setujui",
@@ -590,7 +616,8 @@
     "unavailable": "Tidak bisa menghubungi layanan. Coba lagi.",
     "unsupported": "Versi Safe ini belum didukung.",
     "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela.",
-    "chooseNetwork": "Belum ada yang menunjukkan jaringan tempat multisig ini digunakan. Pilih jaringannya:"
+    "chooseNetwork": "Belum ada yang menunjukkan jaringan tempat multisig ini digunakan. Pilih jaringannya:",
+    "badLink": "Tautan undangan ini tidak lengkap atau rusak. Minta lagi, atau masukkan alamat multisig-nya."
    },
    "external": {
     "pageTitle": "Tanda tangani untuk Vela",
@@ -676,7 +703,10 @@
    "service": {
     "customNote": "Menggunakan layanan multisig khusus ({{host}})",
     "unreachableNote": "Layanan multisig tidak dapat dijangkau — transaksi yang menunggu tidak bisa dimuat; akan dicoba lagi.",
-    "retry": "Coba lagi"
+    "retry": "Coba lagi",
+    "offline": "Kamu sedang offline — menampilkan yang dimuat sebelumnya.",
+    "offlineSince": "Kamu sedang offline — menampilkan yang dimuat pada {{time}}.",
+    "chainUnreachable": "Tidak dapat menjangkau {{network}} — transaksi yang menunggu di sana tidak bisa diperiksa sekarang."
    }
   },
   "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
