@@ -121,7 +121,8 @@
         "number": "Transaksi #",
         "call": "Panggilan kontrak",
         "callWithValue": "Panggilan kontrak dengan {{amount}} {{symbol}}",
-        "batchCalls": "{{total}} panggilan dalam satu transaksi"
+        "batchCalls": "{{total}} panggilan dalam satu transaksi",
+        "rename": "Ganti nama multisig ini di registri menjadi “{{name}}”"
       },
       "proposal": {
         "title": "Transaksi multisig",
@@ -210,7 +211,7 @@
         "done": "Selesai",
         "name": "Nama",
         "namePlaceholder": "mis. Dana tim",
-        "nameHint": "Semua anggota melihat nama ini. Nama disimpan bersama multisig dan tidak bisa diubah nanti.",
+        "nameHint": "Semua anggota melihat nama ini. Nama disimpan bersama multisig; mengubahnya nanti perlu persetujuan anggota.",
         "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau karakter tak terlihat, dan tanpa spasi di awal maupun akhir.",
         "fewer": "Lebih sedikit persetujuan",
         "more": "Lebih banyak persetujuan",
@@ -291,7 +292,13 @@
         "unavailable": "Belum tersedia di Ethereum",
         "couldNotCheck": "Tidak bisa memeriksa",
         "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
-        "remove": "Hapus dari perangkat ini"
+        "remove": "Hapus dari perangkat ini",
+        "renameTitle": "Nama di registri",
+        "renameNote": "Anggota, dan siapa pun yang mencari multisig ini, melihat nama ini. Mengganti namanya adalah salah satu transaksinya di {{network}}: anggota menyetujuinya seperti transaksi lain.",
+        "renameAction": "Ganti nama di chain",
+        "renameUnavailable": "Catatannya tidak ada di jaringan mana pun di dompet ini, jadi namanya tidak bisa diganti dari sini.",
+        "shareAgain": "Bagikan lagi",
+        "shareAgainNote": "Layanan multisig tidak memiliki pengaturannya; mungkin tersimpan di registri versi lama. Membagikannya lagi perlu satu konfirmasi passkey."
       },
       "service": {
         "customNote": "Menggunakan layanan multisig khusus ({{host}})",

@@ -940,6 +940,11 @@ pub enum ClearTerm {
     /// record — its name, its keys' names and public keys — to another
     /// chain. The id predates the wording ("Copy this wallet's record").
     IntentBackUpPublicKeys,
+    /// A multisig's setup filed in the Safe Genesis Registry (`record`):
+    /// "Save its setup to Ethereum", the multisig's twin of the record copy.
+    IntentSaveMultisigSetup,
+    /// A Safe renaming its own record in the Safe Genesis Registry.
+    IntentRenameInRegistry,
     IntentBorrow,
     IntentBridge,
     IntentBurn,
@@ -1002,6 +1007,8 @@ pub enum ClearTerm {
     LabelValidUntil,
     /// The name a registry record publishes for the wallet.
     LabelWalletName,
+    /// The name a Safe Genesis Registry record carries (a multisig's).
+    LabelName,
     LabelYouPay,
     LabelYouPayMax,
     LabelYouReceive,
@@ -1046,6 +1053,8 @@ impl ClearTerm {
         // The same intent's words before they were made honest (records and
         // receipts written then still say them).
         ("back up public keys", Self::IntentBackUpPublicKeys),
+        ("save this multisig's setup", Self::IntentSaveMultisigSetup),
+        ("rename in the registry", Self::IntentRenameInRegistry),
         ("borrow", Self::IntentBorrow),
         ("bridge", Self::IntentBridge),
         ("burn", Self::IntentBurn),
@@ -1103,6 +1112,7 @@ impl ClearTerm {
         ("token ids", Self::LabelTokenIds),
         ("valid until", Self::LabelValidUntil),
         ("wallet name", Self::LabelWalletName),
+        ("name", Self::LabelName),
         ("you pay", Self::LabelYouPay),
         ("you pay (max)", Self::LabelYouPayMax),
         ("you receive", Self::LabelYouReceive),
@@ -2776,10 +2786,10 @@ fn start_tx(
     // only present as a stranger's call it read from a signature database. It
     // is the one first-party contract call the wallet makes; it is drawn as
     // what it is, with nothing to fetch.
-    if let Some(result) = to
-        .as_deref()
-        .and_then(|to| build_registry_backup_result(to, &data, chain_id))
-    {
+    if let Some(result) = to.as_deref().and_then(|to| {
+        build_registry_backup_result(to, &data, chain_id)
+            .or_else(|| build_genesis_registry_result(to, &data, chain_id))
+    }) {
         model.result = Some(result);
         model.resolved = true;
         return render();
@@ -5023,6 +5033,86 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
         verified: false,
         // Every word of this sheet is written above, by this build, from bytes
         // it decoded itself — the strongest provenance there is.
+        provenance: ClearProvenance::BuiltIn,
+        sign_type: ClearSignType::Transaction,
+        partial: false,
+        best_effort: false,
+        to_own_token: false,
+        intent_term: None,
+        terms_off_chain: false,
+        reading: ClearReading::default(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The Safe Genesis Registry — Vela's own contract for multisig setups
+// ---------------------------------------------------------------------------
+
+/// `Some` for a `record(...)` or `rename(string)` call to the Safe Genesis
+/// Registry ([`crate::multisig::GENESIS_REGISTRY`]) that this build can read;
+/// anything else to it takes the ordinary ladder.
+///
+/// Built in, like the passkey registry's backup: the contract is Vela's
+/// own, and every row is read here from the call's bytes. A record files a
+/// multisig's setup — its genesis and the name it carries — under the address
+/// the registry derives from it, which the sheet derives the same way (from
+/// the proxy code in the call), so the address row is the one the record
+/// will hold. A rename gives the CALLING account's own record a new name:
+/// the footer's account is the one renamed. Nothing moves value; a name is a
+/// label anyone can read, and the sheet says what it is.
+fn build_genesis_registry_result(to: &str, data: &str, chain_id: u32) -> Option<ClearSignResult> {
+    if !to.eq_ignore_ascii_case(crate::multisig::GENESIS_REGISTRY) {
+        return None;
+    }
+    let bytes = primitives::from_hex(data).ok()?;
+    let field =
+        |label: &str, value: String, format: &str, address: Option<String>| ClearSignField {
+            label: label.to_owned(),
+            value,
+            format: format.to_owned(),
+            token_address: None,
+            warning: false,
+            unverified: false,
+            role: ClearFieldRole::Generic,
+            detail: false,
+            expired: false,
+            address,
+            usd_value: None,
+            label_term: None,
+            value_term: None,
+            bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
+        };
+    let network = super::network_admin::builtin_display_name(chain_id)
+        .map(|name| field("Network", name.to_owned(), "raw", None));
+    let (intent, rows) = if let Some((safe, genesis)) = crate::multisig::read_record_call(&bytes) {
+        let address = field(
+            "Address",
+            format!("{}…{}", take_chars(&safe, 0, 8), last_chars(&safe, 6)),
+            "addressName",
+            Some(safe.to_lowercase()),
+        );
+        let name = field("Name", genesis.name.unwrap_or_default(), "raw", None);
+        ("Save this multisig's setup", vec![address, name])
+    } else {
+        let name = crate::multisig::read_rename(&bytes)?;
+        (
+            "Rename in the registry",
+            vec![field("Name", name, "raw", None)],
+        )
+    };
+    Some(ClearSignResult {
+        intent: intent.to_owned(),
+        contract_name: Some("Safe Genesis Registry".to_owned()),
+        owner: Some("Vela".to_owned()),
+        fields: network.into_iter().chain(rows).collect(),
+        risk: ClearRisk::Safe,
+        contract_address: Some(to.to_lowercase()),
+        verified: false,
+        // Every word written above, by this build, from bytes it decoded itself.
         provenance: ClearProvenance::BuiltIn,
         sign_type: ClearSignType::Transaction,
         partial: false,
@@ -8928,6 +9018,10 @@ mod clear_term_tests {
                 "Address",
                 "Wallet name",
                 "Keys included",
+                // The Safe Genesis Registry's, likewise.
+                "Save this multisig's setup",
+                "Rename in the registry",
+                "Name",
             ]
             .map(str::to_owned),
         );

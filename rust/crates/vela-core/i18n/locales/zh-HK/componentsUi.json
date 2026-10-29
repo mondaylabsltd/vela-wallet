@@ -310,7 +310,10 @@
         "feeChanged": "此看法提供後手續費已變更"
       },
       "passkeyClosed": "通行密鑰視窗已關閉，因此沒有簽署任何內容。如這部裝置沒有此帳戶的通行密鑰，請使用有該密鑰的裝置。",
-      "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。"
+      "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。",
+      "intentSaveMultisigSetup": "儲存這個多簽的設定",
+      "intentRenameInRegistry": "在登記冊中改名",
+      "labelName": "名稱"
     },
     "currency": {
       "title": "顯示貨幣",

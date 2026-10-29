@@ -12,16 +12,29 @@
  * accepted only if the core re-derives the address from it — a different
  * genesis for the same address would take a 160-bit preimage, so the service
  * cannot hand over a wrong one.
+ *
+ * Registry v4 (2026-10-29): every record carries a name, and the multisig
+ * itself may rename its record (a transaction of its own). What a record's
+ * name is now is read from the registry on chain where this wallet has the
+ * network (`checkRecords`), the service's word only where it does not. The
+ * service reads only v4: a multisig recorded in an earlier registry (v1–v3,
+ * testnets and local forks only) is one it no longer has, and is shown as not
+ * shared — never silently as shared — until it is shared again.
  */
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { hasCode } from './chain';
 import { creationGenesis, hasTransactionService } from './safe-service';
 import {
+	GENESIS_REGISTRY,
 	genesisAddress,
 	genesisMembers,
+	genesisOfCall,
 	multisigGenesis,
+	namedGenesis,
+	readGenesisOf,
 	safeWalletPropsGenesis,
 	sameAddress,
+	validName,
 	type ExportedSafe,
 	type Genesis
 } from './kernel';
@@ -106,26 +119,36 @@ export function newSaltNonce(): string {
 	return randomSeed();
 }
 
-/** Record `genesis` through the service; `true` once the registry holds it (or will). */
+/**
+ * Record `genesis` through the service; `true` once the registry holds it (or
+ * will). Sent named (`namedGenesis`): v4 records every Safe with a name, and
+ * a genesis without one is the service's to name. Without `proof` the service
+ * pays only for a Safe deployed somewhere; anything else comes back as a call
+ * for someone to send, and is not recorded here.
+ */
 async function record(
 	address: string,
 	genesis: Genesis,
-	proof: OwnerProof,
+	proof: OwnerProof | undefined,
 	chainId: number
 ): Promise<boolean> {
-	let answer = await importGenesis({ chainId, safe: address, genesis, ownerProof: proof });
+	const named = namedGenesis(genesis);
+	let answer = await importGenesis({ chainId, safe: address, genesis: named, ownerProof: proof });
 	// A chain the service does not serve: its home chain reads the same factory.
 	const home = answer.status === 'error' ? await recordHomeChain() : chainId;
 	if (answer.status === 'error' && chainId !== home) {
 		answer = await importGenesis({
 			chainId: home,
 			safe: address,
-			genesis,
+			genesis: named,
 			ownerProof: proof
 		});
 	}
 	return answer.status === 'recorded' || answer.status === 'queued';
 }
+
+/** Multisigs asked about without a proof this session: once each, not every minute. */
+const askedWithoutProof = new Set<string>();
 
 /**
  * Create the multisig: one passkey prompt (the creator's proof), then the
@@ -167,17 +190,23 @@ export async function retryUnrecorded(): Promise<void> {
 				continue;
 			}
 			if (known.found) multisig.markShared(account.address);
-			const proof = proofs[account.address.toLowerCase()];
+			const key = account.address.toLowerCase();
+			const proof = proofs[key];
+			// No proof kept (one recorded in an older registry, or imported):
+			// asked once a session — the service pays for a Safe deployed
+			// somewhere; anything else waits for "Share it again".
+			if (!proof && askedWithoutProof.has(key)) continue;
+			if (!proof) askedWithoutProof.add(key);
 			if (
-				proof &&
-				(await record(
+				await record(
 					account.address,
 					account.genesis,
 					proof,
 					account.chainIds[0] ?? (await recordHomeChain())
-				))
+				)
 			) {
 				// Queued: confirmed by a later `fetchGenesis`.
+				multisig.markShared(account.address);
 			}
 		} catch {
 			// the next launch asks again
@@ -186,6 +215,111 @@ export async function retryUnrecorded(): Promise<void> {
 	const left = readProofs();
 	for (const a of multisig.accounts) if (a.recorded) delete left[a.address.toLowerCase()];
 	writeProofs(left);
+}
+
+/**
+ * Share a multisig the service does not have again (one recorded in an
+ * earlier registry, or whose first record never landed): `owner`'s passkey
+ * proves an owner asks, as on creation (one prompt), and the service records
+ * it on its home chain. Resolves `true` once the service holds it.
+ */
+export async function shareAgain(account: MultisigAccount, owner: LocalOwner): Promise<boolean> {
+	const chainId = account.chainIds[0] ?? (await recordHomeChain());
+	const proof = await signOwnerProof(owner.account, account.address, chainId);
+	let recorded = false;
+	try {
+		recorded = await record(account.address, account.genesis, proof, chainId);
+	} catch (error) {
+		if (!(error instanceof ServiceUnavailableError)) throw error;
+	}
+	if (!recorded) {
+		// Kept and asked again with the record loop, as a new multisig's is.
+		writeProofs({ ...readProofs(), [account.address.toLowerCase()]: proof });
+	}
+	// Not paid for now (its sponsor's budget spent), the service still hands
+	// out what an owner proved — shared, with the record to follow.
+	const shared =
+		recorded || (await fetchGenesis(account.address).catch(() => ({ found: false }))).found;
+	if (shared) multisig.markShared(account.address);
+	return shared;
+}
+
+/**
+ * The name `account`'s record holds now — read from the registry on
+ * `chainId` with this wallet's own RPC, the core re-deriving the address from
+ * what comes back. `undefined` when that chain cannot be read here (the
+ * network is not this wallet's, or it did not answer): then nothing is said.
+ */
+async function recordedNameOnChain(
+	address: string,
+	chainId: number
+): Promise<string | null | undefined> {
+	if (networkForChainId(chainId) === null) return undefined;
+	try {
+		const read = await poolRpcCall(
+			'eth_call',
+			[{ to: GENESIS_REGISTRY, data: genesisOfCall(address) }, 'latest'],
+			chainId
+		);
+		if (typeof read.result !== 'string') return undefined;
+		const record = readGenesisOf(address, read.result);
+		return record === null ? null : (record.genesis.name ?? null);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Look at `address`'s record again now (it was just renamed on this device):
+ * its name is read from the chain at once.
+ */
+export async function recheckRecord(address: string): Promise<void> {
+	checked.delete(address.toLowerCase());
+	await checkRecords();
+}
+
+/** How long a record the service queued may take to land before its absence means anything. */
+const LANDING_MS = 10 * 60_000;
+
+/** Multisigs whose record was looked at this session. */
+const checked = new Set<string>();
+
+/**
+ * Look at the record of every multisig this device calls shared, once a
+ * session: its name now (the multisig may have renamed itself — read from
+ * the chain where this wallet can, the service's word only where it cannot),
+ * and whether the service has it at all. A service that answers it holds no
+ * record of one (an earlier registry's: v1–v3 are no longer read) makes it
+ * not shared again, said on screen and asked again, never left looking
+ * shared. Quiet on failure: the next session looks again.
+ */
+export async function checkRecords(): Promise<void> {
+	if (serviceOutage.blocked()) return;
+	for (const account of multisig.accounts.filter((a) => a.recorded || a.shared)) {
+		const key = account.address.toLowerCase();
+		if (checked.has(key)) continue;
+		checked.add(key);
+		try {
+			const known = await fetchGenesis(account.address, { background: true });
+			if (!known.found) {
+				// A record queued moments ago may not have landed yet.
+				if (Date.now() - account.addedMs > LANDING_MS) multisig.markUnshared(account.address);
+				else checked.delete(key);
+				continue;
+			}
+			if (known.pending || !known.genesis) continue;
+			if (!sameAddress(genesisAddress(known.genesis), account.address)) continue;
+			const from = known.readFrom ?? known.recordedOn?.[0];
+			const onChain =
+				from === undefined ? undefined : await recordedNameOnChain(account.address, from);
+			const name = onChain === undefined ? known.genesis.name : onChain;
+			if (name && name !== account.genesis.name && validName(name)) {
+				multisig.setRecordedName(account.address, name);
+			}
+		} catch {
+			checked.delete(key);
+		}
+	}
 }
 
 /** How often a record that has not landed is asked about again while a page is open. */

@@ -310,7 +310,10 @@
         "feeChanged": "Bu görüşten sonra ücret değişti"
       },
       "passkeyClosed": "Geçiş anahtarı istemi kapatıldı, hiçbir şey imzalanmadı. Bu cihazda bu hesabın geçiş anahtarı yoksa, anahtarın olduğu cihazı kullanın.",
-      "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin."
+      "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin.",
+      "intentSaveMultisigSetup": "Bu multisig'in kurulumunu kaydet",
+      "intentRenameInRegistry": "Kayıt defterinde yeniden adlandır",
+      "labelName": "Ad"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

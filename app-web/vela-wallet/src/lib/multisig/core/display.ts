@@ -141,6 +141,8 @@ export async function actionTitle(
 			return m.action.swapOwner;
 		case 'changeThreshold':
 			return fillTemplate(m.action.changeThreshold, { threshold: action.threshold });
+		case 'rename':
+			return fillTemplate(m.action.rename, { name: action.name });
 		case 'call': {
 			if (BigInt(action.value) === 0n) return m.action.call;
 			const info = await tokenInfo(chainId, null);

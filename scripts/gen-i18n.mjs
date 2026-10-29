@@ -1053,8 +1053,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   its settings; the list says which can be added). 2254 + 4 = 2258 leaves,
 //   120 branches.
 // 2406 (Default networks, 2026-10-28): 2285 leaves, 121 branches.
-if (PATHS.length !== 2406) fail(`expected 2406 paths (2285 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2285) fail(`expected 2285 leaf paths, got ${leafSet.size}`);
+// 2416 (Safe Genesis Registry v4: every record named, a Safe renames itself,
+//   2026-10-29): + `componentsUi.signing.{intentSaveMultisigSetup,
+//   intentRenameInRegistry, labelName}` (the record and rename calls drawn as
+//   what they are, the registry being Vela's own), + `home.multisig.action.
+//   rename` (a rename proposal's line) and `home.multisig.settings.
+//   {renameTitle, renameNote, renameAction, renameUnavailable, shareAgain,
+//   shareAgainNote}` (renaming on chain as a proposal; a multisig whose
+//   record the service no longer has, said and shared again).
+//   `create.nameHint` changes value only (a name can be changed now).
+//   2285 + 10 = 2295 leaves, 121 branches.
+if (PATHS.length !== 2416) fail(`expected 2416 paths (2295 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2295) fail(`expected 2295 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

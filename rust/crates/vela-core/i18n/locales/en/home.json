@@ -121,7 +121,8 @@
         "number": "Transaction #",
         "call": "Contract call",
         "callWithValue": "Contract call with {{amount}} {{symbol}}",
-        "batchCalls": "{{total}} calls in one transaction"
+        "batchCalls": "{{total}} calls in one transaction",
+        "rename": "Rename this multisig in the registry to “{{name}}”"
       },
       "proposal": {
         "title": "Multisig transaction",
@@ -210,7 +211,7 @@
         "done": "Done",
         "name": "Name",
         "namePlaceholder": "e.g. Team fund",
-        "nameHint": "Every member sees this name. It's saved with the multisig and can't be changed later.",
+        "nameHint": "Every member sees this name. It's saved with the multisig; changing it later takes the members' approval.",
         "nameInvalid": "Use a shorter name, without control or invisible characters or spaces at either end.",
         "fewer": "Fewer approvals",
         "more": "More approvals",
@@ -291,7 +292,13 @@
         "unavailable": "Not available on Ethereum yet",
         "couldNotCheck": "Couldn't check",
         "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
-        "remove": "Remove from this device"
+        "remove": "Remove from this device",
+        "renameTitle": "Name in the registry",
+        "renameNote": "Members, and anyone who looks this multisig up, see this name. Renaming it is one of its transactions on {{network}}: members approve it like any other.",
+        "renameAction": "Rename on chain",
+        "renameUnavailable": "Its record isn't on a network this wallet has, so it can't be renamed from here.",
+        "shareAgain": "Share it again",
+        "shareAgainNote": "The multisig service doesn't have its setup; it may have been saved to an older registry. Sharing it again takes one passkey confirmation."
       },
       "service": {
         "customNote": "Using a custom multisig service ({{host}})",

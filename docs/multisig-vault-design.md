@@ -12,7 +12,7 @@
 | --- | --- |
 | vela-core `multisig` | genesis（Safe L2 v1.4.1、CompatibilityFallbackHandler、无 hook、owner 按给定顺序）、safeTxHash、批准哈希 `SafeMessage(safeTxHash)`、passkey assertion → 批准、批准核对、签名拼装（按 owner 排序、嵌套 1271、执行者 `v = 1`）、执行调用（缺代码的多签和批准 owner 一并部署）、交易解读与安全形状。对外只有一个 JSON 入口 `multisigCall` |
 | genesis 服务 | 凭 owner passkey 证明代付未部署 Safe 的记录（独立通道和单 owner 限额）；提案信箱（`/api/proposals`，批准按链上规则核对、并发安全合并）；证明过的 genesis 在记录落链前就能查到（`pending`） |
-| web | 账户切换器里的多签一栏；创建（不部署）、按地址添加、邀请；首页多签面板（规则、成员、待批准）；多签有名字：创建第一步填写，随记录写入注册表 v2（`recordNamed`，0x70b3…4802），地址到名字的映射，不参与地址推导、写入后不可改、可以重名；任何钱包里添加过的网络都能发起提案（服务不读的链按 genesis 判定成员）；发起转账走和 Vela 账户完全相同的发送流程（发送、扫码、通讯录、代币详情；选币、金额、收款人、分账、确认页都一样），只有两处不同：手续费那一行换成「几人中几人批准；手续费由执行成员支付」，确认按钮是「发起并批准」，确认后打开提案详情；提案详情（批准 / 批准并执行 / 执行、邀请链接、拒绝 = 同 nonce 作废）；执行后写活动记录，其他设备执行的从链上 `ExecutionSuccess` 找回；15 种语言 |
+| web | 账户切换器里的多签一栏；创建（不部署）、按地址添加、邀请；首页多签面板（规则、成员、待批准）；多签有名字：创建第一步填写，随记录写入注册表 v4（`record` 必带名字，0xF412…945d），地址到名字的映射，不参与地址推导、可以重名，多签自己可以在链上改名（见 3.3）；任何钱包里添加过的网络都能发起提案（服务不读的链按 genesis 判定成员）；发起转账走和 Vela 账户完全相同的发送流程（发送、扫码、通讯录、代币详情；选币、金额、收款人、分账、确认页都一样），只有两处不同：手续费那一行换成「几人中几人批准；手续费由执行成员支付」，确认按钮是「发起并批准」，确认后打开提案详情；提案详情（批准 / 批准并执行 / 执行、邀请链接、拒绝 = 同 nonce 作废）；执行后写活动记录，其他设备执行的从链上 `ExecutionSuccess` 找回；15 种语言 |
 | 导入与外部 owner（§11） | 从 Safe{Wallet} 导出文件导入（core 解析；已部署的由服务从交易服务还原 genesis，未部署的在本机由 props 推导，都由 core 核对地址；地址簿名字作本机备注）；Safe v1.3.0 / v1.4.1 / v1.5.0；外部钱包签名走 PeerConnect + WalletPair（Vela 的 `/connect` 页面是钱包端，EIP-6963 发现钱包，签 SafeTx 的 EIP-712），签名由 core ecrecover 核对后进信箱；服务接受 EOA 批准；没有 owner 在本机时，发送确认直接走外部签名；签名凑齐后任何本机 Vela 账户都可以执行（非 owner 时不占签名位）；分叉测试覆盖：EOA 成员 + passkey 成员混签执行，导入两个 Safe 后两个 EOA 先后签名、非 owner 的 Vela 账户执行并部署 |
 
 **体验统一（2026-10-28，owner 反馈后重做）**：多签用起来只比 Vela 账户多一点点东西。
@@ -20,7 +20,7 @@
 - 头部：名字独占一行（不被网络徽章挤压），地址同一行后面是"2/3"规则小标签和网络徽章；点规则进入设置。
 - 首页：和 Vela 账户完全一样，去掉了顶部多签面板；待批准交易作为 Activity 最上面一组"等待批准"的行（标题、金额、"轮到你批准 · 1/2 · 网络"），点开是提案详情。
 - 账户切换器：Vela 账户和多签在同一个列表里（多签行带"2/3"），底部只有一个"添加账户"，打开后四个选项：新建账户、登录已有账户、创建多签、添加多签（地址或从 Safe{Wallet} 导入）。
-- 设置 → 账户：多签也在账户列表里；当前是多签时，"密钥"一块换成多签自己的：成员（标出本设备上的）、规则、邀请成员、"把多签配置保存到 Ethereum"（对应 Vela 账户的"保存公钥到 Ethereum"，由本设备的 Vela 账户发 `record`/`recordNamed` 交易）、从本设备移除。
+- 设置 → 账户：多签也在账户列表里；当前是多签时，"密钥"一块换成多签自己的：成员（标出本设备上的）、规则、邀请成员、"把多签配置保存到 Ethereum"（对应 Vela 账户的"保存公钥到 Ethereum"，由本设备的 Vela 账户发 v4 的 `record` 交易）、注册表里的名字（"在链上改名"发起提案）、从本设备移除；服务没有它的记录（旧版注册表里的）时标"尚未共享"并提供"重新共享"。
 - 创建：第一步就填名字。
 - 扩展连接 dApp：当前是多签时，dApp 看到的就是多签地址；`eth_sendTransaction` 变成提案（本机成员 passkey 批准，或外部成员钱包签名），请求一直挂着，执行后用执行交易的哈希回答 dApp；被同 nonce 作废则回答拒绝。多签暂不签消息（`personal_sign`、typed data 回 4200）。核心的交易解读新增"合约调用"，仍拒绝对多签自身的未知调用和 delegatecall。
 
@@ -116,11 +116,24 @@ MultisigAccount {
 | Agent（clientmcp） | 能代为发起提案，批准永远是本人在 Vela 签名页点的（spec 107 E3） |
 | 账户切换器 | 多签行显示地址缩写、identicon 和 "2/3" 标记；只读的再标出来 |
 
-### 3.3 名字（2026-10-28 改：名字随记录写入，地址到名字的映射）
+### 3.3 名字（2026-10-28 改：名字随记录写入，地址到名字的映射；2026-10-29 注册表 v4：多签可以改名）
 
 - **定**（owner）：多签地址是唯一的，注册表把地址映射到一个名字即可；名字可以重复，不参与地址推导。
-- **合约**：registry v2 的 `recordNamed(factory, proxyCode, singleton, initializer, saltNonce, name)` 在创建记录时一并写入名字；
-  记录已存在就不改（无名的不补名，有名的不换名）。`genesisOf` 返回 `name`。地址 `0x70b35C0FC8885019ff938542CD4E431725874802`。
+- **合约**（registry v4，`0xF412388bF908E510066d3Be5c704bd9A327f945d`，盐 `keccak256("safe-genesis-registry/v4")`）：
+  `record(factory, proxyCode, singleton, initializer, saltNonce, name)` 必须带名字（1–64 字节，否则 `EmptyName` / `NameTooLong`），
+  记录已存在就不改；`rename(name)` 只能由 Safe 自己调用（`msg.sender` 是 Safe，即成员批准的 Safe 交易），可以改任意次，
+  只改名字和 `renamedAt`，并发出 `GenesisRenamed`；Safe 必须已部署在该注册表所在的链上。`genesisOf` 返回
+  `name`、`renamedAt`、`recorder`、`index`；`renamedAt > 0` 或 `recorder == safe` 时名字才是 Safe 自己定的，否则只是第一个写入者定的。
+  每个注册表（Gnosis、Ethereum）各有各的名字。
+- **钱包的做法**：
+  - 发给服务的 genesis 一律带名字（`namedGenesis`）：自己的名字，没有就用服务同样的规则从地址算出的默认名（"Quiet Harbor"，
+    `default_name`，与服务逐字一致）。服务会丢弃提案里不带名字的 genesis，所以这一条是必须的；导入时 Safe{Wallet} 地址簿的名字只作本机备注，不上链。
+  - 显示的名字是记录在链上的名字：每次会话用本钱包自己的 RPC 读一次 `genesisOf`（core 重新推导地址），读不到时才用服务给的；
+    本机备注（`label`）从不被改名影响。
+  - **改名**：设置里"在链上改名"→ 一笔多签自己的交易 `{to: 注册表, data: rename(name)}`，走和转账完全一样的提案、批准、执行；
+    在服务的主链（有记录、钱包有这个网络的链）上执行，执行者顺带部署多签。core 把它解读为"在注册表中把这个多签改名为 …"，
+    名字不合规（不可见字符、首尾空格等）或编码不规范的一律不签。
+  - 签名页（clear signing）把对注册表的 `record(...)` 和 `rename(string)` 当作 Vela 自己的合约来读：网络、地址、名字三行，确定无疑。
 - **规则**：非空、首尾无空格、无控制字符和 U+FFFD、不超过 64 字节。名字只是标签：谁先写记录谁定名字，不证明任何事，身份是地址和成员。
 - **显示**：记录里有合规的名字就显示它，否则显示本机备注（导入时 Safe{Wallet} 地址簿的名字），再否则显示规则"多签 2/3"。
 - **创建**：第一步就填名字（和 Vela 账户一样），saltNonce 仍是随机数。
@@ -478,8 +491,14 @@ MultisigAccount {
 
 ## 8. SafeGenesisRegistry 的现状
 
-- **合约** `0xdA88357C2eB85e7e0515B1122a28befd6Dc8fb89`：经确定性部署器 CREATE2 部署，所有链地址相同。
-  - 已部署在 Gnosis (100) 和 Arc Testnet (5042002)。
+- **合约 v4** `0xF412388bF908E510066d3Be5c704bd9A327f945d`（2026-10-29）：经确定性部署器 CREATE2 部署，所有链地址相同；
+  每条记录带名字，可以按写入顺序枚举（`totalRecords`、`safeAt`、`genesisPage`），Safe 可以自己改名（`rename`）。
+  - 目前只部署在 Arc Testnet (5042002)；生产要部署在 Gnosis（服务代付写入）和 Ethereum（用户自己付费写入）。
+  - 服务只读 v4（按运行时代码哈希核对，读到别的版本回 502，不会说"没有"）。v1（Gnosis 和 Arc Testnet，`0xdA88…fb89`，0 条记录）、
+    v2（Arc Testnet，`0x70b3…4802`）、v3（Arc Testnet，`0x535f…801E`）都已退役：旧版里的多签服务不再认识，钱包标"尚未共享"并可"重新共享"
+    （本机的 genesis 不受影响，地址照样推导、照样能用；只是别的设备按地址找不到，直到重新共享）。这些都只在测试网和本地分叉上出现过。
+- **以前的合约** `0xdA88357C2eB85e7e0515B1122a28befd6Dc8fb89`（v1）：
+  - 曾部署在 Gnosis (100) 和 Arc Testnet (5042002)。
   - Gnosis 上已在 gnosisscan（Blockscout）和 Sourcify 验证源码。
   - 接口：`record(factory, proxyCreationCode, singleton, initializer, saltNonce)`、`genesisOf(safe)`、`deployCallOf(safe)`。
     每个 Safe 一条记录，写一次，谁都能写；没有 owner、管理员和升级入口。

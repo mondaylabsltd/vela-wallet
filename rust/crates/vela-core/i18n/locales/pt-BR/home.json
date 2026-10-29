@@ -122,7 +122,8 @@
         "number": "Transação nº",
         "call": "Chamada de contrato",
         "callWithValue": "Chamada de contrato com {{amount}} {{symbol}}",
-        "batchCalls": "{{total}} chamadas em uma transação"
+        "batchCalls": "{{total}} chamadas em uma transação",
+        "rename": "Renomear este multisig no registro para “{{name}}”"
       },
       "proposal": {
         "title": "Transação multisig",
@@ -212,7 +213,7 @@
         "done": "Concluir",
         "name": "Nome",
         "namePlaceholder": "ex.: Fundo da equipe",
-        "nameHint": "Todos os membros veem este nome. Ele é salvo com o multisig e não pode ser alterado depois.",
+        "nameHint": "Todos os membros veem este nome. Ele é salvo com o multisig; para alterá-lo depois, os membros precisam aprovar.",
         "nameInvalid": "Use um nome mais curto, sem caracteres de controle ou invisíveis nem espaços no início ou no fim.",
         "fewer": "Menos aprovações",
         "more": "Mais aprovações",
@@ -293,7 +294,13 @@
         "unavailable": "Ainda indisponível na Ethereum",
         "couldNotCheck": "Não foi possível verificar",
         "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
-        "remove": "Remover deste dispositivo"
+        "remove": "Remover deste dispositivo",
+        "renameTitle": "Nome no registro",
+        "renameNote": "Os membros, e qualquer pessoa que consulte este multisig, veem este nome. Renomeá-lo é uma das transações dele na {{network}}: os membros aprovam como qualquer outra.",
+        "renameAction": "Renomear na rede",
+        "renameUnavailable": "O registro dele não está em nenhuma rede desta carteira, então não dá para renomeá-lo daqui.",
+        "shareAgain": "Compartilhar de novo",
+        "shareAgainNote": "O serviço de multisig não tem a configuração dele; talvez ela tenha sido salva em um registro antigo. Compartilhar de novo pede uma confirmação com a passkey."
       },
       "service": {
         "customNote": "Usando um serviço multisig próprio ({{host}})",

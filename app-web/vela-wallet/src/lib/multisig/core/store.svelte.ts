@@ -185,6 +185,33 @@ class MultisigStore {
 		write(this.accounts);
 	}
 
+	/**
+	 * The service answered it holds no record of it (one in an earlier
+	 * registry, which v4's service no longer reads): not shared, said on
+	 * screen, and asked again — never left looking shared.
+	 */
+	markUnshared(address: string): void {
+		const row = this.find(address);
+		if (!row || (!row.recorded && !row.shared)) return;
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, recorded: false, shared: false } : a
+		);
+		write(this.accounts);
+	}
+
+	/**
+	 * The name its record holds now (the multisig renamed itself): the
+	 * genesis keeps every field that makes the address, only its label moves.
+	 */
+	setRecordedName(address: string, name: string): void {
+		const row = this.find(address);
+		if (!row || row.genesis.name === name) return;
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, genesis: { ...a.genesis, name } } : a
+		);
+		write(this.accounts);
+	}
+
 	markShared(address: string): void {
 		const row = this.find(address);
 		if (!row || row.shared) return;

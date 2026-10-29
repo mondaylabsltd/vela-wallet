@@ -2,9 +2,14 @@
 	/**
 	 * A multisig's own part of Settings → Account, where a Vela account shows
 	 * its keys: how many must approve and who its members are, inviting them,
+	 * its name in the registry (renamed on chain by a proposal of its own),
 	 * its setup saved to Ethereum (a Vela account's "save to Ethereum"), and
 	 * taking it off this device. Everything else in Settings is the same for
 	 * both.
+	 *
+	 * The name a member types here stays a proposal until the members approve
+	 * and execute it: the device's label (`label`) is never touched, and what
+	 * the header shows is the record's name as the chain holds it.
 	 */
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -15,10 +20,15 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
+	import { recordHomeChain, shareAgain } from '../core/accounts';
 	import { checkBackup, startBackup, type BackupState } from '../core/backup';
+	import { chainName } from '../core/display';
+	import { validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
-	import { proposals } from '../core/proposals.svelte';
+	import { MailboxUnreadableError, proposals, proposeRename } from '../core/proposals.svelte';
+	import { fetchGenesis } from '../core/service';
+	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
@@ -50,9 +60,88 @@
 		backup = await checkBackup(account);
 	}
 
+	/**
+	 * Where its record can be renamed: a registry chain holding it that this
+	 * wallet has a network for — the service's home chain first, where it
+	 * writes records. `null`: none (or not recorded); `undefined`: not known yet.
+	 */
+	let renameChain = $state<number | null | undefined>(undefined);
+
+	async function findRenameChain() {
+		try {
+			const answer = await fetchGenesis(account.address);
+			const home = await recordHomeChain();
+			const held = (answer.found && !answer.pending ? (answer.recordedOn ?? []) : []).filter(
+				(id) => networkForChainId(id) !== null
+			);
+			renameChain = held.includes(home) ? home : (held[0] ?? null);
+		} catch {
+			renameChain = null;
+		}
+	}
+
 	onMount(() => {
 		void check();
+		void findRenameChain();
 	});
+
+	let renaming = $state(false);
+	let newName = $state('');
+	let renameBusy = $state(false);
+	let renameFailure = $state<string | null>(null);
+	const recordedName = $derived((multisig.find(account.address) ?? account).genesis.name ?? null);
+	const cleanNewName = $derived(newName.trim());
+	const newNameOk = $derived.by(() => {
+		try {
+			return cleanNewName !== '' && validName(cleanNewName);
+		} catch {
+			return false;
+		}
+	});
+
+	async function rename() {
+		if (!newNameOk || renameChain == null || cleanNewName === recordedName) return;
+		const chainId = renameChain;
+		renameBusy = true;
+		renameFailure = null;
+		try {
+			const { safeTxHash } = await proposeRename(account.address, chainId, cleanNewName);
+			renaming = false;
+			multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
+		} catch (error) {
+			renameFailure =
+				error instanceof MailboxUnreadableError
+					? m.proposal.mailboxDown
+					: fillTemplate(m.proposal.failed, {
+							reason: error instanceof Error ? error.message : String(error)
+						});
+		} finally {
+			renameBusy = false;
+		}
+	}
+
+	let sharing = $state(false);
+	let shareFailure = $state<string | null>(null);
+
+	async function share() {
+		const owner = local[0];
+		if (!owner || sharing) return;
+		sharing = true;
+		shareFailure = null;
+		try {
+			if (await shareAgain(multisig.find(account.address) ?? account, owner)) {
+				void findRenameChain();
+			} else {
+				shareFailure = m.add.unavailable;
+			}
+		} catch (error) {
+			shareFailure = fillTemplate(m.proposal.failed, {
+				reason: error instanceof Error ? error.message : String(error)
+			});
+		} finally {
+			sharing = false;
+		}
+	}
 
 	async function save() {
 		if (backup === 'couldNotCheck') return void check();
@@ -104,11 +193,74 @@
 	{#if !isShared(multisig.find(account.address) ?? account)}
 		<!-- Its record has not landed: another member cannot add it yet. -->
 		<p class="note" role="status">{m.panel.notShared}</p>
+		{#if local.length > 0}
+			<!-- The service has no record of it (an earlier registry's, or one that
+			     never landed): an owner here shares it again, one passkey. -->
+			<p class="note">{m.settings.shareAgainNote}</p>
+			<div class="row-actions">
+				<Button variant="secondary" shape="rounded" disabled={sharing} onclick={() => void share()}
+					>{m.settings.shareAgain}</Button
+				>
+			</div>
+			{#if shareFailure}<p class="error" role="alert">{shareFailure}</p>{/if}
+		{/if}
 	{/if}
 	<div class="row-actions">
 		<Button variant="secondary" shape="rounded" onclick={() => multisigUi.open({ kind: 'invite' })}>
 			<span class="label"><Icon icon={UTILITY_ICONS['link-2']} size="sm" />{m.panel.invite}</span>
 		</Button>
+	</div>
+
+	<hr />
+
+	<div class="rename">
+		<span class="text">
+			<span class="name">{m.settings.renameTitle}</span>
+			<span class="state" data-testid="registry-name">{recordedName ?? '…'}</span>
+		</span>
+		{#if renameChain === null}
+			<p class="note">{m.settings.renameUnavailable}</p>
+		{:else if renameChain !== undefined}
+			{#if renaming}
+				<label class="field">
+					<span>{m.create.name}</span>
+					<input
+						class="name-field"
+						placeholder={m.create.namePlaceholder}
+						autocomplete="off"
+						bind:value={newName}
+					/>
+				</label>
+				{#if cleanNewName !== '' && !newNameOk}
+					<p class="error">{m.create.nameInvalid}</p>
+				{/if}
+				<div class="row-actions">
+					<Button
+						variant="value"
+						shape="rounded"
+						disabled={!newNameOk || cleanNewName === recordedName || renameBusy}
+						onclick={() => void rename()}>{m.send.propose}</Button
+					>
+					<Button variant="secondary" shape="rounded" onclick={() => (renaming = false)}
+						>{cancelLabel}</Button
+					>
+				</div>
+				{#if renameFailure}<p class="error" role="alert">{renameFailure}</p>{/if}
+			{:else}
+				<div class="row-actions">
+					<Button
+						variant="secondary"
+						shape="rounded"
+						onclick={() => {
+							newName = recordedName ?? '';
+							renameFailure = null;
+							renaming = true;
+						}}>{m.settings.renameAction}</Button
+					>
+				</div>
+			{/if}
+			<p class="note">{fillTemplate(m.settings.renameNote, { network: chainName(renameChain) })}</p>
+		{/if}
 	</div>
 
 	<hr />
@@ -285,5 +437,36 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.rename {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.name-field {
+		min-height: var(--size-control-lg);
+		padding: 0 var(--space-md);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+	}
+
+	.error {
+		margin: 0;
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-error-base);
 	}
 </style>

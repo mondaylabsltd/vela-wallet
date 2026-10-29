@@ -12,8 +12,11 @@ export interface Genesis {
 	saltNonce: string;
 	initializer: string;
 	/**
-	 * A name written with the record (registry v2 `recordNamed`): a label,
-	 * not part of the address, never changed, not unique.
+	 * The record's name (registry v4): a label, not part of the address, not
+	 * unique. The registry requires one, 1 to 64 bytes; whoever writes the
+	 * record first chooses it, and the Safe itself may change it (`rename`).
+	 * A genesis read from chain history has none until one is given
+	 * ({@link namedGenesis}).
 	 */
 	name?: string;
 }
@@ -88,6 +91,8 @@ export type Action =
 	| { kind: 'removeOwner'; owner: string; threshold: string }
 	| { kind: 'swapOwner'; oldOwner: string; newOwner: string }
 	| { kind: 'changeThreshold'; threshold: string }
+	/** The multisig renames its own record in the genesis registry (a label; nothing else changes). */
+	| { kind: 'rename'; name: string }
 	/** A dApp's call to another contract; `value` in base units, decimal. */
 	| { kind: 'call'; to: string; value: string; data: string };
 
@@ -273,11 +278,59 @@ export const safeWalletPropsGenesis = (props: unknown, address: string) =>
 /** A Safe{Wallet} export, merged by address. Throws on a file that is not one. */
 export const parseSafeExport = (json: string) => call<ExportedSafe[]>('parseSafeExport', { json });
 
-/** The genesis registry (v2): the same address on every chain. */
-export const GENESIS_REGISTRY = '0x70b35C0FC8885019ff938542CD4E431725874802';
+/**
+ * The Safe Genesis Registry (v4, `keccak256("safe-genesis-registry/v4")`
+ * through the deterministic deployer): the same address on every chain it is
+ * on. The core's `GENESIS_REGISTRY`, which a test pins against it.
+ */
+export const GENESIS_REGISTRY = '0xF412388bF908E510066d3Be5c704bd9A327f945d';
 
-/** The registry call that records `genesis` (with its name) on any chain; anyone may send it. */
+/**
+ * The registry call that records `genesis` on any chain, with its name — its
+ * own, else the one the service would give it ({@link defaultName}); anyone
+ * may send it.
+ */
 export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genesis });
+
+/** Whether the registry takes `name` (1 to 64 bytes); {@link validName} is the wallet's narrower rule. */
+export const recordableName = (name: string) => call<boolean>('recordableName', { name });
+
+/** The service's name for a Safe recorded without one ("Quiet Harbor"), from its address. */
+export const defaultName = (safe: string) => call<string>('defaultName', { safe });
+
+/**
+ * `genesis` as the registry and its service take it: with a name (its own,
+ * else {@link defaultName}). The service ignores a genesis sent without one.
+ */
+export const namedGenesis = (genesis: Genesis) => call<Genesis>('namedGenesis', { genesis });
+
+/** The multisig's transaction that renames its record in the registry, at `nonce`. */
+export const renameTx = (name: string, nonce: string) => call<SafeTx>('renameTx', { name, nonce });
+
+/** `genesisOf(safe)` calldata, for an `eth_call` to {@link GENESIS_REGISTRY}. */
+export const genesisOfCall = (safe: string) => call<string>('genesisOfCall', { safe });
+
+/** What one chain's registry holds for a Safe, as the core reads `genesisOf`. */
+export interface RegistryRecord {
+	/** The genesis, with the record's name on that chain. */
+	genesis: Genesis;
+	proxyCreationCodeHash: string;
+	recorder: string;
+	recordedAt: number;
+	index: number;
+	/** Block of the Safe's last rename there, 0 if it never renamed itself. */
+	renamedAt: number;
+	/** The name is the Safe's own (it renamed itself, or wrote the record). */
+	nameBySafe: boolean;
+}
+
+/**
+ * A `genesisOf(safe)` answer read by the core: `null` when the registry holds
+ * nothing for `safe`. Throws on an answer that is not one, or whose genesis
+ * does not make `safe` (the core re-derives it).
+ */
+export const readGenesisOf = (safe: string, ret: string) =>
+	call<RegistryRecord | null>('readGenesisOf', { safe, ret });
 
 /** The genesis inside a creating transaction's calldata that derives `safe`, if any. */
 export const genesisFromCalldata = (input: string, safe: string) =>
@@ -289,11 +342,21 @@ export const genesisFromCalldata = (input: string, safe: string) =>
 export interface ServiceChain {
 	chainId: number;
 	name: string | null;
+	/** The registry is there and the service reads it (records can be looked up there). */
+	registry: boolean;
 }
 
-/** What a `GET /api/health` answer says the service is. */
+/**
+ * What a `GET /api/health` answer says the service is. `ok: false`: its own
+ * 503 — there and answering, but not all of its job can be done now.
+ */
 export type ServiceAnswer =
-	| { kind: 'genesis'; chains: ServiceChain[] | null; homeChainId: number | null }
+	| {
+			kind: 'genesis';
+			chains: ServiceChain[] | null;
+			homeChainId: number | null;
+			ok: boolean;
+	  }
 	| { kind: 'other' }
 	| { kind: 'unreachable' };
 

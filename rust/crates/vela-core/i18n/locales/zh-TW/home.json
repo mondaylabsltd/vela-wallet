@@ -121,7 +121,8 @@
         "number": "交易序號",
         "call": "合約呼叫",
         "callWithValue": "合約呼叫，附帶 {{amount}} {{symbol}}",
-        "batchCalls": "一筆交易中的 {{total}} 個呼叫"
+        "batchCalls": "一筆交易中的 {{total}} 個呼叫",
+        "rename": "將這個多簽在登錄表中的名稱改為「{{name}}」"
       },
       "proposal": {
         "title": "多簽交易",
@@ -210,7 +211,7 @@
         "done": "完成",
         "name": "名稱",
         "namePlaceholder": "例如：團隊資金",
-        "nameHint": "所有成員都會看到這個名稱。它會和多簽一起儲存，之後無法修改。",
+        "nameHint": "所有成員都會看到這個名稱。它會和多簽一起儲存；之後修改需要成員核准。",
         "nameInvalid": "請使用較短的名稱，不能包含控制字元或不可見字元，開頭和結尾不能有空格。",
         "fewer": "減少所需核准",
         "more": "增加所需核准",
@@ -291,7 +292,13 @@
         "unavailable": "Ethereum 上暫不可用",
         "couldNotCheck": "無法檢查",
         "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裡也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
-        "remove": "從此裝置移除"
+        "remove": "從此裝置移除",
+        "renameTitle": "登錄表中的名稱",
+        "renameNote": "成員和任何查詢這個多簽的人都會看到這個名稱。改名是它在 {{network}} 上的一筆交易，和其他交易一樣由成員核准。",
+        "renameAction": "在鏈上改名",
+        "renameUnavailable": "它的紀錄不在這個錢包已有的網路上，無法從這裡改名。",
+        "shareAgain": "重新共享",
+        "shareAgainNote": "多簽服務裡沒有它的設定，可能是儲存到了舊版登錄表。重新共享需要用通行金鑰確認一次。"
       },
       "service": {
         "customNote": "正在使用自訂多簽服務（{{host}}）",

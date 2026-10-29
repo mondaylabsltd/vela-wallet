@@ -85,6 +85,7 @@ vi.mock('./kernel', () => ({
 		nonce
 	}),
 	cancelTx: () => ({}),
+	namedGenesis: (g: unknown) => g,
 	isEcdsaApproval: () => false,
 	verifyApproval: () => true,
 	verifyEcdsaApproval: () => ({}),

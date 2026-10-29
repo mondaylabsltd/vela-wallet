@@ -5,7 +5,12 @@
 #   GENESIS_REPO   path to safe-genesis-registry (default ../../../../production3/safe-genesis-registry)
 #   PEERCONNECT_REPO  path to peerconnect (default ../../../../production3/peerconnect): its relay carries
 #                  an outside owner's session (ws://127.0.0.1:8792)
+#   PEERCONNECT_BIN   a peerconnect-relay already built: run it instead of building PEERCONNECT_REPO
 #   STATE          where logs and the service's database go (default ./.state)
+#   FORK_PORT UNREAD_PORT GENESIS_PORT RELAY_PORT PEERCONNECT_PORT
+#                  the ports (default 8545 8546 8787 8790 8792). A second
+#                  harness beside a running one takes others; the Playwright
+#                  harness reads the same names (e2e/onchain/harness.ts).
 #
 # A second fork answers as Base (8453) on :8546: Gnosis's state under another
 # chain id, which the genesis service is NOT configured to read — a network the
@@ -21,15 +26,20 @@ here=$(cd "$(dirname "$0")" && pwd)
 GENESIS_REPO=${GENESIS_REPO:-"$here/../../../../../production3/safe-genesis-registry"}
 PEERCONNECT_REPO=${PEERCONNECT_REPO:-"$here/../../../../../production3/peerconnect"}
 STATE=${STATE:-"$here/.state"}
-RPC=http://127.0.0.1:8545
-UNREAD=http://127.0.0.1:8546
+FORK_PORT=${FORK_PORT:-8545}
+UNREAD_PORT=${UNREAD_PORT:-8546}
+GENESIS_PORT=${GENESIS_PORT:-8787}
+RELAY_PORT=${RELAY_PORT:-8790}
+PEERCONNECT_PORT=${PEERCONNECT_PORT:-8792}
+RPC=http://127.0.0.1:$FORK_PORT
+UNREAD=http://127.0.0.1:$UNREAD_PORT
 mkdir -p "$STATE"
 
 # The P-256 precompile (0x100) that passkey signatures need exists from Osaka.
-anvil --fork-url "${FORK_URL:-https://rpc.gnosischain.com}" --port 8545 --hardfork osaka --silent \
+anvil --fork-url "${FORK_URL:-https://rpc.gnosischain.com}" --port "$FORK_PORT" --hardfork osaka --silent \
   >"$STATE/anvil.log" 2>&1 &
 echo $! >"$STATE/anvil.pid"
-anvil --fork-url "${FORK_URL:-https://rpc.gnosischain.com}" --port 8546 --chain-id 8453 --hardfork osaka --silent \
+anvil --fork-url "${FORK_URL:-https://rpc.gnosischain.com}" --port "$UNREAD_PORT" --chain-id 8453 --hardfork osaka --silent \
   >"$STATE/anvil-unread.log" 2>&1 &
 echo $! >"$STATE/anvil-unread.pid"
 for r in $RPC $UNREAD; do
@@ -68,34 +78,46 @@ for a in 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 0x57AB0996DC98fbE8Ad58681793
   fund "$a"
 done
 
-# The registry (v2: named geneses), through the deterministic deployer, as on
-# any chain: the address depends only on its code.
+# The registry (v4: every record named, a Safe renames itself), through the
+# deterministic deployer with the production salt, as on any chain: the
+# address depends only on its code. It must be the address the wallet knows
+# (vela_core::multisig::GENESIS_REGISTRY), or the run stops here.
+WALLET_REGISTRY=0xF412388bF908E510066d3Be5c704bd9A327f945d
 INITCODE=$(cd "$GENESIS_REPO/contracts" && forge inspect SafeGenesisRegistry bytecode)
-SALT=$(cast keccak "safe-genesis-registry/v2")  # script/Deploy.s.sol's SALT
+SALT=$(cast keccak "safe-genesis-registry/v4")  # script/Deploy.s.sol's SALT
 DEPLOYER=0x4e59b44847b379578588920cA78FbF26c0B4956C
-REGISTRY=$(cast create2 --deployer $DEPLOYER --salt "$SALT" --init-code "$INITCODE" 2>/dev/null | tail -1)
-cast send $DEPLOYER "$SALT${INITCODE#0x}" --rpc-url $RPC \
+REGISTRY=$(cast create2 --deployer $DEPLOYER --salt "$SALT" --init-code "$INITCODE" 2>/dev/null | tail -1 | awk '{print $NF}')
+[ "$(echo "$REGISTRY" | tr 'A-F' 'a-f')" = "$(echo "$WALLET_REGISTRY" | tr 'A-F' 'a-f')" ] || {
+  echo "this registry build lands at $REGISTRY, not the wallet's $WALLET_REGISTRY (another version?)"; exit 1; }
+[ "$(cast code "$REGISTRY" --rpc-url $RPC)" != "0x" ] || cast send $DEPLOYER "$SALT${INITCODE#0x}" --rpc-url $RPC \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 >/dev/null
-[ -n "$REGISTRY" ] && [ "$(cast code "$REGISTRY" --rpc-url $RPC)" != "0x" ] || { echo "registry did not deploy"; exit 1; }
+[ "$(cast code "$REGISTRY" --rpc-url $RPC)" != "0x" ] || { echo "registry did not deploy"; exit 1; }
 
 (cd "$GENESIS_REPO" && cargo build -q -p genesis-server)
 rm -f "$STATE"/genesis.sqlite*
 REGISTRY_ADDRESS=$REGISTRY HOME_CHAIN_ID=100 \
-CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["http://127.0.0.1:8545"],"txService":"https://api.safe.global/tx-service/gno"}]' \
+CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["'"$RPC"'"],"txService":"https://api.safe.global/tx-service/gno","registry":true}]' \
 PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-MAX_FEE_WEI=100000000000 LISTEN_ADDR=127.0.0.1:8787 DATABASE_PATH="$STATE/genesis.sqlite" \
+MAX_FEE_WEI=100000000000 LISTEN_ADDR=127.0.0.1:$GENESIS_PORT DATABASE_PATH="$STATE/genesis.sqlite" \
 NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
   "$GENESIS_REPO/target/debug/genesis-server" >"$STATE/genesis.log" 2>&1 &
 echo $! >"$STATE/genesis.pid"
 
 # The PeerConnect relay an outside owner's wallet page and Vela meet through.
-(cd "$PEERCONNECT_REPO" && cargo build -q -p peerconnect-relay)
-PEERCONNECT_LISTEN=127.0.0.1:8792 "$PEERCONNECT_REPO/target/debug/peerconnect-relay" >"$STATE/peerconnect.log" 2>&1 &
+if [ -z "${PEERCONNECT_BIN:-}" ]; then
+  (cd "$PEERCONNECT_REPO" && cargo build -q -p peerconnect-relay)
+  PEERCONNECT_BIN="$PEERCONNECT_REPO/target/debug/peerconnect-relay"
+fi
+PEERCONNECT_LISTEN=127.0.0.1:$PEERCONNECT_PORT "$PEERCONNECT_BIN" >"$STATE/peerconnect.log" 2>&1 &
 echo $! >"$STATE/peerconnect.pid"
 
-RPCS="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}" RELAY_PORT=8790 NO_PROXY=127.0.0.1 no_proxy=127.0.0.1 \
+RPCS="{\"100\":\"$RPC\",\"8453\":\"$UNREAD\"}" RELAY_PORT=$RELAY_PORT NO_PROXY=127.0.0.1 no_proxy=127.0.0.1 \
   python3 "$here/relay.py" >"$STATE/relay.log" 2>&1 &
 echo $! >"$STATE/relay.pid"
 
-i=0; until curl -s --noproxy '*' http://127.0.0.1:8787/api/health >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "genesis service did not start"; exit 1; }; sleep 1; done
-echo "registry $REGISTRY · peerconnect ws://127.0.0.1:8792 · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:8787 · relay http://127.0.0.1:8790 · logs $STATE"
+health=http://127.0.0.1:$GENESIS_PORT/api/health
+i=0; until curl -s --noproxy '*' "$health" >/dev/null 2>&1; do i=$((i+1)); [ $i -gt 60 ] && { echo "genesis service did not start"; exit 1; }; sleep 1; done
+# The service reads only its own version of the registry: said now, not at the first lookup.
+curl -s --noproxy '*' "$health" | grep -q '"status":"ok"' || {
+  echo "the genesis service does not read the registry at $REGISTRY:"; curl -s --noproxy '*' "$health"; exit 1; }
+echo "registry $REGISTRY · peerconnect ws://127.0.0.1:$PEERCONNECT_PORT · fork $RPC · unread fork (8453) $UNREAD · genesis http://127.0.0.1:$GENESIS_PORT · relay http://127.0.0.1:$RELAY_PORT · logs $STATE"
