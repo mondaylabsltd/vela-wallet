@@ -169,6 +169,55 @@ MultisigAccount {
   "这笔交易在 Gnosis 上执行，注册表在那里保存它的记录"，未部署时再加一句"执行时会先按创建时的成员把它部署到那里"。
   改名提案也让 Gnosis 成为它的网络之一（那里有了它的提案）。
 
+### 3.5 谁能代表一个 Safe：链上状态，或反事实规则（2026-10-29，r4-e S1）
+
+- **原则**：注册表和信箱都不能决定谁能代表一个 Safe。**已部署的链上，权威是那条链上 Safe 的实时状态；未部署时，
+  只有一条设计好、核对过的反事实规则，由 core 判定**（`multisig::counterfactual_authority`、`multisig::deployed_check`）。
+  web 只负责读链（`eth_getCode`、`eth_getStorageAt`、`eth_call`），判定全在 core。
+- **起因**（r4-e）：恶意或被攻破的 genesis 服务给出一个 `setup` 会 delegatecall
+  `SafeModuleSetup.enableModules([攻击者])` 的 genesis。地址照样推导得出（CREATE2 只认参数），owner 和阈值照样读得出，
+  钱包却把它当成普通多签加进来——部署出来以后，攻击者的模块不经任何成员就能转走资金（Arc Testnet 上已实测部署）。
+- **反事实规则**：`counterfactual_authority(genesis, safe, chain_facts) → Verified { owners, threshold } | Refused { reasons } | Unknown { unread }`。
+  `chain_facts` 是目标链上 `eth_getCode` 的结果，读哪些地址由 core 说（`counterfactual_reads`）。全部满足才是 Verified：
+  1. genesis 推导出所说的地址（原有的 CREATE2 核对）；
+  2. factory、singleton、fallback handler（以及下面允许的 hook 和它切换到的 L2 singleton）都是钱包支持的 Safe 官方部署，
+     **并且**它们在目标链上的运行时代码哈希等于固定的官方代码哈希。支持的部署（`multisig::CANONICAL`，18 个）：
+     factory 1.3.0（canonical、eip155）/ 1.4.1 / 1.5.0；singleton 1.3.0（L1、L2，canonical、eip155）/ 1.4.1（L1、L2）/ 1.5.0（L1、L2）；
+     CompatibilityFallbackHandler 1.3.0（两个地址）/ 1.4.1 / 1.5.0；SafeToL2Setup 1.4.1 / 1.5.0。
+     哈希来源：safe-deployments @ b45417dd（genesis 服务 `genesis-rules/data/known-contracts.json`）；2026-10-29 在 Gnosis (100)
+     和 Arc Testnet (5042002) 上用 `keccak256(eth_getCode)` 逐个重算，两条链完全一致。v1.4.1 的五份代码存为测试向量
+     （`rust/crates/vela-core/tests/vectors/safe-code/`），分叉测试每次在 fork 上重算全部 18 个。
+     没有代码、代码不对 → Refused（`missingCode` / `wrongCode`）；链没回答 → Unknown（"暂时无法核对"），**绝不算 Verified**。
+  3. `setup` 的 `to`/`data` 为空，或者**恰好**是允许的那一个 hook：`SafeToL2Setup.setupToL2(<同版本的官方 L2 singleton>)`
+     （Safe{Wallet} 1.4.1 的部署就是这样：L1 singleton + 这个 hook，非以太坊主网上切到 L2 singleton，别的什么都不做），
+     core 完整解码（36 字节，地址字之外不许有任何东西，hook、L2 singleton、genesis singleton 必须同一版本）。
+     其他一律 Refused 并给出解码后的原因：`SafeModuleSetup.enableModules` → `module {address}`（"启用一个不经成员就能转走资金的模块"）；
+     任何别的合约 → `setupCode {address}`（"在部署时执行 <地址> 上的代码"）；只有 data 没有 to → `notSetup`。
+  4. `fallbackHandler` 为零，或者是该版本的官方 CompatibilityFallbackHandler（`handler {address}`）。
+  5. `paymentToken`、`payment`、`paymentReceiver` 全为零（`payment {token, amount, receiver}`）。
+  另外：initializer 必须是 Safe 自己的标准 ABI 编码（core 解码后重新编码，逐字节相同，偏移、填充、尾部都藏不了东西，否则 `notSetup`）；
+  成员必须是 Safe 的 `setup` 会接受的（非空、无重复、无零地址和哨兵、不含 Safe 自己、1 ≤ 阈值 ≤ 人数，否则 `badMembers`）。
+- **已部署的 Safe**：权威是链上状态。除了 `getOwners`/`getThreshold`，core 还读（`deployed_reads` 给出调用和槽位）：
+  `getModulesPaginated(SENTINEL, 10)`（页的 `next` 本身也是模块）、guard（`GUARD_STORAGE_SLOT`）、v1.5.0 的 module guard、
+  fallback handler（`FALLBACK_HANDLER_STORAGE_SLOT`）、singleton（槽 0）以及 handler 和 singleton 的代码哈希（`deployed_check` 第二轮）。
+  有模块、有 guard、handler 不是任一版本的官方 CompatibilityFallbackHandler（零可以）、singleton 不是官方版本 → 高风险，
+  逐条说清楚："在 Gnosis 上，这个多签有一个不经成员就能转走资金的模块：<地址>"。读不到 → 不加（`unavailable`），不当作干净。
+- **用在哪里**（每个 genesis 进入或部署发生的地方）：
+  - 按地址添加（`accounts.ts` `findMultisig` / `addMultisig`）、提案/邀请链接（`linked.svelte.ts` 走 `findMultisig`，失败时
+    打开添加页由它说明）、Safe{Wallet} 导入（`importExported`：服务给的、`safeWalletPropsGenesis` 推导的、交易服务还原的 genesis
+    一视同仁）、服务给的 genesis 答案都经过 `vetAuthority`：多签在它的网络上**哪里都没部署** → 每个网络都要 Verified，
+    Refused 不加，Unknown 说"暂时无法核对"；**部署了** → 以链上状态为准，有风险就返回 `highRisk`。
+  - 执行（`execute.ts` `planCalls`）：要部署多签时，**就在拼部署调用之前**重新读一次代码（不缓存），core 不是 Verified
+    就抛 `GenesisRefusedError`（在 passkey 之前），提案页说明原因。core 自己也守着：`ExecutionPlan.deploy_facts` 缺失或
+    判定不是 Verified，`execution_calls` 拒绝拼出部署调用。
+  - 创建页的"能建在哪些网络"（`safe_contracts`）也改为核对代码哈希：地址上的代码不是 Safe 的，视同缺失。
+- **界面**：Refused → 添加页（或导入行）红色说明框列出每一条原因，"添加"不可点，也没有"仍然添加"——不部署、不签名、不保存；
+  Unknown → 一句"暂时无法核对 <网络> 上的 Safe 合约"。高风险 → 同样的说明框列出每个模块/guard/handler/singleton，
+  只有点"我已了解，仍然添加"（危险样式，不是强调色）才加入；加入后 `findings` 存在账户上，设置页一直显示这份说明，
+  账户切换器那一行标"高风险"，从不隐藏。
+- **与 5.2 的出入**：5.2 设想"链上出现模块等就停止在这条链上签名"；现在做到的是添加时拦下、确认后持续标出、未 Verified 不部署。
+  对已经加入的高风险多签按链停签，尚未做。本机在此规则之前已加入的多签不会被重新核对（执行时的部署闸门仍然生效）。
+
 ## 4. 创建与登录
 
 ### 4.1 创建（不部署）
@@ -582,6 +631,9 @@ MultisigAccount {
 - [ ] Vela 账户创建时是否顺带把自己的 genesis 写进 registry（第 8 节）。
 - [ ] 服务不读的链上改过成员的多签：信箱按 genesis 成员核对批准（`Target::Unread`），新成员的批准会被拒收。
       要么服务也读这条链，要么信箱在这类链上接受钱包自己核对过的批准——待 owner 决定（3.4）。
+- [x] 未部署多签由谁控制：genesis 只核对了地址，`setup` 里的 hook、模块、fallback handler、付款都没人看，
+      恶意服务给出的 genesis 能把多签交给模块（r4-e S1）。已由 core 的反事实规则和链上状态核对解决（3.5），
+      添加、链接、导入、执行四处都经过它。
 - [ ] 改名会让多签部署到 Gnosis：如果它在别的链上改过成员，Gnosis 上部署出来的是初始成员（第 7 节）。是否在这种情况下
       拦下改名，或只在 Ethereum 的记录上改名，待 owner 决定。
 

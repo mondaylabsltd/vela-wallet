@@ -31,6 +31,7 @@
 	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 
 	interface Props {
@@ -173,6 +174,11 @@
 		</p>
 	</header>
 	<CustomServiceNote {m} />
+	{#if account.findings?.length}
+		<!-- §3.5: added on the person's tap though more than its members can act
+		     for it — said here for as long as it is on this device. -->
+		<AuthorityNotice {m} kind="risk" findings={account.findings} />
+	{/if}
 	<ul class="members">
 		{#each members.owners as owner (owner)}
 			{@const mine = local.some((o) => o.address.toLowerCase() === owner.toLowerCase())}

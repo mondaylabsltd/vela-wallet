@@ -21,7 +21,12 @@ const seams = vi.hoisted(() => ({
 	/** Chains whose mailbox read fails. */
 	mailboxDown: [] as number[],
 	mailboxReads: 0,
-	table: null as { chains: Set<number> | null; homeChainId: number | null } | null
+	table: null as { chains: Set<number> | null; homeChainId: number | null } | null,
+	/** The core's counterfactual verdict per chain (default: verified). */
+	verdict: {} as Record<number, unknown>,
+	/** A deployed Safe's check per chain (default: nothing else acts for it). */
+	deployedCheck: {} as Record<number, unknown>,
+	judged: [] as string[]
 }));
 const store = vi.hoisted(() => ({
 	rows: [] as { address: string; shared?: boolean }[],
@@ -49,7 +54,21 @@ vi.mock('./store.svelte', () => ({
 			store.calls.push('activate');
 			store.active = address;
 		},
-		useChain: (address: string, chainId: number) => store.calls.push(`useChain:${chainId}`)
+		useChain: (address: string, chainId: number) => store.calls.push(`useChain:${chainId}`),
+		setFindings: (_address: string, findings: unknown[]) =>
+			store.calls.push(`setFindings:${findings.length}`)
+	}
+}));
+// Who can act for it: the core's verdicts, as the seams set them (their
+// reading of the chain is `authority.test.ts`'s).
+vi.mock('./authority', () => ({
+	counterfactualOn: async (chainId: number) => {
+		seams.judged.push(`counterfactual:${chainId}`);
+		return seams.verdict[chainId] ?? { kind: 'verified', owners: OWNERS, threshold: 1 };
+	},
+	deployedOn: async (chainId: number) => {
+		seams.judged.push(`deployed:${chainId}`);
+		return seams.deployedCheck[chainId] ?? { risks: [], needCode: [], unread: false };
 	}
 }));
 vi.mock('./chain', () => ({
@@ -113,6 +132,9 @@ beforeEach(() => {
 	seams.mailboxDown = [];
 	seams.mailboxReads = 0;
 	seams.table = null;
+	seams.verdict = {};
+	seams.deployedCheck = {};
+	seams.judged = [];
 	store.rows = [];
 	store.active = null;
 	store.calls = [];
@@ -232,5 +254,71 @@ describe('networks another member made it used on', () => {
 		store.calls = [];
 		await discoverChains(account as never, [100, 42161, 8453, 10]);
 		expect(store.calls).toEqual([]);
+	});
+});
+
+/**
+ * §3.5: the service's genesis decides nothing by itself. Deployed nowhere,
+ * the core's counterfactual rule must find it Verified on its network, else
+ * it is not added; deployed, the chain says what else can act for it — and
+ * a high-risk one is added only on the person's explicit tap.
+ */
+describe('who can act for a multisig added by address', () => {
+	const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
+
+	it('a genesis the core refuses is not added, and says why', async () => {
+		seams.deployedOn = [];
+		seams.verdict = { 100: { kind: 'refused', reasons: [{ kind: 'module', address: MODULE }] } };
+		const outcome = await addMultisig(SAFE, [100], 100);
+		expect(outcome).toEqual({
+			ok: false,
+			reason: 'refused',
+			findings: [{ from: 'genesis', chainId: 100, reason: { kind: 'module', address: MODULE } }]
+		});
+		expect(store.rows).toEqual([]);
+		expect(store.active).toBeNull();
+		// Even with the person's "add anyway": a refused genesis has none.
+		expect((await addMultisig(SAFE, [100], 100, { acceptRisks: true })).ok).toBe(false);
+		expect(store.rows).toEqual([]);
+	});
+
+	it('a chain that cannot be checked yet: not verified, not added', async () => {
+		seams.deployedOn = [];
+		seams.verdict = { 100: { kind: 'unknown', unread: [MODULE] } };
+		expect(await findMultisig(SAFE, [100], 100)).toEqual({
+			ok: false,
+			reason: 'unverified',
+			chainId: 100
+		});
+	});
+
+	it('deployed: the chain is asked, not the genesis', async () => {
+		seams.deployedOn = [100];
+		seams.verdict = { 100: { kind: 'refused', reasons: [{ kind: 'notSetup' }] } };
+		expect((await findMultisig(SAFE, [100])).ok).toBe(true);
+		expect(seams.judged).toEqual(['deployed:100']);
+	});
+
+	it('deployed with a module: high risk, kept only on the person’s tap, with what was found', async () => {
+		seams.deployedOn = [100];
+		seams.deployedCheck = {
+			100: { risks: [{ kind: 'module', address: MODULE }], needCode: [], unread: false }
+		};
+		const outcome = await addMultisig(SAFE, [100]);
+		expect(outcome).toMatchObject({
+			ok: false,
+			reason: 'highRisk',
+			findings: [{ from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } }]
+		});
+		expect(store.rows).toEqual([]);
+		const accepted = await addMultisig(SAFE, [100], undefined, { acceptRisks: true });
+		expect(accepted.ok).toBe(true);
+		expect(store.calls).toEqual(['add', 'markShared', 'setFindings:1', 'activate']);
+	});
+
+	it('a deployed Safe whose state cannot be read is not added unchecked', async () => {
+		seams.deployedOn = [100];
+		seams.deployedCheck = { 100: { risks: [], needCode: [], unread: true } };
+		expect(await findMultisig(SAFE, [100])).toEqual({ ok: false, reason: 'unavailable' });
 	});
 });

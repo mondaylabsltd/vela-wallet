@@ -59,7 +59,9 @@
 			<span class="text">
 				<span class="name" class:active={selected}>{multisigName(account, m)}</span>
 				<span class="address"
-					>{shortenAddress(account.address)}{#if !isShared(account)}<span class="flag">
+					>{shortenAddress(account.address)}{#if account.findings?.length}<span class="flag risk">
+							· {m.authority.riskFlag}</span
+						>{:else if !isShared(account)}<span class="flag">
 							· {m.switcher.notShared}</span
 						>{:else if localOwners(account.owners).length === 0}<span class="flag">
 							· {m.switcher.readOnly}</span
@@ -162,6 +164,10 @@
 	.flag {
 		font-family: var(--font-ui);
 		color: var(--color-fg-muted);
+	}
+
+	.flag.risk {
+		color: var(--color-error-base);
 	}
 
 	.avatar {

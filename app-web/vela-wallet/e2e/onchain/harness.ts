@@ -248,6 +248,80 @@ export async function undeployedSafe(
 	};
 }
 
+/** Safe's SafeModuleSetup (safe-modules v0.3.0), on Gnosis. */
+const MODULE_SETUP = '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47';
+/**
+ * Who sends the hooked Safe's deployment: an address anvil impersonates (the
+ * dev accounts carry EIP-7702 delegations on Gnosis, and the service's
+ * sponsor key is busy with its own nonces).
+ */
+const DEPLOYER = '0x00000000000000000000000000000000000D3910';
+
+/**
+ * A genesis whose `setup` hands the Safe to `module`: it delegatecalls
+ * SafeModuleSetup.enableModules([module]) — the address derives, the owners
+ * read as `owners`, and the module can move its funds without them (the r4-e
+ * finding). `deploy` deploys it on the fork through the canonical factory.
+ */
+export async function hookedSafe(
+	owners: string[],
+	module: string,
+	saltNonce: string
+): Promise<{
+	address: string;
+	genesis: { factory: string; singleton: string; saltNonce: string; initializer: string };
+	deploy(): Promise<void>;
+}> {
+	const { execFileSync } = await import('node:child_process');
+	const cast = (...args: string[]) => execFileSync('cast', args, { encoding: 'utf8' }).trim();
+	const enable = cast('calldata', 'enableModules(address[])', `[${module}]`);
+	const initializer = cast(
+		'calldata',
+		'setup(address[],uint256,address,bytes,address,address,uint256,address)',
+		`[${owners.join(',')}]`,
+		'1',
+		MODULE_SETUP,
+		enable,
+		HANDLER_141,
+		ZERO,
+		'0',
+		ZERO
+	);
+	const create = 'createProxyWithNonce(address,bytes,uint256)';
+	const args = [SAFE_L2_141, initializer, saltNonce];
+	const address = cast('call', FACTORY_141, `${create}(address)`, ...args, '--rpc-url', FORK_RPC);
+	return {
+		address,
+		genesis: {
+			factory: FACTORY_141,
+			singleton: SAFE_L2_141,
+			saltNonce: `0x${BigInt(saltNonce).toString(16)}`,
+			initializer
+		},
+		async deploy() {
+			await rpc('anvil_impersonateAccount', [DEPLOYER]);
+			await setBalance(DEPLOYER, 10n ** 18n);
+			cast(
+				'send',
+				FACTORY_141,
+				create,
+				...args,
+				'--rpc-url',
+				FORK_RPC,
+				'--unlocked',
+				'--from',
+				DEPLOYER
+			);
+		}
+	};
+}
+
+/** keccak256 of hex data, as cast computes it. */
+export async function keccak(hex: string): Promise<string> {
+	const { execFileSync } = await import('node:child_process');
+	return execFileSync('cast', ['keccak', hex], { encoding: 'utf8' }).trim();
+}
+
 /** The registry (v4) on the fork: the address the wallet knows. */
 export const REGISTRY = '0xF412388bF908E510066d3Be5c704bd9A327f945d';
 

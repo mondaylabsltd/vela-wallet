@@ -1071,9 +1071,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   rename's review says it runs on the registry's chain and deploys the
 //   multisig there if it is not yet). `settings.renameNote` changes value
 //   only. 2295 − 1 + 3 = 2297 leaves, 121 branches.
-if (PATHS.length !== 2418) fail(`expected 2418 paths (2297 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2297) fail(`expected 2297 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
+// 2443 (who can act for a Safe: the counterfactual rule, 2026-10-29): +
+//   the `home.multisig.authority` branch — `{refusedTitle, refusedBody,
+//   unverified}` (a genesis Vela will not deploy or sign for, or cannot
+//   check yet), one line per reason the core gives (`wrongAddress,
+//   notSetup, badMembers, unknownFactory, unknownSingleton, module,
+//   setupCode, handler, payment, missingCode, wrongCode`), what else can act
+//   for a deployed Safe (`riskTitle, riskBody, riskModule, riskGuard,
+//   riskHandler, riskSingleton, riskConfirm, riskFlag`) and the executor's
+//   refusal (`deployRefused, deployUnverified`). `add.intro` changes value
+//   only (it says what is checked). 2297 + 24 = 2321 leaves, 122 branches.
+if (PATHS.length !== 2443) fail(`expected 2443 paths (2321 leaf + 122 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2321) fail(`expected 2321 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 122) fail(`expected 122 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
