@@ -1447,9 +1447,12 @@
    "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
    "accessAllow": "Erişime izin ver",
    "openInTabTitle": "Vela bir sekmede açık",
-   "openInTabBody": "Her pencerede tek cüzdan: o sekme açıkken yan panel geri çekilir. Burada kullanırsanız o sekme kapanır.",
+   "openInTabBody": "Her pencerede tek cüzdan: o sekme açıkken yan panel geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
    "goToTab": "Sekmeye git",
-   "useHereInstead": "Bunun yerine burada kullan"
+   "useHereInstead": "Bunun yerine burada kullan",
+   "openInPanelTitle": "Vela yan panelde açık",
+   "openInPanelBody": "Her pencerede tek cüzdan: yan panel kullanılırken bu sekme geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
+   "goToPanel": "Yan panele git"
   }
  },
  "signHandoff": {
