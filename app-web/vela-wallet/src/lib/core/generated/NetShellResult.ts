@@ -11,7 +11,12 @@ import type { NetStoredEndpoints } from "./NetStoredEndpoints";
 /**
  * What the shell observed.
  */
-export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
+export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, 
+/**
+ * This shell keeps multisig accounts, so the multisig service is one
+ * of its endpoints (shown, probed, reset). Absent: it is not.
+ */
+multisig_service: boolean, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
 /**
  * `None` = failed/timed out/no parseable id.
  */

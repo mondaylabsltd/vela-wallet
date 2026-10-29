@@ -226,7 +226,8 @@
         "notFound": "Aún no se conoce ninguna multifirma con esta dirección. Si se acaba de crear, inténtalo de nuevo en un minuto.",
         "unavailable": "No se pudo conectar con el servicio. Inténtalo de nuevo.",
         "unsupported": "Esta versión de Safe aún no es compatible.",
-        "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer."
+        "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer.",
+        "chooseNetwork": "Todavía nada indica en qué red se usa este multisig. Elige su red:"
       },
       "external": {
         "pageTitle": "Firmar para Vela",
@@ -293,6 +294,12 @@
         "couldNotCheck": "No se pudo comprobar",
         "backupNote": "Su configuración también queda en Ethereum, para poder encontrar y desplegar el multisig desde ahí. Una cuenta de este dispositivo paga la comisión.",
         "remove": "Quitar de este dispositivo"
+      },
+      "service": {
+        "customNote": "Usando un servicio multifirma propio ({{host}})",
+        "unreachableNote": "El servicio multifirma no está accesible: no se pueden cargar las transacciones pendientes; se reintentará.",
+        "retry": "Reintentar",
+        "noNetworks": "El servicio multifirma no atiende ninguna de tus redes."
       }
     },
     "balanceDetailStatusOwnNode": "Tu nodo no responde",

@@ -30,13 +30,32 @@ import {
 	fetchGenesis,
 	fetchTask,
 	importGenesis,
+	serviceTable,
 	ServiceUnavailableError,
 	type OwnerProof
 } from './service';
+import { networkForChainId } from '$lib/services/networks';
+import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 
-/** The service's home chain: where the registry it reads first lives. */
+/**
+ * The default service's home chain (Gnosis): where its registry lives. Only a
+ * fallback — the service in use names its own (`/api/health`'s `homeChainId`,
+ * {@link recordHomeChain}); this is used when it does not say.
+ */
 export const REGISTRY_HOME_CHAIN_ID = 100;
+
+/**
+ * Where a record goes when the multisig's first network is not one the
+ * service records on: the service's own home chain, as it says
+ * (`homeChainId`); {@link REGISTRY_HOME_CHAIN_ID} only when it says nothing
+ * (its table could not be read, or carries no home chain). A local service
+ * homed on Arc Testnet was asked to record on Gnosis, which it does not serve.
+ */
+export async function recordHomeChain(): Promise<number> {
+	const table = await serviceTable().catch(() => null);
+	return table?.homeChainId ?? REGISTRY_HOME_CHAIN_ID;
+}
 
 const PROOFS_KEY = 'vela.multisigPendingProofs';
 
@@ -96,9 +115,10 @@ async function record(
 ): Promise<boolean> {
 	let answer = await importGenesis({ chainId, safe: address, genesis, ownerProof: proof });
 	// A chain the service does not serve: its home chain reads the same factory.
-	if (answer.status === 'error' && chainId !== REGISTRY_HOME_CHAIN_ID) {
+	const home = answer.status === 'error' ? await recordHomeChain() : chainId;
+	if (answer.status === 'error' && chainId !== home) {
 		answer = await importGenesis({
-			chainId: REGISTRY_HOME_CHAIN_ID,
+			chainId: home,
 			safe: address,
 			genesis,
 			ownerProof: proof
@@ -136,10 +156,12 @@ export async function createMultisig(
 
 /** Ask again for every multisig the registry has not confirmed. Quiet on failure. */
 export async function retryUnrecorded(): Promise<void> {
+	// The service is away: asked again on its schedule, not every minute.
+	if (serviceOutage.blocked()) return;
 	const proofs = readProofs();
 	for (const account of multisig.accounts.filter((a) => !a.recorded)) {
 		try {
-			const known = await fetchGenesis(account.address);
+			const known = await fetchGenesis(account.address, { background: true });
 			if (known.found && !known.pending) {
 				multisig.markRecorded(account.address);
 				continue;
@@ -152,7 +174,7 @@ export async function retryUnrecorded(): Promise<void> {
 					account.address,
 					account.genesis,
 					proof,
-					account.chainIds[0] ?? REGISTRY_HOME_CHAIN_ID
+					account.chainIds[0] ?? (await recordHomeChain())
 				))
 			) {
 				// Queued: confirmed by a later `fetchGenesis`.
@@ -201,7 +223,16 @@ export function followUnrecorded(retry: () => Promise<void> = retryUnrecorded): 
 
 export type AddOutcome =
 	| { ok: true; account: MultisigAccount }
-	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' };
+	| {
+			ok: false;
+			/**
+			 * `chooseNetwork`: nothing says which network it is used on — not
+			 * deployed on any, and its record names none this wallet has (a
+			 * record still on its way names none at all). The person is asked;
+			 * it is not guessed.
+			 */
+			reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' | 'chooseNetwork';
+	  };
 
 /**
  * Add a multisig by address, and show it. When the registry does not hold it
@@ -209,13 +240,17 @@ export type AddOutcome =
  * genesis from that chain and records it (its creator paid for a
  * deployment, so the service pays), and the address is looked up again.
  */
-export async function addMultisig(address: string, chainIds: number[]): Promise<AddOutcome> {
+export async function addMultisig(
+	address: string,
+	chainIds: number[],
+	network?: number
+): Promise<AddOutcome> {
 	const existing = multisig.find(address);
 	if (existing) {
 		multisig.activate(existing.address);
 		return { ok: true, account: existing };
 	}
-	const found = await findMultisig(address, chainIds);
+	const found = await findMultisig(address, chainIds, network);
 	if (!found.ok) return found;
 	const account = keepMultisig(found.account);
 	multisig.activate(account.address);
@@ -227,7 +262,11 @@ export async function addMultisig(address: string, chainIds: number[]): Promise<
  * but kept nowhere (ms-21): an account to read a link's transaction from on
  * a device that has none of its members, which only the person's tap adds.
  */
-export async function findMultisig(address: string, chainIds: number[]): Promise<AddOutcome> {
+export async function findMultisig(
+	address: string,
+	chainIds: number[],
+	network?: number
+): Promise<AddOutcome> {
 	// What the address is on chain, read beside the registry (ms-16): the
 	// wait for a record on its way is only for an address with no code and no
 	// transactions anywhere — a multisig created moments ago.
@@ -283,6 +322,13 @@ export async function findMultisig(address: string, chainIds: number[]): Promise
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
+	// Where it is used, from what says so: the chains it is deployed on, then
+	// the ones its record is on (the service's `recordedOn`), on networks this
+	// wallet has — then the network the person (or a link) names. Never the
+	// first network of the space shown: its proposals are read where it is.
+	const recorded = (answer.recordedOn ?? []).filter((id) => networkForChainId(id) !== null);
+	const where = [...new Set([...used, ...recorded, ...(network === undefined ? [] : [network])])];
+	if (where.length === 0) return { ok: false, reason: 'chooseNetwork' };
 	const { owners, threshold } = genesisMembers(genesis);
 	return {
 		ok: true,
@@ -294,7 +340,7 @@ export async function findMultisig(address: string, chainIds: number[]): Promise
 			recorded: !answer.pending,
 			// It came from the service: the service can hand it out.
 			shared: true,
-			chainIds: used.length > 0 ? used : chainIds.slice(0, 1),
+			chainIds: where,
 			addedMs: Date.now()
 		}
 	};

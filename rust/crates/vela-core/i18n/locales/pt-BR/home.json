@@ -226,7 +226,8 @@
         "notFound": "Nenhuma multisig com este endereço é conhecida ainda. Se ela acabou de ser criada, tente de novo em um minuto.",
         "unavailable": "Não foi possível acessar o serviço. Tente novamente.",
         "unsupported": "Esta versão do Safe ainda não é compatível.",
-        "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler."
+        "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler.",
+        "chooseNetwork": "Ainda nada indica em qual rede este multisig é usado. Escolha a rede dele:"
       },
       "external": {
         "pageTitle": "Assinar para a Vela",
@@ -293,6 +294,12 @@
         "couldNotCheck": "Não foi possível verificar",
         "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
         "remove": "Remover deste dispositivo"
+      },
+      "service": {
+        "customNote": "Usando um serviço multisig próprio ({{host}})",
+        "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
+        "retry": "Tentar de novo",
+        "noNetworks": "O serviço multisig não atende nenhuma das suas redes."
       }
     },
     "balanceDetailStatusOwnNode": "Seu nó não está respondendo",

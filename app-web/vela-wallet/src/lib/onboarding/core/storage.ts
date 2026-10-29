@@ -300,12 +300,33 @@ export type ServiceEndpoints = {
 	fiatRatesURL?: string;
 	/** Spec 038 #E4 — where an unknown AAGUID is looked up; absent = the default node. */
 	aaguidDirectoryURL?: string;
+	/** The multisig service (Safe Genesis Registry); absent = the default. */
+	genesisServiceURL?: string;
 };
+
+/**
+ * Where the multisig service was set before it was one of these endpoints —
+ * a developer's or a test's own (the live tests still seed it). Read as the
+ * record's `genesisServiceURL` when the record has none, moved into the
+ * record the first time it is read, then removed.
+ */
+export const LEGACY_GENESIS_SERVICE_KEY = 'vela.genesisServiceURL';
+
+/** Said on this page whenever the record is written here (another tab: `storage`). */
+export const SERVICE_ENDPOINTS_CHANGED = 'vela:service-endpoints';
 
 export function loadServiceEndpoints(): ServiceEndpoints {
 	try {
 		const raw = store().getItem(STORAGE_KEYS.serviceEndpoints);
-		return raw ? (JSON.parse(raw) as ServiceEndpoints) : {};
+		const record = raw ? (JSON.parse(raw) as ServiceEndpoints) : {};
+		const legacy = store().getItem(LEGACY_GENESIS_SERVICE_KEY);
+		if (legacy === null) return record;
+		// Moved once: the record's own value, when it has one, stands.
+		const moved =
+			record.genesisServiceURL === undefined ? { ...record, genesisServiceURL: legacy } : record;
+		store().setItem(STORAGE_KEYS.serviceEndpoints, JSON.stringify(moved));
+		store().removeItem(LEGACY_GENESIS_SERVICE_KEY);
+		return moved;
 	} catch {
 		return {};
 	}
@@ -313,6 +334,7 @@ export function loadServiceEndpoints(): ServiceEndpoints {
 
 export function saveServiceEndpoints(endpoints: ServiceEndpoints): void {
 	writeList(STORAGE_KEYS.serviceEndpoints, endpoints);
+	if (typeof window !== 'undefined') window.dispatchEvent(new Event(SERVICE_ENDPOINTS_CHANGED));
 }
 
 function describe(error: unknown): string {

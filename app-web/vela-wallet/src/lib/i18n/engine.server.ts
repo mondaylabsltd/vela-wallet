@@ -716,6 +716,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			bundlerHint: k('settingsModals.endpoints.bundlerHint'),
 			fiatLabel: k('settingsModals.endpoints.fiatLabel'),
 			fiatHint: k('settingsModals.endpoints.fiatHint'),
+			genesisLabel: k('settingsModals.endpoints.genesisLabel'),
+			genesisHint: k('settingsModals.endpoints.genesisHint'),
 			reset: k('settingsModals.endpoints.resetToDefaults'),
 			resetTitle: k('settingsModals.endpoints.resetTitle'),
 			resetBody: k('settingsModals.endpoints.resetBody'),

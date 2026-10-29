@@ -224,7 +224,8 @@
         "notFound": "Belum ada multisig yang dikenal dengan alamat ini. Jika baru dibuat, coba lagi dalam satu menit.",
         "unavailable": "Tidak bisa menghubungi layanan. Coba lagi.",
         "unsupported": "Versi Safe ini belum didukung.",
-        "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela."
+        "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela.",
+        "chooseNetwork": "Belum ada yang menunjukkan jaringan tempat multisig ini digunakan. Pilih jaringannya:"
       },
       "external": {
         "pageTitle": "Tanda tangani untuk Vela",
@@ -291,6 +292,12 @@
         "couldNotCheck": "Tidak bisa memeriksa",
         "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
         "remove": "Hapus dari perangkat ini"
+      },
+      "service": {
+        "customNote": "Menggunakan layanan multisig khusus ({{host}})",
+        "unreachableNote": "Layanan multisig tidak dapat dijangkau — transaksi yang menunggu tidak bisa dimuat; akan dicoba lagi.",
+        "retry": "Coba lagi",
+        "noNetworks": "Layanan multisig tidak melayani satu pun jaringan Anda."
       }
     },
     "balanceDetailStatusOwnNode": "Node Anda tidak merespons",

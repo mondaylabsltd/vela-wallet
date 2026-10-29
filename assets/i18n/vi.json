@@ -573,7 +573,8 @@
     "notFound": "Chưa biết đa chữ ký nào có địa chỉ này. Nếu vừa tạo, hãy thử lại sau một phút.",
     "unavailable": "Không kết nối được dịch vụ. Hãy thử lại.",
     "unsupported": "Phiên bản Safe này chưa được hỗ trợ.",
-    "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được."
+    "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
+    "chooseNetwork": "Chưa có thông tin multisig này được dùng trên mạng nào. Hãy chọn mạng của nó:"
    },
    "external": {
     "pageTitle": "Ký cho Vela",
@@ -640,6 +641,12 @@
     "couldNotCheck": "Không kiểm tra được",
     "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
     "remove": "Xóa khỏi thiết bị này"
+   },
+   "service": {
+    "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
+    "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
+    "retry": "Thử lại",
+    "noNetworks": "Dịch vụ đa chữ ký không hỗ trợ mạng nào của bạn."
    }
   },
   "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",
@@ -2230,19 +2237,21 @@
   },
   "endpoints": {
    "modalTitle": "Điểm cuối dịch vụ",
-   "description": "Các dịch vụ này vận hành ví của bạn.\nBạn có thể tự triển khai phiên bản của riêng mình để tự lưu ký hoàn toàn.",
-   "chainDataLabel": "CHỈ MỤC DỮ LIỆU CHAIN",
+   "description": "Mỗi dịch vụ đều có thể thay bằng dịch vụ do bạn tự triển khai.",
+   "chainDataLabel": "Chỉ mục dữ liệu chain",
    "chainDataHint": "Cung cấp thông tin mạng, dữ liệu token và logo chain",
-   "passkeyLabel": "CHỈ MỤC PASSKEY",
+   "passkeyLabel": "Chỉ mục passkey",
    "passkeyHint": "Lưu khóa công khai của passkey để đăng nhập trên nhiều thiết bị",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Trung chuyển giao dịch",
    "bundlerHint": "Cần điểm cuối tương thích với Vela Relay",
-   "fiatLabel": "TỶ GIÁ FIAT",
+   "fiatLabel": "Tỷ giá fiat",
    "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
-   "resetToDefaults": "Đặt lại cả bốn về mặc định",
+   "genesisLabel": "Dịch vụ đa chữ ký",
+   "genesisHint": "Tìm multisig và chia sẻ các giao dịch đang chờ phê duyệt. Dịch vụ thấy địa chỉ các multisig của bạn và các đề xuất, nhưng không bao giờ quyết định chúng có đúng hay không: Vela tự kiểm tra mọi bản ghi và phê duyệt.",
+   "resetToDefaults": "Khôi phục tất cả mặc định",
    "selfHostGuide": "Hướng dẫn tự triển khai →",
    "resetTitle": "Khôi phục điểm cuối dịch vụ?",
-   "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
+   "resetBody": "Tất cả dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
    "resetConfirm": "Khôi phục",
    "resetCancel": "Hủy"
   },

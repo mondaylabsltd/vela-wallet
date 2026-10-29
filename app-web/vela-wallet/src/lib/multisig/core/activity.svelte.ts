@@ -20,6 +20,9 @@ import type { SigningMessages } from '$lib/signing/messages';
 /** The id an Activity row carries for a waiting transaction. */
 export const PROPOSAL_ROW_PREFIX = 'multisig:';
 
+/** The waiting group's action while the multisig service is away: ask it now. */
+export const MULTISIG_RETRY = 'multisig-retry';
+
 export function proposalRowId(item: Pick<ProposalItem, 'chainId' | 'safeTxHash'>): string {
 	return `${PROPOSAL_ROW_PREFIX}${item.chainId}:${item.safeTxHash}`;
 }
@@ -157,6 +160,16 @@ class WaitingRows {
 				badgeLogoUrl: chainLogoURL(item.chainId)
 			};
 		});
+		// The service away is said as itself, once for every network, with a
+		// Retry: its own schedule retries too, but nobody should have to wait.
+		if (proposals.unreachable) {
+			return {
+				label: m.panel.pending,
+				note: m.service.unreachableNote,
+				action: { id: MULTISIG_RETRY, label: m.service.retry },
+				rows
+			};
+		}
 		return proposals.stale
 			? { label: m.panel.pending, note: m.panel.stale, rows }
 			: { label: m.panel.pending, rows };

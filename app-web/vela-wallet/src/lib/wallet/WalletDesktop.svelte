@@ -7,6 +7,7 @@
 	import AssetRow from './ui/AssetRow.svelte';
 	import BalanceDisplay from './ui/BalanceDisplay.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
+	import GroupNote from './ui/GroupNote.svelte';
 	import SkeletonRow from './ui/SkeletonRow.svelte';
 	import { UTILITY_ICONS } from './icons';
 	import ReceivePanel from './ui/ReceivePanel.svelte';
@@ -62,6 +63,8 @@
 		column?: Snippet;
 		/** A card at the top of the content, above the balance (the app prompt). Live only. */
 		banner?: Snippet;
+		/** An activity group's own action (its note's Retry), by id. Live only. */
+		ongroupaction?: (id: string) => void;
 	}
 
 	let {
@@ -77,7 +80,8 @@
 		onstatus,
 		onbalancerefresh,
 		column,
-		banner
+		banner,
+		ongroupaction
 	}: Props = $props();
 
 	// The third column replaces the mobile bottom sheet (research.md D5).
@@ -156,7 +160,7 @@
 					{:else}
 						{#each model.activityGroups as group (group.label)}
 							<p class="day">{group.label}</p>
-							{#if group.note}<p class="note" role="status">{group.note}</p>{/if}
+							<GroupNote {group} onaction={ongroupaction} />
 							<ul>
 								{#each group.rows as row, i (i)}
 									<li>
@@ -321,11 +325,5 @@
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
-	}
-
-	.note {
-		margin: 0 0 var(--space-sm);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
 	}
 </style>

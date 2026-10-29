@@ -573,7 +573,8 @@
     "notFound": "Bu adreste bilinen bir çoklu imza yok. Yeni oluşturulduysa bir dakika sonra tekrar dene.",
     "unavailable": "Hizmete ulaşılamadı. Tekrar dene.",
     "unsupported": "Bu Safe sürümü henüz desteklenmiyor.",
-    "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil."
+    "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil.",
+    "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin:"
    },
    "external": {
     "pageTitle": "Vela için imzala",
@@ -640,6 +641,12 @@
     "couldNotCheck": "Kontrol edilemedi",
     "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
     "remove": "Bu cihazdan kaldır"
+   },
+   "service": {
+    "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
+    "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
+    "retry": "Tekrar dene",
+    "noNetworks": "Çoklu imza hizmeti ağlarınızın hiçbirine hizmet vermiyor."
    }
   },
   "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",
@@ -2230,19 +2237,21 @@
   },
   "endpoints": {
    "modalTitle": "Servis Uç Noktaları",
-   "description": "Bu servisler cüzdanınızın çalışmasını sağlar.\nTam öz-saklama için kendi örneklerinizi dağıtabilirsiniz.",
-   "chainDataLabel": "ZİNCİR VERİ DİZİNİ",
+   "description": "Her biri kendi barındırdığınız bir servisle değiştirilebilir.",
+   "chainDataLabel": "Zincir veri dizini",
    "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
-   "passkeyLabel": "PASSKEY DİZİNİ",
+   "passkeyLabel": "Passkey dizini",
    "passkeyHint": "Cihazlar arası giriş için geçiş anahtarı açık anahtarlarını saklar",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "İşlem aktarıcısı",
    "bundlerHint": "Vela Relay uyumlu bir uç nokta gereklidir",
-   "fiatLabel": "FİAT KURLARI",
+   "fiatLabel": "Fiat kurları",
    "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
-   "resetToDefaults": "Dördünü de varsayılana döndür",
+   "genesisLabel": "Çoklu imza hizmeti",
+   "genesisHint": "Multisig'leri bulur ve onay bekleyen işlemleri paylaşır. Multisig'lerinizin adreslerini ve önerilerini görür ama doğru olup olmadıklarına asla karar vermez: Vela her kaydı ve onayı kendisi denetler.",
+   "resetToDefaults": "Tüm varsayılanları geri yükle",
    "selfHostGuide": "Kendin barındırma kılavuzu →",
    "resetTitle": "Servis uç noktaları sıfırlansın mı?",
-   "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+   "resetBody": "Tüm servisler Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
    "resetConfirm": "Sıfırla",
    "resetCancel": "İptal"
   },

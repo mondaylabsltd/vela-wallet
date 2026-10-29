@@ -37,7 +37,15 @@ export async function liveSettings(context: BrowserContext): Promise<void> {
 		([genesis, relay, tokens]) => {
 			localStorage.setItem('vela.intro.seen', String(Date.now()));
 			localStorage.setItem('vela.launch.played', String(Date.now()));
-			localStorage.setItem('vela.genesisServiceURL', genesis);
+			// The multisig service is a service endpoint (Settings → Service
+			// Endpoints). Seeded into that record — once, so an address set
+			// in Settings during a test stands over a reload; the old key is
+			// still read (and moved into the record) for older profiles.
+			const endpoints = JSON.parse(localStorage.getItem('vela.serviceEndpoints') ?? '{}');
+			if (endpoints.genesisServiceURL === undefined) {
+				endpoints.genesisServiceURL = genesis;
+				localStorage.setItem('vela.serviceEndpoints', JSON.stringify(endpoints));
+			}
 			if (relay !== 'default') localStorage.setItem('vela.peerconnectRelay', relay);
 			if (tokens !== 'default') localStorage.setItem('vela.peerconnectTokenEndpoint', tokens);
 		},

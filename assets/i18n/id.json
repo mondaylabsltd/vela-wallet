@@ -573,7 +573,8 @@
     "notFound": "Belum ada multisig yang dikenal dengan alamat ini. Jika baru dibuat, coba lagi dalam satu menit.",
     "unavailable": "Tidak bisa menghubungi layanan. Coba lagi.",
     "unsupported": "Versi Safe ini belum didukung.",
-    "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela."
+    "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela.",
+    "chooseNetwork": "Belum ada yang menunjukkan jaringan tempat multisig ini digunakan. Pilih jaringannya:"
    },
    "external": {
     "pageTitle": "Tanda tangani untuk Vela",
@@ -640,6 +641,12 @@
     "couldNotCheck": "Tidak bisa memeriksa",
     "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
     "remove": "Hapus dari perangkat ini"
+   },
+   "service": {
+    "customNote": "Menggunakan layanan multisig khusus ({{host}})",
+    "unreachableNote": "Layanan multisig tidak dapat dijangkau — transaksi yang menunggu tidak bisa dimuat; akan dicoba lagi.",
+    "retry": "Coba lagi",
+    "noNetworks": "Layanan multisig tidak melayani satu pun jaringan Anda."
    }
   },
   "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
@@ -2230,19 +2237,21 @@
   },
   "endpoints": {
    "modalTitle": "Endpoint Layanan",
-   "description": "Layanan ini menjalankan dompet Anda.\nAnda dapat men-deploy instans sendiri untuk self-custody penuh.",
-   "chainDataLabel": "INDEKS DATA CHAIN",
+   "description": "Masing-masing bisa diganti dengan layanan yang Anda host sendiri.",
+   "chainDataLabel": "Indeks data chain",
    "chainDataHint": "Menyediakan info jaringan, data token, dan logo chain",
-   "passkeyLabel": "INDEKS PASSKEY",
+   "passkeyLabel": "Indeks passkey",
    "passkeyHint": "Menyimpan kunci publik passkey untuk masuk lintas perangkat",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Relay transaksi",
    "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
-   "fiatLabel": "KURS FIAT",
+   "fiatLabel": "Kurs fiat",
    "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-   "resetToDefaults": "Kembalikan keempatnya ke default",
+   "genesisLabel": "Layanan multisig",
+   "genesisHint": "Menemukan multisig dan membagikan transaksi yang menunggu persetujuan. Layanan ini melihat alamat multisig Anda dan usulannya, tetapi tidak pernah menentukan apakah semuanya benar — Vela memeriksa sendiri setiap catatan dan persetujuan.",
+   "resetToDefaults": "Pulihkan semua default",
    "selfHostGuide": "Panduan self-hosting →",
    "resetTitle": "Setel ulang endpoint layanan?",
-   "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
+   "resetBody": "Semua layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
    "resetConfirm": "Setel Ulang",
    "resetCancel": "Batal"
   },

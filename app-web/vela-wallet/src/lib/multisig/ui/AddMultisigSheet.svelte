@@ -2,7 +2,9 @@
 	/**
 	 * Adding a multisig by its address — all another member needs. The
 	 * genesis comes from the service and is accepted only if the core
-	 * re-derives the address from it (`addMultisig`).
+	 * re-derives the address from it (`addMultisig`). Its networks are where
+	 * it is deployed or recorded; when nothing says, the person picks one here
+	 * (`chooseNetwork`) — never the first network of the space, silently.
 	 *
 	 * Or importing Safes from a Safe{Wallet} export: the file is read by the
 	 * core on this device, the person picks the Safes, and each is imported
@@ -10,6 +12,7 @@
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import Dropdown from '$lib/settings/ui/Dropdown.svelte';
 	import { addressEntry } from '$lib/core/kernels';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
@@ -20,6 +23,7 @@
 	import { addMultisig, importExported } from '../core/accounts';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
 	import { multisig } from '../core/store.svelte';
+	import CustomServiceNote from './CustomServiceNote.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -41,19 +45,28 @@
 	const entry = $derived(addressEntry(address.trim()));
 	const valid = $derived(entry === 'valid');
 
+	const networks = spaceNetworksSync();
+	/** Nothing says which network it is used on: the person's pick, asked for. */
+	let choosing = $state(false);
+	let chosen = $state<number | null>(null);
+	let menuOpen = $state(false);
+
 	async function add() {
 		if (!valid) {
 			failure = entry === 'checksum' ? m.send.invalidChecksum : m.send.invalidAddress;
 			return;
 		}
+		if (choosing && chosen === null) return;
 		busy = true;
 		failure = null;
 		const outcome = await addMultisig(
 			address.trim(),
-			spaceNetworksSync().map((n) => n.chainId)
+			networks.map((n) => n.chainId),
+			choosing && chosen !== null ? chosen : undefined
 		);
 		busy = false;
 		if (outcome.ok) onadded(outcome.account.address);
+		else if (outcome.reason === 'chooseNetwork') choosing = true;
 		else failure = m.add[outcome.reason];
 	}
 
@@ -173,6 +186,7 @@
 		{/if}
 	{:else}
 		<p class="intro">{m.add.intro}</p>
+		<CustomServiceNote {m} />
 		<form
 			onsubmit={(event) => {
 				event.preventDefault();
@@ -185,15 +199,37 @@
 				autocomplete="off"
 				spellcheck="false"
 				bind:value={address}
-				oninput={() => (failure = null)}
+				oninput={() => {
+					failure = null;
+					choosing = false;
+					chosen = null;
+				}}
 				aria-invalid={failure !== null}
 			/>
 			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
+			{#if choosing}
+				<p class="choose" role="status">{m.add.chooseNetwork}</p>
+				<Dropdown
+					label={m.action.network}
+					value={networks.find((n) => n.chainId === chosen)?.displayName ?? m.action.network}
+					open={menuOpen}
+					rows={networks.map((n) => ({
+						id: String(n.chainId),
+						label: n.displayName,
+						selected: n.chainId === chosen
+					}))}
+					ontoggle={() => (menuOpen = !menuOpen)}
+					onselect={(id) => {
+						chosen = Number(id);
+						menuOpen = false;
+					}}
+				/>
+			{/if}
 			<Button
 				variant="primary"
 				shape="rounded"
 				loading={busy}
-				disabled={busy}
+				disabled={busy || (choosing && chosen === null)}
 				onclick={() => void add()}>{m.add.add}</Button
 			>
 		</form>
@@ -322,5 +358,12 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
+	}
+
+	.choose {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
 	}
 </style>

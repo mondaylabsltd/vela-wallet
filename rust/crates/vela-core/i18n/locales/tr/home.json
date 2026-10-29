@@ -224,7 +224,8 @@
         "notFound": "Bu adreste bilinen bir çoklu imza yok. Yeni oluşturulduysa bir dakika sonra tekrar dene.",
         "unavailable": "Hizmete ulaşılamadı. Tekrar dene.",
         "unsupported": "Bu Safe sürümü henüz desteklenmiyor.",
-        "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil."
+        "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil.",
+        "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin:"
       },
       "external": {
         "pageTitle": "Vela için imzala",
@@ -291,6 +292,12 @@
         "couldNotCheck": "Kontrol edilemedi",
         "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
         "remove": "Bu cihazdan kaldır"
+      },
+      "service": {
+        "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
+        "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
+        "retry": "Tekrar dene",
+        "noNetworks": "Çoklu imza hizmeti ağlarınızın hiçbirine hizmet vermiyor."
       }
     },
     "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",

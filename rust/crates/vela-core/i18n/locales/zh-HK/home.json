@@ -224,7 +224,8 @@
         "notFound": "還沒有找到這個地址的多簽設定。如果剛建立，請稍後再試。",
         "unavailable": "暫時無法連接服務，請重試。",
         "unsupported": "暫不支援這個版本的 Safe。",
-        "notMultisig": "這個地址不是 Vela 能辨識的多簽帳戶。"
+        "notMultisig": "這個地址不是 Vela 能辨識的多簽帳戶。",
+        "chooseNetwork": "暫時未能得知此多簽用於哪個網絡，請選擇其網絡："
       },
       "external": {
         "pageTitle": "為 Vela 簽署",
@@ -291,6 +292,12 @@
         "couldNotCheck": "無法檢查",
         "backupNote": "把這個多簽的設定也儲存在 Ethereum 上，日後從那裏也能找到並部署它。手續費由此裝置上的一個帳戶支付。",
         "remove": "從此裝置移除"
+      },
+      "service": {
+        "customNote": "現正使用自訂多簽服務（{{host}}）",
+        "unreachableNote": "無法連接多簽服務——待批准交易無法載入，正在重試。",
+        "retry": "重試",
+        "noNetworks": "多簽服務並不支援你的任何網絡。"
       }
     },
     "balanceDetailStatusOwnNode": "你的節點沒有回應",

@@ -9,6 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const OWNERS = ['0x00000000000000000000000000000000000000aa'];
 
+const seams = vi.hoisted(() => ({
+	deployed: true,
+	recordedOn: undefined as number[] | undefined,
+	table: null as { chains: Set<number> | null; homeChainId: number | null } | null
+}));
 const store = vi.hoisted(() => ({
 	rows: [] as { address: string; shared?: boolean }[],
 	active: null as string | null,
@@ -37,7 +42,7 @@ vi.mock('./store.svelte', () => ({
 		}
 	}
 }));
-vi.mock('./chain', () => ({ hasCode: async () => true }));
+vi.mock('./chain', () => ({ hasCode: async () => seams.deployed }));
 vi.mock('./safe-service', () => ({}));
 vi.mock('./kernel', () => ({
 	genesisAddress: () => SAFE,
@@ -48,13 +53,28 @@ vi.mock('./kernel', () => ({
 vi.mock('./owners', () => ({}));
 vi.mock('./service', () => ({
 	ServiceUnavailableError: class extends Error {},
-	fetchGenesis: async () => ({ found: true, pending: false, genesis: { owners: OWNERS } })
+	fetchGenesis: async () => ({
+		found: true,
+		pending: false,
+		genesis: { owners: OWNERS },
+		recordedOn: seams.recordedOn
+	}),
+	serviceTable: async () => seams.table
+}));
+// The wallet's networks: Gnosis, Arc Testnet and Sepolia; chain 999 is none of them.
+vi.mock('$lib/services/networks', () => ({
+	networkForChainId: (id: number) =>
+		[100, 5042002, 11155111].includes(id) ? { chainId: id } : null
 }));
 vi.mock('$lib/services/rpc-pool', () => ({ poolRpcCall: async () => ({ result: '0x0' }) }));
 
-const { addMultisig, findMultisig, keepMultisig } = await import('./accounts');
+const { addMultisig, findMultisig, keepMultisig, recordHomeChain, REGISTRY_HOME_CHAIN_ID } =
+	await import('./accounts');
 
 beforeEach(() => {
+	seams.deployed = true;
+	seams.recordedOn = undefined;
+	seams.table = null;
 	store.rows = [];
 	store.active = null;
 	store.calls = [];
@@ -86,5 +106,59 @@ describe('reading a multisig by its address (ms-21)', () => {
 		expect(added.ok).toBe(true);
 		expect(store.calls).toEqual(['add', 'markShared', 'activate']);
 		expect(store.active).toBe(SAFE);
+	});
+});
+
+/**
+ * Where a multisig added by address is used comes from what says so — the
+ * chains it is deployed on, then the ones its record is on — never the first
+ * network of the space shown; when nothing says, the person is asked.
+ */
+describe('the networks of a multisig added by address', () => {
+	const SPACE = [11155111, 5042002];
+
+	it('an undeployed one is used where its record is, not on the first network shown', async () => {
+		seams.deployed = false;
+		seams.recordedOn = [5042002];
+		const found = await findMultisig(SAFE, SPACE);
+		expect(found).toMatchObject({ ok: true, account: { chainIds: [5042002] } });
+	});
+
+	it('a deployed one is used where it is deployed, then where it is recorded', async () => {
+		seams.recordedOn = [100];
+		const found = await findMultisig(SAFE, SPACE);
+		expect(found).toMatchObject({ ok: true, account: { chainIds: [11155111, 5042002, 100] } });
+	});
+
+	it('when nothing says (a record on its way, or on a network this wallet lacks), asks', async () => {
+		seams.deployed = false;
+		for (const recordedOn of [[], undefined, [999]]) {
+			seams.recordedOn = recordedOn;
+			expect(await findMultisig(SAFE, SPACE)).toEqual({ ok: false, reason: 'chooseNetwork' });
+		}
+		// Nothing is added while the question is open.
+		expect(await addMultisig(SAFE, SPACE)).toEqual({ ok: false, reason: 'chooseNetwork' });
+		expect(store.rows).toEqual([]);
+		// The person's pick is where it is used.
+		const added = await addMultisig(SAFE, SPACE, 5042002);
+		expect(added.ok).toBe(true);
+		expect(store.active).toBe(SAFE);
+		const picked = await findMultisig(SAFE, SPACE, 5042002);
+		expect(picked).toMatchObject({ ok: true, account: { chainIds: [5042002] } });
+	});
+});
+
+/** A record on a chain the service does not serve goes to the service's own home chain. */
+describe('where a record falls back to', () => {
+	it("is the service's home chain, as it says", async () => {
+		seams.table = { chains: new Set([5042002]), homeChainId: 5042002 };
+		expect(await recordHomeChain()).toBe(5042002);
+	});
+
+	it("is the default service's (Gnosis) only when the service says nothing", async () => {
+		seams.table = { chains: null, homeChainId: null };
+		expect(await recordHomeChain()).toBe(REGISTRY_HOME_CHAIN_ID);
+		seams.table = null;
+		expect(await recordHomeChain()).toBe(REGISTRY_HOME_CHAIN_ID);
 	});
 });

@@ -28,6 +28,7 @@ use vela_core::app::network_admin::{
     NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth, NetShellResult as Res,
     NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
     DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    DEFAULT_GENESIS_SERVICE_URL,
     DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS,
     REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
@@ -50,6 +51,7 @@ fn store_loaded(customs: Vec<NetCustomNetwork>, overrides: Vec<NetNetworkConfig>
         network_configs: overrides,
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     }
 }
 
@@ -265,6 +267,7 @@ fn a_partially_stored_endpoints_blob_merges_with_the_defaults() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     let view = sut.view();
     assert_eq!(view.endpoints[0].value, "https://my-data.example");
@@ -720,6 +723,7 @@ fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
         NetEndpointField::PasskeyIndex,
         NetEndpointField::BundlerService,
         NetEndpointField::FiatRates,
+        NetEndpointField::GenesisService,
     ] {
         let with = |value: &str| {
             let mut e = NetServiceEndpoints::default();
@@ -728,6 +732,7 @@ fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
                 NetEndpointField::PasskeyIndex => &mut e.passkey_index_url,
                 NetEndpointField::BundlerService => &mut e.bundler_service_url,
                 NetEndpointField::FiatRates => &mut e.fiat_rates_url,
+                NetEndpointField::GenesisService => &mut e.genesis_service_url,
             };
             *slot = value.to_owned();
             e
@@ -938,6 +943,7 @@ fn custom_service_endpoints_feed_the_new_network_record() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -996,6 +1002,7 @@ fn a_new_networks_logo_is_the_marks_one_rule() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -1478,6 +1485,7 @@ fn a_builtin_rows_bundler_follows_the_configured_relay() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     let row = &sut.view().networks[0];
     assert_eq!(row.chain_id, 1);
@@ -1519,6 +1527,7 @@ fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1545,6 +1554,7 @@ fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1681,6 +1691,7 @@ fn a_page_opened_before_the_store_answers_probes_the_stored_urls() {
             ..NetStoredEndpoints::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
     });
     assert!(
         ops.contains(&Op::FetchServiceHealth {
@@ -2128,6 +2139,7 @@ fn sut_with_alchemy_key() -> Sut {
             alchemy: Some("abc".to_owned()),
             ..Default::default()
         },
+        multisig_service: false,
     });
     sut
 }
@@ -3249,4 +3261,161 @@ fn registry_says_testnet_reads_the_document() {
         ..raw_chain()
     }));
     assert!(!registry_says_testnet(&NetRawChainData::default()));
+}
+
+// ---------------------------------------------------------------------------
+// The multisig service: one more endpoint, on a shell with multisig accounts
+// ---------------------------------------------------------------------------
+
+fn started_with_multisig(endpoints: NetStoredEndpoints) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![],
+        endpoints,
+        provider_keys: NetProviderKeys::default(),
+        multisig_service: true,
+    });
+    sut
+}
+
+/// A shell without multisigs never shows, probes or uses it.
+#[test]
+fn the_multisig_service_is_an_endpoint_only_where_multisigs_are() {
+    let sut = started();
+    assert!(sut
+        .view()
+        .endpoints
+        .iter()
+        .all(|e| e.field != NetEndpointField::GenesisService));
+    let mut sut = started();
+    let ops = sut.dispatch(Event::EndpointsOpened);
+    assert!(!ops.iter().any(|op| matches!(
+        op,
+        Op::FetchServiceHealth { field: NetEndpointField::GenesisService, .. }
+    )));
+
+    // Nor saves it, whoever asks (an agent's `set_service_endpoint`).
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: "https://elsewhere.example".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    assert!(ops.is_empty());
+
+    let sut = started_with_multisig(NetStoredEndpoints::default());
+    let last = sut.view().endpoints.last().cloned().expect("five");
+    assert_eq!(last.field, NetEndpointField::GenesisService);
+    assert_eq!(last.value, DEFAULT_GENESIS_SERVICE_URL);
+    assert_eq!(last.default_value, DEFAULT_GENESIS_SERVICE_URL);
+}
+
+/// Probed at `/api/health` like the others; its answer names the service and
+/// carries no `status` — that is the service, not an invalid answer.
+#[test]
+fn the_multisig_service_is_probed_and_known_by_its_name() {
+    let mut sut = started_with_multisig(NetStoredEndpoints {
+        genesis_service_url: Some("http://127.0.0.1:8788/".to_owned()),
+        ..Default::default()
+    });
+    assert_eq!(sut.view().endpoints[4].value, "http://127.0.0.1:8788/");
+    let ops = sut.dispatch(Event::EndpointsOpened);
+    assert!(ops.contains(&Op::FetchServiceHealth {
+        field: NetEndpointField::GenesisService,
+        base_url: "http://127.0.0.1:8788".to_owned(),
+    }));
+    sut.resolve(Res::ServiceHealth {
+        field: NetEndpointField::GenesisService,
+        body: NetHealthBody::Identity {
+            service: Some("safe-genesis-registry".to_owned()),
+            status: None,
+        },
+        latency_ms: 12.0,
+    });
+    assert!(matches!(
+        sut.view().endpoints[4].health,
+        NetServiceHealth::Ok { .. }
+    ));
+    // Something else answering there is not it.
+    let mut sut = started_with_multisig(NetStoredEndpoints::default());
+    sut.dispatch(Event::EndpointsOpened);
+    sut.resolve(Res::ServiceHealth {
+        field: NetEndpointField::GenesisService,
+        body: NetHealthBody::Identity {
+            service: Some("vela-relay".to_owned()),
+            status: Some("ok".to_owned()),
+        },
+        latency_ms: 12.0,
+    });
+    assert!(matches!(
+        sut.view().endpoints[4].health,
+        NetServiceHealth::InvalidResponse { .. }
+    ));
+}
+
+/// Saved on blur under the URL rule, and reset with the others.
+#[test]
+fn the_multisig_service_is_saved_refused_and_reset_as_the_others_are() {
+    let mut sut = started_with_multisig(NetStoredEndpoints::default());
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: " http://127.0.0.1:8788 ".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    let written = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteServiceEndpoints { endpoints } => Some(endpoints.clone()),
+            _ => None,
+        })
+        .expect("written");
+    assert_eq!(written.genesis_service_url, "http://127.0.0.1:8788");
+
+    // Plain http to another computer is refused: nothing written.
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: "http://192.168.1.5:8788".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    assert!(!ops
+        .iter()
+        .any(|op| matches!(op, Op::WriteServiceEndpoints { .. })));
+    assert!(sut.view().endpoints[4].refused);
+
+    let ops = sut.dispatch(Event::ResetEndpointsToDefaults);
+    let written = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteServiceEndpoints { endpoints } => Some(endpoints.clone()),
+            _ => None,
+        })
+        .expect("written");
+    assert_eq!(written.genesis_service_url, DEFAULT_GENESIS_SERVICE_URL);
+    assert_eq!(sut.view().endpoints[4].value, DEFAULT_GENESIS_SERVICE_URL);
+}
+
+/// A record written before the field existed reads as the default.
+#[test]
+fn a_record_without_the_multisig_service_reads_as_its_default() {
+    let e: NetServiceEndpoints = serde_json::from_value(serde_json::json!({
+        "ethereum_data_url": DEFAULT_ETHEREUM_DATA_URL,
+        "passkey_index_url": DEFAULT_PASSKEY_INDEX_URL,
+        "bundler_service_url": DEFAULT_BUNDLER_SERVICE_URL,
+        "fiat_rates_url": DEFAULT_FIAT_RATES_URL
+    }))
+    .unwrap();
+    assert_eq!(e.genesis_service_url, DEFAULT_GENESIS_SERVICE_URL);
+    let stored: NetStoredEndpoints = serde_json::from_value(serde_json::json!({
+        "ethereum_data_url": null, "passkey_index_url": null,
+        "bundler_service_url": null, "fiat_rates_url": null
+    }))
+    .unwrap();
+    assert_eq!(stored.genesis_service_url, None);
 }

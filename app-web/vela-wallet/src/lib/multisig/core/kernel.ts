@@ -282,3 +282,21 @@ export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genes
 /** The genesis inside a creating transaction's calldata that derives `safe`, if any. */
 export const genesisFromCalldata = (input: string, safe: string) =>
 	call<Genesis | null>('genesisFromCalldata', { input, safe });
+
+// -- the multisig service's health answer (`app::genesis_service`) ---------------
+
+/** A chain the service says it serves (its own name for it, if any). */
+export interface ServiceChain {
+	chainId: number;
+	name: string | null;
+}
+
+/** What a `GET /api/health` answer says the service is. */
+export type ServiceAnswer =
+	| { kind: 'genesis'; chains: ServiceChain[] | null; homeChainId: number | null }
+	| { kind: 'other' }
+	| { kind: 'unreachable' };
+
+/** Whether a health answer (its status and body text) is a multisig service's. */
+export const serviceAnswer = (status: number, body: string) =>
+	call<ServiceAnswer>('serviceAnswer', { status, body });

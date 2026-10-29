@@ -61,6 +61,7 @@ pub mod ext_cache;
 pub mod fee_policy;
 pub mod fee_speed;
 pub mod fee_tier_pref;
+pub mod genesis_service;
 pub mod intent_json;
 pub mod intent_rules;
 pub mod intents;

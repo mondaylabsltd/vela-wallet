@@ -677,8 +677,38 @@ describe('liveEndpoints', () => {
 		expect(model.fields[0].tone).toBe('default');
 	});
 
+	// What a field is for rides behind its ⓘ (`info`); `hint` is for a state.
+	it('keeps what a field is for apart from what state it is in', () => {
+		const model = liveEndpoints(VIEW, m);
+		expect(model.fields[0].info).toBe(m.endpoints.passkeyHint);
+		expect(model.fields[0].hint).toBeUndefined();
+	});
+
+	// The multisig service: one more endpoint (web only), its privacy note its `info`.
+	it('words the multisig service like the others', () => {
+		const view: NetView = {
+			...VIEW,
+			endpoints: [
+				{
+					field: 'genesis_service',
+					value: 'http://127.0.0.1:8788',
+					default_value: 'https://safe-genesis.getvela.app',
+					health: { type: 'ok', latency_ms: 12, rate_count: null },
+					refused: false
+				}
+			]
+		};
+		expect(liveEndpoints(view, m).fields[0]).toMatchObject({
+			id: 'genesis_service',
+			label: m.endpoints.genesisLabel,
+			info: m.endpoints.genesisHint,
+			placeholder: 'https://safe-genesis.getvela.app',
+			badge: { tone: 'ok' }
+		});
+	});
+
 	// set-8: a refused value is not saved, and the field says so.
-	it('a refused value says it was not saved, outlined, in place of its hint', () => {
+	it('a refused value says it was not saved, outlined, always shown', () => {
 		const view: NetView = {
 			...VIEW,
 			endpoints: [

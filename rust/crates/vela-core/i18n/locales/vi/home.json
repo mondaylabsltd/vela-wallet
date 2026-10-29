@@ -224,7 +224,8 @@
         "notFound": "Chưa biết đa chữ ký nào có địa chỉ này. Nếu vừa tạo, hãy thử lại sau một phút.",
         "unavailable": "Không kết nối được dịch vụ. Hãy thử lại.",
         "unsupported": "Phiên bản Safe này chưa được hỗ trợ.",
-        "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được."
+        "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
+        "chooseNetwork": "Chưa có thông tin multisig này được dùng trên mạng nào. Hãy chọn mạng của nó:"
       },
       "external": {
         "pageTitle": "Ký cho Vela",
@@ -291,6 +292,12 @@
         "couldNotCheck": "Không kiểm tra được",
         "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
         "remove": "Xóa khỏi thiết bị này"
+      },
+      "service": {
+        "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
+        "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
+        "retry": "Thử lại",
+        "noNetworks": "Dịch vụ đa chữ ký không hỗ trợ mạng nào của bạn."
       }
     },
     "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",

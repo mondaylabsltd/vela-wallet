@@ -19,14 +19,19 @@ const call = (data: string, value = '0') => ({
 	status: 'waiting',
 	canApprove: []
 });
-const seams = vi.hoisted(() => ({ open: [] as unknown[] }));
+const seams = vi.hoisted(() => ({ open: [] as unknown[], stale: false, unreachable: false }));
 
 vi.mock('./proposals.svelte', () => ({
 	proposals: {
 		get open() {
 			return seams.open;
 		},
-		stale: false
+		get stale() {
+			return seams.stale;
+		},
+		get unreachable() {
+			return seams.unreachable;
+		}
 	}
 }));
 vi.mock('./display', () => ({
@@ -44,7 +49,7 @@ vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => null }));
 vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
 vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
 
-const { waitingRows } = await import('./activity.svelte');
+const { MULTISIG_RETRY, waitingRows } = await import('./activity.svelte');
 
 const m = {
 	action: { call: 'Contract call' },
@@ -55,7 +60,8 @@ const m = {
 		waiting: 'Waiting',
 		progress: '{{approved}}/{{threshold}}'
 	},
-	panel: { pending: 'Waiting', stale: 'stale' }
+	panel: { pending: 'Waiting', stale: 'stale' },
+	service: { unreachableNote: 'service away', retry: 'Retry' }
 } as unknown as MultisigMessages;
 const signing = {} as SigningMessages;
 const settle = () => new Promise((done) => setTimeout(done, 0));
@@ -81,5 +87,31 @@ describe('a waiting contract call in Activity', () => {
 		expect(row.title).toBe('Contract call');
 		expect(row.amount).toBe('\u22125');
 		expect(row.unit).toBe('xDAI');
+	});
+});
+
+describe('the waiting group while the multisig service is away', () => {
+	it('says so once, over the last list, with a Retry', () => {
+		seams.open = [call('0xdeadbeef')];
+		seams.stale = true;
+		seams.unreachable = true;
+		const group = waitingRows.group(m)!;
+		expect(group.note).toBe('service away');
+		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
+		expect(group.rows).toHaveLength(1);
+		// Nothing waiting is not "no activity": the group stays to say it.
+		seams.open = [];
+		expect(waitingRows.group(m)?.note).toBe('service away');
+	});
+
+	it('a list that is only stale says that, with no Retry of its own', () => {
+		seams.open = [call('0xdeadbeef')];
+		seams.stale = true;
+		seams.unreachable = false;
+		const group = waitingRows.group(m)!;
+		expect(group.note).toBe('stale');
+		expect(group.action).toBeUndefined();
+		seams.stale = false;
+		expect(waitingRows.group(m)?.note).toBeUndefined();
 	});
 });

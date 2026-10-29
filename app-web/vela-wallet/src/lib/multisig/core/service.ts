@@ -12,20 +12,20 @@
  * write-once, an approval merges), so a call that failed in flight is simply
  * made again.
  */
-import type { Approval, Genesis, SafeTx } from './kernel';
+import {
+	serviceAnswer,
+	type Approval,
+	type Genesis,
+	type SafeTx,
+	type ServiceAnswer
+} from './kernel';
+import { DEFAULT_GENESIS_SERVICE_URL, genesisService, serviceOutage } from './service-state.svelte';
 
-export const DEFAULT_GENESIS_SERVICE_URL = 'https://safe-genesis.getvela.app';
-/** A developer's or a test's own service; unset means the default. */
-export const GENESIS_SERVICE_KEY = 'vela.genesisServiceURL';
+export { DEFAULT_GENESIS_SERVICE_URL };
 
+/** The service in use: the person's own (Settings → Service Endpoints), else the default. */
 export function genesisServiceURL(): string {
-	try {
-		const own = localStorage.getItem(GENESIS_SERVICE_KEY);
-		if (own && /^https?:\/\//.test(own)) return own.replace(/\/+$/, '');
-	} catch {
-		// storage unavailable: the default
-	}
-	return DEFAULT_GENESIS_SERVICE_URL;
+	return genesisService.url;
 }
 
 /** The service could not be reached, or answered something unreadable. */
@@ -44,18 +44,39 @@ interface Answer<T> {
 const TIMEOUT_MS = 15_000;
 const ATTEMPTS = 3;
 
-async function request<T>(path: string, init?: RequestInit): Promise<Answer<T>> {
+/**
+ * `background`: a read nobody is waiting on (the 12 s refresh, a record
+ * asked about again). While the service is away it asks nothing and fails at
+ * once, so one outage is never a failed request per network per round.
+ */
+async function request<T>(
+	path: string,
+	init?: RequestInit,
+	{ background = false }: { background?: boolean } = {}
+): Promise<Answer<T>> {
 	let last = 'no attempt';
 	for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
 		if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+		if (background && serviceOutage.blocked()) throw new ServiceUnavailableError(`away: ${last}`);
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 		try {
-			const response = await fetch(`${genesisServiceURL()}${path}`, {
-				...init,
-				signal: controller.signal,
-				headers: init?.body ? { 'content-type': 'application/json' } : undefined
-			});
+			let response: Response;
+			try {
+				response = await fetch(`${genesisServiceURL()}${path}`, {
+					...init,
+					signal: controller.signal,
+					headers: init?.body ? { 'content-type': 'application/json' } : undefined
+				});
+			} catch (error) {
+				// Nothing answered (refused, closed, offline, timed out): the
+				// service is away, for every network at once.
+				serviceOutage.failed();
+				throw error;
+			}
+			// It answered — a chain's read failing behind it (a 502) is that
+			// chain's, not the service being away.
+			serviceOutage.answered();
 			// A gateway's error page, or a cold start: worth one more try.
 			if (response.status >= 500 && attempt < ATTEMPTS - 1) {
 				last = `HTTP ${response.status}`;
@@ -72,6 +93,92 @@ async function request<T>(path: string, init?: RequestInit): Promise<Answer<T>> 
 	throw new ServiceUnavailableError(last);
 }
 
+const CHECK_TIMEOUT_MS = 8_000;
+
+/**
+ * What answers at `url` (`GET /api/health`, the service's cheapest read):
+ * a multisig service and the chains it serves, something else, or nothing.
+ * The core reads the answer. One try, no retries: a person is waiting.
+ */
+export async function checkService(url: string): Promise<ServiceAnswer> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+	let response: Response;
+	let text: string;
+	try {
+		response = await fetch(`${url}/api/health`, { signal: controller.signal, cache: 'no-store' });
+		text = await response.text();
+	} catch {
+		return { kind: 'unreachable' };
+	} finally {
+		clearTimeout(timer);
+	}
+	return serviceAnswer(response.status, text);
+}
+
+/** Whether the service in use answers as itself now (the outage's one probe). */
+export async function probeService(): Promise<boolean> {
+	return (await checkService(genesisServiceURL())).kind === 'genesis';
+}
+
+/**
+ * The networks a new multisig may be created on: those the service serves
+ * (its record is written on the first one), all of them while that is not
+ * known.
+ */
+export function servedOnly<T extends { chainId: number }>(
+	networks: T[],
+	served: Set<number> | null
+): T[] {
+	return served === null ? networks : networks.filter((n) => served.has(n.chainId));
+}
+
+const SERVED_TTL_MS = 60_000;
+
+/** What the service in use says of itself (`/api/health`), as far as it says. */
+export interface ServiceTable {
+	/** The chains it records on and reads; `null`: it lists none. */
+	chains: Set<number> | null;
+	/** The chain its registry lives on; `null`: it does not say. */
+	homeChainId: number | null;
+}
+
+let served: { url: string; at: number; table: Promise<ServiceTable | null> } | null = null;
+
+/**
+ * The service in use's own table, or `null` when it could not be read. Kept
+ * a minute per service; one that could not be read is asked again next time.
+ */
+export function serviceTable(): Promise<ServiceTable | null> {
+	const url = genesisServiceURL();
+	if (served && served.url === url && Date.now() - served.at < SERVED_TTL_MS) return served.table;
+	const table = checkService(url)
+		.then((answer): ServiceTable | null =>
+			answer.kind === 'genesis'
+				? {
+						chains: answer.chains === null ? null : new Set(answer.chains.map((c) => c.chainId)),
+						homeChainId: answer.homeChainId
+					}
+				: null
+		)
+		.catch(() => null);
+	const entry = { url, at: Date.now(), table };
+	served = entry;
+	void table.then((t) => {
+		if (t === null && served === entry) served = null;
+	});
+	return table;
+}
+
+/**
+ * The chains the service in use records on, by its own table, or `null` when
+ * that is not known (it could not be read, or lists none) — nothing is then
+ * narrowed.
+ */
+export async function servedChains(): Promise<Set<number> | null> {
+	return (await serviceTable())?.chains ?? null;
+}
+
 // -- genesis ---------------------------------------------------------------------
 
 export interface GenesisAnswer {
@@ -84,8 +191,11 @@ export interface GenesisAnswer {
 }
 
 /** The genesis recorded for `safe`, from whichever chain holds it. */
-export async function fetchGenesis(safe: string): Promise<GenesisAnswer> {
-	const { status, body } = await request<GenesisAnswer>(`/api/genesis/${safe}`);
+export async function fetchGenesis(
+	safe: string,
+	options?: { background?: boolean }
+): Promise<GenesisAnswer> {
+	const { status, body } = await request<GenesisAnswer>(`/api/genesis/${safe}`, undefined, options);
 	if (status === 404) return { found: false };
 	if (status !== 200) throw new ServiceUnavailableError(`HTTP ${status}`);
 	return body;
@@ -164,10 +274,13 @@ export interface ProposalsAnswer {
  */
 export async function fetchProposals(
 	chainId: number,
-	safe: string
+	safe: string,
+	options?: { background?: boolean }
 ): Promise<ProposalsAnswer | null> {
 	const { status, body } = await request<ProposalsAnswer>(
-		`/api/proposals/${safe}?chainId=${chainId}`
+		`/api/proposals/${safe}?chainId=${chainId}`,
+		undefined,
+		options
 	);
 	if (status === 404) return null;
 	if (status !== 200) throw new ServiceUnavailableError(`HTTP ${status}`);

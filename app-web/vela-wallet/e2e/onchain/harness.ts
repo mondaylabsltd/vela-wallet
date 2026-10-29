@@ -55,7 +55,10 @@ export async function useHarness(context: BrowserContext): Promise<void> {
 		([genesis, relay, peerconnect]) => {
 			localStorage.setItem('vela.intro.seen', String(Date.now()));
 			localStorage.setItem('vela.genesisServiceURL', genesis);
-			localStorage.setItem('vela.serviceEndpoints', JSON.stringify({ bundlerServiceURL: relay }));
+			localStorage.setItem(
+				'vela.serviceEndpoints',
+				JSON.stringify({ bundlerServiceURL: relay, genesisServiceURL: genesis })
+			);
 			localStorage.setItem('vela.peerconnectRelay', peerconnect);
 		},
 		[GENESIS, RELAY, PEERCONNECT]

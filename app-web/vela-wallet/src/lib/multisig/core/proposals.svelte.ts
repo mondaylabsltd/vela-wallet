@@ -30,7 +30,14 @@ import {
 } from './kernel';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
-import { fetchProposals, submitApproval, type Proposal } from './service';
+import {
+	fetchProposals,
+	genesisServiceURL,
+	probeService,
+	submitApproval,
+	type Proposal
+} from './service';
+import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
 import { externalSigning } from '../external/signing.svelte';
@@ -173,16 +180,23 @@ export function readProposal(
  * members now, and nothing may be proposed from them (a nonce taken from a
  * list that is not there would be one an open proposal already holds).
  * Throws when the members cannot be read.
+ *
+ * `background`: nobody is waiting on this read (the refresh). `mailbox:
+ * false` skips the mailbox — the service is away, and was asked once for
+ * the whole round (`serviceOutage`).
  */
 export async function readChain(
 	account: MultisigAccount,
 	chainId: number,
-	previous: Proposal[] | null = null
+	previous: Proposal[] | null = null,
+	{ background = false, mailbox: ask = true }: { background?: boolean; mailbox?: boolean } = {}
 ): Promise<ChainState & { proposals: Proposal[] }> {
 	const [members, answer] = await Promise.all([
 		readMembers(chainId, account.address, account.genesis),
 		// `false`: unread (a `null` is the mailbox knowing nothing of it).
-		fetchProposals(chainId, account.address).catch(() => false as const)
+		ask
+			? fetchProposals(chainId, account.address, { background }).catch(() => false as const)
+			: (false as const)
 	]);
 	const mailbox = answer !== false;
 	const list = answer === false ? (previous ?? []) : (answer?.proposals ?? []);
@@ -219,6 +233,11 @@ class Proposals {
 	#inflight: Promise<void> | null = null;
 	/** The last list the mailbox gave, per chain: kept while it cannot be read. */
 	#lists = new Map<number, Proposal[]>();
+	/** The service those lists came from: another one's say nothing of it. */
+	#source: string | null = null;
+	#chainIds: number[] = [];
+	#account: MultisigAccount | null = null;
+	#online: (() => void) | null = null;
 
 	get items(): ProposalItem[] {
 		return this.chains.flatMap((c) => c.items).sort(sortKey);
@@ -234,23 +253,54 @@ class Proposals {
 		const address = account?.address ?? null;
 		if (this.#timer) clearInterval(this.#timer);
 		this.#timer = null;
+		if (this.#online) window.removeEventListener('online', this.#online);
+		this.#online = null;
 		if (!sameAddress(this.#address, address)) {
 			this.chains = [];
 			this.#lists.clear();
 			this.stale = false;
 		}
 		this.#address = address;
+		this.#account = account;
+		this.#chainIds = chainIds;
 		if (!account) return;
 		void this.refresh(account, chainIds);
+		// Back online: the outage is over as far as anyone knows — read now.
+		if (typeof window !== 'undefined') {
+			this.#online = () => this.retry();
+			window.addEventListener('online', this.#online);
+		}
 		this.#timer = setInterval(() => {
 			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
 			void this.refresh(account, chainIds);
 		}, 12_000);
 	}
 
+	/**
+	 * Whether the stale list is stale because the multisig service is away
+	 * (rather than slow, or a chain unread): said as such, with a Retry.
+	 */
+	get unreachable(): boolean {
+		return this.stale && serviceOutage.down;
+	}
+
+	/** The person's Retry (or `online`): ask the service now, whatever its schedule. */
+	retry(): Promise<void> {
+		serviceOutage.reset();
+		const account = this.#account;
+		return account ? this.refresh(account, this.#chainIds) : Promise.resolve();
+	}
+
 	/** Re-read every chain the multisig is used on. One refresh at a time. */
 	refresh(account: MultisigAccount, chainIds: number[]): Promise<void> {
 		if (this.#inflight) return this.#inflight;
+		// Another service (Settings): the lists the last one gave are not its.
+		const source = genesisServiceURL();
+		if (this.#source !== source) {
+			this.#lists.clear();
+			if (this.#source !== null) this.chains = [];
+			this.#source = source;
+		}
 		this.loading = this.chains.length === 0;
 		const followed = () => sameAddress(this.#address, account.address);
 		// Slow is said as stale: "No activity yet" over transactions the
@@ -261,11 +311,17 @@ class Proposals {
 		const run = (async () => {
 			let failed = false;
 			const next: ChainState[] = [];
+			// While the service is away: nothing until its next step, then one
+			// probe for every network — not a failed read per network per round.
+			const mailbox = await serviceOutage.available(probeService);
 			await Promise.all(
 				chainIds.map(async (chainId) => {
 					const known = followed() ? (this.#lists.get(chainId) ?? null) : null;
 					try {
-						const read = await readChain(account, chainId, known);
+						const read = await readChain(account, chainId, known, {
+							background: true,
+							mailbox
+						});
 						if (!read.mailbox) failed = true;
 						else if (followed()) this.#lists.set(chainId, read.proposals);
 						next.push({

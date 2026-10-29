@@ -396,12 +396,15 @@ fn read_store() -> NetShellResult {
             passkey_index_url: endpoints.passkey_index_url,
             bundler_service_url: endpoints.bundler_service_url,
             fiat_rates_url: endpoints.fiat_rates_url,
+            // Multisig accounts are the web's: this shell has no such service.
+            genesis_service_url: None,
         },
         provider_keys: NetProviderKeys {
             alchemy: provider_keys.alchemy,
             drpc: provider_keys.drpc,
             ankr: provider_keys.ankr,
         },
+        multisig_service: false,
     }
 }
 
@@ -1027,6 +1030,7 @@ mod tests {
                 passkey_index_url: "https://idx.example".to_owned(),
                 bundler_service_url: "https://bundler.example".to_owned(),
                 fiat_rates_url: "https://rates.example".to_owned(),
+                ..NetServiceEndpoints::default()
             })
             .is_err()
             {

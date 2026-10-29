@@ -573,7 +573,8 @@
     "notFound": "No multisig with this address is known yet. If it was just created, try again in a minute.",
     "unavailable": "Couldn't reach the service. Try again.",
     "unsupported": "This Safe's version isn't supported yet.",
-    "notMultisig": "This address isn't a multisig Vela can read."
+    "notMultisig": "This address isn't a multisig Vela can read.",
+    "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network:"
    },
    "external": {
     "pageTitle": "Sign with your wallet for Vela",
@@ -640,6 +641,12 @@
     "couldNotCheck": "Couldn't check",
     "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
     "remove": "Remove from this device"
+   },
+   "service": {
+    "customNote": "Using a custom multisig service ({{host}})",
+    "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
+    "retry": "Retry",
+    "noNetworks": "The multisig service serves none of your networks."
    }
   },
   "balanceDetailStatusOwnNode": "Your node isn't answering",
@@ -2230,19 +2237,21 @@
   },
   "endpoints": {
    "modalTitle": "Service Endpoints",
-   "description": "These services power your wallet.\nYou can deploy your own instances for full self-custody.",
-   "chainDataLabel": "CHAIN DATA INDEX",
+   "description": "Each can be replaced with one you host yourself.",
+   "chainDataLabel": "Chain data index",
    "chainDataHint": "Provides network info, token data, and chain logos",
-   "passkeyLabel": "PASSKEY INDEX",
+   "passkeyLabel": "Passkey index",
    "passkeyHint": "Stores passkey public keys for cross-device sign-in",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Transaction relay",
    "bundlerHint": "Vela Relay compatible endpoint required",
-   "fiatLabel": "FIAT RATES",
+   "fiatLabel": "Fiat rates",
    "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
-   "resetToDefaults": "Reset all four to defaults",
+   "genesisLabel": "Multisig service",
+   "genesisHint": "Finds multisigs and shares the transactions waiting for approval. It sees your multisigs' addresses and proposals, and never decides they're right — Vela checks every record and approval itself.",
+   "resetToDefaults": "Restore all defaults",
    "selfHostGuide": "Self-hosting guide →",
    "resetTitle": "Reset the service endpoints?",
-   "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
+   "resetBody": "Every service goes back to Vela's own address. The addresses you entered here are forgotten.",
    "resetConfirm": "Reset",
    "resetCancel": "Cancel"
   },

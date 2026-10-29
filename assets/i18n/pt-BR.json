@@ -575,7 +575,8 @@
     "notFound": "Nenhuma multisig com este endereço é conhecida ainda. Se ela acabou de ser criada, tente de novo em um minuto.",
     "unavailable": "Não foi possível acessar o serviço. Tente novamente.",
     "unsupported": "Esta versão do Safe ainda não é compatível.",
-    "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler."
+    "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler.",
+    "chooseNetwork": "Ainda nada indica em qual rede este multisig é usado. Escolha a rede dele:"
    },
    "external": {
     "pageTitle": "Assinar para a Vela",
@@ -642,6 +643,12 @@
     "couldNotCheck": "Não foi possível verificar",
     "backupNote": "A configuração também fica na Ethereum, para que o multisig possa ser encontrado e implantado a partir de lá. Uma conta deste dispositivo paga a taxa.",
     "remove": "Remover deste dispositivo"
+   },
+   "service": {
+    "customNote": "Usando um serviço multisig próprio ({{host}})",
+    "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
+    "retry": "Tentar de novo",
+    "noNetworks": "O serviço multisig não atende nenhuma das suas redes."
    }
   },
   "balanceDetailStatusOwnNode": "Seu nó não está respondendo",
@@ -2237,19 +2244,21 @@
   },
   "endpoints": {
    "modalTitle": "Endpoints de serviço",
-   "description": "Estes serviços mantêm sua carteira funcionando.\nVocê pode implantar suas próprias instâncias para autocustódia total.",
-   "chainDataLabel": "ÍNDICE DE DADOS DA CHAIN",
+   "description": "Cada um pode ser trocado por um que você mesmo hospede.",
+   "chainDataLabel": "Índice de dados da chain",
    "chainDataHint": "Fornece informações de rede, dados de tokens e logos das chains",
-   "passkeyLabel": "ÍNDICE DE PASSKEY",
+   "passkeyLabel": "Índice de passkey",
    "passkeyHint": "Guarda as chaves públicas das passkeys para login em vários dispositivos",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Relay de transações",
    "bundlerHint": "É necessário um endpoint compatível com o Vela Relay",
-   "fiatLabel": "COTAÇÕES FIAT",
+   "fiatLabel": "Cotações fiat",
    "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
-   "resetToDefaults": "Restaurar os quatro",
+   "genesisLabel": "Serviço multisig",
+   "genesisHint": "Encontra multisigs e compartilha as transações que aguardam aprovação. Ele vê os endereços dos seus multisigs e as propostas, mas nunca decide se estão corretos: a Vela verifica por conta própria cada registro e cada aprovação.",
+   "resetToDefaults": "Restaurar todos os padrões",
    "selfHostGuide": "Guia de auto-hospedagem →",
    "resetTitle": "Restaurar os endpoints de serviço?",
-   "resetBody": "Os quatro serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
+   "resetBody": "Todos os serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
    "resetConfirm": "Restaurar",
    "resetCancel": "Cancelar"
   },

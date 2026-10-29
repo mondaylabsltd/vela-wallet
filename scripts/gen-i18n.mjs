@@ -1013,10 +1013,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   meaning, chosen by exactly one key in every locale, not a plural form.
 //   2253 + 1 = 2254 leaves, 120 branches.
 // 2387 (Account panel copy, 2026-10-28): 2267 leaves, 120 branches.
-if (PATHS.length !== 2387) fail(`expected 2387 paths (2267 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2267) fail(`expected 2267 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
-if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
+// 2380 (the multisig service, one more service endpoint, 2026-10-29): +
+//   `settingsModals.endpoints.{genesisLabel, genesisHint}` (its field, and
+//   what it sees), + the `home.multisig.service` branch (the custom-service
+//   note, the service-away note and its Retry, the create sheet's "serves
+//   none of your networks"). 2253 + 6 = 2259 leaves, 120 + 1 = 121 branches.
+// 2381 (a multisig added by address is used where it is deployed or recorded;
+//   when nothing says, the person is asked): + `home.multisig.add.chooseNetwork`.
+//   2259 + 1 = 2260 leaves, 121 branches.
+// 2395 (Multisig service, 2026-10-28): 2274 leaves, 121 branches.
+if (PATHS.length !== 2395) fail(`expected 2395 paths (2274 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2274) fail(`expected 2274 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

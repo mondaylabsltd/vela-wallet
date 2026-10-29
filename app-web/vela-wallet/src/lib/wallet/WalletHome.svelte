@@ -9,6 +9,7 @@
 	import BottomSheet from './ui/BottomSheet.svelte';
 	import ChainFilterList from './ui/ChainFilterList.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
+	import GroupNote from './ui/GroupNote.svelte';
 	import SectionHeader from './ui/SectionHeader.svelte';
 	import SkeletonRow from './ui/SkeletonRow.svelte';
 	import TabBar from './ui/TabBar.svelte';
@@ -42,6 +43,8 @@
 		onasset?: (row: AssetRowModel) => void;
 		/** A card at the top of the home, under the header (the app prompt). Live only. */
 		banner?: Snippet;
+		/** An activity group's own action (its note's Retry), by id. Live only. */
+		ongroupaction?: (id: string) => void;
 	}
 
 	let {
@@ -55,7 +58,8 @@
 		onasset,
 		onstatus,
 		onbalancerefresh,
-		banner
+		banner,
+		ongroupaction
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -116,7 +120,7 @@
 		{:else}
 			{#each model.activityGroups as group (group.label)}
 				<p class="day">{group.label}</p>
-				{#if group.note}<p class="note" role="status">{group.note}</p>{/if}
+				<GroupNote {group} onaction={ongroupaction} />
 				<ul>
 					{#each group.rows as row, i (i)}
 						<li>
@@ -214,12 +218,6 @@
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
-	}
-
-	.note {
-		margin: 0 0 var(--space-sm);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
 	}
 
 	ul {

@@ -224,7 +224,8 @@
         "notFound": "No multisig with this address is known yet. If it was just created, try again in a minute.",
         "unavailable": "Couldn't reach the service. Try again.",
         "unsupported": "This Safe's version isn't supported yet.",
-        "notMultisig": "This address isn't a multisig Vela can read."
+        "notMultisig": "This address isn't a multisig Vela can read.",
+        "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network:"
       },
       "external": {
         "pageTitle": "Sign with your wallet for Vela",
@@ -291,6 +292,12 @@
         "couldNotCheck": "Couldn't check",
         "backupNote": "Its setup is kept on Ethereum as well, so the multisig can be found and deployed from there. An account on this device pays the fee.",
         "remove": "Remove from this device"
+      },
+      "service": {
+        "customNote": "Using a custom multisig service ({{host}})",
+        "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
+        "retry": "Retry",
+        "noNetworks": "The multisig service serves none of your networks."
       }
     },
     "balanceDetailStatusOwnNode": "Your node isn't answering",

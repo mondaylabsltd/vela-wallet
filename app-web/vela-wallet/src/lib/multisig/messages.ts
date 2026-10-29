@@ -225,6 +225,16 @@ export interface MultisigMessages {
 		backupNote: string;
 		remove: string;
 	};
+	/** What the multisig area says of its service (set in Settings → Service Endpoints). */
+	service: {
+		/** The multisig area's note while a custom service is in use (`{{host}}`). */
+		customNote: string;
+		/** Activity's waiting group while the service is away, over the last list. */
+		unreachableNote: string;
+		retry: string;
+		/** The create sheet: the service's chain table holds none of the wallet's networks. */
+		noNetworks: string;
+	};
 	add: {
 		title: string;
 		intro: string;
@@ -234,6 +244,8 @@ export interface MultisigMessages {
 		unavailable: string;
 		unsupported: string;
 		notMultisig: string;
+		/** Nothing says which network it is used on: the person picks one. */
+		chooseNetwork: string;
 	};
 }
 
@@ -445,6 +457,12 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		backupNote: '',
 		remove: ''
 	},
+	service: {
+		customNote: '',
+		unreachableNote: '',
+		retry: '',
+		noNetworks: ''
+	},
 	add: {
 		title: '',
 		intro: '',
@@ -453,6 +471,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notFound: '',
 		unavailable: '',
 		unsupported: '',
-		notMultisig: ''
+		notMultisig: '',
+		chooseNetwork: ''
 	}
 };

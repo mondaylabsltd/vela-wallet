@@ -7,6 +7,10 @@
 	 * the end: the creator's proof, with which the genesis service records the
 	 * multisig. Nothing is deployed and no fee is paid until its first
 	 * transfer out.
+	 *
+	 * The first network is where that record is written, so only the
+	 * networks the service says it serves (`/api/health`'s chain table) are
+	 * offered — all of them while that is not known.
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -25,6 +29,8 @@
 	import { localOwners } from '../core/owners';
 	import { addLink, shareOrigin } from '../core/link';
 	import { memberProblem } from '../core/members';
+	import { servedChains, servedOnly } from '../core/service';
+	import CustomServiceNote from './CustomServiceNote.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -41,8 +47,13 @@
 	let { m, locale, current, wide, closeLabel, onclose, oncreated }: Props = $props();
 
 	const accounts = loadAccounts();
-	const networks = spaceNetworksSync();
+	const spaceNetworks = spaceNetworksSync();
 	const saltNonce = newSaltNonce();
+
+	/** The chains the service serves; `null` while not known (nothing narrowed). */
+	let served = $state<Set<number> | null>(null);
+	void servedChains().then((chains) => (served = chains));
+	const networks = $derived(servedOnly(spaceNetworks, served));
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
@@ -54,8 +65,14 @@
 	let threshold = $state(1);
 	let name = $state('');
 	let chainId = $state(
-		networks.find((n) => n.chainId === 100)?.chainId ?? networks[0]?.chainId ?? 100
+		spaceNetworks.find((n) => n.chainId === 100)?.chainId ?? spaceNetworks[0]?.chainId ?? 100
 	);
+	// The service's table came: a network it does not serve is not the pick.
+	$effect(() => {
+		if (networks.length > 0 && !networks.some((n) => n.chainId === chainId)) {
+			chainId = (networks.find((n) => n.chainId === 100) ?? networks[0]).chainId;
+		}
+	});
 	let creatorChoice = $state<string | null>(null);
 	/** vis-19: which of the review's two choices has its menu open. */
 	let menu = $state<'network' | 'creator' | null>(null);
@@ -317,6 +334,7 @@
 				</li>
 			{/each}
 		</ol>
+		<CustomServiceNote {m} />
 		<!-- vis-19: the app's own select (the settings dropdown and its rows),
 		     not the browser's — a native menu drew in the system's face and
 		     colours, the one control in the sheet that did. -->
@@ -338,6 +356,9 @@
 				}}
 			/>
 		</div>
+		{#if networks.length === 0}
+			<p class="error" role="alert">{m.service.noNetworks}</p>
+		{/if}
 		{#if local.length > 1}
 			<div class="select">
 				<span>{m.create.creator}</span>
@@ -372,7 +393,7 @@
 				variant="primary"
 				shape="rounded"
 				loading={busy}
-				disabled={busy || !creator || !draft}
+				disabled={busy || !creator || !draft || networks.length === 0}
 				onclick={create}>{m.create.create}</Button
 			>
 		</div>

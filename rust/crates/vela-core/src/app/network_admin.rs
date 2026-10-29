@@ -191,6 +191,10 @@ pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
 pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
 pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
+/// The multisig service (the Safe Genesis Registry's API): where a multisig's
+/// genesis is recorded and its proposals are shared. A shell with multisig
+/// accounts only ([`NetShellResult::StoreLoaded`]'s `multisig_service`).
+pub const DEFAULT_GENESIS_SERVICE_URL: &str = "https://safe-genesis.getvela.app";
 
 /// The curated public RPCs of the built-in networks — the pool's `public`
 /// tier: below a person's own endpoint, a provider key and the network's
@@ -369,6 +373,17 @@ pub fn service_identity(field: NetEndpointField) -> Option<&'static str> {
         NetEndpointField::BundlerService => Some("vela-relay"),
         // Third-party — validated by rate-map shape, not identity.
         NetEndpointField::FiatRates => None,
+        NetEndpointField::GenesisService => Some(super::genesis_service::GENESIS_SERVICE_IDENTITY),
+    }
+}
+
+/// Whether a health response's `status` is one this endpoint accepts: `"ok"`,
+/// or — the multisig service, whose `/api/health` reports what it serves
+/// rather than a status — none at all.
+pub fn health_status_accepted(field: NetEndpointField, status: Option<&str>) -> bool {
+    match field {
+        NetEndpointField::GenesisService => matches!(status, None | Some("ok")),
+        _ => status == Some("ok"),
     }
 }
 
@@ -1000,7 +1015,7 @@ pub struct NetNetworkConfig {
     pub only_mine: bool,
 }
 
-/// The four service endpoints — 1:1 `ServiceEndpoints` under
+/// The service endpoints — 1:1 `ServiceEndpoints` under
 /// `vela.serviceEndpoints`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -1009,6 +1024,15 @@ pub struct NetServiceEndpoints {
     pub passkey_index_url: String,
     pub bundler_service_url: String,
     pub fiat_rates_url: String,
+    /// The multisig service (a shell with multisig accounts; the others keep
+    /// the default and never show it). Absent from a record written before
+    /// it existed: the default.
+    #[serde(default = "default_genesis_service_url")]
+    pub genesis_service_url: String,
+}
+
+fn default_genesis_service_url() -> String {
+    DEFAULT_GENESIS_SERVICE_URL.to_owned()
 }
 
 impl Default for NetServiceEndpoints {
@@ -1018,6 +1042,7 @@ impl Default for NetServiceEndpoints {
             passkey_index_url: DEFAULT_PASSKEY_INDEX_URL.to_owned(),
             bundler_service_url: DEFAULT_BUNDLER_SERVICE_URL.to_owned(),
             fiat_rates_url: DEFAULT_FIAT_RATES_URL.to_owned(),
+            genesis_service_url: DEFAULT_GENESIS_SERVICE_URL.to_owned(),
         }
     }
 }
@@ -1052,6 +1077,7 @@ impl NetServiceEndpoints {
             NetEndpointField::PasskeyIndex => &self.passkey_index_url,
             NetEndpointField::BundlerService => &self.bundler_service_url,
             NetEndpointField::FiatRates => &self.fiat_rates_url,
+            NetEndpointField::GenesisService => &self.genesis_service_url,
         }
     }
 
@@ -1061,6 +1087,7 @@ impl NetServiceEndpoints {
             NetEndpointField::PasskeyIndex => self.passkey_index_url = value,
             NetEndpointField::BundlerService => self.bundler_service_url = value,
             NetEndpointField::FiatRates => self.fiat_rates_url = value,
+            NetEndpointField::GenesisService => self.genesis_service_url = value,
         }
     }
 }
@@ -1074,6 +1101,7 @@ pub fn default_endpoint(field: NetEndpointField) -> &'static str {
         NetEndpointField::PasskeyIndex => DEFAULT_PASSKEY_INDEX_URL,
         NetEndpointField::BundlerService => DEFAULT_BUNDLER_SERVICE_URL,
         NetEndpointField::FiatRates => DEFAULT_FIAT_RATES_URL,
+        NetEndpointField::GenesisService => DEFAULT_GENESIS_SERVICE_URL,
     }
 }
 
@@ -1087,6 +1115,8 @@ pub struct NetStoredEndpoints {
     pub passkey_index_url: Option<String>,
     pub bundler_service_url: Option<String>,
     pub fiat_rates_url: Option<String>,
+    #[serde(default)]
+    pub genesis_service_url: Option<String>,
 }
 
 /// One API key per provider — 1:1 `RpcProviderKeys` under `vela.rpcProviders`.
@@ -1289,15 +1319,32 @@ pub enum NetEndpointField {
     PasskeyIndex,
     BundlerService,
     FiatRates,
+    /// The multisig service — shown, probed and used only by a shell with
+    /// multisig accounts ([`NetShellResult::StoreLoaded`]'s `multisig_service`).
+    GenesisService,
 }
 
-/// The four fields in UI order (SettingsScreen.tsx:462-467).
-pub const ENDPOINT_FIELDS: [NetEndpointField; 4] = [
+/// The fields in UI order (SettingsScreen.tsx:462-467), the multisig
+/// service last.
+pub const ENDPOINT_FIELDS: [NetEndpointField; 5] = [
     NetEndpointField::EthereumData,
     NetEndpointField::PasskeyIndex,
     NetEndpointField::BundlerService,
     NetEndpointField::FiatRates,
+    NetEndpointField::GenesisService,
 ];
+
+/// Whether this shell has `field`: the multisig service only where multisigs are.
+fn has_endpoint(model: &Model, field: NetEndpointField) -> bool {
+    field != NetEndpointField::GenesisService || model.multisig_service
+}
+
+/// The fields this shell has, in UI order.
+fn endpoint_fields(model: &Model) -> impl Iterator<Item = NetEndpointField> + '_ {
+    ENDPOINT_FIELDS
+        .into_iter()
+        .filter(|&field| has_endpoint(model, field))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1442,6 +1489,10 @@ pub enum NetShellResult {
         network_configs: Vec<NetNetworkConfig>,
         endpoints: NetStoredEndpoints,
         provider_keys: NetProviderKeys,
+        /// This shell keeps multisig accounts, so the multisig service is one
+        /// of its endpoints (shown, probed, reset). Absent: it is not.
+        #[serde(default)]
+        multisig_service: bool,
     },
     /// A best-effort write acknowledged. Never changes state.
     Written,
@@ -1857,6 +1908,9 @@ pub struct Model {
     /// Fields whose last blur was refused by the URL rule — nothing saved.
     /// Cleared by the next edit of that field, or a reset.
     endpoint_refused: BTreeSet<NetEndpointField>,
+    /// The shell keeps multisig accounts: the multisig service is one of its
+    /// endpoints ([`NetShellResult::StoreLoaded`]).
+    multisig_service: bool,
     provider_keys: NetProviderKeys,
     provider_drafts: BTreeMap<NetProviderId, String>,
     provider_tests: BTreeMap<NetProviderId, ProviderTest>,
@@ -2267,6 +2321,13 @@ impl App for NetworkAdmin {
 
             // -- endpoints ---------------------------------------------------
             Event::EndpointsOpened | Event::EndpointsRefreshRequested => endpoint_probe_wave(model),
+            // A field this shell does not have (the multisig service where
+            // there are no multisigs) is not edited or saved from anywhere.
+            Event::EndpointEdited { field, .. } | Event::EndpointBlurred { field }
+                if !has_endpoint(model, field) =>
+            {
+                Command::done()
+            }
             Event::EndpointEdited { field, value } => {
                 model.endpoint_drafts.set(field, value);
                 model.endpoint_refused.remove(&field);
@@ -2306,9 +2367,8 @@ impl App for NetworkAdmin {
             loaded: model.loaded,
             networks: network_rows(model),
             wizard: wizard_view(model),
-            endpoints: ENDPOINT_FIELDS
-                .iter()
-                .map(|&field| NetEndpointView {
+            endpoints: endpoint_fields(model)
+                .map(|field| NetEndpointView {
                     field,
                     value: model.endpoint_drafts.get(field).to_owned(),
                     default_value: NetServiceEndpoints::default().get(field).to_owned(),
@@ -3860,7 +3920,8 @@ fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
     model.probe_when_loaded = false;
     model.endpoint_gen = next_gen(model);
     let mut ops = Vec::new();
-    for &field in &ENDPOINT_FIELDS {
+    let fields: Vec<NetEndpointField> = endpoint_fields(model).collect();
+    for field in fields {
         let url = model.endpoint_drafts.get(field).to_owned();
         if url.is_empty() {
             // 'Empty URL' (SettingsScreen.tsx:349).
@@ -3974,8 +4035,8 @@ fn service_health_result(
         NetHealthBody::Identity { service, status } => {
             // Invariant ⑥: the endpoint must BE the service it claims —
             // a passkey index pointed elsewhere is a login-safety failure.
-            let identity_ok =
-                identity_accepted(field, service.as_deref()) && status.as_deref() == Some("ok");
+            let identity_ok = identity_accepted(field, service.as_deref())
+                && health_status_accepted(field, status.as_deref());
             if identity_ok {
                 NetServiceHealth::Ok {
                     latency_ms,
@@ -4199,10 +4260,12 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             network_configs,
             endpoints,
             provider_keys,
+            multisig_service,
         } => {
             if attempt != model.load_gen {
                 return Command::done();
             }
+            model.multisig_service = multisig_service;
             model.custom_networks = custom_networks;
             model.overrides = network_configs;
             model.endpoints = NetServiceEndpoints {
@@ -4218,6 +4281,9 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
                 fiat_rates_url: endpoints
                     .fiat_rates_url
                     .unwrap_or_else(|| DEFAULT_FIAT_RATES_URL.to_owned()),
+                genesis_service_url: endpoints
+                    .genesis_service_url
+                    .unwrap_or_else(default_genesis_service_url),
             };
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
