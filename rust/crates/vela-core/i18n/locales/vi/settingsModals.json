@@ -103,16 +103,17 @@
       "urlRefused": "Chưa lưu — hãy dùng địa chỉ https:// (http:// thường chỉ cho máy tính này). Địa chỉ trước đó vẫn đang được dùng."
     },
     "backup": {
-      "title": "Sao chép bản ghi của ví này sang Ethereum",
-      "backedUp": "Đã sao chép sang Ethereum",
-      "notBackedUp": "Chưa sao chép (không bắt buộc)",
+      "title": "Sao lưu bản ghi tài khoản lên Ethereum",
+      "backedUp": "Đã sao lưu",
+      "notBackedUp": "Chưa sao lưu (không bắt buộc)",
       "couldNotCheck": "Không kiểm tra được. Chạm để thử lại.",
-      "cannotCopy": "Ví cũ này không sao chép được",
-      "explain": "Bản ghi của ví trên Gnosis là công khai: địa chỉ và tên ví, cùng tên, khóa công khai, ID thông tin xác thực và kiểu trình xác thực của từng khóa. Thiết bị có một trong các passkey của bạn tìm ra ví này nhờ bản ghi đó. Tại đây, một bản sao cũng được lưu lên Ethereum. Đây là một giao dịch Ethereum: bạn xác nhận bằng passkey và trả phí mạng bằng một coin bạn có trên Ethereum. Bản sao không thể chuyển tiền và không lấy lại được passkey đã mất."
+      "cannotCopy": "Tài khoản cũ này không sao lưu được",
+      "explain": "Thiết bị mới tìm ra tài khoản này qua bản ghi công khai trên Gnosis. Một bản trên Ethereum giúp vẫn tìm được tài khoản khi Gnosis ngừng hoạt động. Tốn một lần phí mạng Ethereum. Đây không phải bản sao lưu passkey và không thể chuyển tiền."
     },
     "keys": {
       "title": "Khóa",
-      "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
+      "subtitle": "Passkey nào trong số này cũng ký được cho tài khoản này trên mọi mạng.",
+      "subtitleSingle": "Passkey này ký cho tài khoản này trên mọi mạng.",
       "keyN": "Khóa {{n}}",
       "notSynced": "Gắn với thiết bị",
       "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",

@@ -112,16 +112,16 @@ class RegistryBackupTest {
         // Still asking: the title and "Checking…", inert.
         val asking = SettingsLive.ethereumBackupRow(null, strings)!!
         assertEquals(SettingsLive.ETHEREUM_BACKUP_ROW, asking.id)
-        assertEquals("Copy this wallet's record to Ethereum", asking.title)
+        assertEquals("Back up the account record on Ethereum", asking.title)
         assertEquals("Checking…" to RowTrailing.None, asking.subtitle to asking.trailing)
 
         val copied = rowFor(done("backed_up", row = Triple("backedUp", "positive", "none")))!!
-        assertEquals("Copied to Ethereum" to RowTrailing.None, copied.subtitle to copied.trailing)
+        assertEquals("Backed up" to RowTrailing.None, copied.subtitle to copied.trailing)
         assertTrue("said in the positive tone", copied.subtitlePositive)
 
         // Not a warning: a copy is optional and costs a fee. A tap opens the sheet.
         val notYet = rowFor(done("not_backed_up", withCall = true, row = Triple("notBackedUp", "neutral", "copy")))!!
-        assertEquals("Not copied yet (optional)" to RowTrailing.Chevron, notYet.subtitle to notYet.trailing)
+        assertEquals("Not backed up (optional)" to RowTrailing.Chevron, notYet.subtitle to notYet.trailing)
         assertFalse(notYet.subtitlePositive)
 
         // The retry (dead-controls #8): the glyph that says "ask again", not a
@@ -132,7 +132,7 @@ class RegistryBackupTest {
         // A wallet from before registry V13: a calm end, nothing to tap. It
         // used to read "Couldn't check" and retry for ever.
         val never = rowFor(done("not_copyable", row = Triple("cannotCopy", "neutral", "none")))!!
-        assertEquals("This older wallet can't be copied" to RowTrailing.None, never.subtitle to never.trailing)
+        assertEquals("This older account can't be backed up" to RowTrailing.None, never.subtitle to never.trailing)
         assertFalse(never.subtitlePositive)
 
         // The ripple goes exactly where the action is.
@@ -234,11 +234,11 @@ class RegistryBackupTest {
         val titles = listOf(SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4)
             .map { SettingsFixtures.buildState(it, strings).keys!!.backup!! }
         assertEquals(
-            listOf("Not copied yet (optional)", "Copied to Ethereum", "Couldn't check. Tap to try again.", "This older wallet can't be copied"),
+            listOf("Not backed up (optional)", "Backed up", "Couldn't check. Tap to try again.", "This older account can't be backed up"),
             titles.map { it.subtitle },
         )
         assertEquals(listOf(RowTrailing.Chevron, RowTrailing.None, RowTrailing.Retry, RowTrailing.None), titles.map { it.trailing })
-        assertTrue(titles.all { it.title == "Copy this wallet's record to Ethereum" })
+        assertTrue(titles.all { it.title == "Back up the account record on Ethereum" })
     }
 
     /** "Not copied yet": the core's row, and the call a tap sends. */
@@ -308,7 +308,7 @@ class RegistryBackupTest {
             strings,
             signingDomain = "example.com",
         ).keys!!
-        assertEquals("Keys on example.com", block.domain)
+        assertEquals("Your passkeys stay on your devices and sign only for example.com", block.domain)
     }
 
     @Test

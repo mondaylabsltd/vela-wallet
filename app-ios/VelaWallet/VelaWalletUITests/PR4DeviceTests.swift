@@ -276,7 +276,7 @@ final class PR4DeviceTests: XCTestCase {
                 let at = Date().timeIntervalSince(started)
                 guard let seen = see(app) else { settle(0.2); continue }
                 let header = seen.texts.first { $0.label.hasPrefix("钥匙") }
-                let record = seen.text("把钱包记录复制到以太坊")
+                let record = seen.text("在以太坊备份账户记录")
                 let explain = seen.id("keys.backupExplain")
                 let venue = seen.ids("settings.venue").min { $0.frame.minY < $1.frame.minY }
                 let appearance = seen.text("外观")

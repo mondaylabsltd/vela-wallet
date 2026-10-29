@@ -68,7 +68,7 @@
       "pageSave": "Save",
       "pageAdd": "Add a self-hosted signing page",
       "pageDuplicate": "That page is already saved.",
-      "keysOn": "Keys on {{domain}}",
+      "keysOn": "Your passkeys stay on your devices and sign only for {{domain}}",
       "pageSelfHosted": "Self-hosted · {{domain}}",
       "pageTrust": "Trust this version",
       "pageRename": "Rename",
@@ -76,15 +76,15 @@
       "pageName": "Name"
     },
     "venue": {
-      "title": "Where you review and sign",
-      "subtitle": "For this account's transactions and messages. Your keys don't change.",
-      "inVela": "Review and sign in Vela",
-      "inVelaBody": "Vela's own signing sheet",
-      "page": "Review and sign on a trusted signing page",
-      "pageBody": "A zero-dependency page shows exactly what you sign",
-      "blockedApp": "Vela can't reach keys on {{domain}}.",
-      "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}.",
-      "blockedWeb": "Signing pages open from the Vela apps, not the web."
+      "title": "How you sign",
+      "subtitle": "Choose where this account's transactions and messages are confirmed. Your keys stay the same.",
+      "inVela": "Sign with Vela",
+      "inVelaBody": "Vela's own confirm sheet",
+      "page": "Sign on a trusted signing page",
+      "pageBody": "A standalone page that signs exactly what it shows",
+      "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
+      "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
+      "blockedWeb": "Not available on the web. Open it from the Vela app."
     },
     "advanced": {
       "networksTitle": "Networks",

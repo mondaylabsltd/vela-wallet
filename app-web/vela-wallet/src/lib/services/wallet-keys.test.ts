@@ -172,6 +172,31 @@ describe('before any chain is asked', () => {
 		expect(done.rows[0].name).toBe('Key 1');
 	});
 
+	// One key is "This passkey signs…", several "Any one of them signs…" — a
+	// difference of meaning, chosen by exactly one key in every locale. Not a
+	// plural form: Chinese has one for every count and would never say it.
+	it('says the one-key line for exactly one key, in every locale', () => {
+		const one = wallet();
+		one.keys = one.keys.slice(0, 1);
+		const subtitle = (locale: Parameters<typeof resolveSettingsMessages>[0], account: Account) =>
+			walletKeysModel(deviceOnlyKeys(account), COPIED, resolveSettingsMessages(locale)).subtitle;
+		expect(subtitle('en', one)).toBe('This passkey signs for this account on every network.');
+		expect(subtitle('en', wallet())).toBe(
+			'Any one of them signs for this account on every network.'
+		);
+		expect(subtitle('zh', one)).toBe('这把通行密钥可在所有网络为这个账户签名。');
+		expect(subtitle('zh', wallet())).toBe('任意一把都能在所有网络为这个账户签名。');
+		for (const locale of ['ja', 'ru', 'fr'] as const) {
+			const words = resolveSettingsMessages(locale).keys;
+			expect(subtitle(locale, one), locale).toBe(words.subtitleSingle);
+			expect(subtitle(locale, wallet()), locale).toBe(words.subtitle);
+			expect(words.subtitleSingle, locale).not.toBe(words.subtitle);
+		}
+		// Before the list is known: the general line.
+		const loading = walletKeysModel(null, CHECKING_ROW, m);
+		expect(loading.subtitle).toBe(m.keys.subtitle);
+	});
+
 	it('the copy’s row keeps room for every second line it can say', () => {
 		const model = walletKeysModel(deviceOnlyKeys(wallet()), CHECKING_ROW, m);
 		expect(model.backup?.subtitle).toBe(m.backup.words['componentsUi.funding.checking']);

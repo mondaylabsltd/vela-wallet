@@ -68,7 +68,7 @@
       "pageSave": "保存",
       "pageAdd": "セルフホストの署名ページを追加",
       "pageDuplicate": "このページは保存済みです。",
-      "keysOn": "キーは {{domain}}",
+      "keysOn": "パスキーはあなたの端末に保存され、{{domain}} のためだけに署名します",
       "pageSelfHosted": "セルフホスト · {{domain}}",
       "pageTrust": "このバージョンを信頼",
       "pageRename": "名前を変更",
@@ -76,15 +76,15 @@
       "pageName": "名前"
     },
     "venue": {
-      "title": "確認と署名の場所",
-      "subtitle": "このアカウントの取引とメッセージに適用。キーは変わりません。",
-      "inVela": "Vela で確認して署名",
-      "inVelaBody": "Vela の署名画面",
-      "page": "信頼できる署名ページで確認して署名",
-      "pageBody": "依存ゼロのページで、見たものに署名",
-      "blockedApp": "Vela は {{domain}} のキーを使えません。",
-      "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。",
-      "blockedWeb": "署名ページは Vela アプリでのみ開けます。"
+      "title": "署名の方法",
+      "subtitle": "このアカウントの取引とメッセージをどこで確認するかを選びます。キーは変わりません。",
+      "inVela": "Vela で署名",
+      "inVelaBody": "Vela の確認画面",
+      "page": "信頼できる署名ページで署名",
+      "pageBody": "表示した内容そのままに署名する単独のページ",
+      "blockedApp": "このアカウントのパスキーは {{domain}} のためだけに署名するため、Vela ではここで使えません。",
+      "blockedPage": "このページは {{pageDomain}} にありますが、このアカウントのパスキーは {{domain}} のためだけに署名します。",
+      "blockedWeb": "Web 版では使えません。Vela アプリから開いてください。"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

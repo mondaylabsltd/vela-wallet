@@ -68,7 +68,7 @@
       "pageSave": "Salva",
       "pageAdd": "Aggiungi una pagina di firma ospitata da te",
       "pageDuplicate": "Questa pagina è già salvata.",
-      "keysOn": "Chiavi su {{domain}}",
+      "keysOn": "Le tue passkey restano sui tuoi dispositivi e firmano solo per {{domain}}",
       "pageSelfHosted": "Ospitata da te · {{domain}}",
       "pageTrust": "Fidati di questa versione",
       "pageRename": "Rinomina",
@@ -76,15 +76,15 @@
       "pageName": "Nome"
     },
     "venue": {
-      "title": "Dove controlli e firmi",
-      "subtitle": "Per le transazioni e i messaggi di questo account. Le tue chiavi non cambiano.",
-      "inVela": "Controlla e firma in Vela",
-      "inVelaBody": "La schermata di firma di Vela",
-      "page": "Controlla e firma su una pagina di firma di fiducia",
-      "pageBody": "Una pagina senza dipendenze mostra esattamente ciò che firmi",
-      "blockedApp": "Vela non può usare le chiavi su {{domain}}.",
-      "blockedPage": "Questa pagina è su {{pageDomain}}; le chiavi di questo account sono su {{domain}}.",
-      "blockedWeb": "Le pagine di firma si aprono dalle app di Vela, non dal web."
+      "title": "Come firmi",
+      "subtitle": "Scegli dove confermare le transazioni e i messaggi di questo account. Le tue chiavi restano le stesse.",
+      "inVela": "Firma con Vela",
+      "inVelaBody": "La schermata di conferma di Vela",
+      "page": "Firma su una pagina di firma di fiducia",
+      "pageBody": "Una pagina autonoma che firma esattamente ciò che mostra",
+      "blockedApp": "Le passkey di questo account firmano solo per {{domain}}, quindi Vela non può usarle qui.",
+      "blockedPage": "Questa pagina è su {{pageDomain}}, ma le passkey di questo account firmano solo per {{domain}}.",
+      "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela."
     },
     "advanced": {
       "networksTitle": "Reti",

@@ -103,16 +103,17 @@
       "urlRefused": "Non enregistré : utilisez une adresse https:// (http:// seulement pour cet ordinateur). L'adresse précédente reste utilisée."
     },
     "backup": {
-      "title": "Copier l'enregistrement de ce portefeuille sur Ethereum",
-      "backedUp": "Copié sur Ethereum",
-      "notBackedUp": "Pas encore copié (facultatif)",
+      "title": "Sauvegarder l'enregistrement du compte sur Ethereum",
+      "backedUp": "Sauvegardé",
+      "notBackedUp": "Non sauvegardé (facultatif)",
       "couldNotCheck": "Vérification impossible. Touchez pour réessayer.",
-      "cannotCopy": "Cet ancien portefeuille ne peut pas être copié",
-      "explain": "L'enregistrement de votre portefeuille sur Gnosis est public : son adresse et son nom, et pour chaque clé son nom, sa clé publique, son identifiant d'identification et le modèle d'authentificateur. Un appareil qui a l'une de vos clés d'accès retrouve ce portefeuille grâce à lui. Ici, une copie est aussi enregistrée sur Ethereum. C'est une transaction Ethereum : vous la confirmez avec une clé d'accès et payez ses frais de réseau avec une crypto détenue sur Ethereum. La copie ne peut ni déplacer d'argent ni récupérer une clé d'accès perdue."
+      "cannotCopy": "Cet ancien compte ne peut pas être sauvegardé",
+      "explain": "Un nouvel appareil retrouve ce compte grâce à son enregistrement public sur Gnosis. Une copie sur Ethereum lui permet de le retrouver même quand Gnosis est indisponible. Cela coûte une fois des frais de réseau Ethereum. Ce n'est pas une sauvegarde de vos clés d'accès, et cela ne peut pas déplacer de fonds."
     },
     "keys": {
       "title": "Clés",
-      "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
+      "subtitle": "N'importe laquelle signe pour ce compte sur tous les réseaux.",
+      "subtitleSingle": "Cette clé d'accès signe pour ce compte sur tous les réseaux.",
       "keyN": "Clé {{n}}",
       "notSynced": "Liée à l'appareil",
       "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient.",

@@ -563,7 +563,7 @@ struct HandoffCardTests {
     /// own host.
     @Test func keysOnIsSaidOnlyWhereItIsNews() {
         #expect(SigningPageNames.keysOnLine(url: "https://sign.getvela.app/", domain: "getvela.app", loc: loc)
-                == "Keys on getvela.app")
+                == "Your passkeys stay on your devices and sign only for getvela.app")
         #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "sign.example.com", loc: loc) == nil)
         #expect(SigningPageNames.keysOnLine(url: "https://SIGN.example.com/x/", domain: "sign.example.com", loc: loc) == nil)
         #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "", loc: loc) == nil)
@@ -572,7 +572,7 @@ struct HandoffCardTests {
             pages: SigningPageFixtures.pages, selected: nil, loc: loc, line: SigningPageFixtures.askingLine,
             asksTrust: SigningPageFixtures.asksTrust
         )
-        #expect(choices.map(\.domainLine) == [nil, "Keys on getvela.app", nil])
+        #expect(choices.map(\.domainLine) == [nil, "Your passkeys stay on your devices and sign only for getvela.app", nil])
         // …and offer the answer where the line asks it — never for the
         // official page or Vela's own sheet.
         #expect(choices.map { $0.trust?.version } == [nil, nil, SigningPageFixtures.askingVersion])

@@ -103,16 +103,17 @@
       "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
     },
     "backup": {
-      "title": "Salin catatan dompet ini ke Ethereum",
-      "backedUp": "Sudah disalin ke Ethereum",
-      "notBackedUp": "Belum disalin (opsional)",
+      "title": "Cadangkan catatan akun di Ethereum",
+      "backedUp": "Sudah dicadangkan",
+      "notBackedUp": "Belum dicadangkan (opsional)",
       "couldNotCheck": "Tidak dapat memeriksa. Ketuk untuk coba lagi.",
-      "cannotCopy": "Dompet lama ini tidak dapat disalin",
-      "explain": "Catatan dompet Anda di Gnosis bersifat publik: alamat dan namanya, serta untuk setiap kunci namanya, kunci publik, ID kredensial, dan model autentikatornya. Perangkat yang memiliki salah satu passkey Anda menemukan dompet ini lewat catatan itu. Di sini salinannya juga disimpan di Ethereum. Ini satu transaksi Ethereum: Anda mengonfirmasinya dengan passkey dan membayar biaya jaringannya dengan koin yang Anda miliki di Ethereum. Salinan ini tidak dapat memindahkan uang atau mengembalikan passkey yang hilang."
+      "cannotCopy": "Akun lama ini tidak dapat dicadangkan",
+      "explain": "Perangkat baru menemukan akun ini lewat catatan publiknya di Gnosis. Salinan di Ethereum membuat akun tetap bisa ditemukan saat Gnosis tidak tersedia. Biayanya satu kali biaya jaringan Ethereum. Ini bukan cadangan passkey Anda dan tidak dapat memindahkan dana."
     },
     "keys": {
       "title": "Kunci",
-      "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
+      "subtitle": "Salah satunya saja sudah bisa menandatangani untuk akun ini di semua jaringan.",
+      "subtitleSingle": "Passkey ini menandatangani untuk akun ini di semua jaringan.",
       "keyN": "Kunci {{n}}",
       "notSynced": "Terikat perangkat",
       "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",

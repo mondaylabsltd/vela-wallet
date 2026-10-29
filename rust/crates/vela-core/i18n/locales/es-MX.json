@@ -68,7 +68,7 @@
       "pageSave": "Guardar",
       "pageAdd": "Agregar una página de firma alojada por ti",
       "pageDuplicate": "Esa página ya está guardada.",
-      "keysOn": "Llaves en {{domain}}",
+      "keysOn": "Tus llaves de acceso se quedan en tus dispositivos y solo firman para {{domain}}",
       "pageSelfHosted": "Alojada por ti · {{domain}}",
       "pageTrust": "Confiar en esta versión",
       "pageRename": "Cambiar nombre",
@@ -76,15 +76,15 @@
       "pageName": "Nombre"
     },
     "venue": {
-      "title": "Dónde revisas y firmas",
-      "subtitle": "Para las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
-      "inVela": "Revisa y firma en Vela",
-      "inVelaBody": "La pantalla de firma de Vela",
-      "page": "Revisa y firma en una página de firma de confianza",
-      "pageBody": "Una página sin dependencias muestra exactamente lo que firmas",
-      "blockedApp": "Vela no puede usar las llaves de {{domain}}.",
-      "blockedPage": "Esta página está en {{pageDomain}}; las llaves de esta cuenta están en {{domain}}.",
-      "blockedWeb": "Las páginas de firma se abren desde las apps de Vela, no en la web."
+      "title": "Cómo firmas",
+      "subtitle": "Elige dónde se confirman las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
+      "inVela": "Firmar con Vela",
+      "inVelaBody": "La pantalla de confirmación de Vela",
+      "page": "Firmar en una página de firma de confianza",
+      "pageBody": "Una página independiente que firma exactamente lo que muestra",
+      "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
+      "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
+      "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela."
     },
     "advanced": {
       "networksTitle": "Redes",

@@ -619,7 +619,14 @@ export interface SettingsMessages {
 	/** The keys that control this wallet (spec 062). */
 	keys: {
 		title: string;
+		/** The line under the title for several keys: "Any one of them signs…". */
 		subtitle: string;
+		/**
+		 * The line for exactly one key: "This passkey signs…" — a different
+		 * statement, not a plural form, so it is chosen by the count in every
+		 * locale (Chinese has one plural form and would never pick `_one`).
+		 */
+		subtitleSingle: string;
 		/** `Key {{n}}` — a key nobody named. */
 		keyN: string;
 		synced: string;
@@ -972,6 +979,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.funding.checking',
 	'settingsModals.keys.title',
 	'settingsModals.keys.subtitle',
+	'settingsModals.keys.subtitleSingle',
 	'settingsModals.keys.keyN',
 	'settingsModals.keys.notSynced',
 	'settingsModals.keys.fromDevice',
