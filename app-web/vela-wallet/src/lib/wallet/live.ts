@@ -372,8 +372,10 @@ export function cutFigureText(figure: string): string {
  * rounded HALF UP, trailing zeros dropped; an amount too small to survive six
  * places keeps two significant digits instead of reading `0`. String
  * arithmetic only — a uint256 must never pass through a JS `number` — and the
- * decimal mark is the person's preset. Ungrouped, like the field `Max` fills:
- * a figure and the balance it came from must read the same.
+ * decimal mark and the grouping are the person's preset (r4a-21: one number
+ * format everywhere — the multisig's sheet read "1,000" where the confirm read
+ * "1000"). Only an editable field is never grouped (`inputSeparators`), so a
+ * separator never jumps about under the person's typing.
  *
  * It used to be `trimBalance`'s six places, TRUNCATED, at every magnitude:
  * `1.22456789` read "1.224567" on the row while Max wrote "1.2246", and a
@@ -422,7 +424,8 @@ export function tokenAmountText(amount: string, rounding: 'half-up' | 'down' = '
 		const keep = Math.min(lead + 2, fracRaw.length);
 		return `0${decimal}${fracRaw.slice(0, keep).replace(/0+$/, '')}`;
 	}
-	return fracPart === '' ? intPart : `${intPart}${decimal}${fracPart}`;
+	const grouped = groupDigits(intPart);
+	return fracPart === '' ? grouped : `${grouped}${decimal}${fracPart}`;
 }
 
 /**

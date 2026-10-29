@@ -6,6 +6,8 @@
  * replaces the fixture layer that builds them and nothing else.
  */
 
+import type { ProvenanceNote } from '$lib/services/token-provenance';
+
 export type MobileStateId = 'h1' | 'h1s' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'h7' | 'h7x' | 'h8';
 
 export type DesktopStateId = 'd1' | 'd2' | 'd3';
@@ -135,6 +137,12 @@ export interface ActivityRowModel {
 	badgeColor: string;
 	/** Live rows only: the chain's logo over the badge dot. */
 	badgeLogoUrl?: string;
+	/**
+	 * A line under the subtitle in the danger tone: what about this row must
+	 * be read before anything else — a multisig transaction that changes who
+	 * controls it, or that sends a token posing as another (r4a-1, r4a-2).
+	 */
+	caution?: string;
 }
 
 export interface ActivityGroupModel {
@@ -181,6 +189,11 @@ export interface AssetRowModel {
 	 * shows is the last read there ("Last seen $2.00"), drawn quieter.
 	 */
 	stale?: boolean;
+	/**
+	 * r4a-2: a token nobody vouches for on its chain — its short contract, so
+	 * two rows of one name never look alike, and a lookalike's warning.
+	 */
+	provenance?: ProvenanceNote;
 }
 
 export interface SectionModel {

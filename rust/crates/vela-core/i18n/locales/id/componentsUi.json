@@ -313,7 +313,14 @@
       "passkeyTimedOut": "Waktu permintaan passkey habis, jadi tidak ada yang ditandatangani. Coba lagi saat Anda siap.",
       "intentSaveMultisigSetup": "Simpan pengaturan multisig ini",
       "intentRenameInRegistry": "Ganti nama di registri",
-      "labelName": "Nama"
+      "labelName": "Nama",
+      "intentAddMember": "Tambah anggota",
+      "intentRemoveMember": "Hapus anggota",
+      "intentReplaceMember": "Ganti anggota",
+      "intentChangeThreshold": "Ubah persetujuan yang dibutuhkan",
+      "labelMember": "Anggota",
+      "labelNewMember": "Anggota baru",
+      "labelApprovalsRequired": "Persetujuan yang dibutuhkan"
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

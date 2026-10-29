@@ -58,6 +58,30 @@ export interface MultisigMessages {
 		/** A rename of its record in the registry (`{{name}}`). */
 		rename: string;
 	};
+	/** A member change read in full (the core's `memberChanges`). */
+	change: {
+		/** `{{member}}`: a name and short address, or the short address. */
+		add: string;
+		remove: string;
+		/** `{{old}}`, `{{new}}`. */
+		replace: string;
+		threshold: string;
+		/** `{{before}}`, `{{after}}`: each "2 of 3" (`create.thresholdValue`). */
+		rule: string;
+		/** `{{network}}`: where it changes who controls the multisig. */
+		caution: string;
+		/** The same, short, on its Home row. */
+		rowCaution: string;
+		/** It does not fit the members it would meet (`{{network}}`): it would revert. */
+		doesNotFit: string;
+	};
+	/** A token's provenance (`token_provenance`): unverified, a lookalike. */
+	token: {
+		unverified: string;
+		/** `{{symbol}}`: the vouched symbol it reads as. */
+		lookalike: string;
+		contract: string;
+	};
 	proposal: {
 		title: string;
 		approvals: string;
@@ -138,6 +162,14 @@ export interface MultisigMessages {
 		outboxAway: string;
 		/** Not sent after a while: kept, Send again. */
 		outboxNotSent: string;
+		/** The full hash's copy button. */
+		copy: string;
+		/** An executed transaction's sender (`{{name}}`). */
+		executedBy: string;
+		/** The approvals its receipt says counted (`{{approved}}`, `{{threshold}}`). */
+		countedThen: string;
+		/** Executed, and which approvals counted is not on record here. */
+		approvalsSigned: string;
 		outboxSendAgain: string;
 	};
 	send: {
@@ -351,6 +383,21 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		batchCalls: '',
 		rename: ''
 	},
+	change: {
+		add: '',
+		remove: '',
+		replace: '',
+		threshold: '',
+		rule: '',
+		caution: '',
+		rowCaution: '',
+		doesNotFit: ''
+	},
+	token: {
+		unverified: '',
+		lookalike: '',
+		contract: ''
+	},
 	proposal: {
 		title: '',
 		approvals: '',
@@ -413,7 +460,11 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		outboxBusy: '',
 		outboxAway: '',
 		outboxNotSent: '',
-		outboxSendAgain: ''
+		outboxSendAgain: '',
+		copy: '',
+		executedBy: '',
+		countedThen: '',
+		approvalsSigned: ''
 	},
 	send: {
 		propose: '',

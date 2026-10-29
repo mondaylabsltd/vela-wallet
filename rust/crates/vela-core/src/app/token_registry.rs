@@ -41,6 +41,18 @@ pub fn registry_token(chain_id: u32, address: &str) -> Option<RegistryToken> {
         })
 }
 
+/// Every token the registry lists on `chain_id`, in address order.
+pub fn registry_tokens_on(chain_id: u32) -> impl Iterator<Item = RegistryToken> {
+    let start = table::TABLE.partition_point(|(chain, ..)| *chain < chain_id);
+    table::TABLE[start..]
+        .iter()
+        .take_while(move |(chain, ..)| *chain == chain_id)
+        .map(|(_, _, symbol, decimals)| RegistryToken {
+            symbol,
+            decimals: *decimals,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,6 +14,7 @@
  * parallel type would be the first step towards a parallel component.
  */
 
+import type { ProvenanceNote } from '$lib/services/token-provenance';
 import type { QrCode } from '$lib/wallet/qr';
 import type {
 	ActivityGroupModel,
@@ -527,6 +528,16 @@ export interface SendTokenCardModel {
 	 * the core's `can_change_token`, carrying the button's accessible name.
 	 */
 	change?: string;
+	/** r4a-2: a token nobody vouches for — its contract, and a lookalike's warning. */
+	provenance?: ProvenanceView;
+}
+
+/** A token's provenance note and the words its controls are named with (r4a-2). */
+export interface ProvenanceView {
+	note: ProvenanceNote;
+	contractLabel: string;
+	copyLabel: string;
+	explorerLabel: string;
 }
 
 /** SD2b's recipient card: who, how much, and a way to drop them. */
@@ -1054,6 +1065,8 @@ export interface SendConfirmModel {
 	amountUnit?: string;
 	/** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
 	subline: string;
+	/** r4a-2: the coin is one nobody vouches for — its contract, and a lookalike's warning. */
+	provenance?: ProvenanceView;
 	/**
 	 * "Drafted by your AI agent": the person's AI agent put this transfer on
 	 * the review (spec 103). Said on the review itself — on a phone the agent's

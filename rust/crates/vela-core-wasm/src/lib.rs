@@ -676,6 +676,23 @@ pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
     vela_core::app::network_admin::public_rpc_urls(chain_id)
 }
 
+/// Who vouches for a token's name on its chain (`app::token_provenance`):
+/// `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+/// `token` empty is the native coin. Synchronous, so a view model can call
+/// it while it builds a row.
+#[wasm_bindgen(js_name = tokenProvenance)]
+#[must_use]
+pub fn token_provenance(chain_id: u32, token: &str, symbol: &str, native_symbol: &str) -> String {
+    let token = Some(token).filter(|t| !t.trim().is_empty());
+    serde_json::to_string(&vela_core::app::token_provenance::token_provenance(
+        chain_id,
+        token,
+        symbol,
+        native_symbol,
+    ))
+    .unwrap_or_default()
+}
+
 /// A hidden amount as every shell draws it: the mask, then the unit the
 /// shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
 /// for whether a hidden amount keeps its unit: it does. An empty `unit` (a

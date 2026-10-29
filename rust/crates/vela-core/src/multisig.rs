@@ -1182,7 +1182,7 @@ pub fn verify_approval(
 }
 
 /// `ecrecover(hash, v, r, s)` over a 65-byte `r ‖ s ‖ v` (`v` 27/28, or 0/1).
-fn recover(hash: B256, signature: &[u8]) -> Result<Address, CoreError> {
+pub(crate) fn recover(hash: B256, signature: &[u8]) -> Result<Address, CoreError> {
     use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
     if signature.len() != 65 {
         return Err(err("not a 65-byte signature"));
@@ -1826,7 +1826,7 @@ fn read_transfer(to: Address, value: U256, data: &[u8]) -> Option<Action> {
     None
 }
 
-fn read_owner_management(data: &[u8]) -> Option<Action> {
+pub(crate) fn read_owner_management(data: &[u8]) -> Option<Action> {
     let w = |i: usize| {
         data.get(4 + i * 32..4 + (i + 1) * 32)
             .map(U256::from_be_slice)
@@ -2310,6 +2310,19 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             arg(&args, "originalThreshold")?,
             &arg::<Vec<String>>(&args, "current")?,
             arg(&args, "currentThreshold")?,
+        )?)),
+        // What a transaction changes about the members, and what an executed
+        // one's receipt says (`multisig_reading`).
+        "memberChanges" => out(json(&crate::multisig_reading::member_changes(
+            &arg::<Action>(&args, "action")?,
+            &arg::<Vec<String>>(&args, "owners")?,
+            arg(&args, "threshold")?,
+        )?)),
+        "executionFacts" => out(json(&crate::multisig_reading::execution_facts(
+            arg(&args, "chainId")?,
+            &arg::<String>(&args, "safe")?,
+            &arg::<String>(&args, "safeTxHash")?,
+            &arg::<Vec<crate::multisig_reading::ReceiptLog>>(&args, "logs")?,
         )?)),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]

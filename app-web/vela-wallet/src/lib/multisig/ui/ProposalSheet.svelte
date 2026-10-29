@@ -39,17 +39,26 @@
 		actionRecipient,
 		actionTitle,
 		chainName,
+		changeLines,
 		explorerTxUrl,
 		formatUnits,
 		localName,
-		memberChanges,
+		memberWho,
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
+	import {
+		factsOfExecution,
+		frozenFacts,
+		rememberExecution,
+		type FrozenFacts
+	} from '../core/executed';
+	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
+	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
 	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
-	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
+	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
@@ -144,13 +153,26 @@
 	);
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
+	/** A member as a change names it: the name this device knows, and the short address. */
+	const who = (address: string) => memberWho(address, names.label(address));
+
 	let title = $state('');
-	let lines = $state<{ label: string; to: string }[]>([]);
+	let lines = $state<{ label: string; to: string; note: ProvenanceNote | null }[]>([]);
+	/** r4a-2: the token a transfer sends, when nobody vouches for it. */
+	let tokenNote = $state<ProvenanceNote | null>(null);
 	$effect(() => {
 		const current = item;
 		if (!current) return;
-		void actionTitle(m, chainId, current.review.action, current.nonce).then((t) => (title = t));
+		void actionTitle(m, chainId, current.review.action, current.nonce, who).then(
+			(t) => (title = t)
+		);
 		const action = current.review.action;
+		if (action?.kind === 'transfer' && action.token) {
+			const token = action.token;
+			void tokenInfo(chainId, token)
+				.catch(() => ({ symbol: '', decimals: 18 }))
+				.then((info) => (tokenNote = provenanceNote(chainId, token, info.symbol, m.token)));
+		} else tokenNote = null;
 		// A batch of transfers alone keeps its lines; one with calls is read
 		// call by call below, as the signing sheet reads a batch.
 		if (action?.kind === 'batch' && readableCalls(action) === null) {
@@ -160,7 +182,11 @@
 						symbol: '',
 						decimals: 18
 					}));
-					return { label: `${formatUnits(t.amount, info.decimals)} ${info.symbol}`, to: t.to };
+					return {
+						label: `${formatUnits(t.amount, info.decimals)} ${info.symbol}`,
+						to: t.to,
+						note: provenanceNote(chainId, t.token, info.symbol, m.token)
+					};
 				})
 			).then((l) => (lines = l));
 		} else lines = [];
@@ -195,8 +221,23 @@
 			if (reading === next) reading = null;
 		};
 	});
-	/** A batch's calls into the multisig itself: each one changes who controls it, said loudly. */
-	const changes = $derived(memberChanges(m, item?.review.action ?? null));
+	/**
+	 * r4a-1: what it changes about who controls the multisig — every member
+	 * change, alone or in a batch, read by the core against this network's
+	 * members now: who, the rule before and after, and whether it fits.
+	 */
+	const memberReading = $derived.by(() => {
+		const action = item?.review.action ?? null;
+		if (!action || !members) return null;
+		try {
+			return readMemberChanges(action, members);
+		} catch {
+			return null;
+		}
+	});
+	const change = $derived(
+		memberReading ? changeLines(m, memberReading, chainName(chainId), who) : null
+	);
 	/** The core's verb for a call it could read ("Approve"); else the multisig's line. */
 	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
 
@@ -310,6 +351,15 @@
 		phase = { kind: 'busy', what: 'execute' };
 		try {
 			const by = actor.address;
+			// What this execution counts, as it is sent: kept, so the transaction
+			// reads its own facts later, never today's owners re-counted (r4a-8).
+			const sent = factsOfExecution(
+				item.approvals.filter((a) => a.counts).map((a) => a.owner),
+				by,
+				members.owners.some((o) => sameAddress(o, by)),
+				item.threshold
+			);
+			const safeTxHash = item.safeTxHash;
 			const result = await execute(account, item, actor, members);
 			phase = { kind: 'sent', txHash: null, by };
 			// A reply that was no hash (a 500, a refusal after a lost reply): the
@@ -342,6 +392,7 @@
 						: { kind: 'failed', reason: m.proposal.notLanded };
 				return;
 			}
+			rememberExecution(chainId, account.address, safeTxHash, sent);
 			phase = { kind: 'sent', txHash, by };
 			// A rename: the record's new name is read from the chain now.
 			if (item.review.action?.kind === 'rename') void recheckRecord(account.address);
@@ -444,6 +495,56 @@
 			live = false;
 		};
 	});
+
+	/**
+	 * r4a-8: an executed transaction's facts as they were when it ran — whose
+	 * approvals counted, the threshold then, who sent it — read once its
+	 * execution is known; never today's owners re-counted.
+	 */
+	const executedTx = $derived(
+		phase.kind === 'sent' && phase.txHash ? phase.txHash : (finished?.txHash ?? null)
+	);
+	const frozenKey = $derived(executedTx && item ? `${item.safeTxHash}:${executedTx}` : '');
+	let frozen = $state<FrozenFacts | null>(null);
+	$effect(() => {
+		const key = frozenKey;
+		frozen = null;
+		if (!key) return;
+		const [hash, tx] = key.split(':');
+		let live = true;
+		const address = untrack(() => account.address);
+		void frozenFacts(chainId, address, hash, tx).then((facts) => {
+			if (live) frozen = facts;
+		});
+		return () => {
+			live = false;
+		};
+	});
+	/**
+	 * Whom the list names: the members whose approvals counted when it ran;
+	 * a finished one's verified approvals while those are not known (never a
+	 * "Waiting" row on a transaction that can no longer move); else this
+	 * network's members now.
+	 */
+	const listed = $derived(
+		frozen
+			? frozen.approvers
+			: item?.status === 'done'
+				? item.approvals.filter((a) => a.counts).map((a) => a.owner)
+				: (members?.owners ?? [])
+	);
+
+	let hashCopied = $state(false);
+	async function copyHash() {
+		if (!item) return;
+		try {
+			await navigator.clipboard.writeText(item.safeTxHash);
+			hashCopied = true;
+			setTimeout(() => (hashCopied = false), 1600);
+		} catch {
+			// nothing to copy into: the hash stays on screen
+		}
+	}
 
 	/** Approvals the mailbox holds from accounts that are not members on this network now. */
 	const notCounted = $derived(
@@ -556,14 +657,67 @@
 					<span class="to-address">{shortenAddress(recipient)}</span>
 				</p>
 			{/if}
+			{#if tokenNote}
+				<!-- r4a-2: which token this is, when nobody vouches for its name. -->
+				<ProvenanceNoteView
+					note={tokenNote}
+					contractLabel={m.token.contract}
+					copyLabel={m.proposal.copy}
+					explorerLabel={m.proposal.explorer}
+				/>
+			{/if}
+			{#if change && memberReading}
+				<!-- r4a-1: who it adds, removes or replaces, the rule before and
+				     after, on which network — said before anything else. -->
+				<section class="change" data-testid="member-change">
+					{#if item.status !== 'done'}
+						<p class="change-caution" role="alert">
+							<Icon icon={UTILITY_ICONS['triangle-alert']} size="sm" />
+							<span>{change.caution}</span>
+						</p>
+					{/if}
+					<ul class="change-list">
+						{#each memberReading.changes as c, i (i)}
+							<li>
+								<span class="change-what">{change.changes[i]}</span>
+								{#each [c.removed, c.added].filter((a) => a !== null) as address, j (j)}
+									<span class="change-who">
+										<Identicon
+											svg={identiconSvgForClient(address ?? '')}
+											size="compact"
+											address={address ?? ''}
+										/>
+										<code class="change-address">{address}</code>
+									</span>
+								{/each}
+							</li>
+						{/each}
+					</ul>
+					{#if item.status !== 'done'}
+						<p class="change-rule" data-testid="member-change-rule">{change.rule}</p>
+						{#if change.doesNotFit}
+							<p class="warn" role="alert">{change.doesNotFit}</p>
+						{/if}
+					{/if}
+				</section>
+			{/if}
 			{#if reading}
-				<CallReview {reading} m={signing} alerts={changes} />
+				<CallReview {reading} m={signing} />
 			{/if}
 			{#if lines.length > 0}
 				<ul class="lines">
 					{#each lines as line, i (i)}
 						<li>
 							<span>{line.label}</span><span class="to-address">{shortenAddress(line.to)}</span>
+							{#if line.note}
+								<span class="line-note">
+									<ProvenanceNoteView
+										note={line.note}
+										copyLabel={m.proposal.copy}
+										explorerLabel={m.proposal.explorer}
+									/>
+								</span>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -577,9 +731,24 @@
 					<dt>{m.action.number}</dt>
 					<dd>{item.nonce.toString()}</dd>
 				</div>
-				<div>
+				<div class="hash-row">
 					<dt>{m.proposal.hash}</dt>
-					<dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd>
+					<!-- r4a-22: the whole hash, to compare with another wallet's. -->
+					<dd class="mono">
+						<details class="hash" data-testid="proposal-hash">
+							<summary>{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</summary>
+							<code>{item.safeTxHash}</code>
+						</details>
+						<button
+							type="button"
+							class="hash-copy"
+							aria-label={m.proposal.copy}
+							data-testid="proposal-hash-copy"
+							onclick={copyHash}
+						>
+							<Icon icon={hashCopied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
+						</button>
+					</dd>
 				</div>
 			</dl>
 			{#if item.review.action?.kind === 'rename'}
@@ -621,30 +790,39 @@
 		<section class="approvals" aria-label={m.proposal.approvals}>
 			<h3>
 				{m.proposal.approvals}
-				<span class="count"
-					>{finished
-						? finished.txHash
-							? m.proposal.executed
-							: m.proposal.voided
-						: fillTemplate(m.status.progress, {
-								approved: shownApproved,
-								threshold: item.threshold
-							})}</span
+				<!-- r4a-8: a finished one is never re-counted against today's rule. -->
+				<span class="count" data-testid="approvals-count"
+					>{executedTx
+						? m.proposal.executed
+						: finished
+							? m.proposal.voided
+							: item.status === 'done'
+								? ''
+								: fillTemplate(m.status.progress, {
+										approved: shownApproved,
+										threshold: item.threshold
+									})}</span
 				>
 			</h3>
 			<div class="bar" aria-hidden="true">
 				<span
 					class="fill"
-					style:width="{finished?.txHash
+					style:width="{executedTx
 						? 100
-						: Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"
+						: item.status === 'done'
+							? 0
+							: Math.min(100, (shownApproved / Math.max(1, item.threshold)) * 100)}%"
 				></span>
 			</div>
 			<ul>
-				{#each members?.owners ?? [] as owner (owner)}
-					{@const row = item.approvals.find((a) => a.counts && sameAddress(a.owner, owner))}
-					{@const executedBy =
-						phase.kind === 'sent' && !!phase.txHash && sameAddress(phase.by, owner)}
+				{#each listed as owner (owner)}
+					{@const row =
+						frozen || item.status === 'done'
+							? true
+							: item.approvals.find((a) => a.counts && sameAddress(a.owner, owner))}
+					{@const executedBy = frozen
+						? frozen.executorApproved && sameAddress(frozen.executor, owner)
+						: phase.kind === 'sent' && !!phase.txHash && sameAddress(phase.by, owner)}
 					{@const mine = localOwners([owner]).length > 0}
 					<li class:done={!!row || executedBy}>
 						<!-- Beside the row's own control (Sign with another wallet), never in it. -->
@@ -672,7 +850,25 @@
 			</ul>
 		</section>
 
-		{#if notCounted.length > 0}
+		{#if frozen}
+			<p class="fine" data-testid="executed-facts">
+				{[
+					frozen.executor
+						? fillTemplate(m.proposal.executedBy, { name: names.label(frozen.executor) })
+						: '',
+					fillTemplate(m.proposal.countedThen, {
+						approved: frozen.approvers.length,
+						threshold: frozen.threshold
+					})
+				]
+					.filter(Boolean)
+					.join(' · ')}
+			</p>
+		{:else if executedTx && phase.kind !== 'sent'}
+			<p class="fine" data-testid="executed-facts-unknown">{m.proposal.approvalsSigned}</p>
+		{/if}
+
+		{#if notCounted.length > 0 && item.status !== 'done'}
 			<!-- The mailbox takes any valid signature; only this network's members count. -->
 			<p class="fine" data-testid="not-counted">
 				{fillTemplate(m.proposal.notCounted, {
@@ -1047,6 +1243,7 @@
 
 	.lines li {
 		display: flex;
+		flex-wrap: wrap;
 		justify-content: space-between;
 		padding-block: var(--space-xs);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
@@ -1151,6 +1348,102 @@
 		margin: var(--space-lg) 0 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	/* r4a-1: a member change, read before anything else. */
+	.change {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		margin: var(--space-md) 0 var(--space-lg);
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-error-soft);
+	}
+
+	.change-caution {
+		display: flex;
+		gap: var(--space-sm);
+		align-items: flex-start;
+		margin: 0;
+		font-weight: var(--weight-semibold);
+		color: var(--color-error-base);
+	}
+
+	.change-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.change-list li {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.change-what {
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.change-who {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		min-width: 0;
+	}
+
+	.change-address {
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.change-rule {
+		margin: 0;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-fg-base);
+	}
+
+	.line-note {
+		flex-basis: 100%;
+	}
+
+	.hash-row dd {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-xs);
+		min-width: 0;
+	}
+
+	.hash {
+		min-width: 0;
+	}
+
+	.hash summary {
+		cursor: pointer;
+	}
+
+	.hash code {
+		display: block;
+		overflow-wrap: anywhere;
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.hash-copy {
+		display: inline-flex;
+		flex: none;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--color-fg-muted);
+		cursor: pointer;
 	}
 
 	.warn {

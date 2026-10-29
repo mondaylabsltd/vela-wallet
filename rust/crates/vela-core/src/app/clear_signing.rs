@@ -945,6 +945,13 @@ pub enum ClearTerm {
     IntentSaveMultisigSetup,
     /// A Safe renaming its own record in the Safe Genesis Registry.
     IntentRenameInRegistry,
+    /// Safe's own owner management, called on the Safe itself (a multisig's
+    /// member change): `addOwnerWithThreshold`, `removeOwner`, `swapOwner`,
+    /// `changeThreshold`.
+    IntentAddMember,
+    IntentRemoveMember,
+    IntentReplaceMember,
+    IntentChangeThreshold,
     IntentBorrow,
     IntentBridge,
     IntentBurn,
@@ -1009,6 +1016,11 @@ pub enum ClearTerm {
     LabelWalletName,
     /// The name a Safe Genesis Registry record carries (a multisig's).
     LabelName,
+    /// A multisig member a change adds or removes; the one a replacement
+    /// brings in; how many approvals the multisig needs after it.
+    LabelMember,
+    LabelNewMember,
+    LabelApprovalsRequired,
     LabelYouPay,
     LabelYouPayMax,
     LabelYouReceive,
@@ -1055,6 +1067,10 @@ impl ClearTerm {
         ("back up public keys", Self::IntentBackUpPublicKeys),
         ("save this multisig's setup", Self::IntentSaveMultisigSetup),
         ("rename in the registry", Self::IntentRenameInRegistry),
+        ("add a member", Self::IntentAddMember),
+        ("remove a member", Self::IntentRemoveMember),
+        ("replace a member", Self::IntentReplaceMember),
+        ("change approvals required", Self::IntentChangeThreshold),
         ("borrow", Self::IntentBorrow),
         ("bridge", Self::IntentBridge),
         ("burn", Self::IntentBurn),
@@ -1113,6 +1129,9 @@ impl ClearTerm {
         ("valid until", Self::LabelValidUntil),
         ("wallet name", Self::LabelWalletName),
         ("name", Self::LabelName),
+        ("member", Self::LabelMember),
+        ("new member", Self::LabelNewMember),
+        ("approvals required", Self::LabelApprovalsRequired),
         ("you pay", Self::LabelYouPay),
         ("you pay (max)", Self::LabelYouPayMax),
         ("you receive", Self::LabelYouReceive),
@@ -2789,6 +2808,7 @@ fn start_tx(
     if let Some(result) = to.as_deref().and_then(|to| {
         build_registry_backup_result(to, &data, chain_id)
             .or_else(|| build_genesis_registry_result(to, &data, chain_id))
+            .or_else(|| build_safe_owner_result(to, model.from.as_deref(), &data, chain_id))
     }) {
         model.result = Some(result);
         model.resolved = true;
@@ -5110,6 +5130,116 @@ fn build_genesis_registry_result(to: &str, data: &str, chain_id: u32) -> Option<
         owner: Some("Vela".to_owned()),
         fields: network.into_iter().chain(rows).collect(),
         risk: ClearRisk::Safe,
+        contract_address: Some(to.to_lowercase()),
+        verified: false,
+        // Every word written above, by this build, from bytes it decoded itself.
+        provenance: ClearProvenance::BuiltIn,
+        sign_type: ClearSignType::Transaction,
+        partial: false,
+        best_effort: false,
+        to_own_token: false,
+        intent_term: None,
+        terms_off_chain: false,
+        reading: ClearReading::default(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// A Safe's own owner management, called on itself — a multisig's member change
+// ---------------------------------------------------------------------------
+
+/// `Some` for one of Safe's four owner-management functions sent by the
+/// signing account to ITSELF — a multisig changing its own members:
+/// `addOwnerWithThreshold`, `removeOwner`, `swapOwner`, `changeThreshold`,
+/// as [`crate::multisig`] reads them. These are Safe's own functions on the
+/// Safe itself, decoded here from the bytes: a certain reading, never a name
+/// from the public selector database. Sent to any other address the same
+/// bytes are someone else's contract, and take the ordinary ladder.
+///
+/// Who the members are before and after, and whether the Safe would accept
+/// the change, is the multisig's own sheet to say (it knows the members);
+/// these rows say what the call does.
+fn build_safe_owner_result(
+    to: &str,
+    from: Option<&str>,
+    data: &str,
+    chain_id: u32,
+) -> Option<ClearSignResult> {
+    if !from.is_some_and(|from| from.trim().eq_ignore_ascii_case(to)) {
+        return None;
+    }
+    let bytes = primitives::from_hex(data).ok()?;
+    let action = crate::multisig::read_owner_management(&bytes)?;
+    let field = |label: &str, value: String, address: Option<String>| ClearSignField {
+        label: label.to_owned(),
+        value,
+        format: if address.is_some() {
+            "addressName"
+        } else {
+            "raw"
+        }
+        .to_owned(),
+        token_address: None,
+        warning: false,
+        unverified: false,
+        role: ClearFieldRole::Generic,
+        detail: false,
+        expired: false,
+        address,
+        usd_value: None,
+        label_term: None,
+        value_term: None,
+        bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: false,
+        dust: false,
+    };
+    let member = |label: &str, a: &str| {
+        field(
+            label,
+            format!("{}…{}", take_chars(a, 0, 8), last_chars(a, 6)),
+            Some(a.to_lowercase()),
+        )
+    };
+    let network = super::network_admin::builtin_display_name(chain_id)
+        .map(|name| field("Network", name.to_owned(), None));
+    use crate::multisig::Action;
+    let (intent, rows) = match &action {
+        Action::AddOwner { owner, threshold } => (
+            "Add a member",
+            vec![
+                member("Member", owner),
+                field("Approvals required", threshold.clone(), None),
+            ],
+        ),
+        Action::RemoveOwner { owner, threshold } => (
+            "Remove a member",
+            vec![
+                member("Member", owner),
+                field("Approvals required", threshold.clone(), None),
+            ],
+        ),
+        Action::SwapOwner {
+            old_owner,
+            new_owner,
+        } => (
+            "Replace a member",
+            vec![member("Member", old_owner), member("New member", new_owner)],
+        ),
+        Action::ChangeThreshold { threshold } => (
+            "Change approvals required",
+            vec![field("Approvals required", threshold.clone(), None)],
+        ),
+        _ => return None,
+    };
+    Some(ClearSignResult {
+        intent: intent.to_owned(),
+        contract_name: None,
+        owner: None,
+        fields: network.into_iter().chain(rows).collect(),
+        // Certain, and weighty: it changes who controls the account.
+        risk: ClearRisk::Caution,
         contract_address: Some(to.to_lowercase()),
         verified: false,
         // Every word written above, by this build, from bytes it decoded itself.
@@ -9022,6 +9152,14 @@ mod clear_term_tests {
                 "Save this multisig's setup",
                 "Rename in the registry",
                 "Name",
+                // A Safe's own member changes, likewise.
+                "Add a member",
+                "Remove a member",
+                "Replace a member",
+                "Change approvals required",
+                "Member",
+                "New member",
+                "Approvals required",
             ]
             .map(str::to_owned),
         );

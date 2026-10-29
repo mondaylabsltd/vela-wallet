@@ -313,7 +313,14 @@
       "passkeyTimedOut": "La demande de passkey a expiré : rien n'a été signé. Réessayez quand vous êtes prêt.",
       "intentSaveMultisigSetup": "Enregistrer la configuration de ce multisig",
       "intentRenameInRegistry": "Renommer dans le registre",
-      "labelName": "Nom"
+      "labelName": "Nom",
+      "intentAddMember": "Ajouter un membre",
+      "intentRemoveMember": "Retirer un membre",
+      "intentReplaceMember": "Remplacer un membre",
+      "intentChangeThreshold": "Modifier les approbations requises",
+      "labelMember": "Membre",
+      "labelNewMember": "Nouveau membre",
+      "labelApprovalsRequired": "Approbations requises"
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

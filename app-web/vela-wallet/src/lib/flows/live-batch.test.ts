@@ -248,7 +248,7 @@ describe('what it adds up to (issue 204)', () => {
 			label: 'Total · 1 recipient',
 			value: '1793.103448 USDT',
 			detail: '13,000 CNY',
-			balance: 'Balance 2500.5 USDT',
+			balance: 'Balance 2,500.5 USDT',
 			over: false,
 			overText: undefined
 		});

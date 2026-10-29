@@ -3802,3 +3802,180 @@ fn another_call_to_the_registry_takes_the_ordinary_ladder() {
     assert!(!ops.is_empty(), "the ordinary reading asks for something");
     assert!(view.result.is_none());
 }
+
+// ---------------------------------------------------------------------------
+// A Safe's own member changes, sent by the Safe to itself (r4a-15)
+// ---------------------------------------------------------------------------
+
+const SAFE_SELF: &str = "0x00000000000000000000000000000000000000aa";
+const MEMBER: &str = "0x4444444444444444444444444444444444444444";
+const OLD_MEMBER: &str = "0x1111111111111111111111111111111111111111";
+
+fn owner_call(signature: &str, words: &[String]) -> String {
+    let selector = vela_core::primitives::keccak256(signature.as_bytes());
+    let mut data = vela_core::primitives::to_hex(&selector[..4], true);
+    for w in words {
+        data.push_str(w);
+    }
+    data
+}
+
+fn addr_word(a: &str) -> String {
+    format!("{:0>64}", a.trim_start_matches("0x"))
+}
+
+fn num_word(n: u64) -> String {
+    format!("{n:064x}")
+}
+
+fn safe_self_sheet(data: String, from: Option<&str>) -> (Vec<Op>, ClearSigningView) {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: Some(SAFE_SELF.to_owned()),
+        data: Some(data),
+        value: Some("0x0".to_owned()),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+        from: from.map(str::to_owned),
+        probe_code: false,
+    });
+    (ops, sut.view())
+}
+
+/// Safe's own owner management on the Safe itself is read by Vela from the
+/// bytes — never a name from the public selector database.
+#[test]
+fn a_safes_own_member_change_is_read_by_vela() {
+    let cases = [
+        (
+            owner_call(
+                "addOwnerWithThreshold(address,uint256)",
+                &[addr_word(MEMBER), num_word(2)],
+            ),
+            "Add a member",
+            ClearTerm::IntentAddMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x444444…444444"),
+                ("Approvals required", "2"),
+            ],
+        ),
+        (
+            owner_call(
+                "removeOwner(address,address,uint256)",
+                &[addr_word("0x1"), addr_word(MEMBER), num_word(1)],
+            ),
+            "Remove a member",
+            ClearTerm::IntentRemoveMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x444444…444444"),
+                ("Approvals required", "1"),
+            ],
+        ),
+        (
+            owner_call(
+                "swapOwner(address,address,address)",
+                &[addr_word("0x1"), addr_word(OLD_MEMBER), addr_word(MEMBER)],
+            ),
+            "Replace a member",
+            ClearTerm::IntentReplaceMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x111111…111111"),
+                ("New member", "0x444444…444444"),
+            ],
+        ),
+        (
+            owner_call("changeThreshold(uint256)", &[num_word(3)]),
+            "Change approvals required",
+            ClearTerm::IntentChangeThreshold,
+            vec![("Network", "Gnosis"), ("Approvals required", "3")],
+        ),
+    ];
+    for (data, intent, term, rows) in cases {
+        let (ops, view) = safe_self_sheet(data, Some(SAFE_SELF));
+        assert!(
+            ops.is_empty(),
+            "{intent}: nothing to fetch, no selector database"
+        );
+        let result = view.result.expect("a certain reading");
+        assert_eq!(result.intent, intent);
+        assert_eq!(result.intent_term, Some(term));
+        assert_eq!(result.reading.source, ClearLineSource::Vela, "{intent}");
+        assert_eq!(result.reading.selector_name, None, "{intent}");
+        let got: Vec<(&str, &str)> = result
+            .fields
+            .iter()
+            .map(|f| (f.label.as_str(), f.value.as_str()))
+            .collect();
+        assert_eq!(got, rows, "{intent}");
+        assert!(
+            result.fields.iter().all(|f| f.label_term.is_some()),
+            "{intent}"
+        );
+    }
+}
+
+/// The same bytes sent anywhere but to the sender itself are somebody
+/// else's contract: they take the ordinary ladder.
+#[test]
+fn owner_management_bytes_to_another_contract_are_no_member_change() {
+    let data = owner_call("changeThreshold(uint256)", &[num_word(3)]);
+    let (ops, view) = safe_self_sheet(data.clone(), None);
+    assert!(!ops.is_empty(), "no sender: the ordinary ladder");
+    assert!(view.result.is_none());
+    let (ops, view) = safe_self_sheet(data, Some(MEMBER));
+    assert!(!ops.is_empty(), "another sender: the ordinary ladder");
+    assert!(view.result.is_none());
+}
+
+/// Inside a batch the multisig sends (`from` itself), every member change is
+/// Vela's own reading too.
+#[test]
+fn a_batchs_member_changes_are_read_by_vela() {
+    let mut sut = Sut::new();
+    let add = owner_call(
+        "addOwnerWithThreshold(address,uint256)",
+        &[addr_word(MEMBER), num_word(2)],
+    );
+    let swap = owner_call(
+        "swapOwner(address,address,address)",
+        &[addr_word("0x1"), addr_word(OLD_MEMBER), addr_word(MEMBER)],
+    );
+    let calls = json!([
+        {"to": SAFE_SELF, "value": "0x0", "data": add},
+        {"to": SAFE_SELF, "value": "0x0", "data": swap},
+    ]);
+    let params = json!([{
+        "version": "2.0.0",
+        "chainId": "0x64",
+        "from": SAFE_SELF,
+        "atomicRequired": true,
+        "calls": calls,
+    }]);
+    let ops = sut.dispatch(Event::ResolveBatch {
+        params_json: params.to_string(),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+        from: Some(SAFE_SELF.to_owned()),
+        probe_code: false,
+    });
+    assert!(ops.is_empty(), "nothing to fetch for either call");
+    let batch = sut.view().batch.expect("both calls read");
+    let read: Vec<(String, ClearLineSource)> = batch
+        .calls
+        .iter()
+        .map(|c| {
+            let r = c.result.as_ref().expect("a reading");
+            (r.intent.clone(), r.reading.source)
+        })
+        .collect();
+    assert_eq!(
+        read,
+        vec![
+            ("Add a member".to_owned(), ClearLineSource::Vela),
+            ("Replace a member".to_owned(), ClearLineSource::Vela),
+        ]
+    );
+}

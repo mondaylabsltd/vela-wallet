@@ -43,7 +43,15 @@ const fake = vi.hoisted(() => ({
 	followed: null as string | null,
 	/** Where an approval signed here stands, while the mailbox lacks it. */
 	kept: null as any,
-	sentAgain: 0
+	sentAgain: 0,
+	/** The core's reading of a member change (r4a-1). */
+	memberReading: null as any,
+	/** What an executed transaction's receipt says (r4a-8). */
+	frozen: null as any,
+	/** What this device recorded when it executed one. */
+	remembered: [] as any[],
+	/** The core's ruling on a token nobody vouches for (r4a-2). */
+	tokenNote: null as any
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -102,12 +110,15 @@ vi.mock('../core/display', () => ({
 	explorerTxUrl: () => null,
 	formatUnits: (v: bigint) => String(v),
 	localName: () => null,
-	memberChanges: (_m: unknown, action: any) =>
-		action?.kind === 'batch'
-			? action.calls.flatMap((c: any, i: number) =>
-					c.action.kind === 'changeThreshold' ? [`changes #${i + 1}`] : []
-				)
-			: [],
+	memberWho: (a: string) => a.slice(0, 6),
+	changeLines: (_m: unknown, reading: any, network: string) => ({
+		changes: reading.changes.map((c: any) =>
+			c.call === null ? `change.${c.kind}` : `#${c.call} · change.${c.kind}`
+		),
+		rule: `change.rule ${reading.before.threshold}/${reading.before.owners} → ${reading.after.threshold}/${reading.after.owners}`,
+		caution: `change.caution ${network}`,
+		doesNotFit: reading.fits ? null : 'change.doesNotFit'
+	}),
 	shortenAddress: (a: string) => a.slice(0, 8),
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 18 })
 }));
@@ -117,6 +128,7 @@ vi.mock('../core/kernel', () => {
 	return {
 		sameAddress: same,
 		transfersOf: () => [],
+		readMemberChanges: () => fake.memberReading,
 		memberDrift: (was: { owners: string[] }, is: { owners: string[] }) => ({
 			same:
 				was.owners.length === is.owners.length &&
@@ -125,6 +137,24 @@ vi.mock('../core/kernel', () => {
 	};
 });
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
+vi.mock('../core/executed', () => ({
+	factsOfExecution: (
+		approvers: string[],
+		executor: string,
+		_owner: boolean,
+		threshold: number
+	) => ({
+		executor,
+		threshold,
+		approvers,
+		executorApproved: false
+	}),
+	frozenFacts: async () => fake.frozen,
+	rememberExecution: (...args: any[]) => void fake.remembered.push(args)
+}));
+vi.mock('$lib/services/token-provenance', () => ({
+	provenanceNote: () => fake.tokenNote
+}));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
 	nativeSymbol: () => 'xDAI'
@@ -217,6 +247,10 @@ beforeEach(() => {
 	fake.followed = null;
 	fake.kept = null;
 	fake.sentAgain = 0;
+	fake.memberReading = null;
+	fake.frozen = null;
+	fake.remembered = [];
+	fake.tokenNote = null;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -445,10 +479,29 @@ describe('a batch of calls (owner, 2026-10-28)', () => {
 			]
 		};
 		fake.chain.items = [item({ review: { action: batch, refusal: null } })];
+		fake.memberReading = {
+			changes: [
+				{
+					call: 2,
+					kind: 'threshold',
+					added: null,
+					removed: null,
+					before: { threshold: 2, owners: 2 },
+					after: { threshold: 1, owners: 2 },
+					fits: true
+				}
+			],
+			before: { threshold: 2, owners: 2 },
+			after: { threshold: 1, owners: 2 },
+			fits: true
+		};
 		const screen = show();
 		await settle();
 		expect(document.querySelector('[data-testid="multisig-call-review"]')).not.toBeNull();
-		expect(document.body.textContent).toContain('changes #2');
+		const change = document.querySelector('[data-testid="member-change"]')?.textContent ?? '';
+		expect(change).toContain('change.caution Gnosis');
+		expect(change).toContain('#2 · change.threshold');
+		expect(change).toContain('change.rule 2/2 → 1/2');
 		// Every call's own bytes, in order.
 		expect(document.body.textContent).toContain(`#2 ${SAFE} 0x694e80c3`);
 		await screen.unmount();
@@ -779,5 +832,160 @@ describe('what was signed here and the mailbox has not taken', () => {
 		expect(fake.sentAgain).toBe(1);
 		// Never a second signature: no approve, no passkey.
 		expect(fake.calls).toEqual([]);
+	});
+});
+
+/**
+ * r4a-1: a member change alone reads as fully as one inside a batch — who,
+ * the rule before → after, the network, the caution — and one the Safe would
+ * refuse says executing it would fail.
+ */
+describe('a member change', () => {
+	const add = { kind: 'addOwner', owner: TO, threshold: '2' };
+	const reading = (fits: boolean) => ({
+		changes: [
+			{
+				call: null,
+				kind: 'add',
+				added: TO,
+				removed: null,
+				before: { threshold: 2, owners: 2 },
+				after: { threshold: 2, owners: 3 },
+				fits
+			}
+		],
+		before: { threshold: 2, owners: 2 },
+		after: { threshold: 2, owners: 3 },
+		fits
+	});
+
+	it('says who, the rule before and after, the network, and the caution', async () => {
+		fake.chain.items = [item({ review: { action: add, refusal: null } })];
+		fake.memberReading = reading(true);
+		const screen = show();
+		await settle();
+		const block = document.querySelector('[data-testid="member-change"]');
+		expect(block?.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+			'change.caution Gnosis'
+		);
+		expect(block?.textContent).toContain('change.add');
+		// The whole address of whom it adds, beside its name.
+		expect(block?.textContent).toContain(TO);
+		expect(document.querySelector('[data-testid="member-change-rule"]')?.textContent?.trim()).toBe(
+			'change.rule 2/2 → 2/3'
+		);
+		expect(block?.textContent).not.toContain('change.doesNotFit');
+		await screen.unmount();
+	});
+
+	it('one that does not fit the members now says executing it would fail', async () => {
+		fake.chain.items = [item({ review: { action: add, refusal: null } })];
+		fake.memberReading = reading(false);
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="member-change"]')?.textContent).toContain(
+			'change.doesNotFit'
+		);
+		await screen.unmount();
+	});
+});
+
+/** r4a-22: the whole proposal hash, to compare with another wallet's: shown and copied. */
+describe('the proposal hash', () => {
+	it('is there whole, behind its short form, with a copy', async () => {
+		const written: string[] = [];
+		Object.defineProperty(navigator, 'clipboard', {
+			configurable: true,
+			value: { writeText: async (text: string) => void written.push(text) }
+		});
+		const screen = show();
+		await settle();
+		const hash = document.querySelector('[data-testid="proposal-hash"]');
+		expect(hash?.querySelector('summary')?.textContent).toContain('…');
+		expect(hash?.querySelector('code')?.textContent).toBe(HASH);
+		(document.querySelector('[data-testid="proposal-hash-copy"]') as HTMLButtonElement).click();
+		await settle();
+		expect(written).toEqual([HASH]);
+		await screen.unmount();
+	});
+});
+
+/**
+ * r4a-8: an executed transaction reads the facts frozen when it ran — the
+ * approvals that counted then, the threshold then, who sent it — never
+ * today's owners re-counted, never "Waiting", never more than were needed.
+ */
+describe('an executed transaction', () => {
+	const THEN = '0xcc000000000000000000000000000000000000cc';
+	const done = () => item({ status: 'done', canApprove: [], approvals: [], approved: 0 });
+
+	it('lists whose approvals counted then — a member removed since too — and who sent it', async () => {
+		fake.chain.items = [done()];
+		fake.executed = `0x${'ee'.repeat(32)}`;
+		fake.frozen = {
+			executor: ME,
+			threshold: 2,
+			approvers: [THEN, ME],
+			executorApproved: true,
+			source: 'chain'
+		};
+		const screen = show();
+		await settle();
+		const approvals = document.querySelector('section.approvals')?.textContent ?? '';
+		// THEN is no member now (members are ME and OTHER): it approved it,
+		// then — and OTHER, a member now, did not.
+		expect(approvals).toContain(THEN.slice(0, 6));
+		expect(document.querySelectorAll('section.approvals li')).toHaveLength(2);
+		// The executor approved by sending it: counted once, as the executor.
+		expect(approvals.match(/proposal\.executed/g)?.length).toBe(2);
+		expect(approvals).not.toContain('status.progress');
+		expect(approvals).not.toContain('proposal.waiting');
+		expect(document.querySelector('[data-testid="approvals-count"]')?.textContent).toBe(
+			'proposal.executed'
+		);
+		const facts = document.querySelector('[data-testid="executed-facts"]')?.textContent ?? '';
+		expect(facts).toContain('proposal.executedBy');
+		expect(facts).toContain('proposal.countedThen');
+		await screen.unmount();
+	});
+
+	it('says so when which approvals counted is not on record', async () => {
+		fake.chain.items = [done()];
+		fake.executed = `0x${'ee'.repeat(32)}`;
+		fake.frozen = null;
+		const screen = show();
+		await settle();
+		expect(
+			document.querySelector('[data-testid="executed-facts-unknown"]')?.textContent?.trim()
+		).toBe('proposal.approvalsSigned');
+		expect(document.body.textContent).not.toContain('status.progress');
+		await screen.unmount();
+	});
+});
+
+/** r4a-2: a transfer of a token nobody vouches for shows its contract on the sheet. */
+describe('a transfer of an unverified token', () => {
+	it('carries the note the core rules, with the contract', async () => {
+		const FAKE = '0x57e64022d8d9a420dFE08a22d6a687caaBc6B7C6';
+		fake.chain.items = [
+			item({
+				review: { action: { kind: 'transfer', token: FAKE, to: TO, amount: '1' }, refusal: null }
+			})
+		];
+		fake.tokenNote = {
+			text: 'Not the real USDC',
+			tone: 'danger',
+			contract: FAKE,
+			short: '0x57e6…B7C6',
+			explorerUrl: `https://explorer.example/address/${FAKE}`
+		};
+		const screen = show();
+		await settle();
+		const note = document.querySelector('[data-testid="token-provenance"]');
+		expect(note?.getAttribute('data-tone')).toBe('danger');
+		expect(note?.textContent).toContain('Not the real USDC');
+		expect(note?.textContent).toContain('0x57e6…B7C6');
+		expect(note?.querySelector('a')?.getAttribute('href')).toContain(FAKE);
+		await screen.unmount();
 	});
 });

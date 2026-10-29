@@ -313,7 +313,14 @@
       "passkeyTimedOut": "パスキーの確認が時間切れになったため、何も署名されていません。準備ができたらもう一度お試しください。",
       "intentSaveMultisigSetup": "このマルチシグの設定を保存",
       "intentRenameInRegistry": "レジストリで名前を変更",
-      "labelName": "名前"
+      "labelName": "名前",
+      "intentAddMember": "メンバーを追加",
+      "intentRemoveMember": "メンバーを削除",
+      "intentReplaceMember": "メンバーを入れ替え",
+      "intentChangeThreshold": "必要な承認数を変更",
+      "labelMember": "メンバー",
+      "labelNewMember": "新しいメンバー",
+      "labelApprovalsRequired": "必要な承認数"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

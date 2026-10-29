@@ -125,6 +125,21 @@
         "batchCalls": "한 거래에 {{total}}개의 호출",
         "rename": "레지스트리에서 이 멀티시그의 이름을 “{{name}}”(으)로 변경"
       },
+      "change": {
+        "add": "{{member}} 추가",
+        "remove": "{{member}} 제거",
+        "replace": "{{old}}을(를) {{new}}(으)로 교체",
+        "threshold": "필요한 승인 수 변경",
+        "rule": "승인: {{before}} → {{after}}",
+        "caution": "{{network}}에서 이 멀티시그를 관리하는 멤버가 바뀝니다. 모든 멤버가 예상한 경우에만 승인하세요.",
+        "rowCaution": "이 멀티시그를 관리하는 멤버가 바뀝니다",
+        "doesNotFit": "{{network}}의 현재 멤버와 맞지 않아 실행하면 실패합니다."
+      },
+      "token": {
+        "unverified": "확인되지 않은 토큰",
+        "lookalike": "진짜 {{symbol}}이(가) 아닙니다. 다른 컨트랙트가 이 이름을 씁니다",
+        "contract": "토큰 컨트랙트"
+      },
       "proposal": {
         "title": "멀티시그 거래",
         "approvals": "승인 현황",
@@ -187,7 +202,11 @@
         "outboxBusy": "멀티시그 서비스가 혼잡합니다. {{seconds}}초 후 다시 보냅니다.",
         "outboxAway": "멀티시그 서비스에 연결하지 못했습니다. {{seconds}}초 후 다시 보냅니다.",
         "outboxNotSent": "아직 전송되지 않음: 멀티시그 서비스가 받아들이지 않았습니다. 이 기기에 보관되며, 전송되기 전까지 다른 멤버는 볼 수 없습니다.",
-        "outboxSendAgain": "다시 보내기"
+        "outboxSendAgain": "다시 보내기",
+        "copy": "복사",
+        "executedBy": "{{name}}이(가) 실행함",
+        "countedThen": "실행 당시 인정된 승인: {{threshold}}개 중 {{approved}}개",
+        "approvalsSigned": "이 멤버들이 승인했습니다. 실행 당시 어떤 승인이 인정됐는지는 이 기기에 기록되어 있지 않습니다."
       },
       "send": {
         "propose": "제안하고 승인",

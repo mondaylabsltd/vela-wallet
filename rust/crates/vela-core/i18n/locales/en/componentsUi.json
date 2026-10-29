@@ -365,7 +365,14 @@
       "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready.",
       "intentSaveMultisigSetup": "Save this multisig's setup",
       "intentRenameInRegistry": "Rename in the registry",
-      "labelName": "Name"
+      "labelName": "Name",
+      "intentAddMember": "Add a member",
+      "intentRemoveMember": "Remove a member",
+      "intentReplaceMember": "Replace a member",
+      "intentChangeThreshold": "Change approvals required",
+      "labelMember": "Member",
+      "labelNewMember": "New member",
+      "labelApprovalsRequired": "Approvals required"
     },
     "currency": {
       "title": "Display currency",

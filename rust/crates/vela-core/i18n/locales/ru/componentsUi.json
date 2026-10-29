@@ -313,7 +313,14 @@
       "passkeyTimedOut": "Время запроса ключа доступа истекло, ничего не подписано. Попробуйте ещё раз, когда будете готовы.",
       "intentSaveMultisigSetup": "Сохранить настройки этого мультисига",
       "intentRenameInRegistry": "Переименовать в реестре",
-      "labelName": "Название"
+      "labelName": "Название",
+      "intentAddMember": "Добавить участника",
+      "intentRemoveMember": "Удалить участника",
+      "intentReplaceMember": "Заменить участника",
+      "intentChangeThreshold": "Изменить число одобрений",
+      "labelMember": "Участник",
+      "labelNewMember": "Новый участник",
+      "labelApprovalsRequired": "Нужно одобрений"
     },
     "signingApprove": {
       "resultingTotal": "Новый общий лимит",

@@ -3,6 +3,7 @@
 	import { MASK } from '../fixtures';
 	import type { AssetRowModel } from '../model';
 	import TokenIcon from './TokenIcon.svelte';
+	import ProvenanceNote from '$lib/flows/ui/ProvenanceNote.svelte';
 
 	interface Props {
 		row: AssetRowModel;
@@ -48,6 +49,9 @@
 	<span class="text">
 		<span class="ticker">{row.ticker}</span>
 		<span class="chain">{row.chain}</span>
+		<!-- r4a-2: a token nobody vouches for carries its contract (and a
+		     lookalike its warning), so no two rows read as one token. -->
+		{#if row.provenance}<ProvenanceNote note={row.provenance} bare />{/if}
 	</span>
 	<span class="numbers" class:masked={row.masked} class:stale={row.stale === true}>
 		<span class="balance">

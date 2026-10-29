@@ -62,6 +62,7 @@ import init, {
 	minGasPriceWei,
 	ManageTokensCore,
 	maskedAmount,
+	tokenProvenance,
 	NetworkAdminCore,
 	networkChainIsTestnet,
 	networkSpaceChainIds,
@@ -167,6 +168,11 @@ export { shownNetworksSettle };
 // Synchronous, and callable once `loadCore()` has resolved — every caller is
 // a view-model builder over a core view, which cannot exist before that.
 export { maskedAmount };
+// Who vouches for a token's name on its chain (`token_provenance`): the
+// native coin, a token the registry lists there, or anybody's contract — and
+// for the last, the vouched symbol it reads as, if any. Synchronous, callable
+// once `loadCore()` has resolved.
+export { tokenProvenance };
 // The symbol a fiat figure is written with (`l10n::fiat_symbol`): one rule for
 // all four apps, where the web kept a table of its own that wrote the Hong
 // Kong dollar with the US dollar's "$" and the yen and the yuan with one "¥".

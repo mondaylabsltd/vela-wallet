@@ -313,7 +313,14 @@
       "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist.",
       "intentSaveMultisigSetup": "Einrichtung dieses Multisig speichern",
       "intentRenameInRegistry": "Im Register umbenennen",
-      "labelName": "Name"
+      "labelName": "Name",
+      "intentAddMember": "Mitglied hinzufügen",
+      "intentRemoveMember": "Mitglied entfernen",
+      "intentReplaceMember": "Mitglied ersetzen",
+      "intentChangeThreshold": "Erforderliche Genehmigungen ändern",
+      "labelMember": "Mitglied",
+      "labelNewMember": "Neues Mitglied",
+      "labelApprovalsRequired": "Erforderliche Genehmigungen"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

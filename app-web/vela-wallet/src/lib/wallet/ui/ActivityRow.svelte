@@ -73,6 +73,10 @@
 			<span class="title">{row.title}</span>
 		{/if}
 		<span class="subtitle">{row.subtitle}</span>
+		{#if row.caution}
+			<!-- r4a-1 / r4a-2: what must be read before anything else. -->
+			<span class="caution" data-testid="activity-caution">{row.caution}</span>
+		{/if}
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
 	     draws no amount cell — never an empty one. Spec 093: a grant's
@@ -250,6 +254,13 @@
 	.subtitle {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.caution {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-error-base);
 		overflow-wrap: anywhere;
 	}
 

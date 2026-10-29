@@ -197,7 +197,12 @@ export class CallReading {
 		});
 		const method = this.method;
 		this.#clear.start(
-			txKickoff(method, this.paramsJson, this.chainId, toClearLocale(resolvedFormatKeys()))
+			txKickoff(method, this.paramsJson, this.chainId, toClearLocale(resolvedFormatKeys()), {
+				// The multisig signs it: a call into itself — Safe's own member
+				// management — is read by Vela from the bytes, never named from
+				// the public function-name database (r4a-15).
+				from: this.multisig
+			})
 		);
 		this.#guard.start({
 			type: 'approval_detected',
