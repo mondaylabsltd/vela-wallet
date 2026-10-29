@@ -616,7 +616,14 @@
     "riskConfirm": "Anladım, yine de ekle",
     "riskFlag": "Yüksek risk",
     "deployRefused": "Vela bu çoklu imzayı {{network}} üzerinde dağıtmayacak:",
-    "deployUnverified": "Vela {{network}} üzerindeki Safe sözleşmelerini kontrol edemedi, bu yüzden bu çoklu imzayı henüz orada dağıtmayacak. Birazdan tekrar dene."
+    "deployUnverified": "Vela {{network}} üzerindeki Safe sözleşmelerini kontrol edemedi, bu yüzden bu çoklu imzayı henüz orada dağıtmayacak. Birazdan tekrar dene.",
+    "refusedFlag": "Reddedildi",
+    "refusedOn": "{{network}} üzerinde salt okunur: Vela orada bunu dağıtmaz ve onun için imza atmaz.",
+    "signRiskTitle": "Yüksek riskli bir çoklu imza için imzalansın mı?",
+    "signRiskBody": "{{network}} üzerinde bu çoklu imza adına yalnızca üyeleri işlem yapamıyor. Bunu kontrol eden, ne imzalarsan imzala fonlarını taşıyabilir ya da onu engelleyebilir. Yalnızca nedenini tam olarak biliyorsan imzala.",
+    "signRiskConfirm": "Riski anladım, imzala",
+    "signRiskCancel": "İmzalama",
+    "signUnchecked": "Vela, {{network}} üzerinde bu çoklu imza adına kimin işlem yapabileceğini kontrol edemedi, bu yüzden orada henüz imza atmayacak. Birazdan tekrar dene."
    },
    "external": {
     "pageTitle": "Vela için imzala",

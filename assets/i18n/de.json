@@ -616,7 +616,14 @@
     "riskConfirm": "Verstanden – trotzdem hinzufügen",
     "riskFlag": "Hohes Risiko",
     "deployRefused": "Vela stellt dieses Multisig auf {{network}} nicht bereit:",
-    "deployUnverified": "Vela konnte die Safe-Verträge auf {{network}} nicht prüfen und stellt dieses Multisig dort deshalb noch nicht bereit. Versuch es gleich noch einmal."
+    "deployUnverified": "Vela konnte die Safe-Verträge auf {{network}} nicht prüfen und stellt dieses Multisig dort deshalb noch nicht bereit. Versuch es gleich noch einmal.",
+    "refusedFlag": "Abgelehnt",
+    "refusedOn": "Nur lesen auf {{network}}: Vela stellt es dort nicht bereit und signiert nicht dafür.",
+    "signRiskTitle": "Für ein Multisig mit hohem Risiko signieren?",
+    "signRiskBody": "Auf {{network}} können nicht nur seine Mitglieder für dieses Multisig handeln. Wer das kontrolliert, kann sein Guthaben bewegen oder es blockieren – egal, was du signierst. Signiere nur, wenn du genau weißt, warum es das hat.",
+    "signRiskConfirm": "Risiko verstanden – signieren",
+    "signRiskCancel": "Nicht signieren",
+    "signUnchecked": "Vela konnte nicht prüfen, wer auf {{network}} für dieses Multisig handeln kann, und signiert dort deshalb noch nicht. Versuche es gleich noch einmal."
    },
    "external": {
     "pageTitle": "Für Vela signieren",

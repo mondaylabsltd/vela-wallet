@@ -616,7 +616,14 @@
     "riskConfirm": "理解したうえで追加する",
     "riskFlag": "高リスク",
     "deployRefused": "Vela はこのマルチシグを {{network}} にデプロイしません：",
-    "deployUnverified": "{{network}} の Safe コントラクトを確認できなかったため、Vela はまだこのマルチシグをそこにデプロイしません。しばらくしてからもう一度お試しください。"
+    "deployUnverified": "{{network}} の Safe コントラクトを確認できなかったため、Vela はまだこのマルチシグをそこにデプロイしません。しばらくしてからもう一度お試しください。",
+    "refusedFlag": "拒否",
+    "refusedOn": "{{network}} では閲覧のみ：Vela はここでこのマルチシグをデプロイせず、署名もしません。",
+    "signRiskTitle": "高リスクのマルチシグに署名しますか？",
+    "signRiskBody": "{{network}} では、このマルチシグはメンバー以外にも操作できます。それを管理する者は、あなたが何に署名しても、資金を動かしたりブロックしたりできます。理由を正確に理解している場合にのみ署名してください。",
+    "signRiskConfirm": "リスクを理解したうえで署名する",
+    "signRiskCancel": "署名しない",
+    "signUnchecked": "{{network}} でこのマルチシグを操作できる者を確認できなかったため、Vela はまだそこで署名しません。しばらくしてからもう一度お試しください。"
    },
    "external": {
     "pageTitle": "Vela 用に署名",

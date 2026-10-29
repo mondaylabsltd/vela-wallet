@@ -616,7 +616,14 @@
     "riskConfirm": "Saya mengerti, tetap tambahkan",
     "riskFlag": "Risiko tinggi",
     "deployRefused": "Vela tidak akan men-deploy multisig ini di {{network}}:",
-    "deployUnverified": "Vela tidak bisa memeriksa kontrak Safe di {{network}}, jadi belum akan men-deploy multisig ini di sana. Coba lagi sebentar lagi."
+    "deployUnverified": "Vela tidak bisa memeriksa kontrak Safe di {{network}}, jadi belum akan men-deploy multisig ini di sana. Coba lagi sebentar lagi.",
+    "refusedFlag": "Ditolak",
+    "refusedOn": "Hanya baca di {{network}}: Vela tidak akan men-deploy atau menandatangani untuknya di sana.",
+    "signRiskTitle": "Tanda tangani untuk multisig berisiko tinggi?",
+    "signRiskBody": "Di {{network}}, bukan hanya anggotanya yang bisa bertindak atas multisig ini. Siapa pun yang mengendalikannya bisa memindahkan dana atau memblokirnya, apa pun yang kamu tanda tangani. Tanda tangani hanya jika kamu tahu persis mengapa ia memilikinya.",
+    "signRiskConfirm": "Saya mengerti risikonya, tanda tangani",
+    "signRiskCancel": "Jangan tanda tangani",
+    "signUnchecked": "Vela tidak bisa memeriksa siapa yang bisa bertindak atas multisig ini di {{network}}, jadi belum akan menandatangani di sana. Coba lagi sebentar lagi."
    },
    "external": {
     "pageTitle": "Tanda tangani untuk Vela",

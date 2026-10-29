@@ -616,7 +616,14 @@
     "riskConfirm": "Tôi hiểu, vẫn thêm",
     "riskFlag": "Rủi ro cao",
     "deployRefused": "Vela sẽ không triển khai đa chữ ký này trên {{network}}:",
-    "deployUnverified": "Vela không kiểm tra được các hợp đồng Safe trên {{network}}, nên chưa triển khai đa chữ ký này ở đó. Hãy thử lại sau ít phút."
+    "deployUnverified": "Vela không kiểm tra được các hợp đồng Safe trên {{network}}, nên chưa triển khai đa chữ ký này ở đó. Hãy thử lại sau ít phút.",
+    "refusedFlag": "Bị từ chối",
+    "refusedOn": "Chỉ đọc trên {{network}}: Vela sẽ không triển khai hay ký cho đa chữ ký này ở đó.",
+    "signRiskTitle": "Ký cho một đa chữ ký rủi ro cao?",
+    "signRiskBody": "Trên {{network}}, không chỉ các thành viên mới hành động được cho đa chữ ký này. Ai kiểm soát nó có thể chuyển tiền hoặc chặn nó, dù bạn ký gì. Chỉ ký nếu bạn biết chính xác vì sao nó có thứ đó.",
+    "signRiskConfirm": "Tôi hiểu rủi ro, ký",
+    "signRiskCancel": "Không ký",
+    "signUnchecked": "Vela không kiểm tra được ai có thể hành động cho đa chữ ký này trên {{network}}, nên chưa ký ở đó. Hãy thử lại sau giây lát."
    },
    "external": {
     "pageTitle": "Ký cho Vela",
