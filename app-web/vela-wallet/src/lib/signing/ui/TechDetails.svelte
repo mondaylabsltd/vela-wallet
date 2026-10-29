@@ -4,6 +4,7 @@
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import KeyValueRows from './KeyValueRows.svelte';
+	import RawData from './RawData.svelte';
 	import type { TechModel } from '../model';
 
 	/**
@@ -68,8 +69,7 @@
 			{/if}
 
 			{#if tech.raw}
-				<p class="layer-label">{tech.raw.label}</p>
-				<p class="raw">{tech.raw.hex}</p>
+				<RawData raw={tech.raw} />
 			{/if}
 		</div>
 	{/if}
@@ -113,18 +113,13 @@
 		color: var(--color-fg-subtle);
 	}
 
-	.signature,
-	.raw {
+	.signature {
 		margin: 0;
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 		color: var(--color-fg-base);
 		overflow-wrap: anywhere;
-	}
-
-	.raw {
-		color: var(--color-fg-muted);
 	}
 
 	.identity {

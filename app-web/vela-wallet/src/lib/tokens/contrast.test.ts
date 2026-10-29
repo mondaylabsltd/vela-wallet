@@ -55,6 +55,12 @@ const PAIRS: Array<[string, string, number, string]> = [
 	['color.fg.base', 'color.bg.base', 3, 'active pager dot, checks, selected marks, focus ring'],
 	['color.fg.base', 'color.bg.raised', 3, 'checks and selected marks on raised sheets'],
 	['color.fg.inverse', 'color.fg.base', 4.5, 'neutral primary button label on its fill'],
+	// Technical details' raw data (`RawData`), drawn on the sunken panel: its
+	// values and hidden-character markers, its keys and notes, and its
+	// punctuation, whose meaning the indented layout also carries.
+	['color.fg.base', 'color.bg.sunken', 4.5, 'raw data values and markers on the sunken panel'],
+	['color.fg.muted', 'color.bg.sunken', 4.5, 'raw data keys and notes on the sunken panel'],
+	['color.fg.subtle', 'color.bg.sunken', 3, 'raw data punctuation (see header note)'],
 	['color.accent.base', 'color.bg.base', 3, 'value button fill against page background'],
 	['color.accent.base', 'color.bg.raised', 3, 'value button fill against a raised sheet']
 ];

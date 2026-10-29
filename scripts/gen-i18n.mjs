@@ -991,8 +991,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.eraseDevice.failedHeld` — everything was deleted but the empty
 //   database, which another tab still holds open: close Vela there, then try
 //   again. 2253 + 1 = 2254 leaves, 120 branches.
-if (PATHS.length !== 2374) fail(`expected 2374 paths (2254 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2254) fail(`expected 2254 leaf paths, got ${leafSet.size}`);
+// 2377 (the raw call data readable, 2026-10-29): +
+//   `componentsUi.signing.{techRawCopy, techRawShowAll, techRawJsonText}` —
+//   the technical details' copy button, the "show all" of a capped long
+//   payload, and the note over a string drawn as the JSON it holds (typed
+//   data). 2254 + 3 = 2257 leaves, 120 branches.
+if (PATHS.length !== 2377) fail(`expected 2377 paths (2257 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2257) fail(`expected 2257 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
