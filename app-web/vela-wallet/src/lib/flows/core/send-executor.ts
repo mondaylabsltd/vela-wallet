@@ -142,9 +142,10 @@ export interface SendTrackerHandoff {
 }
 
 /**
- * The session the executor belongs to, for the one fact it must dispatch
- * mid-submit (`OpSigned`, spec 082 RJ1). Absent: a harness with no session —
- * then there is no write-ahead to wait for, and the submit posts as before.
+ * The session the executor belongs to, for the facts it dispatches mid-flight:
+ * `OpSigned` mid-submit (spec 082 RJ1), and a walk's progressive chunks
+ * (`TokensPartial`). Absent: a harness with no session — then there is no
+ * write-ahead to wait for, and the submit posts as before.
  */
 export interface SendExecutorSelf {
 	dispatch(event: SendEvent): void;
@@ -366,8 +367,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					const tokens = await fetchTokens(operation.address, {
 						onProgress: (partial) => {
 							// Display-only; lock resolution always waits for the full answer.
+							// Into the session itself, as `OpSigned` is: the wallet page's
+							// port for it was a no-op, so a picker opened while the home's
+							// round was still out (the home streams it since home-20) stayed
+							// empty until the slowest network answered — and on the desktop
+							// a tap meant for its row landed on the home's, beside it.
 							ports.tokensFetched(partial);
-							ports.tokensPartial(partial.map(toSendToken));
+							self?.dispatch({ type: 'tokens_partial', tokens: partial.map(toSendToken) });
 						}
 					});
 					ports.tokensFetched(tokens);

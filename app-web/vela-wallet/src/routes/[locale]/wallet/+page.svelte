@@ -845,7 +845,6 @@
 			},
 			onError: (error) => console.error('[send] core fault:', error),
 			ports: {
-				tokensPartial: () => {},
 				// The originals are the API's; the core carries the slice it needs and
 				// the overlays read that. Indexing them here (as Expo does for its
 				// token selector's logos) would be a second copy nothing reads.

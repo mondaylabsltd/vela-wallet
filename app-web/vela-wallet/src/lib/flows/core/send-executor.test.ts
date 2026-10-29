@@ -9,8 +9,11 @@
 //     reads per chain (Tempo: the fee recipient instead of the relay's gas
 //     quote), swallowing every error.
 // And `EstimateFee` hands `auto_fee_token` through to the fee session.
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SendToken } from '$lib/core/generated/SendToken';
+import type { SendView } from '$lib/core/generated/SendView';
+import type { APIToken } from '$lib/services/tokens-model';
 
 const seams = vi.hoisted(() => ({
 	fetchTokens: vi.fn(),
@@ -116,7 +119,8 @@ vi.mock('$lib/services/wallet-api', () => ({
 }));
 
 import { createSendExecutor, setSendTrackerSink } from './send-executor';
-import type { SendShellPorts } from './send-types';
+import { createSendSession } from './send-session';
+import { sendTokenId, type SendShellPorts } from './send-types';
 import type { SendEvent } from '$lib/core/generated/SendEvent';
 import { sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
 import { VenueBlockedError } from '$lib/signing/sign-challenge';
@@ -136,7 +140,6 @@ const HELD: SendToken = {
 
 function ports(extra: Partial<SendShellPorts> = {}): SendShellPorts {
 	return {
-		tokensPartial: vi.fn(),
 		tokensFetched: vi.fn(),
 		credentialId: () => null,
 		credentialLoaded: vi.fn(),
@@ -228,6 +231,90 @@ describe('FetchTokens — one list with the asset screen (spec 078)', () => {
 			type: 'network_added',
 			outcome: { type: 'not_found' }
 		});
+	});
+});
+
+describe('a picker opened while the home’s round is still out', () => {
+	const XDAI: APIToken = {
+		network: 'gnosis-mainnet',
+		chainName: 'Gnosis',
+		symbol: 'xDAI',
+		balance: '2',
+		decimals: 18,
+		logo: null,
+		name: 'xDAI',
+		tokenAddress: null,
+		priceUsd: 1,
+		spam: false
+	};
+
+	/** Gnosis has answered; another network is still out (the walk never ends here). */
+	function roundStillOut() {
+		seams.fetchTokens.mockImplementation(
+			(_address: string, options: { onProgress?: (tokens: APIToken[]) => void }) => {
+				options.onProgress?.([XDAI]);
+				return new Promise(() => {});
+			}
+		);
+	}
+
+	it('hands each chunk of the walk to its own session', async () => {
+		roundStillOut();
+		const dispatch = vi.fn();
+		const executor = createSendExecutor(ports({ holdings: () => ({ kind: 'walk' }) }), {
+			dispatch
+		});
+		void executor.execute(fetchTokens);
+		await vi.waitFor(() =>
+			expect(dispatch).toHaveBeenCalledWith({
+				type: 'tokens_partial',
+				tokens: [expect.objectContaining({ chain_id: 100, symbol: 'xDAI', balance: '2' })]
+			})
+		);
+	});
+
+	it('lists what has answered, and its row opens the send form — not the asset page', async () => {
+		// The desktop test's path (e2e/onchain/multisig.onchain.ts, "the desktop"):
+		// the home streams its rows (home-20) and Send opens before the round has
+		// settled, so `FetchTokens` walks. The picker must show the row the home
+		// shows, or the tap meant for it lands on the home's row beside it.
+		roundStillOut();
+		let view: SendView | null = null;
+		const session = createSendSession({
+			onView: (next) => (view = next),
+			onError: (error) => {
+				throw error;
+			},
+			ports: ports({ holdings: () => ({ kind: 'walk' }) })
+		});
+		session.start({
+			type: 'open',
+			account: {
+				id: '',
+				address: ACCOUNT,
+				name: 'Desk fund',
+				multisig: { threshold: 2, owners: 2 }
+			},
+			params: {
+				preselected_symbol: null,
+				preselected_network: null,
+				prefilled_recipient: null,
+				prefilled_chain_id: null,
+				prefilled_token_address: null,
+				prefilled_amount_base: null,
+				locked: false,
+				preselected_multi: null
+			},
+			display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+		});
+		await vi.waitFor(() => expect(view?.tokens).toHaveLength(1));
+		const shown = view as unknown as SendView;
+		expect(shown.stage).toBe('select_token');
+		expect(shown.loading).toBe(false);
+		session.dispatch({ type: 'select_token', token_id: sendTokenId(shown.tokens[0]) });
+		expect((view as unknown as SendView).stage).toBe('enter_details');
+		expect((view as unknown as SendView).selected_token).toMatchObject({ symbol: 'xDAI' });
+		session.dispose();
 	});
 });
 

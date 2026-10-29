@@ -43,8 +43,6 @@ export type SendEffect = { id: number; operation: SendOperation };
  * React tree — `t` for the alert wording, the router for `Close`.
  */
 export interface SendShellPorts {
-	/** `fetchTokens`'s `onProgress` — a progressive chain chunk, display only. */
-	tokensPartial(tokens: SendToken[]): void;
 	/**
 	 * The FULL `APIToken` rows behind a chunk/answer. The core carries the slice
 	 * it needs; the shell keeps the originals so `TokenSelector` still renders the
