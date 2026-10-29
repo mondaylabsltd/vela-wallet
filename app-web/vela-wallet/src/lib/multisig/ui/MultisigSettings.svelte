@@ -20,6 +20,7 @@
 	import { proposals } from '../core/proposals.svelte';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import CustomServiceNote from './CustomServiceNote.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -77,6 +78,7 @@
 			{fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}
 		</p>
 	</header>
+	<CustomServiceNote {m} />
 	<ul class="members">
 		{#each members.owners as owner (owner)}
 			{@const mine = local.some((o) => o.address.toLowerCase() === owner.toLowerCase())}

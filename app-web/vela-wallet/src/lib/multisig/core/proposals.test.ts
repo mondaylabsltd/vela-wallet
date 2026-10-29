@@ -9,7 +9,15 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const OWNER = '0x00000000000000000000000000000000000000aa';
 const TO = '0x000000000000000000000000000000000000dEaD';
 
-const mailbox = { down: false, slowMs: 0, proposals: [] as unknown[], postDown: false };
+const mailbox = {
+	down: false,
+	slowMs: 0,
+	proposals: [] as unknown[],
+	postDown: false,
+	reads: 0,
+	probes: 0,
+	url: 'https://safe-genesis.getvela.app'
+};
 
 // ms-19: the outbox lives in localStorage, which the server project lacks.
 const storage = new Map<string, string>();
@@ -26,7 +34,13 @@ vi.mock('./chain', () => ({
 	readMembers: async () => ({ owners: [OWNER], threshold: 2, nonce: 3n, deployed: true })
 }));
 vi.mock('./service', () => ({
+	genesisServiceURL: () => mailbox.url,
+	probeService: async () => {
+		mailbox.probes += 1;
+		return !mailbox.down;
+	},
 	fetchProposals: async () => {
+		mailbox.reads += 1;
 		if (mailbox.slowMs) await new Promise((r) => setTimeout(r, mailbox.slowMs));
 		if (mailbox.down) throw new Error('mailbox down');
 		return { members: {}, proposals: mailbox.proposals };
@@ -113,6 +127,7 @@ const {
 	MailboxUnreadableError,
 	SLOW_REFRESH_MS
 } = await import('./proposals.svelte');
+const { serviceOutage, RETRY_STEPS_MS } = await import('./service-state.svelte');
 
 function stored(nonce: number) {
 	const tx = {
@@ -144,6 +159,10 @@ beforeEach(() => {
 	mailbox.slowMs = 0;
 	mailbox.proposals = [];
 	mailbox.postDown = false;
+	mailbox.reads = 0;
+	mailbox.probes = 0;
+	mailbox.url = 'https://safe-genesis.getvela.app';
+	serviceOutage.reset();
 	storage.clear();
 	signed.length = 0;
 	submitted.length = 0;
@@ -208,6 +227,67 @@ describe('a mailbox that cannot be read', () => {
 			proposals.follow(null, []);
 			vi.useRealTimers();
 		}
+	});
+});
+
+describe('a multisig service that is away', () => {
+	const chains = [100, 5042002, 1];
+
+	it('asks no network until its next step, then one probe for all of them', async () => {
+		mailbox.proposals = [stored(3)];
+		proposals.follow(account, chains);
+		await proposals.refresh(account, chains);
+		expect(mailbox.reads).toBe(3);
+
+		// Found away (by any request): the next rounds ask the mailbox nothing.
+		serviceOutage.failed();
+		mailbox.down = true;
+		mailbox.reads = 0;
+		await proposals.refresh(account, chains);
+		expect(mailbox.reads).toBe(0);
+		expect(mailbox.probes).toBe(0);
+		// Said as the service away, over the last list — never "nothing waiting".
+		expect(proposals.unreachable).toBe(true);
+		expect(proposals.open.map((i) => i.nonce)).toEqual([3n, 3n, 3n]);
+
+		// Its step came: one probe for the three networks, still away.
+		serviceOutage.reset();
+		serviceOutage.failed(Date.now() - RETRY_STEPS_MS[0]);
+		await proposals.refresh(account, chains);
+		expect(mailbox.probes).toBe(1);
+		expect(mailbox.reads).toBe(0);
+		expect(serviceOutage.blocked()).toBe(true);
+
+		// The Retry: asked now, whatever the schedule — and it is back.
+		mailbox.down = false;
+		await proposals.retry();
+		expect(mailbox.reads).toBe(3);
+		expect(proposals.stale).toBe(false);
+		expect(proposals.unreachable).toBe(false);
+		proposals.follow(null, []);
+	});
+
+	it('a slow or partial read is still said as stale, not as the service away', async () => {
+		mailbox.down = true;
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		// The mock's failure is not a network one: nothing marked the outage.
+		expect(proposals.stale).toBe(true);
+		expect(proposals.unreachable).toBe(false);
+		proposals.follow(null, []);
+	});
+
+	it("forgets another service's list when the address changes", async () => {
+		mailbox.proposals = [stored(3)];
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		expect(proposals.open).toHaveLength(1);
+		mailbox.url = 'http://127.0.0.1:8788';
+		mailbox.down = true;
+		await proposals.refresh(account, [100]);
+		expect(proposals.open).toEqual([]);
+		expect(proposals.stale).toBe(true);
+		proposals.follow(null, []);
 	});
 });
 

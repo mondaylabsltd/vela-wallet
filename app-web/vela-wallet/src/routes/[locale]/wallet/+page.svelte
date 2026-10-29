@@ -98,7 +98,8 @@
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import { proposalOfRow, waitingRows } from '$lib/multisig/core/activity.svelte';
+	import { MULTISIG_RETRY, proposalOfRow, waitingRows } from '$lib/multisig/core/activity.svelte';
+	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
@@ -1869,6 +1870,10 @@
 		} else selectedTxId = row.id ?? null;
 	}
 	let proposalTapped = false;
+	/** An activity group's action: the waiting group's Retry, while the multisig service is away. */
+	function groupAction(id: string) {
+		if (id === MULTISIG_RETRY) void multisigProposals.retry();
+	}
 	function flowTo(...args: Parameters<typeof enter>) {
 		if (args[0] === 'tx-detail' && proposalTapped) {
 			proposalTapped = false;
@@ -2698,6 +2703,7 @@
 				}}
 				onassetclose={() => (selectedAssetId = null)}
 				onactivity={openActivity}
+				ongroupaction={groupAction}
 			/>
 		</div>
 		{#if desktopFlow === 'ds1'}
@@ -2735,6 +2741,7 @@
 					onstatus={openRescue}
 					onbalancerefresh={refreshBalances}
 					onactivity={openActivity}
+					ongroupaction={groupAction}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 				/>
 				{#if shownFlowState !== undefined}

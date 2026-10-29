@@ -167,7 +167,20 @@ export type SettingsPageId =
 	 * only (no grants elsewhere), so the route adds its row and nav entry.
 	 */
 	| 'sites'
+	/**
+	 * The multisig service (Safe Genesis Registry) this device uses — the
+	 * default or the person's own. Web only (multisigs are), so the route adds
+	 * its row and nav entry, and draws the page (`MultisigServicePage`).
+	 */
+	| 'multisig-service'
 	| 'about';
+
+/** A settings page the route draws itself: its header, and its body. */
+export interface MultisigServicePage {
+	title: string;
+	subtitle?: string;
+	body: import('svelte').Snippet;
+}
 
 /**
  * Which modal is open over the current page. The phone draws all of these as

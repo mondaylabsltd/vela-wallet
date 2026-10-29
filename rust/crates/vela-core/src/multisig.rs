@@ -1824,6 +1824,16 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "multisig")?,
             &arg::<String>(&args, "nonce")?,
         )?)),
+        // The multisig service's two Settings rules (`app::genesis_service`).
+        #[cfg(feature = "crux")]
+        "serviceAddress" => out(json(&crate::app::genesis_service::service_address(
+            &arg::<String>(&args, "input")?,
+        ))),
+        #[cfg(feature = "crux")]
+        "serviceAnswer" => out(json(&crate::app::genesis_service::service_answer(
+            arg(&args, "status")?,
+            &arg::<String>(&args, "body")?,
+        ))),
         other => Err(err(format!("unknown multisig method {other}"))),
     }
 }
@@ -1873,6 +1883,26 @@ mod tests {
 
     const A: &str = "0x1111111111111111111111111111111111111111";
     const B: &str = "0x2222222222222222222222222222222222222222";
+
+    /// The service's Settings rules go through the multisig door as JSON.
+    #[cfg(feature = "crux")]
+    #[test]
+    fn the_service_rules_answer_through_the_door() {
+        assert_eq!(
+            call_json("serviceAddress", r#"{"input":" http://127.0.0.1:8788/ "}"#).unwrap(),
+            r#"{"kind":"ok","url":"http://127.0.0.1:8788"}"#
+        );
+        let body = serde_json::json!({
+            "status": 200,
+            "body": r#"{"service":"safe-genesis-registry","chains":[{"chainId":100}]}"#
+        });
+        let answer: serde_json::Value =
+            serde_json::from_str(&call_json("serviceAnswer", &body.to_string()).unwrap()).unwrap();
+        assert_eq!(
+            answer,
+            serde_json::json!({"kind":"genesis","chains":[{"chainId":100,"name":null}],"homeChainId":null})
+        );
+    }
 
     #[test]
     fn owner_order_is_part_of_the_address() {

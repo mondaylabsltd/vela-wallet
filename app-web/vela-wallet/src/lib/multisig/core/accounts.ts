@@ -33,6 +33,7 @@ import {
 	ServiceUnavailableError,
 	type OwnerProof
 } from './service';
+import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 
 /** The service's home chain: where the registry it reads first lives. */
@@ -136,10 +137,12 @@ export async function createMultisig(
 
 /** Ask again for every multisig the registry has not confirmed. Quiet on failure. */
 export async function retryUnrecorded(): Promise<void> {
+	// The service is away: asked again on its schedule, not every minute.
+	if (serviceOutage.blocked()) return;
 	const proofs = readProofs();
 	for (const account of multisig.accounts.filter((a) => !a.recorded)) {
 		try {
-			const known = await fetchGenesis(account.address);
+			const known = await fetchGenesis(account.address, { background: true });
 			if (known.found && !known.pending) {
 				multisig.markRecorded(account.address);
 				continue;

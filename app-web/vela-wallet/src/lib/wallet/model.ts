@@ -145,6 +145,8 @@ export interface ActivityGroupModel {
 	 * home saying there is nothing.
 	 */
 	note?: string;
+	/** The one thing to do about what the note says (the multisig service is away: Retry). */
+	action?: { id: string; label: string };
 	rows: ActivityRowModel[];
 }
 

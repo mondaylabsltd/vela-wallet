@@ -20,6 +20,7 @@
 	import { addMultisig, importExported } from '../core/accounts';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
 	import { multisig } from '../core/store.svelte';
+	import CustomServiceNote from './CustomServiceNote.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -173,6 +174,7 @@
 		{/if}
 	{:else}
 		<p class="intro">{m.add.intro}</p>
+		<CustomServiceNote {m} />
 		<form
 			onsubmit={(event) => {
 				event.preventDefault();
