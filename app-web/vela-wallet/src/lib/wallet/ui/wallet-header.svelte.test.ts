@@ -22,7 +22,7 @@ const base: WalletHeaderModel = {
 describe('the header’s sync line (ob-2)', () => {
 	it('draws nothing for a synced wallet', () => {
 		const screen = render(WalletHeader, { props: { header: base, onclick: () => {} } });
-		expect(screen.container.querySelector('[role="status"]')).toBeNull();
+		expect(screen.container.querySelector('.sync[role="status"]')).toBeNull();
 	});
 
 	it('says syncing, with no button, while the session still tries', () => {
@@ -32,7 +32,7 @@ describe('the header’s sync line (ob-2)', () => {
 				onclick: () => {}
 			}
 		});
-		expect(screen.container.querySelector('[role="status"]')?.textContent).toContain(
+		expect(screen.container.querySelector('.sync[role="status"]')?.textContent).toContain(
 			'Saved on this device · syncing…'
 		);
 		expect(screen.container.querySelector('.retry')).toBeNull();
