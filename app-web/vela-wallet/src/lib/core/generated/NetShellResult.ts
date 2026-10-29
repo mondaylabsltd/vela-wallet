@@ -6,6 +6,7 @@ import type { NetHealthBody } from "./NetHealthBody";
 import type { NetNetworkConfig } from "./NetNetworkConfig";
 import type { NetProviderKeys } from "./NetProviderKeys";
 import type { NetRawChainData } from "./NetRawChainData";
+import type { NetShownNetworks } from "./NetShownNetworks";
 import type { NetStoredEndpoints } from "./NetStoredEndpoints";
 
 /**
@@ -16,7 +17,12 @@ export type NetShellResult = { "type": "store_loaded", custom_networks: Array<Ne
  * This shell keeps multisig accounts, so the multisig service is one
  * of its endpoints (shown, probed, reset). Absent: it is not.
  */
-multisig_service: boolean, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
+multisig_service: boolean, 
+/**
+ * `vela.shownNetworks`, as settled ([`shown_networks::settle`]);
+ * `None`: none stored, or unreadable — every network is shown.
+ */
+shown_networks?: NetShownNetworks, } | { "type": "written" } | { "type": "provider_keys_retired", configs_written: boolean, keys_removed: boolean, } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
 /**
  * `None` = failed/timed out/no parseable id.
  */
