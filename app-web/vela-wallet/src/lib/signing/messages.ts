@@ -380,6 +380,11 @@ export interface SigningMessages {
 	techParam: string;
 	techRawUnits: string;
 	techRawData: string;
+	/** The raw data's copy button, its "Copied", its "Show all", its JSON-in-a-string note. */
+	techRawCopy: string;
+	techRawCopied: string;
+	techRawShowAll: string;
+	techRawJsonText: string;
 	techSimResult: string;
 	techIdentityToken: string;
 	techIdentityRecipient: string;

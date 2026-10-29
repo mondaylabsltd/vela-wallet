@@ -283,6 +283,31 @@ export interface TechIdentity {
 	avatar?: LetterMark;
 }
 
+/**
+ * The request as the site sent it (`RawData`): laid out to be read, copied as
+ * it came. `hex` is that text exactly — the params' JSON, or the bytes.
+ */
+export interface RawDataModel {
+	label: string;
+	hex: string;
+	words: {
+		/** The copy button's name: "Copy raw data". */
+		copy: string;
+		/** Its confirmation: "Copied". */
+		copied: string;
+		/**
+		 * Under a capped payload, "Show all (412 lines)": the words before and
+		 * after the count, which only the drawing knows — split here so that
+		 * no `{{…}}` is ever left in a model.
+		 */
+		showAll: [before: string, after: string];
+		/** Over a string drawn as the JSON it holds: "(a string, shown as JSON)". */
+		jsonText: string;
+		/** A character of it is drawn as its marker: the sheet's hidden-character line. */
+		hidden: string;
+	};
+}
+
 export interface TechModel {
 	title: string;
 	/** Byte count shown on the collapsed row when there is one ("· 412 字节"). */
@@ -291,7 +316,7 @@ export interface TechModel {
 	params: KeyValueRow[];
 	identities: TechIdentity[];
 	simResult?: KeyValueRow;
-	raw?: { label: string; hex: string };
+	raw?: RawDataModel;
 	copyLabel: string;
 	explorerLabel: string;
 }

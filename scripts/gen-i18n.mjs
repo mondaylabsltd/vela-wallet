@@ -1022,8 +1022,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   when nothing says, the person is asked): + `home.multisig.add.chooseNetwork`.
 //   2259 + 1 = 2260 leaves, 121 branches.
 // 2395 (Multisig service, 2026-10-28): 2274 leaves, 121 branches.
-if (PATHS.length !== 2395) fail(`expected 2395 paths (2274 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2274) fail(`expected 2274 leaf paths, got ${leafSet.size}`);
+// 2377 (the raw call data readable, 2026-10-29): +
+//   `componentsUi.signing.{techRawCopy, techRawShowAll, techRawJsonText}` —
+//   the technical details' copy button, the "show all" of a capped long
+//   payload, and the note over a string drawn as the JSON it holds (typed
+//   data). 2254 + 3 = 2257 leaves, 120 branches.
+// 2398 (Raw JSON view, 2026-10-28): 2277 leaves, 121 branches.
+if (PATHS.length !== 2398) fail(`expected 2398 paths (2277 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2277) fail(`expected 2277 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

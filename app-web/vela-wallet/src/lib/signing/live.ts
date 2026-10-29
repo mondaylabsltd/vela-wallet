@@ -50,6 +50,7 @@ import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
 import { getEthereumDataURL } from '$lib/services/endpoints';
 import { txParams } from './core/tx-params';
+import { rawWords } from './raw-json';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
 import { resolvedFormatKeys } from '$lib/services/locale-format';
 import type { SigningMessages } from './messages';
@@ -1583,7 +1584,9 @@ function techModel(inputs: SigningLiveInputs, own: boolean, shown: VerdictShown)
 		...(own && simResult !== undefined
 			? { simResult: { label: m.techSimResult, value: simResult } }
 			: {}),
-		raw: request ? { label: m.techRawData, hex: request.params_json } : undefined,
+		raw: request
+			? { label: m.techRawData, hex: request.params_json, words: rawWords(m) }
+			: undefined,
 		copyLabel: m.copyValue,
 		explorerLabel: m.viewOnExplorer
 	};
