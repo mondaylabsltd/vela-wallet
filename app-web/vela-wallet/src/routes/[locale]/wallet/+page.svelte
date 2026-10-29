@@ -236,6 +236,11 @@
 	 * the foot of this page draws it.
 	 */
 	let switching = $state(false);
+	// r4a-24: a multisig sheet (a link that arrived, a proposal) opens alone —
+	// the switcher closes first, never two modals stacked.
+	$effect(() => {
+		if (multisigUi.sheet !== null) switching = false;
+	});
 
 	/**
 	 * The third column's own two subjects (spec 015 D3 and 021 A2, live): the
@@ -1424,6 +1429,8 @@
 									rule: data.multisigMessages.panel.title,
 									feeNote: data.multisigMessages.proposal.feeNote,
 									confirm: data.multisigMessages.send.propose,
+									mailboxDown: data.multisigMessages.proposal.mailboxDown,
+									offline: data.multisigMessages.proposal.reason.offline,
 									// The rule on the send's network: its members there now.
 									membersOn: (chainId: number) => {
 										const there = multisigProposals.chain(chainId)?.members;

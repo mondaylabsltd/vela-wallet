@@ -55,15 +55,19 @@ const UNREAD = 42161;
 const UNDEPLOYED = 8453;
 /** A network this device does not have (a member's own). */
 const ELSEWHERE = 99999;
+/** r4b-3: networks whose RPC does not answer. */
+const rpc = vi.hoisted(() => ({ down: [] as number[] }));
 vi.mock('./chain', () => ({
 	hasCode: async () => true,
 	// Read through the wallet's own RPC: on Arbitrum the Safe is deployed, at nonce 7.
 	readMembers: async (chainId: number) =>
-		chainId === UNREAD
-			? { owners: [OWNER], threshold: 1, nonce: 7n, deployed: true }
-			: chainId === UNDEPLOYED
-				? { owners: [OWNER], threshold: 1, nonce: 0n, deployed: false }
-				: { owners: [OWNER], threshold: 2, nonce: 3n, deployed: true }
+		rpc.down.includes(chainId)
+			? Promise.reject(new Error(`chain ${chainId} unavailable`))
+			: chainId === UNREAD
+				? { owners: [OWNER], threshold: 1, nonce: 7n, deployed: true }
+				: chainId === UNDEPLOYED
+					? { owners: [OWNER], threshold: 1, nonce: 0n, deployed: false }
+					: { owners: [OWNER], threshold: 2, nonce: 3n, deployed: true }
 }));
 vi.mock('./service', () => ({
 	ServiceUnavailableError: errors.ServiceUnavailableError,
@@ -173,7 +177,9 @@ vi.mock('./owners', () => ({
 	}
 }));
 vi.mock('$lib/onboarding/core/storage', () => ({ loadAccounts: () => [] }));
-vi.mock('./records', () => ({ recordRemoteExecutions: async () => false }));
+vi.mock('./records', () => ({
+	recordRemoteExecutions: async () => ({ wrote: false, unreadable: [] })
+}));
 vi.mock('./execute', () => ({ submitExecution: async () => ({}) }));
 vi.mock('../external/signing.svelte', () => ({ externalSigning: { approve: async () => ({}) } }));
 const account = {
@@ -200,8 +206,10 @@ const {
 	OUTBOX_PATIENCE_MS,
 	outbox,
 	readProposal,
+	markCancellations,
 	SLOW_REFRESH_MS
 } = await import('./proposals.svelte');
+const { executions } = await import('./execution-watch.svelte');
 const { serviceOutage, RETRY_STEPS_MS } = await import('./service-state.svelte');
 
 function stored(nonce: number, chainId = 100) {
@@ -245,6 +253,8 @@ beforeEach(() => {
 	storage.clear();
 	signed.length = 0;
 	submitted.length = 0;
+	rpc.down = [];
+	executions.resetForTests();
 	proposals.follow(null, []);
 });
 
@@ -620,5 +630,169 @@ describe('who counts', () => {
 		const deployed = readProposal(account as never, { ...undeployed, deployed: true }, p as never)!;
 		expect(deployed.renameUndeployed).toBe(false);
 		expect(deployed.canExecute).toHaveLength(1);
+	});
+});
+
+/**
+ * r4b-11: the waiting list is kept per multisig across reloads — shown at
+ * once on the next page, said as the last known, and kept while the mailbox
+ * fails or is slow; never a source of a new proposal's number.
+ */
+describe('the list kept across reloads (r4b-11)', () => {
+	it('a reload with a failing mailbox still shows the last list, as the last known', async () => {
+		mailbox.proposals = [stored(3), stored(4)];
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		expect(proposals.open.map((i) => i.nonce)).toEqual([3n, 4n]);
+		expect(proposals.cached).toBeNull();
+
+		// The next page: nothing in memory, the mailbox failing.
+		proposals.follow(null, []);
+		mailbox.down = true;
+		proposals.follow(account, [100]);
+		// At once, before anything answered.
+		expect(proposals.open.map((i) => i.nonce)).toEqual([3n, 4n]);
+		expect(proposals.cached).not.toBeNull();
+		expect(proposals.stale).toBe(true);
+		await proposals.refresh(account, [100]);
+		expect(proposals.open.map((i) => i.nonce)).toEqual([3n, 4n]);
+		expect(proposals.cached).not.toBeNull();
+		// …and no number is taken from it.
+		await expect(
+			proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }])
+		).rejects.toBeInstanceOf(MailboxUnreadableError);
+
+		// The mailbox back: read in full, no longer the last known.
+		mailbox.down = false;
+		await proposals.refresh(account, [100]);
+		expect(proposals.cached).toBeNull();
+		expect(proposals.stale).toBe(false);
+	});
+
+	it('another service’s list is not this one’s', async () => {
+		mailbox.proposals = [stored(3)];
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		proposals.follow(null, []);
+		mailbox.url = 'https://other.example';
+		mailbox.down = true;
+		proposals.follow(account, [100]);
+		expect(proposals.open).toEqual([]);
+		expect(proposals.cached).toBeNull();
+	});
+});
+
+describe('a network that does not answer (r4b-3)', () => {
+	it('is named as unreadable — the list is never "nothing waits"', async () => {
+		mailbox.proposals = [stored(3)];
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		rpc.down = [100];
+		await proposals.refresh(account, [100]);
+		expect(proposals.unreadable).toEqual([100]);
+		expect(proposals.stale).toBe(true);
+		expect(proposals.open.map((i) => i.nonce)).toEqual([3n]);
+		rpc.down = [];
+		await proposals.refresh(account, [100]);
+		expect(proposals.unreadable).toEqual([]);
+	});
+});
+
+describe('back to the tab, and offline (r4b-16, r4b-15)', () => {
+	it('a tab shown again reads at once; offline is said, and back online reads', async () => {
+		const listeners = new Map<string, () => void>();
+		const target = {
+			addEventListener: (type: string, fn: () => void) => void listeners.set(type, fn),
+			removeEventListener: (type: string) => void listeners.delete(type)
+		};
+		const doc = { ...target, visibilityState: 'visible' };
+		vi.stubGlobal('window', target);
+		vi.stubGlobal('document', doc);
+		vi.stubGlobal('navigator', { onLine: true });
+		try {
+			proposals.follow(account, [100]);
+			await new Promise((r) => setTimeout(r, 0));
+			const before = mailbox.reads;
+			listeners.get('visibilitychange')?.();
+			await new Promise((r) => setTimeout(r, 0));
+			expect(mailbox.reads).toBeGreaterThan(before);
+			listeners.get('offline')?.();
+			expect(proposals.offline).toBe(true);
+			listeners.get('online')?.();
+			expect(proposals.offline).toBe(false);
+			proposals.follow(null, []);
+			expect(listeners.size).toBe(0);
+		} finally {
+			vi.unstubAllGlobals();
+			vi.stubGlobal('localStorage', {
+				getItem: (k: string) => storage.get(k) ?? null,
+				setItem: (k: string, v: string) => void storage.set(k, v),
+				removeItem: (k: string) => void storage.delete(k)
+			});
+		}
+	});
+});
+
+describe('proposals at one number (r4b-6)', () => {
+	it('each open one knows the others — only one of them can run', () => {
+		const at = (hash: string, nonce: bigint, status = 'pending', kind = 'transfer') =>
+			({
+				safeTxHash: hash,
+				nonce,
+				status,
+				review: { action: { kind } },
+				cancelledBy: null,
+				sameNonce: []
+			}) as never;
+		const items = [at('0xa', 5n), at('0xb', 5n), at('0xc', 6n), at('0xd', 5n, 'done')];
+		markCancellations(SAFE, items);
+		const by = Object.fromEntries(
+			(items as { safeTxHash: string; sameNonce: string[] }[]).map((i) => [
+				i.safeTxHash,
+				i.sameNonce
+			])
+		);
+		expect(by).toEqual({ '0xa': ['0xb'], '0xb': ['0xa'], '0xc': [], '0xd': [] });
+	});
+});
+
+describe('an execution in flight is not offered again (r4b-7)', () => {
+	it('while this device’s execution may land, nobody here can execute it', () => {
+		const members = { owners: [OWNER], threshold: 1, nonce: 3n, deployed: true };
+		const p = { ...stored(3), approvals: [{ owner: OWNER, createdMs: 1 }] };
+		expect(readProposal(account as never, members, p as never)!.executing).toBe(false);
+		executions.start({
+			chainId: 100,
+			multisig: SAFE,
+			safeTxHash: p.safeTxHash,
+			nonce: '3',
+			userOpHash: '0x01',
+			by: OWNER,
+			maybeSent: false,
+			startedMs: Date.now(),
+			createdMs: 1
+		});
+		const item = readProposal(account as never, members, p as never)!;
+		expect(item.executing).toBe(true);
+		expect(item.canExecute).toEqual([]);
+	});
+});
+
+describe('a proposal withdrawn before it is made (r4b-5)', () => {
+	it('asks no passkey and proposes nothing once the person dismissed it', async () => {
+		mailbox.proposals = [stored(3)];
+		mailbox.slowMs = 50;
+		const stop = new AbortController();
+		const proposing = proposeTransfers(
+			SAFE,
+			100,
+			[{ to: TO, token: null, amount: '1' }],
+			stop.signal
+		);
+		// Dismissed while the waiting list is still being read.
+		stop.abort();
+		await expect(proposing).rejects.toMatchObject({ name: 'AbortError' });
+		expect(signed).toEqual([]);
+		expect(submitted).toEqual([]);
 	});
 });

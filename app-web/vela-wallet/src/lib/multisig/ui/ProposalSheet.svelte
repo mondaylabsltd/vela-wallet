@@ -46,9 +46,17 @@
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
-	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
+	import { ExecutorCannotPayError } from '../core/execute';
 	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
+	import { ChainUnavailableError } from '../core/chain';
+	import { executions, watchExecution, type InFlight } from '../core/execution-watch.svelte';
+	import { progressLine } from '../core/progress';
+	import { multisigUi } from '../core/ui.svelte';
+	import { PasskeyCheckError } from '../core/owners';
+	import { ServiceUnavailableError } from '../core/service';
+	import { PasskeyError } from '$lib/onboarding/core/passkey';
+	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
@@ -57,6 +65,7 @@
 		approveExternally,
 		draftCalls,
 		execute,
+		MailboxRefusedError,
 		MailboxUnreadableError,
 		outbox,
 		proposals,
@@ -112,6 +121,9 @@
 
 	/** The shown multisig's transactions, or the link's own source (ms-21). */
 	const store = $derived<ProposalSource>(source ?? proposals);
+	// r4b-4: a link's transaction is read again while it is shown, as the
+	// shown multisig's are — an execution elsewhere is seen here too.
+	$effect(() => source?.watch?.());
 
 	/** A dApp's transaction not proposed yet: the review, before any passkey. */
 	const drafting = $derived(!!draft && !draft.safeTxHash);
@@ -230,6 +242,8 @@
 		| { kind: 'idle' }
 		| { kind: 'busy'; what: 'approve' | 'execute' | 'reject' | 'propose' }
 		| { kind: 'sent'; txHash: string | null; by: string }
+		/** r4b-1: how this device's execution ended when it was not the one that ran. */
+		| { kind: 'ended'; verdict: ExecutionVerdict; by: string }
 		| { kind: 'failed'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
 	let rejecting = $state(false);
@@ -247,6 +261,7 @@
 				})
 	);
 
+	/** A dismissal the browser reports as its own (a closed sheet, nothing said by the wallet). */
 	function cancelled(error: unknown): boolean {
 		return (
 			error instanceof DOMException &&
@@ -254,7 +269,14 @@
 		);
 	}
 
+	/**
+	 * r4b-12: why it did not go, always in the corpus' words — never a raw
+	 * message — and true to what happens: a passkey closed (or not on this
+	 * device: the browser tells the two apart for nobody), one that timed out,
+	 * one whose signature did not check out; an approval kept and resent.
+	 */
 	function reasonOf(error: unknown): string {
+		console.warn('[multisig] not done:', error);
 		if (error instanceof ExecutorCannotPayError && actor) {
 			const symbol = nativeSymbol(chainId);
 			return fillTemplate(m.proposal.cannotPay, {
@@ -264,8 +286,34 @@
 				balance: `${formatUnits(error.have, 18)} ${symbol}`
 			});
 		}
-		if (error instanceof MailboxUnreadableError) return m.proposal.mailboxDown;
-		return error instanceof Error ? error.message : String(error);
+		if (error instanceof MailboxUnreadableError) {
+			return offline() ? m.proposal.reason.offline : m.proposal.mailboxDown;
+		}
+		if (error instanceof PasskeyError) {
+			if (error.kind === 'cancelled') {
+				return error.timedOut ? m.proposal.reason.passkeyTimedOut : m.proposal.reason.passkeyClosed;
+			}
+			if (error.kind === 'not_discoverable') return m.proposal.reason.passkeyMissing;
+			return m.proposal.reason.passkeyFailed;
+		}
+		if (cancelled(error)) return m.proposal.reason.passkeyClosed;
+		if (error instanceof PasskeyCheckError) return m.proposal.reason.passkeyFailed;
+		if (error instanceof MailboxRefusedError) return m.proposal.reason.serviceRefused;
+		if (error instanceof ServiceUnavailableError) {
+			return offline() ? m.proposal.reason.offline : m.proposal.reason.serviceKept;
+		}
+		// The relay provably never took it (refused, or out of reach): nothing was sent.
+		if (error instanceof Error && error.name === 'UserOpNotSentError') return m.proposal.notSent;
+		if (error instanceof ChainUnavailableError || offline()) {
+			return offline()
+				? m.proposal.reason.offline
+				: fillTemplate(m.proposal.reason.chainUnreachable, { network: chainName(chainId) });
+		}
+		return m.proposal.reason.unknown;
+	}
+
+	function offline(): boolean {
+		return typeof navigator !== 'undefined' && navigator.onLine === false;
 	}
 
 	/**
@@ -285,7 +333,7 @@
 			await draft.propose();
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+			phase = { kind: 'failed', reason: reasonOf(error) };
 			return;
 		}
 		// The proposal as the mailbox has it now: executed if it is ready.
@@ -301,55 +349,118 @@
 			await store.refresh(account, account.chainIds);
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+			phase = { kind: 'failed', reason: reasonOf(error) };
 		}
 	}
+
+	/** The watch of this device's execution in flight; stopped when the sheet goes. */
+	let watching: AbortController | null = null;
+	$effect(() => () => watching?.abort());
 
 	async function onExecute() {
 		if (!item || !actor || !members) return;
 		phase = { kind: 'busy', what: 'execute' };
+		let result: Awaited<ReturnType<typeof execute>>;
+		const by = actor.address;
+		const executing = item;
 		try {
-			const by = actor.address;
-			const result = await execute(account, item, actor, members);
-			phase = { kind: 'sent', txHash: null, by };
-			// A reply that was no hash (a 500, a refusal after a lost reply): the
-			// relay is asked about it at once, and an op it refused or never took
-			// is said now — not after three minutes of "Executing…".
-			const watch = new AbortController();
-			const refused = result.maybeSent
-				? relayRefused(result.userOpHash, chainId, watch.signal)
-				: new Promise<boolean>(() => {});
-			const outcome = await Promise.race([
-				result
-					.waitForTxHash(180_000, watch.signal)
-					.then((hash) => ({ hash }))
-					.catch(() => ({ hash: null })),
-				refused.then((yes) => (yes ? ('refused' as const) : new Promise<never>(() => {})))
-			]);
-			watch.abort();
-			if (outcome === 'refused') {
+			result = await execute(account, item, actor, members);
+		} catch (error) {
+			phase = { kind: 'failed', reason: reasonOf(error) };
+			return;
+		}
+		// r4b-7: written down the moment the relay has it — a reload resumes
+		// watching it, and it is not offered again while it may land.
+		const flight = executions.start({
+			chainId,
+			multisig: account.address,
+			safeTxHash: executing.safeTxHash,
+			nonce: executing.nonce.toString(),
+			userOpHash: result.userOpHash,
+			by,
+			maybeSent: result.maybeSent,
+			startedMs: Date.now(),
+			createdMs: executing.createdMs
+		});
+		// The submit's own wait for its receipt, beside the watch.
+		let own: string | null = null;
+		void result
+			.waitForTxHash(180_000, (watching = new AbortController()).signal)
+			.then((hash) => (own = hash))
+			.catch(() => {});
+		await follow(flight, executing, () => own);
+	}
+
+	/**
+	 * r4b-1: watch an execution sent from here to its end — the core's
+	 * verdict on the chain's nonce, the relay's word and the transaction
+	 * that executed it — within seconds of a race lost, bounded always.
+	 */
+	async function follow(flight: InFlight, executing: ProposalItem, own: () => string | null) {
+		phase = { kind: 'sent', txHash: null, by: flight.by };
+		const controller = watching ?? new AbortController();
+		watching = controller;
+		const verdict = await watchExecution(flight, { signal: controller.signal, own });
+		if (controller.signal.aborted) return;
+		controller.abort();
+		watching = null;
+		if (verdict.kind !== 'waiting') executions.end(chainId, account.address, flight.safeTxHash);
+		await store.refresh(account, account.chainIds).catch(() => {});
+		switch (verdict.kind) {
+			case 'executed':
+				phase = { kind: 'sent', txHash: verdict.txHash, by: flight.by };
+				// A rename: the record's new name is read from the chain now.
+				if (executing.review.action?.kind === 'rename') void recheckRecord(account.address);
+				onexecuted?.({ item: executing, txHash: verdict.txHash, userOpHash: flight.userOpHash });
+				// A dApp's transaction: its site gets the transaction, now.
+				draft?.executed(verdict.txHash);
+				return;
+			case 'executedByOther':
+				phase = { kind: 'ended', verdict, by: flight.by };
+				// Executed all the same: the site waiting for it gets its hash.
+				draft?.executed(verdict.txHash);
+				return;
+			case 'notSent':
 				phase = { kind: 'failed', reason: m.proposal.notSent };
 				return;
-			}
-			const txHash = outcome.hash;
-			await store.refresh(account, account.chainIds);
-			if (!txHash) {
-				// Not on chain after the wait: say so, and let them try again —
-				// unless the chain shows it executed meanwhile.
-				phase =
-					item?.status === 'done'
-						? { kind: 'sent', txHash: null, by }
-						: { kind: 'failed', reason: m.proposal.notLanded };
+			case 'timedOut':
+				phase = { kind: 'failed', reason: m.proposal.notLanded };
 				return;
-			}
-			phase = { kind: 'sent', txHash, by };
-			// A rename: the record's new name is read from the chain now.
-			if (item.review.action?.kind === 'rename') void recheckRecord(account.address);
-			onexecuted?.({ item, txHash, userOpHash: result.userOpHash });
-			// A dApp's transaction: its site gets the transaction, now.
-			draft?.executed(txHash);
-		} catch (error) {
-			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+			case 'waiting':
+				return;
+			default:
+				phase = { kind: 'ended', verdict, by: flight.by };
+		}
+	}
+
+	// r4b-7: an execution this device sent before a reload (or with the sheet
+	// closed) is watched again — never offered as if nothing was sent.
+	const resumeKey = $derived(item && !drafting ? `${chainId}:${item.safeTxHash}` : '');
+	$effect(() => {
+		if (!resumeKey) return;
+		untrack(() => {
+			if (!item || phase.kind !== 'idle' || item.status === 'done') return;
+			const flight = executions.get(chainId, account.address, item.safeTxHash);
+			if (flight) void follow(flight, item, () => null);
+		});
+	});
+
+	/** The words for how this device's execution ended (`ended`). */
+	function endedLine(verdict: ExecutionVerdict, nonce: bigint): string {
+		switch (verdict.kind) {
+			case 'executedByOther':
+				return verdict.paid ? m.proposal.lostRacePaid : m.proposal.lostRace;
+			case 'replaced':
+				return fillTemplate(
+					verdict.paid ? m.proposal.replacedFirstPaid : m.proposal.replacedFirst,
+					{
+						nonce: nonce.toString()
+					}
+				);
+			case 'failed':
+				return m.proposal.execFailed;
+			default:
+				return fillTemplate(m.proposal.cantCheckUsed, { network: chainName(chainId) });
 		}
 	}
 
@@ -376,6 +487,7 @@
 			await approveExternally(account, chainId, item.tx, outside);
 			await store.refresh(account, account.chainIds);
 		} catch (error) {
+			// The outside wallet's own refusal is its sheet's to say.
 			if (!cancelled(error)) phase = { kind: 'failed', reason: reasonOf(error) };
 		}
 	}
@@ -389,7 +501,7 @@
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = cancelled(error) ? { kind: 'idle' } : { kind: 'failed', reason: reasonOf(error) };
+			phase = { kind: 'failed', reason: reasonOf(error) };
 		}
 	}
 
@@ -423,26 +535,56 @@
 	 * executed, else another transaction at its number (never a guess).
 	 */
 	let finished = $state<{ txHash: string | null; byCancel?: boolean } | null>(null);
+	/** r4b-2: the chain's history could not be read: said, with Retry. */
+	let unreadHistory = $state(false);
+	let historyTry = $state(0);
 	const doneKey = $derived(item?.status === 'done' ? item.safeTxHash : '');
 	$effect(() => {
 		const key = doneKey;
+		void historyTry;
 		finished = null;
+		unreadHistory = false;
 		if (!key) return;
 		let live = true;
 		const address = untrack(() => account.address);
 		const cancel = untrack(() => item?.cancelledBy ?? null);
-		void findExecution(address, chainId, key).then(async (hash) => {
-			if (!live || hash === undefined) return;
+		// Bounded by when it was proposed, and final: its number is used.
+		const since = untrack(() => ({
+			sinceMs: item?.createdMs ?? 0,
+			final: true,
+			nonce: item?.nonce
+		}));
+		void findExecution(address, chainId, key, since).then(async (hash) => {
+			if (!live) return;
+			if (hash === undefined) {
+				unreadHistory = true;
+				return;
+			}
 			if (hash !== null) {
 				finished = { txHash: hash };
 				return;
 			}
-			const byCancel = cancel ? !!(await findExecution(address, chainId, cancel)) : false;
+			const byCancel = cancel ? !!(await findExecution(address, chainId, cancel, since)) : false;
 			if (live) finished = { txHash: null, byCancel };
 		});
 		return () => {
 			live = false;
 		};
+	});
+
+	/**
+	 * r4a-16: every transaction it waits behind — each number between the
+	 * chain's and its own — and, where one is here, the way to it (r4D-19).
+	 */
+	const blocking = $derived.by(() => {
+		if (!item || item.status !== 'queued') return [];
+		const from = store.chain(chainId)?.members.nonce ?? 0n;
+		const out: { nonce: bigint; hash: string | null }[] = [];
+		for (let n = from; n < item.nonce && out.length < 20; n += 1n) {
+			const open = store.chain(chainId)?.items.find((i) => i.nonce === n && i.status !== 'done');
+			out.push({ nonce: n, hash: open?.safeTxHash ?? null });
+		}
+		return out;
 	});
 
 	/** Approvals the mailbox holds from accounts that are not members on this network now. */
@@ -513,13 +655,25 @@
 		const approved = item.approvals.some((a) => a.counts && sameAddress(a.owner, p.by));
 		return owner && !approved ? item.approved + 1 : item.approved;
 	});
+
+	/** r4b-3: the network did not answer the last read (or the device is offline). */
+	const chainDown = $derived(store.unreadable.includes(chainId));
+	let retrying = $state(false);
+	async function retryRead() {
+		retrying = true;
+		try {
+			await store.refresh(account, account.chainIds);
+		} finally {
+			retrying = false;
+		}
+	}
 </script>
 
 <Sheet title={m.proposal.title} {closeLabel} {wide} {busy} {onclose}>
 	{#if drafting && !item}
 		<!-- The dApp's transaction is being read: said, never a blank window. -->
 		{#if draftFailure}
-			<p class="warn" role="alert">{fillTemplate(m.proposal.failed, { reason: draftFailure })}</p>
+			<p class="warn" role="alert">{draftFailure}</p>
 			<div class="two">
 				<Button variant="secondary" shape="rounded" onclick={() => draft?.decline()}
 					>{m.external.decline}</Button
@@ -532,14 +686,27 @@
 			<p class="quiet" aria-busy="true">{m.proposal.opening}</p>
 		{/if}
 	{:else if !item}
-		<!-- Read from the mailbox and still not there: said as that (ms-22). -->
-		<p class="quiet" aria-busy={!store.chain(chainId)?.mailbox}>
-			{store.loading
-				? m.proposal.opening
-				: store.chain(chainId)?.mailbox
-					? m.proposal.notInMailbox
-					: m.proposal.notFound}
-		</p>
+		{#if !store.loading && (chainDown || offline())}
+			<!-- r4b-3: the network (or this device) is not answering: said as
+			     that, with Retry — never "it hasn't been shared". -->
+			<p class="warn" role="alert" data-testid="proposal-chain-down">
+				{offline()
+					? m.proposal.reason.offline
+					: fillTemplate(m.proposal.cantCheck, { network: chainName(chainId) })}
+			</p>
+			<Button variant="secondary" shape="rounded" disabled={retrying} onclick={retryRead}
+				>{m.service.retry}</Button
+			>
+		{:else}
+			<!-- Read from the mailbox and still not there: said as that (ms-22). -->
+			<p class="quiet" aria-busy={!store.chain(chainId)?.mailbox}>
+				{store.loading
+					? m.proposal.opening
+					: store.chain(chainId)?.mailbox
+						? m.proposal.notInMailbox
+						: m.proposal.notFound}
+			</p>
+		{/if}
 	{:else}
 		{#if draft}
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
@@ -626,10 +793,7 @@
 						? finished.txHash
 							? m.proposal.executed
 							: m.proposal.voided
-						: fillTemplate(m.status.progress, {
-								approved: shownApproved,
-								threshold: item.threshold
-							})}</span
+						: progressLine(m, shownApproved, item.threshold)}</span
 				>
 			</h3>
 			<div class="bar" aria-hidden="true">
@@ -705,7 +869,7 @@
 			</section>
 		{/if}
 
-		{#if item.unsent && phase.kind !== 'sent'}
+		{#if item.unsent && phase.kind !== 'sent' && phase.kind !== 'ended'}
 			<!-- Signed here, not in the mailbox yet: kept, and sent again — said live. -->
 			<div class="unsent" role="status" data-testid="proposal-unsent">
 				{#if kept?.retryAt}
@@ -723,9 +887,17 @@
 			</div>
 		{/if}
 
-		{#if item.status === 'done' && phase.kind !== 'sent'}
+		{#if item.status === 'done' && phase.kind !== 'sent' && phase.kind !== 'ended'}
 			<!-- Said once it is read from the chain: executed (where), or voided. -->
-			{#if finished?.txHash}
+			{#if unreadHistory}
+				<!-- r4b-2: the history could not be read — said, with Retry. -->
+				<p class="quiet" role="status" data-testid="proposal-history-unread">
+					{fillTemplate(m.proposal.cantCheckUsed, { network: chainName(chainId) })}
+				</p>
+				<Button variant="secondary" shape="rounded" onclick={() => (historyTry += 1)}
+					>{m.service.retry}</Button
+				>
+			{:else if finished?.txHash}
 				<p class="quiet">
 					{m.proposal.executed}
 					{#if explorerTxUrl(chainId, finished.txHash)}
@@ -749,10 +921,37 @@
 				<p class="quiet">{m.proposal.doneNote}</p>
 			{/if}
 		{:else if item.status === 'queued'}
-			<p class="quiet">
-				{fillTemplate(m.proposal.queuedNote, {
-					nonce: (store.chain(chainId)?.members.nonce ?? 0n).toString()
-				})}
+			<!-- r4a-16: every number it waits behind; each one here opens (r4D-19). -->
+			<p class="quiet" data-testid="proposal-queued">
+				{blocking.length > 1
+					? fillTemplate(m.proposal.queuedNoteMany, {
+							nonces: blocking.map((b) => `#${b.nonce}`).join(', ')
+						})
+					: fillTemplate(m.proposal.queuedNote, {
+							nonce: (blocking[0]?.nonce ?? store.chain(chainId)?.members.nonce ?? 0n).toString()
+						})}
+			</p>
+			{#if !source && blocking.some((b) => b.hash)}
+				<div class="blocking">
+					{#each blocking as b (b.nonce)}
+						{#if b.hash}
+							{@const hash = b.hash}
+							<button
+								type="button"
+								class="text-button"
+								data-tap
+								onclick={() => multisigUi.open({ kind: 'proposal', chainId, safeTxHash: hash })}
+								>{fillTemplate(m.proposal.openNumber, { nonce: b.nonce.toString() })}</button
+							>
+						{/if}
+					{/each}
+				</div>
+			{/if}
+		{/if}
+		{#if item.sameNonce.length > 0 && item.status !== 'done'}
+			<!-- r4b-6: proposals at one number — only one of them can run. -->
+			<p class="fine" role="note" data-testid="proposal-conflict">
+				{fillTemplate(m.proposal.conflict, { nonce: item.nonce.toString() })}
 			</p>
 		{/if}
 		{#if item.cancelledBy && item.status !== 'done'}
@@ -784,7 +983,7 @@
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed'}
-				<p class="warn" role="alert">{fillTemplate(m.proposal.failed, { reason: phase.reason })}</p>
+				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
 			{/if}
 			<div class="two">
 				<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => draft?.decline()}
@@ -802,6 +1001,32 @@
 			</div>
 			{#if executeNow && item.review.action !== null}
 				<p class="fine">{m.proposal.feeNote}</p>
+			{/if}
+		{:else if phase.kind === 'ended'}
+			<!-- r4b-1: this device's execution was not the one that ran — said
+			     within seconds, with the transaction that did. -->
+			{@const other =
+				phase.verdict.kind === 'executedByOther' || phase.verdict.kind === 'failed'
+					? phase.verdict.txHash
+					: null}
+			<div class="sent" role="status" data-testid="proposal-ended">
+				<span>{endedLine(phase.verdict, item.nonce)}</span>
+				{#if other && explorerTxUrl(chainId, other)}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external block explorer -->
+					<a href={explorerTxUrl(chainId, other)} target="_blank" rel="noopener noreferrer"
+						>{m.proposal.explorer}</a
+					>
+				{/if}
+			</div>
+			{#if phase.verdict.kind === 'unknown'}
+				<Button
+					variant="secondary"
+					shape="rounded"
+					onclick={() => {
+						phase = { kind: 'idle' };
+						historyTry += 1;
+					}}>{m.service.retry}</Button
+				>
 			{/if}
 		{:else if phase.kind === 'sent'}
 			<div class="sent" class:pending={!phase.txHash} role="status" aria-busy={!phase.txHash}>
@@ -835,7 +1060,7 @@
 			{/if}
 
 			{#if phase.kind === 'failed'}
-				<p class="warn" role="alert">{fillTemplate(m.proposal.failed, { reason: phase.reason })}</p>
+				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
 			{/if}
 
 			<div class="primary">
@@ -902,7 +1127,7 @@
 		{/if}
 
 		<!-- Only while approvals are missing: not once it is being executed. -->
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended' && shownApproved < item.threshold}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>
@@ -927,7 +1152,7 @@
 		{/if}
 
 		<!-- Any member here may withdraw it, the proposer included, approved or not. -->
-		{#if !drafting && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent'}
+		{#if !drafting && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent' && phase.kind !== 'ended'}
 			<div class="reject">
 				{#if rejecting}
 					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>
@@ -946,7 +1171,7 @@
 			</div>
 		{/if}
 
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent'}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && phase.kind !== 'ended'}
 			<p class="fine subtle">{m.proposal.noExpiry}</p>
 		{/if}
 	{/if}
@@ -982,6 +1207,12 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
+	}
+
+	.blocking {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-md);
 	}
 
 	.unsent {

@@ -43,7 +43,9 @@ function item(action: unknown, hash: string) {
 		threshold: 2,
 		status: 'open',
 		canApprove: [],
-		canExecute: []
+		canExecute: [],
+		sameNonce: [],
+		executing: false
 	};
 }
 

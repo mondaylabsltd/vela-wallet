@@ -98,7 +98,10 @@
         "pending": "Waiting for approval",
         "stale": "Couldn't refresh — showing the last known state.",
         "notShared": "Not shared yet: other members can add it once it is recorded. Vela keeps trying.",
-        "invite": "Invite members"
+        "invite": "Invite members",
+        "lastKnown": "Last known list, from {{time}} — checking for changes.",
+        "checking": "Checking for transactions waiting for approval…",
+        "historyUnreadable": "Couldn't read this multisig's history on {{network}}: transactions executed elsewhere may be missing here."
       },
       "status": {
         "ready": "Ready to execute",
@@ -106,7 +109,9 @@
         "waiting": "Waiting for others",
         "queued": "Queued",
         "progress": "{{approved}}/{{threshold}} approved",
-        "unsent": "Not sent yet"
+        "unsent": "Not sent yet",
+        "executing": "Executing…",
+        "conflict": "Only one of these can run"
       },
       "action": {
         "send": "Send {{amount}} {{symbol}}",
@@ -187,7 +192,28 @@
         "outboxBusy": "The multisig service is busy — sending again in {{seconds}} s.",
         "outboxAway": "Couldn’t reach the multisig service — sending again in {{seconds}} s.",
         "outboxNotSent": "Not sent yet: the multisig service didn’t take it. It’s kept on this device, and other members can’t see it until it’s sent.",
-        "outboxSendAgain": "Send again"
+        "outboxSendAgain": "Send again",
+        "lostRace": "Another member executed this first. Nothing was sent from your account.",
+        "lostRacePaid": "Another member executed this first. Your account's attempt reached the network too and paid its network fee.",
+        "replacedFirst": "Another transaction at #{{nonce}} ran first, so this one can never run. Nothing was sent from your account.",
+        "replacedFirstPaid": "Another transaction at #{{nonce}} ran first, so this one can never run. Your account's attempt reached the network and paid its network fee.",
+        "execFailed": "It reached the network but didn't execute: its call failed. The network fee was paid.",
+        "cantCheck": "Can't reach {{network}} — can't check this transaction right now.",
+        "cantCheckUsed": "This transaction's number is used, but {{network}} can't be read right now to say whether it was executed or replaced.",
+        "conflict": "Only one of the transactions waiting at #{{nonce}} can run: the first one executed replaces the others.",
+        "queuedNoteMany": "It can run once transactions {{nonces}} are executed or cancelled.",
+        "openNumber": "Open #{{nonce}}",
+        "reason": {
+          "passkeyClosed": "The passkey prompt was closed, so nothing was signed. If this device has no passkey for this account, use the device that has it.",
+          "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready.",
+          "passkeyMissing": "This device has no passkey for this account, so nothing was signed. Use the device that has it.",
+          "passkeyFailed": "The passkey's signature didn't check out for this account, so nothing was signed or sent.",
+          "serviceKept": "The multisig service didn't answer. What you signed is kept on this device and sent again on its own.",
+          "serviceRefused": "The multisig service refused it, so it wasn't saved. Nothing was sent.",
+          "offline": "You're offline, so nothing was sent. Try again once you're back online.",
+          "chainUnreachable": "Can't reach {{network}} right now, so nothing was sent. Try again in a moment.",
+          "unknown": "Something went wrong, so nothing was sent. Try again."
+        }
       },
       "send": {
         "propose": "Propose and approve",
@@ -241,7 +267,8 @@
         "unavailable": "Couldn't reach the service. Try again.",
         "unsupported": "This Safe's version isn't supported yet.",
         "notMultisig": "This address isn't a multisig Vela can read.",
-        "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network:"
+        "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network:",
+        "badLink": "This invite link is incomplete or damaged. Ask for it again, or enter the multisig's address."
       },
       "external": {
         "pageTitle": "Sign with your wallet for Vela",
@@ -327,7 +354,10 @@
       "service": {
         "customNote": "Using a custom multisig service ({{host}})",
         "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
-        "retry": "Retry"
+        "retry": "Retry",
+        "offline": "You're offline — showing what was loaded before.",
+        "offlineSince": "You're offline — showing what was loaded at {{time}}.",
+        "chainUnreachable": "Can't reach {{network}} — its waiting transactions can't be checked right now."
       }
     },
     "balanceDetailStatusOwnNode": "Your node isn't answering",

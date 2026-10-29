@@ -16,13 +16,19 @@
 	import { checkRecords, discoverChains, followUnrecorded, keepMultisig } from '../core/accounts';
 	import { spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
-	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
+	import {
+		brokenAddText,
+		brokenLink,
+		parseAddLink,
+		parseProposalLink,
+		type ProposalLink
+	} from '../core/link';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { flushOutbox, hasNetwork, proposals } from '../core/proposals.svelte';
-	import { recordExecution, useCancelTitle } from '../core/records';
+	import { recordExecution, useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { externalSigning } from '../external/signing.svelte';
@@ -48,6 +54,8 @@
 	let { m, signing, locale, wide, closeLabel, current, onchanged }: Props = $props();
 
 	let addPrefill = $state('');
+	/** r4b-13: what the link's own lookup found, said at once in the add sheet. */
+	let addFailure = $state<string | null>(null);
 	/**
 	 * ms-22: a link's transaction, waiting for its multisig to be added (the
 	 * service could not find it at once): opened once it is.
@@ -77,8 +85,8 @@
 
 	onMount(() => {
 		multisig.boot();
-		// ms-9: an executed cancellation's Activity row is titled as its proposal.
-		useCancelTitle(m.action.cancel);
+		// ms-9, r4a-3: an executed transaction's Activity row is titled as its proposal.
+		useRecordWords(m);
 		proposals.onrecorded = () => onchanged?.();
 		// ms-19: what was signed and never reached the mailbox goes now.
 		void flushOutbox().then((sent) => {
@@ -132,10 +140,12 @@
 			// ms-22: a damaged link is said, not ignored. A broken add link
 			// shows what it held in the add sheet, where the address rule says
 			// what is wrong with it.
-			const raw = decodeURIComponent(location.hash.replace(/^#(ms|msa)=/, ''));
+			const raw = brokenAddText(location.hash);
 			clearHash();
 			if (broken === 'add') {
+				// r4b-13: said at once — not only once Add is tapped.
 				addPrefill = raw;
+				addFailure = m.add.badLink;
 				multisigUi.open({ kind: 'add' });
 			} else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
 			return;
@@ -146,6 +156,7 @@
 		clearHash();
 		if (adding) {
 			addPrefill = adding;
+			addFailure = null;
 			multisigUi.open({ kind: 'add' });
 			return;
 		}
@@ -170,7 +181,9 @@
 		if (sheetNow?.kind !== 'notice' || sheetNow.text !== m.proposal.opening) return;
 		if (opening.kind === 'failed') {
 			// ms-22: the person adds it themselves; its transaction opens then.
+			// r4b-13: what the lookup found is said at once, not looked up again.
 			addPrefill = proposal.multisig;
+			addFailure = m.add[opening.reason];
 			pendingLink = proposal;
 			multisigUi.open({ kind: 'add' });
 			return;
@@ -283,15 +296,18 @@
 	<AddMultisigSheet
 		{m}
 		prefill={addPrefill}
+		prefillFailure={addFailure}
 		{wide}
 		{closeLabel}
 		onclose={() => {
 			addPrefill = '';
+			addFailure = null;
 			pendingLink = null;
 			multisigUi.close();
 		}}
 		onadded={(address) => {
 			addPrefill = '';
+			addFailure = null;
 			// ms-22: added from a link's transaction: that transaction opens now.
 			const linked = pendingLink;
 			if (linked && linked.multisig.toLowerCase() === address.toLowerCase()) {

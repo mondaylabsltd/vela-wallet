@@ -101,13 +101,33 @@ export interface ChainMembers {
 	nonce: bigint;
 }
 
+/**
+ * Multisigs seen deployed, per chain, this session (r4D-18): code does not go
+ * away, so a deployed Safe's code is not read again on every refresh.
+ */
+const deployedSeen = new Set<string>();
+
+async function deployed(chainId: number, safe: string): Promise<boolean> {
+	const key = `${chainId}:${safe.toLowerCase()}`;
+	if (deployedSeen.has(key)) return true;
+	const yes = await hasCode(chainId, safe);
+	if (yes) deployedSeen.add(key);
+	return yes;
+}
+
+/** The multisig's nonce on `chainId` now (0 where it is not deployed). */
+export async function readNonce(chainId: number, safe: string): Promise<bigint> {
+	if (!(await deployed(chainId, safe))) return 0n;
+	return BigInt(await ethCall(chainId, safe, NONCE));
+}
+
 /** The multisig's owners, threshold and nonce on `chainId`, from the chain (or, undeployed, its genesis). */
 export async function readMembers(
 	chainId: number,
 	safe: string,
 	genesis: Genesis
 ): Promise<ChainMembers> {
-	if (!(await hasCode(chainId, safe))) {
+	if (!(await deployed(chainId, safe))) {
 		const { owners, threshold } = genesisMembers(genesis);
 		return { deployed: false, owners, threshold, nonce: 0n };
 	}

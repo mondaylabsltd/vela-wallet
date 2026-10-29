@@ -439,3 +439,35 @@ export type ServiceAnswer =
 /** Whether a health answer (its status and body text) is a multisig service's. */
 export const serviceAnswer = (status: number, body: string) =>
 	call<ServiceAnswer>('serviceAnswer', { status, body });
+
+// -- an execution in flight (`multisig_watch`) -----------------------------------
+
+/** What a lookup of the transaction that executed a safeTxHash found. */
+export type ExecutedIn = { kind: 'found'; txHash: string } | { kind: 'none' } | { kind: 'unknown' };
+
+/** What the relay says of this device's own operation. */
+export type OurOp =
+	| { kind: 'landed'; txHash: string }
+	| { kind: 'pending' }
+	| { kind: 'refused' }
+	| { kind: 'unknown' };
+
+/** Where an execution in flight stands (the core's `ExecutionVerdict`). */
+export type ExecutionVerdict =
+	| { kind: 'executed'; txHash: string }
+	| { kind: 'executedByOther'; txHash: string; paid: boolean }
+	| { kind: 'replaced'; paid: boolean }
+	| { kind: 'failed'; txHash: string }
+	| { kind: 'notSent' }
+	| { kind: 'unknown' }
+	| { kind: 'waiting' }
+	| { kind: 'timedOut' };
+
+/** The core's rule: what the gathered facts say of an execution in flight. */
+export const executionVerdict = (facts: {
+	nonceUsed: boolean | null;
+	executedIn: ExecutedIn;
+	ourOp: OurOp;
+	elapsedMs: number;
+	limitMs: number;
+}) => call<ExecutionVerdict>('executionVerdict', { facts });

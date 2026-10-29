@@ -25,6 +25,7 @@ const OTHER = '0x00000000000000000000000000000000000000bb';
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const HASH = `0x${'ab'.repeat(32)}`;
 const TO = '0x000000000000000000000000000000000000dEaD';
+const TX = `0x${'ee'.repeat(32)}`;
 
 const fake = vi.hoisted(() => ({
 	chain: null as any,
@@ -43,12 +44,23 @@ const fake = vi.hoisted(() => ({
 	followed: null as string | null,
 	/** Where an approval signed here stands, while the mailbox lacks it. */
 	kept: null as any,
-	sentAgain: 0
+	sentAgain: 0,
+	approveError: null as any,
+	/** r4b-1: where the core says this device's execution ended. */
+	verdict: null as any,
+	/** r4b-7: an execution sent before a reload, still in flight. */
+	inflight: null as any,
+	ended: [] as string[],
+	/** r4b-3: networks that did not answer. */
+	unreadable: [] as number[]
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
 	proposals: {
 		loading: false,
+		get unreadable() {
+			return fake.unreadable;
+		},
 		chain: () => fake.chain,
 		refresh: async () => {},
 		get chains() {
@@ -66,7 +78,10 @@ vi.mock('../core/proposals.svelte', () => ({
 			return [];
 		}
 	},
-	approve: async () => void fake.calls.push('approve'),
+	approve: async () => {
+		if (fake.approveError) throw fake.approveError;
+		fake.calls.push('approve');
+	},
 	approveExternally: async () => void fake.calls.push('external'),
 	execute: async () => {
 		fake.calls.push('execute');
@@ -74,13 +89,28 @@ vi.mock('../core/proposals.svelte', () => ({
 	},
 	proposeCancel: async () => void fake.calls.push('reject'),
 	draftCalls: async () => fake.draft,
-	MailboxUnreadableError: class extends Error {}
+	MailboxUnreadableError: class extends Error {},
+	MailboxRefusedError: class extends Error {}
 }));
 vi.mock('../core/execute', () => ({
-	ExecutorCannotPayError: class extends Error {},
-	relayRefused: async () => fake.refused
+	ExecutorCannotPayError: class extends Error {}
+}));
+vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
+vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
+vi.mock('../core/execution-watch.svelte', () => ({
+	executions: {
+		start: (flight: unknown) => flight,
+		get: () => fake.inflight,
+		end: (_c: number, _m: string, hash: string) => void fake.ended.push(hash)
+	},
+	watchExecution: async () => {
+		if (fake.verdict) return fake.verdict;
+		if (fake.refused) return { kind: 'notSent' };
+		return { kind: 'executed', txHash: await fake.execution.waitForTxHash() };
+	}
 }));
 vi.mock('../core/owners', () => ({
+	PasskeyCheckError: class extends Error {},
 	localOwners: (owners: string[]) =>
 		owners
 			.filter((o) => o.toLowerCase() === ME)
@@ -137,7 +167,12 @@ function words(): MultisigMessages {
 	const out: any = {};
 	for (const [group, keys] of Object.entries(MULTISIG_SHAPE)) {
 		out[group] = {};
-		for (const key of Object.keys(keys)) out[group][key] = `${group}.${key}`;
+		for (const [key, value] of Object.entries(keys as Record<string, unknown>)) {
+			out[group][key] =
+				typeof value === 'object' && value !== null && !('forms' in value)
+					? Object.fromEntries(Object.keys(value).map((leaf) => [leaf, `${group}.${key}.${leaf}`]))
+					: `${group}.${key}`;
+		}
 	}
 	out.proposal.siteAsks = '{{host}} asks for this transaction.';
 	out.proposal.failed = 'Failed: {{reason}}';
@@ -162,6 +197,8 @@ function item(overrides: Record<string, unknown> = {}) {
 		canApprove: [local],
 		canExecute: [],
 		cancelledBy: null,
+		sameNonce: [],
+		executing: false,
 		createdMs: 1,
 		unsent: false,
 		renameUndeployed: false,
@@ -217,6 +254,11 @@ beforeEach(() => {
 	fake.followed = null;
 	fake.kept = null;
 	fake.sentAgain = 0;
+	fake.approveError = null;
+	fake.verdict = null;
+	fake.inflight = null;
+	fake.ended = [];
+	fake.unreadable = [];
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -417,7 +459,7 @@ describe('an execution the relay refused (ms-3)', () => {
 		press('proposal.approveAndExecute');
 		await settle();
 		const text = document.body.textContent ?? '';
-		expect(text).toContain('Failed: proposal.notSent');
+		expect(text).toContain('proposal.notSent');
 		expect(text).not.toContain('proposal.executed');
 		// The way to try again is still there.
 		expect(buttons()).toContain('proposal.approveAndExecute');
@@ -547,14 +589,22 @@ describe('a transaction whose number is used (ms-9, ms-10)', () => {
 		await screen.unmount();
 	});
 
-	it('the chain cannot say: neither executed nor cancelled is claimed', async () => {
+	it('the chain cannot say: neither executed nor cancelled is claimed — said, with Retry', async () => {
 		fake.chain.items = [done()];
 		fake.executed = undefined;
 		const screen = show();
 		await settle();
 		const text = document.body.textContent ?? '';
-		expect(text).toContain('proposal.doneNote');
+		// r4b-2: an unreadable history is said as that, never as nothing.
+		expect(text).toContain('proposal.cantCheckUsed');
 		expect(text).not.toContain('proposal.voided');
+		expect(text).not.toContain('proposal.executed');
+		expect(buttons()).toContain('service.retry');
+		// Readable again: the Retry reads it, and it says what happened.
+		fake.executed = TX;
+		press('service.retry');
+		await settle();
+		expect(document.body.textContent).toContain('proposal.executed');
 		await screen.unmount();
 	});
 });
@@ -587,7 +637,8 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 			items: [item({ canApprove: [], proposer: OTHER })],
 			mailbox: true
 		}),
-		refresh
+		refresh,
+		unreadable: [] as number[]
 	});
 
 	it('is read from its own source, says no member is here, and offers the two ways on', async () => {
@@ -779,5 +830,200 @@ describe('what was signed here and the mailbox has not taken', () => {
 		expect(fake.sentAgain).toBe(1);
 		// Never a second signature: no approve, no passkey.
 		expect(fake.calls).toEqual([]);
+	});
+});
+
+/**
+ * r4b-1, r4b-7: an execution sent from here is watched to its end by the
+ * core's verdict — the race's loser is told within the watch's first round,
+ * never "Executing…" without end; one sent before a reload is watched again
+ * and never offered as if nothing was sent.
+ */
+describe('an execution in flight (r4b-1, r4b-7)', () => {
+	const ready = () =>
+		item({
+			approved: 2,
+			status: 'ready',
+			canApprove: [],
+			canExecute: [local],
+			approvals: [
+				{ owner: ME, counts: true, approval: {}, createdMs: 1 },
+				{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }
+			]
+		});
+
+	it('another member executed it first: said so, nothing sent from here, nothing more offered', async () => {
+		fake.chain.items = [ready()];
+		fake.execution = {
+			maybeSent: false,
+			userOpHash: '0x01',
+			waitForTxHash: () => new Promise(() => {})
+		};
+		fake.verdict = { kind: 'executedByOther', txHash: `0x${'77'.repeat(32)}`, paid: false };
+		const screen = show();
+		await settle();
+		press('proposal.execute');
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.lostRace');
+		expect(text).not.toContain('proposal.executing');
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(fake.ended).toEqual([HASH]);
+		await screen.unmount();
+	});
+
+	it('replaced by another transaction at its number: said with the number', async () => {
+		fake.chain.items = [ready()];
+		fake.execution = {
+			maybeSent: false,
+			userOpHash: '0x01',
+			waitForTxHash: () => new Promise(() => {})
+		};
+		fake.verdict = { kind: 'replaced', paid: false };
+		const screen = show();
+		await settle();
+		press('proposal.execute');
+		await settle();
+		expect(document.body.textContent).toContain('proposal.replacedFirst');
+		await screen.unmount();
+	});
+
+	it('past its time: said as not landed, and it may be tried again', async () => {
+		fake.chain.items = [ready()];
+		fake.execution = {
+			maybeSent: false,
+			userOpHash: '0x01',
+			waitForTxHash: () => new Promise(() => {})
+		};
+		fake.verdict = { kind: 'timedOut' };
+		const screen = show();
+		await settle();
+		press('proposal.execute');
+		await settle();
+		expect(document.body.textContent).toContain('proposal.notLanded');
+		expect(buttons()).toContain('proposal.execute');
+		await screen.unmount();
+	});
+
+	it('sent before a reload: watched again at once, not offered for execution', async () => {
+		fake.chain.items = [ready()];
+		fake.inflight = {
+			chainId: 100,
+			multisig: SAFE,
+			safeTxHash: HASH,
+			nonce: '0',
+			userOpHash: '0x01',
+			by: ME,
+			maybeSent: false,
+			startedMs: Date.now(),
+			createdMs: 1
+		};
+		// Still on its way.
+		fake.verdict = { kind: 'waiting' };
+		let screen = show();
+		await settle();
+		expect(document.body.textContent).toContain('proposal.executing');
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(fake.calls).not.toContain('execute');
+		await screen.unmount();
+		// …and it landed: executed, from the watch alone.
+		fake.verdict = { kind: 'executed', txHash: TX };
+		const onexecuted = vi.fn();
+		screen = show({ onexecuted });
+		await settle();
+		expect(onexecuted).toHaveBeenCalledWith(
+			expect.objectContaining({ txHash: TX, userOpHash: '0x01' })
+		);
+		expect(fake.calls).not.toContain('execute');
+		await screen.unmount();
+	});
+});
+
+describe('the network cannot be read (r4b-3)', () => {
+	it('says it cannot reach the network, with Retry — never "hasn’t been shared"', async () => {
+		fake.chain = null;
+		fake.unreadable = [100];
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.cantCheck');
+		expect(text).not.toContain('proposal.notFound');
+		expect(buttons()).toContain('service.retry');
+		await screen.unmount();
+	});
+});
+
+describe('why it did not go, in the corpus’ words (r4b-12)', () => {
+	it.each([
+		['a passkey prompt closed', 'cancelled', 'proposal.reason.passkeyClosed'],
+		['a passkey prompt that timed out', 'timedOut', 'proposal.reason.passkeyTimedOut'],
+		['a raw error', 'raw', 'proposal.reason.unknown']
+	])('%s', async (_what, kind, words) => {
+		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		fake.approveError =
+			kind === 'raw'
+				? new Error('genesis service unavailable: Unexpected token o')
+				: new PasskeyError('cancelled', 'User cancelled the operation', kind === 'timedOut');
+		const screen = show();
+		await settle();
+		press('proposal.approve');
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain(words);
+		expect(text).not.toContain('Unexpected token');
+		expect(text).not.toContain('User cancelled the operation');
+		fake.approveError = null;
+		await screen.unmount();
+	});
+});
+
+describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)', () => {
+	it('a link’s own source is kept fresh while shown, and stops when closed', async () => {
+		const stop = vi.fn();
+		const watch = vi.fn(() => stop);
+		const screen = show({
+			source: {
+				loading: false,
+				unreadable: [],
+				chain: () => fake.chain,
+				refresh: async () => {},
+				watch
+			},
+			watch: { added: false, onwatch: () => {} }
+		});
+		await settle();
+		expect(watch).toHaveBeenCalledTimes(1);
+		await screen.unmount();
+		expect(stop).toHaveBeenCalledTimes(1);
+	});
+
+	it('never "3/2": the approvals counted up to the threshold', async () => {
+		fake.chain.items = [item({ approved: 3, threshold: 2, status: 'ready', canApprove: [] })];
+		const m = words();
+		m.status.progress = '{{approved}}/{{threshold}}';
+		const screen = show({ m });
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('2/2');
+		expect(text).not.toContain('3/2');
+		await screen.unmount();
+	});
+
+	it('proposals at one number say only one of them can run', async () => {
+		fake.chain.items = [item({ sameNonce: [`0x${'ef'.repeat(32)}`] })];
+		const screen = show();
+		await settle();
+		expect(document.body.textContent).toContain('proposal.conflict');
+		await screen.unmount();
+	});
+
+	it('queued behind several: every number named', async () => {
+		const m = words();
+		m.proposal.queuedNoteMany = 'after {{nonces}}';
+		fake.chain.items = [item({ nonce: 3n, status: 'queued' })];
+		const screen = show({ m });
+		await settle();
+		expect(document.body.textContent).toContain('after #0, #1, #2');
+		await screen.unmount();
 	});
 });

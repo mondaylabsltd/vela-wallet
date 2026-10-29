@@ -625,7 +625,11 @@
 				.chain(chainId)
 				?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase());
 			if (item?.status !== 'done') continue;
-			const hash = await findExecution(address, chainId, safeTxHash);
+			const hash = await findExecution(address, chainId, safeTxHash, {
+				sinceMs: item.createdMs,
+				final: true,
+				nonce: item.nonce
+			});
 			// The chain could not say: asked again, never read as cancelled.
 			if (hash === undefined) continue;
 			// Done at its nonce but not by this transaction: another one (a

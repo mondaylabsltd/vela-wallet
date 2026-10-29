@@ -16,7 +16,7 @@
 
 import { fromBaseUnits } from './eip681';
 import { fetchIncomingTransfers } from './incoming-transfers';
-import { inSpace, nativeSymbol, spaceNetworksSync } from './networks';
+import { getCustomChainIdsSync, inSpace, nativeSymbol, spaceNetworksSync } from './networks';
 import { watchNativeBalances } from './native-watch';
 import { mergeTransactions } from './records';
 import { resolveTokenMetadata } from './token-metadata';
@@ -191,20 +191,30 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
 		// a brand-new wallet so its first receipt is still caught.
 		const tokens = await fetchTokens(address).catch(() => [] as APIToken[]);
 		const active = [...new Set(tokens.map(tokenChainId))];
-		const chainIds = active.length ? active : DEFAULT_MONITOR_CHAINS;
+		// r4a-17: the networks the person added to the space in front (Arc,
+		// say) are the ones the token API knows least about — never left out
+		// of the watch for being past the first few; and a space with none of
+		// the main payment chains (the testnet space, r4D-18) scans its own.
+		const added = getCustomChainIdsSync().filter(inSpace);
+		const space = [
+			...new Set([
+				...added,
+				...spaceNetworksSync()
+					.slice(0, NATIVE_WATCH_FALLBACK)
+					.map((net) => net.chainId)
+			])
+		];
+		const chainIds = active.length
+			? active
+			: DEFAULT_MONITOR_CHAINS.some(inSpace)
+				? DEFAULT_MONITOR_CHAINS
+				: space;
 		// home-5: a native coin paid to an account with no code leaves no log
 		// for the scan below to find — its balance is what moves. Read beside
 		// the scan, on the networks of the space in front; a move re-reads the
 		// balances (`onNativeBalanceMoved`).
-		const watched = chainIds.filter(inSpace);
-		void watchNativeBalances(
-			address,
-			watched.length > 0
-				? watched
-				: spaceNetworksSync()
-						.slice(0, NATIVE_WATCH_FALLBACK)
-						.map((net) => net.chainId)
-		);
+		const watched = [...new Set([...chainIds.filter(inSpace), ...added])];
+		void watchNativeBalances(address, watched.length > 0 ? watched : space);
 		const incoming = await fetchIncomingTransfers(address, chainIds);
 		if (incoming.length === 0) return 0;
 		const index = buildTokenIndex(tokens);

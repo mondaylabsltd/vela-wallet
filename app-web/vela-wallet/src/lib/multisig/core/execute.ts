@@ -10,15 +10,16 @@
  */
 import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
 import { findAccountByAddress } from '$lib/services/accounts';
-import { poolRpcCall } from '$lib/services/rpc-pool';
 import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import {
 	keySetOf,
 	sendBatchCalls,
+	UserOpNotSentError,
 	type BeforeSign,
 	type SignFn,
 	type SubmitResult
 } from '$lib/services/safe-transaction';
+import { PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
 import { signChallenge } from '$lib/signing/sign-challenge';
 import { hasCode, type ChainMembers } from './chain';
 import {
@@ -29,7 +30,7 @@ import {
 	type Genesis,
 	type SafeTx
 } from './kernel';
-import type { LocalOwner } from './owners';
+import { PasskeyCheckError, type LocalOwner } from './owners';
 
 export interface ExecutionInput {
 	chainId: number;
@@ -82,7 +83,7 @@ function executorSigner(owner: LocalOwner, chainId: number, tx: SafeTx): SignFn 
 			request: { method: 'vela_multisigExecute', params: { tx }, origin: '', chainId }
 		});
 		const compat = verifySafeWebAuthn(assertion);
-		if (!compat.ok) throw new Error(compat.reason);
+		if (!compat.ok) throw new PasskeyCheckError(compat.reason ?? 'unverifiable');
 		return {
 			signature: fromHex(assertion.signatureHex),
 			authenticatorData: fromHex(assertion.authenticatorDataHex),
@@ -163,6 +164,19 @@ export async function relayRefused(
 	return false;
 }
 
+/**
+ * r4a-23: the relay out of reach for a moment, before anything was signed
+ * (its quote, its estimate): nothing left the device, and nothing is lost by
+ * asking once more — a one-off is never the person's to retry.
+ */
+function unreachable(error: unknown): boolean {
+	if (error instanceof PoolFailedError) return !error.rateLimited && !error.internal;
+	return error instanceof UserOpNotSentError && error.rejection === null;
+}
+
+/** How long before the one automatic retry. */
+export const RELAY_RETRY_MS = 1_500;
+
 /** Send the execution. Resolves once the relay has the operation. */
 export async function submitExecution(input: ExecutionInput): Promise<SubmitResult> {
 	const stored = findAccountByAddress(input.executor.address);
@@ -170,7 +184,22 @@ export async function submitExecution(input: ExecutionInput): Promise<SubmitResu
 	const walletSigner =
 		stored.keys && stored.keys.length > 1 ? keySetOf(stored) : stored.publicKeyHex;
 	const calls = await planCalls(input);
-	const signer = executorSigner(input.executor, input.chainId, input.tx);
+	const own = executorSigner(input.executor, input.chainId, input.tx);
+	// Whether the passkey was asked: once it was, a retry would ask again —
+	// never done without the person.
+	let asked = false;
+	const signer: SignFn = (challenge, operation) => {
+		asked = true;
+		return own(challenge, operation);
+	};
 	signer.beforeSign = canPay(input.executor.address, input.chainId);
-	return sendBatchCalls(input.executor.address, calls, input.chainId, walletSigner, signer);
+	const send = () =>
+		sendBatchCalls(input.executor.address, calls, input.chainId, walletSigner, signer);
+	try {
+		return await send();
+	} catch (error) {
+		if (asked || !unreachable(error)) throw error;
+		await new Promise((r) => setTimeout(r, RELAY_RETRY_MS));
+		return send();
+	}
 }

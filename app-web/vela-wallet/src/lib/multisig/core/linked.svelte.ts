@@ -24,7 +24,18 @@ export interface ProposalSource {
 	loading: boolean;
 	chain(chainId: number): ChainState | undefined;
 	refresh(account: MultisigAccount, chainIds: number[]): Promise<void>;
+	/** r4b-3: networks whose members could not be read on the last refresh. */
+	unreadable: number[];
+	/**
+	 * r4b-4: keep it fresh while its sheet is open (a poll, and at once when
+	 * the tab is shown again); the returned function stops. The shown
+	 * multisig's own list is already followed, and has none.
+	 */
+	watch?(): () => void;
 }
+
+/** How often a linked transaction is read again while its sheet is open (as `proposals`). */
+export const LINKED_POLL_MS = 12_000;
 
 /**
  * One chain of a multisig the wallet is not showing, read on demand — the
@@ -35,6 +46,8 @@ export class LinkedProposals implements ProposalSource {
 	loading = $state(true);
 	/** The last read failed: the transaction shown may be stale. */
 	stale = $state(false);
+	/** r4b-3: the network did not answer the last read. */
+	unreadable = $state<number[]>([]);
 	/** The mailbox's last list: kept while it cannot be read (`readChain`). */
 	#list: Proposal[] | null = null;
 
@@ -56,12 +69,38 @@ export class LinkedProposals implements ProposalSource {
 				{ chainId: this.chainId, members: read.members, items: read.items, mailbox: read.mailbox }
 			];
 			this.stale = !read.mailbox;
+			this.unreadable = [];
 		} catch {
-			// The members could not be read: what was read stays, said as stale.
+			// The members could not be read: what was read stays, said as stale
+			// — and the network as the one that did not answer.
 			this.stale = true;
+			this.unreadable = [this.chainId];
 		} finally {
 			this.loading = false;
 		}
+	}
+
+	/** r4b-4: read again every {@link LINKED_POLL_MS} while shown, and when the tab comes back. */
+	watch(): () => void {
+		const timer = setInterval(() => {
+			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+			void this.refresh();
+		}, LINKED_POLL_MS);
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') void this.refresh();
+		};
+		const onOnline = () => void this.refresh();
+		if (typeof document !== 'undefined') {
+			document.addEventListener('visibilitychange', onVisible);
+			window.addEventListener('online', onOnline);
+		}
+		return () => {
+			clearInterval(timer);
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('visibilitychange', onVisible);
+				window.removeEventListener('online', onOnline);
+			}
+		};
 	}
 }
 
@@ -83,7 +122,11 @@ export async function openProposalLink(link: ProposalLink): Promise<LinkOpening>
 	let account = stored;
 	if (!account) {
 		// The link names its transaction's network: that is where it is used.
-		const found = await findMultisig(link.multisig, [link.chainId], link.chainId);
+		// r4b-13: one lookup, answered in a few seconds — asked once more at most.
+		const found = await findMultisig(link.multisig, [link.chainId], link.chainId, {
+			waits: 1,
+			waitMs: 2500
+		});
 		// (`chooseNetwork` cannot come back: the link names one.)
 		if (!found.ok)
 			return {

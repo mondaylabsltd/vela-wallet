@@ -1443,9 +1443,12 @@ pub enum SendShellResult {
         safe_tx_hash: String,
     },
     /// Nothing was proposed: the passkey was dismissed (`cancelled`), or the
-    /// mailbox or the chain could not be reached.
+    /// mailbox or the chain could not be reached — `reason` says which, when
+    /// the shell knows (round 4: one cause, one message).
     ProposeFailed {
         cancelled: bool,
+        #[serde(default)]
+        reason: Option<SendProposeFailure>,
     },
     PasskeyCancelAcknowledged,
     RecordsPersisted,
@@ -1817,6 +1820,22 @@ pub enum SendTxErrorKey {
     /// [`SendView::tx_venue_block`]'s reason (`VenueBlock::key()`, with its
     /// domains), not a generic failure.
     VenueBlocked,
+    /// A multisig's proposal: its waiting transactions could not be read, so
+    /// nothing was proposed (`home.multisig.proposal.mailboxDown`).
+    ProposalMailboxDown,
+    /// A multisig's proposal: this device is offline, nothing was proposed.
+    ProposalOffline,
+}
+
+/// Why a multisig's proposal was not made, as the shell knows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendProposeFailure {
+    /// The mailbox (or the chain's members) could not be read.
+    MailboxDown,
+    /// The device is offline.
+    Offline,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -6095,8 +6114,10 @@ fn propose_safe_tx(model: &mut Model, gen: u64) -> Cmd {
     };
     let id = next(model);
     model.pipeline = Pipeline::Proposing { id, gen };
-    // The approval is the one passkey prompt this confirm makes.
+    // The approval is the one passkey prompt this confirm makes; the last
+    // attempt's reason goes with it.
     model.tx = SendTxStatus::Signing;
+    model.tx_error = None;
     Command::all([
         issue(
             id,
@@ -6110,7 +6131,11 @@ fn propose_safe_tx(model: &mut Model, gen: u64) -> Cmd {
     ])
 }
 
-fn accept_proposed(model: &mut Model, id: u64, outcome: Result<String, bool>) -> Cmd {
+fn accept_proposed(
+    model: &mut Model,
+    id: u64,
+    outcome: Result<String, (bool, Option<SendProposeFailure>)>,
+) -> Cmd {
     let Pipeline::Proposing { id: expect, gen } = model.pipeline else {
         return Command::done();
     };
@@ -6142,13 +6167,17 @@ fn accept_proposed(model: &mut Model, id: u64, outcome: Result<String, bool>) ->
             ])
         }
         // Dismissed: the review, as the person left it.
-        Err(true) => {
+        Err((true, _)) => {
             model.tx = SendTxStatus::Idle;
             render()
         }
-        Err(false) => {
+        Err((false, reason)) => {
             model.tx = SendTxStatus::Error;
-            model.tx_error = Some(SendTxErrorKey::Generic);
+            model.tx_error = Some(match reason {
+                Some(SendProposeFailure::MailboxDown) => SendTxErrorKey::ProposalMailboxDown,
+                Some(SendProposeFailure::Offline) => SendTxErrorKey::ProposalOffline,
+                None => SendTxErrorKey::Generic,
+            });
             fire(
                 model,
                 SendOperation::Haptic {
@@ -6500,6 +6529,12 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     ) {
         model.pipeline = Pipeline::Idle;
     }
+    // r4b-5: a multisig's proposal withdrawn before it was made — the shell
+    // stops it (no passkey after this, nothing proposed), and an answer that
+    // still comes back is ignored: nothing opens over what the person does.
+    if matches!(model.pipeline, Pipeline::Proposing { .. }) {
+        model.pipeline = Pipeline::Idle;
+    }
     if let Pipeline::Submitting { id, .. } = model.pipeline {
         model.withdrawn_submit = Some(id);
     }
@@ -6522,6 +6557,18 @@ fn retry_after_bootstrap(model: &mut Model) -> Cmd {
 fn handle_back(model: &mut Model) -> Cmd {
     match model.step {
         SendStep::Confirm => {
+            // r4b-5: a multisig's proposal being made is the person's to
+            // withdraw — leaving its confirm (‹, Escape) stops it: no passkey
+            // after this, nothing proposed, back to the form.
+            if matches!(model.pipeline, Pipeline::Proposing { .. }) {
+                let withdrawn = cancel_signing(model);
+                model.tx = SendTxStatus::Idle;
+                model.tx_hash = None;
+                model.tx_error = None;
+                leave_confirm(model);
+                model.step = SendStep::EnterDetails;
+                return Command::all([withdrawn, schedule_form_estimate(model), render()]);
+            }
             // Never go back while a transaction is in progress (invariant ③).
             if !matches!(
                 model.tx,
@@ -6759,7 +6806,9 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
         }
         R::AccountCredential { public_key_hex } => accept_credential(model, id, public_key_hex),
         R::Proposed { safe_tx_hash } => accept_proposed(model, id, Ok(safe_tx_hash)),
-        R::ProposeFailed { cancelled } => accept_proposed(model, id, Err(cancelled)),
+        R::ProposeFailed { cancelled, reason } => {
+            accept_proposed(model, id, Err((cancelled, reason)))
+        }
         R::FeeEstimated { outcome } => accept_fee(model, id, outcome),
         R::TreasuryProbed { probe } => accept_treasury(model, id, probe),
         R::TimerElapsed { .. } => accept_timer(model, id),
@@ -7432,10 +7481,11 @@ fn relay_stopped(model: &Model) -> bool {
 fn confirm_gate_open(model: &Model) -> bool {
     // A multisig's confirm waits on no fee, relay or previous operation of
     // its own: the proposal takes the next free nonce.
+    // r4D-10: a proposal that did not go is proposed again by the confirm
+    // itself — one message, one button (no separate "Try again").
     if proposing(model).is_some() {
-        return model.tx == SendTxStatus::Idle
+        return matches!(model.tx, SendTxStatus::Idle | SendTxStatus::Error)
             && !model.lock.busy()
-            && model.tx_error.is_none()
             && !risk_pending(model);
     }
     model.tx == SendTxStatus::Idle

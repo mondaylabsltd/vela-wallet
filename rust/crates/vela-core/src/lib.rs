@@ -43,6 +43,7 @@ mod identicon_features;
 pub mod identicon_raster;
 pub mod l10n;
 pub mod multisig;
+pub mod multisig_watch;
 pub mod passkey;
 mod passkey_catalog;
 pub mod prefs;

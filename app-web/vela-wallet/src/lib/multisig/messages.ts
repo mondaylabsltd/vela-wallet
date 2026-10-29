@@ -30,6 +30,12 @@ export interface MultisigMessages {
 		stale: string;
 		notShared: string;
 		invite: string;
+		/** r4b-11: the list kept from an earlier page, shown while it is checked (`{{time}}`). */
+		lastKnown: string;
+		/** r4b-11: reading, nothing to show yet. */
+		checking: string;
+		/** r4b-2: the history on `{{network}}` could not be read. */
+		historyUnreadable: string;
 	};
 	status: {
 		ready: string;
@@ -39,6 +45,10 @@ export interface MultisigMessages {
 		progress: string;
 		/** Signed here, not in the mailbox yet. */
 		unsent: string;
+		/** r4b-7: its execution was sent from here and may still land. */
+		executing: string;
+		/** r4b-6: another proposal waits at its number. */
+		conflict: string;
 	};
 	action: {
 		send: string;
@@ -139,6 +149,38 @@ export interface MultisigMessages {
 		/** Not sent after a while: kept, Send again. */
 		outboxNotSent: string;
 		outboxSendAgain: string;
+		/** r4b-1: another member's execution ran first; nothing was sent from here. */
+		lostRace: string;
+		/** …and this device's attempt landed too, paying its fee. */
+		lostRacePaid: string;
+		/** r4b-1: another transaction at `{{nonce}}` ran first. */
+		replacedFirst: string;
+		replacedFirstPaid: string;
+		/** This device's execution landed and did not execute it. */
+		execFailed: string;
+		/** r4b-3: `{{network}}` did not answer. */
+		cantCheck: string;
+		/** Its number is used; `{{network}}` cannot say by what now. */
+		cantCheckUsed: string;
+		/** r4b-6: only one of the proposals at `{{nonce}}` can run. */
+		conflict: string;
+		/** r4a-16: the numbers it waits behind (`{{nonces}}`: "#3, #4"). */
+		queuedNoteMany: string;
+		/** r4D-19: open the transaction at `{{nonce}}`. */
+		openNumber: string;
+		/** r4b-12: why it did not go, in the corpus' words. */
+		reason: {
+			passkeyClosed: string;
+			passkeyTimedOut: string;
+			passkeyMissing: string;
+			passkeyFailed: string;
+			serviceKept: string;
+			serviceRefused: string;
+			offline: string;
+			/** `{{network}}` */
+			chainUnreachable: string;
+			unknown: string;
+		};
 	};
 	send: {
 		propose: string;
@@ -284,6 +326,12 @@ export interface MultisigMessages {
 		/** Activity's waiting group while the service is away, over the last list. */
 		unreachableNote: string;
 		retry: string;
+		/** r4b-15: the device is offline. */
+		offline: string;
+		/** …and the list shown was read at `{{time}}`. */
+		offlineSince: string;
+		/** r4b-3: `{{network}}` did not answer the last read. */
+		chainUnreachable: string;
 	};
 	add: {
 		title: string;
@@ -296,6 +344,8 @@ export interface MultisigMessages {
 		notMultisig: string;
 		/** Nothing says which network it is used on: the person picks one. */
 		chooseNetwork: string;
+		/** r4b-13: the invite link is damaged. */
+		badLink: string;
 	};
 }
 
@@ -324,7 +374,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		pending: '',
 		stale: '',
 		notShared: '',
-		invite: ''
+		invite: '',
+		lastKnown: '',
+		checking: '',
+		historyUnreadable: ''
 	},
 	status: {
 		ready: '',
@@ -332,7 +385,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		waiting: '',
 		queued: '',
 		progress: '',
-		unsent: ''
+		unsent: '',
+		executing: '',
+		conflict: ''
 	},
 	action: {
 		send: '',
@@ -413,7 +468,28 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		outboxBusy: '',
 		outboxAway: '',
 		outboxNotSent: '',
-		outboxSendAgain: ''
+		outboxSendAgain: '',
+		lostRace: '',
+		lostRacePaid: '',
+		replacedFirst: '',
+		replacedFirstPaid: '',
+		execFailed: '',
+		cantCheck: '',
+		cantCheckUsed: '',
+		conflict: '',
+		queuedNoteMany: '',
+		openNumber: '',
+		reason: {
+			passkeyClosed: '',
+			passkeyTimedOut: '',
+			passkeyMissing: '',
+			passkeyFailed: '',
+			serviceKept: '',
+			serviceRefused: '',
+			offline: '',
+			chainUnreachable: '',
+			unknown: ''
+		}
 	},
 	send: {
 		propose: '',
@@ -541,7 +617,10 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	service: {
 		customNote: '',
 		unreachableNote: '',
-		retry: ''
+		retry: '',
+		offline: '',
+		offlineSince: '',
+		chainUnreachable: ''
 	},
 	add: {
 		title: '',
@@ -552,6 +631,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unavailable: '',
 		unsupported: '',
 		notMultisig: '',
-		chooseNetwork: ''
+		chooseNetwork: '',
+		badLink: ''
 	}
 };

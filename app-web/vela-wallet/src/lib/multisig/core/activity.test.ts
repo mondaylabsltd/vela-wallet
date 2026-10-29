@@ -17,13 +17,21 @@ const call = (data: string, value = '0') => ({
 	approved: 1,
 	threshold: 2,
 	status: 'waiting',
-	canApprove: []
+	canApprove: [],
+	sameNonce: [] as string[],
+	executing: false
 });
 const seams = vi.hoisted(() => ({
 	open: [] as unknown[],
 	missing: [] as { chainId: number; count: number }[],
 	stale: false,
-	unreachable: false
+	unreachable: false,
+	offline: false,
+	unreadable: [] as number[],
+	historyUnreadable: [] as number[],
+	cached: null as { at: number } | null,
+	loading: false,
+	readAt: null as number | null
 }));
 
 vi.mock('./proposals.svelte', () => ({
@@ -39,6 +47,24 @@ vi.mock('./proposals.svelte', () => ({
 		},
 		get unreachable() {
 			return seams.unreachable;
+		},
+		get offline() {
+			return seams.offline;
+		},
+		get unreadable() {
+			return seams.unreadable;
+		},
+		get historyUnreadable() {
+			return seams.historyUnreadable;
+		},
+		get cached() {
+			return seams.cached;
+		},
+		get loading() {
+			return seams.loading;
+		},
+		get readAt() {
+			return seams.readAt;
 		}
 	}
 }));
@@ -62,7 +88,8 @@ vi.mock('$lib/services/chain-doc', () => ({
 		chainId === 77777 ? { kind: 'doc', body: { name: 'Member Chain' } } : { kind: 'absent' }
 }));
 
-const { MULTISIG_RETRY, missingOfRow, waitingRows } = await import('./activity.svelte');
+const { MULTISIG_RETRY, missingOfRow, proposalOfRow, waitingRows } =
+	await import('./activity.svelte');
 
 const m = {
 	action: { call: 'Contract call' },
@@ -71,7 +98,9 @@ const m = {
 		ready: 'Ready',
 		yourTurn: 'Your turn',
 		waiting: 'Waiting',
-		progress: '{{approved}}/{{threshold}}'
+		progress: '{{approved}}/{{threshold}}',
+		executing: 'Executing',
+		conflict: 'Only one can run'
 	},
 	proposal: {
 		missingNetworkNamed: 'On {{name}} (chain {{chainId}}) — not here',
@@ -79,8 +108,20 @@ const m = {
 		missingCount: 'Waiting there: {{n}}',
 		addNetwork: 'Add network'
 	},
-	panel: { pending: 'Waiting', stale: 'stale' },
-	service: { unreachableNote: 'service away', retry: 'Retry' }
+	panel: {
+		pending: 'Waiting',
+		stale: 'stale',
+		lastKnown: 'last known {{time}}',
+		checking: 'checking',
+		historyUnreadable: 'history unread on {{network}}'
+	},
+	service: {
+		unreachableNote: 'service away',
+		retry: 'Retry',
+		offline: 'offline',
+		offlineSince: 'offline since {{time}}',
+		chainUnreachable: "can't reach {{network}}"
+	}
 } as unknown as MultisigMessages;
 const signing = {} as SigningMessages;
 const settle = () => new Promise((done) => setTimeout(done, 0));
@@ -166,5 +207,100 @@ describe('proposals on a network this device does not have', () => {
 		expect(missingOfRow('multisig:100:0xab')).toBeNull();
 		seams.missing = [];
 		expect(waitingRows.group(m)).toBeNull();
+	});
+});
+
+describe('what the waiting group says of where it stands (r4b-3, r4b-11, r4b-15, r4b-2)', () => {
+	const reset = () => {
+		seams.open = [call('0xdeadbeef')];
+		seams.missing = [];
+		seams.stale = false;
+		seams.unreachable = false;
+		seams.offline = false;
+		seams.unreadable = [];
+		seams.historyUnreadable = [];
+		seams.cached = null;
+		seams.loading = false;
+		seams.readAt = null;
+	};
+
+	it('offline is said as offline, with when the list was read — before anything else', () => {
+		reset();
+		seams.offline = true;
+		seams.stale = true;
+		seams.unreachable = true;
+		expect(waitingRows.group(m)?.note).toBe('offline');
+		seams.readAt = Date.UTC(2026, 9, 29, 16, 36);
+		expect(waitingRows.group(m)?.note).toMatch(/^offline since \S/);
+		expect(waitingRows.group(m)?.action).toBeUndefined();
+	});
+
+	it('a network that did not answer is named, with Retry — never "nothing waits"', () => {
+		reset();
+		seams.stale = true;
+		seams.unreadable = [100];
+		const group = waitingRows.group(m)!;
+		expect(group.note).toBe("can't reach Gnosis");
+		expect(group.action).toEqual({ id: MULTISIG_RETRY, label: 'Retry' });
+		seams.open = [];
+		expect(waitingRows.group(m)?.note).toBe("can't reach Gnosis");
+	});
+
+	it('the list kept from an earlier page is shown at once, said as the last known', () => {
+		reset();
+		seams.stale = true;
+		seams.cached = { at: Date.UTC(2026, 9, 29, 16, 36) };
+		const group = waitingRows.group(m)!;
+		expect(group.rows).toHaveLength(1);
+		expect(group.note).toMatch(/^last known \S/);
+	});
+
+	it('still reading with nothing to show: a cue from the first frame', () => {
+		reset();
+		seams.open = [];
+		seams.loading = true;
+		expect(waitingRows.group(m)).toMatchObject({ note: 'checking', rows: [] });
+		seams.loading = false;
+		expect(waitingRows.group(m)).toBeNull();
+	});
+
+	it('a history that could not be read is said, with Retry', () => {
+		reset();
+		seams.historyUnreadable = [100];
+		expect(waitingRows.group(m)).toMatchObject({
+			note: 'history unread on Gnosis',
+			action: { id: MULTISIG_RETRY }
+		});
+	});
+});
+
+describe('a waiting row (r4b-6, r4b-7, r4b-17, r4a-4)', () => {
+	it('never more approved than needed; proposals at one number say only one can run', async () => {
+		seams.offline = false;
+		seams.unreadable = [];
+		seams.historyUnreadable = [];
+		seams.cached = null;
+		seams.stale = false;
+		const a = {
+			...call('0x11111111'),
+			approved: 3,
+			threshold: 2,
+			status: 'ready',
+			sameNonce: ['0xb']
+		};
+		const b = { ...call('0x22222222'), sameNonce: ['0xa'], executing: true };
+		seams.open = [a, b];
+		waitingRows.follow(m, signing, MULTISIG);
+		await settle();
+		const [first, second] = waitingRows.group(m)!.rows;
+		expect(first.subtitle).toBe('Ready · Only one can run · 2/2 · Gnosis');
+		expect(second.subtitle).toBe('Executing · Only one can run · 1/2 · Gnosis');
+	});
+
+	it('its id opens the transaction — an executed row’s too', () => {
+		const hash = `0x${'ab'.repeat(32)}`;
+		expect(proposalOfRow(`multisig:100:${hash}`)).toEqual({ chainId: 100, safeTxHash: hash });
+		expect(proposalOfRow(`multisig:100:${hash}:0`)).toEqual({ chainId: 100, safeTxHash: hash });
+		expect(proposalOfRow(`multisig:${hash}:0`)).toBeNull();
 	});
 });

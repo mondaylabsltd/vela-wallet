@@ -30,18 +30,32 @@
 	interface Props {
 		m: MultisigMessages;
 		prefill?: string;
+		/**
+		 * r4b-13: what the link's own lookup already found (it was not
+		 * found, the service away), or that the link is damaged — said at
+		 * once; the address is not looked up again until the person taps Add.
+		 */
+		prefillFailure?: string | null;
 		wide: boolean;
 		closeLabel: string;
 		onclose: () => void;
 		onadded: (address: string) => void;
 	}
 
-	let { m, prefill = '', wide, closeLabel, onclose, onadded }: Props = $props();
+	let {
+		m,
+		prefill = '',
+		prefillFailure = null,
+		wide,
+		closeLabel,
+		onclose,
+		onadded
+	}: Props = $props();
 
 	// The link's address seeds the field once; the person may edit it.
 	let address = $state(untrack(() => prefill));
 	let busy = $state(false);
-	let failure = $state<string | null>(null);
+	let failure = $state<string | null>(untrack(() => prefillFailure));
 	// The core's one address rule (send-2), checksum included.
 	const entry = $derived(addressEntry(address.trim()));
 	const valid = $derived(entry === 'valid');
@@ -72,7 +86,7 @@
 	}
 
 	$effect(() => {
-		if (prefill && valid) void add();
+		if (prefill && valid && untrack(() => prefillFailure) === null) void add();
 	});
 
 	// -- importing from Safe{Wallet} ----------------------------------------------

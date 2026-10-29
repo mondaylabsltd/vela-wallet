@@ -1083,9 +1083,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
+// 2468 (round 4: state, sync and history): + `home.multisig.status.
+//   {executing, conflict}`, + `home.multisig.panel.{lastKnown, checking,
+//   historyUnreadable}`, + `home.multisig.proposal.{lostRace, lostRacePaid,
+//   replacedFirst, replacedFirstPaid, execFailed, cantCheck, cantCheckUsed,
+//   conflict, queuedNoteMany, openNumber}`, + the `home.multisig.proposal.
+//   reason` branch's 9 leaves (passkeyClosed, passkeyTimedOut, passkeyMissing,
+//   passkeyFailed, serviceKept, serviceRefused, offline, chainUnreachable,
+//   unknown), + `home.multisig.service.{offline, offlineSince,
+//   chainUnreachable}`, + `home.multisig.add.badLink`.
+//   2318 + 28 = 2346 leaves, 121 + 1 = 122 branches.
+if (PATHS.length !== 2468) fail(`expected 2468 paths (2346 leaf + 122 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2346) fail(`expected 2346 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 122) fail(`expected 122 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

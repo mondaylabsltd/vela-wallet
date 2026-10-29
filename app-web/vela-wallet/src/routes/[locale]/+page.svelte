@@ -58,6 +58,7 @@
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
 	import { track, type AnalyticsEventProps } from '$lib/analytics';
 	import { analyticsMethod } from '$lib/analytics/methods';
+	import { carriedLinkHash } from '$lib/multisig/core/link';
 
 	let { data }: PageProps = $props();
 
@@ -190,7 +191,8 @@
 		session.accountEstablished(mode);
 		// Signing in ends where the wallet is, not back on the page that
 		// started it — the same landing all three native clients make.
-		await goto(walletHref, { replaceState: true });
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
+		await goto(walletHref + carriedLinkHash(location.hash), { replaceState: true });
 	}
 
 	/**
@@ -262,7 +264,9 @@
 		// Welcome is taken to the wallet. `app.html` already hid this page
 		// before paint on the same rule; the attribute goes once we have left.
 		if (welcomeBelongsInWallet()) {
-			void goto(walletHref, { replaceState: true }).finally(() => {
+			// r4b-17: a multisig link opened here (`/en#msa=…`) goes on to the wallet.
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
+			void goto(walletHref + carriedLinkHash(location.hash), { replaceState: true }).finally(() => {
 				delete document.documentElement.dataset.intro;
 			});
 			return () => {
