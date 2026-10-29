@@ -116,4 +116,13 @@ settlement?: TrackSettlement | null,
  * be read was stamped with the clock: this machine re-reads its block's
  * time in the background and rewrites it (module doc).
  */
-time_verified?: boolean | null, };
+time_verified?: boolean | null, 
+/**
+ * The token's contract, for a transfer of one (round 5): what the
+ * transfer moved, stored beside its symbol when the record was written
+ * (the stored `token`). `None` for the chain's own coin, on records
+ * written before the field, and from a shell that does not keep it — a
+ * symbol alone is whatever a contract answers, so Activity can only say
+ * whose "USDC" it was from this ([`super::token_provenance`]).
+ */
+token?: string | null, };
