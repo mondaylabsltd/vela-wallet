@@ -29,6 +29,7 @@
 	import { nativeSymbol } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
@@ -492,8 +493,7 @@
 			{#if recipient}
 				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
 				<p class="to">
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-					<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(recipient)}</span>
+					<Identicon svg={identiconSvgForClient(recipient)} size="compact" address={recipient} />
 					<!-- A call names the contract it calls, in the signing sheet's word. -->
 					<span class="to-label">{reading ? signing.labelInteracting : m.action.to}</span>
 					{#if named}<span class="to-who">{named}</span>{/if}
@@ -579,8 +579,8 @@
 						phase.kind === 'sent' && !!phase.txHash && sameAddress(phase.by, owner)}
 					{@const mine = localOwners([owner]).length > 0}
 					<li class:done={!!row || executedBy}>
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
+						<!-- Beside the row's own control (Sign with another wallet), never in it. -->
+						<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 						<span class="who"
 							>{names.label(owner)}{#if mine}<span class="here">
 									· {m.panel.thisDevice}</span
@@ -895,20 +895,6 @@
 		padding-block: var(--space-xs);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-base);
-	}
-
-	.avatar {
-		display: inline-flex;
-		flex: none;
-		width: var(--icon-xl);
-		height: var(--icon-xl);
-		border-radius: var(--radius-full);
-		overflow: hidden;
-	}
-
-	.avatar :global(svg) {
-		width: 100%;
-		height: 100%;
 	}
 
 	.facts {

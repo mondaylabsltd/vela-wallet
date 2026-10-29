@@ -14,9 +14,10 @@
  */
 import { tick } from 'svelte';
 import type { SigningMessages } from '$lib/signing/messages';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const ME = '0x00000000000000000000000000000000000000aa';
@@ -563,6 +564,27 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		await settle();
 		expect(fake.calls).toContain('external');
 		expect(refresh).toHaveBeenCalled();
+		await screen.unmount();
+	});
+});
+
+describe('every artwork opens the identicon viewer (founder call, 2026-09-05)', () => {
+	afterEach(() => identiconViewer.close());
+
+	it('the recipient and each member, on its own address; a row control stays beside it', async () => {
+		const screen = show();
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('.to button.identicon')?.click();
+		expect(identiconViewer.current?.address).toBe(TO);
+
+		const rows = [...document.body.querySelectorAll('.approvals li')];
+		expect(rows).toHaveLength(2);
+		rows[1].querySelector<HTMLButtonElement>('button.identicon')?.click();
+		expect(identiconViewer.current?.address).toBe(OTHER);
+		// "Sign with another wallet" is the row's own control, beside the
+		// artwork's button: no button holds another.
+		expect(rows[1].textContent).toContain('external.signWithWallet');
+		expect(document.body.querySelector('button button')).toBeNull();
 		await screen.unmount();
 	});
 });
