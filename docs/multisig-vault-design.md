@@ -300,6 +300,15 @@ MultisigAccount {
   genesis 被拒 → `refused`；这笔交易不签 → `blocked`（新：`SigningBlockedError`）；有风险 → `risk`（每次签名都问）；否则 `open`。
   `authorizeSigning(account, chainId, tx)` 在**每一次**签名前**重新读链**（`checkNow`，不用会话缓存）：谁能代表它
   （deployed check / 反事实规则）、它在该链现在的成员、以及这笔交易的状态差异——会话中途被加上的模块，下一次 passkey 之前就会被拦下。
+- **整合（2026-10-30，round 5 三分支合并）**：
+  - 审阅的每一次读（`eth_getCode`、trace、probe、`eth_simulateV1`、收款方风险）和预览一样有界（`REVIEW_READ_MS` 8 s，
+    `bounded.ts`）：读不到就按"没有回答"交给 core（状态未核对、资产未模拟），审阅不会一直挂着按钮，闸门（同一条读路径）
+    也不会把 passkey 挂住。
+  - 执行：预览已经说明 passkey 之前就停（会失败、没有报价、**超时未核对**（`unchecked`）、执行者付不起）的，在闸门之前就停
+    （`throwIfStopped`）——"批准并执行"退回只批准时，那次批准自己过一次闸门，风险确认不会问两次；签名页上批准的执行者
+    （`approval_route` = 页面）在执行前先批准，闸门只问一次（`approveAuthorized`）。
+  - 签名页（`app-web/trusted-signer`）的读法规则与 `multisig_review` 对拍：核心审阅拒的（`sign.allowed=false`，含 Bybit 状态差异向量），
+    页面从字节上就拒（`samples/multisig-test.mjs`）；页面读不了链，链上才看得出的未声明写入由钱包在开页**之前**拦下。
 - **已知限制**：模拟与真实执行可能不同（恶意代码可以识别 `eth_call`）；解码规则（delegatecall 只给 MultiSendCallOnly、
   不签对多签自身的未知调用）仍然是第一道门。作废（拒绝）不单独弹审阅：它是 0 值、空 data 的自调用，闸门照样核对其状态差异。
 - **测试**：core `multisig_review_tests.rs`（Bybit 读起来是转账却写槽 0、嵌套调用里未声明的 addOwner、声明的成员变更通过、

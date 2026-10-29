@@ -30,15 +30,27 @@ import {
 	type SafeTx
 } from './kernel';
 import { multisig } from './store.svelte';
+import { bounded } from './bounded';
+
+/**
+ * How long one of the review's reads is waited for (round 5, as the
+ * preview's): past it, it did not answer — said as such by the core (a state
+ * not read, a move not simulated), never a review held open for good. The
+ * signing gate reads through here too, so a hung node never holds a passkey.
+ */
+export const REVIEW_READ_MS = 8_000;
 
 /** A JSON-RPC answer as the core reads one: the envelope, or `{unreachable: true}`. */
 async function envelope(chainId: number, method: string, params: unknown[]): Promise<unknown> {
-	try {
-		const answer = await poolRpcCall(method, params, chainId);
-		return answer.error ? { error: answer.error } : { result: answer.result ?? null };
-	} catch {
-		return { unreachable: true };
-	}
+	const read = async (): Promise<unknown> => {
+		try {
+			const answer = await poolRpcCall(method, params, chainId);
+			return answer.error ? { error: answer.error } : { result: answer.result ?? null };
+		} catch {
+			return { unreachable: true };
+		}
+	};
+	return bounded(read(), { unreachable: true }, REVIEW_READ_MS);
 }
 
 /** What the review is of: the transaction, and the Safe on its chain now. */
@@ -99,7 +111,13 @@ export async function gatherReview(subject: ReviewSubject): Promise<ReviewInput>
 		reads = reviewReads(base);
 	}
 	const simulate =
-		reads.simCalls.length > 0 ? rpcSimulateReply(safe, reads.simCalls, chainId) : null;
+		reads.simCalls.length > 0
+			? bounded(
+					rpcSimulateReply(safe, reads.simCalls, chainId).catch(() => null),
+					null,
+					REVIEW_READ_MS
+				)
+			: null;
 	// Both, side by side: the trace (every write) where the network offers it
 	// and its execution ran; the probe otherwise — the core picks (a trace
 	// that reverted reads nothing, never "nothing changes").
@@ -112,8 +130,15 @@ export async function gatherReview(subject: ReviewSubject): Promise<ReviewInput>
 	};
 	const facts = Promise.all(
 		reads.recipients.map(async (address): Promise<RecipientFacts> => {
-			const risk = await resolveRecipientRisk(chainId, address);
-			return { address, isContract: risk.isContract, firstTime: risk.firstInteraction };
+			const unknown: RecipientFacts = { address, isContract: null, firstTime: null };
+			const risk = await bounded(
+				resolveRecipientRisk(chainId, address).catch(() => null),
+				null,
+				REVIEW_READ_MS
+			);
+			return risk
+				? { address, isContract: risk.isContract, firstTime: risk.firstInteraction }
+				: unknown;
 		})
 	);
 	const [state, simReply, recipientFacts] = await Promise.all([

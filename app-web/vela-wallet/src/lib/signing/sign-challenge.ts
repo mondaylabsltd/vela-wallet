@@ -13,8 +13,11 @@
  * and the core reads it (`signingPlan`, spec 102); nothing here chooses.
  *
  * WHERE it is reviewed and signed is the account's venue (spec 102) — and the
- * web has one venue only: its own sheet. It opens no signing page (owner,
- * 2026-09-23; plan P2-11), so the plan asked is the web's
+ * web has one venue only for a transaction or a message: its own sheet. It
+ * opens no signing page for those (owner, 2026-09-23; plan P2-11) — the one
+ * approved exception (owner, 2026-10-30) is a multisig member's approval on
+ * the page the member chose, routed by `multisig/core/owners.ts`, never from
+ * here — so the plan asked is the web's
  * (`signingPlan(record, 'web')`, the core's `SigningPlan::on_web`):
  *
  * - a `getvela.app` account whose venue is a trusted page signs HERE, natively:

@@ -318,8 +318,9 @@ export function firstCallData(request: LocalTransaction['signedRequest']): strin
  *
  * `ScanIncomingTransfers` is a multi-chain `eth_getLogs` sweep, and the shell
  * issues it from three places that can overlap (the account hand-off, the focus
- * tick, the 10s Activity poll). `fetchTokens` solves the same problem for
- * balances with an in-flight promise; this is that, one layer up.
+ * tick, the incoming cadence's live tick — `incoming-cadence.ts`). `fetchTokens`
+ * solves the same problem for balances with an in-flight promise; this is
+ * that, one layer up.
  *
  * A follower answers `0`, and that is not a fudge — it is the literal truth the
  * operation is defined to report: `new_count` is how many receipts THIS scan

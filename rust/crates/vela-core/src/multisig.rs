@@ -3103,6 +3103,7 @@ fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
 /// allowed `setupToL2` hook switches it, on any chain but Ethereum), its
 /// owners in list order, its threshold and its fallback handler. `None` for
 /// a genesis the counterfactual rule refuses.
+#[cfg(feature = "crux")]
 pub(crate) struct StartState {
     pub singleton: Address,
     pub owners: Vec<Address>,
@@ -3110,6 +3111,7 @@ pub(crate) struct StartState {
     pub handler: Address,
 }
 
+#[cfg(feature = "crux")]
 pub(crate) fn counterfactual_start(
     g: &Genesis,
     safe: Address,
@@ -3130,6 +3132,7 @@ pub(crate) fn counterfactual_start(
 }
 
 /// `code` is the runtime code of the canonical Safe singleton at `singleton`.
+#[cfg(feature = "crux")]
 pub(crate) fn canonical_singleton_code(singleton: Address, code: &str) -> bool {
     canonical_as(singleton, &[Role::Singleton, Role::SingletonL2])
         .is_some_and(|c| matches!(code_is(Some(code), c), CodeIs::Canonical))

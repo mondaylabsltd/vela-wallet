@@ -126,6 +126,7 @@ const {
 	ExecutionUnpricedError,
 	ExecutionUncheckedError,
 	bounded,
+	throwIfStopped,
 	relayRefused,
 	NOT_TAKEN_AFTER_MS
 } = await import('./execute');
@@ -435,6 +436,26 @@ describe('a read that never answers (round 5)', () => {
 
 	it('a look that could not check it stops before the passkey, and the approval is kept', () => {
 		expect(stoppedBeforeSigning(new ExecutionUncheckedError())).toBe(true);
+	});
+
+	it('throwIfStopped: every look but a priced, payable one stops, with the error the sheet says', () => {
+		expect(() => throwIfStopped({ kind: 'unchecked' })).toThrow(ExecutionUncheckedError);
+		expect(() => throwIfStopped({ kind: 'unpriced' })).toThrow(ExecutionUnpricedError);
+		expect(() =>
+			throwIfStopped({ kind: 'fails', why: { kind: 'unknown' } } as unknown as Parameters<
+				typeof throwIfStopped
+			>[0])
+		).toThrow(ExecutionWouldFailError);
+		const priced = (canPay: boolean) =>
+			({
+				kind: 'priced',
+				calls: [],
+				fee: { token: null, amount: 5n, value: 5n },
+				canPay,
+				balance: 1n
+			}) as unknown as Parameters<typeof throwIfStopped>[0];
+		expect(() => throwIfStopped(priced(false))).toThrow(ExecutorCannotPayError);
+		expect(() => throwIfStopped(priced(true))).not.toThrow();
 	});
 });
 

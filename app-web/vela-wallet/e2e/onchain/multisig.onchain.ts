@@ -1161,9 +1161,12 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		await shot(page, 'h4-sign-asks');
 		await page.getByRole('button', { name: "Don't sign" }).click();
 		await expect(confirm).toHaveCount(0);
-		// Nothing signed: the review stands, to be confirmed again — and asked again.
+		// Nothing signed: the send stands, to be proposed again — reviewed again
+		// (§3.6: each proposal is drawn at its number before its passkey) and
+		// asked again.
 		await expect(propose).toBeEnabled();
 		await propose.click();
+		await confirmReview(page);
 		await expect(confirm).toBeVisible({ timeout: 30_000 });
 		await page.getByRole('button', { name: 'I understand the risk — sign' }).click();
 		await expect(page.getByText('1/1 approved').first()).toBeVisible({ timeout: 60_000 });

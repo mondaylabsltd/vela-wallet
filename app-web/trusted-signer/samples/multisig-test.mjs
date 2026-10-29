@@ -181,6 +181,59 @@ for (const [name, safeTx] of CASES) {
   }
 }
 
+// --- 1b. never accept what the wallet's one review refuses ---------------------
+//
+// Round 5 (signing parity, §3.6): the wallet signs a member's approval only
+// from `multisigReview` and its sign rule, asked again right before the
+// passkey (`signingGate`). This page cannot read the chain (its CSP connects
+// nowhere), so its state-diff guard is the decoding rules alone; what it must
+// never do is accept a transaction the core's review refuses. Two checks:
+//  - every case above, through `multisigReview` with no chain reads (the
+//    review the page's position is in): refused there ⇒ refused here, and a
+//    review the core cannot build at all is refused here too;
+//  - the core's own state-diff vectors (`tests/vectors/multisig-review/`):
+//    the transactions the guard refuses on a real chain's answers (Bybit:
+//    a DELEGATECALL that writes slot 0) are refused here from their bytes.
+
+const reviewOf = (input) => {
+  try {
+    return ms('multisigReview', { input });
+  } catch (error) {
+    return { thrown: String(error && error.message || error) };
+  }
+};
+let aligned = 0;
+for (const [name, safeTx] of CASES) {
+  const parsed = ns.multisig.parseTx(safeTx);
+  if (parsed.error) continue;
+  const out = reviewOf({ chainId: CHAIN, safe: SAFE, tx: safeTx, owners: members.owners, threshold: members.threshold, deployed: true });
+  const coreRefuses = !!out.thrown || out.error !== undefined || out.sign?.allowed === false;
+  const pageRefuses = !!ns.multisig.read(SAFE, parsed.tx).refusal;
+  if (coreRefuses) {
+    check(`${name}: the one review (multisigReview) refuses it — so does the page`, pageRefuses,
+      JSON.stringify(out.thrown ?? out.concerns));
+  } else {
+    check(`${name}: what the page accepts, the one review signs too`, pageRefuses || out.sign?.allowed === true,
+      JSON.stringify(out));
+  }
+  aligned += 1;
+}
+check(`every readable case went through multisigReview (${aligned})`, aligned >= CASES.length - 2);
+
+const VECTORS = join(repo, 'rust/crates/vela-core/tests/vectors/multisig-review');
+for (const file of readdirSync(VECTORS).filter((f) => f.endsWith('.json')).sort()) {
+  const vector = JSON.parse(readFileSync(join(VECTORS, file), 'utf8'));
+  const out = reviewOf(vector.input);
+  check(`${file}: the core reviews it as the vector says (${vector.expect.sign.allowed ? 'signed' : 'refused'})`,
+    out.sign && out.sign.allowed === vector.expect.sign.allowed, JSON.stringify(out.sign ?? out));
+  const parsed = ns.multisig.parseTx(vector.input.tx);
+  const reading = parsed.error ? { refusal: parsed.error } : ns.multisig.read(vector.input.safe, parsed.tx);
+  if (vector.expect.sign.allowed === false) {
+    check(`${file}: refused by the state-diff guard — and by the page, from its bytes`, !!reading.refusal,
+      JSON.stringify(reading.action));
+  }
+}
+
 // The page is stricter than the core where the core would accept a shape the
 // page cannot draw exactly: never the other way round.
 for (const [name, bad] of [

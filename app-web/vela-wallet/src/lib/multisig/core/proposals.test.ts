@@ -185,7 +185,13 @@ vi.mock('./owners', () => ({
 		return { owner: OWNER };
 	}
 }));
-vi.mock('$lib/onboarding/core/storage', () => ({ loadAccounts: () => [] }));
+/** 2026-10-29: an executor whose account approves on the trusted page (`approval_route`). */
+const pageRoute = vi.hoisted(() => ({ accounts: [] as { address: string }[] }));
+vi.mock('$lib/onboarding/core/storage', () => ({ loadAccounts: () => pageRoute.accounts }));
+vi.mock('$lib/core/kernels', async (original) => ({
+	...(await original<typeof import('$lib/core/kernels')>()),
+	multisigApprovalRoute: () => ({ type: 'page' })
+}));
 vi.mock('./records', () => ({
 	recordRemoteExecutions: async () => ({ wrote: false, unreadable: [] })
 }));
@@ -194,6 +200,11 @@ vi.mock('./execute', () => ({
 	submitExecution: async () => {
 		sentExecutions.count += 1;
 		return {};
+	},
+	// The look's own stoppers are `execute.test.ts`'s; here, a look that is
+	// not a priced one stops, by its kind.
+	throwIfStopped: (preview: { kind: string }) => {
+		if (preview.kind !== 'priced') throw new Error(`stopped: ${preview.kind}`);
 	}
 }));
 vi.mock('../external/signing.svelte', () => ({ externalSigning: { approve: async () => ({}) } }));
@@ -383,6 +394,49 @@ describe('every signature passes the gate first (§3.5)', () => {
 		expect(signed).toEqual([]);
 		expect(sentExecutions.count).toBe(0);
 		expect(submitted).toEqual([]);
+	});
+
+	const members = { deployed: true, owners: [OWNER], threshold: 1, nonce: 0n };
+	const pending = () =>
+		({
+			chainId: 100,
+			safeTxHash: `0x${'22'.repeat(32)}`,
+			tx: stored(1).safeTx,
+			approvals: [],
+			canApprove: [{ address: OWNER }],
+			review: { action: null }
+		}) as unknown as Parameters<typeof approve>[1];
+	const local = {
+		address: OWNER,
+		name: 'Mine',
+		account: { address: OWNER }
+	} as unknown as Parameters<typeof approve>[2];
+
+	it('a look that already stops before the passkey (not checked in time) stops before the gate asks', async () => {
+		const multisigAccount = account as Parameters<typeof approve>[0];
+		await expect(
+			execute(multisigAccount, pending(), local, members, { kind: 'unchecked' })
+		).rejects.toThrow('stopped: unchecked');
+		// No risk asked for an execution that was never going to be signed: the
+		// approval a caller gives instead asks the gate once, as its own.
+		expect(gate.asked).toEqual([]);
+		expect(signed).toEqual([]);
+		expect(sentExecutions.count).toBe(0);
+	});
+
+	it('an executor that approves on its page: the gate once, its approval, then the execution', async () => {
+		pageRoute.accounts = [{ address: OWNER }];
+		try {
+			const multisigAccount = account as Parameters<typeof approve>[0];
+			await execute(multisigAccount, pending(), local, members, {
+				kind: 'priced'
+			} as unknown as Parameters<typeof execute>[4]);
+			expect(gate.asked).toEqual([100]);
+			expect(signed).toEqual([`0x${'22'.repeat(32)}`]);
+			expect(sentExecutions.count).toBe(1);
+		} finally {
+			pageRoute.accounts = [];
+		}
 	});
 });
 

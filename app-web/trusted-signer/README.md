@@ -48,7 +48,7 @@ delegatecall、改模块 / guard / handler / singleton 的自调用和 gas 退�
 （`https://wallet.getvela.app`、`https://getvela.app`），且只限这一种请求。见 [PROTOCOL.md](PROTOCOL.md) 第 12 节。
 
 ```sh
-node samples/multisig-test.mjs  # 199 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
+node samples/multisig-test.mjs  # 245 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
 bun samples/serve-dist.mjs      # 本机按托管方的样子提供 dist/（含 _headers 的规则与 /b/<hash>/sign），部署前先试
 bun samples/answer-test.mjs     # 37 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：多签批准只答网页钱包
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示

@@ -50,6 +50,9 @@ import {
 	type SafeTx
 } from './kernel';
 import { PasskeyCheckError, type LocalOwner } from './owners';
+import { bounded } from './bounded';
+
+export { bounded, PREVIEW_READ_MS } from './bounded';
 
 export interface ExecutionInput {
 	chainId: number;
@@ -321,22 +324,6 @@ async function readGas(chainId: number, from: string, call: Call): Promise<bigin
 	).catch(() => null);
 	const raw = answer?.result;
 	return typeof raw === 'string' && /^0x[0-9a-fA-F]+$/.test(raw) ? BigInt(raw) : null;
-}
-
-/** How long one read of a preview is waited for: past it, it said nothing. */
-export const PREVIEW_READ_MS = 8_000;
-
-/**
- * `read`, or `fallback` once it has not answered in {@link PREVIEW_READ_MS}
- * (round 5): a read that never answers never holds the preview — or the
- * buttons it decides — for good.
- */
-export function bounded<T>(read: Promise<T>, fallback: T, ms = PREVIEW_READ_MS): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	return Promise.race([
-		read,
-		new Promise<T>((done) => (timer = setTimeout(() => done(fallback), ms)))
-	]).finally(() => clearTimeout(timer));
 }
 
 const LIVE_READS: PreviewReads = {

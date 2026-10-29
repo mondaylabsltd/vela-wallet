@@ -36,9 +36,11 @@
 //! - **The web** ([`venue_choices_on_web`], [`SigningPlan::on_web`]) opens no
 //!   page for a transaction or a message (owner, 2026-09-23): a `getvela.app`
 //!   account signs those in Vela, and a custom-domain account cannot sign them
-//!   there and says why. Its one hand-off (2026-10-29) is a multisig member's
-//!   approval, which goes to the page the account chose
-//!   ([`crate::trusted_signer::approval::approval_route`]).
+//!   there and says why. Its one hand-off is a multisig member's approval,
+//!   which goes to the page the account chose
+//!   ([`crate::trusted_signer::approval::approval_route`]) — the owner
+//!   APPROVED it on 2026-10-30 for multisig approvals only, and only when the
+//!   member chose the page venue (spec 102 plan, P2-11 amended).
 //!
 //! What this does NOT claim: the domain is shared (D2), so a page as venue
 //! assures *what you see is what you sign*; it does not stop a fully
@@ -164,8 +166,10 @@ pub enum VenueBlock {
     /// The page lives on `page_domain` and the account's keys on `domain`: a
     /// browser lets a page use only the passkeys of its own site.
     PageOnOtherDomain { page_domain: String, domain: String },
-    /// The web wallet opens no signing page (owner, 2026-09-23): pages open
-    /// from the Vela apps. Never an R1 answer — only the web's choices and
+    /// The web wallet opens no signing page for a transaction or a message
+    /// (owner, 2026-09-23): pages open from the Vela apps. The one exception
+    /// (owner, approved 2026-10-30) is a multisig member's approval on the
+    /// page the member chose ([`crate::trusted_signer::approval::approval_route`]). Never an R1 answer — only the web's choices and
     /// plan ([`venue_choices_on_web`], [`SigningPlan::on_web`]) give it.
     NotOnWeb,
 }
@@ -614,8 +618,10 @@ pub struct SigningPlan {
 }
 
 impl SigningPlan {
-    /// This plan as the web wallet carries it out. The web opens no page
-    /// (owner, 2026-09-23): a `getvela.app` account whose venue is a page
+    /// This plan as the web wallet carries it out — for a transaction or a
+    /// message. The web opens no page for those (owner, 2026-09-23; a
+    /// multisig member's approval is the approved exception, 2026-10-30,
+    /// [`crate::trusted_signer::approval::approval_route`]): a `getvela.app` account whose venue is a page
     /// signs in Vela there (its keys are the web's own), and a custom-domain
     /// account cannot sign there at all — [`Self::blocked`] says why
     /// ([`VenueBlock::NotOnWeb`]: its keys answer only on its page, and pages

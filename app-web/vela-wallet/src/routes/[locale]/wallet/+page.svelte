@@ -117,6 +117,7 @@
 	import type { FlowStateId } from '$lib/flows/model';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
+	import { followIncomingCadence } from '$lib/wallet/core/incoming-cadence';
 	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
 	import {
 		createReceiveWatchSession,
@@ -1746,17 +1747,21 @@
 		feed.privacyChanged(balance.view.hidden);
 	});
 
-	// The 10s Activity poll the Expo home ran, only while the tab is visible.
-	onMount(() => {
-		const id = setInterval(() => {
-			if (document.visibilityState === 'visible') feed.liveTick();
-		}, 10_000);
-		return () => clearInterval(id);
-	});
+	// The account-wide incoming-funds check (the feed's live tick), on the
+	// owner's adaptive cadence (round 5): 10 s while someone is at the page,
+	// 30 s when it sits idle, 60 s hidden, and at once when it is shown again
+	// or the browser comes back online (`incoming-cadence.ts`). Shown again is
+	// the focus tick the core re-reads on; online is a live tick.
+	onMount(() =>
+		followIncomingCadence((reason) => {
+			if (reason === 'visible') feed.focusTick();
+			else feed.liveTick();
+		})
+	);
 
 	// The 10-minute aggregate poll the Expo home ran too (the core's
 	// `AUTO_REFRESH_MS`; the timer is the shell's). A native coin arriving
-	// while the home sits open is caught by the 10s Activity tick's balance
+	// while the home sits open is caught by the incoming cadence's balance
 	// watch now (home-5, `native-watch.ts`); this is the floor for anything
 	// else. Not forced: the core drops it while backgrounded, and the
 	// 5-minute token cache has expired by then anyway.
@@ -1856,7 +1861,7 @@
 		const onvisibility = () => {
 			if (document.visibilityState === 'visible') {
 				balance.focused();
-				feed.focusTick();
+				// The feed's focus tick is the incoming cadence's (above).
 				refreshClock = Date.now();
 			} else balance.backgrounded();
 		};
@@ -1867,7 +1872,7 @@
 		// back without the browser noticing (a node, not the connection).
 		const ononline = () => {
 			balance.refresh(true);
-			feed.liveTick();
+			// The feed's live tick is the incoming cadence's (above).
 		};
 		window.addEventListener('online', ononline);
 		return () => {

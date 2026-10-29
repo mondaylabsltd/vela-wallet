@@ -10,11 +10,12 @@
  *   open from the Vela apps, not the web." — in the person's language, with
  *   no passkey prompt, no "try again", and the page answered -32603 once the
  *   sheet is closed;
- * - Settings' "Where you review and sign" is a statement, not a choice: for a
- *   `getvela.app` account reviewing on the official page, Vela's sheet is
- *   marked (that is where the web signs it) and the page row is shown,
- *   disabled, with the web's reason; for a custom-domain account nothing is
- *   marked and the row under the account says why.
+ * - Settings' "Where you review and sign" is a choice since 2026-10-30 (the
+ *   owner approved the web opening the page for a multisig member's
+ *   approvals, and only those, when the member chose it): the account's own
+ *   venue is marked, R1 alone disables what its keys cannot reach, and the
+ *   screen says what a page does on the web (multisig approvals there; every
+ *   other transaction and message in Vela).
  */
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -187,7 +188,7 @@ for (const locale of ['en', 'zh'] as const) {
 	});
 }
 
-test('Settings: a getvela.app account on the official page signs in Vela here; the page row says why not', async ({
+test('Settings: a getvela.app account chooses where its multisig approvals are signed; the page says what a page does here', async ({
 	page
 }) => {
 	await seed(page, 'getvela.app', { type: 'page', url: OFFICIAL_PAGE });
@@ -195,44 +196,47 @@ test('Settings: a getvela.app account on the official page signs in Vela here; t
 	await page.goto('/en/settings');
 	const row = page.getByRole('button', { name: new RegExp(corpus('en', 'settings.venue.title')) });
 	await expect(row).toBeVisible({ timeout: 20_000 });
-	await expect(row).toContainText(corpus('en', 'settings.venue.inVela'));
+	// Owner, 2026-10-30: the web opens the page for this account's multisig
+	// approvals (and only those), so the account's own choice is shown.
+	await expect(row).toContainText(corpus('en', 'settings.venue.page'));
 	await row.click();
 
 	const radios = page.getByRole('radio');
 	await expect(radios).toHaveCount(2);
-	await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'true');
 	await expect(radios.nth(0)).toContainText(corpus('en', 'settings.venue.inVela'));
-	await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'false');
-	await expect(radios.nth(1)).toBeDisabled();
+	await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'false');
 	await expect(radios.nth(1)).toContainText(corpus('en', 'settings.signing.pageOfficial'));
-	await expect(radios.nth(1)).toContainText(corpus('en', 'settings.venue.blockedWeb'));
-	// A statement, not a choice: nothing is offered on Vela's own row either.
-	await expect(radios.nth(0)).toHaveAttribute('aria-disabled', 'true');
+	await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'true');
+	// A choice now: neither row is disabled, and the web's old reason is gone.
+	await expect(radios.nth(0)).toBeEnabled();
+	await expect(radios.nth(1)).toBeEnabled();
+	await expect(radios.nth(1)).not.toContainText(corpus('en', 'settings.venue.blockedWeb'));
+	// What a page does on the web: multisig approvals there, the rest in Vela.
+	await expect(page.getByText(corpus('en', 'settings.venue.webApprovals'))).toBeVisible();
 });
 
-test('Settings: a custom-domain account signs nowhere on the web, and the row says why', async ({
+test('Settings: a custom-domain account keeps its own page; Vela and the official page say why not', async ({
 	page
 }) => {
 	await seed(page, 'sign.example.com', { type: 'page', url: OWN_PAGE });
 	await denyOffOrigin(page);
 	await page.goto('/en/settings');
-	const reason = corpus('en', 'settings.venue.blockedWeb');
 	const row = page.getByRole('button', { name: new RegExp(corpus('en', 'settings.venue.title')) });
 	await expect(row).toBeVisible({ timeout: 20_000 });
-	await expect(row).toContainText(reason);
+	await expect(row).toContainText(corpus('en', 'settings.venue.page'));
 	await row.click();
 
 	const radios = page.getByRole('radio');
 	await expect(radios).toHaveCount(3);
-	for (let i = 0; i < 3; i += 1) {
-		await expect(radios.nth(i)).toHaveAttribute('aria-checked', 'false');
-		await expect(radios.nth(i)).toBeDisabled();
-	}
-	// R1's reason under Vela's sheet; the web's under the account's own page,
-	// which is named as self-hosted, never as "my own".
+	// R1 alone decides what can be picked: the account's keys answer only on
+	// its own domain — Vela's sheet and the official page say why not.
+	await expect(radios.nth(0)).toBeDisabled();
 	await expect(radios.nth(0)).toContainText('sign.example.com');
+	await expect(radios.nth(1)).toBeDisabled();
+	await expect(radios.nth(2)).toHaveAttribute('aria-checked', 'true');
 	await expect(radios.nth(2)).toContainText(
 		corpus('en', 'settings.signing.pageSelfHosted').replace('{{domain}}', 'sign.example.com')
 	);
-	await expect(radios.nth(2)).toContainText(reason);
+	await expect(radios.nth(2)).not.toContainText(corpus('en', 'settings.venue.blockedWeb'));
+	await expect(page.getByText(corpus('en', 'settings.venue.webApprovals'))).toBeVisible();
 });

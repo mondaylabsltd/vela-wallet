@@ -794,6 +794,13 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
    发往零地址的腿、多签对自己做成员变更以外的调用（`enableModule` / `setGuard` / `setFallbackHandler` /
    `changeMasterCopy` / `execTransaction` …，卡上写出函数名）、带 gas 退款的交易、未知操作类型、向登记合约转币、
    显示不全的新名字。
+   **与钱包的唯一审阅对齐（2026-10-30，第五轮整合）**：钱包签成员批准之前走 vela-core `multisig_review`
+   （§3.6：读法 + 状态差异守卫 + 收款方风险，`signingGate` 在每次 passkey 前重读链）。本页连不出去，状态差异守卫
+   只能靠读法规则；规则是**本页拒的 ⊇ 核心审阅拒的**：`multisig-test.mjs` 把每个 SafeTx 都送进不带链上读数的
+   `multisigReview`，核心拒（`sign.allowed = false` 或无法审阅）本页必拒；核心的状态差异向量
+   （`tests/vectors/multisig-review/`，Bybit：一个写 slot 0 的 delegatecall）本页从字节上就拒。
+   链上读数才看得出的未声明写入（例如一个已启用的模块被调用后改了成员）由钱包在开页**之前**拦下
+   （`authorizeSigning` → `SigningBlockedError`，页不会被打开）。
 4. **签什么**：`SafeMessage(safeTxHash)` 在**成员**自己的域（`EIP712Domain(chainId, 成员)`）下 ——
    v1.4.1 的 Safe 对每个成员调用旧版 `isValidSignature(txHashData, sig)`，Vela 账户的
    CompatibilityFallbackHandler 核对的正是它（vela-core `approval_challenge`）。不是 dApp 的 SafeMessage
@@ -834,7 +841,8 @@ P-256 签名在那把钥匙下成立；再组装成 `PasskeyApproval`，并按�
 ### 12.6 测试
 
 - `node samples/multisig-test.mjs` —— 与发布的 wasm 逐例对拍哈希、批准字节、读法（36 个 SafeTx，核心自己造的
-  转账 / 调用 / 成员变更 / 取消 / 改名 + 手写的敌意形状），再走本页的管线：哈希不符、名字里的看不见字符、
+  转账 / 调用 / 成员变更 / 取消 / 改名 + 手写的敌意形状），并对拍钱包的唯一审阅 `multisigReview`（核心拒的本页必拒，
+  含状态差异守卫的七个向量），再走本页的管线：哈希不符、名字里的看不见字符、
   超大载荷、非钱包的打开者、链和成员对不上，十五种语言。
 - `bun samples/answer-test.mjs` 的 G 段 —— 发布出去的字节上：evil.example 用 postMessage 要多签批准 → 拒；
   `wallet.getvela.app` 要 → 卡上有多签名（标 App 提供）和三个哈希，点按后答复回到钱包，签的正是批准字节；
