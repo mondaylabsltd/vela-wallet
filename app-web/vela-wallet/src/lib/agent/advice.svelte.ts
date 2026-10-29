@@ -49,6 +49,43 @@ class SheetBeside {
 export const sheetBeside = new SheetBeside();
 
 /**
+ * A multisig proposal's review on screen (§3.6): the request the core's
+ * `multisig_review` names for it (`adviceRequest` — bound to its
+ * safeTxHash on its chain) and what its sheet reads of it. An opinion on it
+ * is read, bound and drawn as one on a dApp's request is: the same digest,
+ * the same standing (current, or given for an earlier version).
+ */
+export interface ProposalFacts {
+	id: string | null;
+	signing: Record<string, unknown>;
+	sheet: Record<string, unknown>;
+}
+
+class ProposalBeside {
+	open = $state.raw<ProposalFacts | null>(null);
+
+	publish(facts: ProposalFacts): void {
+		this.open = facts;
+		// An opinion goes with its proposal.
+		const held = sheetBeside.advice;
+		if (held !== null && held.requestId.startsWith('multisig:') && held.requestId !== facts.id) {
+			sheetBeside.advice = null;
+		}
+	}
+
+	withdraw(): void {
+		this.open = null;
+	}
+}
+
+export const proposalBeside = new ProposalBeside();
+
+/** The id an opinion given now is held under: the dApp request's, else the proposal's. */
+export function openRequestId(): string | null {
+	return signRequest.view.request?.id ?? proposalBeside.open?.id ?? null;
+}
+
+/**
  * The sheet's facts for `intent_rules::review` (`agent_review::SheetFacts`):
  * the clear-signing and guard views, and — for this request only — the
  * simulation and the fee.
@@ -79,7 +116,7 @@ function reviewAccount(): string | null {
  */
 export function openReview(networks: NetView | null = null): OpenReview | null {
 	const request = signRequest.view.request ?? null;
-	if (request === null) return null;
+	if (request === null) return openProposalReview(networks);
 	const review = reviewOf({
 		send: null,
 		operation: null,
@@ -88,6 +125,27 @@ export function openReview(networks: NetView | null = null): OpenReview | null {
 		networks,
 		signing: request,
 		sheet: sheetFacts()
+	});
+	const digest = (review.signing as { review_digest?: unknown } | null)?.review_digest;
+	return typeof digest === 'string' ? { review_digest: digest, review } : null;
+}
+
+/**
+ * A multisig proposal's review on screen, read by the core as any signing
+ * request (`intent_rules::review`): its digest covers the proposal's
+ * safeTxHash, chain, reading, state-diff guard and simulation.
+ */
+function openProposalReview(networks: NetView | null): OpenReview | null {
+	const open = proposalBeside.open;
+	if (open === null || open.id === null) return null;
+	const review = reviewOf({
+		send: null,
+		operation: null,
+		draftedBy: null,
+		account: (open.signing.signer_address as string | undefined) ?? null,
+		networks,
+		signing: open.signing as unknown as Parameters<typeof reviewOf>[0]['signing'],
+		sheet: { ...open.sheet, descriptor_base: getEthereumDataURL() }
 	});
 	const digest = (review.signing as { review_digest?: unknown } | null)?.review_digest;
 	return typeof digest === 'string' ? { review_digest: digest, review } : null;

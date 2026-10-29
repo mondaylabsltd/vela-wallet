@@ -74,7 +74,8 @@ vi.mock('../core/chain', () => ({ hasCode: async () => seams.deployed }));
 // A rename's signature passes the gate in `proposeRename` (stood in above).
 vi.mock('../core/gate.svelte', () => ({
 	SigningRefusedError: class extends Error {},
-	SigningUncheckedError: class extends Error {}
+	SigningUncheckedError: class extends Error {},
+	SigningBlockedError: class extends Error {}
 }));
 vi.mock('../core/kernel', () => {
 	const same = (a?: string | null, b?: string | null) =>

@@ -44,6 +44,11 @@ pub mod identicon_raster;
 pub mod l10n;
 pub mod multisig;
 pub mod multisig_reading;
+/// The one review every member signs from, the state-diff guard and the
+/// signing gate (docs/multisig-vault-design.md §3.6). Reads simulations with
+/// `app::sim_outcome`, so it needs the `crux` feature the wasm shell has.
+#[cfg(feature = "crux")]
+pub mod multisig_review;
 pub mod multisig_watch;
 pub mod passkey;
 mod passkey_catalog;

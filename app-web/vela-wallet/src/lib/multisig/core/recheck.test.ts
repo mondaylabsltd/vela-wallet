@@ -7,7 +7,15 @@
  * a network that does not answer is asked again, and changes nothing.
  * The chain's readings are stood in for (`authority.test.ts` reads them).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
+
+// The gate's rule is the core's (`signingGate`): it reads the findings kept here.
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';

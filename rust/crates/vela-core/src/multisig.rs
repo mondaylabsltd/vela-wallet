@@ -3097,6 +3097,44 @@ fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
     })
 }
 
+/// What a Safe not deployed on a chain holds the moment its genesis' setup
+/// has run there — for a simulation that puts it in place with a state
+/// override (`multisig_review`): the singleton it runs (the L2 one when the
+/// allowed `setupToL2` hook switches it, on any chain but Ethereum), its
+/// owners in list order, its threshold and its fallback handler. `None` for
+/// a genesis the counterfactual rule refuses.
+pub(crate) struct StartState {
+    pub singleton: Address,
+    pub owners: Vec<Address>,
+    pub threshold: u64,
+    pub handler: Address,
+}
+
+pub(crate) fn counterfactual_start(
+    g: &Genesis,
+    safe: Address,
+    chain_id: u64,
+) -> Option<StartState> {
+    let vetted = vet_genesis(g, safe).ok()?;
+    let setup = read_setup(&unhex(&g.initializer).ok()?)?;
+    let mut singleton: Address = g.singleton.parse().ok()?;
+    if chain_id != 1 && canonical_as(setup.to, &[Role::ToL2Setup]).is_some() {
+        singleton = read_setup_to_l2(&setup.data)?;
+    }
+    Some(StartState {
+        singleton,
+        owners: vetted.owners,
+        threshold: vetted.threshold,
+        handler: setup.fallback_handler,
+    })
+}
+
+/// `code` is the runtime code of the canonical Safe singleton at `singleton`.
+pub(crate) fn canonical_singleton_code(singleton: Address, code: &str) -> bool {
+    canonical_as(singleton, &[Role::Singleton, Role::SingletonL2])
+        .is_some_and(|c| matches!(code_is(Some(code), c), CodeIs::Canonical))
+}
+
 /// The contracts whose code [`counterfactual_authority`] needs read on the
 /// target chain for `g` (`eth_getCode` of each): its factory, its
 /// singleton, its fallback handler and its setup hook with the singleton
@@ -3521,6 +3559,20 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         // An execution in flight (`multisig_watch`).
         "executionVerdict" => out(json(&crate::multisig_watch::execution_verdict(&arg(
             &args, "facts",
+        )?))),
+        // The one review, its reads, and the gate before every signature
+        // (`multisig_review`, §3.6).
+        #[cfg(feature = "crux")]
+        "reviewReads" => out(json(&crate::multisig_review::review_reads(&arg(
+            &args, "input",
+        )?)?)),
+        #[cfg(feature = "crux")]
+        "multisigReview" => out(json(&crate::multisig_review::multisig_review(&arg(
+            &args, "input",
+        )?)?)),
+        #[cfg(feature = "crux")]
+        "signingGate" => out(json(&crate::multisig_review::signing_gate(&arg(
+            &args, "input",
         )?))),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]

@@ -644,6 +644,65 @@ export interface MultisigMessages {
 		counted: string;
 		notCounted: string;
 	};
+	/** The one review every member signs from (§3.6): the state-diff guard, who it reaches, the bytes. */
+	review: ReviewMessages;
+}
+
+/** `home.multisig.review`: what the one review says beside the call's reading (§3.6). */
+export interface ReviewMessages {
+	/** Running it changes who controls the multisig, undeclared: no signing. */
+	stateTitle: string;
+	/** `{{network}}` */
+	stateBody: string;
+	/** `{{before}}`, `{{after}}`: slot 0, the code the proxy runs (Bybit). */
+	writeSingleton: string;
+	/** `{{address}}` */
+	writeModuleOn: string;
+	writeModuleOff: string;
+	/** `{{after}}` */
+	writeGuard: string;
+	writeModuleGuard: string;
+	writeHandler: string;
+	/** `{{address}}` */
+	writeAdded: string;
+	writeRemoved: string;
+	/** An `owners` entry outside the member list (`{{address}}`). */
+	writeOwnerEntry: string;
+	/** `{{before}}`, `{{after}}` */
+	writeThreshold: string;
+	/** `{{after}}` */
+	writeOwnerCount: string;
+	writeNonce: string;
+	/** `{{slot}}` */
+	writeStorage: string;
+	/** `{{network}}`: checked, nothing that decides control changes. */
+	stateUnchanged: string;
+	/** `{{network}}`: checked, the members change exactly as declared. */
+	stateDeclared: string;
+	/** `{{network}}`: no state-diff source; only the decoding rules stand. */
+	stateUnread: string;
+	sourceTrace: string;
+	sourceProbe: string;
+	/** What moves was read from the probe's balances (no simulation offered). */
+	movesProbe: string;
+	roleRecipient: string;
+	roleContract: string;
+	roleMember: string;
+	/** `{{n}}`: a batch's call. */
+	callNumber: string;
+	/** `{{address}}`, `{{label}}`, `{{known}}` */
+	lookalike: string;
+	/** `{{address}}` */
+	toContract: string;
+	typedData: string;
+	techTitle: string;
+	hashesTitle: string;
+	approveAnyway: string;
+	approveExecuteAnyway: string;
+	executeAnyway: string;
+	proposeAnyway: string;
+	/** The gate refused a transaction right before signing. */
+	blocked: string;
 }
 
 /** `home.multisig.members`: changing who the members are and how many must approve. */
@@ -1283,5 +1342,42 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		executedBy: '',
 		counted: '',
 		notCounted: ''
+	},
+	review: {
+		stateTitle: '',
+		stateBody: '',
+		writeSingleton: '',
+		writeModuleOn: '',
+		writeModuleOff: '',
+		writeGuard: '',
+		writeModuleGuard: '',
+		writeHandler: '',
+		writeAdded: '',
+		writeRemoved: '',
+		writeOwnerEntry: '',
+		writeThreshold: '',
+		writeOwnerCount: '',
+		writeNonce: '',
+		writeStorage: '',
+		stateUnchanged: '',
+		stateDeclared: '',
+		stateUnread: '',
+		sourceTrace: '',
+		sourceProbe: '',
+		movesProbe: '',
+		roleRecipient: '',
+		roleContract: '',
+		roleMember: '',
+		callNumber: '',
+		lookalike: '',
+		toContract: '',
+		typedData: '',
+		techTitle: '',
+		hashesTitle: '',
+		approveAnyway: '',
+		approveExecuteAnyway: '',
+		executeAnyway: '',
+		proposeAnyway: '',
+		blocked: ''
 	}
 };

@@ -33,7 +33,19 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, callTitle, readableCalls } from '../core/call-review.svelte';
+	import { CallReading, callTitle, readableCalls, reviewedCalls } from '../core/call-review.svelte';
+	import { ProposalReview, REVIEW_FRESH_MS } from '../core/proposal-review.svelte';
+	import { anywayLabel, reviewBlocks, reviewTech } from '../core/review-blocks';
+	import BlockList from '$lib/signing/ui/BlockList.svelte';
+	import { resolvedFormatKeys } from '$lib/services/locale-format';
+	import {
+		adviceStanding,
+		openReview,
+		proposalBeside,
+		sheetBeside
+	} from '$lib/agent/advice.svelte';
+	import { adviceCard } from '$lib/agent/advisor';
+	import ReviewTech from './ReviewTech.svelte';
 	import { names } from '../core/names.svelte';
 	import {
 		actionRecipient,
@@ -73,6 +85,7 @@
 		declinedRisk,
 		gateOf,
 		signingGate,
+		SigningBlockedError,
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
@@ -110,6 +123,7 @@
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
 	import type { DappProposal } from '../core/ui.svelte';
+	import type { ReviewFirstRequest } from '../core/review-first.svelte';
 	import type { ProposalSource } from '../core/linked.svelte';
 	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
@@ -129,6 +143,11 @@
 		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
 		/** A dApp's transaction: reviewed here before it is proposed (`DappRequestHost`). */
 		draft?: DappProposal | null;
+		/**
+		 * §3.6: the proposer's own transaction (a transfer, a rename, a member
+		 * change), built at its number and reviewed here before its passkey.
+		 */
+		prebuilt?: ReviewFirstRequest | null;
 		/** ms-21: where the transaction is read from when it is not the shown multisig's. */
 		source?: ProposalSource | null;
 		/**
@@ -150,6 +169,7 @@
 		onclose,
 		onexecuted,
 		draft = null,
+		prebuilt = null,
 		source = null,
 		watch = null
 	}: Props = $props();
@@ -161,7 +181,7 @@
 	$effect(() => source?.watch?.());
 
 	/** A dApp's transaction not proposed yet: the review, before any passkey. */
-	const drafting = $derived(!!draft && !draft.safeTxHash);
+	const drafting = $derived((!!draft && !draft.safeTxHash) || !!prebuilt);
 	let drafted = $state<{ chain: ChainState; item: ProposalItem } | null>(null);
 	let draftFailure = $state<string | null>(null);
 
@@ -197,13 +217,15 @@
 
 	const item = $derived(
 		drafting
-			? (drafted?.item ?? null)
+			? (prebuilt?.item ?? drafted?.item ?? null)
 			: (store
 					.chain(chainId)
 					?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null)
 	);
 	const members = $derived(
-		drafting ? (drafted?.chain.members ?? null) : (store.chain(chainId)?.members ?? null)
+		drafting
+			? (prebuilt?.chain.members ?? drafted?.chain.members ?? null)
+			: (store.chain(chainId)?.members ?? null)
 	);
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
@@ -252,7 +274,7 @@
 	 * call must not be read again (and flash "Loading…") each time.
 	 */
 	const callKey = $derived.by(() => {
-		const calls = readableCalls(item?.review.action ?? null);
+		const calls = item ? reviewedCalls(item.review.action, item.tx) : null;
 		return calls
 			? `${chainId}:${account.address}:${calls.map((c) => `${c.to}:${c.value}:${c.data}`).join(';')}`
 			: '';
@@ -260,12 +282,13 @@
 	let reading = $state<CallReading | null>(null);
 	$effect(() => {
 		if (!callKey) return;
-		const { action, chain, address } = untrack(() => ({
+		const { action, tx, chain, address } = untrack(() => ({
 			action: item?.review.action,
+			tx: item?.tx,
 			chain: chainId,
 			address: account.address
 		}));
-		const calls = readableCalls(action ?? null);
+		const calls = tx ? reviewedCalls(action ?? null, tx) : null;
 		if (!calls) return;
 		const next = new CallReading(chain, address, calls);
 		reading = next;
@@ -294,6 +317,85 @@
 	);
 	/** The core's verb for a call it could read ("Approve"); else the multisig's line. */
 	const shownTitle = $derived((reading && callTitle(reading.clear, signing)) || title);
+
+	/*
+	 * §3.6: the one review — the same on every member's device, for every
+	 * action: what moves (simulated as the Safe, now), who each leg reaches,
+	 * the state-diff guard, the hashes and the bytes, the AI's opinion. Read
+	 * again while the sheet is open, so what a member signs from is the
+	 * chain now; the gate reads it once more right before the passkey.
+	 */
+	const reviewKey = $derived(
+		item && members
+			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}`
+			: ''
+	);
+	let proposalReview = $state<ProposalReview | null>(null);
+	$effect(() => {
+		if (!reviewKey) return;
+		const subject = untrack(() => ({
+			safe: account.address,
+			chainId,
+			tx: item!.tx,
+			members: members!,
+			genesis: account.genesis,
+			origin: draft?.origin ?? null
+		}));
+		const next = new ProposalReview(subject);
+		proposalReview = next;
+		void next.refresh();
+		const timer = setInterval(() => void next.refresh(), REVIEW_FRESH_MS);
+		return () => {
+			clearInterval(timer);
+			next.dispose();
+			if (proposalReview === next) proposalReview = null;
+		};
+	});
+	/** The core's review now, with the call's reading: blind (`sign_anyway`) or not. */
+	const fullReview = $derived(proposalReview?.read(reading?.clear.sign_anyway === true) ?? null);
+	const reviewContext = $derived({
+		m,
+		signing,
+		network: chainName(chainId),
+		nativeSymbol: nativeSymbol(chainId),
+		preset: resolvedFormatKeys().number,
+		nameOf: (address: string) => names.label(address) ?? localName(address)
+	});
+	const checks = $derived(reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext));
+	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
+	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
+	const signRule = $derived(fullReview?.sign ?? null);
+	const signBlocked = $derived(signRule?.allowed === false);
+	const anyway = $derived(signRule?.anyway === true);
+	/** The signing sheet holds its confirm while its simulation is out; so does this. */
+	const reviewHolding = $derived(!fullReview && proposalReview?.failed !== true);
+	const valueVariant = $derived<'value' | 'danger'>(anyway ? 'danger' : 'value');
+
+	// The AI's opinion on this proposal (spec 103): published for
+	// `vela_review` while the sheet is up, bound to its safeTxHash and chain.
+	const adviceId = $derived(
+		fullReview ? ((fullReview.adviceRequest.id as string | undefined) ?? null) : null
+	);
+	$effect(() => {
+		if (!fullReview) return;
+		proposalBeside.publish({
+			id: adviceId,
+			signing: fullReview.adviceRequest,
+			sheet: {
+				clear: reading?.clear ?? null,
+				guard: reading?.guard ?? null,
+				fee: null,
+				simulation: proposalReview?.sim ?? null,
+				simulation_pending: !proposalReview?.sim
+			}
+		});
+	});
+	$effect(() => () => proposalBeside.withdraw());
+	const adviceModel = $derived.by(() => {
+		const held = sheetBeside.advice;
+		if (!held || adviceId === null || held.requestId !== adviceId) return null;
+		return adviceCard(held.advice, adviceStanding(held.advice, openReview()), signing.agentAdvice);
+	});
 
 	/** Whose hand does the work: the person picks among this device's members. */
 	let chosen = $state<string | null>(null);
@@ -450,6 +552,11 @@
 		if (error instanceof SigningUncheckedError) {
 			return fillTemplate(m.authority.signUnchecked, { network: chainName(error.chainId) });
 		}
+		// §3.6: read again right before the passkey, it changes who controls the multisig.
+		if (error instanceof SigningBlockedError) {
+			proposalReview?.refresh();
+			return m.review.blocked;
+		}
 		// §3.5: the executor deploys only a genesis the core finds Verified there.
 		if (error instanceof GenesisRefusedError) {
 			const network = chainName(error.chainId);
@@ -492,10 +599,16 @@
 	 * one go, so the site gets its transaction — not a wait for approvals
 	 * nobody else has to give.
 	 */
-	const executeNow = $derived(drafting && !!item && item.canExecute.length > 0);
+	const executeNow = $derived(drafting && !prebuilt && !!item && item.canExecute.length > 0);
 
 	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
 	async function onPropose() {
+		// §3.6: the proposer's own transaction goes on to its passkey (the host closes this).
+		if (prebuilt) {
+			phase = { kind: 'busy', what: 'propose' };
+			prebuilt.confirm();
+			return;
+		}
 		if (!draft || !item) return;
 		const thenExecute = executeNow;
 		phase = { kind: 'busy', what: 'propose' };
@@ -994,7 +1107,7 @@
 		{#if draftFailure}
 			<p class="warn" role="alert">{draftFailure}</p>
 			<div class="two">
-				<Button variant="secondary" shape="rounded" onclick={() => draft?.decline()}
+				<Button variant="secondary" shape="rounded" onclick={() => (prebuilt ?? draft)?.decline()}
 					>{m.external.decline}</Button
 				>
 				<Button variant="secondary" shape="rounded" onclick={() => void loadDraft()}
@@ -1032,7 +1145,8 @@
 		{/if}
 		<header class="what">
 			<p class="title">{shownTitle || '…'}</p>
-			{#if recipient}
+			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
+				<!-- A transfer read by the signing sheet's machines names its own recipient (§3.6). -->
 				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
 				<p class="to">
 					<Identicon svg={identiconSvgForClient(recipient)} size="compact" address={recipient} />
@@ -1089,7 +1203,7 @@
 			{#if reading}
 				<CallReview {reading} m={signing} />
 			{/if}
-			{#if lines.length > 0}
+			{#if lines.length > 0 && !reading}
 				<ul class="lines">
 					{#each lines as line, i (i)}
 						<li>
@@ -1107,6 +1221,10 @@
 					{/each}
 				</ul>
 			{/if}
+			<!-- §3.6: the state-diff guard, who each leg reaches, what moves — the signing sheet's blocks. -->
+			<div class="review-checks" data-testid="review-checks">
+				<BlockList blocks={checks} />
+			</div>
 			<dl class="facts">
 				<div>
 					<dt>{m.action.network}</dt>
@@ -1165,6 +1283,10 @@
 				</details>
 			{/if}
 		</header>
+
+		{#if fullReview && tech}
+			<ReviewTech {m} review={fullReview} {tech} advice={adviceModel} />
+		{/if}
 
 		{#if gate.kind === 'refused'}
 			<!-- §3.5: its genesis refused here — read-only, nothing to sign. -->
@@ -1430,25 +1552,28 @@
 				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
 			{/if}
 			<div class="two">
-				<Button variant="secondary" shape="rounded" disabled={busy} onclick={() => draft?.decline()}
-					>{m.external.decline}</Button
+				<Button
+					variant="secondary"
+					shape="rounded"
+					disabled={busy}
+					onclick={() => (prebuilt ?? draft)?.decline()}>{m.external.decline}</Button
 				>
-				{#if item.review.action !== null && !readOnly}
+				{#if item.review.action !== null && !readOnly && !signBlocked}
 					<Button
-						variant="value"
+						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
-						disabled={busy}
+						disabled={busy || reviewHolding}
 						onclick={onPropose}
 						>{executeNow
-							? m.proposal.approveAndExecute
+							? anywayLabel('approveExecute', m.proposal.approveAndExecute, fullReview, m)
 							: rejecters.length > 0
-								? m.send.propose
+								? anywayLabel('propose', m.send.propose, fullReview, m)
 								: m.send.proposeOnly}</Button
 					>
 				{/if}
 			</div>
-			{#if executeNow && item.review.action !== null && !readOnly}
+			{#if executeNow && item.review.action !== null && !readOnly && !signBlocked}
 				<p class="fine">{m.proposal.feeNote}</p>
 			{/if}
 		{:else if phase.kind === 'ended'}
@@ -1489,7 +1614,7 @@
 					>
 				{/if}
 			</div>
-		{:else if item.status !== 'done' && item.review.action !== null && !readOnly}
+		{:else if item.status !== 'done' && item.review.action !== null && !readOnly && !signBlocked}
 			{#if candidates.length > 1}
 				<fieldset class="actor">
 					<legend>{m.proposal.as}</legend>
@@ -1561,13 +1686,13 @@
 						<!-- It cannot run by this executor: approving is the one thing left to do. -->
 						{#if approveFirst && canApproveOnly}
 							<Button
-								variant="value"
+								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-								disabled={busy}
+								disabled={busy || reviewHolding}
 								onclick={onApprove}
 							>
-								{m.proposal.approve}
+								{anywayLabel('approve', m.proposal.approve, fullReview, m)}
 							</Button>
 						{/if}
 					{:else}
@@ -1578,20 +1703,22 @@
 									variant="secondary"
 									shape="rounded"
 									loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-									disabled={busy}
+									disabled={busy || reviewHolding}
 									onclick={onApprove}
 								>
 									{m.proposal.approve}
 								</Button>
 							{/if}
 							<Button
-								variant="value"
+								variant={valueVariant}
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
-								disabled={busy || actorPreview === null}
+								disabled={busy || reviewHolding || actorPreview === null}
 								onclick={onExecute}
 							>
-								{approveFirst ? m.proposal.approveAndExecute : m.proposal.execute}
+								{approveFirst
+									? anywayLabel('approveExecute', m.proposal.approveAndExecute, fullReview, m)
+									: anywayLabel('execute', m.proposal.execute, fullReview, m)}
 							</Button>
 						</div>
 					{/if}
@@ -1637,13 +1764,13 @@
 					{/if}
 				{:else if approvers.length > 0 && actor}
 					<Button
-						variant="value"
+						variant={valueVariant}
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
-						disabled={busy}
+						disabled={busy || reviewHolding}
 						onclick={onApprove}
 					>
-						{m.proposal.approve}
+						{anywayLabel('approve', m.proposal.approve, fullReview, m)}
 					</Button>
 				{:else if localOwners(members?.owners ?? []).length === 0 && !watch}
 					<p class="quiet">{m.proposal.notMember}</p>
