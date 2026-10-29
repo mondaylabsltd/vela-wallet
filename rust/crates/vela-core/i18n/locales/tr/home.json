@@ -216,9 +216,11 @@
         "whyReverts": "ağ bunu reddediyor — “{{reason}}”",
         "whyRevertsPlain": "çalışırken geri alınıyor ve ağ bir neden belirtmiyor",
         "unpricedReason": "ağ ücreti hesaplanamadı — birazdan yeniden deneyin",
+        "uncheckedReason": "çalışıp çalışmayacağı kontrol edilemedi — birazdan yeniden deneyin",
         "feeLine": "Ağ ücreti ≈ {{fee}}, ödeyen: {{name}}",
         "feeChecking": "Çalışıp çalışmayacağı ve ağ ücreti kontrol ediliyor…",
         "feeUnpriced": "Ağ ücreti şu anda hesaplanamadı.",
+        "feeUnchecked": "Çalışıp çalışmayacağı kontrol edilemedi — yine de onaylayabilirsiniz; Yürüt yeniden kontrol eder.",
         "feeRetry": "Yeniden kontrol et",
         "feeSetup": "{{network}} üzerinde tek seferlik kurulum dahil ≈ {{amount}}:",
         "feeSetupPlain": "{{network}} üzerinde tek seferlik kurulum dahil:",
@@ -331,7 +333,7 @@
         "body": "Üyeler kodu tarar veya bağlantıyı açar: multisig, ağı ve üye adlarıyla Vela'ya eklenir.",
         "shareText": "Vela'daki multisig'imize katıl",
         "qrLabel": "Davet kodu",
-        "outsideHint": "Vela dışında bir cüzdan kullanan üyelerin bir şey eklemesi gerekmez: bir işlem onayını beklediğinde ona bağlantısını gönderin, kendi cüzdanıyla imzalasın."
+        "outsideHint": "Vela dışında bir cüzdan kullanan üyelerin bir şey eklemesi gerekmez: bir işlem onayını beklediğinde ona bağlantısını gönderin, kendi cüzdanıyla onaylasın."
       },
       "presence": {
         "needsYou_one": "{{count}} işlem onayınızı bekliyor",
@@ -406,7 +408,7 @@
         "askNote": "Yalnızca bunu az önce Vela'da başlattıysanız devam edin. Cüzdanınız size sormadan hiçbir şey imzalanmaz.",
         "connect": "Bağlan",
         "decline": "Reddet",
-        "keepOpen": "Bağlandı. Bu sayfayı açık tutun: Vela'nın istekleri cüzdanınızda görünür.",
+        "keepOpen": "Bağlandı. Bu sayfayı açık tutun: Vela'nın istekleri önce burada, sonra cüzdanınızda görünür.",
         "waitingVela": "Vela bekleniyor…",
         "noSession": "Bu sayfayı, bir üye başka bir cüzdanla imzalarken Vela'nın gösterdiği bağlantıdan açın.",
         "requests": "İstekler",
@@ -625,6 +627,16 @@
           "tooMany": "Bir multisig en fazla {{max}} üyeye sahip olabilir.",
           "changeWaiting": "Orada bekleyen başka bir üye değişikliği var. Önce onu yürütün veya reddedin."
         }
+      },
+      "timeline": {
+        "heading": "Geçmiş",
+        "created": "{{name}} oluşturdu",
+        "approved": "{{name}} onayladı",
+        "approvedByExecuting": "{{name}} yürüterek onayladı",
+        "executed": "Yürütüldü",
+        "executedBy": "{{name}} yürüttü",
+        "counted": "sayıldı",
+        "notCounted": "sayılmadı"
       }
     },
     "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",

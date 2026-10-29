@@ -56,12 +56,12 @@ const UNDEPLOYED = 8453;
 /** A network this device does not have (a member's own). */
 const ELSEWHERE = 99999;
 /** r4b-3: networks whose RPC does not answer. */
-const rpc = vi.hoisted(() => ({ down: [] as number[] }));
+const rpc = vi.hoisted(() => ({ down: [] as number[], memberReads: 0 }));
 vi.mock('./chain', () => ({
 	hasCode: async () => true,
 	// Read through the wallet's own RPC: on Arbitrum the Safe is deployed, at nonce 7.
 	readMembers: async (chainId: number) =>
-		rpc.down.includes(chainId)
+		(rpc.memberReads += 1) && rpc.down.includes(chainId)
 			? Promise.reject(new Error(`chain ${chainId} unavailable`))
 			: chainId === UNREAD
 				? { owners: [OWNER], threshold: 1, nonce: 7n, deployed: true }
@@ -652,6 +652,35 @@ describe('proposals found on every chain', () => {
 		await proposals.refresh(account, [100]);
 		expect(proposals.missing).toEqual([]);
 		expect(proposals.chain(UNREAD)?.items[0]?.status).toBe('done');
+		proposals.follow(null, []);
+	});
+
+	/**
+	 * r4D-18 (round 5): a network with nothing waiting is read every fifth
+	 * poll (a minute), not every poll; anything waiting — or a read the page
+	 * asks for — reads it at once.
+	 */
+	it('a quiet network’s chain is read once a minute; one with something waiting, every poll', async () => {
+		mailbox.all = true;
+		mailbox.proposals = [];
+		proposals.follow(account, [100]);
+		await proposals.refresh(account, [100]);
+		const reads = () => rpc.memberReads;
+		const start = reads();
+		for (let i = 0; i < 4; i += 1) await proposals.refresh(account, [100], { tick: true });
+		expect(reads(), 'four quiet polls: the mailbox only').toBe(start);
+		await proposals.refresh(account, [100], { tick: true });
+		expect(reads(), 'the fifth reads the chain').toBe(start + 1);
+		// Something to run (at the chain's nonce): every poll reads the chain.
+		mailbox.proposals = [stored(3)];
+		await proposals.refresh(account, [100], { tick: true });
+		await proposals.refresh(account, [100], { tick: true });
+		expect(reads()).toBe(start + 3);
+		// A read the page asks for (focus, Retry) is never quiet.
+		mailbox.proposals = [];
+		await proposals.refresh(account, [100], { tick: true });
+		await proposals.refresh(account, [100]);
+		expect(reads()).toBe(start + 5);
 		proposals.follow(null, []);
 	});
 

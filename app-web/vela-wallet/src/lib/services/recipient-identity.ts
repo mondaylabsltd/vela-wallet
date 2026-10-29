@@ -34,7 +34,8 @@
 import * as core from '$lib/core/client';
 import { runWalk } from './core-walk';
 import { namehash } from './ens';
-import { ensureCustomNetworks, networkForChainId } from './networks';
+import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { ensureCustomNetworks, inSpace, networkForChainId } from './networks';
 import { queryWalletName } from './public-key-index';
 import { poolRpcCall } from './rpc-pool';
 import { getItem, setItem } from './storage';
@@ -103,7 +104,14 @@ async function servicesOnWalletNetworks(): Promise<NameServiceConfig[]> {
 	// runs first waits for that read rather than taking "not read yet" for
 	// "not added". An unreadable store leaves the built-in networks.
 	await ensureCustomNetworks().catch(() => undefined);
-	return NAME_SERVICES.filter((config) => networkForChainId(config.chainId) !== null);
+	// Spec 105: each space reads only its own networks — in the testnet
+	// space, no mainnet name service (r4D-18: four mainnet nodes on every
+	// testnet-space load, for names a testnet address seldom has).
+	return NAME_SERVICES.filter(
+		(config) =>
+			networkForChainId(config.chainId) !== null &&
+			(!networkSpace.testnet || inSpace(config.chainId))
+	);
 }
 
 // ---------------------------------------------------------------------------

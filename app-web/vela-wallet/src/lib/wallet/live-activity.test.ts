@@ -672,3 +672,59 @@ describe('liveActivityGroups', () => {
 		);
 	});
 });
+
+/**
+ * Round 5 (r4a-2 in Activity): a received or executed transfer keeps its
+ * token's contract, and its row says whose name it carries — through the
+ * real core (`FeedItem.token`) and its provenance rule.
+ */
+describe('a transfer of a token nobody vouches for, in Activity', () => {
+	const ARC = 5042002;
+	const FAKE = '0x57e64022d8d9a420dfe08a22d6a687caabc6b7c6';
+	const received = (id: string, extra: Partial<LocalTransaction>): LocalTransaction => ({
+		id,
+		userOpHash: '',
+		txHash: `0x${'5a'.repeat(32)}`,
+		from: '0x' + 'b1'.repeat(20),
+		to: ACCOUNT,
+		value: '5000',
+		symbol: 'USDC',
+		decimals: 6,
+		chainId: ARC,
+		timestamp: NOW_S - 60,
+		timeVerified: true,
+		status: 'confirmed',
+		type: 'receive',
+		...extra
+	});
+
+	it('a lookalike "USDC" says it is not the real one; the chain’s own coin says nothing', async () => {
+		const items = await feedItemsThroughCore(
+			[
+				received('fake', { token: FAKE }),
+				received('real', { txHash: `0x${'5b'.repeat(32)}`, symbol: 'USDC', decimals: 18 }),
+				// Written before the field: read as it always was, no note.
+				received('old', { txHash: `0x${'5c'.repeat(32)}` })
+			],
+			ACCOUNT,
+			NOW_S * 1000
+		);
+		const byId = Object.fromEntries(items.map((it) => [it.id, it]));
+		expect(byId.fake.token).toBe(FAKE);
+		expect(byId.real.token ?? null).toBeNull();
+		const fake = liveActivityRow(byId.fake, m, false);
+		expect(fake.caution).toMatch(/^Not the real USDC/);
+		expect(fake.caution).toContain('0x57e6');
+		expect(liveActivityRow(byId.real, m, false).caution).toBeUndefined();
+		expect(liveActivityRow(byId.old, m, false).caution).toBeUndefined();
+	}, 30_000);
+
+	it('any other unverified token says it is unverified', () => {
+		const row = liveActivityRow(
+			item({ id: 'r4t', chain_id: ARC, symbol: 'R4T', token: FAKE }),
+			m,
+			false
+		);
+		expect(row.caution).toMatch(/^Unverified token · 0x57/);
+	});
+});

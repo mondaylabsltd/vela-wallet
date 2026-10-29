@@ -56,7 +56,10 @@
 	} from '../core/executed';
 	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
+	import ProposalTimeline from './ProposalTimeline.svelte';
+	import { timelineOf } from '../core/timeline';
 	import {
+		ExecutionUncheckedError,
 		ExecutionUnpricedError,
 		ExecutionWouldFailError,
 		ExecutorCannotPayError,
@@ -430,6 +433,7 @@
 			return fillTemplate(m.proposal.wouldFail, { reason: whyText(m, error.why) });
 		}
 		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
+		if (error instanceof ExecutionUncheckedError) return m.proposal.uncheckedReason;
 		if (error instanceof MailboxUnreadableError) {
 			return offline() ? m.proposal.reason.offline : m.proposal.mailboxDown;
 		}
@@ -546,8 +550,12 @@
 		);
 		try {
 			// The look on screen when it is fresh — its calls and fee are what is
-			// signed — else a new one, said the same way.
-			const preview = await preflight.check(executionInput(account, item, actor, members));
+			// signed — else a new one, said the same way. One that could not
+			// check (or price) it is never reused: Execute looks again before
+			// its passkey (round 5), bounded like every look.
+			const input = executionInput(account, item, actor, members);
+			const shown = preflight.get(input);
+			const preview = await preflight.check(input, shown?.kind === 'priced' ? PREVIEW_FRESH_MS : 0);
 			result = await execute(account, item, actor, members, preview);
 		} catch (error) {
 			if (approving && stoppedBeforeSigning(error)) {
@@ -786,6 +794,10 @@
 	/** r4b-2: the chain's history could not be read: said, with Retry. */
 	let unreadHistory = $state(false);
 	let historyTry = $state(0);
+	/** Unreadable histories asked again unprompted, and how far apart. */
+	const HISTORY_AUTO_TRIES = 3;
+	const HISTORY_AUTO_MS = 4_000;
+	let autoTries = 0;
 	const doneKey = $derived(item?.status === 'done' ? item.safeTxHash : '');
 	$effect(() => {
 		const key = doneKey;
@@ -802,12 +814,20 @@
 			final: true,
 			nonce: item?.nonce
 		}));
+		let again: ReturnType<typeof setTimeout> | undefined;
 		void findExecution(address, chainId, key, since).then(async (hash) => {
 			if (!live) return;
 			if (hash === undefined) {
 				unreadHistory = true;
+				// Round 5: a node a few blocks behind cannot say yet — asked
+				// again by itself a few times (Retry stays on screen).
+				if (autoTries < HISTORY_AUTO_TRIES) {
+					autoTries += 1;
+					again = setTimeout(() => (historyTry += 1), HISTORY_AUTO_MS);
+				}
 				return;
 			}
+			autoTries = 0;
 			if (hash !== null) {
 				finished = { txHash: hash };
 				return;
@@ -817,6 +837,7 @@
 		});
 		return () => {
 			live = false;
+			clearTimeout(again);
 		};
 	});
 
@@ -1362,6 +1383,15 @@
 				</div>
 			{/if}
 		{/if}
+		{#if executedTx && (item.status === 'done' || phase.kind === 'sent')}
+			<!-- r4D-17: its story, from the facts this wallet holds. -->
+			<ProposalTimeline
+				{m}
+				{chainId}
+				steps={timelineOf(item, executedTx, frozen)}
+				label={(a) => names.label(a)}
+			/>
+		{/if}
 		{#if item.sameNonce.length > 0 && item.status !== 'done'}
 			<!-- r4b-6: proposals at one number — only one of them can run. -->
 			<p class="fine" role="note" data-testid="proposal-conflict">
@@ -1584,6 +1614,15 @@
 								</ul>
 							{/if}
 						</div>
+					{:else if actorPreview?.kind === 'unchecked'}
+						<!-- Round 5: the look did not answer in time — said, and nothing held:
+						     approving goes ahead, and Execute looks again first. -->
+						<p class="fine" role="status" data-testid="execute-unchecked">
+							{m.proposal.feeUnchecked}
+							<button type="button" class="text-button" onclick={recheck}
+								>{m.proposal.feeRetry}</button
+							>
+						</p>
 					{:else if actorPreview?.kind === 'unpriced'}
 						<p class="fine" data-testid="execute-unpriced">
 							{m.proposal.feeUnpriced}

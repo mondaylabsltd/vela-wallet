@@ -489,7 +489,13 @@ async function fetchAllChainTokens(
 	// all. They are read beside the chains, capped, and a chain that needs one
 	// waits for it only after its own answer is in.
 	const customTokens = await loadCustomTokens();
-	const clPrices = cappedChainlinkPrices(fetchChainlinkPrices());
+	// Spec 105: nothing in the testnet space is priced, so nothing reads
+	// Ethereum's price feeds there (r4D-18: a mainnet node, and its chain
+	// document, on every testnet-space load).
+	const clPrices =
+		networkSpace.current === 'testnet'
+			? Promise.resolve<Record<string, number>>({})
+			: cappedChainlinkPrices(fetchChainlinkPrices());
 
 	// Phase 2: query each chain in parallel, streaming results as each chain finishes
 	const networks = spaceNetworksSync();

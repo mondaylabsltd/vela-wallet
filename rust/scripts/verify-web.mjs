@@ -53,8 +53,25 @@ const indexOf = (section, svg) => fragmentIndex.get(`${section}:${svg}`) ?? null
 // representations agree (spec 004 T048).
 const LOCALES = ['en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it'];
 const ASSET_DIR = join(RUST_DIR, '..', 'assets', 'i18n');
+// The on-demand namespaces (gen-i18n's `ON_DEMAND`, `assets/i18n/<name>/<lng>.json`)
+// are deep-merged in, as the web app merges them for the screens that draw them:
+// the corpus's every key is replayed, wherever it loads from.
+const ON_DEMAND = ['multisig'];
+const deepMerge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? deepMerge(out[k], v) : v;
+  }
+  return out;
+};
 const assets = Object.fromEntries(
-  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(ASSET_DIR, `${l}.json`)))]),
+  LOCALES.map((l) => {
+    let doc = JSON.parse(readFileSync(join(ASSET_DIR, `${l}.json`), 'utf8'));
+    for (const name of ON_DEMAND) {
+      doc = deepMerge(doc, JSON.parse(readFileSync(join(ASSET_DIR, name, `${l}.json`), 'utf8')));
+    }
+    return [l, new TextEncoder().encode(JSON.stringify(doc))];
+  }),
 );
 
 /** Build an engine with `catalogLng` resident and `changeLng` active. */

@@ -208,6 +208,7 @@ fn record(id: &str, kind: FeedTxKind, ts: f64) -> FeedTxRecord {
         // Not on the wire when absent, so the fixture the shells share
         // (`privacy-hidden.json`) is byte for byte what it was.
         time_verified: None,
+        token: None,
     }
 }
 

@@ -1100,3 +1100,23 @@ describe('a transaction detail with no record behind it (issue #213)', () => {
 		expect(mobile.sheet.model.amount).toBe('+1.25 ETH');
 	});
 });
+
+/** Round 5: a transfer's detail names its token's contract when nobody vouches for it. */
+describe('the token a transfer moved, in its detail', () => {
+	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const FAKE = '0x57e64022d8d9a420dfe08a22d6a687caabc6b7c6';
+
+	it('a lookalike: its contract, whole when copied, and that it is not the real one', () => {
+		const detail = liveTxDetail(item('f', { chain_id: 5042002, symbol: 'USDC', token: FAKE }), ctx);
+		const fact = detail.facts.find((f) => f.label === fm['home.multisig.token.contract']);
+		expect(fact).toMatchObject({ mono: true, tone: 'danger' });
+		expect(fact?.detail).toMatch(/^Not the real USDC/);
+		expect(fact?.copyValue?.toLowerCase()).toBe(FAKE);
+	});
+
+	it('the chain’s coin, and a record that kept no contract: no such line', () => {
+		const plain = [item('n'), item('o', { token: null })];
+		const labels = plain.flatMap((one) => liveTxDetail(one, ctx).facts.map((f) => f.label));
+		expect(labels).not.toContain(fm['home.multisig.token.contract']);
+	});
+});

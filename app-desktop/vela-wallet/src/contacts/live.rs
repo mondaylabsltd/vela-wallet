@@ -324,6 +324,7 @@ mod tests {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         }
     }
 

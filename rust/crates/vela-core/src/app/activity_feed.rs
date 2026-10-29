@@ -331,6 +331,14 @@ pub struct FeedTxRecord {
     /// time in the background and rewrites it (module doc).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_verified: Option<bool>,
+    /// The token's contract, for a transfer of one (round 5): what the
+    /// transfer moved, stored beside its symbol when the record was written
+    /// (the stored `token`). `None` for the chain's own coin, on records
+    /// written before the field, and from a shell that does not keep it — a
+    /// symbol alone is whatever a contract answers, so Activity can only say
+    /// whose "USDC" it was from this ([`super::token_provenance`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A value the shell stored and hands back verbatim, read leniently: what
@@ -438,6 +446,9 @@ pub struct FeedBatchTransfer {
     pub decimals: u32,
     pub usd_value: f64,
     pub logo_urls: Option<Vec<String>>,
+    /// The line's token contract, as its record stored it ([`FeedTxRecord::token`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A batch send summarized from its per-line records (`buildBatchView`,
@@ -548,6 +559,14 @@ pub struct FeedItem {
     /// whenever the balance is hidden, whatever this says.
     #[serde(default)]
     pub figure_maskable: bool,
+    /// A transfer's token contract (round 5), as its record stored it
+    /// ([`FeedTxRecord::token`]): a received or sent token's — a multisig's
+    /// executed transfers too — so the shell draws the core's provenance
+    /// note (`token_provenance`: unverified, or not the real one) beside the
+    /// symbol. `None` for the chain's coin, a dApp row, a signature, a
+    /// folded batch (its lines carry their own) and an older record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// One part of a row's second line (spec 093).
@@ -1777,6 +1796,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: t.token.clone(),
     }
 }
 
@@ -1804,6 +1824,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: t.token.clone(),
     }
 }
 
@@ -2026,6 +2047,7 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
         }),
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     }
 }
 
@@ -2065,6 +2087,7 @@ fn signature_item(t: &FeedTxRecord) -> FeedItem {
         }),
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     }
 }
 
@@ -2917,6 +2940,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     })
 }
 
@@ -2950,6 +2974,7 @@ fn build_batch(group: &[&FeedTxRecord]) -> Option<FeedBatch> {
                 decimals: g.decimals,
                 usd_value: tx_usd_value(g),
                 logo_urls: g.logo_urls.clone(),
+                token: g.token.clone(),
             })
             .collect(),
         ids: group.iter().map(|g| g.id.clone()).collect(),

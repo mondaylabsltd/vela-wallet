@@ -485,6 +485,15 @@
 					{@render thresholdStepper(mm.thresholdAfter)}
 				{/if}
 
+				{#if plan && compose.kind === 'replace' && entry}
+					<!-- Round 5: the preview names who replaces whom, before anything is proposed. -->
+					<p class="replacing" data-testid="member-replace-preview">
+						{fillTemplate(mm.changeReplace, {
+							old: names.label(compose.owner),
+							new: memberName.trim() || entry.name || names.label(entry.address)
+						})}
+					</p>
+				{/if}
 				{#if plan}
 					<p class="label">{mm.perNetwork}</p>
 					<ul class="plan" data-testid="member-plan">
@@ -835,6 +844,14 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.replacing {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
 	}
 
 	.error {

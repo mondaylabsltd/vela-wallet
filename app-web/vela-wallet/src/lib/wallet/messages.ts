@@ -118,6 +118,14 @@ export interface WalletMessages {
 		unknown: string;
 		/** Spec 082 RG5: the home's empty line under a chain filter (`home_empty_key`). */
 		emptyTitleNetwork: string;
+		/**
+		 * Round 5: a transfer of a token nobody vouches for says so on its row
+		 * — "Unverified token", or "Not the real {{symbol}} — …" — the
+		 * multisig's words (`home.multisig.token`), one set for every surface.
+		 * Absent (a drawn fixture): no note.
+		 */
+		tokenUnverified?: string;
+		tokenLookalike?: string;
 	};
 	assets: {
 		emptyTitle: string;

@@ -704,6 +704,9 @@ export type OurOp =
 	| { kind: 'refused' }
 	| { kind: 'unknown' };
 
+/** What the receipt of this device's landed transaction shows (the core's `OurReceipt`). */
+export type OurReceipt = 'executed' | 'notExecuted' | 'unread';
+
 /** Where an execution in flight stands (the core's `ExecutionVerdict`). */
 export type ExecutionVerdict =
 	| { kind: 'executed'; txHash: string }
@@ -720,6 +723,7 @@ export const executionVerdict = (facts: {
 	nonceUsed: boolean | null;
 	executedIn: ExecutedIn;
 	ourOp: OurOp;
+	receipt?: OurReceipt;
 	elapsedMs: number;
 	limitMs: number;
 }) => call<ExecutionVerdict>('executionVerdict', { facts });

@@ -216,9 +216,11 @@
         "whyReverts": "網路拒絕了它 —「{{reason}}」",
         "whyRevertsPlain": "它在執行時回滾，網路沒有給出原因",
         "unpricedReason": "無法算出網路費 — 請稍後再試",
+        "uncheckedReason": "無法確認它能否執行 — 請稍後再試",
         "feeLine": "網路費 ≈ {{fee}}，由 {{name}} 支付",
         "feeChecking": "正在檢查能否執行，以及網路費…",
         "feeUnpriced": "暫時無法算出網路費。",
+        "feeUnchecked": "無法確認它能否執行 — 你仍可以核准；執行時會再檢查一次。",
         "feeRetry": "重新檢查",
         "feeSetup": "包含在 {{network}} 上的一次性設定 ≈ {{amount}}：",
         "feeSetupPlain": "包含在 {{network}} 上的一次性設定：",
@@ -331,7 +333,7 @@
         "body": "成員掃描條碼或開啟連結即可：在 Vela 中新增這個多簽，並帶上網路和成員名稱。",
         "shareText": "加入我們在 Vela 的多簽",
         "qrLabel": "邀請條碼",
-        "outsideHint": "使用其他錢包（非 Vela）的成員不必新增：當交易需要他們核准時，把該交易的連結傳給他們，用自己的錢包簽署即可。"
+        "outsideHint": "使用其他錢包（非 Vela）的成員不必新增：當交易需要他們核准時，把該交易的連結傳給他們，用自己的錢包核准即可。"
       },
       "presence": {
         "needsYou_one": "{{count}} 筆待你核准",
@@ -406,7 +408,7 @@
         "askNote": "只有在你剛剛於 Vela 發起時才繼續。錢包未詢問你之前，不會簽署任何內容。",
         "connect": "連線",
         "decline": "拒絕",
-        "keepOpen": "已連線。請保持此頁面開啟：Vela 的請求會出現在你的錢包中。",
+        "keepOpen": "已連線。請保持此頁面開啟：Vela 的請求會先出現在這裡，再出現在你的錢包中。",
         "waitingVela": "正在等待 Vela…",
         "noSession": "請從 Vela 顯示的連結開啟此頁面（成員用其他錢包簽署時會顯示）。",
         "requests": "請求",
@@ -625,6 +627,16 @@
           "tooMany": "多簽最多有 {{max}} 位成員。",
           "changeWaiting": "那裡還有另一項成員變更在等待，請先執行或拒絕它。"
         }
+      },
+      "timeline": {
+        "heading": "紀錄",
+        "created": "{{name}} 建立",
+        "approved": "{{name}} 核准",
+        "approvedByExecuting": "{{name}} 核准（透過執行）",
+        "executed": "已執行",
+        "executedBy": "{{name}} 執行",
+        "counted": "已計入",
+        "notCounted": "未計入"
       }
     },
     "balanceDetailStatusOwnNode": "你的節點沒有回應",

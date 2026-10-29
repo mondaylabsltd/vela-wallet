@@ -498,7 +498,7 @@ fn run_case(case: &Case) -> Result<(), String> {
             let opts = owned.as_options(&mut scratch);
             check_string(
                 expect,
-                i18n_engine(&lng, &lng, mode).and_then(|e| e.t(&key, &opts)),
+                i18n_engine_for(&key, &lng, &lng, mode).and_then(|e| e.t(&key, &opts)),
             )
         }
         "i18n_t_keys" => {
@@ -538,7 +538,8 @@ fn run_case(case: &Case) -> Result<(), String> {
             };
             check_string(
                 expect,
-                i18n_engine(&resident, "en", i18n::PluralMode::Cldr).and_then(|e| e.t(&key, &opts)),
+                i18n_engine_for(&key, &resident, "en", i18n::PluralMode::Cldr)
+                    .and_then(|e| e.t(&key, &opts)),
             )
         }
         "i18n_interpolate" => {
@@ -750,6 +751,70 @@ fn i18n_engine(
     engine.change_language(change_lng);
     Ok(engine)
 }
+
+/// The engine a case of `key` runs on: the compiled-in catalogs, or — for a
+/// key of an on-demand namespace, which is not compiled in — catalogs read
+/// from the corpus JSON with that namespace in, as the screens that draw it
+/// load them (`Catalog::from_json`, the runtime route).
+fn i18n_engine_for(
+    key: &str,
+    catalog_lng: &str,
+    change_lng: &str,
+    mode: i18n::PluralMode,
+) -> Result<i18n::I18n, vela_core::CoreError> {
+    if !ON_DEMAND_PREFIXES.iter().any(|p| key.starts_with(p)) {
+        return i18n_engine(catalog_lng, change_lng, mode);
+    }
+    let mut engine = i18n::I18n::new(i18n::Catalog::from_json("en", &corpus_json("en"))?)?
+        .with_plural_mode(mode);
+    if catalog_lng != "en" {
+        let _displaced = engine.load_catalog(i18n::Catalog::from_json(
+            catalog_lng,
+            &corpus_json(catalog_lng),
+        )?);
+    }
+    engine.change_language(change_lng);
+    Ok(engine)
+}
+
+/// A locale's whole corpus, merged as the generator merges it (every
+/// namespace file over the core one), on-demand namespaces included.
+fn corpus_json(lng: &str) -> Vec<u8> {
+    let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("i18n/locales");
+    let mut out = serde_json::Map::new();
+    let mut absorb = |p: PathBuf| {
+        if let Ok(txt) = fs::read_to_string(&p) {
+            if let Ok(Value::Object(m)) = serde_json::from_str::<Value>(&txt) {
+                out.extend(m);
+            }
+        }
+    };
+    absorb(corpus.join(format!("{lng}.json")));
+    for ns in CORPUS_NAMESPACES {
+        absorb(corpus.join(lng).join(format!("{ns}.json")));
+    }
+    Value::Object(out).to_string().into_bytes()
+}
+
+/// The corpus's namespace files, in the generator's spread order.
+const CORPUS_NAMESPACES: [&str; 16] = [
+    "home",
+    "send",
+    "receive",
+    "assets",
+    "addToken",
+    "tokenDetail",
+    "history",
+    "onboarding",
+    "connect",
+    "about",
+    "clearSigning",
+    "componentsTx",
+    "componentsUi",
+    "settingsModals",
+    "contacts",
+    "explore",
+];
 
 fn json_strings(v: Vec<String>) -> Value {
     Value::Array(v.into_iter().map(Value::String).collect())
@@ -1171,6 +1236,11 @@ fn identicon_bulk_corpus() {
     println!("identicon bulk: {} hashes green", suite.pairs.len());
 }
 
+/// The corpus subtrees that load on demand (`scripts/gen-i18n.mjs`'s
+/// `ON_DEMAND`): left out of the compiled tables and the main runtime
+/// catalog, emitted as `assets/i18n/<name>/<lng>.json`.
+const ON_DEMAND_PREFIXES: [&str; 1] = ["home.multisig."];
+
 /// The exhaustive i18n suite: every key path × every locale, in a columnar
 /// encoding (`{locales, keys, values}`).
 ///
@@ -1255,6 +1325,18 @@ fn i18n_exhaustive_corpus() {
         for (i, key) in suite.keys.iter().enumerate() {
             total += 1;
             let got = engine.t(key, &opts);
+            // Round 5: an on-demand namespace is not compiled in — its keys
+            // must NOT resolve here (the split is real), and are proven by the
+            // runtime-JSON route below, merged as the web app merges them.
+            if ON_DEMAND_PREFIXES.iter().any(|p| key.starts_with(p)) {
+                if matches!(&got, Ok(s) if s != key) {
+                    failed += 1;
+                    if failures.len() < 20 {
+                        failures.push(format!("{lng}::{key}: compiled in, but loads on demand"));
+                    }
+                }
+                continue;
+            }
             let ok = matches!(&got, Ok(s) if s == &column[i]);
             if !ok {
                 failed += 1;

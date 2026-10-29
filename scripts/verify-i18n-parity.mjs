@@ -84,9 +84,24 @@ oracle.init({
 // oracle is compared against exactly what a browser runs.
 const wasm = await loadShippedCore();
 
-// Per-locale assets, exactly what the browser fetches from `/i18n/<lng>.json`.
+// Per-locale assets, exactly what a shell loads: the main catalog, with the
+// on-demand namespaces (`assets/i18n/<name>/<lng>.json`, gen-i18n's `ON_DEMAND`)
+// deep-merged in, as the web app merges them for the screens that draw them —
+// so every key the corpus holds is compared, wherever it loads from.
+const ON_DEMAND = ['multisig'];
+const deepMerge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? deepMerge(out[k], v) : v;
+  }
+  return out;
+};
 const assets = Object.fromEntries(
-  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(REPO_ROOT, 'assets/i18n', `${l}.json`)))]),
+  LOCALES.map((l) => {
+    let doc = readJson(join(REPO_ROOT, 'assets/i18n', `${l}.json`));
+    for (const name of ON_DEMAND) doc = deepMerge(doc, readJson(join(REPO_ROOT, 'assets/i18n', name, `${l}.json`)));
+    return [l, new TextEncoder().encode(JSON.stringify(doc))];
+  }),
 );
 
 const engines = Object.fromEntries(

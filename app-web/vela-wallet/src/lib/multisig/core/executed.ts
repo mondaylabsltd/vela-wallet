@@ -25,6 +25,11 @@ export interface FrozenFacts {
 	executorApproved: boolean;
 	/** Read from its receipt, or what this device recorded when it executed it. */
 	source: 'chain' | 'device';
+	/**
+	 * When it ran (Unix ms): its block's time, read with its receipt, else
+	 * when this device saw its execution land; `null` when neither says.
+	 */
+	atMs: number | null;
 }
 
 const KEY = 'vela.multisig.executed';
@@ -34,7 +39,7 @@ const KEEP = 200;
 const keyOf = (chainId: number, safe: string, safeTxHash: string) =>
 	`${chainId}:${safe.toLowerCase()}:${safeTxHash.toLowerCase()}`;
 
-function load(): Record<string, Omit<FrozenFacts, 'source'> & { at: number }> {
+function load(): Record<string, Omit<FrozenFacts, 'source' | 'atMs'> & { at: number }> {
 	try {
 		return JSON.parse(localStorage.getItem(KEY) ?? '{}');
 	} catch {
@@ -47,7 +52,7 @@ export function rememberExecution(
 	chainId: number,
 	safe: string,
 	safeTxHash: string,
-	facts: Omit<FrozenFacts, 'source'>
+	facts: Omit<FrozenFacts, 'source' | 'atMs'>
 ): void {
 	try {
 		const all = load();
@@ -72,7 +77,7 @@ export function factsOfExecution(
 	executor: string,
 	executorIsOwner: boolean,
 	threshold: number
-): Omit<FrozenFacts, 'source'> {
+): Omit<FrozenFacts, 'source' | 'atMs'> {
 	const all = executorIsOwner ? [...approvals, executor] : [...approvals];
 	const unique = all
 		.filter((a, i) => all.findIndex((b) => sameAddress(a, b)) === i)
@@ -84,6 +89,18 @@ export function factsOfExecution(
 		approvers,
 		executorApproved: executorIsOwner && approvers.some((a) => sameAddress(a, executor))
 	};
+}
+
+/** A block's time (Unix ms), or `null` when it could not be read. */
+async function blockTimeMs(chainId: number, block: string | undefined): Promise<number | null> {
+	if (!block) return null;
+	const answer = await poolRpcCall('eth_getBlockByNumber', [block, false], chainId).catch(
+		() => null
+	);
+	const time = (answer?.result as { timestamp?: string } | null)?.timestamp;
+	return typeof time === 'string' && /^0x[0-9a-fA-F]+$/.test(time)
+		? Number(BigInt(time)) * 1000
+		: null;
 }
 
 const read = new Map<string, Promise<FrozenFacts | null>>();
@@ -104,7 +121,8 @@ export function frozenFacts(
 		hit = (async () => {
 			try {
 				const answer = await poolRpcCall('eth_getTransactionReceipt', [txHash], chainId);
-				const logs = (answer.result as { logs?: ReceiptLog[] } | null)?.logs;
+				const receipt = answer.result as { logs?: ReceiptLog[]; blockNumber?: string } | null;
+				const logs = receipt?.logs;
 				if (Array.isArray(logs)) {
 					const facts = executionFacts(
 						chainId,
@@ -118,7 +136,8 @@ export function frozenFacts(
 							threshold: facts.threshold,
 							approvers: facts.approvers,
 							executorApproved: facts.executorApproved,
-							source: 'chain' as const
+							source: 'chain' as const,
+							atMs: await blockTimeMs(chainId, receipt?.blockNumber)
 						};
 					}
 				}
@@ -132,7 +151,8 @@ export function frozenFacts(
 				threshold: kept.threshold,
 				approvers: kept.approvers,
 				executorApproved: kept.executorApproved,
-				source: 'device' as const
+				source: 'device' as const,
+				atMs: typeof kept.at === 'number' ? kept.at : null
 			};
 		})();
 		// A read that found nothing is asked again next time (the receipt may come).

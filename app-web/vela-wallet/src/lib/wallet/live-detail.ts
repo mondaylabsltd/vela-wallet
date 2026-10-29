@@ -37,6 +37,7 @@ import { maskedAmount } from '$lib/core/client';
 import { dappRequestDisplay } from '$lib/core/kernels';
 import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
+import { provenanceNote } from '$lib/services/token-provenance';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
@@ -493,6 +494,27 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 			mono: item.alias === null,
 			copy: m['componentsUi.identiconViewer.copyAddress'],
 			copyValue: item.counterparty
+		});
+	}
+
+	// Round 5: which token it was — its contract, and what the core says of
+	// whose name it carries ("Unverified token", "Not the real USDC").
+	const token = item.batch === null ? (item.token ?? null) : null;
+	const note = token
+		? provenanceNote(item.chain_id, token, item.symbol, {
+				unverified: m['home.multisig.token.unverified'],
+				lookalike: m['home.multisig.token.lookalike']
+			})
+		: null;
+	if (note) {
+		facts.push({
+			label: m['home.multisig.token.contract'],
+			value: note.short,
+			mono: true,
+			detail: note.text,
+			...(note.tone === 'danger' ? { tone: 'danger' as const } : {}),
+			copy: m['componentsUi.identiconViewer.copyAddress'],
+			copyValue: note.contract
 		});
 	}
 

@@ -90,6 +90,48 @@ const bundles = {};
 for (const lng of LOCALES) bundles[lng] = buildLocale(lng);
 
 // ---------------------------------------------------------------------------
+// On-demand namespaces (round 5, 2026-10-29)
+// ---------------------------------------------------------------------------
+//
+// Subtrees of the corpus that only some screens of some shells draw are cut
+// out of the compiled tables (stage 1/2) and of the main runtime catalog
+// (stage 4), and written as their own per-locale catalog under
+// `assets/i18n/<name>/<lng>.json` — loaded by the screens that draw them,
+// never resident for everyone else. SC-005's budget (tests/i18n_residency.rs)
+// guards what every reader holds; this is how a feature's words stop being a
+// cost to the readers who never open it.
+//
+// `multisig` = `home.multisig`: the multisig screens and the connect page an
+// outside owner signs on — 527 leaves, a third of `ja` + `en`'s bytes, drawn only by
+// the web app (which resolves them at build time, merged back in by
+// `engine.server.ts`). No native shell reads a `home.multisig` key, and none
+// bundles `assets/i18n/*/` (each takes `assets/i18n/*.json`). The source files
+// are untouched: the words stay where every branch edits them (`home.json`).
+//
+// Each catalog is rooted at its path (`{"home":{"multisig":…}}`), so a shell
+// deep-merges it into the locale's main catalog before it loads it.
+const ON_DEMAND = { multisig: ['home', 'multisig'] };
+const onDemand = {};
+for (const [name, path] of Object.entries(ON_DEMAND)) {
+  onDemand[name] = {};
+  for (const lng of LOCALES) {
+    let parent = bundles[lng];
+    for (const k of path.slice(0, -1)) parent = parent?.[k];
+    const leaf = path[path.length - 1];
+    if (!parent || typeof parent[leaf] !== 'object') fail(`${lng}: no ${path.join('.')} to load on demand`);
+    // Rebuilt rather than mutated: the parents are the namespace files' own objects.
+    let doc = parent[leaf];
+    for (let i = path.length - 1; i >= 0; i--) doc = { [path[i]]: doc };
+    onDemand[name][lng] = doc;
+    const prune = (node, depth) => {
+      const { [path[depth]]: child, ...rest } = node;
+      return depth === path.length - 1 ? rest : { ...rest, [path[depth]]: prune(child, depth + 1) };
+    };
+    bundles[lng] = prune(bundles[lng], 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Stage 1 — the shared path table
 // ---------------------------------------------------------------------------
 
@@ -1192,9 +1234,33 @@ for (let i = 1; i < PATHS.length; i++) {
 //   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
 //   121 branches.
 // 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
-if (PATHS.length !== 2740) fail(`expected 2740 paths (2611 leaf + 129 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2611) fail(`expected 2611 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
+// 2751 (round 5, stable, 2026-10-29): + `home.multisig.proposal.{feeUnchecked,
+//   uncheckedReason}` (a preview that did not answer in time is said as not
+//   checked — approving goes ahead, Execute checks again), + the
+//   `home.multisig.timeline` branch `{heading, created, approved,
+//   approvedByExecuting, executed, executedBy, counted, notCounted}` (an
+//   executed transaction's story, r4D-17). `invite.outsideHint` ("approve")
+//   and `external.keepOpen` (requests appear on the page first) change value
+//   only. 2611 + 2 + 8 = 2621 leaves, 129 + 1 = 130 branches.
+// 2202 (round 5, the same day): `home.multisig` (527 leaves, 22 branches with
+//   itself) loads on demand (`ON_DEMAND`, top of this file) and leaves the
+//   compiled tables: 2621 − 527 = 2094 leaves, 130 − 22 = 108 branches. Its
+//   own pin is below; the corpus (`home.json`) did not change.
+if (PATHS.length !== 2202) fail(`expected 2202 paths (2094 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2094) fail(`expected 2094 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
+// The on-demand catalogs, pinned the same way (leaves of every locale's union):
+// a key dropped from one namespace and not landed in the other fails here.
+{
+  const pins = { multisig: 527 };
+  for (const [name, docs] of Object.entries(onDemand)) {
+    const leaves = new Set();
+    for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());
+    if (leaves.size !== pins[name]) fail(`expected ${pins[name]} on-demand ${name} leaves, got ${leaves.size}`);
+    const clash = [...leaves].filter((p) => leafSet.has(p) || branchSet.has(p));
+    if (clash.length) fail(`${clash.length} on-demand ${name} paths are also in the compiled table: ${clash[0]}`);
+  }
+}
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
@@ -1397,6 +1463,17 @@ for (const lng of LOCALES) {
   assetStats.push({ lng, bytes: Buffer.byteLength(readFileSync(file)) });
 }
 
+// The on-demand catalogs, one directory per namespace.
+const onDemandStats = [];
+for (const [name, docs] of Object.entries(onDemand)) {
+  mkdirSync(join(ASSET_DIR, name), { recursive: true });
+  for (const lng of LOCALES) {
+    const file = join(ASSET_DIR, name, `${lng}.json`);
+    writeFileSync(file, `${JSON.stringify(docs[lng], null, 1)}\n`);
+    onDemandStats.push({ name, lng, bytes: Buffer.byteLength(readFileSync(file)) });
+  }
+}
+
 // A stale asset is a wrong translation shipped to production, so prove the merge
 // round-trips before anyone trusts it: every asset must reparse to exactly the
 // bundle it came from.
@@ -1404,6 +1481,11 @@ for (const lng of LOCALES) {
   const back = readJson(join(ASSET_DIR, `${lng}.json`));
   if (JSON.stringify(back) !== JSON.stringify(bundles[lng])) {
     fail(`${lng}: emitted asset does not round-trip back to the merged bundle`);
+  }
+  for (const [name, docs] of Object.entries(onDemand)) {
+    if (JSON.stringify(readJson(join(ASSET_DIR, name, `${lng}.json`))) !== JSON.stringify(docs[lng])) {
+      fail(`${lng}: the on-demand ${name} catalog does not round-trip`);
+    }
   }
 }
 
@@ -1507,12 +1589,16 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 145,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (SC-005 budget 218,100 — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;
 const assetJa = assetStats.find((a) => a.lng === 'ja').bytes;
 console.log(`assets     : ${LOCALES.length} files, ${assetTotal} bytes total -> ${relative(REPO_ROOT, ASSET_DIR)}/`);
 console.log(`  on-demand: a ja reader fetches ${assetJa} + ${assetEn} = ${assetJa + assetEn} bytes, not ${assetTotal}`);
+for (const name of Object.keys(onDemand)) {
+  const of = (lng) => onDemandStats.find((o) => o.name === name && o.lng === lng).bytes;
+  console.log(`  + ${name} (its screens only): ${of('ja')} + ${of('en')} bytes -> ${relative(REPO_ROOT, join(ASSET_DIR, name))}/`);
+}
 const dtBytes = dtRows.reduce((n, r) => n + Buffer.byteLength(r.am) + Buffer.byteLength(r.pm) + r.weekdays.reduce((m, w) => m + Buffer.byteLength(w), 0), 0);
 console.log(`datetime   : ${dtRows.length} locales, ${dtBytes} bytes of strings (ICU ${process.versions.icu}) -> ${relative(REPO_ROOT, DATETIME_FILE)}`);

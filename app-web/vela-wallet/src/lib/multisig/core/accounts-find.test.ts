@@ -15,6 +15,7 @@ const OWNERS = ['0x00000000000000000000000000000000000000aa'];
 const seams = vi.hoisted(() => ({
 	/** The chains it has code on; `null`: every one asked. */
 	deployedOn: null as number[] | null,
+	codeReads: 0,
 	recordedOn: undefined as number[] | undefined,
 	/** The chains the mailbox holds proposals of it for. */
 	proposedOn: [] as number[],
@@ -79,7 +80,7 @@ vi.mock('./authority', () => ({
 }));
 vi.mock('./chain', () => ({
 	hasCode: async (chainId: number) =>
-		seams.deployedOn === null || seams.deployedOn.includes(chainId)
+		(seams.codeReads += 1) && (seams.deployedOn === null || seams.deployedOn.includes(chainId))
 }));
 vi.mock('./safe-service', () => ({}));
 // The core's own rule for which networks it is on (`multisigNetworks`); the
@@ -287,6 +288,31 @@ describe('networks another member made it used on', () => {
 		store.calls = [];
 		await discoverChains(account as never, [100, 42161, 8453, 10]);
 		expect(store.calls).toEqual([]);
+	});
+
+	it('r4D-18: looked for once an hour on the device, not on every page', async () => {
+		const kept = new Map<string, string>();
+		vi.stubGlobal('localStorage', {
+			getItem: (k: string) => kept.get(k) ?? null,
+			setItem: (k: string, v: string) => void kept.set(k, v),
+			removeItem: (k: string) => void kept.delete(k)
+		});
+		try {
+			seams.deployedOn = [];
+			const account = { address: SAFE, chainIds: [100] };
+			const page = async (now: number) => {
+				vi.resetModules();
+				const fresh = await import('./accounts');
+				seams.codeReads = 0;
+				await fresh.discoverChains(account as never, [100, 42161, 8453], now);
+				return seams.codeReads;
+			};
+			expect(await page(1_000)).toBe(2);
+			expect(await page(1_000 + 30 * 60_000), 'a reload half an hour on').toBe(0);
+			expect(await page(1_000 + 61 * 60_000), 'an hour on: looked for again').toBe(2);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });
 

@@ -216,9 +216,11 @@
         "whyReverts": "jaringan menolaknya — “{{reason}}”",
         "whyRevertsPlain": "transaksi ini gagal saat dijalankan, dan jaringan tidak memberi alasan",
         "unpricedReason": "biaya jaringan tidak dapat dihitung — coba lagi sebentar lagi",
+        "uncheckedReason": "tidak bisa diperiksa apakah transaksi akan berjalan — coba lagi sebentar lagi",
         "feeLine": "Biaya jaringan ≈ {{fee}}, dibayar oleh {{name}}",
         "feeChecking": "Memeriksa bahwa ini akan berjalan, dan biaya jaringannya…",
         "feeUnpriced": "Biaya jaringan tidak dapat dihitung saat ini.",
+        "feeUnchecked": "Tidak bisa memeriksa apakah transaksi akan berjalan — Anda tetap bisa menyetujui; Eksekusi akan memeriksa lagi.",
         "feeRetry": "Periksa lagi",
         "feeSetup": "Termasuk penyiapan satu kali di {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Termasuk penyiapan satu kali di {{network}}:",
@@ -331,7 +333,7 @@
         "body": "Anggota memindai kode atau membuka tautan: multisig ditambahkan di Vela dengan jaringan dan nama anggotanya.",
         "shareText": "Bergabunglah dengan multisig kami di Vela",
         "qrLabel": "Kode undangan",
-        "outsideHint": "Anggota yang memakai dompet lain, bukan Vela, tidak perlu menambahkannya: saat transaksi membutuhkan persetujuan mereka, kirim tautannya dan mereka menandatangani dengan dompet sendiri."
+        "outsideHint": "Anggota yang memakai dompet lain, bukan Vela, tidak perlu menambahkannya: saat transaksi membutuhkan persetujuan mereka, kirim tautannya dan mereka menyetujuinya dengan dompet sendiri."
       },
       "presence": {
         "needsYou_one": "{{count}} perlu persetujuan Anda",
@@ -406,7 +408,7 @@
         "askNote": "Lanjutkan hanya jika Anda baru saja memulainya di Vela. Tidak ada yang ditandatangani tanpa dompet Anda bertanya.",
         "connect": "Hubungkan",
         "decline": "Tolak",
-        "keepOpen": "Terhubung. Biarkan halaman ini terbuka: permintaan Vela muncul di dompet Anda.",
+        "keepOpen": "Terhubung. Biarkan halaman ini terbuka: permintaan Vela muncul di sini dulu, lalu di dompet Anda.",
         "waitingVela": "Menunggu Vela…",
         "noSession": "Buka halaman ini dari tautan yang ditampilkan Vela saat anggota menandatangani dengan dompet lain.",
         "requests": "Permintaan",
@@ -625,6 +627,16 @@
           "tooMany": "Multisig bisa memiliki paling banyak {{max}} anggota.",
           "changeWaiting": "Ada perubahan anggota lain yang menunggu di sana. Jalankan atau tolak dulu."
         }
+      },
+      "timeline": {
+        "heading": "Riwayat",
+        "created": "Dibuat oleh {{name}}",
+        "approved": "Disetujui oleh {{name}}",
+        "approvedByExecuting": "Disetujui oleh {{name}}, dengan mengeksekusinya",
+        "executed": "Dieksekusi",
+        "executedBy": "Dieksekusi oleh {{name}}",
+        "counted": "dihitung",
+        "notCounted": "tidak dihitung"
       }
     },
     "balanceDetailStatusOwnNode": "Node Anda tidak merespons",

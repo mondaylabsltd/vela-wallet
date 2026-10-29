@@ -169,6 +169,12 @@ export type ExecutionPreview =
 	| { kind: 'fails'; why: ExecutionBlock }
 	/** The fee could not be priced now (the relay or the chain did not answer). */
 	| { kind: 'unpriced' }
+	/**
+	 * Round 5: the look did not answer in time (a read that hangs): whether it
+	 * would run is not known. Approving does not need it; executing looks
+	 * again before the passkey.
+	 */
+	| { kind: 'unchecked' }
 	| {
 			kind: 'priced';
 			/** The calls priced — exactly the ones signed. */
@@ -317,11 +323,28 @@ async function readGas(chainId: number, from: string, call: Call): Promise<bigin
 	return typeof raw === 'string' && /^0x[0-9a-fA-F]+$/.test(raw) ? BigInt(raw) : null;
 }
 
+/** How long one read of a preview is waited for: past it, it said nothing. */
+export const PREVIEW_READ_MS = 8_000;
+
+/**
+ * `read`, or `fallback` once it has not answered in {@link PREVIEW_READ_MS}
+ * (round 5): a read that never answers never holds the preview — or the
+ * buttons it decides — for good.
+ */
+export function bounded<T>(read: Promise<T>, fallback: T, ms = PREVIEW_READ_MS): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	return Promise.race([
+		read,
+		new Promise<T>((done) => (timer = setTimeout(() => done(fallback), ms)))
+	]).finally(() => clearTimeout(timer));
+}
+
 const LIVE_READS: PreviewReads = {
-	quote: quoteExecutionFee,
-	balanceOf: readBalance,
-	callRefusal: readCallRefusal,
-	gasOf: readGas,
+	quote: (chainId, executor, calls) =>
+		bounded(quoteExecutionFee(chainId, executor, calls), { kind: 'failed' } as ExecutionQuote),
+	balanceOf: (chainId, token, holder) => bounded(readBalance(chainId, token, holder), null),
+	callRefusal: (chainId, multisig, tx) => bounded(readCallRefusal(chainId, multisig, tx), null),
+	gasOf: (chainId, from, call) => bounded(readGas(chainId, from, call), null),
 	token: tokenInfo
 };
 
@@ -459,12 +482,21 @@ export class ExecutionUnpricedError extends Error {
 	}
 }
 
+/** Whether it would run could not be checked in time: nothing was signed, and a retry may check it. */
+export class ExecutionUncheckedError extends Error {
+	constructor() {
+		super('whether the execution would run could not be checked');
+		this.name = 'ExecutionUncheckedError';
+	}
+}
+
 /** Whether `error` stopped the execution before its passkey: nothing was signed or sent. */
 export function stoppedBeforeSigning(error: unknown): boolean {
 	return (
 		error instanceof ExecutorCannotPayError ||
 		error instanceof ExecutionWouldFailError ||
-		error instanceof ExecutionUnpricedError
+		error instanceof ExecutionUnpricedError ||
+		error instanceof ExecutionUncheckedError
 	);
 }
 
@@ -564,6 +596,7 @@ export async function submitExecution(
 	if (ready.kind === 'refused') throw ready.error;
 	if (ready.kind === 'fails') throw new ExecutionWouldFailError(ready.why);
 	if (ready.kind === 'unpriced') throw new ExecutionUnpricedError();
+	if (ready.kind === 'unchecked') throw new ExecutionUncheckedError();
 	if (!ready.canPay && ready.balance !== null) {
 		throw new ExecutorCannotPayError(ready.fee.amount, ready.balance);
 	}

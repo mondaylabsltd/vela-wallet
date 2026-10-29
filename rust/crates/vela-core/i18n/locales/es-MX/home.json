@@ -217,9 +217,11 @@
         "whyReverts": "la red lo rechaza — “{{reason}}”",
         "whyRevertsPlain": "se revierte al ejecutarse, y la red no da ningún motivo",
         "unpricedReason": "no se pudo calcular la comisión de red — inténtalo de nuevo en un momento",
+        "uncheckedReason": "no se pudo comprobar si se ejecutaría — inténtalo de nuevo en un momento",
         "feeLine": "Comisión de red ≈ {{fee}}, la paga {{name}}",
         "feeChecking": "Comprobando que se ejecutaría, y la comisión de red…",
         "feeUnpriced": "No se pudo calcular la comisión de red en este momento.",
+        "feeUnchecked": "No se pudo comprobar si se ejecutaría — aún puedes aprobar; Ejecutar lo vuelve a comprobar.",
         "feeRetry": "Comprobar de nuevo",
         "feeSetup": "Incluye una configuración única en {{network}} ≈ {{amount}}:",
         "feeSetupPlain": "Incluye una configuración única en {{network}}:",
@@ -333,7 +335,7 @@
         "body": "Los miembros escanean el código o abren el enlace: agrega el multisig en Vela con su red y los nombres de los miembros.",
         "shareText": "Únete a nuestro multisig en Vela",
         "qrLabel": "Código de invitación",
-        "outsideHint": "Los miembros que usan otra billetera, no Vela, no necesitan agregarlo: cuando una transacción necesite su aprobación, envíales su enlace y firmarán con su propia billetera."
+        "outsideHint": "Los miembros que usan otra billetera, no Vela, no necesitan agregarlo: cuando una transacción necesite su aprobación, envíales su enlace y la aprobarán con su propia billetera."
       },
       "presence": {
         "needsYou_one": "{{count}} necesita tu aprobación",
@@ -410,7 +412,7 @@
         "askNote": "Continúa solo si acabas de iniciar esto en Vela. No se firma nada sin que tu wallet te lo pregunte.",
         "connect": "Conectar",
         "decline": "Rechazar",
-        "keepOpen": "Conectado. Deja esta página abierta: las solicitudes de Vela aparecen en tu wallet.",
+        "keepOpen": "Conectado. Deja esta página abierta: las solicitudes de Vela aparecen primero aquí y luego en tu wallet.",
         "waitingVela": "Esperando a Vela…",
         "noSession": "Abre esta página desde el enlace que Vela muestra cuando un miembro firma con otra wallet.",
         "requests": "Solicitudes",
@@ -629,6 +631,16 @@
           "tooMany": "Una multisig puede tener como máximo {{max}} miembros.",
           "changeWaiting": "Hay otro cambio de miembros pendiente ahí. Ejecútalo o recházalo primero."
         }
+      },
+      "timeline": {
+        "heading": "Historial",
+        "created": "Creada por {{name}}",
+        "approved": "Aprobada por {{name}}",
+        "approvedByExecuting": "Aprobada por {{name}} al ejecutarla",
+        "executed": "Ejecutada",
+        "executedBy": "Ejecutada por {{name}}",
+        "counted": "contó",
+        "notCounted": "no contó"
       }
     },
     "balanceDetailStatusOwnNode": "Tu nodo no responde",

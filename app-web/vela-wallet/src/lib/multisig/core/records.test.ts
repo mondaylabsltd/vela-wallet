@@ -43,7 +43,9 @@ const chain = vi.hoisted(() => ({
 	cap: Infinity,
 	down: false,
 	windows: [] as [bigint, bigint][],
-	head: 0x200000n
+	head: 0x200000n,
+	/** The block from which the multisig's nonce reads 10 (0 before it). */
+	usedAt: 0x1f0000n
 }));
 vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
 	getLogsRangeCap: (await importOriginal<typeof import('$lib/services/rpc-pool-endpoints')>())
@@ -57,7 +59,10 @@ vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
 				result: { number: `0x${n.toString(16)}`, timestamp: `0x${(n * 2n).toString(16)}` }
 			};
 		}
-		if (method === 'eth_call') return { result: '0x0' };
+		if (method === 'eth_call') {
+			const at = params[1] === 'latest' ? chain.head : BigInt(params[1] as string);
+			return { result: at >= chain.usedAt ? '0xa' : '0x0' };
+		}
 		const filter = params[0] as { topics: string[]; fromBlock: string; toBlock: string };
 		const from = BigInt(filter.fromBlock);
 		const to = BigInt(filter.toBlock);
@@ -121,6 +126,7 @@ beforeEach(() => {
 	chain.cap = Infinity;
 	chain.down = false;
 	chain.windows = [];
+	chain.usedAt = 0x1f0000n;
 	resetHistoryForTests();
 });
 
@@ -270,6 +276,22 @@ describe('the history, read in windows (r4b-2)', () => {
 		const items = [item(CALL, { kind: 'call', to: SAFE, value: '0', data: '0x' })];
 		expect(await recordRemoteExecutions(SAFE, items)).toEqual({ wrote: false, unreadable: [100] });
 		expect(store.saved).toEqual([]);
+	});
+
+	it('a node behind the nonce: its "none" is not the last word, and is not kept', async () => {
+		// Round 5: the number was used in a block this node has not reached
+		// (it lags the one the nonce was read from). Its history holds no
+		// `ExecutionSuccess` yet — which once read as "another transaction
+		// ran first" and was kept for good.
+		chain.usedAt = chain.head + 3n;
+		const since = Number(0x1f8000n * 2n) * 1000;
+		const ask = () => findExecution(SAFE, 100, VOIDED, { sinceMs: since, final: true, nonce: 4n });
+		expect(await ask()).toBeUndefined();
+		// Caught up, it can say: used at its head, and no execution — voided, kept.
+		chain.usedAt = chain.head - 10n;
+		expect(await ask()).toBeNull();
+		chain.usedAt = chain.head + 3n;
+		expect(await ask()).toBeNull();
 	});
 
 	it('a node that refuses even one block: unreadable, not endless', async () => {
