@@ -2,7 +2,8 @@ import { error } from '@sveltejs/kit';
 import {
 	resolveMultisigMessages,
 	resolveRequestMessages,
-	resolveSigningMessages
+	resolveSigningMessages,
+	resolveWalletMessages
 } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
 import type { EntryGenerator, PageServerLoad } from './$types';
@@ -27,6 +28,9 @@ export const load: PageServerLoad = ({ params }) => {
 		signingMessages: resolveSigningMessages(locale),
 		// A request to a multisig opens its proposal here, and an outside
 		// member's wallet may be asked from here.
-		multisigMessages: resolveMultisigMessages(locale)
+		multisigMessages: resolveMultisigMessages(locale),
+		// Every artwork drawn here (the signer line, the consent card, a
+		// proposal's members) opens the identicon viewer.
+		identiconViewer: resolveWalletMessages(locale).identiconViewer
 	};
 };

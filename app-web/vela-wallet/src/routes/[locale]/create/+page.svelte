@@ -16,6 +16,7 @@
 	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralTemplate } from '$lib/i18n/plural';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
@@ -94,6 +95,9 @@
 <!-- Spec 075: a founding key can be minted on the Trusted Signer's page. The
      wait, the pairing code and the sentence a refusal ends with are drawn
      over this flow, which stays exactly as it was underneath. -->
+
+<!-- The done screen's artwork opens the viewer, as every artwork does. -->
+<IdenticonViewerHost copy={data.identiconViewer} />
 
 {#if pending}
 	<PromptSheet

@@ -28,6 +28,7 @@
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { browser } from '$app/environment';
@@ -87,6 +88,9 @@
 	closeLabel={data.signingMessages.receipt.done ?? ''}
 	current={session.view.address || null}
 />
+
+<!-- Every artwork above opens the viewer on its address, as in the wallet. -->
+<IdenticonViewerHost copy={data.identiconViewer} />
 
 <style>
 	/*

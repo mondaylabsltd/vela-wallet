@@ -21,6 +21,7 @@
 	import { spaceNetworksSync } from '$lib/services/networks';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
@@ -185,7 +186,6 @@
 	}
 </script>
 
-<!-- eslint-disable svelte/no-at-html-tags -- every {@html} here is the core's identicon SVG, drawn from an address -->
 <Sheet
 	title={m.create.title}
 	{closeLabel}
@@ -217,8 +217,10 @@
 				<li>
 					<label class:on>
 						<input type="checkbox" checked={on} onchange={() => toggle(a.address)} />
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(a.address)}</span>
+						<!-- A picture, not the viewer's button: the whole row is the
+						     checkbox's label, and a button inside it would be nested
+						     interactive content (and steal the row's tap). -->
+						<Identicon svg={identiconSvgForClient(a.address)} size="row" />
 						<span class="text"
 							><span class="name">{a.name || shortenAddress(a.address)}</span><span class="address"
 								>{shortenAddress(a.address)}</span
@@ -252,8 +254,7 @@
 				{#each owners as o, i (o)}
 					<li>
 						<span class="ordinal">{i + 1}</span>
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-						<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(o)}</span>
+						<Identicon svg={identiconSvgForClient(o)} size="row" address={o} />
 						<span class="text"
 							><span class="name">{memberLabel(o)}</span
 							>{#if memberLabel(o) !== shortenAddress(o)}<span class="address"
@@ -311,9 +312,12 @@
 	{:else if step === 'review'}
 		{#if draft}
 			<div class="hero">
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-				<span class="hero-avatar" aria-hidden="true"
-					>{@html identiconSvgForClient(draft.address)}</span
+				<span class="hero-avatar"
+					><Identicon
+						svg={identiconSvgForClient(draft.address)}
+						size="detail"
+						address={draft.address}
+					/></span
 				>
 				<p class="hero-name">{cleanName}</p>
 				<p class="hero-rule">{fillTemplate(m.panel.title, { m: threshold, n: owners.length })}</p>
@@ -402,8 +406,9 @@
 			<span class="done"><Icon icon={UTILITY_ICONS.check} size="lg" /></span>
 			<p class="hero-rule">{m.create.created}</p>
 			{#if cleanName}<p class="hero-name">{cleanName}</p>{/if}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-			<span class="hero-avatar" aria-hidden="true">{@html identiconSvgForClient(created)}</span>
+			<span class="hero-avatar"
+				><Identicon svg={identiconSvgForClient(created)} size="detail" address={created} /></span
+			>
 			<p class="hero-address">{created}</p>
 			<p class="hint">{m.create.createdBody}</p>
 		</div>
@@ -476,21 +481,6 @@
 		border-radius: var(--radius-sm);
 		border: var(--border-hairline) solid var(--color-border-strong);
 		color: var(--color-fg-base);
-	}
-
-	.avatar {
-		display: inline-flex;
-		flex: none;
-		width: var(--icon-2xl);
-		height: var(--icon-2xl);
-		border-radius: var(--radius-full);
-		overflow: hidden;
-	}
-
-	.avatar :global(svg),
-	.hero-avatar :global(svg) {
-		width: 100%;
-		height: 100%;
 	}
 
 	.text {
@@ -667,10 +657,6 @@
 
 	.hero-avatar {
 		display: inline-flex;
-		width: var(--size-identiconDetail);
-		height: var(--size-identiconDetail);
-		border-radius: var(--radius-full);
-		overflow: hidden;
 		margin-block: var(--space-md);
 	}
 

@@ -11,6 +11,7 @@
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
@@ -83,8 +84,9 @@
 		{#each members.owners as owner (owner)}
 			{@const mine = local.some((o) => o.address.toLowerCase() === owner.toLowerCase())}
 			<li>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-				<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(owner)}</span>
+				<!-- The member's artwork opens the viewer on its address (founder
+				     call, 2026-09-05): the row itself is no control. -->
+				<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
 				<span class="text">
 					<span class="name">{names.label(owner)}</span>
 					<!-- A member with no name reads its address once, not twice (ms-26). -->
@@ -195,23 +197,6 @@
 		gap: var(--space-md);
 		padding-block: var(--space-sm);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
-	}
-
-	.avatar {
-		display: flex;
-		width: var(--icon-xl);
-		height: var(--icon-xl);
-		flex: none;
-	}
-
-	.avatar {
-		overflow: hidden;
-		border-radius: var(--radius-full);
-	}
-
-	.avatar :global(svg) {
-		width: 100%;
-		height: 100%;
 	}
 
 	.text {

@@ -7,6 +7,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { addLink, shareOrigin } from '../core/link';
@@ -51,8 +52,11 @@
 
 <Sheet title={m.panel.invite} {closeLabel} {wide} {onclose}>
 	<div class="hero">
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -- the core's own SVG, from the address -->
-		<span class="avatar" aria-hidden="true">{@html identiconSvgForClient(account.address)}</span>
+		<Identicon
+			svg={identiconSvgForClient(account.address)}
+			size="detail"
+			address={account.address}
+		/>
 		<p class="address">{account.address}</p>
 		<p class="hint">{m.create.createdBody}</p>
 		{#if unshared}
@@ -93,19 +97,6 @@
 		align-items: center;
 		text-align: center;
 		padding-block: var(--space-lg);
-	}
-
-	.avatar {
-		display: inline-flex;
-		width: var(--size-identiconDetail);
-		height: var(--size-identiconDetail);
-		border-radius: var(--radius-full);
-		overflow: hidden;
-	}
-
-	.avatar :global(svg) {
-		width: 100%;
-		height: 100%;
 	}
 
 	.address {
