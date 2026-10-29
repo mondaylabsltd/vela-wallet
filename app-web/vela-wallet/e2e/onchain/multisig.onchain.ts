@@ -51,7 +51,7 @@ async function proposeSend(
 	coin = { row: /^xDAI Gnosis/, symbol: 'xDAI' }
 ): Promise<void> {
 	await page
-		.getByRole('button', { name: en('componentsUi.dock.send') })
+		.getByRole('button', { name: en('componentsUi.dock.send'), exact: true })
 		.first()
 		.click();
 	await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
@@ -72,7 +72,8 @@ async function proposeSend(
 	await expect(page.getByRole('heading', { name: en('send.confirmTitle') })).toBeVisible();
 	await expect(page.getByText(`${amount} ${coin.symbol}`, { exact: true }).first()).toBeVisible();
 	await shot(page, `${name}-confirm`);
-	await page.getByRole('button', { name: 'Propose and approve' }).click();
+	// r4C-10: with no member on this device, nobody here approves: "Propose".
+	await page.getByRole('button', { name: /^Propose( and approve)?$/ }).click();
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -101,6 +102,20 @@ function errors(page: Page): string[] {
 	return seen;
 }
 
+/**
+ * r4-create: "First network" is a list, and nothing is picked when nothing
+ * says which (no network used here yet, funds on several) — Gnosis, the
+ * suite's index chain, as the sheet once defaulted to.
+ */
+async function pickFirstNetwork(page: Page, name = 'Gnosis'): Promise<void> {
+	const group = page.getByRole('radiogroup', { name: 'First network' });
+	const radio = group.getByRole('radio', { name, exact: true });
+	if (!(await radio.isVisible()))
+		await group.getByRole('button', { name: /^More networks/ }).click();
+	await radio.click();
+	await expect(radio).toBeChecked();
+}
+
 test('a 2-of-3 multisig on one device: create, fund, propose, approve and execute', async ({
 	page,
 	context
@@ -118,7 +133,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 		await shot(page, '02-switcher');
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Team fund');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Team fund');
 		await expect(page.getByText('New multisig')).toBeVisible();
 		await page.getByText('Parallel Two', { exact: true }).click();
 		await page.getByText('Parallel Three', { exact: true }).click();
@@ -128,6 +143,7 @@ test('a 2-of-3 multisig on one device: create, fund, propose, approve and execut
 		await shot(page, '04-threshold');
 		await page.getByRole('button', { name: 'Next' }).click();
 		await shot(page, '05-review');
+		await pickFirstNetwork(page);
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(page.getByText('Multisig created')).toBeVisible();
 		await shot(page, '06-created');
@@ -185,7 +201,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 			.click();
 		await pageA.getByRole('button', { name: 'Add account' }).click();
 		await pageA.getByRole('button', { name: /^Create multisig/ }).click();
-		await pageA.getByRole('textbox', { name: 'Name' }).fill('Shared 2/2');
+		await pageA.getByRole('textbox', { name: /^Name/ }).fill('Shared 2/2');
 		await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
 		await pageA.getByRole('button', { name: 'Add', exact: true }).click();
 		await expect(pageA.getByText('Members · 2')).toBeVisible();
@@ -194,6 +210,7 @@ test('two devices: one proposes, the other opens the link, approves and executes
 		await expect(pageA.getByText(/Every member must approve/)).toBeVisible();
 		await shot(pageA, 'x1-threshold-all');
 		await pageA.getByRole('button', { name: 'Next' }).click();
+		await pickFirstNetwork(pageA);
 		await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 		await pageA.getByRole('button', { name: 'Done' }).click();
 		await expect(pageA.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
@@ -265,11 +282,12 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await page.getByRole('button', { name: 'Add account' }).click();
 	await shot(page, 'd1-add-account');
 	await page.getByRole('button', { name: /^Create multisig/ }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Desk fund');
+	await page.getByRole('textbox', { name: /^Name/ }).fill('Desk fund');
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await shot(page, 'd2-create');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(page);
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -291,7 +309,7 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
 		timeout: 30_000
 	});
-	await expect(page.getByText('Save its setup to Ethereum')).toBeVisible();
+	await expect(page.getByText('Back up its setup on Ethereum')).toBeVisible();
 	await shot(page, 'd7-settings');
 
 	// Every page wears the same account: Contacts too, and its switcher.
@@ -300,11 +318,11 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 	await expect(page.getByText('Desk fund').first()).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Needs 2 of 2 members' }).first()).toBeVisible();
 	await page
-		.getByRole('button', { name: /Desk fund/ })
+		.getByRole('button', { name: /^Desk fund/ })
 		.first()
 		.click();
 	const dialog = page.getByRole('dialog');
-	await expect(dialog.getByRole('button', { name: /Desk fund/ })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: /^Desk fund/ })).toBeVisible();
 	await expect(dialog.getByRole('button', { name: 'Add account' })).toBeVisible();
 	await shot(page, 'd8-contacts-switcher');
 	expect(thrown).toEqual([]);
@@ -325,10 +343,11 @@ test('a network the genesis service does not read: propose, approve and execute 
 		.click();
 	await page.getByRole('button', { name: 'Add account' }).click();
 	await page.getByRole('button', { name: /^Create multisig/ }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Base fund');
+	await page.getByRole('textbox', { name: /^Name/ }).fill('Base fund');
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(page);
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -368,12 +387,13 @@ test('an outside owner signs with their own wallet, through the connect page', a
 			.click();
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('With MetaMask');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('With MetaMask');
 		await page.getByPlaceholder("Member's address (0x…)").fill(EOA_ONE);
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await expect(page.getByText('2 of 2')).toBeVisible();
 		await page.getByRole('button', { name: 'Next' }).click();
+		await pickFirstNetwork(page);
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
 	});
@@ -524,11 +544,11 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 
 	await test.step('the undeployed one: fund it and send, no owner on this device', async () => {
 		await page
-			.getByRole('button', { name: /Parallel One|EOA vault|Public treasury/ })
+			.getByRole('button', { name: /^(Parallel One|EOA vault|Public treasury)/ })
 			.first()
 			.click();
 		await page
-			.getByRole('button', { name: /EOA vault/ })
+			.getByRole('button', { name: /^EOA vault/ })
 			.first()
 			.click();
 		await expect(page.getByText('EOA vault', { exact: true }).first()).toBeVisible();
@@ -592,7 +612,7 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 		.click();
 	await page.getByRole('button', { name: 'Add account' }).click();
 	await page.getByRole('button', { name: /^Create multisig/ }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Old name');
+	await page.getByRole('textbox', { name: /^Name/ }).fill('Old name');
 	// Two and Three, Two first: Two's passkey asks for the record, so the
 	// sponsor's per-owner budget (5 a day, spent by the tests above on One)
 	// still pays and the record lands on chain, where a rename needs it.
@@ -601,6 +621,7 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 	await page.getByText('Parallel Three', { exact: true }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(page);
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -643,13 +664,13 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 		});
 		await expect(page.getByTestId('registry-name')).toHaveText('Old name');
 		await page.getByRole('button', { name: 'Change the shared name' }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Team treasury');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Team treasury');
 		await shot(page, 'r1-rename');
 		await page.getByRole('button', { name: 'Propose and approve' }).click();
 		// The members read it as what it is.
-		await expect(
-			page.getByText('Rename this multisig in the registry to “Team treasury”').first()
-		).toBeVisible({ timeout: 60_000 });
+		await expect(page.getByText('Change the shared name to “Team treasury”').first()).toBeVisible({
+			timeout: 60_000
+		});
 		await expect(page.getByText('1/2 approved').first()).toBeVisible();
 		await shot(page, 'r2-proposal');
 	});
@@ -758,7 +779,7 @@ test('an owner added on one network: its approval is taken by the mailbox and co
 			.click();
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Grows on Base');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Grows on Base');
 		await page.getByPlaceholder("Member's address (0x…)").fill(EOA_ONE);
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await expect(page.getByText('Members · 2')).toBeVisible();
@@ -766,6 +787,7 @@ test('an owner added on one network: its approval is taken by the mailbox and co
 		await page.getByRole('button', { name: 'Fewer approvals' }).click();
 		await expect(page.getByText('1 of 2')).toBeVisible();
 		await page.getByRole('button', { name: 'Next' }).click();
+		await pickFirstNetwork(page);
 		await page.getByRole('button', { name: 'Create', exact: true }).click();
 		await page.getByRole('button', { name: 'Done' }).click();
 	});
@@ -791,7 +813,8 @@ test('an owner added on one network: its approval is taken by the mailbox and co
 		expect(posted.body.proposal?.approvals[0]?.signerIsGenesisOwner).toBe(true);
 		added = posted.body.proposal!.safeTxHash;
 		await page.goto(`/en/wallet#ms=${UNREAD_CHAIN}.${multisig}.${added}`);
-		await expect(page.getByText('Add a member').first()).toBeVisible({ timeout: 90_000 });
+		// r4a-1: a member change reads in full — whom it adds, by the whole address.
+		await expect(page.getByTestId('member-change')).toContainText(EOA_TWO, { timeout: 90_000 });
 		await expect(page.getByText('1/1 approved').first()).toBeVisible();
 		await shot(page, 'w1-add-owner');
 		await page.getByRole('button', { name: 'Execute', exact: true }).click();
@@ -814,9 +837,12 @@ test('an owner added on one network: its approval is taken by the mailbox and co
 		await page.reload();
 		await proposeSend(page, '0.5', 'w3-propose', { row: /^ETH Base/, symbol: 'ETH' });
 		await expect(page.getByText('1/2 approved').first()).toBeVisible();
-		const link = (await page.locator('code.link').textContent())!.trim();
-		next = link.split('.').pop()!;
-		expect(link).toContain(`#ms=${UNREAD_CHAIN}.`);
+		// r4C-13: every member left to approve is an outside wallet, so the link
+		// shown is the connect page's, naming the transaction (`ms=` in it).
+		const link = (await page.locator('code.link').first().textContent())!.trim();
+		const named = link.match(/[#&]ms=(\d+)\.0x[0-9a-fA-F]{40}\.(0x[0-9a-fA-F]{64})/);
+		expect(named?.[1]).toBe(String(UNREAD_CHAIN));
+		next = named![2];
 	});
 
 	await test.step("the new owner's approval: taken by the mailbox, counted by the wallet", async () => {
@@ -853,7 +879,7 @@ test('an owner added on one network: its approval is taken by the mailbox and co
 
 	await test.step('Settings: the original members, and the current ones on Base', async () => {
 		await page
-			.getByRole('link', { name: /members approve/ })
+			.getByRole('link', { name: /^(Needs \d+ of \d+ members|Rule differs by network)$/ })
 			.first()
 			.click();
 		await expect(page.getByRole('heading', { name: 'Original members' })).toBeVisible({
@@ -895,11 +921,12 @@ test('a proposal on a network it is not deployed on: found by another device wit
 		.click();
 	await pageA.getByRole('button', { name: 'Add account' }).click();
 	await pageA.getByRole('button', { name: /^Create multisig/ }).click();
-	await pageA.getByRole('textbox', { name: 'Name' }).fill('Found on Base');
+	await pageA.getByRole('textbox', { name: /^Name/ }).fill('Found on Base');
 	await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
 	await pageA.getByRole('button', { name: 'Add', exact: true }).click();
 	await pageA.getByRole('button', { name: 'Next' }).click();
 	await pageA.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(pageA);
 	await pageA.getByRole('button', { name: 'Create', exact: true }).click();
 	await pageA.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await pageA.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -1036,8 +1063,11 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		await field.fill(hooked.address);
 		await add.click();
 		// Nothing says which network it is on: the person names one.
-		await page.getByRole('button', { name: 'Network' }).click();
-		await page.getByRole('option', { name: /^Gnosis/ }).click();
+		// r4-create: the networks are a list on the sheet; a pick only picks.
+		await page
+			.getByRole('radiogroup', { name: 'Network' })
+			.getByRole('radio', { name: 'Gnosis', exact: true })
+			.click();
 		await add.click();
 		const notice = page.getByTestId('authority-refused');
 		await expect(notice).toBeVisible({ timeout: 60_000 });
@@ -1090,7 +1120,7 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		await setBalance(hooked.address, 2n * 10n ** 18n);
 		await page.goto('/en/wallet');
 		await page
-			.getByRole('button', { name: en('componentsUi.dock.send') })
+			.getByRole('button', { name: en('componentsUi.dock.send'), exact: true })
 			.first()
 			.click();
 		await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
@@ -1177,7 +1207,7 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		// The switcher says both, each as what it is.
 		await page.goto('/en/wallet');
 		await page
-			.getByRole('button', { name: /Old vault/ })
+			.getByRole('button', { name: /^Old vault/ })
 			.first()
 			.click();
 		await expect(page.getByTestId('flag-refused')).toBeVisible({ timeout: 30_000 });
@@ -1223,7 +1253,7 @@ test('members changed from Settings: one proposal per deployed network, executed
 		.click();
 	await page.getByRole('button', { name: 'Add account' }).click();
 	await page.getByRole('button', { name: /^Create multisig/ }).click();
-	await page.getByRole('textbox', { name: 'Name' }).fill('Changes hands');
+	await page.getByRole('textbox', { name: /^Name/ }).fill('Changes hands');
 	await page.getByText('Parallel Two', { exact: true }).click();
 	await page.getByText('Parallel Three', { exact: true }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -1231,6 +1261,7 @@ test('members changed from Settings: one proposal per deployed network, executed
 	// The rule chosen, the way back from a lost passkey said with it.
 	await expect(page.getByTestId('create-recovery')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
+	await pickFirstNetwork(page);
 	await page.getByRole('button', { name: 'Create', exact: true }).click();
 	await page.getByRole('button', { name: 'Done' }).click();
 	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
@@ -1264,7 +1295,7 @@ test('members changed from Settings: one proposal per deployed network, executed
 	});
 
 	await test.step('Add member: the change on each network, then one proposal each', async () => {
-		await page.getByRole('link', { name: '2 of 3 members approve' }).first().click();
+		await page.getByRole('link', { name: 'Needs 2 of 3 members' }).first().click();
 		const changes = page.getByTestId('member-changes');
 		await expect(changes.locator('.rows li')).toHaveCount(3, { timeout: 60_000 });
 		await expect(page.getByTestId('recovery')).toBeVisible();
@@ -1300,7 +1331,10 @@ test('members changed from Settings: one proposal per deployed network, executed
 				.getByTestId('member-group')
 				.getByRole('button', { name: new RegExp(`^${network} `) })
 				.click();
-			await expect(page.getByText('Add a member').first()).toBeVisible({ timeout: 30_000 });
+			// r4a-1: read as the change it is, the member by the name kept here.
+			await expect(page.getByTestId('member-change')).toContainText('Outside One', {
+				timeout: 30_000
+			});
 			await page.getByRole('button', { name: 'Approve and execute' }).click();
 			await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
 				timeout: 120_000

@@ -23,7 +23,7 @@ vi.mock('./names.svelte', () => ({
 	}
 }));
 vi.mock('./chain', () => ({
-	hasCode: async (_chain: number, a: string) => a === DEPLOYED
+	hasContractCode: async (_chain: number, a: string) => a === DEPLOYED
 }));
 
 vi.mock('$lib/services/public-key-index', () => ({

@@ -36,10 +36,29 @@ vi.mock('$lib/services/rpc-pool', () => ({
 }));
 
 let safeContractsOn: typeof import('./chain').safeContractsOn;
+let hasContractCode: typeof import('./chain').hasContractCode;
 
 beforeAll(async () => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
-	({ safeContractsOn } = await import('./chain'));
+	({ safeContractsOn, hasContractCode } = await import('./chain'));
+});
+
+/**
+ * Who signs how is read on this (r4-9): an EIP-7702 delegation is a person's
+ * own wallet with smart-account features — its key signs — not a smart
+ * account that approves only in Vela. The onchain suite's outside owner is
+ * one (Gnosis's anvil account #1 is delegated).
+ */
+describe('a smart account, or a wallet', () => {
+	it('an EIP-7702 delegation is a wallet; other code is a smart account; none is neither', async () => {
+		const DELEGATED = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
+		const CONTRACT = '0x00000000000000000000000000000000000000c0';
+		SAFE_CODE[DELEGATED] = '0xef01002e623468c560072e91d7a94a1dcb2eefbdbe69cb';
+		SAFE_CODE[CONTRACT] = '0x6080604052';
+		expect(await hasContractCode(100, DELEGATED)).toBe(false);
+		expect(await hasContractCode(100, CONTRACT)).toBe(true);
+		expect(await hasContractCode(100, '0x00000000000000000000000000000000000000e0')).toBe(false);
+	});
 });
 
 describe('the Safe contracts on a chain', () => {

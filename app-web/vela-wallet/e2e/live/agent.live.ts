@@ -187,7 +187,7 @@ test('an AI agent over ClientMCP: a Vela account, then a multisig', async ({ bro
 			.click();
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Agent Team');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Agent Team');
 		await page.getByText('Agent Alice', { exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await page.getByRole('button', { name: 'Next' }).click();

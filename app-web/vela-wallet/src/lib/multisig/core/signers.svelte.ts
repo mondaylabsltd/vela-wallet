@@ -3,7 +3,8 @@
  * sheet offers them to approve (ms-11, r4-9):
  *
  * - `here`: a Vela account on this device — its passkey, on this sheet;
- * - `vela`: a smart account elsewhere — code at its address on that network,
+ * - `vela`: a smart account elsewhere — code at its address on that network
+ *   (an EIP-7702 delegation is not: that is a person's wallet, which signs),
  *   or the passkey index knows it as a Vela account. It approves in Vela, on
  *   its own device, from the proposal's link; an outside wallet can never
  *   sign for it, so that path is never offered;
@@ -13,7 +14,7 @@
  * `null` while that is still being read: nothing is offered on a guess.
  */
 import { queryWalletName } from '$lib/services/public-key-index';
-import { hasCode } from './chain';
+import { hasContractCode } from './chain';
 import { names } from './names.svelte';
 import { localOwners } from './owners';
 
@@ -43,7 +44,7 @@ class SignerKinds {
 	#ask(chainId: number, address: string, key: string): void {
 		if (this.#asked.has(key)) return;
 		this.#asked.add(key);
-		void hasCode(chainId, address)
+		void hasContractCode(chainId, address)
 			.then((code) => {
 				this.#code = { ...this.#code, [key]: code };
 			})
@@ -66,7 +67,7 @@ export async function plainAccounts(chainId: number, owners: string[]): Promise<
 		owners.map(async (owner) => {
 			if (localOwners([owner]).length > 0) return false;
 			const [code, indexed] = await Promise.all([
-				hasCode(chainId, owner).catch(() => false),
+				hasContractCode(chainId, owner).catch(() => false),
 				queryWalletName(owner).catch(() => null)
 			]);
 			return !code && !indexed;

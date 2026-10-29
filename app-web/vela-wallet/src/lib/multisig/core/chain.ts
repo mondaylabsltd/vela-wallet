@@ -40,6 +40,19 @@ export async function hasCode(chainId: number, address: string): Promise<boolean
 	return typeof code === 'string' && code !== '0x' && code !== '0x0';
 }
 
+/**
+ * Whether `address` is a smart account on `chainId` — code there that is not
+ * an EIP-7702 delegation (`0xef0100 ++ implAddr`, 23 bytes: a person's own
+ * wallet with smart-account features, which still signs with its key, as
+ * `recipient-risk.ts` reads it). Who signs how is decided on this, not on
+ * `hasCode`: a delegated EOA's wallet signs for it.
+ */
+export async function hasContractCode(chainId: number, address: string): Promise<boolean> {
+	const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
+	if (typeof code !== 'string' || code === '0x' || code === '0x0') return false;
+	return !/^0xef0100[0-9a-fA-F]{40}$/i.test(code);
+}
+
 /** Verdicts read this session: a contract's code does not come and go. */
 const contractVerdicts = new Map<number, SafeContracts>();
 

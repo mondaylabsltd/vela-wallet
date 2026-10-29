@@ -38,7 +38,7 @@ async function seeHolding(page: Page): Promise<void> {
 /** Send `amount` USDC on Arc to `to` with the regular send flow; returns once it landed. */
 async function sendUsdc(page: Page, to: string, amount: string, name: string): Promise<void> {
 	await page
-		.getByRole('button', { name: en('componentsUi.dock.send') })
+		.getByRole('button', { name: en('componentsUi.dock.send'), exact: true })
 		.first()
 		.click();
 	await expect(page.getByRole('heading', { name: en('send.selectTokenTitle') })).toBeVisible();
@@ -125,7 +125,7 @@ test('a multisig on Arc Testnet: two passkey members, propose, approve, execute'
 			.click();
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Arc Team');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Arc Team');
 		await page.getByText('Arc Alice', { exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await expect(page.getByText('2 of 2')).toBeVisible();
@@ -184,7 +184,7 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 			.click();
 		await page.getByRole('button', { name: 'Add account' }).click();
 		await page.getByRole('button', { name: /^Create multisig/ }).click();
-		await page.getByRole('textbox', { name: 'Name' }).fill('Arc With MetaMask');
+		await page.getByRole('textbox', { name: /^Name/ }).fill('Arc With MetaMask');
 		await page.getByPlaceholder("Member's address (0x…)").fill(FUNDER);
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await page.getByRole('button', { name: 'Next' }).click();
