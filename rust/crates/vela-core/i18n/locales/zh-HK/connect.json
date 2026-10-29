@@ -126,7 +126,11 @@
     "ext": {
       "installedNote": "之前已開啟的分頁需要重新載入，網站才能找到 Vela。",
       "accessNote": "網站存取權已受限制：網站無法找到 Vela，通行密鑰亦無法使用。",
-      "accessAllow": "允許存取"
+      "accessAllow": "允許存取",
+      "openInTabTitle": "Vela 已在分頁中開啟",
+      "openInTabBody": "每個視窗只開一個錢包：該分頁開啟期間，側邊欄會讓位。改在此處使用會關閉該分頁。",
+      "goToTab": "前往分頁",
+      "useHereInstead": "改在此處使用"
     }
   },
   "signHandoff": {

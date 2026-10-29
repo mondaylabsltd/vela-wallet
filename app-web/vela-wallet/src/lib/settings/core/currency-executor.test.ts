@@ -18,6 +18,7 @@ vi.mock('$lib/services/currency-rate', () => ({
 }));
 
 import { currencyOperationFailure, executeCurrencyOperation } from './currency-executor';
+import { useWalletSyncChannel } from '$lib/wallet/core/wallet-sync';
 
 const effect = (operation: CurrencyEffect['operation']): CurrencyEffect => ({ id: 1, operation });
 
@@ -35,6 +36,23 @@ describe('display_currency executor', () => {
 			type: 'stored_code',
 			code: 'EUR'
 		});
+	});
+
+	it('says a written choice to the other documents (a tab, the side panel)', async () => {
+		const posted: unknown[] = [];
+		useWalletSyncChannel({
+			postMessage: (m) => posted.push(m),
+			addEventListener: () => {},
+			removeEventListener: () => {}
+		});
+		try {
+			await executeCurrencyOperation(effect({ type: 'read_stored_code' }));
+			expect(posted).toEqual([]);
+			await executeCurrencyOperation(effect({ type: 'write_stored_code', code: 'EUR' }));
+			expect(posted).toEqual([{ topic: 'currency' }]);
+		} finally {
+			useWalletSyncChannel(undefined);
+		}
 	});
 
 	it('the web has no device currency — answered, never skipped', async () => {

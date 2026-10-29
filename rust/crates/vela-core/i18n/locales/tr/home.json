@@ -301,6 +301,7 @@
     "syncStalledLine": "Bu cihaza kaydedildi · henüz eşitlenmedi",
     "totalUnpriced": "Henüz fiyat yok",
     "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
-    "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."
+    "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden.",
+    "networkFilterOnly": "Yalnızca {{network}} gösteriliyor"
   }
 }

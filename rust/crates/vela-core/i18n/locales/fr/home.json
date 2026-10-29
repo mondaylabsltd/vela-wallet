@@ -303,6 +303,7 @@
     "syncStalledLine": "Enregistré sur cet appareil · pas encore synchronisé",
     "totalUnpriced": "Pas encore de prix",
     "allUnpriced": "Impossible d'obtenir le prix de vos tokens.",
-    "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains."
+    "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains.",
+    "networkFilterOnly": "Seul {{network}} est affiché"
   }
 }

@@ -27,6 +27,7 @@
 
 import { getItem, setItem } from '$lib/services/storage';
 import { refreshCustomNetworks } from '$lib/services/networks';
+import { announceWalletSync } from '$lib/wallet/core/wallet-sync';
 import { invalidateAllPools, refreshPool } from '$lib/services/rpc-pool';
 import { fetchRawChainData, loadSearchIndex } from '$lib/services/chain-registry';
 import { fetchWithTimeout, NET_TIMEOUTS } from '$lib/services/net';
@@ -438,6 +439,8 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 			// Cache invalidation, not a decision (the Expo comment's rule): the
 			// synchronous network snapshot must re-read the bytes just written.
 			await refreshCustomNetworks();
+			// …and so must every other document's (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'networks' });
 			return { type: 'written' };
 
 		case 'write_network_configs':
@@ -445,6 +448,8 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 			// The same invalidation: the explorer links read the overrides from
 			// the snapshot, and an explorer set here was otherwise never used.
 			await refreshCustomNetworks();
+			// …and so must every other document's (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'networks' });
 			return { type: 'written' };
 
 		case 'write_service_endpoints': {

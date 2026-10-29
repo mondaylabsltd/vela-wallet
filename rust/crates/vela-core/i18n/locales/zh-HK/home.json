@@ -301,6 +301,7 @@
     "syncStalledLine": "已儲存在此裝置 · 尚未同步",
     "totalUnpriced": "暫時未有價格",
     "allUnpriced": "你的所有代幣暫時都未能取得價格。",
-    "currencyUnavailable": "暫時未能取得 {{code}} 匯率——金額以美元顯示。"
+    "currencyUnavailable": "暫時未能取得 {{code}} 匯率——金額以美元顯示。",
+    "networkFilterOnly": "只顯示 {{network}}"
   }
 }

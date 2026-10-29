@@ -126,7 +126,11 @@
     "ext": {
       "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
       "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
-      "accessAllow": "Autoriser l'accès"
+      "accessAllow": "Autoriser l'accès",
+      "openInTabTitle": "Vela est ouvert dans un onglet",
+      "openInTabBody": "Un wallet par fenêtre : le panneau latéral s'efface tant que cet onglet est ouvert. L'utiliser ici ferme l'onglet.",
+      "goToTab": "Aller à l'onglet",
+      "useHereInstead": "Utiliser ici à la place"
     }
   },
   "signHandoff": {

@@ -126,7 +126,11 @@
     "ext": {
       "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
       "accessNote": "El acceso a sitios está limitado: los sitios no ven Vela y tu passkey no funciona.",
-      "accessAllow": "Permitir acceso"
+      "accessAllow": "Permitir acceso",
+      "openInTabTitle": "Vela está abierta en una pestaña",
+      "openInTabBody": "Una billetera por ventana: el panel lateral se hace a un lado mientras esa pestaña esté abierta. Si la usas aquí, esa pestaña se cierra.",
+      "goToTab": "Ir a la pestaña",
+      "useHereInstead": "Usar aquí en su lugar"
     }
   },
   "signHandoff": {

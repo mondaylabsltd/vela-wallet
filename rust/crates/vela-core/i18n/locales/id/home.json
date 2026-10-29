@@ -301,6 +301,7 @@
     "syncStalledLine": "Tersimpan di perangkat ini · belum tersinkron",
     "totalUnpriced": "Belum ada harga",
     "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
-    "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS."
+    "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS.",
+    "networkFilterOnly": "Hanya menampilkan {{network}}"
   }
 }

@@ -33,6 +33,7 @@ import {
 	networkAdminOperationFailure
 } from './network-admin-executor';
 import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
+import { useWalletSyncChannel } from '$lib/wallet/core/wallet-sync';
 
 const effect = (operation: NetEffect['operation']): NetEffect => ({ id: 1, operation });
 
@@ -153,6 +154,22 @@ describe('writes', () => {
 		);
 		expect(result).toEqual({ type: 'written' });
 		expect(JSON.parse(kv.get('vela.customNetworks')!)).toEqual([STORED_CUSTOM]);
+	});
+
+	it('a network write is said to the other documents (a tab, the side panel)', async () => {
+		const posted: unknown[] = [];
+		useWalletSyncChannel({
+			postMessage: (m) => posted.push(m),
+			addEventListener: () => {},
+			removeEventListener: () => {}
+		});
+		try {
+			await executeNetworkAdminOperation(effect({ type: 'write_custom_networks', networks: [] }));
+			await executeNetworkAdminOperation(effect({ type: 'write_network_configs', configs: [] }));
+			expect(posted).toEqual([{ topic: 'networks' }, { topic: 'networks' }]);
+		} finally {
+			useWalletSyncChannel(undefined);
+		}
 	});
 
 	it('write_service_endpoints goes through the onboarding module (D3a)', async () => {

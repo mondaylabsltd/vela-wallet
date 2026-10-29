@@ -118,6 +118,7 @@ import {
 	receiptLookupHash
 } from './lib/op-receipt.js';
 import { installDoor, openDoor } from './lib/locales.js';
+import { closeSidePanel, panelMayClose, toolbarTarget } from './lib/one-surface.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -239,27 +240,40 @@ function instantConnect(method, origin) {
  * Through the doorway, never at a locale page: which locale is the page's to
  * pick, from the language the person pinned — which a worker cannot read
  * (`localStorage`), so picking here meant Chrome's language (issue 317).
+ *
+ * One wallet per window (`lib/one-surface.js`): the wallet tab of the window
+ * the button was pressed in comes first, and it is FOCUSED — not navigated
+ * again, which reloaded the wallet under the person. That tab is the
+ * window's wallet then, so the window's side panel, when one is up and owes
+ * no request, is closed where this Chrome can (`sidePanel.close`, 141+);
+ * where it cannot, the panel sees the tab and steps aside by itself.
  */
-async function openWallet() {
+async function openWallet(windowId) {
 	const url = chrome.runtime.getURL(openDoor());
+	const base = chrome.runtime.getURL('');
 	// A NORMAL window's tab only (spec 089): a request window is a popup of
 	// this origin too, and with no wallet tab open it was the one reused — the
 	// toolbar navigated the pending request away (answered 4900) and left the
 	// wallet in a 420 px popup.
-	const [existing] = await chrome.tabs.query({
-		url: chrome.runtime.getURL('') + '*',
-		windowType: 'normal'
-	});
-	if (existing) {
-		await chrome.tabs.update(existing.id, { active: true, url });
-		await chrome.windows.update(existing.windowId, { focused: true });
-		return;
+	const tabs = await chrome.tabs.query({ url: base + '*', windowType: 'normal' });
+	const target = toolbarTarget(tabs, windowId, base);
+	if (target.kind === 'focus') {
+		await chrome.tabs.update(target.tabId, { active: true });
+		await chrome.windows.update(target.windowId, { focused: true });
+	} else {
+		await chrome.tabs.create(typeof windowId === 'number' ? { url, windowId } : { url });
 	}
-	await chrome.tabs.create({ url });
+	const walletWindow = target.kind === 'focus' ? target.windowId : windowId;
+	if (typeof walletWindow !== 'number') return;
+	await loaded;
+	if (!panelMayClose([...records.values()], walletWindow)) return;
+	if (await closeSidePanel(chrome.sidePanel, walletWindow)) {
+		void swlog.log('panel.down', { cause: 'wallet_tab' });
+	}
 }
 
-chrome.action?.onClicked?.addListener(() => {
-	openWallet().catch(() => console.error('[vela] could not open the wallet'));
+chrome.action?.onClicked?.addListener((tab) => {
+	openWallet(tab?.windowId).catch(() => console.error('[vela] could not open the wallet'));
 });
 
 /**

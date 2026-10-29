@@ -126,7 +126,11 @@
     "ext": {
       "installedNote": "Hãy tải lại các thẻ đã mở trước đó để các trang tìm thấy Vela.",
       "accessNote": "Quyền truy cập trang web bị giới hạn: các trang không thấy Vela và không dùng được passkey.",
-      "accessAllow": "Cho phép truy cập"
+      "accessAllow": "Cho phép truy cập",
+      "openInTabTitle": "Vela đang mở trong một thẻ",
+      "openInTabBody": "Mỗi cửa sổ một ví: bảng bên tạm lui khi thẻ đó còn mở. Dùng ở đây thì thẻ đó sẽ đóng.",
+      "goToTab": "Đến thẻ",
+      "useHereInstead": "Dùng ở đây"
     }
   },
   "signHandoff": {

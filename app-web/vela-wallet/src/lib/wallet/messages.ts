@@ -154,7 +154,15 @@ export interface WalletMessages {
 		 */
 		internal: Readonly<Record<string, string>>;
 	};
-	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
+	networkFilter: {
+		pillAll: string;
+		sheetTitle: string;
+		allNetworks: string;
+		/** The phone home's line while it is narrowed to one network: "Showing {{network}} only". */
+		only: string;
+		/** …and its way back to every network. */
+		showEvery: string;
+	};
 	sidebar: { networks: string };
 	receive: {
 		title: string;
@@ -304,6 +312,8 @@ export const WALLET_KEYS = [
 	'componentsUi.networkFilter.pillAll',
 	'componentsUi.networkFilter.selectChain',
 	'componentsUi.networkFilter.allNetworks',
+	'home.networkFilterOnly',
+	'componentsUi.networkFilter.showEvery',
 	'settingsModals.network.modalTitle',
 	'receive.title',
 	'receive.addressLabel',

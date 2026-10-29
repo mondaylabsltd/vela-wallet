@@ -301,6 +301,7 @@
     "syncStalledLine": "Auf diesem Gerät gespeichert · noch nicht synchronisiert",
     "totalUnpriced": "Noch kein Preis",
     "allUnpriced": "Für keinen deiner Token konnte ein Preis ermittelt werden.",
-    "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar."
+    "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar.",
+    "networkFilterOnly": "Nur {{network}} wird angezeigt"
   }
 }

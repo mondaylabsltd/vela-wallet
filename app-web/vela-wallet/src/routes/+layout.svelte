@@ -25,6 +25,8 @@
 	import type { ExtensionMessages } from '$lib/extension/messages';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
+	import OpenInTab from '$lib/extension/OpenInTab.svelte';
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
 	import { agentSettings } from '$lib/agent/settings.svelte';
@@ -262,8 +264,28 @@
 		};
 	});
 
+	/**
+	 * One wallet per window (`one-surface.svelte.ts`): the side panel of a
+	 * window that has Vela open in a tab stands aside for it — unless a dApp's
+	 * request is owed here, which rises over the wallet as spec 082 routes it.
+	 */
+	let inPanel = $state(false);
+	const extensionMessages = $derived(
+		(page.data as { extension?: ExtensionMessages } | undefined)?.extension
+	);
+	const standAside = $derived(
+		inPanel &&
+			extensionMessages !== undefined &&
+			oneSurface.elsewhere !== null &&
+			panelSurface.current === null
+	);
+
 	onMount(() => {
-		if (isPanelDocument()) void panelSurface.start();
+		if (isPanelDocument()) {
+			inPanel = true;
+			void panelSurface.start();
+			void oneSurface.start();
+		}
 		// The custom-network snapshot, warmed once per document (spec 038 #E9)
 		// so send, signing and the RPC pool see an added network on a fresh
 		// load, not only after the wallet page or a Settings write.
@@ -348,7 +370,7 @@
 	middle where both are half-transparent over the bare document (FR-012).
 -->
 <div class="surface">
-	<div class="page" data-launch-page style:opacity={pageOpacity}>
+	<div class="page" data-launch-page style:opacity={pageOpacity} inert={standAside}>
 		{#if spaceMessages !== undefined}
 			<NetworkSpaceLayer messages={spaceMessages} />
 		{/if}
@@ -356,11 +378,17 @@
 			<p class="offline" role="status">{offlineLabel}</p>
 		{/if}
 		<!-- The packaged extension's own notices (spec 094); nothing elsewhere. -->
-		<ExtensionNotices
-			messages={(page.data as { extension?: ExtensionMessages } | undefined)?.extension}
-		/>
+		<ExtensionNotices messages={extensionMessages} />
 		{@render children()}
 	</div>
+
+	{#if standAside && extensionMessages !== undefined}
+		<OpenInTab
+			messages={extensionMessages}
+			ongototab={() => void oneSurface.goToTab()}
+			onusehere={() => void oneSurface.useHere()}
+		/>
+	{/if}
 
 	<ParallelSpaceBadge onopen={() => goto(parallelHref)} />
 

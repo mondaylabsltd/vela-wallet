@@ -301,6 +301,7 @@
     "syncStalledLine": "この端末に保存済み · まだ同期されていません",
     "totalUnpriced": "価格はまだありません",
     "allUnpriced": "どのトークンの価格も取得できませんでした。",
-    "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。"
+    "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。",
+    "networkFilterOnly": "{{network}} のみ表示中"
   }
 }

@@ -126,7 +126,11 @@
     "ext": {
       "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
       "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
-      "accessAllow": "アクセスを許可"
+      "accessAllow": "アクセスを許可",
+      "openInTabTitle": "Vela はタブで開いています",
+      "openInTabBody": "1 つのウィンドウに 1 つのウォレット。そのタブが開いている間、サイドパネルは表示を控えます。ここで使うと、そのタブは閉じられます。",
+      "goToTab": "タブへ移動",
+      "useHereInstead": "代わりにここで使う"
     }
   },
   "signHandoff": {

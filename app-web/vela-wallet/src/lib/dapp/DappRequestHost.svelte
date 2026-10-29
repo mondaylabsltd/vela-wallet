@@ -61,6 +61,7 @@
 	import type { RequestMessages } from '$lib/dapp/messages';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import {
 		answerRequest,
 		readRequest,
@@ -122,6 +123,16 @@
 	 * chain it asked for names the answer's words.
 	 */
 	let addingChain = $state<number | null>(null);
+
+	/**
+	 * One wallet per window: a side panel standing aside for a wallet tab
+	 * (`oneSurface`) comes back for as long as a request is here — shown,
+	 * owed, or landing. A request is answered where spec 082 routes it.
+	 */
+	$effect(() => {
+		if (request === null && owing === null && !landing) return;
+		return oneSurface.hold();
+	});
 
 	// A multisig shown is the account dApps see, as on the wallet.
 	const facts = $derived({

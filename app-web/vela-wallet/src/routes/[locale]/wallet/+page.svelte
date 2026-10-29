@@ -2235,6 +2235,21 @@
 	 * narrow to it. Shell state, as the sidebar's is.
 	 */
 	let chainSheetOpen = $state(false);
+	/**
+	 * The phone home says when that filter narrows it, with the way back: the
+	 * side panel showed one network's tokens under the whole wallet's total,
+	 * and nothing on the home said so (the owner's report).
+	 */
+	const homeNarrowed = $derived(
+		chainFilter.chainId === null
+			? undefined
+			: {
+					label: fill(data.walletMessages.networkFilter.only, {
+						network: chainName(chainFilter.chainId)
+					}),
+					action: data.walletMessages.networkFilter.showEvery
+				}
+	);
 	const chainRows = $derived(
 		liveChainRows(
 			balance.view,
@@ -2736,6 +2751,8 @@
 					onbalancerefresh={refreshBalances}
 					onactivity={openActivity}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
+					narrowed={homeNarrowed}
+					onshowall={() => chainFilter.select(null)}
 				/>
 				{#if shownFlowState !== undefined}
 					<!-- Note 16: a transaction or a holding tapped on the home opens
