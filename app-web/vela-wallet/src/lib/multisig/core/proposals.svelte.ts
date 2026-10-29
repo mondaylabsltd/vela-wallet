@@ -40,6 +40,7 @@ import {
 } from './kernel';
 import { MemberChangeRefusedError, memberStateOf } from './member-changes';
 import { loadAccounts } from '$lib/onboarding/core/storage';
+import { multisigApprovalRoute } from '$lib/core/kernels';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
 import {
@@ -837,7 +838,12 @@ export async function propose(
 	await authorizeSigning(account, chainId);
 	const hash = safeTxHash(chainId, account.address, tx);
 	stopIfWithdrawn(signal);
-	const approval = await signApproval(owner.account, chainId, hash);
+	const approval = await signApproval(owner.account, chainId, hash, {
+		multisig: account.address,
+		name: account.genesis.name ?? account.label ?? null,
+		tx,
+		signal
+	});
 	// r4b-5: withdrawn while the passkey was up: what it signed goes nowhere.
 	stopIfWithdrawn(signal);
 	return submitProposal(account, chainId, tx, approval);
@@ -1273,7 +1279,11 @@ async function proposeBuilt(
 /** `owner` approves `item` (one passkey prompt). */
 export async function approve(account: MultisigAccount, item: ProposalItem, owner: LocalOwner) {
 	await authorizeSigning(account, item.chainId);
-	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash);
+	const approval = await signApproval(owner.account, item.chainId, item.safeTxHash, {
+		multisig: account.address,
+		name: account.genesis.name ?? account.label ?? null,
+		tx: item.tx
+	});
 	const answer = await submitKept({
 		chainId: item.chainId,
 		safe: account.address,
@@ -1318,6 +1328,19 @@ export async function execute(
 ) {
 	// §3.5: the signing gate before the executor's passkey, as every signature.
 	await authorizeSigning(account, item.chainId);
+	// 2026-10-29: an executor that reviews and signs on a page approves THERE
+	// first — its operation counts as its approval (`msg.sender`), and that
+	// approval must be one it read on the page, not only in Vela. Posted like
+	// any approval; a second ask for the same transaction is not made
+	// (`approveOnPage` keeps what the page answered for this page's life).
+	const record = loadAccounts().find((a) => sameAddress(a.address, executor.address));
+	const route = record ? multisigApprovalRoute(record) : null;
+	if (
+		route?.type === 'page' &&
+		item.canApprove.some((o) => sameAddress(o.address, executor.address))
+	) {
+		await approve(account, item, executor);
+	}
 	return submitExecution(executionInput(account, item, executor, members), preview);
 }
 

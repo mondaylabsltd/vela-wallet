@@ -12,7 +12,9 @@
 import type { Account } from '$lib/core/generated/Account';
 import { toHex } from '$lib/core/kernels';
 import { loadAccounts } from '$lib/onboarding/core/storage';
-import { signChallenge } from '$lib/signing/sign-challenge';
+import { multisigApprovalRoute, signingPlan } from '$lib/core/kernels';
+import { signChallenge, VenueBlockedError } from '$lib/signing/sign-challenge';
+import { approveOnPage } from './page-approval.svelte';
 import { keySetOf } from '$lib/services/safe-transaction';
 import { toSignerAccount } from '$lib/services/accounts';
 import {
@@ -22,7 +24,8 @@ import {
 	sponsorChallenge,
 	velaAccountGenesis,
 	type FoundingKey,
-	type PasskeyApproval
+	type PasskeyApproval,
+	type SafeTx
 } from './kernel';
 import type { OwnerProof } from './service';
 
@@ -85,12 +88,51 @@ export class PasskeyCheckError extends Error {
 	}
 }
 
-/** `owner` approves `safeTxHash` of a multisig on `chainId`: one passkey prompt. */
+/**
+ * What the member approves, for a member who reviews and signs on a page:
+ * the page reads the SafeTx itself, from these fields, and recomputes the
+ * hash. Absent, an approval can only be made in Vela.
+ */
+export interface ApprovalSubject {
+	multisig: string;
+	/** The multisig's name on this device (the page marks it "named by the app"). */
+	name?: string | null;
+	tx: SafeTx;
+	signal?: AbortSignal;
+}
+
+/**
+ * `owner` approves `safeTxHash` of a multisig on `chainId`: one passkey
+ * prompt — in Vela, or on the trusted signing page the member chose to review
+ * and sign on (`multisigApprovalRoute`, 2026-10-29). A member whose keys
+ * nothing here can reach is refused with the core's reason.
+ */
 export async function signApproval(
 	owner: Account,
 	chainId: number,
-	safeTxHash: string
+	safeTxHash: string,
+	subject?: ApprovalSubject
 ): Promise<PasskeyApproval> {
+	const record = loadAccounts().find((a) => sameAddress(a.address, owner.address)) ?? owner;
+	const route = multisigApprovalRoute(record);
+	if (route?.type === 'blocked') throw new VenueBlockedError(route.block);
+	if (route?.type === 'page') {
+		if (!subject) throw new Error('an approval on a signing page needs the transaction itself');
+		const plan = signingPlan(record);
+		return approveOnPage({
+			member: owner,
+			page: route.url,
+			chainId,
+			multisig: subject.multisig,
+			multisigName: subject.name,
+			tx: subject.tx,
+			safeTxHash,
+			keys: foundingKeys(owner),
+			keyRoute: plan?.key ?? undefined,
+			keyLabel: plan?.key_label ?? null,
+			signal: subject.signal
+		});
+	}
 	const challenge = approvalChallenge(chainId, owner.address, safeTxHash);
 	const assertion = await signAs(owner, challenge, 'vela_multisigApprove', chainId, { safeTxHash });
 	try {

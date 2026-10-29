@@ -40,6 +40,21 @@
 > 字节，选语言的规则和 App 相同（`samples/locales-test.mjs`）。见 PROTOCOL.md 第 0 节后
 > 「钥匙路线、确认按钮、页面自己那一行」。
 
+> **多签成员在签名页上批准（2026-10-29）。** 创始人的 Bybit 教训：签名人必须能在独立于钱包 App
+> 代码的界面上审阅并签名。多签住在网页钱包里，所以**网页钱包第一次打开签名页** —— 只为这一件事：
+> 成员账户的「签名方式」选了签名页时，发起并批准、批准、执行前执行者自己的批准、拒绝，都把原始
+> SafeTx 交给本页（`vela_multisigApprove`），本页自己算哈希、自己读、签成员的批准字节。交易和消息在
+> 网页上仍在 Vela 里签（`SigningPlan::on_web` 没变）。通道是 postMessage（7.1），答复只给浏览器报告的
+> `https://wallet.getvela.app` / `https://getvela.app`（`resolve.answersToWallet`）。钱包打开前照旧核对
+> 页面（R6），为此 `dist/_headers` 给 `/b/*` 和 `/index.json` 加了 `Access-Control-Allow-Origin: *`。
+> 见 PROTOCOL.md 第 12 节；`samples/multisig-test.mjs`、`answer-test.mjs` 的 G 段。
+> 本机端到端：`samples/serve-dist.mjs` 提供 `dist/`；钱包与页面都要在 `getvela.app` 上（用
+> `--host-resolver-rules` 映射 `wallet.getvela.app`、`sign.getvela.app` 到本机 TLS），两边的 passkey 才是
+> 同一个 relying party —— 回环上的页面只能用 `localhost` 的钥匙。
+>
+> 部署顺序不变：`dist/`（含新 `_headers`）先上线，`curl -I …/b/<新哈希>/sign` 200 + immutable +
+> `access-control-allow-origin: *`，再改 `LAUNCH`。
+
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 
 ---
@@ -65,7 +80,7 @@ cd app-web/trusted-signer
 export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
-bun samples/answer-test.mjs        # 31/31 答复只交给钱包（102 R7），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
+bun samples/answer-test.mjs        # 37/37 答复只交给钱包（102 R7；G 段：多签批准只答网页钱包，2026-10-29），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
 bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
 bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
@@ -79,6 +94,7 @@ node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plu
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
+node samples/multisig-test.mjs     # 199/199 多签批准：哈希、批准字节、读法与发布的 wasm 逐例对拍；敌意输入；十五种语言（2026-10-29）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）

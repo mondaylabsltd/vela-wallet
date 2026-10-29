@@ -653,6 +653,10 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 | 页面版本 | 本页**地址**里的哈希 | 不是请求方能改的；也不是证明（证明是钱包打开前的核对） |
 | 预渲染的费用字符串 | —— | **不使用** |
 | 请求方给的摘要 | —— | **不使用** |
+| 多签批准（第 12 节）：safeTxHash、域哈希、消息哈希 | 本页从**原始 SafeTx 字段** + chainId + 多签地址本地算出（EIP-712）；App 给的 safeTxHash 只用来比对，不一致就拒签并把两个哈希都写出来 | 否 |
+| 多签批准：读法（转账、成员变更、批量的每一腿、拒绝、改名） | 本页按 vela-core `review` 的同一套规则从 SafeTx 读出（`lib/multisig.js`）；对外部合约的调用走交易的同一条阶梯（描述 / 4byte / 只看形状 / 盲签） | 否 |
+| 多签批准：多签的名字 | App（`context.multisig.name`）| 是，且标「App 提供」；看不见的字符显示成码位 |
+| 多签批准：被签的字节 | 本页推导：`SafeMessage(safeTxHash)` 在**成员**自己的域下 | 否 |
 
 ---
 
@@ -740,4 +744,99 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
 - 会话里被本页规则拒掉的请求**立刻**答 `refused`，理由留在屏幕上直到下一个请求；
   一次性通道（URL 片段、扩展）仍是「关掉页面才发拒绝」；
 - 关掉页面时屏幕上若有未答的请求，照旧答 `user_rejected`（或 `refused`）。
+
+## 12. 多签成员的批准（`vela_multisigApprove`，2026-10-29）
+
+创始人的 Bybit 教训：**签名人必须能在一个独立于钱包 App 代码的界面上审阅并签名。**
+多签住在网页钱包里。成员账户的「签名方式」选了签名页时，批准（发起并批准、批准、执行前执行者
+自己的批准、拒绝 = 批准一笔取消交易）不再弹钱包自己的 passkey，而是交给这一页。
+
+### 12.1 请求
+
+```json
+{
+  "intent": {
+    "method": "vela_multisigApprove",
+    "origin": "",
+    "params": [{
+      "chainId": 5042002,
+      "safe": "0x…多签",
+      "member": "0x…批准的成员（本机的 Vela 账户）",
+      "safeTx": { "to": "0x…", "value": "0x…", "data": "0x…", "operation": 0,
+                  "safeTxGas": "0x0", "baseGas": "0x0", "gasPrice": "0x0",
+                  "gasToken": "0x000…0", "refundReceiver": "0x000…0", "nonce": "0x3" },
+      "safeTxHash": "0x…App（vela-core）算的，只供比对"
+    }]
+  },
+  "context": {
+    "chainId": 5042002, "chainName": "Arc Testnet", "nativeSymbol": "USDC",
+    "account": "0x…成员", "signer": { "name": "Bob", "letter": "B" },
+    "allowCredentials": ["…"], "keyRoute": { … },
+    "multisig": { "name": "Arc Team" }
+  }
+}
+```
+
+由 vela-core `trusted_signer::approval::request` 生成（网页钱包经 wasm 的
+`trustedSignerApprovalRequest`）。字段名与 vela-core 的 `SafeTx` 相同；数量是 `0x` 十六进制或十进制字符串。
+
+### 12.2 本页做什么（`lib/multisig.js`，不信任 App）
+
+1. **严格读字段**：地址必须 `0x` + 40 位十六进制，数量必须是字符串、不超过 2^256−1，`operation`
+   是整数，calldata 超过 64 KiB 或批量超过 64 腿就拒签（「太大，无法完整显示」）——本页把每一个字节都画出来，
+   一个能让页面卡死的请求就是一个拒不了签的请求。
+2. **自己算哈希**：域哈希 `EIP712Domain(chainId, verifyingContract = 多签)`、消息哈希（SafeTx 结构哈希）、
+   safeTxHash。和 App 给的不一样 → `refuse.msHashMismatch`，最先、最响地写出两个值，不弹 passkey。
+3. **按核心的规则读**（vela-core `multisig::review`，`samples/multisig-test.mjs` 逐例对拍发布的 wasm）：
+   原生币 / ERC-20 转账（金额按本页目录里的小数位，不认识的代币按最小单位原样）、对外部合约的调用
+   （交易的同一条阶梯，来源行照旧）、成员变更（加、删、替换、改阈值）、改名、拒绝（取消）、
+   MultiSendCallOnly 的每一腿。**拒签**：对 MultiSendCallOnly 以外的 delegatecall、批量里的 delegatecall 腿、
+   发往零地址的腿、多签对自己做成员变更以外的调用（`enableModule` / `setGuard` / `setFallbackHandler` /
+   `changeMasterCopy` / `execTransaction` …，卡上写出函数名）、带 gas 退款的交易、未知操作类型、向登记合约转币、
+   显示不全的新名字。
+4. **签什么**：`SafeMessage(safeTxHash)` 在**成员**自己的域（`EIP712Domain(chainId, 成员)`）下 ——
+   v1.4.1 的 Safe 对每个成员调用旧版 `isValidSignature(txHashData, sig)`，Vela 账户的
+   CompatibilityFallbackHandler 核对的正是它（vela-core `approval_challenge`）。不是 dApp 的 SafeMessage
+   （那条多一次 keccak）：两者永远不能互相冒充。哈希用的是**本页算的** safeTxHash，从不用 App 给的。
+5. **卡上有什么**：标题（转账 / 合约调用 / 添加成员… + 「多签」标签）、来源行（✓ 本页读出 / △ / ○）、
+   多签（地址 + identicon，名字标「App 提供」）、网络、读法、nonce、三个哈希（全文，各带复制按钮）、
+   签名成员与确认方式、按钮「批准」（取消交易是「批准拒绝」）。
+
+### 12.3 通道：postMessage，只答网页钱包
+
+网页钱包收不到 `velawallet://`。它用 `window.open` 打开**核对过的那一版**
+（`…/b/<hash>/sign?ch=post&lang=…`，vela-core `CheckedPage::post_launch`），等本页说 `ready`，
+再把请求发过来（7.1 的信封：`{vela:'intent', id, intent, context}`）。答复 `{vela:'result', id, result}`
+（`result` 与交易签名相同：`credentialId`、`signature`、`authenticatorData`、`clientDataJSON`）或
+`{vela:'error', id, code}`。
+
+**答复只交给网页钱包**（`resolve.answersToWallet`，R7 的扩展）：postMessage 通道上，只有
+`vela_multisigApprove`、且浏览器报告的打开者 origin（`event.origin`，不是请求方的说法）**恰好是**
+`https://wallet.getvela.app` 或 `https://getvela.app` 时才算交给钱包；`*.getvela.app` 的其他子域不算。
+本页自己在本机回环上时（开发者自己的页面，只能用回环自己的 passkey），回环上的钱包也算。其余一律拒签 ——
+postMessage 上的其他任何签名仍然拒签，哪怕打开者就是网页钱包；`lib/intake.js` 在发出那一刻再按同一规则查一次，
+不合格的只收到 `refused`。
+
+### 12.4 钱包怎么验（vela-core `trusted_signer::approval::accept`）
+
+只接受：user-verified 的 `webauthn.get`、挑战码**恰好**是钱包自己算的批准字节、凭据是该成员的钥匙之一、
+P-256 签名在那把钥匙下成立；再组装成 `PasskeyApproval`，并按链上的方式验一遍（`verify_approval`），
+且它的 owner 就是这个成员。页面说自己签了什么，一个字都不读。
+
+### 12.5 网页钱包开页之前的核对
+
+和各 App 一样（规格 076 / 102 R6）：取部署的 `index.json`，核心选版本（`launch::target`），以浏览器导航的
+`Accept` 取**那一个 URL** 的字节、算 sha256，核心裁决（`launch::admit`）；不通过就不打开，卡上写核心的那一行。
+浏览器只在托管方允许时才把跨源的字节交给脚本，所以 `dist/_headers` 给 `/b/*` 和 `/index.json` 加了
+`Access-Control-Allow-Origin: *`（字节本来就是公开的，核对不带任何凭据）。没有这一行，网页钱包的核对永远完成不了，
+也就什么都打不开。
+
+### 12.6 测试
+
+- `node samples/multisig-test.mjs` —— 与发布的 wasm 逐例对拍哈希、批准字节、读法（36 个 SafeTx，核心自己造的
+  转账 / 调用 / 成员变更 / 取消 / 改名 + 手写的敌意形状），再走本页的管线：哈希不符、名字里的看不见字符、
+  超大载荷、非钱包的打开者、链和成员对不上，十五种语言。
+- `bun samples/answer-test.mjs` 的 G 段 —— 发布出去的字节上：evil.example 用 postMessage 要多签批准 → 拒；
+  `wallet.getvela.app` 要 → 卡上有多签名（标 App 提供）和三个哈希，点按后答复回到钱包，签的正是批准字节；
+  哈希不符 → 拒、不弹 passkey；网页钱包要别的签名 → 仍拒。
 

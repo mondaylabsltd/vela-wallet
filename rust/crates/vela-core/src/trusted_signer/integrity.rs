@@ -61,6 +61,22 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 593d37fe's page approving a multisig member (2026-10-29, the owner's
+    // Bybit lesson): `vela_multisigApprove` — the page recomputes the
+    // safeTxHash (and the domain and message hashes) from the raw SafeTx, the
+    // chain and the multisig, refuses loudly when the app's hash differs, reads
+    // the transaction by the core's own `review` rules (a native or ERC-20
+    // transfer in units, a member added, removed, swapped or the threshold
+    // changed, a rename, a rejection, MultiSendCallOnly legs; a delegatecall to
+    // anything else, a self-call that changes modules, guard, handler or
+    // singleton, and a gas refund refused), draws the multisig's name as the
+    // app's, and has the member's passkey sign `SafeMessage(safeTxHash)` under
+    // the member's domain. It answers that one request over postMessage to
+    // Vela's web wallet origin as the browser reports it, and nothing else
+    // there. Not LAUNCH yet — only once `dist/` is deployed (with its
+    // `_headers`, which now let the web wallet's check read `/b/*` and
+    // `/index.json`) and `/b/<this>/sign` answers 200 + immutable.
+    "48030d0296d0a643013240be84877dd3f86e9969fa0230b3c57e686a21ed5029",
     // 6d7172b4's page with a chain it does not know said as such (round 3,
     // 2026-10-28): the coin symbol of a chain missing from the page's own
     // table is the app's `nativeSymbol`, marked "coin named by the app" /

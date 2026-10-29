@@ -87,7 +87,8 @@
       "pageBody": "Tam olarak gösterdiğini imzalayan bağımsız bir sayfa",
       "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
       "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
-      "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın."
+      "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın.",
+      "webApprovals": "Web’de çoklu imza onaylarınızı imza sayfası inceler ve imzalar. Diğer işlemler ve mesajlar Vela’da onaylanır."
     },
     "advanced": {
       "networksTitle": "Ağlar",

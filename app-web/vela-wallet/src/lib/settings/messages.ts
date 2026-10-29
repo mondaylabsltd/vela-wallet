@@ -221,6 +221,11 @@ export interface SettingsMessages {
 		 * the values that fill it (`venueBlockLine`).
 		 */
 		blocked: Record<VenueBlockKey, string>;
+		/**
+		 * 2026-10-29: the web's one hand-off — a page venue reviews and signs
+		 * the account's multisig approvals there; everything else stays in Vela.
+		 */
+		webApprovals?: string;
 	};
 	/**
 	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.

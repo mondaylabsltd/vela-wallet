@@ -87,7 +87,8 @@
       "pageBody": "Una página independiente que firma exactamente lo que muestra",
       "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
       "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
-      "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela."
+      "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela.",
+      "webApprovals": "En la web, una página de firma revisa y firma tus aprobaciones multifirma. Las demás transacciones y mensajes se confirman en Vela."
     },
     "advanced": {
       "networksTitle": "Redes",

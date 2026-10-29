@@ -167,6 +167,20 @@ window.VelaCS = window.VelaCS || {};
       if (!data) return { refuse: 'refuse.typedShape' };
       return forAccount(typedDataHash(data), 'EIP-712');
     }
+    // A multisig member's approval: `SafeMessage(safeTxHash)` under the
+    // member's own domain (lib/multisig.js) — over the safeTxHash THIS page
+    // computed from the SafeTx's fields. The hash the app sent is only ever
+    // compared with it, and a difference is a refusal, never a choice.
+    if (ns.multisig && intent.method === ns.multisig.METHOD) {
+      var request = ns.multisig.request(intent);
+      if (request.error) return { refuse: request.error };
+      var computed = ns.multisig.hashes(request.chainId, request.safe, request.tx).safeTxHash;
+      if (computed !== request.claimed) return { refuse: 'refuse.msHashMismatch' };
+      return {
+        hash: ns.multisig.approvalChallenge(request.chainId, request.member, computed),
+        describes: 'SafeMessage(safeTxHash)',
+      };
+    }
     if (intent.method === 'eth_sign') {
       // The payload IS the digest. Signing it is exactly the blind signature the
       // sheet warns about, so this page will not produce one.

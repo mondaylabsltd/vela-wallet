@@ -235,6 +235,20 @@ window.VelaCS = window.VelaCS || {};
         originVerified: true,
         requester: event.origin,
       }, function (kind, body) {
+        // The same rule as the card's, where the bytes leave (spec 102 R7):
+        // an answer goes to the opener only when the answer rule says the
+        // opener is the wallet — today, a multisig approval answered to Vela's
+        // web wallet. Anything else gets the refusal code and nothing more.
+        // A key ceremony keeps its own rule (resolve.js `walletRequester`).
+        var method = data.intent && typeof data.intent.method === 'string' ? data.intent.method : '';
+        var ceremony = !!(ns.ceremony && ns.ceremony.kindOf(method));
+        var toWallet = ceremony || (ns.resolve && ns.resolve.answersToWallet({
+          channel: 'post', originVerified: true, requester: peer.origin, method: method,
+        }));
+        if (kind === 'result' && !toWallet) {
+          post({ vela: 'error', id: id, code: 'refused' });
+          return;
+        }
         post(Object.assign({ vela: kind, id: id }, body));
       });
     }

@@ -71,6 +71,7 @@ const lib = loadPageLibs([
   'src/lib/i18n.js', 'src/lib/locales/en.js', 'src/lib/keccak.js', 'src/lib/identicon-features.js',
   'src/lib/identicon.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/fee.js', 'src/lib/logos.js',
   'src/lib/catalog.js', 'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/signer.js', 'src/lib/ceremony.js',
+  'src/lib/safeop.js', 'src/lib/multisig.js',
 ]);
 const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
 const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
@@ -174,6 +175,28 @@ const attackerOpener = (signer) => `<!doctype html><meta charset="utf-8"><p>evil
   };
 </script>`;
 
+/**
+ * A window that opens the page and hands it `request` over postMessage — the
+ * web wallet's way (2026-10-29), or an attacker's copy of it. Whatever comes
+ * back is kept in `window.__answers`.
+ */
+const genericOpener = (signer, request, who) => `<!doctype html><meta charset="utf-8"><p>${who}</p><script>
+  window.__answers = [];
+  window.__go = function () {
+    var child = window.open(${JSON.stringify(signer)}, 'vela-signer', 'width=460,height=760');
+    window.addEventListener('message', function (event) {
+      var data = event.data || {};
+      if (event.source !== child) return;
+      if (data.vela === 'ready') {
+        child.postMessage(Object.assign({ vela: 'intent', id: 'ms-1' }, ${JSON.stringify(request)}), event.origin);
+      } else if (data.vela === 'result' || data.vela === 'error') {
+        window.__answers.push(data);
+      }
+    });
+    return true;
+  };
+</script>`;
+
 const framing = (src) => `<!doctype html><meta charset="utf-8"><p>a page with a frame</p>
 <iframe id="f" src="${src.replace(/"/g, '&quot;')}" style="width:420px;height:720px"></iframe>`;
 
@@ -183,6 +206,12 @@ const host = createHttpsServer(tls, (req, res) => {
   const url = new URL(req.url, `https://${name}`);
   if (url.pathname === '/__frame') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(framing(url.searchParams.get('src') || ''));
+    return;
+  }
+  if ((name === 'evil.example' || name === 'wallet.getvela.app') && url.pathname === '/open-request') {
+    const request = JSON.parse(Buffer.from(url.searchParams.get('req') || '', 'base64url').toString('utf8'));
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      .end(genericOpener(url.searchParams.get('signer'), request, name));
     return;
   }
   if (name === 'evil.example') {
@@ -213,7 +242,7 @@ await new Promise((r) => loopback.listen(LOOPBACK_PORT, '127.0.0.1', r));
 // --- the browser ----------------------------------------------------------------
 
 const profile = mkdtempSync(join(tmpdir(), 'answer-'));
-const rules = ['sign.getvela.app', 'getvela.app', 'evil.example'].map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
+const rules = ['sign.getvela.app', 'getvela.app', 'evil.example', 'wallet.getvela.app'].map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
 const chrome = spawn(process.env.CHROME_BIN, [
   '--headless=new', `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`,
   `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--no-proxy-server',
@@ -480,6 +509,83 @@ try {
       sig.valid && sig.kind === 'SafeOp' && sig.overDigest, `${sig.kind} ${String(sig.digest).slice(0, 18)}…`);
     check('F. evil.example heard nothing along the way', stolen.length === before);
     await page.close();
+  }
+
+  // === G. a multisig member's approval over postMessage (2026-10-29) =============
+  //
+  // The web wallet opens the page and hands it the SafeTx by postMessage; the
+  // page answers to the opener only when the BROWSER reports the opener as
+  // Vela's web wallet, and only for this one request.
+  {
+    const MULTISIG = '0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9';
+    const safeTx = {
+      to: ATTACKER, value: '0xde0b6b3a7640000', data: '0x', operation: 0, safeTxGas: '0x0', baseGas: '0x0',
+      gasPrice: '0x0', gasToken: '0x0000000000000000000000000000000000000000',
+      refundReceiver: '0x0000000000000000000000000000000000000000', nonce: '0x3',
+    };
+    const parsed = lib.multisig.parseTx(safeTx).tx;
+    const hashes = lib.multisig.hashes(100, MULTISIG, parsed);
+    const approvalIntent = (claimed) => ({
+      method: 'vela_multisigApprove', origin: '',
+      params: [{ chainId: 100, safe: MULTISIG, member: SAFE, safeTx, safeTxHash: claimed }],
+    });
+    const msContext = { chainId: 100, account: SAFE, allowCredentials: [credentialId], multisig: { name: 'Team fund' } };
+    const expected = Buffer.from(lib.multisig.approvalChallenge(100, SAFE, hashes.safeTxHash)).toString('base64url');
+
+    async function askOver(who, request) {
+      const req = Buffer.from(JSON.stringify(request)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://${who}/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && ['card', 'refused'].includes(window.__velaState.phase)");
+      const text = await popup.ev('document.body.innerText');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', slid ? 10000 : 4000).catch(() => {});
+      const answers = await opener.ev('window.__answers');
+      const used = await uses();
+      await popup.close();
+      await opener.close();
+      return { slid, answers, used, text };
+    }
+
+    const stranger = await askOver('evil.example', { intent: approvalIntent(hashes.safeTxHash), context: msContext });
+    check('G. a multisig approval asked by evil.example over postMessage: no button, no passkey, "refused"',
+      !stranger.slid && stranger.used === 0 && stranger.answers.length === 1 &&
+        stranger.answers[0].vela === 'error' && stranger.answers[0].code === 'refused',
+      JSON.stringify(stranger.answers).slice(0, 160));
+
+    const wallet = await askOver('wallet.getvela.app', { intent: approvalIntent(hashes.safeTxHash), context: msContext });
+    const answer = wallet.answers.find((a) => a.vela === 'result');
+    const clientData = answer
+      ? JSON.parse(Buffer.from(String(answer.result.clientDataJSON).replace(/^0x/, ''), 'hex').toString('utf8'))
+      : {};
+    const sig = answer
+      ? await usable(Buffer.from(JSON.stringify(answer.result)).toString('base64url'))
+      : { valid: false };
+    check('G. asked by the web wallet: the card shows the multisig, its name as the app\'s, the three hashes',
+      wallet.text.includes('Team fund') && wallet.text.includes('named by the app') &&
+        wallet.text.includes(hashes.safeTxHash) && wallet.text.includes(hashes.domainHash) &&
+        wallet.text.includes(hashes.messageHash), wallet.text.slice(0, 200));
+    check('G. and the approval goes back to the web wallet, signed by the member\'s key',
+      wallet.slid && !!answer && sig.valid, JSON.stringify(wallet.answers).slice(0, 160));
+    check('G. over exactly the approval bytes: SafeMessage(safeTxHash) under the member\'s domain',
+      clientData.challenge === expected, `${clientData.challenge} vs ${expected}`);
+
+    const forged = '0x' + 'ab'.repeat(32);
+    const lied = await askOver('wallet.getvela.app', { intent: approvalIntent(forged), context: msContext });
+    check('G. the wallet\'s fields do not make the hash it claims: refused loudly, no passkey, "refused"',
+      !lied.slid && lied.used === 0 && lied.text.includes(forged) && lied.text.includes(hashes.safeTxHash) &&
+        lied.answers.length === 1 && lied.answers[0].code === 'refused', lied.text.slice(0, 200));
+
+    const message = await askOver('wallet.getvela.app', {
+      intent: { method: 'personal_sign', params: ['0x68656c6c6f', SAFE], origin: '' },
+      context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] },
+    });
+    check('G. any other signature the web wallet asks over postMessage: still refused (R7)',
+      !message.slid && message.used === 0 && message.answers.length === 1 && message.answers[0].code === 'refused');
   }
 } catch (error) {
   console.log('FAILED: ' + (error.stack || error.message));

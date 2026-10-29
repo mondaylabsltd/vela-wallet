@@ -168,6 +168,12 @@ export interface VenueInput {
 	 * stored venue, P2-11), and a `blocked` plan marks none and says why.
 	 */
 	web?: Pick<SigningPlan, 'venue' | 'blocked'>;
+	/**
+	 * 2026-10-29, the web: the choice is the person's (it decides where the
+	 * account's multisig approvals are reviewed and signed), and the screen
+	 * says what a page does there (`webNote`).
+	 */
+	webApprovals?: boolean;
 }
 
 /** "Where you review and sign", from the core's choices (R1, R2). */
@@ -229,7 +235,8 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 					: value,
 		domainLine: keysOnText(input.domain, m),
 		rows,
-		readOnly: web !== undefined ? true : undefined
+		readOnly: web !== undefined ? true : undefined,
+		webNote: input.webApprovals ? m.venue.webApprovals : undefined
 	};
 }
 

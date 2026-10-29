@@ -6,6 +6,12 @@
 import type { PluralCopy } from '$lib/i18n/plural';
 
 export interface MultisigMessages {
+	/**
+	 * 2026-10-29: the hand-off card for a member who approves on a trusted
+	 * signing page — the apps' card, in the corpus' words
+	 * (`resolveHandoffMessages`). Absent in fixtures that draw no hand-off.
+	 */
+	handoff?: import('$lib/signing/messages').HandoffMessages;
 	switcher: {
 		section: string;
 		create: string;

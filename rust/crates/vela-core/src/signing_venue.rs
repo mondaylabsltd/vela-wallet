@@ -34,9 +34,11 @@
 //!   lives, so the browser goes straight to it instead of asking again; and
 //!   the person is told which key they will confirm with ([`KeyLabel`]).
 //! - **The web** ([`venue_choices_on_web`], [`SigningPlan::on_web`]) opens no
-//!   page at all (owner, 2026-09-23): a page row is disabled there with its
-//!   reason ([`VenueBlock::NotOnWeb`]), a `getvela.app` account signs in Vela,
-//!   and a custom-domain account cannot sign there and says why.
+//!   page for a transaction or a message (owner, 2026-09-23): a `getvela.app`
+//!   account signs those in Vela, and a custom-domain account cannot sign them
+//!   there and says why. Its one hand-off (2026-10-29) is a multisig member's
+//!   approval, which goes to the page the account chose
+//!   ([`crate::trusted_signer::approval::approval_route`]).
 //!
 //! What this does NOT claim: the domain is shared (D2), so a page as venue
 //! assures *what you see is what you sign*; it does not stop a fully

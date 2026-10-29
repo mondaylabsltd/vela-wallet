@@ -87,7 +87,8 @@
       "pageBody": "보여 주는 내용 그대로 서명하는 독립 페이지",
       "blockedApp": "이 계정의 패스키는 {{domain}}에만 서명하므로 Vela에서는 여기서 사용할 수 없습니다.",
       "blockedPage": "이 페이지는 {{pageDomain}}에 있지만, 이 계정의 패스키는 {{domain}}에만 서명합니다.",
-      "blockedWeb": "웹에서는 사용할 수 없습니다. Vela 앱에서 여세요."
+      "blockedWeb": "웹에서는 사용할 수 없습니다. Vela 앱에서 여세요.",
+      "webApprovals": "웹에서는 멀티시그 승인을 서명 페이지에서 검토하고 서명합니다. 다른 거래와 메시지는 Vela에서 확인합니다."
     },
     "advanced": {
       "networksTitle": "네트워크",

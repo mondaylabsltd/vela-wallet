@@ -655,6 +655,49 @@ fn a_stale_check_opens_nothing_until_it_is_run_again() {
         .is_ok());
 }
 
+/// 2026-10-29: the web wallet opens the checked page for a multisig member's
+/// approval with the request handed over by postMessage — the same checked
+/// address, `?ch=post`, the wallet's language, nothing in the fragment — and,
+/// like every launch, not once the check no longer vouches for it.
+#[test]
+fn the_web_opens_the_checked_page_for_post_message() {
+    let chosen = target(OFFICIAL, Some(&[BUILD_ALLOWED[0].to_owned()]), &[], &[])
+        .unwrap_or_else(|_| unreachable!());
+    let admitted = admit(
+        &chosen,
+        Some(chosen.version()),
+        CheckFailure::NotChecked,
+        &[],
+        &[],
+        false,
+        10,
+    );
+    let checked = admitted.page().unwrap_or_else(|| unreachable!());
+    assert_eq!(
+        checked.post_launch("zh-HK", 10),
+        Ok(format!("{}?ch=post&lang=zh-HK", chosen.url()))
+    );
+    assert_eq!(
+        checked.post_launch("bad tag\"", 10),
+        Ok(format!("{}?ch=post", chosen.url()))
+    );
+    assert_eq!(
+        checked.post_launch("en", 10 + MAX_CHECK_AGE_MS + 1),
+        Err(LaunchRefused::Stale)
+    );
+    // A page whose bytes are not the version asked for opens nothing at all.
+    let refused = admit(
+        &chosen,
+        Some(&"0".repeat(64)),
+        CheckFailure::NotChecked,
+        &[],
+        &[],
+        false,
+        10,
+    );
+    assert!(refused.page().is_none());
+}
+
 /// Nothing to ask for, and why: nothing this wallet knows is published, or
 /// everything that would do is blocked here.
 #[test]

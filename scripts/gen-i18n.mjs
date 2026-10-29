@@ -1192,8 +1192,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
 //   121 branches.
 // 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
-if (PATHS.length !== 2740) fail(`expected 2740 paths (2611 leaf + 129 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2611) fail(`expected 2611 leaf paths, got ${leafSet.size}`);
+// 2741 (2026-10-29, the trusted signing page approves multisig members):
+//   + `settings.venue.webApprovals` — on the web, a member whose account
+//   reviews and signs on a page approves its multisig transactions there;
+//   everything else stays in Vela. 2612 leaves, 129 branches.
+if (PATHS.length !== 2741) fail(`expected 2741 paths (2612 leaf + 129 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2612) fail(`expected 2612 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -50,10 +50,11 @@ export const SIM_WILL_FAIL_REASON_KEY = 'componentsUi.signing.simWillFailReason'
 export const SIM_WILL_FAIL_KEY = 'componentsUi.signing.simWillFail';
 
 /**
- * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
- * the web opens no signing page, so no live page here draws the card, and
- * these strings stay out of `SigningMessages` (which every page with a
- * signing host carries). The apps draw the same card from the same keys.
+ * Spec 102 (D4): the hand-off card's words — for the gallery, and (since
+ * 2026-10-29) for the one card the web draws live: a multisig member's
+ * approval handed to its trusted signing page (`MultisigMessages.handoff`).
+ * They stay out of `SigningMessages` (which every page with a signing host
+ * carries). The apps draw the same card from the same keys.
  */
 export interface HandoffMessages {
 	/** "Review and sign on a trusted signing page". */
