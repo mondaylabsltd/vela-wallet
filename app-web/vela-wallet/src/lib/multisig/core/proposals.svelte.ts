@@ -476,6 +476,7 @@ export function keptChains(
 ): { chains: ChainState[]; lists: Map<number, Proposal[]>; at: number } | null {
 	const kept = keptWaiting(account.address, genesisServiceURL());
 	if (!kept) return null;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
 	const lists = new Map<number, Proposal[]>();
 	const chains: ChainState[] = kept.chains.map((c) => {
 		const members: ChainMembers = { ...c.members, nonce: BigInt(c.members.nonce) };
