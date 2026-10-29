@@ -1894,6 +1894,12 @@ mod tests {
                     SendOperation::ResolveIdentity { .. } => {
                         SendShellResult::IdentityResolved { identity: None }
                     }
+                    // The recipient's check answers, as the executor's does:
+                    // the confirm is shut while it is out (send-18), and this
+                    // test is about the fee's hold, not the check's.
+                    SendOperation::ResolveRisk { .. } => {
+                        SendShellResult::RiskResolved { risk: None }
+                    }
                     SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
                         outcome: SendFeeOutcome::Ok {
                             estimate: estimate.clone(),
@@ -2458,9 +2464,10 @@ mod tests {
     }
 
     /// The importer's machine through its executor, no dialogs: a pasted
-    /// two-row table in USD (which prices itself) previews, converts at the
-    /// mirrored rate, and applies to exactly those two drafts — the rows the
-    /// host seeds the split editor with.
+    /// two-row table opens reading its figures in the coin (send-16); picked
+    /// as USD (which prices itself) it converts at the mirrored rate, and
+    /// applies to exactly those two drafts — the rows the host seeds the
+    /// split editor with.
     #[test]
     fn a_pasted_table_applies_to_its_rows() {
         use vela_core::app::batch_import::{
@@ -2497,12 +2504,24 @@ mod tests {
         );
         let view = batch.view();
         assert!(view.opened);
-        assert_eq!(view.unit, BatchUnit::Fiat);
+        assert_eq!(
+            view.unit,
+            BatchUnit::Token,
+            "a sheet reads the coin (send-16)"
+        );
         assert_eq!(
             view.rate_status,
             vela_core::app::batch_import::BatchRateStatus::Ok
         );
         assert!(!view.rate_input.is_empty(), "USD prices itself: {view:?}");
+        // Fiat is the person's pick, the tab the page sends.
+        pump(
+            &mut batch,
+            BatchEvent::SetUnit {
+                unit: BatchUnit::Fiat,
+            },
+        );
+        assert_eq!(batch.view().unit, BatchUnit::Fiat);
 
         pump(
             &mut batch,
@@ -2587,6 +2606,17 @@ mod tests {
 
         let view = batch.view();
         assert_eq!(view.file_name.as_deref(), Some("payroll-sample.xlsx"));
+        // The sheet's figures are the coin's (send-16)…
+        assert_eq!(view.unit, BatchUnit::Token);
+        assert_eq!(view.total_token, "5173.88", "5000 + 173.88 USDT as written");
+        // …and read as USD at the person's pick, they convert at its own rate.
+        pump(
+            &mut batch,
+            BatchEvent::SetUnit {
+                unit: BatchUnit::Fiat,
+            },
+        );
+        let view = batch.view();
         assert_eq!(view.unit, BatchUnit::Fiat);
         // Two priced rows; the header is not one of them, and neither is the
         // short row that carries an address and no amount.
