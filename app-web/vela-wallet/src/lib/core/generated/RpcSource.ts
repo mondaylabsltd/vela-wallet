@@ -3,4 +3,4 @@
 /**
  * Endpoint source tier (`EndpointStats['source']`, `rpc-pool.ts:37`).
  */
-export type RpcSource = "user" | "provider" | "default" | "public" | "builtin" | "fallback";
+export type RpcSource = "user" | "default" | "public" | "builtin" | "fallback";

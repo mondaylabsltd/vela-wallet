@@ -11,7 +11,7 @@ import type { NetStoredEndpoints } from "./NetStoredEndpoints";
 /**
  * What the shell observed.
  */
-export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
+export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, } | { "type": "written" } | { "type": "provider_keys_retired", configs_written: boolean, keys_removed: boolean, } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
 /**
  * `None` = failed/timed out/no parseable id.
  */

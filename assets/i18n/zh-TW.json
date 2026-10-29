@@ -2203,16 +2203,12 @@
    "totalPartial": "目前合計 {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC 供應商",
    "description": "填入 API 金鑰，即可讓支援的網路透過您自己的供應商存取 RPC。優先順序：各網路單獨設定的 RPC，其次是您的供應商，接著是 Vela 內建，最後是鏈索引。",
    "getKey": "取得金鑰",
    "test": "測試",
    "notSet": "未設定",
    "checkKey": "檢查金鑰",
-   "activeNetworks": "{{count}} 個網路",
    "supportsCount": "支援 {{total}} 個網路中的 {{count}} 個",
-   "unavailable": "無法使用",
-   "avgLatency": "平均 {{ms}}ms",
    "relayNotice": "提交你交易的中繼會收到錢包為每條網路使用的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
   },
   "endpoints": {

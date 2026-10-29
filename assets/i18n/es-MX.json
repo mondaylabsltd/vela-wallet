@@ -2210,16 +2210,12 @@
    "totalPartial": "Total hasta ahora {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Proveedores RPC",
    "description": "Agrega una clave de API para enrutar las redes compatibles a través de tu propio proveedor. Prioridad: RPC por red, luego tus proveedores, después lo integrado de Vela y por último el índice de cadenas.",
    "getKey": "Obtener una clave",
    "test": "Probar",
    "notSet": "Sin configurar",
    "checkKey": "Revisa la clave",
-   "activeNetworks": "{{count}} redes",
    "supportsCount": "Admite {{count}} de {{total}} redes",
-   "unavailable": "No disponible",
-   "avgLatency": "prom. {{ms}}ms",
    "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC que tu billetera usa en cada red —incluida la clave de API— para poder llegar a las redes que usas."
   },
   "endpoints": {

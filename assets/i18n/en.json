@@ -2203,16 +2203,12 @@
    "totalPartial": "Total {{amount}} so far"
   },
   "rpcProviders": {
-   "modalTitle": "RPC Providers",
    "description": "Add an API key to route supported networks through your own provider. Priority: per-network RPC, then your providers, then Vela built-in, then the chain index.",
    "getKey": "Get a key",
    "test": "Test",
    "notSet": "Not set",
    "checkKey": "Check key",
-   "activeNetworks": "{{count}} networks",
    "supportsCount": "Supports {{count}} of {{total}} networks",
-   "unavailable": "Unavailable",
-   "avgLatency": "avg {{ms}}ms",
    "relayNotice": "The relay that submits your transactions is sent the RPC address your wallet uses for each network — including the API key in it — so it can reach the networks you use."
   },
   "endpoints": {
