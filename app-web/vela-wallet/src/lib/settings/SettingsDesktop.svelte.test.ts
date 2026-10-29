@@ -7,7 +7,7 @@
  * its drafts, and leaving a saved key's field saved an empty draft over the
  * key it showed.
  */
-import { tick } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
@@ -182,14 +182,79 @@ describe('rows that go somewhere, go there', () => {
 		await view.click(view.nav(String(m.about.title)));
 		const hrefs = [...view.root.querySelectorAll<HTMLAnchorElement>('a.kv')].map((a) => a.href);
 		expect(hrefs).toEqual([
-			'https://getvela.app/',
-			'https://github.com/mondaylabsltd/vela-wallet',
-			'https://safe.global/',
-			// Spec 095 (App Review 5.1.1(i)).
+			// Spec 095 (App Review 5.1.1(i)), then the code (owner, 2026-10-29).
+			'https://getvela.app/support',
 			'https://getvela.app/privacy',
 			'https://getvela.app/terms',
-			'https://getvela.app/support'
+			'https://github.com/mondaylabsltd/vela-wallet'
 		]);
+		// No usage-statistics switch here any more: it has the Privacy panel.
+		expect(view.root.querySelector('[role="switch"]')).toBe(null);
+	});
+});
+
+// Owner, 2026-10-29: "Share anonymous usage statistics" left About for its
+// own panel beside the AI agent's, and the account says it is a Safe.
+describe('Privacy and the Safe line, on the desktop', () => {
+	const ANALYTICS = {
+		id: 'settings-analytics',
+		icon: 'eye-off' as const,
+		title: 'Share anonymous usage statistics',
+		subtitle: 'Which screens open and which steps finish.',
+		on: true
+	};
+
+	it('opens a Privacy panel holding the switch, which reports a flip', async () => {
+		const base = buildDesktopState('dst1', m, IDENTICON);
+		const prefs: SettingsPrefEvent[] = [];
+		const screen = render(SettingsDesktop, {
+			props: {
+				model: {
+					...base,
+					nav: [...base.nav, { id: 'privacy', icon: 'eye-off', label: String(m.sections.privacy) }]
+				},
+				analytics: ANALYTICS,
+				onprefevent: (event: SettingsPrefEvent) => prefs.push(event)
+			}
+		});
+		await tick();
+		expect(screen.component.open('privacy')).toBe(true);
+		await tick();
+		expect(screen.container.querySelector('.panel h1')?.textContent?.trim()).toBe(
+			String(m.sections.privacy)
+		);
+		const toggle = screen.container.querySelector<HTMLButtonElement>('[role="switch"]');
+		expect(toggle?.getAttribute('aria-checked')).toBe('true');
+		toggle?.click();
+		expect(prefs).toEqual([{ kind: 'analytics', on: false }]);
+		await screen.unmount();
+	});
+
+	it('has no Privacy panel where no switch is given (the gallery)', async () => {
+		const view = await drawn();
+		expect(view.screen.component.open('privacy')).toBe(false);
+	});
+
+	it('says under the account’s keys that it is a Safe, linking Safe{Wallet}', async () => {
+		const base = buildDesktopState('dst1', m, IDENTICON);
+		const screen = render(SettingsDesktop, {
+			props: {
+				model: base,
+				accountKeys: createRawSnippet(() => ({ render: () => '<p class="members">members</p>' }))
+			}
+		});
+		await tick();
+		const line = screen.container.querySelector('.safe-wallet');
+		expect(line?.textContent).toContain('Safe{Wallet}');
+		const link = line?.querySelector('a');
+		expect(link?.getAttribute('href')).toBe('https://app.safe.global');
+		expect(link?.getAttribute('target')).toBe('_blank');
+		// Under the account's own part: after the multisig's members.
+		const members = screen.container.querySelector('.members');
+		expect(
+			members && line && members.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+		await screen.unmount();
 	});
 });
 

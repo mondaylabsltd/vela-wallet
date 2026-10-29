@@ -4,15 +4,16 @@
  * questions and opening events it already had still hold now that the wide
  * layout shares them.
  */
-import { tick } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { words } from './__fixtures__/words';
 import { buildMobileState } from './fixtures';
-import type { MobileSettingsStateId } from './model';
+import type { MobileSettingsStateId, SettingsHomeModel, SettingsRowModel } from './model';
 import type { SettingsNetEvent } from './net-events';
+import type { SettingsPrefEvent } from './pref-events';
 import SettingsHome from './SettingsHome.svelte';
 
 const m = words();
@@ -418,5 +419,84 @@ describe('Connected sites', () => {
 	it('says so when no site is connected', async () => {
 		const { root } = await opened({ ...sites, group: { ...sites.group, items: [] } });
 		expect(root.textContent).toContain('No site is connected.');
+	});
+});
+
+// Owner, 2026-10-29: "Share anonymous usage statistics" left About for 高级,
+// under the AI agent and the connected sites — the rows about who sees this
+// wallet — and the account says it is a Safe.
+describe('usage statistics and the Safe line, on the phone', () => {
+	const ANALYTICS = {
+		id: 'settings-analytics',
+		icon: 'eye-off' as const,
+		title: 'Share anonymous usage statistics',
+		subtitle: 'Which screens open and which steps finish.',
+		on: false
+	};
+	const AGENT: SettingsRowModel = {
+		id: 'agent',
+		icon: 'link-2',
+		title: 'AI agent',
+		subtitle: 'Let an AI agent use this wallet',
+		trailing: 'chevron'
+	};
+
+	/** The agent's row after the endpoints — as the route adds it. */
+	function withAgent(model: SettingsHomeModel): SettingsHomeModel {
+		return {
+			...model,
+			sections: model.sections.map((section) => {
+				const at = section.rows.findIndex((row) => row.id === 'endpoints');
+				if (at < 0) return section;
+				const rows = [...section.rows.slice(0, at + 1), AGENT, ...section.rows.slice(at + 1)];
+				return { ...section, rows };
+			})
+		};
+	}
+
+	it('stands in Advanced right under the AI agent, and reports a flip', async () => {
+		const prefs: SettingsPrefEvent[] = [];
+		const screen = render(SettingsHome, {
+			props: {
+				model: withAgent(buildMobileState('st1b', m, IDENTICON)),
+				analytics: ANALYTICS,
+				onprefevent: (event: SettingsPrefEvent) => prefs.push(event)
+			}
+		});
+		await tick();
+		const toggle = screen.container.querySelector<HTMLButtonElement>('[role="switch"]');
+		expect(toggle?.getAttribute('aria-checked')).toBe('false');
+		const before = toggle?.previousElementSibling;
+		expect(before?.querySelector('.title')?.textContent?.trim()).toBe('AI agent');
+		// One of the group: a hairline under it, as between the rows.
+		expect(toggle?.classList.contains('divider')).toBe(true);
+		toggle?.click();
+		expect(prefs).toEqual([{ kind: 'analytics', on: true }]);
+		await screen.unmount();
+	});
+
+	it('is not in About any more', async () => {
+		const screen = render(SettingsHome, {
+			props: { model: withAgent(buildMobileState('st14', m, IDENTICON)), analytics: ANALYTICS }
+		});
+		await tick();
+		expect(screen.container.textContent).toContain(String(m.about.footer));
+		expect(screen.container.querySelector('[role="switch"]')).toBe(null);
+		await screen.unmount();
+	});
+
+	it('says under the account’s keys that it is a Safe, linking Safe{Wallet}', async () => {
+		const screen = render(SettingsHome, {
+			props: {
+				model: buildMobileState('st1', m, IDENTICON),
+				accountKeys: createRawSnippet(() => ({ render: () => '<p class="members">members</p>' }))
+			}
+		});
+		await tick();
+		const line = screen.container.querySelector('.keys-block .safe-wallet');
+		expect(line?.textContent).toContain('Safe{Wallet}');
+		expect(line?.querySelector('a')?.getAttribute('href')).toBe('https://app.safe.global');
+		expect(line?.previousElementSibling?.classList.contains('members')).toBe(true);
+		await screen.unmount();
 	});
 });

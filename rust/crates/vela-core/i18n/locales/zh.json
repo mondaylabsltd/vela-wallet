@@ -27,13 +27,15 @@
       "localization": "区域格式",
       "advanced": "高级",
       "community": "社区",
+      "privacy": "隐私",
       "developer": "开发者"
     },
     "account": {
       "switch": "切换账户",
       "contactsSubtitle": "已保存地址与最近收款人",
       "remove": "从这台设备移除",
-      "removeBody": "只有这个钱包离开，其余的不动。"
+      "removeBody": "只有这个钱包离开，其余的不动。",
+      "openInSafe": "这个账户是标准的 Safe，你也可以在 {{app}} 中打开它"
     },
     "appearance": {
       "themeLight": "浅色",

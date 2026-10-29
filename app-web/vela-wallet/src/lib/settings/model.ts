@@ -167,6 +167,12 @@ export type SettingsPageId =
 	 * only (no grants elsewhere), so the route adds its row and nav entry.
 	 */
 	| 'sites'
+	/**
+	 * "Share anonymous usage statistics", a desktop panel beside the AI
+	 * agent's (the phone draws the switch in 高级, under those rows). Web and
+	 * extension only, so the route adds its nav entry.
+	 */
+	| 'privacy'
 	| 'about';
 
 /**
@@ -605,6 +611,8 @@ export interface KeyValueRowModel {
 /** A settings row that is a switch (`ui/SwitchRow.svelte`). */
 export interface SwitchRowModel {
 	id: string;
+	/** The leading glyph, where the switch stands among rows that carry one. */
+	icon?: UtilityIconId;
 	title: string;
 	subtitle: string;
 	on: boolean;
@@ -675,13 +683,30 @@ export interface AgentLinkModel {
 
 export interface AboutModel {
 	title: string;
-	tagline: string;
+	/** The wordmark beside the mark — a brand, never translated. */
+	name: string;
+	/** "v0.9.8 (ced8298)": the version and the build it was cut from. */
 	version: string;
-	sectionTechnical: string;
-	rows: KeyValueRowModel[];
+	/** What a tap on the version puts on the clipboard, for a support request. */
+	versionCopy: string;
+	/** The version button's name, and the word that confirms the copy. */
+	copyLabel: string;
+	copiedLabel: string;
 	sectionLinks?: string;
 	links: KeyValueRowModel[];
+	/** The page's one slogan. */
 	footer: string;
+}
+
+/**
+ * "This account is a standard Safe — you can also open it in Safe{Wallet}":
+ * the sentence around the link, and where the link goes.
+ */
+export interface SafeWalletLineModel {
+	before: string;
+	app: string;
+	after: string;
+	href: string;
 }
 
 export interface FeedbackModel {
@@ -1034,6 +1059,8 @@ export interface SettingsHomeModel {
 	account: AccountRowModel;
 	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 	keys?: WalletKeysModel;
+	/** Under the account's keys, a Vela account's or a multisig's: it is a Safe. */
+	safeWallet: SafeWalletLineModel;
 	/** Spec 102: where this account reviews and signs — a row under the account, and its page. */
 	venue?: VenueModel;
 	/** Spec 102: Settings → Signing pages. Absent where no page is ever opened (the web). */
@@ -1312,6 +1339,10 @@ export interface SettingsDesktopModel {
 	feedback: FeedbackModel;
 	/** The phone's Community group, as a panel: the same three link rows. */
 	community: { title: string; rows: SettingsRowModel[] };
+	/** The panel "Share anonymous usage statistics" stands in, beside the AI agent's. */
+	privacy: { title: string };
+	/** Under the account's keys, as on the phone. */
+	safeWallet: SafeWalletLineModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

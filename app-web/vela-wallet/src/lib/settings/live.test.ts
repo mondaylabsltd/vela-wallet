@@ -27,7 +27,6 @@ import {
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
 	withLiveNetworks,
-	withLiveNetworksDesktop,
 	withLivePreferences,
 	withLivePreferencesDesktop,
 	withLiveStorage
@@ -828,20 +827,12 @@ describe('device storage counts what it lists (set-19)', () => {
 
 describe('the network count (spec 072)', () => {
 	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-	const aboutCount = (rows: { id?: string; value: string }[]) =>
-		rows.find((row) => row.id === 'networks')?.value;
 	const homeCount = (model: ReturnType<typeof buildMobileState>) =>
 		model.sections.flatMap((section) => section.rows).find((row) => row.id === 'networks')?.value;
 
-	it('is the live list’s, on the Networks row and in About — never the drawn 12', () => {
+	it('is the live list’s, on the Networks row — never the drawn 12', () => {
 		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), VIEW, m);
 		expect(homeCount(home)).toBe(m.networks.count.replace('{{count}}', '2'));
-		expect(aboutCount(home.about.rows)).toBe(m.about.techNetworksValue.replace('{{count}}', '2'));
-
-		const desktop = withLiveNetworksDesktop(buildDesktopState('dst8', m, IDENTICON), VIEW, m);
-		expect(aboutCount(desktop.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '2')
-		);
 	});
 
 	// Spec 105: the row counts the list it opens — the space's (S22,
@@ -857,29 +848,17 @@ describe('the network count (spec 072)', () => {
 			words
 		});
 		expect(homeCount(mainnet)).toBe(m.networks.count.replace('{{count}}', '2'));
-		expect(aboutCount(mainnet.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '2')
-		);
-		const testnet = withLiveNetworksDesktop(
-			buildDesktopState('dst8', m, IDENTICON),
-			view,
-			m,
-			undefined,
-			{
-				current: 'testnet',
-				words
-			}
-		);
-		expect(aboutCount(testnet.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '1')
-		);
+		const testnet = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), view, m, undefined, {
+			current: 'testnet',
+			words
+		});
+		expect(homeCount(testnet)).toBe(m.networks.count.replace('{{count}}', '1'));
 	});
 
 	it('says nothing until the ledger has been read', () => {
 		const unread = { ...VIEW, loaded: false, networks: [] };
 		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), unread, m);
 		expect(homeCount(home)).toBeUndefined();
-		expect(aboutCount(home.about.rows)).toBe('');
 	});
 });
 

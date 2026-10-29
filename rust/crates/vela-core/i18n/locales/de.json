@@ -27,13 +27,15 @@
       "localization": "Lokalisierung",
       "advanced": "Erweitert",
       "community": "Community",
+      "privacy": "Datenschutz",
       "developer": "Entwickler"
     },
     "account": {
       "switch": "Konto wechseln",
       "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
       "remove": "Von diesem Gerät entfernen",
-      "removeBody": "Nur diese Wallet geht, die anderen bleiben."
+      "removeBody": "Nur diese Wallet geht, die anderen bleiben.",
+      "openInSafe": "Dieses Konto ist ein Standard-Safe – du kannst es auch in {{app}} öffnen"
     },
     "appearance": {
       "themeLight": "Hell",

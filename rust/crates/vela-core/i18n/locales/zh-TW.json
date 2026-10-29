@@ -27,13 +27,15 @@
       "localization": "在地化",
       "advanced": "進階",
       "community": "社群",
+      "privacy": "隱私",
       "developer": "開發者"
     },
     "account": {
       "switch": "切換帳戶",
       "contactsSubtitle": "已儲存的地址與最近收款人",
       "remove": "從這台裝置移除",
-      "removeBody": "只有這個錢包離開，其餘的不動。"
+      "removeBody": "只有這個錢包離開，其餘的不動。",
+      "openInSafe": "這個帳戶是標準的 Safe，你也可以在 {{app}} 中開啟它"
     },
     "appearance": {
       "themeLight": "淺色",

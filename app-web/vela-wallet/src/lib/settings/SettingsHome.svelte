@@ -54,10 +54,12 @@
 	import SectionLabel from './ui/SectionLabel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
+	import SafeWalletLine from './ui/SafeWalletLine.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import SitesPanel from './ui/SitesPanel.svelte';
+	import SwitchRow from './ui/SwitchRow.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -92,8 +94,9 @@
 		 */
 		onprefevent?: (event: SettingsPrefEvent) => void;
 		/**
-		 * "Share anonymous usage statistics" (About), with its live state.
-		 * Absent in the gallery.
+		 * "Share anonymous usage statistics", with its live state: in 高级,
+		 * under the AI agent and the connected sites (owner, 2026-10-29 — it
+		 * stood in About). Absent in the gallery.
 		 */
 		analytics?: SwitchRowModel;
 		/**
@@ -186,6 +189,16 @@
 			section.collapsible === true ? { ...section, collapsed: !advancedOpen } : section
 		)
 	);
+
+	/**
+	 * The row the usage-statistics switch follows: the last of the "who sees
+	 * this wallet" rows the route added to 高级 (the AI agent, then the
+	 * connected sites on the extension).
+	 */
+	const analyticsAfter = $derived.by(() => {
+		const ids = new Set(sections.flatMap((section) => section.rows.map((row) => row.id)));
+		return ids.has('sites') ? 'sites' : ids.has('agent') ? 'agent' : undefined;
+	});
 
 	/** Rows a tap navigates from; everything else opens an overlay. */
 	const PAGE_OF: Partial<Record<string, SettingsPageId>> = {
@@ -425,6 +438,8 @@
 									model={model.keys}
 									onbackup={() => onethereumbackup?.()}
 								/>{/if}
+							<!-- A Vela account and a multisig alike: both are Safes. -->
+							<div class="safe-wallet"><SafeWalletLine line={model.safeWallet} /></div>
 						</div>
 					{/if}
 
@@ -465,11 +480,16 @@
 
 						{#if section.collapsed !== true}
 							{#each section.rows as row, rowIndex (row.id)}
-								<SettingsRow
-									{row}
-									onselect={selectRow}
-									divider={rowIndex < section.rows.length - 1}
-								/>
+								{@const last = rowIndex === section.rows.length - 1}
+								{@const switchHere = analytics !== undefined && row.id === analyticsAfter}
+								<SettingsRow {row} onselect={selectRow} divider={!last || switchHere} />
+								{#if switchHere && analytics !== undefined}
+									<SwitchRow
+										row={analytics}
+										divider={!last}
+										onchange={(on) => onprefevent?.({ kind: 'analytics', on })}
+									/>
+								{/if}
 							{/each}
 						{/if}
 
@@ -583,11 +603,7 @@
 				{:else if page === 'signing-pages' && model.signingPages !== undefined}
 					<SigningPagesPanel panel={model.signingPages} />
 				{:else if page === 'about'}
-					<AboutPanel
-						panel={model.about}
-						{analytics}
-						onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
-					/>
+					<AboutPanel panel={model.about} />
 				{:else if page === 'sites' && sites !== undefined}
 					<SitesPanel
 						panel={sites}
@@ -779,6 +795,10 @@
 <style>
 	.keys-block {
 		margin-top: var(--space-2xl);
+	}
+
+	.safe-wallet {
+		margin-top: var(--space-lg);
 	}
 
 	.venue-row {

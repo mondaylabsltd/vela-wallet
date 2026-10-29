@@ -41,6 +41,7 @@ import type {
 	RpcBannerModel,
 	RpcFixModel,
 	RpcProvidersModel,
+	SafeWalletLineModel,
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsDesktopModel,
@@ -742,49 +743,38 @@ export function communityRows(): SettingsRowModel[] {
 	}));
 }
 
+/** The wordmark About shows beside the mark: a brand, never translated. */
+const APP_NAME = 'Vela';
+
+/**
+ * About (owner, 2026-10-29): the mark, the name and the build — a tap on the
+ * build copies it for a support request — then where to get help, the
+ * policy, the terms and the code, and the one slogan. No "technical
+ * details": Safe v1.4.1, a passkey signer and ERC-4337 describe a Vela
+ * account, not a multisig, so they were wrong as a statement about the
+ * wallet. That an account is a Safe is said under the account instead
+ * ({@link safeWalletLine}).
+ */
 function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
+	const version = fill(m.about.version, { version: APP_VERSION, commit: APP_COMMIT });
 	return {
 		title: m.about.title,
-		tagline: m.about.tagline,
-		version: fill(m.about.version, { version: APP_VERSION, commit: APP_COMMIT }),
-		sectionTechnical: m.about.sectionTechnical,
-		rows: [
-			{ label: m.about.techWalletLabel, value: m.about.techWalletValue, mono: true },
-			{ label: m.about.techAuthLabel, value: m.about.techAuthValue, mono: true },
-			{ label: m.about.techAccountTypeLabel, value: m.about.techAccountTypeValue },
-			{ label: m.about.techSignerLabel, value: m.about.techSignerValue },
-			{
-				id: 'networks',
-				label: m.about.techNetworksLabel,
-				value: fill(m.about.techNetworksValue, { count: NETWORK_COUNT })
-			}
-		],
+		name: APP_NAME,
+		version,
+		versionCopy: `${APP_NAME} ${version}`,
+		copyLabel: m.about.copy,
+		copiedLabel: m.about.copied,
 		sectionLinks: withLinksHeading ? m.about.sectionLinks : undefined,
+		// Spec 095 (App Review 5.1.1(i)): a way to reach us, the policy and the
+		// terms, reachable after onboarding too — the same three on every shell.
 		links: [
 			{
-				label: m.about.linkWebsite,
-				value: 'getvela.app',
+				label: m.about.linkSupport,
+				value: 'getvela.app/support',
 				mono: true,
 				external: true,
-				href: 'https://getvela.app'
+				href: 'https://getvela.app/support'
 			},
-			{
-				label: m.about.linkGitHub,
-				value: 'github.com/mondaylabsltd/vela-wallet',
-				mono: true,
-				external: true,
-				href: 'https://github.com/mondaylabsltd/vela-wallet'
-			},
-			{
-				label: m.about.linkSafeWallet,
-				value: 'safe.global',
-				mono: true,
-				external: true,
-				href: 'https://safe.global'
-			},
-			// Spec 095 (App Review 5.1.1(i)): the policy, the terms and a way to
-			// reach us, reachable after onboarding too — the same three on every
-			// shell.
 			{
 				label: m.about.linkPrivacy,
 				value: 'getvela.app/privacy',
@@ -800,15 +790,31 @@ function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 				href: 'https://getvela.app/terms'
 			},
 			{
-				label: m.about.linkSupport,
-				value: 'getvela.app/support',
+				label: m.about.linkGitHub,
+				value: 'github.com/mondaylabsltd/vela-wallet',
 				mono: true,
 				external: true,
-				href: 'https://getvela.app/support'
+				href: 'https://github.com/mondaylabsltd/vela-wallet'
 			}
 		],
 		footer: m.about.footer
 	};
+}
+
+/** Safe{Wallet}'s own name — a product, never translated. */
+const SAFE_WALLET = 'Safe{Wallet}';
+
+/**
+ * "This account is a standard Safe — you can also open it in Safe{Wallet}",
+ * under a Vela account's keys and a multisig's members alike: both are Safes.
+ * The link is Safe{Wallet}'s front door rather than one account on one chain:
+ * an account here is the same address on every network, and Safe{Wallet}'s
+ * deep link (`/home?safe=<shortName>:<address>`) names one network by a short
+ * name this page does not hold.
+ */
+export function safeWalletLine(m: SettingsMessages): SafeWalletLineModel {
+	const [before, after = ''] = m.account.openInSafe.split('{{app}}');
+	return { before, app: SAFE_WALLET, after, href: 'https://app.safe.global' };
 }
 
 // ---------------------------------------------------------------------------
@@ -1612,6 +1618,7 @@ export function buildMobileState(
 		endpoints: endpoints(m, false),
 		storage: storage(m),
 		about: about(m, false),
+		safeWallet: safeWalletLine(m),
 		accountsSheet: accountsSheet(m, identicon),
 		signOutSheet: signOutSheet(m, state === 'st3b'),
 		languageSheet: languageSheet(m, 'zh'),
@@ -1802,6 +1809,8 @@ export function buildDesktopState(
 		eraseSheet: eraseSheet(m),
 		feedback: feedbackPanel(m),
 		community: { title: m.sections.community, rows: communityRows() },
+		privacy: { title: m.sections.privacy },
+		safeWallet: safeWalletLine(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

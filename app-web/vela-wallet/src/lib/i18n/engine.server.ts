@@ -456,11 +456,13 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			appearance: k('settings.sections.appearance'),
 			localization: k('settings.sections.localization'),
 			advanced: k('settings.sections.advanced'),
-			community: k('settings.sections.community')
+			community: k('settings.sections.community'),
+			privacy: k('settings.sections.privacy')
 		},
 		account: {
 			switch: k('settings.account.switch'),
-			contactsSubtitle: k('settings.account.contactsSubtitle')
+			contactsSubtitle: k('settings.account.contactsSubtitle'),
+			openInSafe: k('settings.account.openInSafe')
 		},
 		contacts: k('componentsUi.mainNav.contacts'),
 		feedback: { title: k('settings.feedback.title'), subtitle: k('settings.feedback.subtitle') },
@@ -754,22 +756,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		about: {
 			title: k('settings.about.title'),
 			subtitleTemplate: k('settings.about.subtitle'),
-			tagline: k('about.tagline'),
 			version: k('about.version'),
-			sectionTechnical: k('about.sectionTechnical'),
-			techWalletLabel: k('about.techWalletLabel'),
-			techWalletValue: k('about.techWalletValue'),
-			techAuthLabel: k('about.techAuthLabel'),
-			techAuthValue: k('about.techAuthValue'),
-			techAccountTypeLabel: k('about.techAccountTypeLabel'),
-			techAccountTypeValue: k('about.techAccountTypeValue'),
-			techSignerLabel: k('about.techSignerLabel'),
-			techSignerValue: k('about.techSignerValue'),
-			techNetworksLabel: k('about.techNetworksLabel'),
-			techNetworksValue: k('about.techNetworksValue'),
-			linkWebsite: k('about.linkWebsite'),
+			copy: k('componentsUi.signing.copyValue'),
+			copied: k('receive.copied'),
 			linkGitHub: k('about.linkGitHub'),
-			linkSafeWallet: k('about.linkSafeWallet'),
 			linkPrivacy: k('about.linkPrivacy'),
 			linkTerms: k('about.linkTerms'),
 			linkSupport: k('about.linkSupport'),

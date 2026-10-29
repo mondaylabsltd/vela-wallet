@@ -56,7 +56,6 @@ import type { SettingsMessages } from './messages';
 import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type {
-	AboutModel,
 	AddNetworkModel,
 	BalanceDetailModel,
 	ChainMarkModel,
@@ -686,28 +685,9 @@ function networkCount(view: NetView, space?: LiveSpace): number | undefined {
 	return view.networks.filter((row) => row.is_testnet === testnet).length;
 }
 
-/** About's network row, counted from the list. */
-function aboutWithNetworkCount(
-	about: AboutModel,
-	count: number | undefined,
-	m: SettingsMessages
-): AboutModel {
-	return {
-		...about,
-		rows: about.rows.map((row) =>
-			row.id === 'networks'
-				? {
-						...row,
-						value: count === undefined ? '' : fill(m.about.techNetworksValue, { count })
-					}
-				: row
-		)
-	};
-}
-
 /**
  * Replace the network-owned sections of a built settings model with the
- * core's view — the pages, and the two places that count the networks.
+ * core's view — the pages, and the Networks row that counts them.
  */
 export function withLiveNetworks(
 	model: SettingsHomeModel,
@@ -735,7 +715,6 @@ export function withLiveNetworks(
 					: row
 			)
 		})),
-		about: aboutWithNetworkCount(model.about, count, m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId, space, nodes),
@@ -767,7 +746,6 @@ export function withLiveNetworksDesktop(
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
-		about: aboutWithNetworkCount(model.about, networkCount(view, space), m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId, space, nodes),
