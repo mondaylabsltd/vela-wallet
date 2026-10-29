@@ -283,11 +283,7 @@ export const recordCall = (genesis: Genesis) => call<Call>('recordCall', { genes
 export const genesisFromCalldata = (input: string, safe: string) =>
 	call<Genesis | null>('genesisFromCalldata', { input, safe });
 
-// -- the multisig service, as Settings sets it (`app::genesis_service`) ------------
-
-/** A typed service address: saved as `url`, or why not. */
-export type ServiceAddress =
-	{ kind: 'ok'; url: string } | { kind: 'insecure' } | { kind: 'invalid' };
+// -- the multisig service's health answer (`app::genesis_service`) ---------------
 
 /** A chain the service says it serves (its own name for it, if any). */
 export interface ServiceChain {
@@ -300,9 +296,6 @@ export type ServiceAnswer =
 	| { kind: 'genesis'; chains: ServiceChain[] | null; homeChainId: number | null }
 	| { kind: 'other' }
 	| { kind: 'unreachable' };
-
-/** `https://`, or plain `http://` to this computer; trimmed, no trailing slash, no query. */
-export const serviceAddress = (input: string) => call<ServiceAddress>('serviceAddress', { input });
 
 /** Whether a health answer (its status and body text) is a multisig service's. */
 export const serviceAnswer = (status: number, body: string) =>

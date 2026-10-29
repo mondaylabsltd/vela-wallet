@@ -188,7 +188,8 @@ function decodeStoredEndpoints(stored: ServiceEndpoints): NetStoredEndpoints {
 		ethereum_data_url: asOptionalString(stored.ethereumDataURL),
 		passkey_index_url: asOptionalString(stored.passkeyIndexURL),
 		bundler_service_url: asOptionalString(stored.bundlerServiceURL),
-		fiat_rates_url: asOptionalString(stored.fiatRatesURL)
+		fiat_rates_url: asOptionalString(stored.fiatRatesURL),
+		genesis_service_url: asOptionalString(stored.genesisServiceURL)
 	};
 }
 
@@ -426,7 +427,9 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 				custom_networks: decodeArray(customNetworks, decodeCustomNetwork),
 				network_configs: decodeArray(networkConfigs, decodeNetworkConfig),
 				endpoints: decodeStoredEndpoints(loadServiceEndpoints()),
-				provider_keys: decodeProviderKeys(providers)
+				provider_keys: decodeProviderKeys(providers),
+				// The web keeps multisig accounts: their service is one of its endpoints.
+				multisig_service: true
 			};
 		}
 
@@ -449,14 +452,15 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 
 		case 'write_service_endpoints': {
 			// Through the onboarding module (D3a): same key, same camelCase shape.
-			// The core sends the complete merged record — four strings, verbatim,
-			// exactly as the Expo saver received them.
+			// The core sends the complete merged record — its strings, verbatim,
+			// exactly as the Expo saver received them (and the multisig service).
 			const e = operation.endpoints;
 			saveServiceEndpoints({
 				ethereumDataURL: e.ethereum_data_url,
 				passkeyIndexURL: e.passkey_index_url,
 				bundlerServiceURL: e.bundler_service_url,
-				fiatRatesURL: e.fiat_rates_url
+				fiatRatesURL: e.fiat_rates_url,
+				genesisServiceURL: e.genesis_service_url
 			});
 			return { type: 'written' };
 		}
@@ -569,9 +573,11 @@ export function networkAdminOperationFailure(effect: NetEffect): NetShellResult 
 					ethereum_data_url: null,
 					passkey_index_url: null,
 					bundler_service_url: null,
-					fiat_rates_url: null
+					fiat_rates_url: null,
+					genesis_service_url: null
 				},
-				provider_keys: { alchemy: null, drpc: null, ankr: null }
+				provider_keys: { alchemy: null, drpc: null, ankr: null },
+				multisig_service: true
 			};
 		case 'write_custom_networks':
 		case 'write_network_configs':

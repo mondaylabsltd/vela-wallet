@@ -1,11 +1,13 @@
 /**
- * The multisig service's live state: which service this device uses
- * (Settings → Multisig service), and whether it is answering.
+ * The multisig service's live state: which service this device uses, and
+ * whether it is answering.
  *
- * The address is the person's (or a test's) own in `vela.genesisServiceURL`,
- * used only when the core's rule admits it (`serviceAddress`: `https://`, or
- * plain `http://` to this computer) — one stored by hand that the rule
- * refuses is not used, and Settings shows the default, which is what is.
+ * The address is one of the service endpoints (Settings → Service Endpoints,
+ * `vela.serviceEndpoints`' `genesisServiceURL`): set, probed, refused and
+ * reset by the core as the others are, and read here the way every endpoint
+ * reader reads its own (`services/endpoints.ts`: the default when the record
+ * holds none, or one the rule refuses). The old `vela.genesisServiceURL` key
+ * is moved into the record when it is read (`loadServiceEndpoints`).
  *
  * The outage is the whole service's, not a network's: the first request that
  * finds nothing answering (refused, closed, offline, timed out) marks it
@@ -13,26 +15,10 @@
  * capped schedule ({@link RETRY_STEPS_MS}), when ONE probe goes first. Any
  * answer, `online`, a new address and the person's Retry end it at once.
  */
-import { serviceAddress } from './kernel';
+import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '$lib/onboarding/core/storage';
+import { DEFAULT_SERVICE_ENDPOINTS, getGenesisServiceURL } from '$lib/services/endpoints';
 
-export const DEFAULT_GENESIS_SERVICE_URL = 'https://safe-genesis.getvela.app';
-/** The person's own service (Settings), a developer's or a test's; unset means the default. */
-export const GENESIS_SERVICE_KEY = 'vela.genesisServiceURL';
-
-/** The stored address, as the core's rule admits it; `null` for none or a refused one. */
-export function admittedServiceURL(raw: string | null): string | null {
-	if (raw === null || raw.trim() === '') return null;
-	try {
-		const answer = serviceAddress(raw);
-		return answer.kind === 'ok' ? answer.url : null;
-	} catch {
-		// The core is not loaded yet (nothing it re-verifies can run either):
-		// the stored address's shape, as before the setting existed. Settings
-		// writes only what the core admitted.
-		const url = raw.trim().replace(/\/+$/, '');
-		return /^https?:\/\/[^\s?#]+$/.test(url) ? url : null;
-	}
-}
+export const DEFAULT_GENESIS_SERVICE_URL = DEFAULT_SERVICE_ENDPOINTS.genesisServiceURL;
 
 /** `127.0.0.1:8788` for `http://127.0.0.1:8788`: what names a service in a line. */
 export function serviceHost(url: string | null): string | null {
@@ -46,46 +32,46 @@ export function serviceHost(url: string | null): string | null {
 }
 
 class GenesisServiceSetting {
-	/** Bumped on every write here or in another tab: what reads `custom` reads again. */
+	/** Bumped whenever the endpoints are written, here or in another tab. */
 	#version = $state(0);
+	/** The service last read: a write that changes it ends what was known of it. */
+	#seen: string;
 
 	constructor() {
+		this.#seen = this.read();
 		if (typeof window === 'undefined') return;
+		window.addEventListener(SERVICE_ENDPOINTS_CHANGED, () => this.changed());
 		window.addEventListener('storage', (event) => {
-			if (event.key === GENESIS_SERVICE_KEY || event.key === null) this.changed();
+			if (event.key === STORAGE_KEYS.serviceEndpoints || event.key === null) this.changed();
 		});
 	}
 
-	/** The person's own service, or `null`: the default is used. */
-	get custom(): string | null {
-		void this.#version;
+	private read(): string {
 		try {
-			return admittedServiceURL(localStorage.getItem(GENESIS_SERVICE_KEY));
+			return getGenesisServiceURL();
 		} catch {
-			return null;
+			return DEFAULT_GENESIS_SERVICE_URL;
 		}
 	}
 
 	/** The service in use. */
 	get url(): string {
-		return this.custom ?? DEFAULT_GENESIS_SERVICE_URL;
+		void this.#version;
+		return this.read();
 	}
 
-	/** Use `url` (already admitted by the core), or the default (`null`). */
-	set(url: string | null): void {
-		try {
-			if (url === null) localStorage.removeItem(GENESIS_SERVICE_KEY);
-			else localStorage.setItem(GENESIS_SERVICE_KEY, url);
-		} catch {
-			// storage unavailable: nothing to keep it in
-		}
-		this.changed();
+	/** The person's own service, or `null`: the default is in use. */
+	get custom(): string | null {
+		const url = this.url;
+		return url === DEFAULT_GENESIS_SERVICE_URL ? null : url;
 	}
 
 	private changed(): void {
-		this.#version += 1;
+		const now = this.read();
 		// Another service: what was known about the last one says nothing.
-		serviceOutage.reset();
+		if (now !== this.#seen) serviceOutage.reset();
+		this.#seen = now;
+		this.#version += 1;
 	}
 }
 

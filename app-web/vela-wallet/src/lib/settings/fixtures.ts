@@ -593,28 +593,28 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 				id: 'chain-data',
 				label: m.endpoints.chainDataLabel,
 				value: 'https://ethereum-data.getvela.app',
-				hint: m.endpoints.chainDataHint,
+				info: m.endpoints.chainDataHint,
 				badge: latencyPill(62)
 			},
 			{
 				id: 'passkey',
 				label: m.endpoints.passkeyLabel,
 				value: 'https://p256-index-rs.getvela.app',
-				hint: m.endpoints.passkeyHint,
+				info: m.endpoints.passkeyHint,
 				badge: latencyPill(88)
 			},
 			{
 				id: 'relay',
 				label: m.endpoints.bundlerLabel,
 				value: 'https://vela-relay-cf.getvela.app',
-				hint: m.endpoints.bundlerHint,
+				info: m.endpoints.bundlerHint,
 				badge: latencyPill(104)
 			},
 			{
 				id: 'fiat',
 				label: m.endpoints.fiatLabel,
 				value: 'https://vela-currency.getvela.app/v2/…',
-				hint: m.endpoints.fiatHint,
+				info: m.endpoints.fiatHint,
 				badge: latencyPill(1200, m.networks.slow)
 			}
 		],

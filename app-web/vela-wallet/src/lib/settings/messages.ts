@@ -361,6 +361,9 @@ export interface SettingsMessages {
 		bundlerHint: string;
 		fiatLabel: string;
 		fiatHint: string;
+		/** The multisig service (web only: multisigs are), and what it sees. */
+		genesisLabel: string;
+		genesisHint: string;
 		reset: string;
 		/** Spec 072 (FR-010): resetting is destructive and asks first. */
 		resetTitle: string;
@@ -1047,6 +1050,8 @@ export const SETTINGS_KEYS = [
 	'settingsModals.endpoints.bundlerHint',
 	'settingsModals.endpoints.fiatLabel',
 	'settingsModals.endpoints.fiatHint',
+	'settingsModals.endpoints.genesisLabel',
+	'settingsModals.endpoints.genesisHint',
 	'settingsModals.endpoints.resetToDefaults',
 	'settingsModals.endpoints.resetTitle',
 	'settingsModals.endpoints.resetBody',

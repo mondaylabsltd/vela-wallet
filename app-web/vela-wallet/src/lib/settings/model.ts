@@ -167,20 +167,7 @@ export type SettingsPageId =
 	 * only (no grants elsewhere), so the route adds its row and nav entry.
 	 */
 	| 'sites'
-	/**
-	 * The multisig service (Safe Genesis Registry) this device uses — the
-	 * default or the person's own. Web only (multisigs are), so the route adds
-	 * its row and nav entry, and draws the page (`MultisigServicePage`).
-	 */
-	| 'multisig-service'
 	| 'about';
-
-/** A settings page the route draws itself: its header, and its body. */
-export interface MultisigServicePage {
-	title: string;
-	subtitle?: string;
-	body: import('svelte').Snippet;
-}
 
 /**
  * Which modal is open over the current page. The phone draws all of these as
@@ -436,7 +423,14 @@ export interface UrlFieldModel {
 	label: string;
 	value: string;
 	placeholder?: string;
+	/** A line under the field, always shown: what the field's state is. */
 	hint?: string;
+	/**
+	 * What the field is for — behind an ⓘ beside its label, opened in place
+	 * (a disclosure, not a hover: phones have none). States never go here:
+	 * they are the badge and the `hint`, always shown.
+	 */
+	info?: string;
 	badge?: StatusPillModel;
 	/** SR2's field is outlined in the tone of its state. */
 	tone?: 'default' | 'error' | 'success';

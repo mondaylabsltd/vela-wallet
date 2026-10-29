@@ -22,7 +22,6 @@
 		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
-		MultisigServicePage,
 		SettingsDesktopModel,
 		SettingsOverlayId,
 		SettingsPageId,
@@ -81,8 +80,6 @@
 		agent?: AgentPanelModel;
 		/** dapp-11: Settings › Connected sites — the extension only. */
 		sites?: SitesPanelModel;
-		/** Settings → Multisig service, drawn by the route (web only). Absent in the gallery. */
-		multisigService?: MultisigServicePage;
 		/** The sidebar's network filter was used. Absent in the gallery. */
 		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 		/**
@@ -129,7 +126,6 @@
 		analytics,
 		agent,
 		sites,
-		multisigService,
 		onchainselect,
 		onaccountselect,
 		onaccountcreate,
@@ -202,11 +198,6 @@
 				return { title: agent?.title ?? model.title, description: undefined };
 			case 'sites':
 				return { title: sites?.title ?? model.title, description: sites?.subtitle };
-			case 'multisig-service':
-				return {
-					title: multisigService?.title ?? model.title,
-					description: multisigService?.subtitle
-				};
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -248,7 +239,6 @@
 		'about',
 		'agent',
 		'sites',
-		'multisig-service',
 		'signing-pages'
 	]);
 
@@ -260,7 +250,6 @@
 		const panel = id === 'signing-venue' ? 'account' : id;
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
 		if (panel === 'sites' && sites === undefined) return false;
-		if (panel === 'multisig-service' && multisigService === undefined) return false;
 		closeOverlay();
 		openPage(panel as SettingsPageId);
 		return true;
@@ -556,8 +545,6 @@
 							storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
 						)}
 				/>
-			{:else if page === 'multisig-service' && multisigService !== undefined}
-				{@render multisigService.body()}
 			{:else if page === 'agent' && agent !== undefined}
 				<AgentPanel
 					panel={agent}

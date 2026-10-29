@@ -1,9 +1,10 @@
 /**
- * The multisig service as Settings sets it, and as an outage finds it: the
- * address the core admits is the one used; a service that does not answer is
- * marked away for every network at once, background reads then ask nothing
- * until the next step of a capped schedule, and any answer, a new address or
- * the person's Retry ends it. The health answer is read by the core.
+ * The multisig service as the endpoints set it, and as an outage finds it:
+ * the record's `genesisServiceURL` is the one used (the old key moved into
+ * it once); a service that does not answer is marked away for every network
+ * at once, background reads then ask nothing until the next step of a capped
+ * schedule, and any answer, a new address or the person's Retry ends it. The
+ * health answer is read by the core.
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,24 +12,23 @@ import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
 const storage = new Map<string, string>();
-vi.stubGlobal('localStorage', {
+const memory = {
 	getItem: (k: string) => storage.get(k) ?? null,
 	setItem: (k: string, v: string) => void storage.set(k, v),
 	removeItem: (k: string) => void storage.delete(k)
-});
+};
+vi.stubGlobal('localStorage', memory);
 
-const { serviceAddress, serviceAnswer } = await import('./kernel');
-const {
-	DEFAULT_GENESIS_SERVICE_URL,
-	GENESIS_SERVICE_KEY,
-	RETRY_STEPS_MS,
-	admittedServiceURL,
-	genesisService,
-	serviceHost,
-	serviceOutage
-} = await import('./service-state.svelte');
+const { serviceAnswer } = await import('./kernel');
+const { LEGACY_GENESIS_SERVICE_KEY, saveServiceEndpoints } =
+	await import('$lib/onboarding/core/storage');
+const { DEFAULT_GENESIS_SERVICE_URL, RETRY_STEPS_MS, genesisService, serviceHost, serviceOutage } =
+	await import('./service-state.svelte');
 const { checkService, fetchProposals, genesisServiceURL, servedChains, servedOnly } =
 	await import('./service');
+
+const RECORD = 'vela.serviceEndpoints';
+const record = () => JSON.parse(storage.get(RECORD) ?? '{}') as Record<string, string>;
 
 beforeAll(() => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
@@ -46,48 +46,43 @@ function answering(status: number, body: string) {
 
 beforeEach(() => {
 	storage.clear();
-	genesisService.set(null);
 	serviceOutage.reset();
 });
 afterEach(() => {
 	vi.unstubAllGlobals();
-	vi.stubGlobal('localStorage', {
-		getItem: (k: string) => storage.get(k) ?? null,
-		setItem: (k: string, v: string) => void storage.set(k, v),
-		removeItem: (k: string) => void storage.delete(k)
-	});
+	vi.stubGlobal('localStorage', memory);
 });
 
-describe('the address (the core rule)', () => {
-	it('is https, or plain http to this computer, trimmed of trailing slashes', () => {
-		expect(serviceAddress(' http://127.0.0.1:8788/ ')).toEqual({
-			kind: 'ok',
-			url: 'http://127.0.0.1:8788'
-		});
-		expect(serviceAddress('http://192.168.1.5:8788')).toEqual({ kind: 'insecure' });
-		expect(serviceAddress('https://example.com?x=1')).toEqual({ kind: 'invalid' });
-		expect(serviceAddress('javascript:alert(1)')).toEqual({ kind: 'invalid' });
-	});
-
-	it('stored by hand and refused is not used: the default is, and is said', () => {
-		storage.set(GENESIS_SERVICE_KEY, 'http://evil.example');
+describe('the address (one of the service endpoints)', () => {
+	it('is the default until the record holds one', () => {
+		expect(genesisServiceURL()).toBe(DEFAULT_GENESIS_SERVICE_URL);
 		expect(genesisService.custom).toBeNull();
-		expect(genesisServiceURL()).toBe(DEFAULT_GENESIS_SERVICE_URL);
-	});
-
-	it("keeps the live tests' seeding: the key holds the person's own", () => {
-		storage.set(GENESIS_SERVICE_KEY, 'http://127.0.0.1:8788/');
-		expect(genesisService.custom).toBe('http://127.0.0.1:8788');
+		storage.set(RECORD, JSON.stringify({ genesisServiceURL: 'http://127.0.0.1:8788/' }));
 		expect(genesisServiceURL()).toBe('http://127.0.0.1:8788');
-		genesisService.set(null);
-		expect(storage.has(GENESIS_SERVICE_KEY)).toBe(false);
-		expect(genesisServiceURL()).toBe(DEFAULT_GENESIS_SERVICE_URL);
+		expect(genesisService.custom).toBe('http://127.0.0.1:8788');
 	});
 
-	it('reads nothing into an empty key', () => {
-		expect(admittedServiceURL('http://127.0.0.1:8788/')).toBe('http://127.0.0.1:8788');
-		expect(admittedServiceURL('  ')).toBeNull();
-		expect(admittedServiceURL(null)).toBeNull();
+	it('is the default when the record holds one the rule refuses, or a blank', () => {
+		for (const refused of ['http://evil.example', 'javascript:alert(1)', '', '  ']) {
+			storage.set(RECORD, JSON.stringify({ genesisServiceURL: refused }));
+			expect(genesisServiceURL()).toBe(DEFAULT_GENESIS_SERVICE_URL);
+			expect(genesisService.custom).toBeNull();
+		}
+	});
+
+	it('moves the old key into the record once, and the record stands over it', () => {
+		storage.set(RECORD, JSON.stringify({ bundlerServiceURL: 'http://127.0.0.1:8790' }));
+		storage.set(LEGACY_GENESIS_SERVICE_KEY, 'http://127.0.0.1:8788');
+		expect(genesisServiceURL()).toBe('http://127.0.0.1:8788');
+		expect(record()).toEqual({
+			bundlerServiceURL: 'http://127.0.0.1:8790',
+			genesisServiceURL: 'http://127.0.0.1:8788'
+		});
+		expect(storage.has(LEGACY_GENESIS_SERVICE_KEY)).toBe(false);
+		// A test seeding the old key again does not undo what Settings set.
+		saveServiceEndpoints({ genesisServiceURL: 'http://127.0.0.1:8787' });
+		storage.set(LEGACY_GENESIS_SERVICE_KEY, 'http://127.0.0.1:8788');
+		expect(genesisServiceURL()).toBe('http://127.0.0.1:8787');
 	});
 
 	it('is named by its host in a line', () => {
@@ -117,7 +112,7 @@ describe('the health answer (the core reads it)', () => {
 	});
 
 	it("gives the create sheet the service's chains, asked once a minute", async () => {
-		storage.set(GENESIS_SERVICE_KEY, 'http://127.0.0.1:8788');
+		storage.set(RECORD, JSON.stringify({ genesisServiceURL: 'http://127.0.0.1:8788' }));
 		const fetch = answering(200, HEALTH);
 		vi.stubGlobal('fetch', fetch);
 		expect(await servedChains()).toEqual(new Set([5042002]));
@@ -148,7 +143,7 @@ describe("the create sheet's networks", () => {
 				throw new TypeError('Failed to fetch');
 			})
 		);
-		storage.set(GENESIS_SERVICE_KEY, 'http://127.0.0.1:1');
+		storage.set(RECORD, JSON.stringify({ genesisServiceURL: 'http://127.0.0.1:1' }));
 		expect(await servedChains()).toBeNull();
 	});
 });
@@ -217,10 +212,6 @@ describe('an outage', () => {
 		vi.stubGlobal('fetch', answering(404, JSON.stringify({ error: 'unknown safe' })));
 		// A person waiting asks anyway; the service answering ends the outage.
 		expect(await fetchProposals(100, '0xabc')).toBeNull();
-		expect(serviceOutage.down).toBe(false);
-
-		serviceOutage.failed();
-		genesisService.set('http://127.0.0.1:8788');
 		expect(serviceOutage.down).toBe(false);
 
 		serviceOutage.failed();

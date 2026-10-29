@@ -81,9 +81,11 @@ function answer(operation: NetOperation, chain: Chain): NetShellResult | undefin
 					ethereum_data_url: null,
 					passkey_index_url: null,
 					bundler_service_url: null,
-					fiat_rates_url: null
+					fiat_rates_url: null,
+					genesis_service_url: null
 				},
-				provider_keys: { alchemy: null, drpc: null, ankr: null }
+				provider_keys: { alchemy: null, drpc: null, ankr: null },
+				multisig_service: true
 			};
 		case 'fetch_chain_info':
 			return { type: 'chain_info', chain_id: operation.chain_id, data: chain.doc };

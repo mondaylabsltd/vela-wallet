@@ -24,7 +24,6 @@
 		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
-		MultisigServicePage,
 		SettingsHomeModel,
 		SettingsOverlayId,
 		SettingsPageId,
@@ -104,8 +103,6 @@
 		agent?: AgentPanelModel;
 		/** dapp-11: Settings › Connected sites — the extension only (no grants elsewhere). */
 		sites?: SitesPanelModel;
-		/** Settings → Multisig service, drawn by the route (web only). Absent in the gallery. */
-		multisigService?: MultisigServicePage;
 		/**
 		 * The account switcher (spec 028 Phase 8). A row is picked by its
 		 * POSITION in the sheet — the session's own order — and the two buttons
@@ -161,7 +158,6 @@
 		analytics,
 		agent,
 		sites,
-		multisigService,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
@@ -203,8 +199,7 @@
 		'signing-venue': 'signing-venue',
 		'signing-pages': 'signing-pages',
 		agent: 'agent',
-		sites: 'sites',
-		'multisig-service': 'multisig-service'
+		sites: 'sites'
 	};
 
 	const OVERLAY_OF: Partial<Record<string, SettingsOverlayId>> = {
@@ -245,7 +240,6 @@
 	export function open(id: string): boolean {
 		if (PAGE_OF[id] === undefined && OVERLAY_OF[id] === undefined && !SECTIONS_OF_HOME.has(id))
 			return false;
-		if (id === 'multisig-service' && multisigService === undefined) return false;
 		close();
 		page = 'home';
 		if (!SECTIONS_OF_HOME.has(id)) selectRow(id);
@@ -311,10 +305,6 @@
 				return agent && { title: agent.title, subtitle: undefined };
 			case 'sites':
 				return sites && { title: sites.title, subtitle: sites.subtitle };
-			case 'multisig-service':
-				return (
-					multisigService && { title: multisigService.title, subtitle: multisigService.subtitle }
-				);
 			case 'signing-venue':
 				return model.venue && { title: model.venue.title, subtitle: model.venue.subtitle };
 			case 'signing-pages':
@@ -609,8 +599,6 @@
 								storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
 							)}
 					/>
-				{:else if page === 'multisig-service' && multisigService !== undefined}
-					{@render multisigService.body()}
 				{:else if page === 'agent' && agent !== undefined}
 					<AgentPanel
 						panel={agent}

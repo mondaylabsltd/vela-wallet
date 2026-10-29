@@ -225,31 +225,8 @@ export interface MultisigMessages {
 		backupNote: string;
 		remove: string;
 	};
-	/** Settings → Multisig service, and what the multisig area says of it. */
+	/** What the multisig area says of its service (set in Settings → Service Endpoints). */
 	service: {
-		title: string;
-		subtitle: string;
-		description: string;
-		privacy: string;
-		inUse: string;
-		default: string;
-		field: string;
-		save: string;
-		useDefault: string;
-		checking: string;
-		reachable: string;
-		unreachable: string;
-		notService: string;
-		/** The chains the service lists (`{{networks}}`). */
-		serves: string;
-		/** Save found nothing answering: it may still be saved, with this said. */
-		unsavedUnreachable: string;
-		/** Save found something else answering: not saved. */
-		unsavedNotService: string;
-		saveAnyway: string;
-		invalid: string;
-		insecure: string;
-		saved: string;
 		/** The multisig area's note while a custom service is in use (`{{host}}`). */
 		customNote: string;
 		/** Activity's waiting group while the service is away, over the last list. */
@@ -479,26 +456,6 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		remove: ''
 	},
 	service: {
-		title: '',
-		subtitle: '',
-		description: '',
-		privacy: '',
-		inUse: '',
-		default: '',
-		field: '',
-		save: '',
-		useDefault: '',
-		checking: '',
-		reachable: '',
-		unreachable: '',
-		notService: '',
-		serves: '',
-		unsavedUnreachable: '',
-		unsavedNotService: '',
-		saveAnyway: '',
-		invalid: '',
-		insecure: '',
-		saved: '',
 		customNote: '',
 		unreachableNote: '',
 		retry: '',

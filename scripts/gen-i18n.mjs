@@ -987,13 +987,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2333 (the home says a wallet is saved here and still syncing, ob-2): +
 //   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
 // 2373 (round 3 merged: + onboarding & erase, 2026-10-29): 2248 + 5 = 2253 leaves, 120 branches.
-// 2398 (Settings → Multisig service, 2026-10-29): + the `home.multisig.service`
-//   branch — the setting's page (its address, the probe's three answers, Save
-//   anyway, Use default, the privacy note), the custom-service note, the
-//   service-away note and its Retry, and the create sheet's "serves none of
-//   your networks". 2253 + 24 = 2277 leaves, 120 + 1 = 121 branches.
-if (PATHS.length !== 2398) fail(`expected 2398 paths (2277 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2277) fail(`expected 2277 leaf paths, got ${leafSet.size}`);
+// 2380 (the multisig service, one more service endpoint, 2026-10-29): +
+//   `settingsModals.endpoints.{genesisLabel, genesisHint}` (its field, and
+//   what it sees), + the `home.multisig.service` branch (the custom-service
+//   note, the service-away note and its Retry, the create sheet's "serves
+//   none of your networks"). 2253 + 6 = 2259 leaves, 120 + 1 = 121 branches.
+if (PATHS.length !== 2380) fail(`expected 2380 paths (2259 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2259) fail(`expected 2259 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

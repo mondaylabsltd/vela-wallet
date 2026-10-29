@@ -4,7 +4,7 @@
  * questions and opening events it already had still hold now that the wide
  * layout shares them.
  */
-import { createRawSnippet, tick } from 'svelte';
+import { tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
@@ -418,60 +418,5 @@ describe('Connected sites', () => {
 	it('says so when no site is connected', async () => {
 		const { root } = await opened({ ...sites, group: { ...sites.group, items: [] } });
 		expect(root.textContent).toContain('No site is connected.');
-	});
-});
-
-/**
- * Settings → Multisig service: web only, so the route adds its row and
- * draws its page; the phone pushes it like any other page, and has none
- * when the route gives none.
- */
-describe('Multisig service', () => {
-	const body = createRawSnippet(() => ({
-		render: () => '<p data-testid="service-body">the page</p>'
-	}));
-
-	it('is a pushed page with its own header, drawn by the route', async () => {
-		const model = buildMobileState('st1b', m, IDENTICON);
-		const sections = model.sections.map((section) =>
-			section.collapsible === true
-				? {
-						...section,
-						rows: [
-							...section.rows,
-							{
-								id: 'multisig-service',
-								icon: 'inbox' as const,
-								title: 'Multisig service',
-								value: 'Default',
-								trailing: 'chevron' as const
-							}
-						]
-					}
-				: section
-		);
-		const screen = render(SettingsHome, {
-			props: {
-				model: { ...model, sections },
-				multisigService: { title: 'Multisig service', body }
-			}
-		});
-		await tick();
-		const row = [...screen.container.querySelectorAll<HTMLElement>('button')].find((b) =>
-			b.textContent?.includes('Multisig service')
-		);
-		expect(row?.textContent).toContain('Default');
-		row?.click();
-		await tick();
-		expect(screen.container.querySelector('[data-testid="service-body"]')).toBeTruthy();
-		expect(screen.container.querySelector('h1, h2')?.textContent).toContain('Multisig service');
-	});
-
-	it('is no page at all without the route', async () => {
-		const screen = render(SettingsHome, {
-			props: { model: buildMobileState('st1', m, IDENTICON) }
-		});
-		await tick();
-		expect(screen.component.open('multisig-service')).toBe(false);
 	});
 });

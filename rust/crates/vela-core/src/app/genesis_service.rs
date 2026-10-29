@@ -1,62 +1,24 @@
 //! The multisig service — the Safe Genesis Registry's HTTP API, where a
-//! multisig's genesis is recorded and its proposals are shared — as a person
-//! may set it in Settings (a developer's own, on this computer or elsewhere).
+//! multisig's genesis is recorded and its proposals are shared. Its address
+//! is one of the service endpoints ([`super::network_admin`]'s
+//! `GenesisService`: saved, probed and reset as the others are, under the
+//! same URL rule).
 //!
-//! Two rules, both pure; the shell fetches and stores:
-//!
-//! - [`service_address`]: what may be saved as the service's address. The
-//!   rule every address typed into Settings follows
-//!   ([`is_allowed_endpoint_url`]: `https://`, or plain `http://` to this
-//!   computer), trimmed of spaces and trailing slashes — the shell appends
-//!   `/api/…` — and with no query or fragment, which would swallow that path.
-//! - [`service_answer`]: whether a `GET /api/health` answer is the service's
-//!   (`service: "safe-genesis-registry"`, both shells — genesis-cf and the
-//!   docker server), and the chains it serves when it lists them.
+//! What lives here is how its `GET /api/health` answer reads
+//! ([`service_answer`]): the service's when it names itself
+//! `safe-genesis-registry` (both shells — genesis-cf and the docker server),
+//! with the chains it serves when it lists them. The shell asks it to probe a
+//! service that was away, and to offer a new multisig only the networks its
+//! record can be written on.
 //!
 //! Nothing the service answers is trusted beyond "it is there": every record
 //! and approval it hands out is re-derived and re-verified by
-//! [`crate::multisig`]. The chain table only narrows which networks a new
-//! multisig is offered on — a chain the service does not serve is one its
-//! record cannot be written on.
+//! [`crate::multisig`].
 
 use serde::Serialize;
 
-use super::network_admin::is_allowed_endpoint_url;
-
 /// The `service` a Safe Genesis Registry reports at `/api/health`.
 pub const GENESIS_SERVICE_IDENTITY: &str = "safe-genesis-registry";
-
-/// What a typed multisig service address is.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum ServiceAddress {
-    /// It may be saved, as `url` (trimmed, no trailing slash).
-    Ok { url: String },
-    /// Plain `http://` to another computer: anyone on the way could answer.
-    Insecure,
-    /// Not an address the wallet fetches at all.
-    Invalid,
-}
-
-/// The rule for a multisig service address (see the module note).
-#[must_use]
-pub fn service_address(input: &str) -> ServiceAddress {
-    let url = input.trim().trim_end_matches('/');
-    if url.contains(['?', '#']) {
-        return ServiceAddress::Invalid;
-    }
-    if is_allowed_endpoint_url(url) {
-        return ServiceAddress::Ok { url: url.to_owned() };
-    }
-    // A real host over plain http: said as insecure, not as nonsense.
-    let lower = url.to_ascii_lowercase();
-    match lower.strip_prefix("http://") {
-        Some(rest) if is_allowed_endpoint_url(&format!("https://{rest}")) => {
-            ServiceAddress::Insecure
-        }
-        _ => ServiceAddress::Invalid,
-    }
-}
 
 /// One chain a service says it serves.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -134,43 +96,6 @@ pub fn service_answer(status: u16, body: &str) -> ServiceAnswer {
 mod tests {
     use super::*;
 
-    fn ok(url: &str) -> ServiceAddress {
-        ServiceAddress::Ok { url: url.into() }
-    }
-
-    #[test]
-    fn an_address_is_https_or_this_computer() {
-        assert_eq!(
-            service_address(" https://safe-genesis.getvela.app/ "),
-            ok("https://safe-genesis.getvela.app")
-        );
-        assert_eq!(service_address("http://127.0.0.1:8788"), ok("http://127.0.0.1:8788"));
-        assert_eq!(service_address("http://localhost:8787//"), ok("http://localhost:8787"));
-        assert_eq!(
-            service_address("https://example.com/genesis"),
-            ok("https://example.com/genesis")
-        );
-        assert_eq!(service_address("http://192.168.1.5:8788"), ServiceAddress::Insecure);
-        assert_eq!(service_address("http://example.com"), ServiceAddress::Insecure);
-        // A familiar prefix on a remote host is not this computer.
-        assert_eq!(service_address("http://127.0.0.1.evil.com"), ServiceAddress::Insecure);
-        for bad in [
-            "",
-            "   ",
-            "safe-genesis.getvela.app",
-            "ftp://example.com",
-            "javascript:alert(1)",
-            "https://",
-            "http://",
-            "https://example.com?x=1",
-            "https://example.com/#a",
-            "https://exa mple.com",
-            "https://exa\nmple.com",
-        ] {
-            assert_eq!(service_address(bad), ServiceAddress::Invalid, "{bad:?}");
-        }
-    }
-
     #[test]
     fn a_health_answer_names_the_service_and_its_chains() {
         let body = r#"{"service":"safe-genesis-registry","shell":"docker","homeChainId":5042002,
@@ -220,14 +145,6 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({"kind":"genesis","chains":[{"chainId":100,"name":"Gnosis"}],"homeChainId":100})
-        );
-        assert_eq!(
-            serde_json::to_value(service_address("http://example.com")).unwrap(),
-            serde_json::json!({"kind":"insecure"})
-        );
-        assert_eq!(
-            serde_json::to_value(service_address("https://a.example")).unwrap(),
-            serde_json::json!({"kind":"ok","url":"https://a.example"})
         );
     }
 }

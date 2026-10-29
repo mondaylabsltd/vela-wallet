@@ -21,7 +21,10 @@ export const DEFAULT_SERVICE_ENDPOINTS = {
 	// Spec 038 #E4: the AAGUID directory is meant to be OUR node; until it
 	// exists the default is the one the core's catalog names, and the field
 	// is what moves the lookup the day it does — no build in between.
-	aaguidDirectoryURL: 'https://aaguid-explorer.awesometools.dev'
+	aaguidDirectoryURL: 'https://aaguid-explorer.awesometools.dev',
+	// The multisig service (Safe Genesis Registry): records multisigs and
+	// carries their proposals. The core's `DEFAULT_GENESIS_SERVICE_URL`.
+	genesisServiceURL: 'https://safe-genesis.getvela.app'
 } as const;
 
 /**
@@ -57,4 +60,15 @@ export function getAaguidDirectoryURL(): string {
 		loadServiceEndpoints().aaguidDirectoryURL,
 		DEFAULT_SERVICE_ENDPOINTS.aaguidDirectoryURL
 	);
+}
+
+/**
+ * The multisig service in use, no trailing slash (its paths are appended);
+ * the default when the record holds none, or one the rule refuses.
+ */
+export function getGenesisServiceURL(): string {
+	return stored(
+		loadServiceEndpoints().genesisServiceURL,
+		DEFAULT_SERVICE_ENDPOINTS.genesisServiceURL
+	).replace(/\/+$/, '');
 }

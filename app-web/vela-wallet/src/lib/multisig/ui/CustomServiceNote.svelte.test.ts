@@ -10,26 +10,31 @@ import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import GroupNote from '$lib/wallet/ui/GroupNote.svelte';
 import type { MultisigMessages } from '../messages';
-import { genesisService } from '../core/service-state.svelte';
+import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
+import { serviceOutage } from '../core/service-state.svelte';
 import CustomServiceNote from './CustomServiceNote.svelte';
 
 const m = {
 	service: { customNote: 'Using a custom multisig service ({{host}})' }
 } as unknown as MultisigMessages;
 
-afterEach(() => genesisService.set(null));
+afterEach(() => localStorage.removeItem('vela.serviceEndpoints'));
 
 describe('the custom-service note', () => {
 	it('names the host of the person’s own service, and goes with the default', async () => {
-		genesisService.set('http://127.0.0.1:8788');
+		saveServiceEndpoints({ genesisServiceURL: 'http://127.0.0.1:8788' });
 		const screen = render(CustomServiceNote, { props: { m } });
 		await tick();
 		expect(screen.container.textContent?.trim()).toBe(
 			'Using a custom multisig service (127.0.0.1:8788)'
 		);
-		genesisService.set(null);
+		// Settings → Service Endpoints writes the record: the note follows,
+		// and what was known of the last service's outage goes with it.
+		serviceOutage.failed();
+		saveServiceEndpoints({ genesisServiceURL: 'https://safe-genesis.getvela.app' });
 		await tick();
 		expect(screen.container.querySelector('[data-testid="custom-genesis-service"]')).toBeNull();
+		expect(serviceOutage.down).toBe(false);
 	});
 });
 

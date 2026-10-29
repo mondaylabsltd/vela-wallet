@@ -642,7 +642,8 @@ const ENDPOINT_COPY = {
 	ethereum_data: { label: 'chainDataLabel', hint: 'chainDataHint' },
 	passkey_index: { label: 'passkeyLabel', hint: 'passkeyHint' },
 	bundler_service: { label: 'bundlerLabel', hint: 'bundlerHint' },
-	fiat_rates: { label: 'fiatLabel', hint: 'fiatHint' }
+	fiat_rates: { label: 'fiatLabel', hint: 'fiatHint' },
+	genesis_service: { label: 'genesisLabel', hint: 'genesisHint' }
 } as const;
 
 export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsModel {
@@ -656,9 +657,10 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 				label: m.endpoints[copy.label],
 				value: e.value,
 				placeholder: e.default_value,
-				// set-8: a refused address was not saved; the field says so in
-				// place of its usual line, outlined, until it is edited.
-				hint: e.refused ? m.networks.urlRefused : m.endpoints[copy.hint],
+				// What it is for is behind its ⓘ; a state is always said (set-8:
+				// a refused address was not saved — outlined, until it is edited).
+				info: m.endpoints[copy.hint],
+				hint: e.refused ? m.networks.urlRefused : undefined,
 				badge: servicePill(e.health, m),
 				tone: e.refused ? ('error' as const) : ('default' as const)
 			};

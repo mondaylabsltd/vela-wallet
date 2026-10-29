@@ -7,7 +7,7 @@
  * its drafts, and leaving a saved key's field saved an empty draft over the
  * key it showed.
  */
-import { createRawSnippet, tick } from 'svelte';
+import { tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
@@ -287,43 +287,5 @@ describe('closing the add-network dialog', () => {
 		await view.click(view.root.querySelector<HTMLElement>('[role="dialog"] button.close'));
 		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 		expect(view.net).toEqual([]);
-	});
-});
-
-/** Settings → Multisig service on the wide layout: its nav entry opens the route's page. */
-describe('Multisig service', () => {
-	const body = createRawSnippet(() => ({
-		render: () => '<p data-testid="service-body">the page</p>'
-	}));
-
-	it('opens from its nav entry, with its own heading', async () => {
-		const base = buildDesktopState('dst1', m, IDENTICON);
-		const model = {
-			...base,
-			nav: [
-				...base.nav,
-				{ id: 'multisig-service' as const, icon: 'inbox' as const, label: 'Multisig service' }
-			]
-		};
-		const screen = render(SettingsDesktop, {
-			props: { model, multisigService: { title: 'Multisig service', body } }
-		});
-		await tick();
-		const entry = [...screen.container.querySelectorAll<HTMLElement>('button')].find(
-			(b) => b.textContent?.trim() === 'Multisig service'
-		);
-		entry?.click();
-		await tick();
-		expect(screen.container.querySelector('[data-testid="service-body"]')).toBeTruthy();
-		expect(screen.container.querySelector('h1')?.textContent).toBe('Multisig service');
-		expect(screen.component.open('multisig-service')).toBe(true);
-	});
-
-	it('is no panel without the route', async () => {
-		const screen = render(SettingsDesktop, {
-			props: { model: buildDesktopState('dst1', m, IDENTICON) }
-		});
-		await tick();
-		expect(screen.component.open('multisig-service')).toBe(false);
 	});
 });

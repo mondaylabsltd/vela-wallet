@@ -19,16 +19,11 @@ import {
 	type SafeTx,
 	type ServiceAnswer
 } from './kernel';
-import {
-	DEFAULT_GENESIS_SERVICE_URL,
-	GENESIS_SERVICE_KEY,
-	genesisService,
-	serviceOutage
-} from './service-state.svelte';
+import { DEFAULT_GENESIS_SERVICE_URL, genesisService, serviceOutage } from './service-state.svelte';
 
-export { DEFAULT_GENESIS_SERVICE_URL, GENESIS_SERVICE_KEY };
+export { DEFAULT_GENESIS_SERVICE_URL };
 
-/** The service in use: the person's own (Settings), else the default. */
+/** The service in use: the person's own (Settings → Service Endpoints), else the default. */
 export function genesisServiceURL(): string {
 	return genesisService.url;
 }

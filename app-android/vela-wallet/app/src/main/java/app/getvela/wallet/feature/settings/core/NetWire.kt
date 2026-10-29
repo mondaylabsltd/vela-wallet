@@ -66,6 +66,8 @@ data class NetServiceEndpoints(
     val passkey_index_url: String,
     val bundler_service_url: String,
     val fiat_rates_url: String,
+    /** The multisig service (web only; see [NetEndpointField.GenesisService]). */
+    val genesis_service_url: String = "https://safe-genesis.getvela.app",
 )
 
 /**
@@ -81,6 +83,7 @@ data class NetStoredEndpoints(
     val passkey_index_url: String? = null,
     val bundler_service_url: String? = null,
     val fiat_rates_url: String? = null,
+    val genesis_service_url: String? = null,
 )
 
 /** One API key per provider. `null` = not configured; a cleared key is removed. */
@@ -100,6 +103,13 @@ enum class NetEndpointField {
     @SerialName("bundler_service") BundlerService,
 
     @SerialName("fiat_rates") FiatRates,
+
+    /**
+     * The multisig service — the web's alone (multisig accounts live there):
+     * this shell reports `multisig_service = false`, so the core never shows,
+     * probes or asks for it here. Mirrored so the wire stays one vocabulary.
+     */
+    @SerialName("genesis_service") GenesisService,
 }
 
 @Serializable
@@ -670,6 +680,8 @@ sealed class NetShellResult {
         val network_configs: List<NetNetworkConfig> = emptyList(),
         val endpoints: NetStoredEndpoints = NetStoredEndpoints(),
         val provider_keys: NetProviderKeys = NetProviderKeys(),
+        /** No multisig accounts here: the multisig service is not an endpoint. */
+        val multisig_service: Boolean = false,
     ) : NetShellResult()
 
     @Serializable

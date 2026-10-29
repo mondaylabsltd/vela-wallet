@@ -148,8 +148,6 @@
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
 	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
 	import MultisigSettings from '$lib/multisig/ui/MultisigSettings.svelte';
-	import ServiceSettings from '$lib/multisig/ui/ServiceSettings.svelte';
-	import { genesisService, serviceHost } from '$lib/multisig/core/service-state.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -961,29 +959,9 @@
 			: undefined
 	);
 
-	/**
-	 * Settings → Multisig service, right after the service endpoints — it is
-	 * one, and multisigs are the web's alone, so the route adds it. Its value
-	 * says whose service is in use: the default, or the host of the person's own.
-	 */
-	const multisigServiceRow = $derived<SettingsRowModel>({
-		id: 'multisig-service',
-		icon: 'inbox',
-		title: data.multisigMessages.service.title,
-		subtitle: data.multisigMessages.service.subtitle,
-		value: serviceHost(genesisService.custom) ?? data.multisigMessages.service.default,
-		trailing: 'chevron'
-	});
-	const multisigServicePage = $derived({
-		title: data.multisigMessages.service.title,
-		body: multisigServiceBody
-	});
-
 	function withAgentRow(rows: SettingsRowModel[]): SettingsRowModel[] {
 		const at = rows.findIndex((row) => row.id === 'endpoints');
-		const added = sitesShown
-			? [multisigServiceRow, agentRow, sitesRow]
-			: [multisigServiceRow, agentRow];
+		const added = sitesShown ? [agentRow, sitesRow] : [agentRow];
 		return at < 0 ? rows : [...rows.slice(0, at + 1), ...added, ...rows.slice(at + 1)];
 	}
 
@@ -1125,16 +1103,9 @@
 			nav: model.nav.flatMap((item) => {
 				if (item.id === 'signing-pages') return [];
 				if (item.id !== 'endpoints') return [item];
-				const serviceItem = {
-					id: 'multisig-service' as const,
-					icon: 'inbox' as const,
-					label: data.multisigMessages.service.title
-				};
 				const agentItem = { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title };
 				const sitesItem = { id: 'sites' as const, icon: 'globe' as const, label: m.sites.title };
-				return sitesShown
-					? [item, serviceItem, agentItem, sitesItem]
-					: [item, serviceItem, agentItem];
+				return sitesShown ? [item, agentItem, sitesItem] : [item, agentItem];
 			})
 		};
 		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
@@ -1370,7 +1341,6 @@
 				analytics={analyticsRow}
 				agent={agentPanel}
 				sites={sitesPanel}
-				multisigService={multisigServicePage}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
@@ -1404,7 +1374,6 @@
 				analytics={analyticsRow}
 				agent={agentPanel}
 				sites={sitesPanel}
-				multisigService={multisigServicePage}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
@@ -1468,10 +1437,6 @@
 		loading={(address) => accountLoading(accountsInput, address)}
 		onselect={(account) => multisig.activate(account.address)}
 	/>
-{/snippet}
-
-{#snippet multisigServiceBody()}
-	<ServiceSettings m={data.multisigMessages} locale={data.locale} />
 {/snippet}
 
 {#snippet multisigKeys()}

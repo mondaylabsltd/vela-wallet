@@ -63,7 +63,10 @@ describe('read_store', () => {
 		kv.set('vela.customNetworks', JSON.stringify([STORED_CUSTOM]));
 		kv.set('vela.networkConfig', JSON.stringify([{ chainId: 1, rpcURL: 'https://rpc.example' }]));
 		kv.set('vela.rpcProviders', JSON.stringify({ alchemy: 'key-a' }));
-		endpointsStore.record = { passkeyIndexURL: 'https://idx.example' };
+		endpointsStore.record = {
+			passkeyIndexURL: 'https://idx.example',
+			genesisServiceURL: 'http://127.0.0.1:8788'
+		};
 
 		const result = await executeNetworkAdminOperation(effect({ type: 'read_store' }));
 		expect(result.type).toBe('store_loaded');
@@ -92,8 +95,11 @@ describe('read_store', () => {
 			ethereum_data_url: null,
 			passkey_index_url: 'https://idx.example',
 			bundler_service_url: null,
-			fiat_rates_url: null
+			fiat_rates_url: null,
+			genesis_service_url: 'http://127.0.0.1:8788'
 		});
+		// The web keeps multisig accounts: their service is one of its endpoints.
+		expect(result.multisig_service).toBe(true);
 	});
 
 	// set-2: `[null]`, a record with no chain, a chain id serde cannot read as
@@ -163,7 +169,8 @@ describe('writes', () => {
 					ethereum_data_url: 'https://data.example',
 					passkey_index_url: 'https://idx.example',
 					bundler_service_url: 'https://relay.example',
-					fiat_rates_url: 'https://fx.example'
+					fiat_rates_url: 'https://fx.example',
+					genesis_service_url: 'http://127.0.0.1:8788'
 				}
 			})
 		);
@@ -171,7 +178,8 @@ describe('writes', () => {
 			ethereumDataURL: 'https://data.example',
 			passkeyIndexURL: 'https://idx.example',
 			bundlerServiceURL: 'https://relay.example',
-			fiatRatesURL: 'https://fx.example'
+			fiatRatesURL: 'https://fx.example',
+			genesisServiceURL: 'http://127.0.0.1:8788'
 		});
 	});
 
