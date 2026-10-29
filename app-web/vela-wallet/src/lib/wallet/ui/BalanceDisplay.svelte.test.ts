@@ -559,7 +559,7 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		const host = document.createElement('div');
 		host.style.width = '320px';
 		document.body.appendChild(host);
-		const text = "Can't reach 24 networks right now";
+		const text = "Can't reach 20 networks right now";
 		const screen = render(BalanceDisplay, {
 			target: host,
 			props: { balance: { ...hero(false), status: { kind: 'warning', text } } }

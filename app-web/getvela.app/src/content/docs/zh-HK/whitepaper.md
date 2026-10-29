@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 如何運作，以及使用它時你需要信任甚麼、不需要信任甚麼：帳戶、鑰匙、手續費、威脅模型、復原，以及 Vela 消失時會怎樣。"
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -129,9 +129,10 @@ EVM 鏈
 
 ### 網絡
 
-Vela 內置 24 條網絡——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、
-Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、
-Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的十二份合約及 EIP-7951 / RIP-7212 預編譯合約的 EVM 網絡。
+Vela 預設顯示 20 條網絡——Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、
+Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium 和
+Kaia——並接受任何具備它所檢查的十二份合約及 EIP-7951 / RIP-7212 預編譯合約的 EVM 網絡。
+Stable、MegaETH、Plume 和 XRPL EVM 仍然支援，只是預設隱藏，可在「設定 → 新增網絡」把它們加回來。
 這十二份裡有兩份是 Safe 的通行密鑰簽署器工廠，以及它部署出來的簽署器程式碼，
 只有持有多於一把鑰匙的錢包才需要；檢查會把它們分開列出來。
 

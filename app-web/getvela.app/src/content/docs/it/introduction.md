@@ -1,7 +1,7 @@
 ---
 title: Introduzione
 description: "Cos'è Vela in sei righe, e le domande con cui arriva di solito chi legge — ognuna collegata direttamente alla sua risposta."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Documentazione di Vela
@@ -18,8 +18,11 @@ hardware.
   [guida al self-hosting](/it/docs/self-hosting), che ne elenca anche i limiti.
 - **Le tue chiavi, fino a sette.** Le scegli quando crei il wallet; una qualsiasi
   può firmare. Vela non le ha mai e non ha alcun ruolo sul tuo wallet.
-- **24 reti, un solo indirizzo.** Più qualsiasi rete EVM che aggiungi tu e che
-  soddisfi i requisiti.
+- **20 reti, un solo indirizzo.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+  World Chain, Celo, Unichain, Ink, Soneium e Kaia, più qualsiasi rete EVM che
+  aggiungi tu e che soddisfi i requisiti. Stable, MegaETH, Plume e XRPL EVM puoi
+  riaggiungerle da Impostazioni → Aggiungi rete.
 - **Leggi prima di firmare.** Le transazioni vengono decodificate in linguaggio
   chiaro; ciò che non si riesce a decodificare viene segnalato.
 - **Alpha.** Funziona e contiene fondi veri, ma è giovane: parti con importi

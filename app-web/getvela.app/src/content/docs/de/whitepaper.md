@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -188,11 +188,13 @@ Details: [Klartext-Signatur](/de/docs/clear-signing).
 
 ### Netzwerke
 
-Vela hat 24 eingebaute Netzwerke – Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
-Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume und XRPL EVM – und
-akzeptiert jedes EVM-Netzwerk, das die zwölf Verträge hat, auf die es prüft, sowie das
-EIP-7951/RIP-7212-Precompile. Zwei der zwölf sind die Passkey-Signer-Factory von Safe
+Vela zeigt standardmäßig 20 Netzwerke an – Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium und Kaia – und akzeptiert jedes
+EVM-Netzwerk, das die zwölf Verträge hat, auf die es prüft, sowie das
+EIP-7951/RIP-7212-Precompile. Stable, MegaETH, Plume und XRPL EVM werden weiterhin
+unterstützt, sind standardmäßig ausgeblendet und lassen sich unter Einstellungen →
+Netzwerk hinzufügen zurückholen. Zwei der zwölf sind die Passkey-Signer-Factory von Safe
 und der Signer-Code, den sie bereitstellt; die braucht nur eine Wallet mit mehr als
 einem Schlüssel, und die Prüfung weist sie gesondert aus.
 

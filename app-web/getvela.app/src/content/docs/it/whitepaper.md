@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -184,11 +184,12 @@ rifiutano. Dettagli:
 
 ### Reti
 
-Vela integra 24 reti — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
-Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
-accetta qualsiasi rete EVM che abbia i dodici contratti che controlla e il
-precompilato EIP-7951 / RIP-7212. Due dei dodici sono la factory dei firmatari
+Vela mostra 20 reti per impostazione predefinita — Ethereum, BNB Chain, Base,
+Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle,
+Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium e Kaia — e accetta qualsiasi
+rete EVM che abbia i dodici contratti che controlla e il precompilato EIP-7951 /
+RIP-7212. Stable, MegaETH, Plume e XRPL EVM sono ancora supportate, nascoste per
+impostazione predefinita, e puoi riaggiungerle da Impostazioni → Aggiungi rete. Due dei dodici sono la factory dei firmatari
 passkey di Safe e il codice del firmatario che distribuisce, che servono solo a un
 wallet con più di una chiave; il controllo li riporta separatamente.
 

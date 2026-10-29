@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
-description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: 5613b3a9fa56
+description: "Las 20 redes que Vela muestra por defecto, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
+source: ba67791e85d6
 ---
 
 <script>
@@ -12,22 +12,23 @@ source: 5613b3a9fa56
 
 ## Redes integradas
 
-Vela trae **24 redes** integradas, todas son mainnets:
+Vela muestra **20 redes** por defecto, todas son mainnets:
 
 | Red | Gas se paga en | Red | Gas se paga en |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (la moneda nativa) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (la moneda nativa) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (sin moneda nativa) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (sin moneda nativa) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (la moneda nativa) | Kaia | KAIA |
+
+Stable, MegaETH, Plume y XRPL EVM siguen siendo compatibles, ocultas por defecto:
+vuelve a agregarlas en **Ajustes → Agregar red**.
 
 En la mayoría también puedes pagar la comisión con una stablecoin en dólares que el
 relay acepte en esa red (ver abajo).
@@ -187,9 +188,8 @@ detiene en **Continuar** y te lo dice: fondearlo no serviría de nada.
 Vela lee los saldos y simula las transacciones a través de un **conjunto de
 endpoints RPC** por red (los integrados, respaldos públicos y cualquier llave de
 proveedor o endpoint que agregues) y pasa al siguiente cuando uno está lento o
-caído. Puedes configurar tu propio endpoint por red en **Ajustes → Redes**. (La app
-de Android por ahora usa un solo endpoint por red, sin conmutación, y la app de
-iPhone todavía no te deja cambiarlo.)
+caído. Puedes configurar tu propio endpoint por red en **Ajustes → Redes**, en
+todas las apps.
 
 Con cada solicitud, el relay recibe la dirección RPC que la wallet usa para una red
 (incluida cualquier llave de API que contenga) para poder llegar a la red que usas.

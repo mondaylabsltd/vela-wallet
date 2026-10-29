@@ -1,7 +1,7 @@
 ---
 title: Einführung
 description: "Was Vela ist, in sechs Zeilen, und eine Liste der Fragen, mit denen Leute hierherkommen – jede direkt mit ihrer Antwort verlinkt."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Vela-Dokumentation
@@ -18,8 +18,11 @@ Hardware-Sicherheitsschlüssel.
   [Anleitung zum Selbsthosten](/de/docs/self-hosting), die auch die Grenzen nennt.
 - **Deine Schlüssel, bis zu sieben.** Beim Erstellen der Wallet gewählt; jeder
   einzelne kann signieren. Vela hat sie nie und hat keine Rolle in deiner Wallet.
-- **24 Netzwerke, eine Adresse.** Dazu jedes EVM-Netzwerk, das du hinzufügst und das
-  die Anforderungen erfüllt.
+- **20 Netzwerke, eine Adresse.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+  World Chain, Celo, Unichain, Ink, Soneium und Kaia, dazu jedes EVM-Netzwerk, das du
+  hinzufügst und das die Anforderungen erfüllt. Stable, MegaETH, Plume und XRPL EVM
+  holst du unter Einstellungen → Netzwerk hinzufügen zurück.
 - **Du liest, bevor du signierst.** Transaktionen werden in verständliche Sprache
   übersetzt; was sich nicht dekodieren lässt, wird gekennzeichnet.
 - **Alpha.** Vela funktioniert und ist mit echtem Geld im Einsatz, aber es ist jung:

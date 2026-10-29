@@ -1,7 +1,7 @@
 ---
 title: Audit & masalah yang diketahui
 description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
 
 "Sudah diaudit" adalah klaim tentang kode tertentu pada versi tertentu, jadi halaman ini
@@ -188,8 +188,8 @@ kecuali yang disebut sebagai kompromi yang disengaja:
   Safe) — standar di ekosistem dan tanpa state, tanpa audit formal. Pemeriksaan jaringan
   Vela langsung gagal (fail closed) kalau keduanya tidak ada; yang diperiksa adalah ada
   tidaknya kode di alamat itu, bukan kecocokannya byte demi byte.
-- **Tempo.** Salah satu dari 24 jaringan bawaan, tanpa koin native; Vela membayar gas di
-  sana dengan stablecoin pathUSD. Per September 2026,
+- **Tempo.** Salah satu dari 20 jaringan yang ditampilkan Vela secara default, tanpa koin
+  native; Vela membayar gas di sana dengan stablecoin pathUSD. Per September 2026,
   [kebijakan keamanan](https://github.com/tempoxyz/.github/blob/main/SECURITY.md) Tempo
   menyatakan protokolnya masih dalam proses audit dan tidak punya bug bounty yang aktif.
   Dana yang disimpan di Tempo, dan gas yang dibayar di sana, menanggung risiko tingkat

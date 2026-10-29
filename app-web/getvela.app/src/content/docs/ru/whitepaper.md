@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Как устроена Vela и чему вам нужно — и не нужно — доверять, чтобы ею пользоваться: аккаунт, ключи, комиссия, модель угроз, восстановление и что будет, если Vela исчезнет."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -179,11 +179,12 @@ Passkey принадлежат relying party (проверяющей сторо�
 
 ### Сети
 
-В Vela 24 встроенные сети — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
-Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume и XRPL EVM, — и
-она принимает любую EVM-сеть, в которой есть двенадцать проверяемых контрактов и
-прекомпайл EIP-7951 / RIP-7212. Два из двенадцати — фабрика подписантов passkey от Safe и код
+По умолчанию Vela показывает 20 сетей — Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium и Kaia, — и принимает любую
+EVM-сеть, в которой есть двенадцать проверяемых контрактов и прекомпайл
+EIP-7951 / RIP-7212. Stable, MegaETH, Plume и XRPL EVM по-прежнему поддерживаются,
+по умолчанию скрыты, и их можно вернуть в разделе «Настройки → Добавить сеть». Два из двенадцати — фабрика подписантов passkey от Safe и код
 подписанта, который она разворачивает; они нужны только кошельку, у которого больше
 одного ключа, и проверка сообщает о них отдельно.
 

@@ -1,7 +1,7 @@
 ---
 title: よくある質問
 description: "カストディ、鍵、復旧、ネットワーク、手数料、Vela に何が見えるのか、オープンソース、そして Vela がなくなったらどうなるのかについての短い回答。"
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # よくある質問
@@ -24,7 +24,7 @@ source: 7446e22f990d
 
 ## どのネットワークとトークンに対応していますか？
 
-Ethereum、Base、Arbitrum、Optimism、Polygon、BNB Chain、Gnosis、Avalanche などの 24 の EVM ネットワークを内蔵しています。さらに、要件を満たす EVM ネットワークなら、自分で追加することもできます。ネイティブコインと ERC-20 トークンに対応しています。アドレスはどのネットワークでも同じです。[ネットワークと手数料](/ja/docs/networks-and-fees)を参照してください。
+既定で 20 の EVM ネットワークを表示します（Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium、Kaia）。さらに、要件を満たす EVM ネットワークなら、自分で追加することもできます。Stable、MegaETH、Plume、XRPL EVM も引き続き対応しており、「設定 → ネットワークを追加」から戻せます。ネイティブコインと ERC-20 トークンに対応しています。アドレスはどのネットワークでも同じです。[ネットワークと手数料](/ja/docs/networks-and-fees)を参照してください。
 
 ## 費用はいくらですか？
 

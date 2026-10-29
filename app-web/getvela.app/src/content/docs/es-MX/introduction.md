@@ -1,7 +1,7 @@
 ---
 title: Introducción
 description: "Qué es Vela en seis líneas, y una lista de las preguntas con las que suele llegar la gente, cada una con un enlace directo a su respuesta."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Documentación de Vela
@@ -18,8 +18,11 @@ celular o tu computadora, en otro celular o en una llave de seguridad física.
   límites.
 - **Tus llaves, hasta siete.** Las eliges al crear la wallet, y cualquiera de ellas
   puede firmar. Vela nunca las tiene y no tiene ningún rol en tu wallet.
-- **24 redes, una sola dirección.** Más cualquier red EVM que agregues y que cumpla
-  los requisitos.
+- **20 redes, una sola dirección.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+  World Chain, Celo, Unichain, Ink, Soneium y Kaia, más cualquier red EVM que
+  agregues y que cumpla los requisitos. Stable, MegaETH, Plume y XRPL EVM se pueden
+  volver a agregar en Ajustes → Agregar red.
 - **Lees antes de firmar.** Las transacciones se decodifican en lenguaje claro; lo
   que no se puede decodificar se marca como tal.
 - **Alfa.** Funciona y guarda fondos reales, pero es joven: empieza con montos

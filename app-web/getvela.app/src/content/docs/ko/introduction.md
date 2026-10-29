@@ -1,7 +1,7 @@
 ---
 title: 소개
 description: "Vela가 무엇인지 여섯 줄로 정리하고, 사람들이 흔히 묻는 질문마다 답이 있는 곳을 바로 연결해 두었습니다."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Vela 문서
@@ -16,8 +16,10 @@ Vela는 시드 구문이 없는, **셀프 호스팅할 수 있는 이더리움 �
   운영할 수 있으며, 한계도 그 가이드에 적어 두었습니다.
 - **키는 최대 일곱 개.** 지갑을 만들 때 정하며, 그중 어느 하나로도 서명할 수 있습니다.
   Vela는 키를 갖고 있지 않고, 지갑에 대한 어떤 권한도 없습니다.
-- **24개 네트워크, 하나의 주소.** 요건을 충족하는 EVM 네트워크라면 직접 추가할 수도
-  있습니다.
+- **20개 네트워크, 하나의 주소.** Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche,
+  Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo,
+  Unichain, Ink, Soneium, Kaia이며, 요건을 충족하는 EVM 네트워크라면 직접 추가할 수도
+  있습니다. Stable, MegaETH, Plume, XRPL EVM은 설정 → 네트워크 추가에서 다시 추가할 수 있습니다.
 - **읽고 나서 서명합니다.** 거래는 알기 쉬운 말로 풀어서 보여 주고, 풀지 못한 부분은
   그렇다고 표시합니다.
 - **알파 단계.** 실제로 작동하고 실제 자금을 담고 있지만, 아직 초기입니다. 적은 금액부터

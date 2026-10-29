@@ -1,7 +1,7 @@
 ---
 title: 常见问题
 description: "关于托管、钥匙、恢复、网络、费用、Vela 能看到什么、开源，以及 Vela 不在了会怎样的简短回答。"
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # 常见问题
@@ -29,8 +29,10 @@ source: 7446e22f990d
 
 ## 支持哪些网络和代币？
 
-24 条内置 EVM 网络，包括 Ethereum、Base、Arbitrum、Optimism、Polygon、BNB Chain、Gnosis 和
-Avalanche，另外还可以添加任何满足要求的 EVM 网络。支持原生币和 ERC-20 代币。每条网络上都是同一个
+默认显示 20 条 EVM 网络——Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、
+Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、
+Soneium 和 Kaia——另外还可以添加任何满足要求的 EVM 网络。Stable、MegaETH、Plume 和 XRPL EVM
+仍然支持，可以在“设置 → 添加网络”里加回来。支持原生币和 ERC-20 代币。每条网络上都是同一个
 地址。见[网络与手续费](/zh/docs/networks-and-fees)。
 
 ## 要花多少钱？

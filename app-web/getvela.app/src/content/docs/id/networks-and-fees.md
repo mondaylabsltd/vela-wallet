@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
-description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: 5613b3a9fa56
+description: "20 jaringan yang ditampilkan Vela secara default, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
+source: ba67791e85d6
 ---
 
 <script>
@@ -12,22 +12,23 @@ source: 5613b3a9fa56
 
 ## Jaringan bawaan
 
-Vela punya **24 jaringan** bawaan, semuanya mainnet:
+Vela menampilkan **20 jaringan** secara default, semuanya mainnet:
 
 | Jaringan | Gas dibayar dengan | Jaringan | Gas dibayar dengan |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (koin native-nya) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (koin native-nya) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (tidak ada koin native) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (tidak ada koin native) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (koin native-nya) | Kaia | KAIA |
+
+Stable, MegaETH, Plume, dan XRPL EVM masih didukung, tetapi disembunyikan secara default:
+tambahkan kembali di **Pengaturan → Tambah Jaringan**.
 
 Di sebagian besar jaringan itu, Anda juga bisa membayar biaya dengan stablecoin USD yang
 diterima relay di jaringan tersebut (lihat di bawah).
@@ -185,9 +186,8 @@ berhenti di **Lanjutkan** dan mengatakannya — mengisi dana tidak akan membantu
 Vela membaca saldo dan menyimulasikan transaksi lewat **sekumpulan endpoint RPC** per
 jaringan — endpoint bawaan, cadangan publik, serta kunci penyedia atau endpoint yang Anda
 tambahkan — dan pindah ke endpoint berikutnya kalau satu endpoint lambat atau mati. Anda
-bisa mengatur endpoint sendiri per jaringan di **Pengaturan → Jaringan**. (Aplikasi
-Android saat ini memakai satu endpoint per jaringan, tanpa pengalihan otomatis, dan
-aplikasi iPhone belum mengizinkan Anda mengubahnya.)
+bisa mengatur endpoint sendiri per jaringan di **Pengaturan → Jaringan**, di semua
+aplikasi.
 
 Di setiap permintaan, relay dikirimi alamat RPC yang dipakai dompet untuk sebuah
 jaringan — termasuk kunci API apa pun di dalamnya — supaya relay bisa menjangkau

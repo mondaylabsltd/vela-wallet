@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BUILT_IN_NETWORKS } from './networks';
+import { BUILT_IN_NETWORKS, SHOWN_NETWORKS } from './networks';
 import { en } from './i18n/messages/en';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from './i18n/locales';
 
@@ -11,20 +11,36 @@ import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from './i18n/locales';
  */
 const CORE = join(process.cwd(), '../../rust/crates/vela-core/src/app/network_admin.rs');
 
-function coreChainIds(): number[] {
+/** The core's mainnets, in order, each with whether it is in a fresh profile's lists. */
+function coreMainnets(): { chainId: number; shownByDefault: boolean }[] {
 	const text = readFileSync(CORE, 'utf8');
-	const start = text.indexOf('BUILTIN_CHAINS');
+	const start = text.indexOf('pub const BUILTIN_CHAINS');
 	const end = text.indexOf('\n];', start);
-	return [...text.slice(start, end).matchAll(/chain_id:\s*(\d+)/g)].map((m) => Number(m[1]));
+	return text
+		.slice(start, end)
+		.split('NetBuiltinChain {')
+		.slice(1)
+		.filter((entry) => /testnet:\s*false/.test(entry))
+		.map((entry) => ({
+			chainId: Number(/chain_id:\s*(\d+)/.exec(entry)?.[1]),
+			shownByDefault: /shown_by_default:\s*true/.test(entry)
+		}));
 }
 
 describe('built-in networks', () => {
-	it('match vela-core BUILTIN_CHAINS, in order', () => {
-		expect(BUILT_IN_NETWORKS.map((n) => n.chainId)).toEqual(coreChainIds());
+	it('match vela-core BUILTIN_CHAINS mainnets, in order', () => {
+		expect(BUILT_IN_NETWORKS.map((n) => n.chainId)).toEqual(coreMainnets().map((n) => n.chainId));
+	});
+
+	it('are shown by default exactly where vela-core shows them', () => {
+		expect(BUILT_IN_NETWORKS.map((n) => n.shownByDefault)).toEqual(
+			coreMainnets().map((n) => n.shownByDefault)
+		);
+		expect(SHOWN_NETWORKS.length).toBe(20);
 	});
 
 	it('are counted correctly in the English heading', () => {
-		const count = String(BUILT_IN_NETWORKS.length);
+		const count = String(SHOWN_NETWORKS.length);
 		expect(en.home.networks.heading).toContain(count);
 	});
 
@@ -35,7 +51,7 @@ describe('built-in networks', () => {
 			const heading = JSON.parse(readFileSync(file, 'utf8'))?.home?.networks?.heading;
 			// An untranslated page falls back to English, which is checked above.
 			if (heading === undefined) return expect(heading).toBeUndefined();
-			expect(heading).toContain(String(BUILT_IN_NETWORKS.length));
+			expect(heading).toContain(String(SHOWN_NETWORKS.length));
 		});
 	}
 });

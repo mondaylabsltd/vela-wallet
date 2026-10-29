@@ -267,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "24 のネットワークを内蔵。自分でも追加できます",
-			"body": "ウォレットのアドレスは、どのネットワークでも同じです。別の EVM チェーンを追加するときは、EIP-7951 / RIP-7212 プリコンパイルと、必要な Safe・ERC-4337 のコントラクトがそろっているかを Vela が確認します。足りないコントラクトがあれば、<a href=\"/chain-setup\">チェーンのセットアップ</a>でどれが足りないかがわかり、誰でもデプロイできるものはそこからデプロイできます。",
+			"heading": "20 のネットワークを内蔵。自分でも追加できます",
+			"body": "ウォレットのアドレスは、どのネットワークでも同じです。Stable、MegaETH、Plume、XRPL EVM にも対応しています。既定では表示されませんが、「設定 → ネットワークを追加」から戻せます。別の EVM チェーンを追加するときは、EIP-7951 / RIP-7212 プリコンパイルと、必要な Safe・ERC-4337 のコントラクトがそろっているかを Vela が確認します。足りないコントラクトがあれば、<a href=\"/chain-setup\">チェーンのセットアップ</a>でどれが足りないかがわかり、誰でもデプロイできるものはそこからデプロイできます。",
 			"link": "ネットワークと手数料の詳細"
 		},
 		"faq": {
@@ -388,8 +388,8 @@
 				"body": "macOS・Windows・Linux 向けのデスクトップアプリとブラウザ拡張を、このサイトから直接ダウンロードできます。"
 			},
 			{
-				"title": "24 のネットワーク",
-				"body": "内蔵ネットワークを 12 追加しました（Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM）。Vela を別のチェーンで使えるようにするための、チェーンのセットアップページも用意しました。"
+				"title": "20 のネットワーク",
+				"body": "どの一覧にも表示されるネットワークを 8 つ追加しました（Arc、X Layer、Soneium、Robinhood Chain、Mantle、Kaia、Celo、Ink）。ほかの 4 つ（Stable、MegaETH、Plume、XRPL EVM）は「設定 → ネットワークを追加」から戻せます。Vela を別のチェーンで使えるようにするための、チェーンのセットアップページも用意しました。"
 			},
 			{
 				"title": "ひとつのコアと、ネイティブアプリ",
@@ -498,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "887b494e0b3a",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

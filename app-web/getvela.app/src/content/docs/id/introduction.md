@@ -1,7 +1,7 @@
 ---
 title: Pengantar
 description: "Vela dalam enam baris, ditambah daftar pertanyaan yang paling sering dibawa orang ke sini — masing-masing langsung tertaut ke jawabannya."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Dokumentasi Vela
@@ -19,8 +19,11 @@ keamanan fisik.
 - **Kunci Anda, hingga tujuh.** Dipilih saat Anda membuat dompet; salah satunya saja
   sudah bisa menandatangani. Vela tidak pernah memegang kunci itu dan tidak punya peran
   apa pun di dompet Anda.
-- **24 jaringan, satu alamat.** Ditambah jaringan EVM mana pun yang Anda tambahkan
-  selama memenuhi persyaratannya.
+- **20 jaringan, satu alamat.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+  World Chain, Celo, Unichain, Ink, Soneium, dan Kaia, ditambah jaringan EVM mana pun
+  yang Anda tambahkan selama memenuhi persyaratannya. Stable, MegaETH, Plume, dan XRPL
+  EVM bisa ditambahkan kembali di Pengaturan → Tambah Jaringan.
 - **Baca dulu, baru tanda tangani.** Transaksi didekode menjadi bahasa yang mudah
   dipahami; yang tidak bisa didekode diberi tanda.
 - **Alfa.** Vela berfungsi dan menyimpan dana sungguhan, tetapi masih muda: mulailah

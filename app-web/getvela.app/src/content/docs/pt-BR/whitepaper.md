@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -182,11 +182,12 @@ recusados. Detalhes:
 
 ### Redes
 
-A Vela tem 24 redes integradas — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
-Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
-aceita qualquer rede EVM que tenha os doze contratos que ela verifica e o
-pré-compilado EIP-7951 / RIP-7212. Dois dos doze são a fábrica de signatários de
+A Vela mostra 20 redes por padrão — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium e Kaia — e aceita qualquer rede EVM que
+tenha os doze contratos que ela verifica e o pré-compilado EIP-7951 / RIP-7212.
+Stable, MegaETH, Plume e XRPL EVM continuam compatíveis, ocultas por padrão, e
+podem ser adicionadas de volta em Configurações → Adicionar rede. Dois dos doze são a fábrica de signatários de
 passkey da Safe e o código de signatário que ela implanta, de que só uma carteira com
 mais de uma chave precisa; a verificação informa os dois separadamente.
 

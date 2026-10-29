@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -176,11 +176,12 @@ bisa ditandatangani sesuai permintaan atau ditolak. Detailnya:
 
 ### Jaringan
 
-Vela punya 24 jaringan bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
-MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — dan menerima
-jaringan EVM apa pun yang punya dua belas kontrak yang diperiksanya dan precompile
-EIP-7951 / RIP-7212. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
+Vela menampilkan 20 jaringan secara default — Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium, dan Kaia — dan menerima jaringan EVM
+apa pun yang punya dua belas kontrak yang diperiksanya dan precompile EIP-7951 /
+RIP-7212. Stable, MegaETH, Plume, dan XRPL EVM masih didukung, disembunyikan secara
+default, dan bisa ditambahkan kembali di Pengaturan → Tambah Jaringan. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
 kode signer yang di-deploy factory itu, yang hanya dibutuhkan dompet dengan lebih dari
 satu kunci; pemeriksaannya melaporkan keduanya secara terpisah.
 

@@ -1,7 +1,7 @@
 ---
 title: Câu hỏi thường gặp
 description: "Những câu trả lời ngắn về quyền lưu ký, khóa, khôi phục, mạng, phí, những gì Vela thấy được, mã nguồn mở, và chuyện gì xảy ra nếu Vela không còn nữa."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Câu hỏi thường gặp
@@ -35,9 +35,11 @@ ví sẽ không thể khôi phục. Xem [khôi phục & đăng nhập](/vi/docs/
 
 ## Hỗ trợ những mạng và token nào?
 
-24 mạng EVM tích hợp sẵn, trong đó có Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain,
-Gnosis và Avalanche, cùng bất kỳ mạng EVM nào bạn tự thêm, miễn là đáp ứng yêu cầu. Coin gốc
-và token ERC-20. Địa chỉ giống nhau trên mọi mạng. Xem [mạng & phí](/vi/docs/networks-and-fees).
+20 mạng EVM hiển thị theo mặc định — Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche,
+Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo,
+Unichain, Ink, Soneium và Kaia — cùng bất kỳ mạng EVM nào bạn tự thêm, miễn là đáp ứng yêu cầu.
+Stable, MegaETH, Plume và XRPL EVM vẫn được hỗ trợ và có thể thêm lại trong Cài đặt → Thêm mạng.
+Coin gốc và token ERC-20. Địa chỉ giống nhau trên mọi mạng. Xem [mạng & phí](/vi/docs/networks-and-fees).
 
 ## Chi phí bao nhiêu?
 

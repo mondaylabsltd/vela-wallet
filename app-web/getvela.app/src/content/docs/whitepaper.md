@@ -169,11 +169,12 @@ signed as asked or rejected. Details:
 
 ### Networks
 
-Vela has 24 built-in networks — Ethereum, BNB Chain, Polygon, Arbitrum,
-Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc,
-X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink,
-Plume and XRPL EVM — and accepts any EVM network that has the twelve contracts
-it checks for and the EIP-7951 / RIP-7212 precompile. Two of the twelve are
+Vela shows 20 networks by default — Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle,
+Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia — and accepts
+any EVM network that has the twelve contracts it checks for and the EIP-7951 /
+RIP-7212 precompile. Stable, MegaETH, Plume and XRPL EVM are still supported,
+hidden by default, and can be added back in Settings → Add network. Two of the twelve are
 Safe's passkey signer factory and the signer code it deploys, which only a
 wallet with more than one key needs; the check reports them separately.
 

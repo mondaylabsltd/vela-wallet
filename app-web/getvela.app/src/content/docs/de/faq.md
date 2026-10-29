@@ -1,7 +1,7 @@
 ---
 title: Häufige Fragen
 description: "Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Häufige Fragen
@@ -39,9 +39,12 @@ und wurde er nicht synchronisiert, lässt sich die Wallet nicht wiederherstellen
 
 ## Welche Netzwerke und Token werden unterstützt?
 
-24 eingebaute EVM-Netzwerke, darunter Ethereum, Base, Arbitrum, Optimism, Polygon, BNB
-Chain, Gnosis und Avalanche, dazu jedes EVM-Netzwerk, das du hinzufügst und das die
-Anforderungen erfüllt. Native Coins und ERC-20-Token. Die Adresse ist in jedem Netzwerk
+20 standardmäßig angezeigte EVM-Netzwerke – Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium und Kaia –, dazu jedes EVM-Netzwerk,
+das du hinzufügst und das die Anforderungen erfüllt. Stable, MegaETH, Plume und XRPL
+EVM werden weiterhin unterstützt und lassen sich unter Einstellungen → Netzwerk
+hinzufügen zurückholen. Native Coins und ERC-20-Token. Die Adresse ist in jedem Netzwerk
 dieselbe. Siehe [Netzwerke und Gebühren](/de/docs/networks-and-fees).
 
 ## Was kostet das?

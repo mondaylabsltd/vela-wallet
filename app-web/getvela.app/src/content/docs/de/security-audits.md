@@ -1,7 +1,7 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
@@ -194,8 +194,8 @@ bewusster Kompromiss ausgewiesen ist:
   von Safe) – Ökosystem-Standard und zustandslos, ohne formale Audits. Fehlen sie,
   lehnt Velas Netzwerkprüfung das Netzwerk ab; sie prüft, dass an der Adresse Code
   existiert, nicht, dass er Byte für Byte übereinstimmt.
-- **Tempo.** Eines der 24 eingebauten Netzwerke, ohne nativen Coin; Vela zahlt das Gas
-  dort im Stablecoin pathUSD. Stand September 2026 sagt Tempos
+- **Tempo.** Eines der 20 Netzwerke, die Vela standardmäßig anzeigt, ohne nativen
+  Coin; Vela zahlt das Gas dort im Stablecoin pathUSD. Stand September 2026 sagt Tempos
   [Sicherheitsrichtlinie](https://github.com/tempoxyz/.github/blob/main/SECURITY.md),
   dass das Protokoll noch auditiert wird und kein aktives Bug-Bounty hat. Guthaben auf
   Tempo und dort gezahltes Gas tragen dieses Risiko auf Chain-Ebene; betrachte Tempo

@@ -134,8 +134,8 @@ Roadmap items that don't have their own PRD live as **forward-FRs** inside an ex
 - **When code moves:** update the `file:line` anchors (or at least the symbol names) in §10 so the
   doc stays verifiable. A PRD whose anchors don't resolve is a bug.
 - **Guardrails are non-negotiable:** no Bluetooth *in the dApp path*, no "audit planned," no
-  "beta/tolerate-bugs" banner, 24 networks (not 8 or 12), fee = 3 × padded gas × tier price shown
-  before signing (not 60%, not ≈2×). See the index guardrails before writing.
+  "beta/tolerate-bugs" banner, 20 networks shown by default (not 8, 12 or 24), fee = 3 × padded
+  gas × tier price shown before signing (not 60%, not ≈2×). See the index guardrails before writing.
 
 ---
 

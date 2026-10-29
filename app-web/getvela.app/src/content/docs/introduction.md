@@ -16,8 +16,11 @@ your phone or computer, on another phone, or on a hardware security key.
   lists the limits.
 - **Your keys, up to seven.** Chosen when you create the wallet; any one of them
   can sign. Vela never has them and holds no role on your wallet.
-- **24 networks, one address.** Plus any EVM network you add that meets the
-  requirements.
+- **20 networks, one address.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+  Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia, plus any EVM network
+  you add that meets the requirements. Stable, MegaETH, Plume and XRPL EVM can be
+  added back in Settings → Add network.
 - **You read before you sign.** Transactions are decoded into plain language;
   what can't be decoded is labelled.
 - **Alpha.** It works and holds real funds, and it is young: start with small

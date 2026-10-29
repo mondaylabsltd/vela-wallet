@@ -1,6 +1,6 @@
 ---
 title: Networks & fees
-description: "The 24 networks built into Vela, how to add another, exactly how a transaction's fee is calculated and who receives it, and what happens when a relay runs out of gas."
+description: "The 20 networks Vela shows by default, how to add another, exactly how a transaction's fee is calculated and who receives it, and what happens when a relay runs out of gas."
 ---
 
 <script>
@@ -11,22 +11,23 @@ description: "The 24 networks built into Vela, how to add another, exactly how a
 
 ## Built-in networks
 
-Vela has **24 networks** built in, all mainnets:
+Vela shows **20 networks** by default, all mainnets:
 
 | Network | Gas paid in | Network | Gas paid in |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (the native coin) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (the native coin) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (no native coin) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (no native coin) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (the native coin) | Kaia | KAIA |
+
+Stable, MegaETH, Plume and XRPL EVM are still supported, hidden by default:
+add them back in **Settings → Add network**.
 
 On most of them you can also pay the fee in a USD stablecoin the relay accepts
 on that network (see below).

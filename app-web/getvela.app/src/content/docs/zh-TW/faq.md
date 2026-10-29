@@ -1,7 +1,7 @@
 ---
 title: 常見問題
 description: "關於保管、金鑰、復原、網路、費用、Vela 看得到什麼、開源，以及 Vela 不在了會怎樣的簡短回答。"
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # 常見問題
@@ -30,8 +30,10 @@ source: 7446e22f990d
 
 ## 支援哪些網路和代幣？
 
-24 條內建 EVM 網路，包括 Ethereum、Base、Arbitrum、Optimism、Polygon、BNB Chain、Gnosis 和
-Avalanche，另外還可以新增任何符合條件的 EVM 網路。支援原生幣和 ERC-20 代幣。每條網路上都是同一個
+預設顯示 20 條 EVM 網路——Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、
+Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、
+Soneium 和 Kaia——另外還可以新增任何符合條件的 EVM 網路。Stable、MegaETH、Plume 和 XRPL EVM
+仍然有支援，可以在「設定 → 新增網路」把它們加回來。支援原生幣和 ERC-20 代幣。每條網路上都是同一個
 位址。請看[網路與費用](/zh-TW/docs/networks-and-fees)。
 
 ## 要花多少錢？

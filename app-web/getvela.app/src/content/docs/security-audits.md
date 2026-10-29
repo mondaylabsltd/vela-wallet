@@ -179,8 +179,8 @@ trade-off:
   factory) — ecosystem-standard and stateless, without formal audits. Vela's
   network check fails closed if they are missing; it checks that code exists at
   the address, not that it matches byte for byte.
-- **Tempo.** One of the 24 built-in networks, with no native coin; Vela pays gas
-  there in the pathUSD stablecoin. As of September 2026, Tempo's
+- **Tempo.** One of the 20 networks Vela shows by default, with no native coin;
+  Vela pays gas there in the pathUSD stablecoin. As of September 2026, Tempo's
   [security policy](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)
   says the protocol is still undergoing audit and has no active bug bounty. Funds
   held on Tempo, and gas paid there, carry that chain-level risk; treat it as the

@@ -1,7 +1,7 @@
 ---
 title: Auditorias e problemas conhecidos
 description: "Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
 
 “Auditado” é uma afirmação sobre um código específico numa versão específica, então
@@ -189,8 +189,8 @@ que é uma concessão deliberada:
   factory da Safe) — padrão do ecossistema e sem estado, sem auditorias formais. A
   verificação de rede da Vela falha de forma segura se eles estiverem ausentes; ela
   confere se existe código no endereço, não se ele corresponde byte a byte.
-- **Tempo.** Uma das 24 redes integradas, sem moeda nativa; ali, a Vela paga o gas
-  na stablecoin pathUSD. Em setembro de 2026, a
+- **Tempo.** Uma das 20 redes que a Vela mostra por padrão, sem moeda nativa; ali,
+  a Vela paga o gas na stablecoin pathUSD. Em setembro de 2026, a
   [política de segurança](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)
   da Tempo diz que o protocolo ainda está passando por auditoria e não tem bug bounty
   ativo. Fundos mantidos na Tempo, e o gas pago ali, carregam esse risco de rede;

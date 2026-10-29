@@ -1,7 +1,7 @@
 ---
 title: 자주 묻는 질문
 description: "수탁, 키, 복구, 네트워크, 수수료, Vela가 볼 수 있는 것, 오픈소스, 그리고 Vela가 사라지면 어떻게 되는지에 대한 짧은 답변."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # 자주 묻는 질문
@@ -33,9 +33,11 @@ source: 7446e22f990d
 
 ## 어떤 네트워크와 토큰을 지원하나요?
 
-Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Gnosis, Avalanche를 포함한 24개 EVM
-네트워크가 내장되어 있고, 요건을 충족하는 EVM 네트워크라면 직접 추가할 수도 있습니다. 네이티브
-코인과 ERC-20 토큰을 지원합니다. 주소는 모든 네트워크에서 같습니다.
+기본으로 20개 EVM 네트워크를 보여 줍니다. Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain,
+Celo, Unichain, Ink, Soneium, Kaia이며, 요건을 충족하는 EVM 네트워크라면 직접 추가할 수도
+있습니다. Stable, MegaETH, Plume, XRPL EVM도 계속 지원하며 설정 → 네트워크 추가에서 다시 추가할
+수 있습니다. 네이티브 코인과 ERC-20 토큰을 지원합니다. 주소는 모든 네트워크에서 같습니다.
 [네트워크와 수수료](/ko/docs/networks-and-fees)를 참고하세요.
 
 ## 비용은 얼마인가요?

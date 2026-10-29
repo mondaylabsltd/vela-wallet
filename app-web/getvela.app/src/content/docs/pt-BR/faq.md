@@ -1,7 +1,7 @@
 ---
 title: Perguntas frequentes
 description: "Respostas curtas sobre custódia, chaves, recuperação, redes, taxas, o que a Vela consegue ver, código aberto e o que acontece se a Vela deixar de existir."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Perguntas frequentes
@@ -37,9 +37,12 @@ sincronizada, a carteira não pode ser recuperada. Veja
 
 ## Quais redes e tokens são compatíveis?
 
-24 redes EVM integradas, entre elas Ethereum, Base, Arbitrum, Optimism, Polygon, BNB
-Chain, Gnosis e Avalanche, além de qualquer rede EVM que você adicionar e que atenda
-aos requisitos. Moedas nativas e tokens ERC-20. O endereço é o mesmo em todas as
+20 redes EVM mostradas por padrão — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium e Kaia —, além de qualquer rede EVM que
+você adicionar e que atenda aos requisitos. Stable, MegaETH, Plume e XRPL EVM
+continuam compatíveis e podem ser adicionadas de volta em Configurações → Adicionar
+rede. Moedas nativas e tokens ERC-20. O endereço é o mesmo em todas as
 redes. Veja [redes e taxas](/pt-BR/docs/networks-and-fees).
 
 ## Quanto custa?

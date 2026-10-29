@@ -1,7 +1,7 @@
 ---
 title: Giriş
 description: "Vela'nın ne olduğu altı satırda ve insanların aklındaki soruların listesi — her biri doğrudan yanıtına bağlanıyor."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Vela belgeleri
@@ -19,8 +19,11 @@ donanım güvenlik anahtarında.
 - **Anahtarlarınız, en fazla yedi tane.** Cüzdanı oluştururken seçilir; herhangi
   biri imzalayabilir. Vela bu anahtarlara hiçbir zaman sahip olmaz ve cüzdanınızda
   hiçbir rolü yoktur.
-- **24 ağ, tek adres.** Artı gereksinimleri karşılayan ve sizin eklediğiniz her EVM
-  ağı.
+- **20 ağ, tek adres.** Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche,
+  Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain,
+  Celo, Unichain, Ink, Soneium ve Kaia, artı gereksinimleri karşılayan ve sizin
+  eklediğiniz her EVM ağı. Stable, MegaETH, Plume ve XRPL EVM, Ayarlar → Ağ Ekle
+  bölümünden geri eklenebilir.
 - **İmzalamadan önce okursunuz.** İşlemler sade bir dile çevrilir; çözülemeyen kısım
   etiketlenir.
 - **Alfa.** Çalışıyor ve gerçek para tutuyor, ama henüz genç: küçük tutarlarla

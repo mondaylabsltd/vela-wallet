@@ -8,7 +8,7 @@
 	import { LOCALES, pathFor } from '$lib/i18n/locales';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
-	import { BUILT_IN_NETWORKS, chainLogo } from '$lib/networks';
+	import { SHOWN_NETWORKS, chainLogo } from '$lib/networks';
 	import { readMultisigCount, type MultisigCount } from '$lib/multisig-count';
 	import type { PageData } from './$types';
 
@@ -277,8 +277,9 @@
 		return () => clearInterval(t);
 	});
 
-	// Built-in networks: one list, checked against vela-core by networks.test.ts.
-	const NETWORKS = BUILT_IN_NETWORKS;
+	// Built-in networks: the ones a fresh profile shows, checked against vela-core
+	// by networks.test.ts.
+	const NETWORKS = SHOWN_NETWORKS;
 
 	// Structured data on the root page binds the "Vela Wallet" brand entity to
 	// getvela.app. It feeds Google the canonical site name (so results read

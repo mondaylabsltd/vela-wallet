@@ -1,7 +1,7 @@
 ---
 title: SSS
 description: "Saklama, anahtarlar, kurtarma, ağlar, ücretler, Vela'nın neleri görebildiği, açık kaynak ve Vela ortadan kalkarsa ne olacağı hakkında kısa yanıtlar."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # SSS
@@ -36,9 +36,11 @@ eşitlenmemişse cüzdan kurtarılamaz. Bkz. [kurtarma ve giriş](/tr/docs/recov
 
 ## Hangi ağlar ve tokenlar destekleniyor?
 
-Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Gnosis ve Avalanche dahil 24
-yerleşik EVM ağı, artı gereksinimleri karşılayan ve sizin eklediğiniz her EVM ağı.
-Yerel coinler ve ERC-20 tokenları. Adres her ağda aynıdır. Bkz.
+Varsayılan olarak gösterilen 20 EVM ağı — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium ve Kaia — artı gereksinimleri karşılayan ve
+sizin eklediğiniz her EVM ağı. Stable, MegaETH, Plume ve XRPL EVM hâlâ desteklenir ve
+Ayarlar → Ağ Ekle bölümünden geri eklenebilir. Yerel coinler ve ERC-20 tokenları. Adres her ağda aynıdır. Bkz.
 [ağlar ve ücretler](/tr/docs/networks-and-fees).
 
 ## Maliyeti ne?
