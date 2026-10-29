@@ -225,8 +225,10 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 		const wallet = await other.newPage();
 		await wallet.goto(link);
 		await wallet.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 60_000 });
-		await expect(wallet.getByTestId('connect-connected')).toBeVisible({ timeout: 60_000 });
+		// r4C-7: Vela's request is reviewed on the page; the wallet is asked on the tap.
+		await expect(wallet.getByTestId('connect-review')).toBeVisible({ timeout: 60_000 });
 		await expect(wallet.getByTestId('connect-wrong-account')).toHaveCount(0);
+		await wallet.getByRole('button', { name: /^Sign with / }).click();
 		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 120_000 });
 		await shot(wallet, 'x3-connect');
 		if (!process.env.LIVE_PEERCONNECT) {

@@ -1083,8 +1083,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
+// 2528 (outside owners, round 4, 2026-10-29): + 89 `home.multisig.external`
+//   leaves — the connect page's review (multisig, network, what it does,
+//   number, the hashes a hardware wallet shows), its waits and outcomes, the
+//   relay said on both sides (refused, no pass, unreachable — Retry), the
+//   eth_sign / approveHash fallbacks, approving, executing and rejecting
+//   from the link alone, wallet errors in words, and the sheet's pairing
+//   (Paired with, Use another wallet) and the outside member's own link;
+//   + `mailboxNoEthSign` (a mailbox that takes only typed data refused the
+//   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
+//   121 branches.
+if (PATHS.length !== 2528) fail(`expected 2528 paths (2407 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2407) fail(`expected 2407 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -157,10 +157,19 @@ vi.mock('./kernel', () => ({
 	cancelTx: () => ({}),
 	namedGenesis: (g: unknown) => g,
 	isEcdsaApproval: () => false,
+	isOnChainApproval: (a: object) => 'onChain' in a,
 	verifyApproval: () => true,
 	verifyEcdsaApproval: () => ({}),
 	sameAddress: (a?: string | null, b?: string | null) =>
 		!!a && !!b && a.toLowerCase() === b.toLowerCase()
+}));
+/** r4C-16: owners the chain says approved (`approvedHashes`), by safeTxHash. */
+const chainApproved = vi.hoisted(() => new Map<string, string[]>());
+vi.mock('../external/onchain', () => ({
+	onChainApprovals: async (_c: number, _s: string, hash: string, owners: string[]) =>
+		(chainApproved.get(hash.toLowerCase()) ?? []).filter((o) =>
+			owners.some((x) => x.toLowerCase() === o.toLowerCase())
+		)
 }));
 vi.mock('./owners', () => ({
 	localOwners: (owners: string[]) =>
@@ -620,5 +629,48 @@ describe('who counts', () => {
 		const deployed = readProposal(account as never, { ...undeployed, deployed: true }, p as never)!;
 		expect(deployed.renameUndeployed).toBe(false);
 		expect(deployed.canExecute).toHaveLength(1);
+	});
+
+	it('r4C-16: an owner that approved on chain (approveHash) counts — read from the chain, never the mailbox', async () => {
+		const OTHER = '0x00000000000000000000000000000000000000bb';
+		const p = { ...stored(3), approvals: [{ owner: OWNER, createdMs: 1 }] };
+		const members = { owners: [OWNER, OTHER], threshold: 2, nonce: 3n, deployed: true };
+		// The mailbox claiming an on-chain approval is not believed.
+		const claimed = readProposal(account as never, members, {
+			...p,
+			approvals: [...p.approvals, { owner: OTHER, onChain: true, createdMs: 2 }]
+		} as never)!;
+		expect(claimed.approved).toBe(1);
+		// The chain's word is.
+		const item = readProposal(account as never, members, p as never, [OTHER])!;
+		expect(item.approved).toBe(2);
+		expect(item.status).toBe('ready');
+		expect(item.approvals.find((a) => a.owner === OTHER)?.approval).toEqual({
+			owner: OTHER,
+			onChain: true
+		});
+		// A stranger's on-chain approval is shown, never counted.
+		const stranger = readProposal(account as never, members, p as never, [
+			'0x00000000000000000000000000000000000000ee'
+		])!;
+		expect(stranger.approved).toBe(1);
+	});
+
+	it('r4C-16: readChain asks the chain about the members the mailbox has nothing from', async () => {
+		const hash = (stored(3) as { safeTxHash: string }).safeTxHash.toLowerCase();
+		chainApproved.set(hash, [OWNER]);
+		const { readChain } = await import('./proposals.svelte');
+		// The mailbox has OWNER's approval: the chain is not asked about it.
+		mailbox.proposals = [{ ...stored(3), approvals: [{ owner: OWNER, createdMs: 1 }] }];
+		let read = await readChain(account as never, 100);
+		expect(read.items[0].approvals.map((a) => 'onChain' in a.approval)).toEqual([false]);
+		// It has nothing from OWNER, who approved on chain: that counts.
+		mailbox.proposals = [{ ...stored(3), approvals: [] }];
+		read = await readChain(account as never, 100);
+		expect(read.items[0].approvals).toMatchObject([
+			{ owner: OWNER, counts: true, approval: { owner: OWNER, onChain: true } }
+		]);
+		expect(read.items[0].approved).toBe(1);
+		chainApproved.clear();
 	});
 });

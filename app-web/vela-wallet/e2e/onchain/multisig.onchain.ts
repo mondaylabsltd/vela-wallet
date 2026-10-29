@@ -399,9 +399,12 @@ test('an outside owner signs with their own wallet, through the connect page', a
 		});
 		await shot(walletPage, 'e3-connect-ask');
 		await walletPage.getByRole('button', { name: 'Connect', exact: true }).click();
-		await expect(walletPage.getByTestId('connect-connected')).toBeVisible({ timeout: 30_000 });
+		// r4C-7: Vela's request is reviewed on the page; the wallet is asked on the tap.
+		await expect(walletPage.getByTestId('connect-review')).toBeVisible({ timeout: 30_000 });
 		// The member Vela asked for: no refusal on the page.
 		await expect(walletPage.getByTestId('connect-wrong-account')).toHaveCount(0);
+		await walletPage.getByRole('button', { name: /^Sign with / }).click();
+		await expect(walletPage.getByTestId('connect-signed')).toBeVisible({ timeout: 30_000 });
 		// Vela checks the signature and hands it to the mailbox: the sheet closes, both approved.
 		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
 		await shot(walletPage, 'e4-connect-done');
@@ -444,7 +447,9 @@ async function signElsewhere(
 	const thrown = errors(page);
 	await page.goto(link);
 	await page.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 });
-	await expect(page.getByTestId('connect-connected')).toBeVisible({ timeout: 30_000 });
+	// r4C-7: reviewed on the page first; the wallet is asked on the tap.
+	await page.getByRole('button', { name: /^Sign with / }).click({ timeout: 30_000 });
+	await expect(page.getByTestId('connect-signed')).toBeVisible({ timeout: 30_000 });
 	await expect(vela.getByTestId('external-link')).toHaveCount(0, { timeout: 60_000 });
 	await shot(page, name);
 	await ctx.close();

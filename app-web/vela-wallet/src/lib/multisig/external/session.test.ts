@@ -13,6 +13,13 @@ class FakeConnection extends EventTarget {
 	state: 'offline' | 'waiting' | 'connected' | 'closed' = 'offline';
 	reason: 'left' | 'closed' | 'closed-by-peer' | undefined;
 	room = { paired: true, invite: undefined as string | undefined, toString: () => 'record-1' };
+	relay = Object.assign(new EventTarget(), {
+		status: { kind: 'connecting' } as { kind: string },
+		retried: 0,
+		retry() {
+			this.retried += 1;
+		}
+	});
 	send() {
 		return 0;
 	}
@@ -105,5 +112,55 @@ describe("the connect page's link", () => {
 		const wallet = ExternalWallet.for([OWNER], 'https://wallet.getvela.app/en/connect');
 		expect(wallet.resumed).toBe(true);
 		expect(wallet.link).toBe(`https://wallet.getvela.app/en/connect#for=${OWNER}`);
+	});
+});
+
+/**
+ * r4C-6: the pairing is the person's to change: another wallet is a new room
+ * (a fresh code), whatever this device paired before, and Unpair ends it.
+ * r4C-4: the sheet sees this side's relay state; r4C-2: the link names the
+ * transaction, so the page can approve it with nobody here.
+ */
+describe('pairing management and what the sheet is told', () => {
+	const PAGE = 'https://wallet.getvela.app/en/connect';
+	const TX = { chainId: 5042002, multisig: OWNER, safeTxHash: `0x${'ab'.repeat(32)}` };
+
+	it('"Use another wallet": a fresh room with its invite, the saved pairing kept', () => {
+		const known = ExternalWallet.for([OWNER], PAGE);
+		expect(known.resumed).toBe(true);
+		expect(known.pairedAccount).toBe(OWNER);
+		known.leave();
+		const other = ExternalWallet.fresh([OWNER], PAGE, TX);
+		expect(other.resumed).toBe(false);
+		expect(other.link).toContain(encodeURIComponent('wss://relay#x'));
+		expect(other.link).toContain(`&ms=5042002.${OWNER}.0x${'ab'.repeat(32)}`);
+		expect(saved().map((s) => s.id)).toEqual(['p1']);
+	});
+
+	it('Unpair forgets it: the next request is a new room', () => {
+		ExternalWallet.for([OWNER], PAGE).end();
+		expect(saved()).toEqual([]);
+		expect(ExternalWallet.for([OWNER], PAGE).resumed).toBe(false);
+	});
+
+	it("follows this side's relay state, and Retry reaches it", () => {
+		const wallet = ExternalWallet.for([OWNER], PAGE);
+		expect(wallet.relay).toEqual({ kind: 'connecting' });
+		connection.relay.status = { kind: 'failed', why: 'refused', detail: 'HTTP 4403' } as never;
+		connection.relay.dispatchEvent(new Event('change'));
+		expect(wallet.relay).toMatchObject({ kind: 'failed', why: 'refused' });
+		wallet.retryRelay();
+		expect(connection.relay.retried).toBe(1);
+	});
+
+	it('times each phase from when it began', () => {
+		const wallet = ExternalWallet.for([OWNER], PAGE);
+		const before = wallet.since;
+		wallet.to('confirming');
+		expect(wallet.phase).toBe('confirming');
+		expect(wallet.since).toBeGreaterThanOrEqual(before);
+		const at = wallet.since;
+		wallet.to('confirming');
+		expect(wallet.since).toBe(at);
 	});
 });

@@ -186,13 +186,26 @@ pub struct EcdsaApproval {
     pub signature: String,
 }
 
-/// One owner's approval, either kind — the genesis service's `Approval`; the
-/// two are told apart by their fields.
+/// An owner that approved on chain: it called the Safe's
+/// `approveHash(safeTxHash)` itself (`approvedHashes(owner, hash) != 0`), so
+/// its entry is `r = owner, v = 1`, as the executor's. Never the mailbox's:
+/// the wallet reads it from the chain, and the Safe checks it there again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnChainApproval {
+    pub owner: String,
+    /// Always `true`: what tells this kind apart.
+    pub on_chain: bool,
+}
+
+/// One owner's approval, any kind — the genesis service's `Approval` (passkey
+/// or plain account), or one the chain holds; told apart by their fields.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Approval {
     Passkey(Box<PasskeyApproval>),
     Ecdsa(EcdsaApproval),
+    OnChain(OnChainApproval),
 }
 
 impl Approval {
@@ -200,6 +213,7 @@ impl Approval {
         match self {
             Self::Passkey(a) => &a.owner,
             Self::Ecdsa(a) => &a.owner,
+            Self::OnChain(a) => &a.owner,
         }
     }
 }
@@ -1019,8 +1033,8 @@ fn parse_tx(tx: &SafeTx) -> Result<ParsedTx, CoreError> {
     })
 }
 
-/// The safeTxHash of `tx` for `safe` on `chain_id`.
-pub fn safe_tx_hash(chain_id: u64, safe: &str, tx: &SafeTx) -> Result<String, CoreError> {
+/// The `SafeTx` struct hash of `tx` (EIP-712's `hashStruct`).
+fn safe_tx_struct_hash(tx: &SafeTx) -> Result<B256, CoreError> {
     let t = parse_tx(tx)?;
     let mut s = keccak256(SAFE_TX_TYPEHASH_PREIMAGE).to_vec();
     s.extend_from_slice(&word_addr(t.to));
@@ -1033,11 +1047,44 @@ pub fn safe_tx_hash(chain_id: u64, safe: &str, tx: &SafeTx) -> Result<String, Co
     s.extend_from_slice(&word_addr(t.gas_token));
     s.extend_from_slice(&word_addr(t.refund_receiver));
     s.extend_from_slice(&word_u256(t.nonce));
+    Ok(keccak256(s))
+}
+
+/// The safeTxHash of `tx` for `safe` on `chain_id`.
+pub fn safe_tx_hash(chain_id: u64, safe: &str, tx: &SafeTx) -> Result<String, CoreError> {
     Ok(hex(eip712(
         domain_separator(chain_id, addr(safe)?),
-        keccak256(s),
+        safe_tx_struct_hash(tx)?,
     )
     .as_slice()))
+}
+
+/// The hashes a hardware wallet shows for a SafeTx's typed data — the
+/// domain hash (`EIP712Domain{chainId, verifyingContract}`), the message hash
+/// (the `SafeTx` struct hash) and the safeTxHash they make — so the owner can
+/// match the device's screen with the review's.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeTxHashes {
+    pub domain_hash: String,
+    pub message_hash: String,
+    pub safe_tx_hash: String,
+    /// What `personal_sign` signs in the `eth_sign` form: the EIP-191 hash of
+    /// the safeTxHash.
+    pub eth_sign_hash: String,
+}
+
+/// `tx`'s hashes for `safe` on `chain_id` ([`SafeTxHashes`]).
+pub fn safe_tx_hashes(chain_id: u64, safe: &str, tx: &SafeTx) -> Result<SafeTxHashes, CoreError> {
+    let domain = domain_separator(chain_id, addr(safe)?);
+    let message = safe_tx_struct_hash(tx)?;
+    let hash = eip712(domain, message);
+    Ok(SafeTxHashes {
+        domain_hash: hex(domain.as_slice()),
+        message_hash: hex(message.as_slice()),
+        safe_tx_hash: hex(hash.as_slice()),
+        eth_sign_hash: hex(eth_signed_hash(hash).as_slice()),
+    })
 }
 
 /// What an owner's passkey signs to approve `safe_tx_hash`: the hash the
@@ -1181,16 +1228,54 @@ pub fn verify_approval(
         .map_err(|_| err("the approval signature does not verify"))
 }
 
+/// How a plain account signed a safeTxHash, as the Safe tells them apart by
+/// `v`: its EIP-712 typed data (`v` 27/28, or 0/1 as some wallets answer), or
+/// Safe's `eth_sign` form (`v` 31/32) — `personal_sign` over the safeTxHash,
+/// for a wallet that cannot sign typed data, which the Safe checks against
+/// the EIP-191 hash of the safeTxHash.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EcdsaForm {
+    TypedData,
+    EthSign,
+}
+
+/// The form of a 65-byte `r ‖ s ‖ v` by its `v`; an error for any other.
+pub fn ecdsa_form(signature: &str) -> Result<EcdsaForm, CoreError> {
+    let sig = unhex(signature)?;
+    if sig.len() != 65 {
+        return Err(err("not a 65-byte signature"));
+    }
+    match sig[64] {
+        0 | 1 | 27 | 28 => Ok(EcdsaForm::TypedData),
+        31 | 32 => Ok(EcdsaForm::EthSign),
+        v => Err(err(format!("v {v} is not a plain account's approval"))),
+    }
+}
+
+/// What `personal_sign` signs for a 32-byte message: the EIP-191 hash
+/// (`"\x19Ethereum Signed Message:\n32" ‖ hash`), as the Safe recomputes it
+/// for an `eth_sign` approval.
+fn eth_signed_hash(hash: B256) -> B256 {
+    let mut p = b"\x19Ethereum Signed Message:\n32".to_vec();
+    p.extend_from_slice(hash.as_slice());
+    keccak256(p)
+}
+
 /// `ecrecover(hash, v, r, s)` over a 65-byte `r ‖ s ‖ v` (`v` 27/28, or 0/1).
+/// The `eth_sign` form (`v` 31/32) recovers over the EIP-191 hash with
+/// `v − 4`, as the Safe does.
 fn recover(hash: B256, signature: &[u8]) -> Result<Address, CoreError> {
     use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
     if signature.len() != 65 {
         return Err(err("not a 65-byte signature"));
     }
-    let parity = match signature[64] {
-        0 | 27 => false,
-        1 | 28 => true,
-        v => return Err(err(format!("v {v} is not an EIP-712 signature's"))),
+    let (parity, hash) = match signature[64] {
+        0 | 27 => (false, hash),
+        1 | 28 => (true, hash),
+        31 => (false, eth_signed_hash(hash)),
+        32 => (true, eth_signed_hash(hash)),
+        v => return Err(err(format!("v {v} is not a plain account's approval"))),
     };
     let sig = Signature::from_slice(&signature[..64]).map_err(|_| err("unreadable signature"))?;
     let key =
@@ -1203,7 +1288,8 @@ fn recover(hash: B256, signature: &[u8]) -> Result<Address, CoreError> {
 }
 
 /// Check a plain account's approval as the Safe will (`ecrecover` over the
-/// safeTxHash is the owner). Returns it with `v` as the Safe reads it (27/28).
+/// safeTxHash is the owner — or, in the `eth_sign` form, over its EIP-191
+/// hash). Returns it with `v` as the Safe reads it (27/28, or 31/32).
 pub fn verify_ecdsa_approval(
     safe_tx_hash: &str,
     a: &EcdsaApproval,
@@ -1273,9 +1359,10 @@ pub fn safe_tx_typed_data(
 /// ordered by owner address as Safe requires — a contract signature
 /// (`r = owner, s = offset, v = 0`, the owner's own EIP-1271 envelope in the
 /// tail) per passkey approval, a plain account's own 65 bytes (`v` 27/28)
-/// per EOA approval, and `r = executor, v = 1` for the executor, whose
-/// `msg.sender` approves on its own. An executor that also sent an approval
-/// counts once.
+/// per EOA approval (`v` 27/28, or 31/32 in the `eth_sign` form), and
+/// `r = owner, v = 1` for the executor, whose `msg.sender` approves on its
+/// own, and for an owner that approved on chain (`approveHash`). An executor
+/// that also sent an approval counts once.
 pub fn assemble_signatures(
     approvals: &[Approval],
     executor: Option<&str>,
@@ -1310,6 +1397,7 @@ pub fn assemble_signatures(
                 }
                 Entry::Ecdsa(sig)
             }
+            Approval::OnChain(_) => Entry::Sender,
         };
         entries.push((owner, entry));
     }
@@ -2256,6 +2344,12 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<String>(&args, "safeTxHash")?,
             &arg(&args, "approval")?,
         )?)),
+        "ecdsaForm" => out(json(&ecdsa_form(&arg::<String>(&args, "signature")?)?)),
+        "safeTxHashes" => out(json(&safe_tx_hashes(
+            arg(&args, "chainId")?,
+            &arg::<String>(&args, "safe")?,
+            &arg(&args, "tx")?,
+        )?)),
         "safeTxTypedData" => out(safe_tx_typed_data(
             arg(&args, "chainId")?,
             &arg::<String>(&args, "safe")?,
@@ -3127,6 +3221,129 @@ mod tests {
             signature: "0x1234".into(),
         };
         assert!(verify_ecdsa_approval(hash, &short).is_err());
+    }
+
+    fn eoa_personal_sign(key: &k256::ecdsa::SigningKey, hash: &str) -> String {
+        let h: B256 = hash.parse().unwrap();
+        let (sig, id) = key.sign_prehash_recoverable(eth_signed_hash(h).as_slice());
+        let mut out = sig.to_bytes().to_vec();
+        out.push(27 + id.to_byte());
+        hex(&out)
+    }
+
+    /// Safe's `eth_sign` form: `personal_sign` over the safeTxHash, `v + 4`.
+    /// Checked as the Safe checks it (over the EIP-191 hash), kept as 31/32,
+    /// and told apart from the typed form; the bare `personal_sign` answer
+    /// (`v` 27/28 over the EIP-191 hash) is NOT an approval of the safeTxHash.
+    #[test]
+    fn the_eth_sign_form_is_checked_over_the_eip191_hash() {
+        let (key, owner) = eoa(7);
+        let hash = "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa";
+        let personal = eoa_personal_sign(&key, hash);
+        let mut sig = unhex(&personal).unwrap();
+        assert!(verify_ecdsa_approval(
+            hash,
+            &EcdsaApproval {
+                owner: owner.clone(),
+                signature: personal.clone()
+            }
+        )
+        .is_err());
+        sig[64] += 4;
+        let form = EcdsaApproval {
+            owner: owner.clone(),
+            signature: hex(&sig),
+        };
+        let checked = verify_ecdsa_approval(hash, &form).unwrap();
+        assert_eq!(checked.signature, hex(&sig));
+        assert_eq!(ecdsa_form(&checked.signature).unwrap(), EcdsaForm::EthSign);
+        assert_eq!(
+            ecdsa_form(&eoa_sign(&key, hash)).unwrap(),
+            EcdsaForm::TypedData
+        );
+        assert!(ecdsa_form("0x1234").is_err());
+        // Another hash, another key: refused.
+        let elsewhere = "0x00000000000000000000000000000000000000000000000000000000000000aa";
+        assert!(verify_ecdsa_approval(elsewhere, &form).is_err());
+        let (other, _) = eoa(8);
+        let mut forged = unhex(&eoa_personal_sign(&other, hash)).unwrap();
+        forged[64] += 4;
+        assert!(verify_ecdsa_approval(
+            hash,
+            &EcdsaApproval {
+                owner: owner.clone(),
+                signature: hex(&forged)
+            }
+        )
+        .is_err());
+        // Assembled as it is: the Safe reads v 31/32 as eth_sign.
+        let sigs = unhex(&assemble_signatures(&[Approval::Ecdsa(form)], None).unwrap()).unwrap();
+        assert_eq!(sigs, sig);
+        let hashes = safe_tx_hashes(
+            100,
+            "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+            &transfers_tx(
+                &[Transfer {
+                    token: None,
+                    to: B.into(),
+                    amount: "0x1".into(),
+                }],
+                "0x0",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let h: B256 = hashes.safe_tx_hash.parse().unwrap();
+        assert_eq!(hashes.eth_sign_hash, hex(eth_signed_hash(h).as_slice()));
+    }
+
+    /// The hashes a hardware wallet shows make the safeTxHash:
+    /// `keccak(0x1901 ‖ domain ‖ message)`, the domain Safe's
+    /// `domainSeparator()` and the message the SafeTx struct hash.
+    #[test]
+    fn the_review_hashes_make_the_safe_tx_hash() {
+        let safe = "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83";
+        let tx = transfers_tx(
+            &[Transfer {
+                token: None,
+                to: B.into(),
+                amount: "0x2386f26fc10000".into(),
+            }],
+            "0x3",
+        )
+        .unwrap();
+        let h = safe_tx_hashes(100, safe, &tx).unwrap();
+        assert_eq!(h.safe_tx_hash, safe_tx_hash(100, safe, &tx).unwrap());
+        let mut p = vec![0x19, 0x01];
+        p.extend(unhex(&h.domain_hash).unwrap());
+        p.extend(unhex(&h.message_hash).unwrap());
+        assert_eq!(hex(keccak256(p).as_slice()), h.safe_tx_hash);
+        assert_eq!(
+            h.domain_hash,
+            hex(domain_separator(100, addr(safe).unwrap()).as_slice())
+        );
+        let via_call = call_json(
+            "safeTxHashes",
+            &serde_json::json!({"chainId": 100, "safe": safe, "tx": tx}).to_string(),
+        )
+        .unwrap();
+        assert!(via_call.contains("\"domainHash\""));
+        assert!(via_call.contains(&h.message_hash));
+    }
+
+    /// An owner that approved on chain (`approveHash`) sits in the
+    /// signatures as the executor does, `r = owner, v = 1`, and reads back
+    /// from the JSON as that kind (not a passkey's, not a plain account's).
+    #[test]
+    fn an_on_chain_approval_is_assembled_as_v1() {
+        let onchain: Approval =
+            serde_json::from_value(serde_json::json!({"owner": A, "onChain": true})).unwrap();
+        assert!(matches!(onchain, Approval::OnChain(_)));
+        let sigs = unhex(&assemble_signatures(&[onchain], None).unwrap()).unwrap();
+        assert_eq!(sigs.len(), 65);
+        assert_eq!(&sigs[12..32], addr(A).unwrap().as_slice());
+        assert_eq!(&sigs[32..64], &[0u8; 32]);
+        assert_eq!(sigs[64], 1);
     }
 
     /// EOA and passkey approvals and the executor, sorted by owner: an EOA's

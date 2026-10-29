@@ -23,7 +23,7 @@ import { signChallenge } from '$lib/signing/sign-challenge';
 import { hasCode, type ChainMembers } from './chain';
 import {
 	executionCalls,
-	isEcdsaApproval,
+	isPasskeyApproval,
 	sameAddress,
 	type Approval,
 	type Genesis,
@@ -56,7 +56,7 @@ export async function planCalls(input: ExecutionInput) {
 	// A passkey owner's check needs its wallet's code; a plain account signs as it is.
 	const deployOwners: Genesis[] = [];
 	for (const a of others) {
-		if (!isEcdsaApproval(a) && !(await hasCode(input.chainId, a.owner))) {
+		if (isPasskeyApproval(a) && !(await hasCode(input.chainId, a.owner))) {
 			deployOwners.push(a.ownerGenesis);
 		}
 	}

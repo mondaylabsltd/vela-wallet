@@ -51,6 +51,7 @@
 	import { findExecution } from '../core/records';
 	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
+	import { connectLink } from '../external/connect-link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
@@ -369,6 +370,42 @@
 						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
 	);
+
+	/**
+	 * r4C-13: the one link to send a member whose wallet is elsewhere — the
+	 * connect page, naming the transaction, which it reads, reviews and signs
+	 * from alone (r4C-2) — never the Vela link an outside wallet cannot use.
+	 */
+	const outsideLink = $derived(
+		typeof location === 'undefined' || outside.length === 0
+			? ''
+			: connectLink(`${shareOrigin(location.origin)}/${locale}/connect`, null, outside, {
+					chainId,
+					multisig: account.address,
+					safeTxHash
+				})
+	);
+	/** Members still to approve who approve in Vela (not this device's, not outside wallets). */
+	const velaMissing = $derived(
+		!item
+			? []
+			: (members?.owners ?? []).filter(
+					(o) =>
+						localOwners([o]).length === 0 &&
+						!outside.some((x) => sameAddress(x, o)) &&
+						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
+				)
+	);
+	let outsideCopied = $state(false);
+	async function copyOutsideLink() {
+		try {
+			await navigator.clipboard.writeText(outsideLink);
+			outsideCopied = true;
+			setTimeout(() => (outsideCopied = false), 1600);
+		} catch {
+			// nothing to copy into: the link stays on screen
+		}
+	}
 
 	async function onExternal() {
 		if (!item) return;
@@ -902,7 +939,7 @@
 		{/if}
 
 		<!-- Only while approvals are missing: not once it is being executed. -->
-		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold}
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold && (velaMissing.length > 0 || outside.length === 0)}
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>
@@ -922,6 +959,27 @@
 							>{m.proposal.share}</Button
 						>
 					{/if}
+				</div>
+			</section>
+		{/if}
+
+		{#if !drafting && item.status !== 'done' && phase.kind !== 'sent' && shownApproved < item.threshold && outsideLink}
+			<!-- r4C-13: an outside member's own link: it signs from the connect page alone. -->
+			<section class="invite" data-testid="outside-invite">
+				<h3>{m.external.outsideLinkTitle}</h3>
+				<p class="fine">{m.external.outsideLinkHint}</p>
+				<div class="link-row">
+					<code class="link" data-testid="outside-link">{outsideLink}</code>
+				</div>
+				<div class="link-actions">
+					<Button variant="secondary" shape="rounded" onclick={copyOutsideLink}>
+						<span class="label"
+							><Icon
+								icon={outsideCopied ? UTILITY_ICONS.check : UTILITY_ICONS.copy}
+								size="sm"
+							/>{outsideCopied ? m.proposal.copied : m.proposal.copyLink}</span
+						>
+					</Button>
 				</div>
 			</section>
 		{/if}

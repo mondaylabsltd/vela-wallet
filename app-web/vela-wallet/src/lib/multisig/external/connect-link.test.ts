@@ -21,27 +21,34 @@ describe('the connect link (ms-14)', () => {
 		expect(link).toMatch(/\/en\/connect#wss/);
 		expect(readConnectHash(url.hash)).toEqual({
 			invite: INVITE,
-			members: [ALICE.toLowerCase(), BOB.toLowerCase()]
+			members: [ALICE.toLowerCase(), BOB.toLowerCase()],
+			tx: null
 		});
 	});
 
 	it('a room paired before: the members alone; none named: the plain page', () => {
 		expect(readConnectHash(new URL(connectLink(PAGE, null, [ALICE])).hash)).toEqual({
 			invite: null,
-			members: [ALICE.toLowerCase()]
+			members: [ALICE.toLowerCase()],
+			tx: null
 		});
 		expect(connectLink(PAGE, null, [])).toBe(PAGE);
 	});
 
 	it('an older link (the invite alone) still opens, with no one to check against', () => {
 		const old = `#${encodeURIComponent(INVITE)}`;
-		expect(readConnectHash(old)).toEqual({ invite: INVITE, members: [] });
+		expect(readConnectHash(old)).toEqual({ invite: INVITE, members: [], tx: null });
 		expect(isExpected([], BOB)).toBe(true);
 	});
 
 	it('drops what does not read — never a guess', () => {
-		expect(readConnectHash('#for=0x123,nonsense&%E0%A4%A')).toEqual({ invite: null, members: [] });
-		expect(readConnectHash('')).toEqual({ invite: null, members: [] });
+		expect(readConnectHash('#for=0x123,nonsense&%E0%A4%A')).toEqual({
+			invite: null,
+			members: [],
+			tx: null
+		});
+		expect(readConnectHash('')).toEqual({ invite: null, members: [], tx: null });
+		expect(readConnectHash(`#ms=0.${ALICE}.0x12`).tx).toBeNull();
 		expect(connectLink(PAGE, null, ['0xnope'])).toBe(PAGE);
 	});
 
@@ -49,5 +56,21 @@ describe('the connect link (ms-14)', () => {
 		const members = [ALICE.toLowerCase()];
 		expect(isExpected(members, ALICE)).toBe(true);
 		expect(isExpected(members, BOB)).toBe(false);
+	});
+
+	it('r4C-2: carries the transaction, so the page can approve it with no Vela on the other end', () => {
+		const tx = { chainId: 5042002, multisig: ALICE, safeTxHash: `0x${'Ab'.repeat(32)}` };
+		const live = connectLink(PAGE, INVITE, [BOB], tx);
+		expect(readConnectHash(new URL(live).hash)).toEqual({
+			invite: INVITE,
+			members: [BOB.toLowerCase()],
+			tx: { chainId: 5042002, multisig: ALICE.toLowerCase(), safeTxHash: `0x${'ab'.repeat(32)}` }
+		});
+		// The approve link: no room at all.
+		const later = connectLink(PAGE, null, [BOB], tx);
+		expect(later).toMatch(/\/en\/connect#for=0x3c44.*&ms=5042002\.0x7099/);
+		expect(readConnectHash(new URL(later).hash).invite).toBeNull();
+		// A transaction that does not read is left out, never half-written.
+		expect(connectLink(PAGE, null, [BOB], { ...tx, safeTxHash: '0x12' })).not.toContain('ms=');
 	});
 });
