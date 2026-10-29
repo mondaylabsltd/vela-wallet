@@ -104,16 +104,11 @@ const DISPATCHED: Record<string, Place> = {
 	'networkAdmin.override_expanded': { step: 'set_network_endpoint' },
 	'networkAdmin.override_field_edited': { step: 'set_network_endpoint' },
 	// The person's own field editing: the network core cleans and saves what
-	// was typed. The intents' input check is an agent's (a blank service URL,
-	// a key with spaces), so these stay the core's events.
+	// was typed. The intents' input check is an agent's (a blank service
+	// URL), so these stay the core's events.
 	'networkAdmin.override_blurred': { intent: 'set_network_endpoint' },
 	'networkAdmin.only_mine_changed': { intent: 'set_only_my_node' },
-	'networkAdmin.providers_opened': { step: 'set_provider_key' },
-	'networkAdmin.provider_key_edited': { step: 'set_provider_key' },
-	'networkAdmin.provider_key_blurred': { intent: 'set_provider_key' },
-	'networkAdmin.provider_test_requested': {
-		later: 'testing a provider key; its answer is only drawn in Settings'
-	},
+
 	'networkAdmin.endpoints_opened': { step: 'set_service_endpoint' },
 	'networkAdmin.endpoint_edited': { step: 'set_service_endpoint' },
 	'networkAdmin.endpoint_blurred': { intent: 'set_service_endpoint' },
@@ -286,10 +281,7 @@ const SETTINGS: Record<string, Place> = {
 	'net.detail-field': { step: 'set_network_endpoint' },
 	'net.detail-blur': { intent: 'set_network_endpoint' },
 	'net.only-mine': { intent: 'set_only_my_node' },
-	'net.providers-open': { step: 'set_provider_key' },
-	'net.provider-key': { step: 'set_provider_key' },
-	'net.provider-blur': { intent: 'set_provider_key' },
-	'net.provider-test': { later: 'testing a provider key; its answer is only drawn in Settings' },
+
 	'net.endpoints-open': { step: 'set_service_endpoint' },
 	'net.endpoint': { step: 'set_service_endpoint' },
 	'net.endpoint-blur': { intent: 'set_service_endpoint' },

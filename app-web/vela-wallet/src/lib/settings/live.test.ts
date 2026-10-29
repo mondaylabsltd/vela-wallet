@@ -16,7 +16,6 @@ import {
 	liveSpaceHeading,
 	liveRelayer,
 	liveRelayReport,
-	liveRpcProviders,
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
@@ -112,10 +111,6 @@ const VIEW: NetView = {
 			health: { type: 'unreachable', http_status: null, latency_ms: null },
 			refused: false
 		}
-	],
-	providers: [
-		{ provider: 'alchemy', key: 'alch-key', has_key: true, test: null },
-		{ provider: 'drpc', key: '', has_key: false, test: null }
 	],
 	last_added_chain_id: null,
 	dapp_add: null
@@ -696,75 +691,6 @@ describe('liveEndpoints', () => {
 			hint: m.networks.urlRefused,
 			badge: { tone: 'error', label: m.networks.httpsRequired }
 		});
-	});
-});
-
-describe('liveRpcProviders', () => {
-	it('a set key reads checking with the check action; an unset one invites', () => {
-		const model = liveRpcProviders(VIEW, m);
-		expect(model.providers[0]).toMatchObject({
-			id: 'alchemy',
-			badge: { tone: 'neutral', label: m.rpcProviders.checking },
-			action: m.rpcProviders.checkKey
-		});
-		expect(model.providers[1]).toMatchObject({
-			id: 'drpc',
-			badge: { tone: 'neutral', label: m.rpcProviders.notSet },
-			action: m.rpcProviders.getKey
-		});
-	});
-
-	// set-9: a made-up key read green "Connected" over "Supports 0 of 23".
-	it('a key reads connected only once a network has answered it', () => {
-		const tested = (ok: number, done = true) =>
-			liveRpcProviders(
-				{
-					...VIEW,
-					providers: [
-						{
-							provider: 'alchemy',
-							key: 'alch-key',
-							has_key: true,
-							test: { done, results: [], ok_count: ok, total: 23 }
-						}
-					]
-				},
-				m
-			).providers[0].badge;
-		expect(tested(0)).toMatchObject({ tone: 'error', label: m.rpcProviders.unavailable });
-		expect(tested(12)).toMatchObject({ tone: 'ok', label: m.rpcProviders.connected });
-		expect(tested(5, false)).toMatchObject({ tone: 'neutral', label: m.rpcProviders.checking });
-	});
-
-	it('an unset provider links to its OWN site, never another provider', () => {
-		const model = liveRpcProviders(VIEW, m);
-		const drpc = model.providers.find((p) => p.id === 'drpc');
-		expect(drpc?.actionUrl).toBe('https://drpc.org/');
-		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
-		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
-		expect(all.find((p) => p.id === 'alchemy')?.actionUrl).toBe('https://dashboard.alchemy.com/');
-		expect(model.providers.find((p) => p.id === 'alchemy')?.actionUrl).toBeUndefined();
-	});
-
-	it('"Get a key" is offered once per provider, not again under the field', () => {
-		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
-		for (const provider of liveRpcProviders({ ...VIEW, providers: unset }, m).providers) {
-			expect(provider.action).toBe(m.rpcProviders.getKey);
-			expect(provider.link).toBeUndefined();
-			expect(provider.linkUrl).toBeUndefined();
-		}
-	});
-
-	it('"Get key" opens the key page; only a key is tested (spec 072)', () => {
-		// The in-field "Get key" ran a key TEST on an empty field. Without a key
-		// the action is a link to where one is made; with one it is the test,
-		// and says so.
-		const model = liveRpcProviders(VIEW, m);
-		const drpc = model.providers.find((p) => p.id === 'drpc');
-		expect(drpc).toMatchObject({ action: m.rpcProviders.getKey, actionUrl: 'https://drpc.org/' });
-		const alchemy = model.providers.find((p) => p.id === 'alchemy');
-		expect(alchemy?.action).toBe(m.rpcProviders.checkKey);
-		expect(alchemy?.actionUrl).toBeUndefined();
 	});
 });
 

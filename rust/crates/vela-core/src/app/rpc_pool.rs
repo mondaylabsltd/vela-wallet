@@ -235,10 +235,11 @@ pub enum RpcKind {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum RpcSource {
-    /// Per-network override.
+    /// Per-network override — the person's own endpoint. (The keyed
+    /// Alchemy/dRPC/Ankr tier that sat below it is gone, owner decision
+    /// 2026-10-29: its keys became per-network RPCs,
+    /// `network_admin::retire_provider_keys`.)
     User,
-    /// Configured key (Alchemy/dRPC/Ankr).
-    Provider,
     /// Vela built-in (CHAINS table).
     Default,
     /// Vela curated public fallback.
@@ -253,7 +254,6 @@ pub enum RpcSource {
 pub fn source_priority(source: RpcSource) -> f64 {
     match source {
         RpcSource::User => 10_000.0,
-        RpcSource::Provider => 9_000.0,
         RpcSource::Default => 1_000.0,
         RpcSource::Public => 500.0,
         RpcSource::Builtin => 100.0,
@@ -395,8 +395,8 @@ pub enum RpcCallVerdict {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum RpcOperation {
-    /// Collect the endpoint lists for one chain (user override, provider
-    /// keys, defaults, curated public, chain index — all shell config;
+    /// Collect the endpoint lists for one chain (user override, defaults,
+    /// curated public, chain index — all shell config;
     /// `collectRpcUrls`/`collectBundlerUrls` stay there). Do NOT filter
     /// banned URLs — bans are this core's state.
     LoadPoolConfig { chain_id: u32 },
@@ -538,7 +538,7 @@ pub enum Event {
         chain_id: u32,
         now_ms: f64,
     },
-    /// Provider keys / service endpoints changed: every pool re-reads config
+    /// Service endpoints or per-network RPCs changed: every pool re-reads config
     /// on next use, and cached fastest-RPC winners are dropped
     /// (`invalidateAllPools`).
     InvalidateAll,
@@ -1257,7 +1257,7 @@ impl App for RpcPool {
                 for pool in model.pools.values_mut() {
                     pool.loaded_at_ms = None;
                 }
-                // After a provider-key change the old winner would otherwise
+                // After an endpoint change the old winner would otherwise
                 // ride `X-Rpc-Url` for up to an hour.
                 model.fastest.clear();
                 model.wrong_chain.clear();
@@ -1444,7 +1444,7 @@ fn merge_endpoints(
 
 /// "Only use my node" (owner decision 2026-10-28): with the switch on and an
 /// endpoint of the person's own among the collected ones, the pool is that
-/// endpoint (or those) and nothing else — no provider, no default, no public
+/// endpoint (or those) and nothing else — no default, no public
 /// node is ever handed a read about the account, and a sweep that fails is
 /// the person's node failing. Without an own endpoint the switch means
 /// nothing and the list is kept whole. Answers the list, and whether the
@@ -1497,14 +1497,13 @@ fn note_answer_source(model: &mut Model, chain_id: u32, url: &str) {
 /// (`network_admin::DEAD_RPC_HOSTS`), in every tier the pool fills itself —
 /// the chain index is a third party's list and may still name one, and each
 /// costs a sweep its full timeout. Two things are never dropped: a person's
-/// own endpoint ([`RpcSource::User`], and a keyed [`RpcSource::Provider`]) —
-/// theirs to choose — and the last endpoints of a chain: when nothing else
-/// was collected the list is kept whole, because a dead endpoint that may
-/// have come back beats no endpoint at all.
+/// own endpoint ([`RpcSource::User`]) — theirs to choose — and the last
+/// endpoints of a chain: when nothing else was collected the list is kept
+/// whole, because a dead endpoint that may have come back beats no endpoint
+/// at all.
 fn without_dead_hosts(seeds: Vec<RpcEndpointSeed>) -> Vec<RpcEndpointSeed> {
     let dropped = |seed: &RpcEndpointSeed| {
-        !matches!(seed.source, RpcSource::User | RpcSource::Provider)
-            && super::network_admin::is_dead_rpc_host(&seed.url)
+        seed.source != RpcSource::User && super::network_admin::is_dead_rpc_host(&seed.url)
     };
     if seeds
         .iter()

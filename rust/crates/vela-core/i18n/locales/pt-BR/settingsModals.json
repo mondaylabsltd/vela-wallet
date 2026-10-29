@@ -24,16 +24,12 @@
       "totalPartial": "Total até agora {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "Provedores RPC",
       "description": "Adicione uma chave de API para rotear as redes compatíveis pelo seu próprio provedor. Prioridade: RPC por rede, depois seus provedores, em seguida o integrado da Vela e por fim o índice de redes.",
       "getKey": "Obter uma chave",
       "test": "Testar",
       "notSet": "Não definido",
       "checkKey": "Verificar chave",
-      "activeNetworks": "{{count}} redes",
       "supportsCount": "Suporta {{count}} de {{total}} redes",
-      "unavailable": "Indisponível",
-      "avgLatency": "méd. {{ms}}ms",
       "relayNotice": "O relay que envia suas transações recebe o endereço RPC que sua carteira usa em cada rede — incluindo a chave de API — para alcançar as redes que você usa."
     },
     "endpoints": {

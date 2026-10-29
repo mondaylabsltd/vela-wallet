@@ -25,7 +25,7 @@ use super::fee_policy::FeeTier;
 use super::intents::{
     Action, Actor, BrowseStep, Operation, OperationState, Preference, Reason, ReasonCode, Screen,
 };
-use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
+use super::network_admin::{NetEndpointField, NetOverrideField};
 
 // ---------------------------------------------------------------------------
 // The world, as the judgements read it
@@ -197,15 +197,6 @@ pub struct WizardFacts {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct ProviderFacts {
-    pub provider: NetProviderId,
-    #[serde(default)]
-    pub key: String,
-    #[serde(default)]
-    pub has_key: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct EndpointFacts {
     pub field: NetEndpointField,
     #[serde(default)]
@@ -220,7 +211,6 @@ pub struct EndpointFacts {
 pub struct NetworksFacts {
     pub networks: Vec<NetworkFacts>,
     pub wizard: WizardFacts,
-    pub providers: Vec<ProviderFacts>,
     pub endpoints: Vec<EndpointFacts>,
 }
 
@@ -1222,9 +1212,7 @@ pub fn examine(action: &Action, world: &World) -> Examined {
             None => not_ready("the network list"),
             Some(networks) => examine_networks(action, networks),
         },
-        Action::SetProviderKey { .. }
-        | Action::SetServiceEndpoint { .. }
-        | Action::ResetServiceEndpoints => {
+        Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => {
             if world.networks.is_some() {
                 Examined::Go
             } else {
@@ -1348,12 +1336,7 @@ fn verdict_networks(action: &Action, networks: Option<&NetworksFacts>) -> Verdic
         Action::RemoveNetwork { chain_id } => {
             held(!network(networks, *chain_id).is_some_and(|row| row.is_custom))
         }
-        Action::SetProviderKey { provider, key } => {
-            let key = key.trim();
-            held(networks.providers.iter().any(|row| {
-                &row.provider == provider && row.key == key && row.has_key == !key.is_empty()
-            }))
-        }
+
         Action::SetServiceEndpoint { field, url } => held(
             networks
                 .endpoints
@@ -1444,7 +1427,6 @@ pub fn verdict(action: &Action, world: &World, baseline: &mut Baseline) -> Verdi
         | Action::SetNetworkEndpoint { .. }
         | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. }
-        | Action::SetProviderKey { .. }
         | Action::SetServiceEndpoint { .. }
         | Action::ResetServiceEndpoints => verdict_networks(action, world.networks.as_ref()),
         // Back, forward, reload: asked of the page's engine, which is done.
@@ -1499,7 +1481,6 @@ pub fn world_needs(action: &Action) -> &'static [&'static str] {
         | Action::SetNetworkEndpoint { .. }
         | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. }
-        | Action::SetProviderKey { .. }
         | Action::SetServiceEndpoint { .. }
         | Action::ResetServiceEndpoints => &["networks"],
         Action::EraseDevice
@@ -1826,12 +1807,6 @@ struct ChainOut<'a> {
 }
 
 #[derive(Serialize)]
-struct ProviderOut<'a> {
-    provider: &'a NetProviderId,
-    has_key: bool,
-}
-
-#[derive(Serialize)]
 struct ServiceOut<'a> {
     field: &'a NetEndpointField,
     url: String,
@@ -1841,7 +1816,6 @@ struct ServiceOut<'a> {
 #[derive(Serialize)]
 struct NetworksOut<'a> {
     chains: Vec<ChainOut<'a>>,
-    providers: Vec<ProviderOut<'a>>,
     services: Vec<ServiceOut<'a>>,
 }
 
@@ -1906,26 +1880,13 @@ pub fn approval_detail(action: &Action) -> Option<String> {
         Action::RemoveNetwork { chain_id } => Some(format!("chain {chain_id}")),
         Action::SetOnlyMyNode { chain_id, on } => Some(format!(
             "chain {chain_id} · {}",
-            if *on { "only my node" } else { "public nodes too" }
-        )),
-        Action::SetProviderKey { provider, key } => {
-            let key = key.trim();
-            let tail: String = key
-                .chars()
-                .rev()
-                .take(4)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            Some(if key.is_empty() {
-                word(provider)
-            } else if key.chars().count() <= 4 {
-                format!("{} · ••••", word(provider))
+            if *on {
+                "only my node"
             } else {
-                format!("{} · ••••{tail}", word(provider))
-            })
-        }
+                "public nodes too"
+            }
+        )),
+
         Action::SetServiceEndpoint { field, url } => Some(format!("{}{}", word(field), to(url))),
         Action::DeleteActivity { id } => Some(id.clone()),
         Action::SetNetworkSpace { space } => Some(space.as_str().to_owned()),
@@ -2042,7 +2003,7 @@ fn short_address(address: &str) -> String {
 }
 
 /// A URL as an agent reads it: where it goes, not what it carries. Keys ride
-/// in RPC and service URLs — a provider's in its path, others in the query or
+/// in RPC and service URLs — Alchemy's in its path, others in the query or
 /// as `user:pass@` — so only the scheme and host are kept, and `/…` says
 /// there was more.
 #[must_use]
@@ -2070,9 +2031,8 @@ pub fn redact_url(url: &str) -> String {
 }
 
 /// `vela_state`: the wallet as an agent reads it — ids and values, never
-/// display text. Balance privacy holds here as on every money surface, and a
-/// provider's API key is a credential: only whether one is set is read — nor
-/// is any URL read whole that could carry one ([`redact_url`]).
+/// display text. Balance privacy holds here as on every money surface, and
+/// no URL is read whole that could carry an API key ([`redact_url`]).
 /// `page`, `approvals` and `activity` are the shell's own, passed through.
 #[must_use]
 pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Value) -> Value {
@@ -2215,14 +2175,7 @@ pub fn agent_state(world: &World, page: &str, approvals: &Value, activity: &Valu
                     only_my_node: row.own_rpc && row.only_mine,
                 })
                 .collect(),
-            providers: n
-                .providers
-                .iter()
-                .map(|row| ProviderOut {
-                    provider: &row.provider,
-                    has_key: row.has_key,
-                })
-                .collect(),
+
             services: n
                 .endpoints
                 .iter()

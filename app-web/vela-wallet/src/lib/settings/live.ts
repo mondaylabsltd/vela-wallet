@@ -51,7 +51,7 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/flows/marks';
-import { chainMeta, feedbackPanel, languageRows, markFor, PROVIDER_KEY_URLS } from './fixtures';
+import { chainMeta, feedbackPanel, languageRows, markFor } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
@@ -71,7 +71,6 @@ import type {
 	NetworkDetailModel,
 	NetworkRowModel,
 	NetworkSpaceHeadingModel,
-	RpcProvidersModel,
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsHomeModel,
@@ -581,62 +580,8 @@ function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['s
 }
 
 // ---------------------------------------------------------------------------
-// Providers + endpoints
+// Endpoints
 // ---------------------------------------------------------------------------
-
-const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
-
-/**
- * A provider's pill (set-9). A key is "Connected" only once the core's probe
- * has heard a network answer it: a made-up key read green "Connected" over
- * "Supports 0 of 23 networks". Being tried — or being typed, when leaving
- * the field is what starts the try — it says so; tried and answered by none,
- * it is unavailable.
- */
-function providerPill(p: NetView['providers'][number], m: SettingsMessages): StatusPillModel {
-	if (!p.has_key) return { tone: 'neutral', label: m.rpcProviders.notSet, dot: true };
-	const test = p.test;
-	if (test === null || !test.done) {
-		return { tone: 'neutral', label: m.rpcProviders.checking, dot: true };
-	}
-	return test.ok_count > 0
-		? { tone: 'ok', label: m.rpcProviders.connected, dot: true }
-		: { tone: 'error', label: m.rpcProviders.unavailable, dot: true };
-}
-
-export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
-	return {
-		title: m.advanced.rpcProvidersTitle,
-		subtitle: m.advanced.rpcProvidersSubtitle,
-		// Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
-		description: `${m.rpcProviders.description} ${m.rpcProviders.relayNotice}`,
-		providers: view.providers.map((p) => {
-			const test = p.test;
-			return {
-				id: p.provider,
-				name: PROVIDER_NAMES[p.provider],
-				badge: providerPill(p, m),
-				field: {
-					id: p.provider,
-					label: '',
-					value: p.key,
-					placeholder: p.has_key ? undefined : m.rpcProviders.notSet
-				},
-				// With a key the action tests it. Without one there is nothing to
-				// test, and "Get key" goes where a key is made — it used to run a
-				// test on the empty field under that label.
-				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
-				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
-				// No second "Get a key →" under the field: the in-field action above
-				// already is that link, and two of them read as two different things.
-				support:
-					test !== null && test.done
-						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
-						: undefined
-			};
-		})
-	};
-}
 
 const ENDPOINT_COPY = {
 	ethereum_data: { label: 'chainDataLabel', hint: 'chainDataHint' },
@@ -744,7 +689,6 @@ export function withLiveNetworks(
 		networkDetail:
 			expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
-		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};
 }
@@ -775,7 +719,6 @@ export function withLiveNetworksDesktop(
 			detail: expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networks.detail
 		},
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
-		rpcProviders: liveRpcProviders(view, m),
 		endpoints: liveEndpoints(view, m)
 	};
 }

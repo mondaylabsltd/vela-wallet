@@ -7,7 +7,6 @@
 import type { IntentReason } from '$lib/core/generated/IntentReason';
 import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
-import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 
 /** How long the add wizard may take to look a chain up and check it. */
@@ -151,21 +150,6 @@ export async function removeNetwork(chainId: number): Promise<void> {
 		(entry) => entry.chain_id === chainId && entry.is_custom
 	);
 	networkAdmin.dispatch({ type: 'delete_confirmed', id: row?.id ?? `custom-${chainId}` });
-}
-
-/**
- * RPC providers: open the page (it seeds the drafts), type the key, leave it.
- * A key already in its field is only left — opening the page again would
- * reseed every draft.
- */
-export async function setProviderKey(provider: NetProviderId, key: string): Promise<void> {
-	await ready();
-	const row = networkAdmin.view.providers.find((entry) => entry.provider === provider);
-	if (row?.key !== key.trim()) {
-		networkAdmin.dispatch({ type: 'providers_opened' });
-		networkAdmin.dispatch({ type: 'provider_key_edited', provider, value: key.trim() });
-	}
-	networkAdmin.dispatch({ type: 'provider_key_blurred', provider });
 }
 
 /** Service endpoints: open the page, type the URL, leave it — or only leave it. */

@@ -41,8 +41,6 @@ export interface NetworkConfigRecord {
 	onlyMine?: boolean;
 }
 
-export type RpcProviderKeys = Partial<Record<'alchemy' | 'drpc' | 'ankr', string>>;
-
 async function loadArray<T>(key: string): Promise<T[]> {
 	try {
 		const raw = await getItem(key);
@@ -118,17 +116,6 @@ export async function loadNetworkConfigs(): Promise<NetworkConfigRecord[]> {
 export async function getNetworkConfig(chainId: number): Promise<NetworkConfigRecord | null> {
 	const configs = await loadNetworkConfigs();
 	return configs.find((c) => c.chainId === chainId) ?? null;
-}
-
-export async function getRpcProviderKeys(): Promise<RpcProviderKeys> {
-	try {
-		const raw = await getItem('vela.rpcProviders');
-		if (!raw) return {};
-		const parsed: unknown = JSON.parse(raw);
-		return parsed !== null && typeof parsed === 'object' ? (parsed as RpcProviderKeys) : {};
-	} catch {
-		return {};
-	}
 }
 
 // ---------------------------------------------------------------------------

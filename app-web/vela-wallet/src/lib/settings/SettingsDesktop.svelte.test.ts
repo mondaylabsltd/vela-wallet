@@ -1,11 +1,7 @@
 /**
  * The wide settings layout, in a browser (spec 072): what the phone already
- * did, it now does too — showing the providers or the endpoints is a core
- * event, and every destructive row asks first, naming what goes.
- *
- * The P0 is the first test. Without `providers-open` the core never seeded
- * its drafts, and leaving a saved key's field saved an empty draft over the
- * key it showed.
+ * did, it now does too — showing the endpoints is a core event, and every
+ * destructive row asks first, naming what goes.
  */
 import { tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -61,12 +57,6 @@ async function drawn(model: SettingsDesktopModel = buildDesktopState('dst1', m, 
 }
 
 describe('showing a panel is the core event the phone raises', () => {
-	it('the RPC providers panel raises providers-open (P0)', async () => {
-		const view = await drawn();
-		await view.click(view.nav(String(m.advanced.rpcProvidersTitle)));
-		expect(view.net).toEqual([{ kind: 'providers-open' }]);
-	});
-
 	it('the endpoints panel raises endpoints-open', async () => {
 		const view = await drawn();
 		await view.click(view.nav(String(m.advanced.endpointsTitle)));
@@ -162,21 +152,6 @@ describe('erase', () => {
 });
 
 describe('rows that go somewhere, go there', () => {
-	it('"Get key" opens the provider’s key page; the key test is its own action', async () => {
-		const view = await drawn();
-		await view.click(view.nav(String(m.advanced.rpcProvidersTitle)));
-		const getKey = [...view.root.querySelectorAll<HTMLAnchorElement>('a.action')].find((a) =>
-			a.closest('section')?.textContent?.includes('dRPC')
-		);
-		expect(getKey?.textContent?.trim()).toBe(String(m.rpcProviders.getKey));
-		expect(getKey?.href).toBe('https://drpc.org/');
-		expect(getKey?.target).toBe('_blank');
-
-		const check = view.buttonIn(view.root, String(m.rpcProviders.checkKey));
-		await view.click(check);
-		expect(view.net).toContainEqual({ kind: 'provider-test', provider: 'alchemy' });
-	});
-
 	it('About’s links are links', async () => {
 		const view = await drawn();
 		await view.click(view.nav(String(m.about.title)));

@@ -987,8 +987,15 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2333 (the home says a wallet is saved here and still syncing, ob-2): +
 //   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
 // 2373 (round 3 merged: + onboarding & erase, 2026-10-29): 2248 + 5 = 2253 leaves, 120 branches.
-if (PATHS.length !== 2373) fail(`expected 2373 paths (2253 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2253) fail(`expected 2253 leaf paths, got ${leafSet.size}`);
+// 2369 (RPC providers retired, owner decision 2026-10-29): − 4
+//   `settingsModals.rpcProviders.{modalTitle, activeNetworks, unavailable,
+//   avgLatency}`, which nothing reads once web and desktop drop the page.
+//   The rest of that namespace and `settings.advanced.rpcProviders{Title,
+//   Subtitle}` stay while iOS and Android still draw the page;
+//   `settings.agent.action.setProviderKey` stays to name an old agent's
+//   refused call in the activity. 2253 − 4 = 2249 leaves, 120 branches.
+if (PATHS.length !== 2369) fail(`expected 2369 paths (2249 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2249) fail(`expected 2249 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -40,7 +40,6 @@ import type {
 	RelayerModel,
 	RpcBannerModel,
 	RpcFixModel,
-	RpcProvidersModel,
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsDesktopModel,
@@ -288,13 +287,7 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: fill(m.networks.count, { count: NETWORK_COUNT }),
 					trailing: 'chevron'
 				},
-				{
-					id: 'rpc-providers',
-					icon: 'server',
-					title: m.advanced.rpcProvidersTitle,
-					subtitle: m.advanced.rpcProvidersSubtitle,
-					trailing: 'chevron'
-				},
+
 				{
 					id: 'add-network',
 					icon: 'plus',
@@ -531,56 +524,6 @@ function addNetwork(
 			label: m.addNetwork.openChainSetupTool,
 			href: 'https://getvela.app/chain-setup?chain=48900'
 		}
-	};
-}
-
-/**
- * Where each provider's API key is made. The panel sent every "Get key →" to
- * drpc.org, Alchemy's and Ankr's included.
- */
-export const PROVIDER_KEY_URLS = {
-	alchemy: 'https://dashboard.alchemy.com/',
-	drpc: 'https://drpc.org/',
-	ankr: 'https://www.ankr.com/rpc/'
-} as const;
-
-function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersModel {
-	const support = fill(m.rpcProviders.supportsCount, { count: 12, total: NETWORK_COUNT });
-	return {
-		title: m.advanced.rpcProvidersTitle,
-		subtitle: m.advanced.rpcProvidersSubtitle,
-		description: m.rpcProviders.description,
-		providers: [
-			{
-				id: 'alchemy',
-				name: 'Alchemy',
-				badge: { tone: 'ok', label: m.rpcProviders.connected, dot: true },
-				field: { id: 'alchemy', label: '', value: 'alch_k3y...9fQ2' },
-				action: m.rpcProviders.checkKey,
-				support: withLatency
-					? `${support} · ${fill(m.rpcProviders.avgLatency, { ms: 112 })}`
-					: support
-			},
-			{
-				id: 'drpc',
-				name: 'dRPC',
-				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
-				field: { id: 'drpc', label: '', value: '', placeholder: m.rpcProviders.notSet },
-				action: m.rpcProviders.getKey,
-				actionUrl: PROVIDER_KEY_URLS.drpc,
-				link: `${m.rpcProviders.getKey} →`,
-				linkUrl: PROVIDER_KEY_URLS.drpc
-			},
-			{
-				id: 'ankr',
-				name: 'Ankr',
-				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
-				field: { id: 'ankr', label: '', value: '', placeholder: m.rpcProviders.notSet },
-				action: m.rpcProviders.getKey,
-				actionUrl: PROVIDER_KEY_URLS.ankr,
-				support: fill(m.rpcProviders.supportsCount, { count: 8, total: NETWORK_COUNT })
-			}
-		]
 	};
 }
 
@@ -1523,7 +1466,7 @@ const MOBILE_SHAPE: Record<
 	st10b: { page: 'add-network', overlay: 'none' },
 	st10c: { page: 'add-network', overlay: 'none' },
 	st10d: { page: 'add-network', overlay: 'none' },
-	st11: { page: 'rpc-providers', overlay: 'none' },
+
 	st12: { page: 'endpoints', overlay: 'none' },
 	st13: { page: 'storage', overlay: 'none' },
 	st13b: { page: 'storage', overlay: 'clear-caches', backdrop: 'storage' },
@@ -1608,7 +1551,7 @@ export function buildMobileState(
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
-		rpcProviders: rpcProviders(m, false),
+
 		endpoints: endpoints(m, false),
 		storage: storage(m),
 		about: about(m, false),
@@ -1655,7 +1598,7 @@ const DESKTOP_PAGE: Record<DesktopSettingsStateId, SettingsPageId> = {
 	dst3: 'localization',
 	dst4: 'networks',
 	dst4b: 'networks',
-	dst5: 'rpc-providers',
+
 	dst6: 'endpoints',
 	dst7: 'storage',
 	dst8: 'about',
@@ -1673,7 +1616,7 @@ export function buildDesktopState(
 		{ id: 'appearance', icon: 'sun', label: m.sections.appearance },
 		{ id: 'localization', icon: 'coins', label: m.sections.localization },
 		{ id: 'networks', icon: 'network', label: m.advanced.networksTitle },
-		{ id: 'rpc-providers', icon: 'server', label: m.advanced.rpcProvidersTitle },
+
 		{ id: 'endpoints', icon: 'zap', label: m.advanced.endpointsTitle },
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
@@ -1795,7 +1738,7 @@ export function buildDesktopState(
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),
 			detail: networkDetail(m, false)
 		},
-		rpcProviders: rpcProviders(m, true),
+
 		endpoints: endpoints(m, true),
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),

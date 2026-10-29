@@ -63,10 +63,13 @@ pub const ITEMS: [StorageItem; 8] = [
         ],
         prefixes: &[],
     },
-    // Custom tokens and networks, and each network's own overrides. The RPC
-    // provider keys and the service endpoints are NOT here: they have their
-    // own pages (and "reset"), and a row that says "tokens and networks"
-    // must not delete someone's API keys.
+    // Custom tokens and networks, and each network's own overrides — its RPC
+    // among them, which may carry an API key in its URL (the retired RPC
+    // provider keys became exactly such RPCs, `network_admin`). The service
+    // endpoints are NOT here: they have their own page (and "reset"). Nor is
+    // `vela.rpcProviders`, the retired keys' record: it is deleted once its
+    // keys are per-network RPCs, and until then the erase's namespace sweep
+    // takes it like every `vela.*` key.
     StorageItem {
         id: "custom",
         group: StorageGroup::User,

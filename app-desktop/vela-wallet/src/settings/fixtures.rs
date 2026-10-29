@@ -16,8 +16,9 @@ use super::SettingsStrings;
 /// The gallery state inventory (desktop). One id per mock in
 /// `design/settings/`, checked by `gallery_exposes_every_desktop_settings_state`.
 #[allow(dead_code, reason = "gallery inventory contract, asserted by tests")]
-pub const DESKTOP_STATES: [&str; 10] = [
-    "dst1", "dst2", "dst3", "dst4", "dst4b", "dst5", "dst6", "dst7", "dst8", "dsr1",
+/// DST5 drew RPC Providers, retired 2026-10-29; its number is not reused.
+pub const DESKTOP_STATES: [&str; 9] = [
+    "dst1", "dst2", "dst3", "dst4", "dst4b", "dst6", "dst7", "dst8", "dsr1",
 ];
 
 /// Which panel the second-level nav is showing.
@@ -27,7 +28,6 @@ pub enum SettingsPage {
     Appearance,
     Localization,
     Networks,
-    RpcProviders,
     Endpoints,
     /// The AI agent (spec 103): whether this wallet answers one through a
     /// ClientMCP bridge — after the service endpoints, the other "which
@@ -50,12 +50,11 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 12] = [
+    pub const ALL: [SettingsPage; 11] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
         SettingsPage::Networks,
-        SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
         SettingsPage::Agent,
         SettingsPage::FeeSpeed,
@@ -74,7 +73,6 @@ impl SettingsPage {
             SettingsPage::Appearance => "appearance",
             SettingsPage::Localization => "localization",
             SettingsPage::Networks => "networks",
-            SettingsPage::RpcProviders => "rpc",
             SettingsPage::Endpoints => "endpoints",
             SettingsPage::Agent => "agent",
             SettingsPage::FeeSpeed => "fee-speed",
@@ -91,7 +89,6 @@ impl SettingsPage {
             SettingsPage::Appearance => Icon::Sun,
             SettingsPage::Localization => Icon::Coins,
             SettingsPage::Networks => Icon::Network,
-            SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::Agent => Icon::Link2,
             SettingsPage::FeeSpeed => Icon::Clock,
@@ -108,7 +105,6 @@ impl SettingsPage {
             SettingsPage::Appearance => s.nav_appearance.clone(),
             SettingsPage::Localization => s.nav_localization.clone(),
             SettingsPage::Networks => s.nav_networks.clone(),
-            SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
             SettingsPage::Agent => s.nav_agent.clone(),
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
@@ -565,55 +561,6 @@ pub fn refused_dapp_add(
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         can_add: false,
     }
-}
-
-// -- rpc providers ------------------------------------------------------------
-
-pub struct ProviderFixture {
-    pub name: &'static str,
-    pub key: &'static str,
-    pub supported: u32,
-    pub avg_latency_ms: Option<u32>,
-}
-
-pub const PROVIDERS: [ProviderFixture; 3] = [
-    ProviderFixture {
-        name: "Alchemy",
-        key: "alch_k3y...9fQ2",
-        supported: 12,
-        avg_latency_ms: Some(112),
-    },
-    ProviderFixture {
-        name: "dRPC",
-        key: "",
-        supported: 0,
-        avg_latency_ms: None,
-    },
-    ProviderFixture {
-        name: "Ankr",
-        key: "",
-        supported: 8,
-        avg_latency_ms: None,
-    },
-];
-
-/// "支持 12 个网络，共 12 个 · 平均 112ms".
-pub fn provider_support(s: &SettingsStrings, p: &ProviderFixture) -> Option<SharedString> {
-    if p.supported == 0 {
-        return None;
-    }
-    let base = fill(
-        &fill(&s.provider_supports, "count", &p.supported.to_string()),
-        "total",
-        &NETWORK_COUNT.to_string(),
-    );
-    Some(SharedString::from(match p.avg_latency_ms {
-        Some(ms) => format!(
-            "{base} · {}",
-            fill(&s.provider_avg_latency, "ms", &ms.to_string())
-        ),
-        None => base,
-    }))
 }
 
 // -- endpoints ----------------------------------------------------------------

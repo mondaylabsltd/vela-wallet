@@ -45,10 +45,11 @@ Object.defineProperty(globalThis, 'localStorage', {
 	}
 });
 
-const config = vi.hoisted(() => ({ value: null as { bundlerURL?: string } | null }));
+const config = vi.hoisted(() => ({
+	value: null as { bundlerURL?: string; rpcURL?: string } | null
+}));
 vi.mock('./records', () => ({
-	getNetworkConfig: async () => config.value,
-	getRpcProviderKeys: async () => ({})
+	getNetworkConfig: async () => config.value
 }));
 
 afterEach(() => {
@@ -119,6 +120,23 @@ describe('the public tier is the core’s curated list', () => {
 		const banned = 'https://polygon.gateway.tenderly.co';
 		const collected = await collectRpcUrls(137, (url) => url === banned);
 		expect(collected.map((e) => e.url)).not.toContain(banned);
+	});
+});
+
+/**
+ * Owner decision 2026-10-29: no keyed provider tier between a network's own
+ * RPC and Vela's. The keys a person saved became exactly such an RPC
+ * (`network_admin::retire_provider_keys`); the collector reads no keys.
+ */
+describe('a network’s own RPC leads, and Vela’s default is next', () => {
+	it('nothing sits between them', async () => {
+		config.value = { rpcURL: 'https://eth-mainnet.g.alchemy.com/v2/fake-key' };
+		const collected = await collectRpcUrls(1, NEVER_BANNED);
+		expect(collected.slice(0, 2)).toEqual([
+			{ url: 'https://eth-mainnet.g.alchemy.com/v2/fake-key', source: 'user' },
+			{ url: DEFAULT_NETWORKS.find((n) => n.chainId === 1)!.rpcURL, source: 'default' }
+		]);
+		expect(collected.map((e) => e.source)).not.toContain('provider');
 	});
 });
 

@@ -164,16 +164,14 @@ struct StoredEndpoints {
     fiat_rates_url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+/// The retired RPC provider keys (owner decision 2026-10-29), as a wallet
+/// from before may still hold them — read only for the core to turn them into
+/// per-network RPCs (`RetireProviderKeys`), then deleted.
+#[derive(Deserialize, Default)]
 #[serde(default)]
 struct StoredProviderKeys {
-    /// A CLEARED key is REMOVED, never stored as `""` or `null` — the core's
-    /// invariant ⑦, and the reason these skip when absent.
-    #[serde(skip_serializing_if = "Option::is_none")]
     alchemy: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     drpc: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     ankr: Option<String>,
 }
 
@@ -589,17 +587,30 @@ impl Machine for NetworkAdmin {
                 super::registry::set_registry_url(&endpoints.passkey_index_url);
                 Answer::Now(NetShellResult::Written)
             }
-            NetOperation::WriteRpcProviders { keys } => {
-                let stored = StoredProviderKeys {
-                    alchemy: keys.alchemy.clone(),
-                    drpc: keys.drpc.clone(),
-                    ankr: keys.ankr.clone(),
-                };
-                let _ = storage::write_value(
-                    storage::KEY_RPC_PROVIDERS,
-                    serde_json::to_value(stored).unwrap_or(Value::Null),
-                );
-                Answer::Now(NetShellResult::Written)
+            // NOT best-effort: what really happened is the answer, so a
+            // failure keeps the keys and the next launch retries. The configs
+            // first; the keys go only once those are on disk. Nothing here
+            // logs — the keys ride inside those URLs.
+            NetOperation::RetireProviderKeys { configs } => {
+                let configs_written = configs.as_ref().is_none_or(|configs| {
+                    storage::write_value(
+                        storage::KEY_NETWORK_CONFIG,
+                        encode_list(configs, |c: &NetNetworkConfig| StoredConfig {
+                            chain_id: c.chain_id,
+                            rpc_url: c.rpc_url.clone(),
+                            explorer_url: c.explorer_url.clone(),
+                            bundler_url: c.bundler_url.clone(),
+                            only_mine: c.only_mine,
+                        }),
+                    )
+                    .is_ok()
+                });
+                let keys_removed =
+                    configs_written && storage::remove_value(storage::KEY_RPC_PROVIDERS).is_ok();
+                Answer::Now(NetShellResult::ProviderKeysRetired {
+                    configs_written,
+                    keys_removed,
+                })
             }
 
             // A timer, not a thread. This one fires on every keystroke.
@@ -978,23 +989,62 @@ mod tests {
         });
     }
 
-    /// A cleared provider key is REMOVED, not stored as null or "" — the core's
-    /// invariant ⑦. A stored empty string reads back as "configured with a blank
-    /// key", which is a different fact.
+    /// The retired provider keys (owner decision 2026-10-29) are read as the
+    /// web reads them, and only to be retired.
     #[test]
-    fn a_cleared_provider_key_is_removed_rather_than_blanked() {
-        let stored = serde_json::to_value(StoredProviderKeys {
-            alchemy: Some("abc".to_owned()),
-            drpc: None,
-            ankr: None,
-        })
-        .unwrap_or_else(|_| unreachable!("keys must serialize"));
-        let object = stored
-            .as_object()
-            .unwrap_or_else(|| unreachable!("keys are an object"));
-        assert_eq!(object.get("alchemy").and_then(Value::as_str), Some("abc"));
-        assert!(!object.contains_key("drpc"), "a cleared key must be absent");
-        assert!(!object.contains_key("ankr"));
+    fn saved_provider_keys_are_read_to_be_retired() {
+        let stored: StoredProviderKeys =
+            serde_json::from_value(serde_json::json!({ "alchemy": "fake-key" }))
+                .unwrap_or_else(|_| unreachable!("keys must parse"));
+        assert_eq!(stored.alchemy.as_deref(), Some("fake-key"));
+        assert!(stored.drpc.is_none() && stored.ankr.is_none());
+    }
+
+    /// Retiring them writes the configs, then deletes the keys — and says so.
+    #[test]
+    fn retiring_provider_keys_writes_the_rpcs_then_deletes_the_keys() {
+        storage::tests::with_temp_state("net-retire-keys", || {
+            if storage::write_value(storage::KEY_RPC_PROVIDERS, json!({ "alchemy": "fake-key" }))
+                .is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let config = NetNetworkConfig {
+                chain_id: 1,
+                rpc_url: "https://eth-mainnet.g.alchemy.com/v2/fake-key".to_owned(),
+                explorer_url: "https://etherscan.io".to_owned(),
+                bundler_url: String::new(),
+                only_mine: false,
+            };
+            let answer = match NetworkAdmin::perform(&NetOperation::RetireProviderKeys {
+                configs: Some(vec![config.clone()]),
+            }) {
+                Answer::Now(result) => result,
+                _ => unreachable!("answered at once"),
+            };
+            assert_eq!(
+                answer,
+                NetShellResult::ProviderKeysRetired {
+                    configs_written: true,
+                    keys_removed: true
+                }
+            );
+            assert!(matches!(
+                storage::read_value(storage::KEY_RPC_PROVIDERS),
+                Ok(None)
+            ));
+            match read_store() {
+                NetShellResult::StoreLoaded {
+                    network_configs,
+                    provider_keys,
+                    ..
+                } => {
+                    assert_eq!(network_configs, vec![config]);
+                    assert_eq!(provider_keys, NetProviderKeys::default());
+                }
+                other => unreachable!("wrong variant: {other:?}"),
+            }
+        });
     }
 
     /// Absent endpoint fields stay absent, so the core applies its own defaults

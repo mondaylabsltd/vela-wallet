@@ -2,8 +2,8 @@
  * Vendored from the ClientMCP SDK (`clientmcp/sdk/js/src/index.ts`, protocol
  * `clientmcp.v1`, MIT OR Apache-2.0) — one dependency-free file, kept as one
  * file so it can be diffed against its source. Changes from upstream: repo
- * formatting, and `Record<string, unknown>` where upstream typed handler
- * arguments `any`.
+ * formatting, `Record<string, unknown>` where upstream typed handler
+ * arguments `any`, and `unknownTool` (a call to a tool that is not exposed).
  */
 /**
  * ClientMCP SDK: expose a running application's functions as MCP tools.
@@ -186,6 +186,12 @@ export class ClientMCP {
 		this.#options = options;
 		this.#instructions = options.instructions;
 	}
+
+	/**
+	 * Answers a call to a tool that is not exposed — one an agent still knows
+	 * from an older tool list, say. Unset (or throwing): `Unknown tool`.
+	 */
+	unknownTool: ((name: string, args: Record<string, unknown>) => unknown) | undefined;
 
 	get status(): Status {
 		return this.#status;
@@ -373,8 +379,13 @@ export class ClientMCP {
 		let result: CallToolResult;
 		try {
 			const tool = this.#tools.get(name);
-			if (!tool) throw new Error(`Unknown tool: ${name}`);
-			result = toCallToolResult(await tool.handler(args, { name, signal: controller.signal }));
+			if (tool) {
+				result = toCallToolResult(await tool.handler(args, { name, signal: controller.signal }));
+			} else if (this.unknownTool) {
+				result = toCallToolResult(await this.unknownTool(name, args));
+			} else {
+				throw new Error(`Unknown tool: ${name}`);
+			}
 		} catch (error) {
 			const text = error instanceof Error ? error.message : String(error);
 			result = { content: [{ type: 'text', text }], isError: true };

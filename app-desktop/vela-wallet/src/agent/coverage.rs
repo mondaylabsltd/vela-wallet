@@ -201,13 +201,6 @@ const EVENTS: &[(&str, Place)] = &[
         "NetEvent::OverrideFieldEdited",
         Step("set_network_endpoint"),
     ),
-    ("NetEvent::ProviderKeyBlurred", Intent("set_provider_key")),
-    ("NetEvent::ProviderKeyEdited", Step("set_provider_key")),
-    (
-        "NetEvent::ProviderTestRequested",
-        Later("testing a provider key; its answer is only drawn in Settings"),
-    ),
-    ("NetEvent::ProvidersOpened", Step("set_provider_key")),
     ("NetEvent::SearchInput", Step("add_network")),
     ("NetEvent::WizardReset", Step("add_network")),
     ("NetEvent::WizardTestnetChosen", Step("add_network")),

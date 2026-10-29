@@ -19,7 +19,7 @@ use vela_core::app::intents::{
     authorize, catalog, check, check_json, shows, validate, Action, Actor, Approver, BrowseStep,
     Decision, Grants, Preference, ReasonCode, Recipient, Risk, Screen, MAX_RECIPIENTS,
 };
-use vela_core::app::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
+use vela_core::app::network_admin::{NetEndpointField, NetOverrideField};
 
 const ALICE: &str = "0x00000000219ab540356cbb839cbe05303d7705fa";
 const MINE: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -141,10 +141,6 @@ fn one_of_each() -> Vec<Action> {
             on: true,
         },
         Action::RemoveNetwork { chain_id: 8453 },
-        Action::SetProviderKey {
-            provider: NetProviderId::Alchemy,
-            key: "abc123".to_owned(),
-        },
         Action::SetServiceEndpoint {
             field: NetEndpointField::FiatRates,
             url: "https://rates.example".to_owned(),
@@ -738,6 +734,37 @@ fn json_that_is_no_action_is_refused_saying_why() {
     assert_eq!(checked.kind.as_deref(), Some("set_preference"));
 }
 
+/// RPC provider keys are no longer a setting (owner decision 2026-10-29). An
+/// agent that learned the old catalog is told so by name — and what to use
+/// instead — not handed a parse error; and the catalog no longer offers it.
+#[test]
+fn a_retired_action_is_refused_by_name() {
+    let checked = check_json(
+        Actor::Agent,
+        r#"{"type":"set_provider_key","provider":"alchemy","key":"fake-key"}"#,
+        &on(),
+    );
+    assert_eq!(checked.kind, None);
+    let Decision::Deny { reason } = &checked.decision else {
+        panic!("not refused: {:?}", checked.decision);
+    };
+    assert_eq!(reason.code, ReasonCode::NotFound);
+    assert!(
+        reason.detail.contains("set_network_endpoint"),
+        "{}",
+        reason.detail
+    );
+    assert!(!reason.detail.contains("fake-key"));
+    assert!(vela_core::app::intents::retired("set_provider_key").is_some());
+    assert!(vela_core::app::intents::retired("set_network_endpoint").is_none());
+    for (name, _) in vela_core::app::intents::RETIRED_ACTIONS {
+        assert!(
+            catalog().iter().all(|entry| entry.action != name),
+            "{name} is retired and still in the catalog"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The catalog and the wire
 // ---------------------------------------------------------------------------
@@ -1032,7 +1059,6 @@ fn network_changes_are_manage_level_and_need_real_urls() {
                 | Action::SetNetworkEndpoint { .. }
                 | Action::SetOnlyMyNode { .. }
                 | Action::RemoveNetwork { .. }
-                | Action::SetProviderKey { .. }
                 | Action::SetServiceEndpoint { .. }
                 | Action::ResetServiceEndpoints
         )

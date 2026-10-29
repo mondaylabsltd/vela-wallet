@@ -15,8 +15,7 @@ use crate::settings::model::{NetworkRowModel, chain_tint, lettermark};
 use vela_core::app::display_currency::CurrencyView;
 use vela_core::app::network_admin::{
     Event as NetEvent, NetCompatibility, NetEndpointField, NetNetworkRow, NetOverrideField,
-    NetProbeHealth, NetProviderId, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase,
-    NetWizardView,
+    NetProbeHealth, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase, NetWizardView,
 };
 use vela_core::l10n::currency::{fiat_symbol, format_fiat};
 use vela_core::l10n::datetime::{Civil, DatePreset, TimePreset, format_date, format_time};
@@ -339,7 +338,6 @@ pub fn storage_segments(report: &Report) -> [(f32, u32); 3] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldCommit {
     Endpoint(NetEndpointField),
-    ProviderKey(NetProviderId),
     Override {
         chain_id: u32,
         field: NetOverrideField,
@@ -352,7 +350,6 @@ impl FieldCommit {
     pub fn edited(self, value: String) -> NetEvent {
         match self {
             FieldCommit::Endpoint(field) => NetEvent::EndpointEdited { field, value },
-            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyEdited { provider, value },
             FieldCommit::Override { chain_id, field } => NetEvent::OverrideFieldEdited {
                 chain_id,
                 field,
@@ -366,7 +363,6 @@ impl FieldCommit {
     pub fn committed(self) -> NetEvent {
         match self {
             FieldCommit::Endpoint(field) => NetEvent::EndpointBlurred { field },
-            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyBlurred { provider },
             FieldCommit::Override { chain_id, .. } => NetEvent::OverrideBlurred { chain_id },
         }
     }
@@ -1166,66 +1162,6 @@ pub fn compat_checks(
     Some(rows)
 }
 
-/// A provider's own name. Not translated: Alchemy is called Alchemy.
-#[must_use]
-pub fn provider_name(provider: NetProviderId) -> SharedString {
-    SharedString::from(match provider {
-        NetProviderId::Alchemy => "Alchemy",
-        NetProviderId::Drpc => "dRPC",
-        NetProviderId::Ankr => "Ankr",
-    })
-}
-
-/// Where a provider's key is got — the web's `PROVIDER_KEY_URLS`.
-#[must_use]
-pub fn provider_key_url(provider: NetProviderId) -> &'static str {
-    match provider {
-        NetProviderId::Alchemy => "https://dashboard.alchemy.com/",
-        NetProviderId::Drpc => "https://drpc.org/",
-        NetProviderId::Ankr => "https://www.ankr.com/rpc/",
-    }
-}
-
-/// How many networks this provider's key actually reached, once tested.
-///
-/// `None` until the test finishes. A count of zero out of zero, printed while
-/// the test is still running, reads as "this key works nowhere" — which is a
-/// verdict, and the test has not reached one.
-#[must_use]
-pub fn provider_support(
-    provider: &vela_core::app::network_admin::NetProviderView,
-    s: &SettingsStrings,
-) -> Option<SharedString> {
-    let test = provider.test.as_ref().filter(|test| test.done)?;
-    let base = crate::wallet::fill(
-        &crate::wallet::fill(&s.provider_supports, "count", &test.ok_count.to_string()),
-        "total",
-        &test.total.to_string(),
-    );
-    // The average of the ones that ANSWERED. Folding a failed network in as
-    // zero would make a half-broken key look fast.
-    let answered: Vec<f64> = test
-        .results
-        .iter()
-        .filter(|row| row.ok)
-        .map(|row| row.latency_ms)
-        .collect();
-    if answered.is_empty() {
-        return Some(SharedString::from(base));
-    }
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss,
-        reason = "a mean latency, for display"
-    )]
-    let mean = (answered.iter().sum::<f64>() / answered.len() as f64).max(0.0) as u32;
-    Some(SharedString::from(format!(
-        "{base} · {}",
-        crate::wallet::fill(&s.provider_avg_latency, "ms", &mean.to_string())
-    )))
-}
-
 /// The core owns which networks exist, in what order, and whether each is
 /// custom. This adds only the two things it has no business knowing — a
 /// lettermark and a tint — and flattens the probe health to "is there a number".
@@ -1961,88 +1897,6 @@ mod endpoint_tests {
         );
     }
 
-    /// A key's support line waits for the test to finish, and averages only
-    /// the networks that answered.
-    #[test]
-    fn a_support_line_waits_for_the_test_and_averages_what_answered() {
-        use vela_core::app::network_admin::{
-            NetProviderNetRow, NetProviderTestView, NetProviderView,
-        };
-        let s = strings();
-        let provider = |test: Option<NetProviderTestView>| NetProviderView {
-            provider: NetProviderId::Alchemy,
-            key: "abc".to_owned(),
-            has_key: true,
-            test,
-        };
-
-        // Never tested, and mid-test: no line. "0 of 0" printed while a test is
-        // running reads as "this key works nowhere", which is a verdict the
-        // test has not reached.
-        assert!(provider_support(&provider(None), &s).is_none());
-        assert!(
-            provider_support(
-                &provider(Some(NetProviderTestView {
-                    done: false,
-                    results: Vec::new(),
-                    ok_count: 0,
-                    total: 3,
-                })),
-                &s
-            )
-            .is_none()
-        );
-
-        // Done: two of three, and the average of the two that ANSWERED — 50ms,
-        // not 33ms. Folding the failure in as zero makes a half-broken key look
-        // fast.
-        let line = provider_support(
-            &provider(Some(NetProviderTestView {
-                done: true,
-                results: vec![
-                    NetProviderNetRow {
-                        chain_id: 1,
-                        ok: true,
-                        latency_ms: 40.0,
-                    },
-                    NetProviderNetRow {
-                        chain_id: 56,
-                        ok: true,
-                        latency_ms: 60.0,
-                    },
-                    NetProviderNetRow {
-                        chain_id: 100,
-                        ok: false,
-                        latency_ms: 0.0,
-                    },
-                ],
-                ok_count: 2,
-                total: 3,
-            })),
-            &s,
-        )
-        .unwrap_or_else(|| unreachable!("a finished test has a line"));
-        assert!(line.contains('2') && line.contains('3'), "{line}");
-        assert!(line.contains("50"), "the mean of what answered: {line}");
-
-        // Everything failed: the count, and no average at all.
-        let none_ok = provider_support(
-            &provider(Some(NetProviderTestView {
-                done: true,
-                results: vec![NetProviderNetRow {
-                    chain_id: 1,
-                    ok: false,
-                    latency_ms: 0.0,
-                }],
-                ok_count: 0,
-                total: 1,
-            })),
-            &s,
-        )
-        .unwrap_or_else(|| unreachable!("a finished test has a line"));
-        assert!(!none_ok.contains('·'), "no average to state: {none_ok}");
-    }
-
     /// Each health state gets its own badge — and "checking" gets none.
     #[test]
     fn a_probe_that_has_not_answered_wears_no_verdict() {
@@ -2525,23 +2379,19 @@ mod parity_tests {
                 matches!(
                     next.operation,
                     NetOperation::WriteServiceEndpoints { .. }
-                        | NetOperation::WriteRpcProviders { .. }
                         | NetOperation::WriteNetworkConfigs { .. }
                 )
             })
             .count()
     }
 
-    /// Typing saves nothing; leaving the field (or Enter) saves once — for an
-    /// endpoint and a provider key alike. Before 072 every keystroke also
-    /// sent the blur, so each prefix of a URL was persisted on the way.
+    /// Typing saves nothing; leaving the field (or Enter) saves once. Before
+    /// 072 every keystroke also sent the blur, so each prefix of a URL was
+    /// persisted on the way.
     #[test]
     fn a_keystroke_saves_nothing_and_leaving_the_field_saves() {
         let mut host = loaded();
-        for field in [
-            FieldCommit::Endpoint(NetEndpointField::FiatRates),
-            FieldCommit::ProviderKey(NetProviderId::Alchemy),
-        ] {
+        for field in [FieldCommit::Endpoint(NetEndpointField::FiatRates)] {
             for typed in ["h", "ht", "https://rates.example"] {
                 let pending = host.dispatch(field.edited(typed.to_owned()));
                 assert_eq!(writes(&pending), 0, "{field:?} saved on a keystroke");

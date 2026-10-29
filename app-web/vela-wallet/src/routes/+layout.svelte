@@ -32,6 +32,7 @@
 	import NetworkSpaceLayer from '$lib/network-space/NetworkSpaceLayer.svelte';
 	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
+	import { whenCoreLoaded } from '$lib/core/client';
 	import { localeOfPath, textDirectionOf, toLocale, usesCjkFont } from '$lib/i18n/locales';
 	// The CJK face's stylesheet as a URL, not a bundled import: linked below on
 	// the CJK locales only (perf-9).
@@ -196,6 +197,21 @@
 	);
 	onMount(() => {
 		void networkSpace.boot();
+	});
+
+	/**
+	 * The network ledger, read once the core is here (never the reason it is
+	 * fetched — Welcome loads no wasm). Its load is where saved RPC provider
+	 * keys become the per-network RPCs they were serving (`network_admin`'s
+	 * `retire_provider_keys`, owner decision 2026-10-29): the pool no longer
+	 * reads the keys, so this has to happen wherever the pool may run, not
+	 * only once Settings is opened.
+	 */
+	onMount(() => {
+		void whenCoreLoaded()
+			.then(() => import('$lib/settings/core/network-admin.svelte'))
+			.then(({ networkAdmin }) => networkAdmin.boot())
+			.catch(() => {});
 	});
 
 	onMount(() => {

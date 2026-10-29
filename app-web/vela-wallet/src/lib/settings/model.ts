@@ -39,7 +39,6 @@ export type MobileSettingsStateId =
 	| 'st10b'
 	| 'st10c'
 	| 'st10d'
-	| 'st11'
 	| 'st12'
 	| 'st13'
 	| 'st13b'
@@ -60,10 +59,11 @@ export type MobileSettingsStateId =
 /**
  * Desktop mocks DST1–DST8 (+ DST4b dialog), the DSR1 rescue dialog, and spec
  * 102's DST9 (Settings → Signing pages; DST1's account panel carries "Where
- * you review and sign").
+ * you review and sign"). DST5 (and the phone's ST11) drew RPC Providers, a
+ * page retired 2026-10-29; their numbers are not reused.
  */
 export type DesktopSettingsStateId =
-	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst5' | 'dst6' | 'dst7' | 'dst8' | 'dst9' | 'dsr1';
+	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst6' | 'dst7' | 'dst8' | 'dst9' | 'dsr1';
 
 export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st1',
@@ -82,7 +82,6 @@ export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st10b',
 	'st10c',
 	'st10d',
-	'st11',
 	'st12',
 	'st13',
 	'st13b',
@@ -107,7 +106,6 @@ export const DESKTOP_SETTINGS_STATES: DesktopSettingsStateId[] = [
 	'dst3',
 	'dst4',
 	'dst4b',
-	'dst5',
 	'dst6',
 	'dst7',
 	'dst8',
@@ -131,7 +129,6 @@ export type SettingsPageId =
 	| 'networks'
 	| 'network-detail'
 	| 'add-network'
-	| 'rpc-providers'
 	| 'endpoints'
 	| 'storage'
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
@@ -503,33 +500,6 @@ export interface AddNetworkModel {
 	 * is nothing to lose: leaving then just leaves.
 	 */
 	discard?: ConfirmSheetModel;
-}
-
-export interface ProviderCardModel {
-	id: string;
-	name: string;
-	badge: StatusPillModel;
-	field: UrlFieldModel;
-	/** The blue trailing action inside the field — 检查密钥 / 获取密钥. */
-	action: string;
-	/**
-	 * Where the action GOES, when it is a link: "Get key" opens the
-	 * provider's key page. Absent, the action is the key test.
-	 */
-	actionUrl?: string;
-	/** "支持 12 个网络，共 12 个 · 平均 112ms". */
-	support?: string;
-	/** The "获取密钥 →" link under an unset provider. */
-	link?: string;
-	/** Where that link goes — the provider's own site (the label is not a URL). */
-	linkUrl?: string;
-}
-
-export interface RpcProvidersModel {
-	title: string;
-	subtitle: string;
-	description: string;
-	providers: ProviderCardModel[];
 }
 
 export interface EndpointsModel {
@@ -1057,7 +1027,6 @@ export interface SettingsHomeModel {
 	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
-	rpcProviders: RpcProvidersModel;
 	endpoints: EndpointsModel;
 	storage: StorageModel;
 	about: AboutModel;
@@ -1294,7 +1263,6 @@ export interface SettingsDesktopModel {
 		space?: NetworkSpaceHeadingModel;
 		detail: NetworkDetailModel;
 	};
-	rpcProviders: RpcProvidersModel;
 	endpoints: EndpointsModel;
 	storage: StorageModel;
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */

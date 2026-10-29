@@ -44,7 +44,7 @@
 	import NetworkRow from '$lib/settings/ui/NetworkRow.svelte';
 	import RpcBanner from '$lib/settings/ui/RpcBanner.svelte';
 	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
-	import RpcProvidersPanel from '$lib/settings/ui/RpcProvidersPanel.svelte';
+
 	import SectionLabel from '$lib/settings/ui/SectionLabel.svelte';
 	import SegmentedControl from '$lib/settings/ui/SegmentedControl.svelte';
 	import SelectRow from '$lib/settings/ui/SelectRow.svelte';
@@ -539,10 +539,7 @@
 	</section>
 
 	<section id="gallery-section-settings-panels">
-		<h2>RpcProvidersPanel · EndpointsPanel · AboutPanel</h2>
-		<div class="cell" id="gallery-settings-providers">
-			<RpcProvidersPanel panel={st.rpcProviders} />
-		</div>
+		<h2>EndpointsPanel · AboutPanel</h2>
 		<div class="cell" id="gallery-settings-endpoints">
 			<EndpointsPanel panel={st.endpoints} />
 		</div>

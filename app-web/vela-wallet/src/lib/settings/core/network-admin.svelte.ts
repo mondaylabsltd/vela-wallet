@@ -43,7 +43,6 @@ const EMPTY_VIEW: NetView = {
 		testnet: true
 	},
 	endpoints: [],
-	providers: [],
 	last_added_chain_id: null,
 	dapp_add: null
 };
