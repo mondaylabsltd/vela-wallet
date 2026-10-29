@@ -20,6 +20,7 @@ import {
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
+	withEraseFailureDesktop,
 	withEraseUnsynced,
 	chosenCurrency,
 	withLiveCurrency,
@@ -886,10 +887,19 @@ describe('the network count (spec 072)', () => {
 describe('withEraseFailure', () => {
 	it('says a failed erase in the sheet, on either layout', () => {
 		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, true);
+		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, 'incomplete');
 		expect(desktop.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failed });
 		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, false);
 		expect(home.eraseSheet.callout?.text).toBe(m.erase.loses);
+	});
+
+	it('held by another tab, says so — and that closing Vela there lets the next try finish', () => {
+		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, 'held');
+		expect(home.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failedHeld });
+		expect(m.erase.failedHeld).not.toBe(m.erase.failed);
+		const desktop = withEraseFailureDesktop(buildDesktopState('dst1', m, IDENTICON), m, 'held');
+		expect(desktop.eraseSheet.callout?.text).toBe(m.erase.failedHeld);
 	});
 });
 
@@ -911,7 +921,7 @@ describe('withEraseUnsynced (ob-2)', () => {
 		expect(home.eraseSheet.warning).not.toContain('{{names}}');
 		expect(home.eraseSheet.ack).toBe(m.erase.unsyncedAck);
 		// A failure says itself in the callout; the warning stays where it was.
-		const failed = withEraseFailure(home, m, true);
+		const failed = withEraseFailure(home, m, 'incomplete');
 		expect(failed.eraseSheet.warning).toBe(home.eraseSheet.warning);
 		expect(failed.eraseSheet.callout?.text).toBe(m.erase.failed);
 	});

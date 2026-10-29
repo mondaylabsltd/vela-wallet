@@ -473,6 +473,8 @@ export interface SettingsMessages {
 		cancel: string;
 		/** The erase ran and something survived — said, never swallowed. */
 		failed: string;
+		/** …and what survived is only the emptied database, another tab holding it open: close it there. */
+		failedHeld: string;
 		/** ob-2: the wallets not yet synced, `{{names}}` — what erasing may lose for good. */
 		unsynced: string;
 		/** …and the box the person ticks before the erase may go ahead. */
@@ -1124,6 +1126,7 @@ export const SETTINGS_KEYS = [
 	'settings.eraseDevice.confirm',
 	'settings.eraseDevice.cancel',
 	'settings.eraseDevice.failed',
+	'settings.eraseDevice.failedHeld',
 	'settings.eraseDevice.unsynced',
 	'settings.eraseDevice.unsyncedAck',
 	'componentsUi.bugReport.title',

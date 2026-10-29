@@ -31,7 +31,11 @@ async function openPanel(page: Page, label: string): Promise<void> {
 	await page.locator('nav.settings-nav').getByRole('button', { name: label }).click();
 }
 
-/** One record of the IndexedDB KV, opened the way `services/storage.ts` opens it. */
+/**
+ * One record of the IndexedDB KV, opened the way `services/storage.ts` opens
+ * it — and closed once read: the erase deletes this database, and a
+ * connection left open holds that delete back.
+ */
 function kvGet(page: Page, key: string): Promise<string | null> {
 	return page.evaluate(
 		(k) =>
@@ -40,9 +44,16 @@ function kvGet(page: Page, key: string): Promise<string | null> {
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
 				open.onerror = () => reject(open.error);
 				open.onsuccess = () => {
-					const request = open.result.transaction('kv', 'readonly').objectStore('kv').get(k);
-					request.onsuccess = () => resolve((request.result as string | undefined) ?? null);
-					request.onerror = () => reject(request.error);
+					const db = open.result;
+					const request = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+					request.onsuccess = () => {
+						db.close();
+						resolve((request.result as string | undefined) ?? null);
+					};
+					request.onerror = () => {
+						db.close();
+						reject(request.error);
+					};
 				};
 			}),
 		key
@@ -57,10 +68,17 @@ function kvPut(page: Page, key: string, value: string): Promise<void> {
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
 				open.onerror = () => reject(open.error);
 				open.onsuccess = () => {
-					const tx = open.result.transaction('kv', 'readwrite');
+					const db = open.result;
+					const tx = db.transaction('kv', 'readwrite');
 					tx.objectStore('kv').put(v, k);
-					tx.oncomplete = () => resolve();
-					tx.onerror = () => reject(tx.error);
+					tx.oncomplete = () => {
+						db.close();
+						resolve();
+					};
+					tx.onerror = () => {
+						db.close();
+						reject(tx.error);
+					};
 				};
 			}),
 		[key, value] as const

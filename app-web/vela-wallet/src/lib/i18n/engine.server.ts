@@ -807,6 +807,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			confirm: k('settings.eraseDevice.confirm'),
 			cancel: k('settings.eraseDevice.cancel'),
 			failed: k('settings.eraseDevice.failed'),
+			failedHeld: k('settings.eraseDevice.failedHeld'),
 			unsynced: k('settings.eraseDevice.unsynced'),
 			unsyncedAck: k('settings.eraseDevice.unsyncedAck')
 		},

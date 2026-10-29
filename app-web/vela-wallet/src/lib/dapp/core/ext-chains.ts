@@ -15,6 +15,7 @@
  */
 import {
 	DEFAULT_NETWORKS,
+	ensureCustomNetworks,
 	explorerBaseURL,
 	networkConfigSync,
 	spaceNetworksSync,
@@ -155,15 +156,40 @@ function area(): StorageAreaLike | null {
 	return (local as StorageAreaLike | undefined) ?? null;
 }
 
-/** Store the catalog for the worker. Best-effort, like the snapshot. */
+/** What this document last stored, without its timestamp: the same table is not stored twice. */
+let lastPublished: string | null = null;
+
+/**
+ * Store the catalog for the worker. Best-effort, like the snapshot.
+ *
+ * Not before the stored networks are read: the wallet mounts before its
+ * custom networks and per-network overrides are loaded, and a catalog built
+ * then names none of them — a site's reads went to the public nodes of a
+ * person who set "Only use my node", and a site on a custom network was on a
+ * chain the worker did not have, until the read landed and the table was
+ * published again. And once the table is what the worker has, publishing it
+ * again only rewrites the same thing under a new timestamp (the boot read's
+ * own notification does exactly that).
+ */
 export async function publishExtChains(): Promise<ExtChainCatalog | null> {
 	const store = area();
 	if (!store) return null;
+	// A failed read leaves the built-in table, which is still the right one
+	// to publish rather than none.
+	await ensureCustomNetworks().catch(() => undefined);
 	const catalog = buildExtChainCatalog();
+	const table = JSON.stringify({ ...catalog, updatedAtMs: 0 });
+	if (table === lastPublished) return catalog;
 	try {
 		await store.set({ [CHAINS_KEY]: catalog });
+		lastPublished = table;
 		return catalog;
 	} catch {
 		return null;
 	}
+}
+
+/** Test seam: forget what was published, so the next publish is observable. */
+export function resetExtChainsForTests(): void {
+	lastPublished = null;
 }

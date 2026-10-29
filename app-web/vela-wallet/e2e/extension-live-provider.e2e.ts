@@ -106,15 +106,23 @@ async function seedWallet(context: BrowserContext, id: string): Promise<Page> {
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	await page.waitForURL(/wallet\.html$/, { timeout: 30_000 });
 	// The wallet publishes both the snapshot and the network catalog; wait for
-	// both rather than for a duration.
-	await page.waitForFunction(
-		() =>
-			(window as unknown as ChromeStorage).chrome.storage.local
-				.get(['vela.ext.cache', 'vela.ext.chains'])
-				.then((all) => all['vela.ext.cache'] !== undefined && all['vela.ext.chains'] !== undefined),
-		null,
-		{ timeout: 30_000 }
-	);
+	// both rather than for a duration. Polled from here: a page function that
+	// answers a promise is "truthy" to `waitForFunction` at once, so that wait
+	// only held while the catalog happened to be published at mount — it now
+	// waits for the stored networks first (`publishExtChains`).
+	await expect
+		.poll(
+			() =>
+				page.evaluate(async () => {
+					const all = await (window as unknown as ChromeStorage).chrome.storage.local.get([
+						'vela.ext.cache',
+						'vela.ext.chains'
+					]);
+					return all['vela.ext.cache'] !== undefined && all['vela.ext.chains'] !== undefined;
+				}),
+			{ timeout: 30_000 }
+		)
+		.toBe(true);
 	return page;
 }
 

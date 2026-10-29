@@ -144,7 +144,7 @@ describe('erase', () => {
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.erase.confirm)));
 		expect(view.prefs).toEqual([{ kind: 'erase' }]);
 		// Still up: the route reports a failure through this dialog.
-		await view.screen.rerender({ model: withEraseFailure(model, m, true) });
+		await view.screen.rerender({ model: withEraseFailure(model, m, 'incomplete') });
 		expect(view.dialog()?.textContent).toContain(String(m.erase.failed));
 	});
 

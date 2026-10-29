@@ -50,10 +50,25 @@
  * not-ours keys sat in it. Erasing means everything.
  */
 import { loadCore, storageIsErasableKey } from '$lib/core/client';
-import { deleteDatabase, getAllKeys, removeItem, sealStorage, unsealStorage } from './storage';
+import {
+	DatabaseHeldError,
+	deleteDatabase,
+	getAllKeys,
+	removeItem,
+	sealStorage,
+	unsealStorage
+} from './storage';
 
 /** What {@link EraseIncompleteError.remaining} names when the database itself survived. */
 export const KV_DATABASE = 'IndexedDB "vela"';
+
+/**
+ * What an erase says when all that survived is the emptied database, held
+ * open by another tab — the reason the settings sheet tells apart (and an
+ * agent reads): the next try finishes once Vela is closed there.
+ */
+export const ERASE_HELD =
+	'Erase incomplete: everything was deleted but the database itself, which another tab holds open — close Vela in the other tabs and windows, then try again';
 
 /** Would {@link eraseDeviceData} delete this key? The core's rule; runs after `loadCore()`. */
 export function isErasableKey(key: string): boolean {
@@ -70,11 +85,14 @@ export function isErasableKey(key: string): boolean {
 export class EraseIncompleteError extends Error {
 	/** The keys that survived. Never logged with their values. */
 	readonly remaining: readonly string[];
+	/** Only {@link KV_DATABASE} survived, emptied, because another connection holds it open. */
+	readonly held: boolean;
 
-	constructor(remaining: readonly string[]) {
-		super(`Erase incomplete: ${remaining.length} key(s) still present`);
+	constructor(remaining: readonly string[], held = false) {
+		super(held ? ERASE_HELD : `Erase incomplete: ${remaining.length} key(s) still present`);
 		this.name = 'EraseIncompleteError';
 		this.remaining = remaining;
+		this.held = held;
 	}
 }
 
@@ -198,11 +216,15 @@ export async function eraseDeviceData(): Promise<readonly string[]> {
 		const remaining = [...after.local, ...after.kv, ...after.extension];
 		if (remaining.length > 0) throw new EraseIncompleteError(remaining);
 
-		// Last, once nothing of ours is left in it: the database itself.
+		// Last, once nothing of ours is left in it: the database itself. Held
+		// open by another tab, its delete stays queued and lands once that tab
+		// lets go; meanwhile this document's opens are refused at once (so the
+		// listing above read nothing on a retry — nothing could have been
+		// written behind a queued delete), and the person is told to close it.
 		try {
 			await deleteDatabase();
-		} catch {
-			throw new EraseIncompleteError([KV_DATABASE]);
+		} catch (error) {
+			throw new EraseIncompleteError([KV_DATABASE], error instanceof DatabaseHeldError);
 		}
 
 		// Left sealed: the caller replaces the document next, and nothing is

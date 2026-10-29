@@ -254,6 +254,7 @@
       "confirm": "Cancella tutto",
       "cancel": "Annulla",
       "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova.",
+      "failedHeld": "Tutto ciò che Vela aveva salvato qui è stato eliminato, ma un'altra scheda tiene ancora aperto l'archivio di Vela, quindi la cancellazione non è stata completata. Chiudi Vela nelle altre schede e finestre, poi riprova.",
       "unsynced": "Sincronizzazione non completata: {{names}}. Finché un wallet non è sincronizzato, nessun altro dispositivo può trovarlo: se cancelli ora potresti perderlo per sempre.",
       "unsyncedAck": "Capisco che un wallet non sincronizzato potrebbe andare perso per sempre"
     },

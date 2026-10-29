@@ -254,6 +254,7 @@
       "confirm": "Her Şeyi Sil",
       "cancel": "İptal",
       "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin.",
+      "failedHeld": "Vela'nın burada sakladığı her şey silindi, ancak başka bir sekme Vela'nın depolamasını hâlâ açık tutuyor; bu yüzden temizleme tamamlanamadı. Vela'yı diğer sekme ve pencerelerinizde kapatıp tekrar deneyin.",
       "unsynced": "Eşitlemesi bitmedi: {{names}}. Eşitlenene kadar başka hiçbir cihaz bu cüzdanı bulamaz — şimdi temizlerseniz kalıcı olarak kaybedebilirsiniz.",
       "unsyncedAck": "Eşitlenmemiş bir cüzdanın kalıcı olarak kaybolabileceğini anlıyorum"
     },

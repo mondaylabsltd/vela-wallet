@@ -47,4 +47,16 @@ describe('the could-not-check line', () => {
 		expect(screen.container.querySelector('.stale')).toBeNull();
 		await screen.unmount();
 	});
+
+	it('names nothing `.said` — that is the verdict place it is drawn in, and one name is one element', async () => {
+		// The place's said cell is how the sheet (and every e2e) finds what
+		// was said; a banner of the same name inside it made that two elements.
+		for (const recheck of [undefined, { label: 'Checking again…', checking: true }]) {
+			const screen = render(WarningBanner, { props: { tone: 'caution', text: TEXT, recheck } });
+			await tick();
+			expect(screen.container.querySelector('.said')).toBeNull();
+			expect(screen.container.textContent).toContain(TEXT);
+			await screen.unmount();
+		}
+	});
 });

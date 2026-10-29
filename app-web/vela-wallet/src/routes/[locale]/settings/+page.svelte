@@ -103,8 +103,10 @@
 		STORAGE_ITEM_IDS,
 		type DeviceStorageReport
 	} from '$lib/services/device-storage';
+	import { ERASE_HELD } from '$lib/services/erase-device';
 	import {
 		addNetworkEntered,
+		type EraseFailure,
 		feedbackLabels,
 		themeFromSegment,
 		withEraseFailure,
@@ -240,7 +242,7 @@
 	// stored value, the control that shows it, and the one place that writes it.
 
 	/** Set when an erase ran and something survived. Said, never swallowed. */
-	let eraseFailed = $state(false);
+	let eraseFailed = $state<EraseFailure | false>(false);
 
 	// --- The report (spec 081 FR-016; 078) ------------------------------------
 	//
@@ -628,7 +630,7 @@
 		const outcome = await intents.invoke('person', { type: 'erase_device' });
 		if (outcome.status === 'rejected') {
 			console.error('[erase] incomplete:', outcome.reason.detail);
-			eraseFailed = true;
+			eraseFailed = outcome.reason.detail === ERASE_HELD ? 'held' : 'incomplete';
 		}
 	}
 

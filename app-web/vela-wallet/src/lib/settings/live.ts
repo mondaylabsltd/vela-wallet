@@ -1203,24 +1203,38 @@ export function withLivePreferencesDesktop(
 }
 
 /**
+ * How an erase did not finish: data is still here (`incomplete`), or
+ * everything was deleted but the emptied database, which another tab holds
+ * open (`held` — `ERASE_HELD`, `services/erase-device.ts`). `false`: it has not
+ * failed.
+ */
+export type EraseFailure = 'incomplete' | 'held';
+
+/** The callout's words for a failure — the held one names its way out. */
+function eraseFailureText(m: SettingsMessages, failed: EraseFailure): string {
+	return failed === 'held' ? m.erase.failedHeld : m.erase.failed;
+}
+
+/**
  * The failure the erase can have, said where the person is looking.
  *
  * The sheet already draws a danger callout — the one listing what is lost — so
  * a failed erase replaces that text rather than growing a second surface. The
  * distinction it preserves is the whole reason `EraseIncompleteError` exists:
- * data is still here, and the person is still signed in.
+ * data is still here, and the person is still signed in. Held, it says the
+ * one thing that lets the next try finish: close Vela in the other tabs.
  */
 export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
 	model: M,
 	m: SettingsMessages,
-	failed: boolean
+	failed: EraseFailure | false
 ): M {
 	if (!failed) return model;
 	return {
 		...model,
 		eraseSheet: {
 			...model.eraseSheet,
-			callout: { tone: 'danger', text: m.erase.failed }
+			callout: { tone: 'danger', text: eraseFailureText(m, failed) }
 		}
 	};
 }
@@ -1267,14 +1281,14 @@ function listOf(items: readonly string[], locale: string): string {
 export function withEraseFailureDesktop(
 	model: SettingsDesktopModel,
 	m: SettingsMessages,
-	failed: boolean
+	failed: EraseFailure | false
 ): SettingsDesktopModel {
 	if (!failed) return model;
 	return {
 		...model,
 		eraseSheet: {
 			...model.eraseSheet,
-			callout: { tone: 'danger', text: m.erase.failed }
+			callout: { tone: 'danger', text: eraseFailureText(m, failed) }
 		}
 	};
 }

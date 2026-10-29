@@ -37,7 +37,9 @@
 	{#if room}
 		<p data-room={text}></p>
 	{:else}
-		<div class="said" class:stale={recheck?.checking === true}>
+		<!-- Not `.said`: that is the verdict place's own cell (`VerdictPlace`),
+		     which this banner is drawn inside — one name, one element. -->
+		<div class="words" class:stale={recheck?.checking === true}>
 			<p>{text}</p>
 			{#if recheck?.checking}
 				<p class="again" role="status" aria-busy="true">{recheck.label}</p>
@@ -70,7 +72,7 @@
 		color: var(--color-error-base);
 	}
 
-	.said {
+	.words {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);

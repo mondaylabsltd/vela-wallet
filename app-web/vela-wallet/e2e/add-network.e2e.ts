@@ -467,12 +467,19 @@ test('search → verdict → add → listed → survives a reload → removed', 
 	await expect(
 		page.getByText(en('settingsModals.addNetwork.compatible'), { exact: true })
 	).toBeVisible({ timeout: 30_000 });
-	// Spec 105: the space it goes to — a testnet unless the person says. This
-	// one is said to be a mainnet, so the mainnet space's list shows it.
+	// Spec 105: the space it goes to — preselected from what the registry says
+	// the chain is (set-5, the core's rule: SLIP-44 coin type 1 or a test
+	// network's word in its name is a testnet). Linea names neither: mainnet,
+	// and the person can still say otherwise — and back.
 	const space = page.getByTestId('add-network-space');
-	await expect(space.getByRole('radio', { name: en('networkSpace.wizardTestnet') })).toBeChecked();
-	await space.getByRole('radio', { name: en('networkSpace.wizardMainnet') }).click();
-	await expect(space.getByRole('radio', { name: en('networkSpace.wizardMainnet') })).toBeChecked();
+	const mainnet = space.getByRole('radio', { name: en('networkSpace.wizardMainnet') });
+	const testnet = space.getByRole('radio', { name: en('networkSpace.wizardTestnet') });
+	await expect(mainnet).toBeChecked();
+	await expect(testnet).not.toBeChecked();
+	await testnet.click();
+	await expect(testnet).toBeChecked();
+	await mainnet.click();
+	await expect(mainnet).toBeChecked();
 	await page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') }).click();
 	// Written before the page is left: `openNetworks` is a navigation, the
 	// add is written behind the tap, and on an idle machine the navigation
