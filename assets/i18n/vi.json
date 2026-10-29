@@ -27,13 +27,15 @@
    "localization": "Bản địa hóa",
    "advanced": "Nâng cao",
    "community": "Cộng đồng",
+   "privacy": "Quyền riêng tư",
    "developer": "Nhà phát triển"
   },
   "account": {
    "switch": "Chuyển tài khoản",
    "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
    "remove": "Gỡ khỏi thiết bị này",
-   "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn."
+   "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn.",
+   "openInSafe": "Tài khoản này là một Safe tiêu chuẩn — bạn cũng có thể mở nó trong {{app}}"
   },
   "appearance": {
    "themeLight": "Sáng",
@@ -1491,12 +1493,12 @@
   "techNetworksLabel": "Mạng lưới",
   "techNetworksValue": "{{count}} chain EVM",
   "linkWebsite": "Website",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Mã nguồn mở",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Chính sách quyền riêng tư",
   "linkTerms": "Điều khoản dịch vụ",
   "linkSupport": "Hỗ trợ",
-  "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
+  "footer": "Ví Ethereum thực sự thuộc về bạn",
   "sectionLinks": "Liên kết",
   "debugMode": "Chế độ gỡ lỗi",
   "debugModeBody": "Cho phép các trang http trong mạng cục bộ của bạn dùng ví. Chỉ dành cho phát triển.",

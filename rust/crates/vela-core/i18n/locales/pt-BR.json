@@ -27,13 +27,15 @@
       "localization": "Localização",
       "advanced": "Avançado",
       "community": "Comunidade",
+      "privacy": "Privacidade",
       "developer": "Desenvolvedor"
     },
     "account": {
       "switch": "Trocar de conta",
       "contactsSubtitle": "Endereços salvos e destinatários recentes",
       "remove": "Remover deste dispositivo",
-      "removeBody": "Só esta carteira sai; as outras ficam."
+      "removeBody": "Só esta carteira sai; as outras ficam.",
+      "openInSafe": "Esta conta é um Safe padrão — você também pode abri-la no {{app}}"
     },
     "appearance": {
       "themeLight": "Claro",

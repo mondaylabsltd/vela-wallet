@@ -27,13 +27,15 @@
       "localization": "Yerelleştirme",
       "advanced": "Gelişmiş",
       "community": "Topluluk",
+      "privacy": "Gizlilik",
       "developer": "Geliştirici"
     },
     "account": {
       "switch": "Hesap değiştir",
       "contactsSubtitle": "Kayıtlı adresler ve son alıcılar",
       "remove": "Bu cihazdan kaldır",
-      "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır."
+      "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır.",
+      "openInSafe": "Bu hesap standart bir Safe — onu {{app}} içinde de açabilirsiniz"
     },
     "appearance": {
       "themeLight": "Açık",

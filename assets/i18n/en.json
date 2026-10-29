@@ -27,13 +27,15 @@
    "localization": "Localization",
    "advanced": "Advanced",
    "community": "Community",
+   "privacy": "Privacy",
    "developer": "Developer"
   },
   "account": {
    "switch": "Switch account",
    "contactsSubtitle": "Saved addresses and recent payees",
    "remove": "Remove from this device",
-   "removeBody": "Only this wallet leaves; the others stay."
+   "removeBody": "Only this wallet leaves; the others stay.",
+   "openInSafe": "This account is a standard Safe — you can also open it in {{app}}"
   },
   "appearance": {
    "themeLight": "Light",
@@ -1491,12 +1493,12 @@
   "techNetworksLabel": "Networks",
   "techNetworksValue": "{{count}} EVM chains",
   "linkWebsite": "Website",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Open source code",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Privacy Policy",
   "linkTerms": "Terms of Service",
   "linkSupport": "Support",
-  "footer": "Built with care. Your keys, your coins.",
+  "footer": "The Ethereum wallet that's truly yours",
   "sectionLinks": "Links",
   "debugMode": "Debug mode",
   "debugModeBody": "Lets http pages on your local network use the wallet. For development only.",

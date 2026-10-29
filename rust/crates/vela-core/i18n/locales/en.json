@@ -27,13 +27,15 @@
       "localization": "Localization",
       "advanced": "Advanced",
       "community": "Community",
+      "privacy": "Privacy",
       "developer": "Developer"
     },
     "account": {
       "switch": "Switch account",
       "contactsSubtitle": "Saved addresses and recent payees",
       "remove": "Remove from this device",
-      "removeBody": "Only this wallet leaves; the others stay."
+      "removeBody": "Only this wallet leaves; the others stay.",
+      "openInSafe": "This account is a standard Safe — you can also open it in {{app}}"
     },
     "appearance": {
       "themeLight": "Light",

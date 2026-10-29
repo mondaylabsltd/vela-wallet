@@ -39,19 +39,54 @@ describe('settings messages', () => {
 	});
 });
 
-// Spec 095 (App Review 5.1.1(i)): About links the privacy policy, the terms
-// and the support page, on every shell, in every language.
+// Spec 095 (App Review 5.1.1(i)): About links the support page, the privacy
+// policy and the terms, on every shell, in every language — then the code
+// (owner, 2026-10-29: no website row, no Safe Wallet row).
 describe('Settings → About', () => {
-	it.each(SUPPORTED_LOCALES)('links the policy, the terms and support in %s', (locale) => {
-		const about = buildMobileState('st14', resolveSettingsMessages(locale), IDENTICON_STUB).about;
-		expect(about.links.slice(-3).map((link) => link.href)).toEqual([
-			'https://getvela.app/privacy',
-			'https://getvela.app/terms',
-			'https://getvela.app/support'
-		]);
-		for (const link of about.links) {
-			expect(link.label, locale).not.toMatch(/^about\./);
-			expect(link.href).toBe(`https://${link.value}`);
+	it.each(SUPPORTED_LOCALES)(
+		'links support, the policy, the terms and the code in %s',
+		(locale) => {
+			const m = resolveSettingsMessages(locale);
+			const about = buildMobileState('st14', m, IDENTICON_STUB).about;
+			expect(about.links.map((link) => link.href)).toEqual([
+				'https://getvela.app/support',
+				'https://getvela.app/privacy',
+				'https://getvela.app/terms',
+				'https://github.com/mondaylabsltd/vela-wallet'
+			]);
+			for (const link of about.links) {
+				expect(link.label, locale).not.toMatch(/^about\./);
+				expect(link.href).toBe(`https://${link.value}`);
+			}
+			// One slogan, no trailing period; the code row is named, not "GitHub".
+			expect(about.footer, locale).not.toMatch(/^about\.|[.。]$/);
+			expect(about.links.at(-1)?.label, locale).not.toBe('GitHub');
+		}
+	);
+
+	it('says the slogan and the code row in the owner’s words', () => {
+		const en = buildMobileState('st14', resolveSettingsMessages('en'), IDENTICON_STUB).about;
+		const zh = buildMobileState('st14', resolveSettingsMessages('zh'), IDENTICON_STUB).about;
+		expect(en.footer).toBe("The Ethereum wallet that's truly yours");
+		expect(zh.footer).toBe('真正属于你的以太坊钱包');
+		expect(en.links.at(-1)?.label).toBe('Open source code');
+		expect(zh.links.at(-1)?.label).toBe('开源代码');
+	});
+});
+
+// Owner, 2026-10-29: under an account's keys — a Vela account's or a
+// multisig's — one line says it is a standard Safe and links Safe{Wallet}.
+describe('the Safe{Wallet} line', () => {
+	it.each(SUPPORTED_LOCALES)('reads as one sentence around the link in %s', (locale) => {
+		const m = resolveSettingsMessages(locale);
+		for (const line of [
+			buildMobileState('st1', m, IDENTICON_STUB).safeWallet,
+			buildDesktopState('dst1', m, IDENTICON_STUB).safeWallet
+		]) {
+			expect(line.app).toBe('Safe{Wallet}');
+			expect(line.href).toBe('https://app.safe.global');
+			expect(`${line.before}${line.after}`, locale).not.toContain('{{');
+			expect(line.before.length + line.after.length, locale).toBeGreaterThan(0);
 		}
 	});
 });

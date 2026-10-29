@@ -27,13 +27,15 @@
    "localization": "地域と言語",
    "advanced": "詳細設定",
    "community": "コミュニティ",
+   "privacy": "プライバシー",
    "developer": "開発者向け"
   },
   "account": {
    "switch": "アカウントを切り替える",
    "contactsSubtitle": "保存済みのアドレスと最近の送金先",
    "remove": "この端末から削除",
-   "removeBody": "このウォレットだけが離れ、ほかは残ります。"
+   "removeBody": "このウォレットだけが離れ、ほかは残ります。",
+   "openInSafe": "このアカウントは標準の Safe です。{{app}} でも開けます"
   },
   "appearance": {
    "themeLight": "ライト",
@@ -1491,12 +1493,12 @@
   "techNetworksLabel": "ネットワーク",
   "techNetworksValue": "{{count}} 件の EVM チェーン",
   "linkWebsite": "ウェブサイト",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "オープンソースコード",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "プライバシーポリシー",
   "linkTerms": "利用規約",
   "linkSupport": "サポート",
-  "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
+  "footer": "本当にあなたのものになるイーサリアムウォレット",
   "sectionLinks": "リンク",
   "debugMode": "デバッグモード",
   "debugModeBody": "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",

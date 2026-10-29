@@ -77,7 +77,8 @@
 		AgentPanelModel,
 		SettingsRowModel,
 		SitesPanelModel,
-		StatusPillModel
+		StatusPillModel,
+		SwitchRowModel
 	} from '$lib/settings/model';
 	import { hostLabel } from '$lib/dapp/host';
 	import {
@@ -738,9 +739,14 @@
 	const net = $derived(networkAdmin.view);
 	const m = $derived(data.settingsMessages);
 
-	/** "Share anonymous usage statistics", under About — its live state. */
-	const analyticsRow = $derived({
+	/**
+	 * "Share anonymous usage statistics" — its live state. Beside the AI agent
+	 * and the connected sites (owner, 2026-10-29): in 高级 on the phone, its
+	 * own Privacy panel on the desktop.
+	 */
+	const analyticsRow = $derived<SwitchRowModel>({
 		id: 'settings-analytics',
+		icon: 'eye-off',
 		title: m.analytics.title,
 		subtitle: m.analytics.subtitle,
 		on: analyticsConsent.enabled
@@ -1107,7 +1113,15 @@
 				if (item.id !== 'endpoints') return [item];
 				const agentItem = { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title };
 				const sitesItem = { id: 'sites' as const, icon: 'globe' as const, label: m.sites.title };
-				return sitesShown ? [item, agentItem, sitesItem] : [item, agentItem];
+				// Usage statistics, beside the other "who sees this wallet" entries.
+				const privacyItem = {
+					id: 'privacy' as const,
+					icon: 'eye-off' as const,
+					label: m.sections.privacy
+				};
+				return sitesShown
+					? [item, agentItem, sitesItem, privacyItem]
+					: [item, agentItem, privacyItem];
 			})
 		};
 		model = withEraseUnsynced(model, m, view.unsynced, data.locale);

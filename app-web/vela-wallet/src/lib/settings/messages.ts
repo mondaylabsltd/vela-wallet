@@ -40,8 +40,15 @@ export interface SettingsMessages {
 		advanced: string;
 		/** The official X / Telegram / Discord links (founder, 2026-09-27). */
 		community: string;
+		/** The desktop's panel for "Share anonymous usage statistics". */
+		privacy: string;
 	};
-	account: { switch: string; contactsSubtitle: string };
+	account: {
+		switch: string;
+		contactsSubtitle: string;
+		/** "This account is a standard Safe — you can also open it in {{app}}". */
+		openInSafe: string;
+	};
 	contacts: string;
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
@@ -407,27 +414,18 @@ export interface SettingsMessages {
 	about: {
 		title: string;
 		subtitleTemplate: string;
-		tagline: string;
-		/** Templates with `{{version}}` / `{{commit}}` / `{{count}}`. */
+		/** Template with `{{version}}` / `{{commit}}`. */
 		version: string;
-		sectionTechnical: string;
-		techWalletLabel: string;
-		techWalletValue: string;
-		techAuthLabel: string;
-		techAuthValue: string;
-		techAccountTypeLabel: string;
-		techAccountTypeValue: string;
-		techSignerLabel: string;
-		techSignerValue: string;
-		techNetworksLabel: string;
-		techNetworksValue: string;
-		linkWebsite: string;
+		/** The version's copy button, and what it says once the build is on the clipboard. */
+		copy: string;
+		copied: string;
+		/** "Open source code" — the GitHub row. */
 		linkGitHub: string;
-		linkSafeWallet: string;
 		linkPrivacy: string;
 		linkTerms: string;
 		linkSupport: string;
 		sectionLinks: string;
+		/** The one slogan, at the foot of the page. */
 		footer: string;
 	};
 	accounts: {
@@ -831,8 +829,10 @@ export const SETTINGS_KEYS = [
 	'settings.sections.localization',
 	'settings.sections.advanced',
 	'settings.sections.community',
+	'settings.sections.privacy',
 	'settings.account.switch',
 	'settings.account.contactsSubtitle',
+	'settings.account.openInSafe',
 	'settings.feedback.title',
 	'settings.feedback.subtitle',
 	'settings.analytics.title',
@@ -1085,22 +1085,8 @@ export const SETTINGS_KEYS = [
 	'settings.storage.clearConfirm',
 	'settings.about.title',
 	'settings.about.subtitle',
-	'about.tagline',
 	'about.version',
-	'about.sectionTechnical',
-	'about.techWalletLabel',
-	'about.techWalletValue',
-	'about.techAuthLabel',
-	'about.techAuthValue',
-	'about.techAccountTypeLabel',
-	'about.techAccountTypeValue',
-	'about.techSignerLabel',
-	'about.techSignerValue',
-	'about.techNetworksLabel',
-	'about.techNetworksValue',
-	'about.linkWebsite',
 	'about.linkGitHub',
-	'about.linkSafeWallet',
 	'about.linkPrivacy',
 	'about.linkTerms',
 	'about.linkSupport',

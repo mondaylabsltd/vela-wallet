@@ -27,13 +27,15 @@
    "localization": "지역 설정",
    "advanced": "고급",
    "community": "커뮤니티",
+   "privacy": "개인정보 보호",
    "developer": "개발자"
   },
   "account": {
    "switch": "계정 전환",
    "contactsSubtitle": "저장된 주소와 최근 받는 사람",
    "remove": "이 기기에서 제거",
-   "removeBody": "이 지갑만 떠나고 나머지는 그대로입니다."
+   "removeBody": "이 지갑만 떠나고 나머지는 그대로입니다.",
+   "openInSafe": "이 계정은 표준 Safe입니다. {{app}}에서도 열 수 있습니다"
   },
   "appearance": {
    "themeLight": "라이트",
@@ -1491,12 +1493,12 @@
   "techNetworksLabel": "네트워크",
   "techNetworksValue": "EVM 체인 {{count}}개",
   "linkWebsite": "웹사이트",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "오픈 소스 코드",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "개인정보 처리방침",
   "linkTerms": "서비스 약관",
   "linkSupport": "고객 지원",
-  "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
+  "footer": "진정한 나만의 이더리움 지갑",
   "sectionLinks": "링크",
   "debugMode": "디버그 모드",
   "debugModeBody": "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",

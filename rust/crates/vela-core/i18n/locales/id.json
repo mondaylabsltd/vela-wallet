@@ -27,13 +27,15 @@
       "localization": "Pelokalan",
       "advanced": "Lanjutan",
       "community": "Komunitas",
+      "privacy": "Privasi",
       "developer": "Developer"
     },
     "account": {
       "switch": "Ganti akun",
       "contactsSubtitle": "Alamat tersimpan dan penerima terbaru",
       "remove": "Hapus dari perangkat ini",
-      "removeBody": "Hanya dompet ini yang pergi; yang lain tetap."
+      "removeBody": "Hanya dompet ini yang pergi; yang lain tetap.",
+      "openInSafe": "Akun ini adalah Safe standar — Anda juga bisa membukanya di {{app}}"
     },
     "appearance": {
       "themeLight": "Terang",

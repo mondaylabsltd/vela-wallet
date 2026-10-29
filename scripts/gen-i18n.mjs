@@ -991,8 +991,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.eraseDevice.failedHeld` — everything was deleted but the empty
 //   database, which another tab still holds open: close Vela there, then try
 //   again. 2253 + 1 = 2254 leaves, 120 branches.
-if (PATHS.length !== 2374) fail(`expected 2374 paths (2254 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2254) fail(`expected 2254 leaf paths, got ${leafSet.size}`);
+// 2375 (Settings → About, owner 2026-10-29): + `settings.account.openInSafe`
+//   (under an account's keys: it is a standard Safe, open it in Safe{Wallet})
+//   and `settings.sections.privacy` (the desktop's panel for usage
+//   statistics, moved out of About). About's technical rows, its tagline,
+//   website and Safe Wallet rows leave the WEB page only: iOS, Android and the
+//   desktop app still read every one of those keys, so none is removed.
+//   2253 + 2 = 2255 leaves, 120 branches.
+// 2376 (About page, 2026-10-28): 2256 leaves, 120 branches.
+if (PATHS.length !== 2376) fail(`expected 2376 paths (2256 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2256) fail(`expected 2256 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -51,10 +51,12 @@
 	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
+	import SafeWalletLine from './ui/SafeWalletLine.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import SitesPanel from './ui/SitesPanel.svelte';
+	import SwitchRow from './ui/SwitchRow.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -69,8 +71,9 @@
 		/** A preference control was used (spec 028 T433). Absent = gallery. */
 		onprefevent?: (event: SettingsPrefEvent) => void;
 		/**
-		 * "Share anonymous usage statistics" (About), with its live state.
-		 * Absent in the gallery.
+		 * "Share anonymous usage statistics", with its live state: the Privacy
+		 * panel, whose nav entry the route adds beside the AI agent's (owner,
+		 * 2026-10-29 — it stood in About). Absent in the gallery.
 		 */
 		analytics?: SwitchRowModel;
 		/**
@@ -198,6 +201,8 @@
 				return { title: agent?.title ?? model.title, description: undefined };
 			case 'sites':
 				return { title: sites?.title ?? model.title, description: sites?.subtitle };
+			case 'privacy':
+				return { title: model.privacy.title, description: undefined };
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -239,6 +244,7 @@
 		'about',
 		'agent',
 		'sites',
+		'privacy',
 		'signing-pages'
 	]);
 
@@ -250,6 +256,7 @@
 		const panel = id === 'signing-venue' ? 'account' : id;
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
 		if (panel === 'sites' && sites === undefined) return false;
+		if (panel === 'privacy' && analytics === undefined) return false;
 		closeOverlay();
 		openPage(panel as SettingsPageId);
 		return true;
@@ -345,6 +352,8 @@
 							model={model.account.keys}
 							onbackup={() => onethereumbackup?.()}
 						/>{/if}
+					<!-- A Vela account and a multisig alike: both are Safes. -->
+					<div class="safe-wallet"><SafeWalletLine line={model.safeWallet} /></div>
 				{/if}
 
 				{#if model.account.venue !== undefined}
@@ -529,12 +538,9 @@
 			{:else if page === 'signing-pages' && model.signingPages !== undefined}
 				<SigningPagesPanel panel={model.signingPages} />
 			{:else if page === 'about'}
-				<AboutPanel
-					panel={model.about}
-					layout="inline"
-					{analytics}
-					onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
-				/>
+				<AboutPanel panel={model.about} layout="inline" />
+			{:else if page === 'privacy' && analytics !== undefined}
+				<SwitchRow row={analytics} onchange={(on) => onprefevent?.({ kind: 'analytics', on })} />
 			{:else if page === 'sites' && sites !== undefined}
 				<SitesPanel
 					panel={sites}
@@ -745,6 +751,10 @@
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		margin-block: var(--space-4xl);
+	}
+
+	.safe-wallet {
+		margin-top: var(--space-xl);
 	}
 
 	.venue h2 {

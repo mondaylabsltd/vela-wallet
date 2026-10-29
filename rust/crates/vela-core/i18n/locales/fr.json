@@ -27,13 +27,15 @@
       "localization": "Localisation",
       "advanced": "Avancé",
       "community": "Communauté",
+      "privacy": "Confidentialité",
       "developer": "Développeur"
     },
     "account": {
       "switch": "Changer de compte",
       "contactsSubtitle": "Adresses enregistrées et destinataires récents",
       "remove": "Retirer de cet appareil",
-      "removeBody": "Seul ce portefeuille part, les autres restent."
+      "removeBody": "Seul ce portefeuille part, les autres restent.",
+      "openInSafe": "Ce compte est un Safe standard — vous pouvez aussi l’ouvrir dans {{app}}"
     },
     "appearance": {
       "themeLight": "Clair",
