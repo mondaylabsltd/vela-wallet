@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "zincir üstünde kayıtlı cüzdan",
 			"loading": "Cüzdan sayısı okunuyor",
-			"verify": "Her cüzdan zincir üstünde kayıtlı — kayıt defterine bakın"
+			"verify": "Her cüzdan zincir üstünde kayıtlı — kayıt defterine bakın",
+			"multisigLabel": "çoklu imza hesabı",
+			"multisigNotDeployed": "Çoklu imza kayıt defteri: henüz kurulmadı",
+			"multisigVerify": "Çoklu imza hesapları zincir üstünde kayıtlı — kayıt defterine bakın"
 		},
 		"why": {
 			"heading": "Bunu neden yaptık",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

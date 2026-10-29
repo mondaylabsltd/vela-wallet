@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "carteiras registradas on-chain",
 			"loading": "Carregando o número de carteiras",
-			"verify": "Toda carteira é registrada on-chain — veja o registro"
+			"verify": "Toda carteira é registrada on-chain — veja o registro",
+			"multisigLabel": "contas multisig",
+			"multisigNotDeployed": "Registro multisig: ainda não implantado",
+			"multisigVerify": "Contas multisig são registradas on-chain — veja o registro"
 		},
 		"why": {
 			"heading": "Por que a criamos",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

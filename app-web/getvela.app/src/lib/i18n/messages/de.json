@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "on-chain registrierte Wallets",
 			"loading": "Wallet-Zahl wird geladen",
-			"verify": "Jede Wallet ist on-chain registriert – zum Register"
+			"verify": "Jede Wallet ist on-chain registriert – zum Register",
+			"multisigLabel": "Multisig-Konten",
+			"multisigNotDeployed": "Multisig-Register: noch nicht bereitgestellt",
+			"multisigVerify": "Multisig-Konten sind on-chain erfasst – zum Register"
 		},
 		"why": {
 			"heading": "Warum wir es gebaut haben",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

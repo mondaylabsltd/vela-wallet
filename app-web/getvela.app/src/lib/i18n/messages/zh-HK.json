@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "個錢包已在鏈上登記",
 			"loading": "正在讀取錢包數量",
-			"verify": "每個錢包都在鏈上登記——查看註冊表"
+			"verify": "每個錢包都在鏈上登記——查看註冊表",
+			"multisigLabel": "個多簽帳戶",
+			"multisigNotDeployed": "多簽註冊表：尚未部署",
+			"multisigVerify": "多簽帳戶記錄在鏈上——查看註冊表"
 		},
 		"why": {
 			"heading": "我們為甚麼做 Vela",
@@ -495,7 +498,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "887b494e0b3a",
 		"about": "44b20f016140",
 		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"

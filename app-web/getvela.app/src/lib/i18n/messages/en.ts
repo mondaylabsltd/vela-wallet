@@ -283,7 +283,16 @@ export const en = {
 		seal: {
 			label: 'wallets registered on-chain',
 			loading: 'Loading wallet count',
-			verify: 'Every wallet is registered on-chain — see the registry'
+			verify: 'Every wallet is registered on-chain — see the registry',
+			/**
+			 * The second, smaller line under the counter: multisig accounts from
+			 * their own registry. `multisigLabel` follows the number ("12 multisig
+			 * accounts"); `multisigNotDeployed` replaces both while that registry
+			 * is not on Gnosis or Ethereum yet — said in words, never shown as 0.
+			 */
+			multisigLabel: 'multisig accounts',
+			multisigNotDeployed: 'Multisig registry: not deployed yet',
+			multisigVerify: 'Multisig accounts are recorded on-chain — see the registry'
 		},
 
 		/**
