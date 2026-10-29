@@ -522,7 +522,9 @@
     "badLink": "Liên kết tới giao dịch multisig này bị thiếu hoặc hỏng. Hãy xin lại liên kết.",
     "previewNote": "Không tài khoản nào trên thiết bị này là thành viên của ví đa chữ ký này. Mở liên kết này không thêm ví và không chuyển tài khoản.",
     "watch": "Thêm vào thiết bị này",
-    "watching": "Đã có trên thiết bị này: ví nằm trong danh sách tài khoản của bạn. Tài khoản đang hiển thị không thay đổi."
+    "watching": "Đã có trên thiết bị này: ví nằm trong danh sách tài khoản của bạn. Tài khoản đang hiển thị không thay đổi.",
+    "renameRuns": "Giao dịch này chạy trên {{network}}, nơi registry lưu bản ghi của nó: chỉ chính multisig mới đổi được tên ở đó.",
+    "renameDeploys": "Multisig chưa được triển khai trên {{network}}. Thực thi giao dịch này sẽ triển khai nó ở đó trước, với các thành viên lúc tạo, và thành viên thực thi trả cả phí cho việc đó."
    },
    "send": {
     "propose": "Đề xuất và duyệt",
@@ -564,7 +566,8 @@
     "nameInvalid": "Hãy dùng tên ngắn hơn, không có ký tự điều khiển, ký tự ẩn hay khoảng trắng ở đầu hoặc cuối.",
     "fewer": "Ít phê duyệt hơn",
     "more": "Nhiều phê duyệt hơn",
-    "copyAddress": "Sao chép địa chỉ"
+    "copyAddress": "Sao chép địa chỉ",
+    "noSafeNetworks": "Không mạng nào của bạn có các hợp đồng Safe mà multisig cần. Hãy thêm một mạng có chúng trong Cài đặt → Mạng."
    },
    "add": {
     "title": "Thêm đa chữ ký",
@@ -643,7 +646,7 @@
     "backupNote": "Thiết lập của multisig cũng được lưu trên Ethereum để có thể tìm và triển khai từ đó. Một tài khoản trên thiết bị này trả phí.",
     "remove": "Xóa khỏi thiết bị này",
     "renameTitle": "Tên trong sổ đăng ký",
-    "renameNote": "Thành viên và bất kỳ ai tra cứu multisig này đều thấy tên này. Đổi tên là một giao dịch của nó trên {{network}}: thành viên duyệt như mọi giao dịch khác.",
+    "renameNote": "Thành viên và bất kỳ ai tra cứu multisig này đều thấy tên này. Đổi tên là một giao dịch của nó trên {{network}}, nơi lưu bản ghi của nó: thành viên duyệt như mọi giao dịch khác, và khi thực thi sẽ triển khai multisig trên {{network}} nếu nó chưa có ở đó.",
     "renameAction": "Đổi tên trên chuỗi",
     "renameUnavailable": "Bản ghi của nó không nằm trên mạng nào của ví này, nên không thể đổi tên từ đây.",
     "shareAgain": "Chia sẻ lại",
@@ -652,8 +655,7 @@
    "service": {
     "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
     "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
-    "retry": "Thử lại",
-    "noNetworks": "Dịch vụ đa chữ ký không hỗ trợ mạng nào của bạn."
+    "retry": "Thử lại"
    }
   },
   "balanceDetailStatusOwnNode": "Node của bạn không phản hồi",
