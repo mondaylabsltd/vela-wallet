@@ -648,7 +648,8 @@
   "syncStalledLine": "Tersimpan di perangkat ini · belum tersinkron",
   "totalUnpriced": "Belum ada harga",
   "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
-  "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS."
+  "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS.",
+  "networkFilterOnly": "Hanya menampilkan {{network}}"
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -1444,7 +1445,11 @@
   "ext": {
    "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
    "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
-   "accessAllow": "Izinkan akses"
+   "accessAllow": "Izinkan akses",
+   "openInTabTitle": "Vela terbuka di sebuah tab",
+   "openInTabBody": "Satu dompet per jendela: panel samping mengalah selama tab itu terbuka. Memakainya di sini akan menutup tab tersebut.",
+   "goToTab": "Buka tab",
+   "useHereInstead": "Pakai di sini saja"
   }
  },
  "signHandoff": {

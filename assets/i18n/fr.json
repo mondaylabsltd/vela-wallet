@@ -650,7 +650,8 @@
   "syncStalledLine": "Enregistré sur cet appareil · pas encore synchronisé",
   "totalUnpriced": "Pas encore de prix",
   "allUnpriced": "Impossible d'obtenir le prix de vos tokens.",
-  "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains."
+  "currencyUnavailable": "Impossible de charger les taux en {{code}} pour le moment — les montants sont en dollars américains.",
+  "networkFilterOnly": "Seul {{network}} est affiché"
  },
  "send": {
   "filterStable": "Stablecoins",
@@ -1451,7 +1452,11 @@
   "ext": {
    "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
    "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
-   "accessAllow": "Autoriser l'accès"
+   "accessAllow": "Autoriser l'accès",
+   "openInTabTitle": "Vela est ouvert dans un onglet",
+   "openInTabBody": "Un wallet par fenêtre : le panneau latéral s'efface tant que cet onglet est ouvert. L'utiliser ici ferme l'onglet.",
+   "goToTab": "Aller à l'onglet",
+   "useHereInstead": "Utiliser ici à la place"
   }
  },
  "signHandoff": {

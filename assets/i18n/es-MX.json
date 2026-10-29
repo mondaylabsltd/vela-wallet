@@ -650,7 +650,8 @@
   "syncStalledLine": "Guardada en este dispositivo · aún sin sincronizar",
   "totalUnpriced": "Aún sin precio",
   "allUnpriced": "No se pudo obtener el precio de ninguno de tus tokens.",
-  "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses."
+  "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses.",
+  "networkFilterOnly": "Solo se muestra {{network}}"
  },
  "send": {
   "filterStable": "Estables",
@@ -1451,7 +1452,11 @@
   "ext": {
    "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
    "accessNote": "El acceso a sitios está limitado: los sitios no ven Vela y tu passkey no funciona.",
-   "accessAllow": "Permitir acceso"
+   "accessAllow": "Permitir acceso",
+   "openInTabTitle": "Vela está abierta en una pestaña",
+   "openInTabBody": "Una billetera por ventana: el panel lateral se hace a un lado mientras esa pestaña esté abierta. Si la usas aquí, esa pestaña se cierra.",
+   "goToTab": "Ir a la pestaña",
+   "useHereInstead": "Usar aquí en su lugar"
   }
  },
  "signHandoff": {

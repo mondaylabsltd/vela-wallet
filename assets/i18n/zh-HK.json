@@ -648,7 +648,8 @@
   "syncStalledLine": "已儲存在此裝置 · 尚未同步",
   "totalUnpriced": "暫時未有價格",
   "allUnpriced": "你的所有代幣暫時都未能取得價格。",
-  "currencyUnavailable": "暫時未能取得 {{code}} 匯率——金額以美元顯示。"
+  "currencyUnavailable": "暫時未能取得 {{code}} 匯率——金額以美元顯示。",
+  "networkFilterOnly": "只顯示 {{network}}"
  },
  "send": {
   "filterStable": "穩定幣",
@@ -1444,7 +1445,11 @@
   "ext": {
    "installedNote": "之前已開啟的分頁需要重新載入，網站才能找到 Vela。",
    "accessNote": "網站存取權已受限制：網站無法找到 Vela，通行密鑰亦無法使用。",
-   "accessAllow": "允許存取"
+   "accessAllow": "允許存取",
+   "openInTabTitle": "Vela 已在分頁中開啟",
+   "openInTabBody": "每個視窗只開一個錢包：該分頁開啟期間，側邊欄會讓位。改在此處使用會關閉該分頁。",
+   "goToTab": "前往分頁",
+   "useHereInstead": "改在此處使用"
   }
  },
  "signHandoff": {

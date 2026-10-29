@@ -648,7 +648,8 @@
   "syncStalledLine": "Bu cihaza kaydedildi · henüz eşitlenmedi",
   "totalUnpriced": "Henüz fiyat yok",
   "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
-  "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden."
+  "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden.",
+  "networkFilterOnly": "Yalnızca {{network}} gösteriliyor"
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -1444,7 +1445,11 @@
   "ext": {
    "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
    "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
-   "accessAllow": "Erişime izin ver"
+   "accessAllow": "Erişime izin ver",
+   "openInTabTitle": "Vela bir sekmede açık",
+   "openInTabBody": "Her pencerede tek cüzdan: o sekme açıkken yan panel geri çekilir. Burada kullanırsanız o sekme kapanır.",
+   "goToTab": "Sekmeye git",
+   "useHereInstead": "Bunun yerine burada kullan"
   }
  },
  "signHandoff": {
