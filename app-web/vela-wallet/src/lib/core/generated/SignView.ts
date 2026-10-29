@@ -47,6 +47,16 @@ confirm_block: ConfirmBlock | null,
  */
 reconcile_pending: boolean, swipe_action: SignSwipeAction, tracker_handoff: SignTrackerHandoff | null, 
 /**
+ * The landing for `tracker_handoff`'s operation has been closed
+ * ([`Event::LandingClosed`]): no surface raises it again. The hand-off
+ * stays in the view for as long as it is the last one, so a surface
+ * mounted after the Done — every screen that hosts the sheet mounts
+ * its own — would otherwise read it as a landing still owed and draw
+ * the finished transaction once more. `false` with no hand-off, and for
+ * a new operation's. `#[serde(default)]`.
+ */
+landing_closed: boolean, 
+/**
  * A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
  * it to `tx_tracker::Event::Withdrawn` the moment it appears.
  */
