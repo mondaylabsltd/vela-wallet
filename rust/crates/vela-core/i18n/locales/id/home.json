@@ -224,7 +224,8 @@
         "notFound": "Belum ada multisig yang dikenal dengan alamat ini. Jika baru dibuat, coba lagi dalam satu menit.",
         "unavailable": "Tidak bisa menghubungi layanan. Coba lagi.",
         "unsupported": "Versi Safe ini belum didukung.",
-        "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela."
+        "notMultisig": "Alamat ini bukan multisig yang bisa dibaca Vela.",
+        "chooseNetwork": "Belum ada yang menunjukkan jaringan tempat multisig ini digunakan. Pilih jaringannya:"
       },
       "external": {
         "pageTitle": "Tanda tangani untuk Vela",

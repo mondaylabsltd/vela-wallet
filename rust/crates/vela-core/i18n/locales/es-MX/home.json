@@ -226,7 +226,8 @@
         "notFound": "Aún no se conoce ninguna multifirma con esta dirección. Si se acaba de crear, inténtalo de nuevo en un minuto.",
         "unavailable": "No se pudo conectar con el servicio. Inténtalo de nuevo.",
         "unsupported": "Esta versión de Safe aún no es compatible.",
-        "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer."
+        "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer.",
+        "chooseNetwork": "Todavía nada indica en qué red se usa este multisig. Elige su red:"
       },
       "external": {
         "pageTitle": "Firmar para Vela",

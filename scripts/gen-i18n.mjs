@@ -992,8 +992,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   what it sees), + the `home.multisig.service` branch (the custom-service
 //   note, the service-away note and its Retry, the create sheet's "serves
 //   none of your networks"). 2253 + 6 = 2259 leaves, 120 + 1 = 121 branches.
-if (PATHS.length !== 2380) fail(`expected 2380 paths (2259 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2259) fail(`expected 2259 leaf paths, got ${leafSet.size}`);
+// 2381 (a multisig added by address is used where it is deployed or recorded;
+//   when nothing says, the person is asked): + `home.multisig.add.chooseNetwork`.
+//   2259 + 1 = 2260 leaves, 121 branches.
+if (PATHS.length !== 2381) fail(`expected 2381 paths (2260 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2260) fail(`expected 2260 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

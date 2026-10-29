@@ -226,7 +226,8 @@
         "notFound": "Aucun multisig n’est encore connu à cette adresse. S’il vient d’être créé, réessayez dans une minute.",
         "unavailable": "Service injoignable. Réessayez.",
         "unsupported": "Cette version de Safe n’est pas encore prise en charge.",
-        "notMultisig": "Cette adresse n’est pas un multisig que Vela sait lire."
+        "notMultisig": "Cette adresse n’est pas un multisig que Vela sait lire.",
+        "chooseNetwork": "Rien n'indique encore sur quel réseau ce multisig est utilisé. Choisissez son réseau :"
       },
       "external": {
         "pageTitle": "Signer pour Vela",

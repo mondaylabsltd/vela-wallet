@@ -134,30 +134,49 @@ export function servedOnly<T extends { chainId: number }>(
 }
 
 const SERVED_TTL_MS = 60_000;
-let served: { url: string; at: number; chains: Promise<Set<number> | null> } | null = null;
+
+/** What the service in use says of itself (`/api/health`), as far as it says. */
+export interface ServiceTable {
+	/** The chains it records on and reads; `null`: it lists none. */
+	chains: Set<number> | null;
+	/** The chain its registry lives on; `null`: it does not say. */
+	homeChainId: number | null;
+}
+
+let served: { url: string; at: number; table: Promise<ServiceTable | null> } | null = null;
 
 /**
- * The chains the service in use records on, by its own table (`/api/health`),
- * or `null` when that is not known (it could not be read, or lists none) —
- * nothing is then narrowed. Kept a minute per service.
+ * The service in use's own table, or `null` when it could not be read. Kept
+ * a minute per service; one that could not be read is asked again next time.
  */
-export function servedChains(): Promise<Set<number> | null> {
+export function serviceTable(): Promise<ServiceTable | null> {
 	const url = genesisServiceURL();
-	if (served && served.url === url && Date.now() - served.at < SERVED_TTL_MS) return served.chains;
-	const chains = checkService(url)
-		.then((answer) =>
-			answer.kind === 'genesis' && answer.chains !== null
-				? new Set(answer.chains.map((c) => c.chainId))
+	if (served && served.url === url && Date.now() - served.at < SERVED_TTL_MS) return served.table;
+	const table = checkService(url)
+		.then((answer): ServiceTable | null =>
+			answer.kind === 'genesis'
+				? {
+						chains: answer.chains === null ? null : new Set(answer.chains.map((c) => c.chainId)),
+						homeChainId: answer.homeChainId
+					}
 				: null
 		)
 		.catch(() => null);
-	const entry = { url, at: Date.now(), chains };
+	const entry = { url, at: Date.now(), table };
 	served = entry;
-	// An answer that could not be read is asked again next time.
-	void chains.then((set) => {
-		if (set === null && served === entry) served = null;
+	void table.then((t) => {
+		if (t === null && served === entry) served = null;
 	});
-	return chains;
+	return table;
+}
+
+/**
+ * The chains the service in use records on, by its own table, or `null` when
+ * that is not known (it could not be read, or lists none) — nothing is then
+ * narrowed.
+ */
+export async function servedChains(): Promise<Set<number> | null> {
+	return (await serviceTable())?.chains ?? null;
 }
 
 // -- genesis ---------------------------------------------------------------------

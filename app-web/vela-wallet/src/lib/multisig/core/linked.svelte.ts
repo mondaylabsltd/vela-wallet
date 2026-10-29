@@ -82,8 +82,14 @@ export async function openProposalLink(link: ProposalLink): Promise<LinkOpening>
 	}
 	let account = stored;
 	if (!account) {
-		const found = await findMultisig(link.multisig, [link.chainId]);
-		if (!found.ok) return { kind: 'failed', reason: found.reason };
+		// The link names its transaction's network: that is where it is used.
+		const found = await findMultisig(link.multisig, [link.chainId], link.chainId);
+		// (`chooseNetwork` cannot come back: the link names one.)
+		if (!found.ok)
+			return {
+				kind: 'failed',
+				reason: found.reason === 'chooseNetwork' ? 'notFound' : found.reason
+			};
 		account = found.account;
 	}
 	// The members now are the chain's: one added since the genesis counts.

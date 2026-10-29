@@ -244,6 +244,8 @@ export interface MultisigMessages {
 		unavailable: string;
 		unsupported: string;
 		notMultisig: string;
+		/** Nothing says which network it is used on: the person picks one. */
+		chooseNetwork: string;
 	};
 }
 
@@ -469,6 +471,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notFound: '',
 		unavailable: '',
 		unsupported: '',
-		notMultisig: ''
+		notMultisig: '',
+		chooseNetwork: ''
 	}
 };

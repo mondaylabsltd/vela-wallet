@@ -224,7 +224,8 @@
         "notFound": "이 주소의 멀티시그를 아직 찾을 수 없습니다. 방금 만들었다면 1분 뒤에 다시 시도하세요.",
         "unavailable": "서비스에 연결할 수 없습니다. 다시 시도하세요.",
         "unsupported": "이 Safe 버전은 아직 지원되지 않습니다.",
-        "notMultisig": "이 주소는 Vela가 읽을 수 있는 멀티시그가 아닙니다."
+        "notMultisig": "이 주소는 Vela가 읽을 수 있는 멀티시그가 아닙니다.",
+        "chooseNetwork": "이 멀티시그가 어느 네트워크에서 쓰이는지 아직 알 수 없습니다. 네트워크를 선택하세요:"
       },
       "external": {
         "pageTitle": "Vela용 서명",
