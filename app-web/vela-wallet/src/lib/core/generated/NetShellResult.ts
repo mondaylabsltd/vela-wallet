@@ -6,12 +6,18 @@ import type { NetHealthBody } from "./NetHealthBody";
 import type { NetNetworkConfig } from "./NetNetworkConfig";
 import type { NetProviderKeys } from "./NetProviderKeys";
 import type { NetRawChainData } from "./NetRawChainData";
+import type { NetShownNetworks } from "./NetShownNetworks";
 import type { NetStoredEndpoints } from "./NetStoredEndpoints";
 
 /**
  * What the shell observed.
  */
-export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
+export type NetShellResult = { "type": "store_loaded", custom_networks: Array<NetCustomNetwork>, network_configs: Array<NetNetworkConfig>, endpoints: NetStoredEndpoints, provider_keys: NetProviderKeys, 
+/**
+ * `vela.shownNetworks`, as settled ([`shown_networks::settle`]);
+ * `None`: none stored, or unreadable — every network is shown.
+ */
+shown_networks?: NetShownNetworks, } | { "type": "written" } | { "type": "debounce_elapsed" } | { "type": "search_index", chains: Array<NetChainIndexEntry>, } | { "type": "chain_info", chain_id: number, data: NetRawChainData | null, } | { "type": "probed", url: string, 
 /**
  * `None` = failed/timed out/no parseable id.
  */

@@ -2201,7 +2201,9 @@
    "relayNotice": "Le relais qui soumet vos transactions reçoit l'adresse RPC de ce réseau — clé d'API comprise — pour atteindre le réseau que vous utilisez.",
    "fallback": "Votre nœud ne répond pas — nœuds publics utilisés pour l'instant",
    "onlyMine": "N'utiliser que mon nœud",
-   "onlyMineHint": "Rien de votre compte n'est envoyé aux nœuds publics. Si votre nœud ne répond plus, ce réseau ne peut pas être lu jusqu'à son retour."
+   "onlyMineHint": "Rien de votre compte n'est envoyé aux nœuds publics. Si votre nœud ne répond plus, ce réseau ne peut pas être lu jusqu'à son retour.",
+   "hideBody": "Il quitte votre liste de réseaux. Ses réglages sont conservés, et Ajouter un réseau le remet à tout moment.",
+   "moreNetworks": "Également pris en charge, hors de votre liste : {{names}}. Ajoutez-les depuis Ajouter un réseau."
   },
   "account": {
    "modalTitle": "Comptes",
@@ -2273,7 +2275,9 @@
    "discardTitle": "Abandonner ce réseau ?",
    "discardBody": "Ce que vous avez saisi ici sera perdu.",
    "discardConfirm": "Abandonner",
-   "discardCancel": "Continuer"
+   "discardCancel": "Continuer",
+   "velaNetwork": "Réseau Vela",
+   "velaNetworkHint": "Vela prend en charge ce réseau. L'ajouter le remet dans votre liste de réseaux, avec les réglages que vous aviez."
   },
   "treasury": {
    "modalTitle": "Trésorerie",

@@ -1432,6 +1432,14 @@ export function sendEstimateFailureBodyKey(failure: string): string;
 export function sha256(data: Uint8Array): Uint8Array;
 
 /**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ */
+export function shownNetworksSettle(stored: string, evidence_json: string): string;
+
+/**
  * The hash or signature an answer to a page names (`payload_json`, the
  * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
  * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`;
@@ -2102,6 +2110,7 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly shownNetworksSettle: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signAnswered: (a: number, b: number) => [number, number];
     readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];

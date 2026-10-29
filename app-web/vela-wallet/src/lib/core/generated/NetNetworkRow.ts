@@ -12,6 +12,12 @@ export type NetNetworkRow = { id: string, chain_id: number, display_name: string
  */
 is_custom: boolean, 
 /**
+ * A Vela network shown on the person's word ([`shown_networks`]): it
+ * gets the remove affordance too, which takes it out of the lists and
+ * keeps everything stored for it — Add network shows it again.
+ */
+optional: boolean, 
+/**
  * Its space (spec 105): a testnet's coins have no real value.
  */
 is_testnet: boolean, 

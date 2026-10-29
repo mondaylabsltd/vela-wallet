@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2374 paths = 2254 leaf + 120 branch. Repeated per locale these key bytes
-//! would cost 973545 bytes; interned once they cost 67180.
+//! 2378 paths = 2258 leaf + 120 branch. Repeated per locale these key bytes
+//! would cost 975705 bytes; interned once they cost 67324.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2374] = [
+pub(crate) static PATHS: [&str; 2378] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -2282,6 +2282,8 @@ pub(crate) static PATHS: [&str; 2374] = [
     "settingsModals.addNetwork.singleKeyOnly",
     "settingsModals.addNetwork.testnet",
     "settingsModals.addNetwork.unableToVerify",
+    "settingsModals.addNetwork.velaNetwork",
+    "settingsModals.addNetwork.velaNetworkHint",
     "settingsModals.backup",
     "settingsModals.backup.backedUp",
     "settingsModals.backup.cannotCopy",
@@ -2329,7 +2331,9 @@ pub(crate) static PATHS: [&str; 2374] = [
     "settingsModals.network.fieldBundler",
     "settingsModals.network.fieldExplorer",
     "settingsModals.network.fieldRpcUrl",
+    "settingsModals.network.hideBody",
     "settingsModals.network.modalTitle",
+    "settingsModals.network.moreNetworks",
     "settingsModals.network.onlyMine",
     "settingsModals.network.onlyMineHint",
     "settingsModals.network.relayNotice",
@@ -2389,7 +2393,7 @@ pub(crate) static PATHS: [&str; 2374] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 297] = [
+pub(crate) static IS_BRANCH: [u8; 298] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x10, 0x00,
     0x00, 0x00, 0x04, 0x18, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x20, 0x42, 0x08, 0x00,
     0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x50, 0x48, 0x84, 0x00, 0x00, 0x00, 0x80, 0x40, 0x08,
@@ -2407,12 +2411,12 @@ pub(crate) static IS_BRANCH: [u8; 297] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x02, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x40, 0x08, 0x80, 0x24, 0x44, 0x80, 0x40, 0x20, 0x40,
-    0x00, 0x20, 0x04, 0x00, 0x00, 0x80, 0x00, 0x06, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x42,
-    0x00, 0x04, 0x00, 0x02, 0x20, 0x10, 0x40, 0x10, 0x00,
+    0x00, 0x20, 0x04, 0x00, 0x00, 0x80, 0x00, 0x06, 0x01, 0x00, 0x00, 0x00, 0x08, 0x04, 0x00, 0x08,
+    0x01, 0x10, 0x00, 0x20, 0x00, 0x02, 0x01, 0x04, 0x01, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2374;
+pub(crate) const N_PATHS: usize = 2378;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

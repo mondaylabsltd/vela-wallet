@@ -9,4 +9,9 @@ export type NetView = { loaded: boolean, networks: Array<NetNetworkRow>, wizard:
 /**
  * The add-network sheet a page opened (spec 100).
  */
-dapp_add: NetDappAddView | null, };
+dapp_add: NetDappAddView | null, 
+/**
+ * The Vela networks out of the person's lists, in list order — what
+ * Add network can show again ([`shown_networks::hidden_chain_ids`]).
+ */
+hidden_vela_chain_ids: Array<number>, };

@@ -5708,6 +5708,32 @@ export function sha256(data) {
 }
 
 /**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ * @param {string} stored
+ * @param {string} evidence_json
+ * @returns {string}
+ */
+export function shownNetworksSettle(stored, evidence_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(stored, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(evidence_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.shownNetworksSettle(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * The hash or signature an answer to a page names (`payload_json`, the
  * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
  * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`;
