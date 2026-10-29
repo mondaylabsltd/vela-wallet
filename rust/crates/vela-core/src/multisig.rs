@@ -1859,6 +1859,347 @@ fn read_owner_management(data: &[u8]) -> Option<Action> {
     None
 }
 
+// -- changing the members ----------------------------------------------------------
+//
+// A Safe keeps its owners as a linked list (`owners[SENTINEL] → first → … →
+// SENTINEL`), so removing or replacing an owner names the one BEFORE it
+// (`prevOwner`); `getOwners()` returns the list in that order. Each network
+// has its own list (a Safe's owners on one chain never change another's), so a
+// change is built against one network's members as they stand now, read from
+// that chain — never the genesis', never another network's.
+
+/// A change to a multisig's members or the approvals it needs, as the person
+/// asks for it. Built per network ([`member_change_tx`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MemberChange {
+    /// `addOwnerWithThreshold(owner, threshold)`; no threshold keeps the
+    /// network's.
+    Add {
+        owner: String,
+        #[serde(default)]
+        threshold: Option<u64>,
+    },
+    /// `removeOwner(prevOwner, owner, threshold)`; no threshold keeps the
+    /// network's (and is refused when too few would be left for it).
+    Remove {
+        owner: String,
+        #[serde(default)]
+        threshold: Option<u64>,
+    },
+    /// `swapOwner(prevOwner, oldOwner, newOwner)`: the way back from a lost
+    /// passkey — the other members put the member's new account in its place.
+    Replace {
+        old_owner: String,
+        new_owner: String,
+    },
+    /// `changeThreshold(threshold)`.
+    Threshold { threshold: u64 },
+}
+
+/// One network's members as they stand now: `owners` in the order
+/// `getOwners()` returns them (the Safe's list order), and whether a member
+/// change is already waiting there (not executed, not voided).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberState {
+    pub owners: Vec<String>,
+    pub threshold: u64,
+    #[serde(default)]
+    pub change_waiting: bool,
+}
+
+/// Owners and threshold, before or after a change (owners in list order).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberSet {
+    pub owners: Vec<String>,
+    pub threshold: u64,
+}
+
+/// Why a change cannot be made on a network: each a state the Safe would
+/// refuse (or one that would lock the funds), said before anything is signed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MemberRefusal {
+    /// Not an address.
+    NotAnAddress { address: String },
+    /// The zero address or the list's sentinel (`0x…01`): no one holds it.
+    NoOne { address: String },
+    /// The multisig itself: it cannot approve its own transactions.
+    TheMultisig,
+    /// Already a member on this network.
+    AlreadyMember { owner: String },
+    /// Not a member on this network.
+    NotMember { owner: String },
+    /// Removing the only member would leave no one.
+    LastMember,
+    /// More approvals than members (after the change).
+    ThresholdTooHigh { threshold: u64, owners: u64 },
+    /// No approvals at all.
+    ThresholdZero,
+    /// Removing would leave fewer members than must approve: lower the
+    /// approvals in the same change, or replace the member instead.
+    BelowThreshold { owners: u64, threshold: u64 },
+    /// The change changes nothing (the threshold it already has).
+    Unchanged,
+    /// More members than a Vela multisig has ([`MAX_OWNERS`]).
+    TooMany { max: u64 },
+    /// Another member change waits on this network: built on today's list, a
+    /// second one could name the wrong `prevOwner` once the first runs.
+    ChangeWaiting,
+}
+
+/// What [`member_change_tx`] answers for one network.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MemberVerdict {
+    /// The transaction to propose, and the members before and after it.
+    Ready {
+        tx: Box<SafeTx>,
+        before: MemberSet,
+        after: MemberSet,
+    },
+    Refused {
+        refusal: MemberRefusal,
+    },
+}
+
+/// The owner before `owner` in the Safe's list (`owners` as `getOwners()`
+/// returns them): the sentinel for the first. `None` when it is not one.
+pub fn prev_owner(owners: &[Address], owner: Address) -> Option<Address> {
+    let i = owners.iter().position(|o| *o == owner)?;
+    Some(if i == 0 { SENTINEL } else { owners[i - 1] })
+}
+
+fn typed_address(address: &str) -> Result<Address, MemberRefusal> {
+    address
+        .trim()
+        .parse::<Address>()
+        .map_err(|_| MemberRefusal::NotAnAddress {
+            address: address.to_owned(),
+        })
+}
+
+/// A member to be: an address someone can hold, other than the multisig.
+fn new_member(address: &str, me: Address) -> Result<Address, MemberRefusal> {
+    let a = typed_address(address)?;
+    if a == Address::ZERO || a == SENTINEL {
+        return Err(MemberRefusal::NoOne {
+            address: a.to_checksum(None),
+        });
+    }
+    if a == me {
+        return Err(MemberRefusal::TheMultisig);
+    }
+    Ok(a)
+}
+
+fn checked_threshold(threshold: u64, owners: usize) -> Result<u64, MemberRefusal> {
+    if threshold == 0 {
+        return Err(MemberRefusal::ThresholdZero);
+    }
+    if threshold > owners as u64 {
+        return Err(MemberRefusal::ThresholdTooHigh {
+            threshold,
+            owners: owners as u64,
+        });
+    }
+    Ok(threshold)
+}
+
+fn change_data(signature: &str, words: &[[u8; 32]]) -> Vec<u8> {
+    let mut d = selector(signature).to_vec();
+    for w in words {
+        d.extend_from_slice(w);
+    }
+    d
+}
+
+/// The calldata of `change` into `multisig` on a network whose members are
+/// `state`, and the members after it runs — or why the change cannot be made
+/// there. Mirrors what the Safe's `OwnerManager` itself requires (GS200–GS205)
+/// and adds the wallet's own: no change that changes nothing, at most
+/// [`MAX_OWNERS`], and one member change at a time per network.
+pub fn member_change_call(
+    multisig: &str,
+    state: &MemberState,
+    change: &MemberChange,
+) -> Result<Result<(Vec<u8>, MemberSet), MemberRefusal>, CoreError> {
+    let me = addr(multisig)?;
+    let owners = state
+        .owners
+        .iter()
+        .map(|o| addr(o))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(build_member_change(me, &owners, state, change))
+}
+
+fn build_member_change(
+    me: Address,
+    owners: &[Address],
+    state: &MemberState,
+    change: &MemberChange,
+) -> Result<(Vec<u8>, MemberSet), MemberRefusal> {
+    let shown = |list: &[Address]| list.iter().map(|a| a.to_checksum(None)).collect();
+    if state.change_waiting {
+        return Err(MemberRefusal::ChangeWaiting);
+    }
+    let member = |address: &str| -> Result<Address, MemberRefusal> {
+        let a = typed_address(address)?;
+        if !owners.contains(&a) {
+            return Err(MemberRefusal::NotMember {
+                owner: a.to_checksum(None),
+            });
+        }
+        Ok(a)
+    };
+    let not_yet = |a: Address| -> Result<Address, MemberRefusal> {
+        if owners.contains(&a) {
+            return Err(MemberRefusal::AlreadyMember {
+                owner: a.to_checksum(None),
+            });
+        }
+        Ok(a)
+    };
+    match change {
+        MemberChange::Add { owner, threshold } => {
+            let new = not_yet(new_member(owner, me)?)?;
+            if owners.len() >= MAX_OWNERS {
+                return Err(MemberRefusal::TooMany {
+                    max: MAX_OWNERS as u64,
+                });
+            }
+            // The Safe puts a new owner at the head of its list.
+            let after: Vec<Address> = std::iter::once(new).chain(owners.iter().copied()).collect();
+            let t = checked_threshold(threshold.unwrap_or(state.threshold), after.len())?;
+            let d = change_data(
+                "addOwnerWithThreshold(address,uint256)",
+                &[word_addr(new), word_u256(U256::from(t))],
+            );
+            Ok((
+                d,
+                MemberSet {
+                    owners: shown(&after),
+                    threshold: t,
+                },
+            ))
+        }
+        MemberChange::Remove { owner, threshold } => {
+            let gone = member(owner)?;
+            if owners.len() == 1 {
+                return Err(MemberRefusal::LastMember);
+            }
+            let after: Vec<Address> = owners.iter().copied().filter(|o| *o != gone).collect();
+            let t = match threshold {
+                Some(t) => checked_threshold(*t, after.len())?,
+                None if state.threshold > after.len() as u64 => {
+                    return Err(MemberRefusal::BelowThreshold {
+                        owners: after.len() as u64,
+                        threshold: state.threshold,
+                    })
+                }
+                None => state.threshold,
+            };
+            let prev = prev_owner(owners, gone).ok_or(MemberRefusal::NotMember {
+                owner: gone.to_checksum(None),
+            })?;
+            let d = change_data(
+                "removeOwner(address,address,uint256)",
+                &[word_addr(prev), word_addr(gone), word_u256(U256::from(t))],
+            );
+            Ok((
+                d,
+                MemberSet {
+                    owners: shown(&after),
+                    threshold: t,
+                },
+            ))
+        }
+        MemberChange::Replace {
+            old_owner,
+            new_owner,
+        } => {
+            let old = member(old_owner)?;
+            let new = not_yet(new_member(new_owner, me)?)?;
+            let prev = prev_owner(owners, old).ok_or(MemberRefusal::NotMember {
+                owner: old.to_checksum(None),
+            })?;
+            // The new owner takes the old one's place in the list.
+            let after: Vec<Address> = owners
+                .iter()
+                .map(|o| if *o == old { new } else { *o })
+                .collect();
+            let d = change_data(
+                "swapOwner(address,address,address)",
+                &[word_addr(prev), word_addr(old), word_addr(new)],
+            );
+            Ok((
+                d,
+                MemberSet {
+                    owners: shown(&after),
+                    threshold: state.threshold,
+                },
+            ))
+        }
+        MemberChange::Threshold { threshold } => {
+            let t = checked_threshold(*threshold, owners.len())?;
+            if t == state.threshold {
+                return Err(MemberRefusal::Unchanged);
+            }
+            let d = change_data("changeThreshold(uint256)", &[word_u256(U256::from(t))]);
+            Ok((
+                d,
+                MemberSet {
+                    owners: shown(owners),
+                    threshold: t,
+                },
+            ))
+        }
+    }
+}
+
+/// `change` as the multisig's own transaction at `nonce` on a network whose
+/// members are `state` (a call into the multisig itself, nothing sent), with
+/// the members before and after — or why it cannot be made there. [`review`]
+/// reads it back as the member change it is.
+pub fn member_change_tx(
+    multisig: &str,
+    state: &MemberState,
+    change: &MemberChange,
+    nonce: &str,
+) -> Result<MemberVerdict, CoreError> {
+    let nonce = quantity(nonce)?;
+    let before = MemberSet {
+        owners: state
+            .owners
+            .iter()
+            .map(|o| addr(o).map(|a| a.to_checksum(None)))
+            .collect::<Result<_, _>>()?,
+        threshold: state.threshold,
+    };
+    Ok(match member_change_call(multisig, state, change)? {
+        Ok((data, after)) => MemberVerdict::Ready {
+            tx: Box::new(plain_tx(addr(multisig)?, U256::ZERO, data, 0, nonce)),
+            before,
+            after,
+        },
+        Err(refusal) => MemberVerdict::Refused { refusal },
+    })
+}
+
 /// The calls of a MultiSendCallOnly batch, or why it is not one Vela signs.
 fn read_batch(data: &[u8], me: Address) -> Result<Vec<BatchCall>, &'static str> {
     const UNREADABLE: &str = "a batch Vela cannot read in full";
@@ -2305,6 +2646,12 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         "missingNetworks" => out(serde_json::json!(missing_networks(&arg(
             &args, "evidence"
         )?))),
+        "memberChangeTx" => out(json(&member_change_tx(
+            &arg::<String>(&args, "multisig")?,
+            &arg(&args, "state")?,
+            &arg(&args, "change")?,
+            &arg::<String>(&args, "nonce")?,
+        )?)),
         "memberDrift" => out(json(&member_drift(
             &arg::<Vec<String>>(&args, "original")?,
             arg(&args, "originalThreshold")?,
@@ -3581,5 +3928,357 @@ mod tests {
         // Another Safe's address finds nothing in it.
         assert_eq!(genesis_from_calldata(&hex(&outer), B).unwrap(), None);
         assert_eq!(genesis_from_calldata("0x1234", &ms.address).unwrap(), None);
+    }
+
+    // -- changing the members ---------------------------------------------------
+
+    const C: &str = "0x3333333333333333333333333333333333333333";
+    const D: &str = "0x4444444444444444444444444444444444444444";
+
+    fn members(owners: &[&str], threshold: u64) -> MemberState {
+        MemberState {
+            owners: owners.iter().map(|o| (*o).to_owned()).collect(),
+            threshold,
+            change_waiting: false,
+        }
+    }
+
+    fn ready(ms: &str, state: &MemberState, change: MemberChange) -> (SafeTx, MemberSet) {
+        match member_change_tx(ms, state, &change, "0x5").unwrap() {
+            MemberVerdict::Ready { tx, before, after } => {
+                assert_eq!(before.threshold, state.threshold);
+                assert_eq!(before.owners.len(), state.owners.len());
+                (*tx, after)
+            }
+            MemberVerdict::Refused { refusal } => panic!("refused: {refusal:?}"),
+        }
+    }
+
+    fn refused(ms: &str, state: &MemberState, change: MemberChange) -> MemberRefusal {
+        match member_change_tx(ms, state, &change, "0x5").unwrap() {
+            MemberVerdict::Refused { refusal } => refusal,
+            MemberVerdict::Ready { .. } => panic!("built {change:?}"),
+        }
+    }
+
+    fn checksummed(list: &[&str]) -> Vec<String> {
+        list.iter()
+            .map(|a| addr(a).unwrap().to_checksum(None))
+            .collect()
+    }
+
+    /// The owner before another in the Safe's list (`getOwners()` order): the
+    /// sentinel before the first.
+    #[test]
+    fn the_previous_owner_comes_from_the_chains_list() {
+        let list = [A, B, C].map(|a| addr(a).unwrap());
+        assert_eq!(prev_owner(&list, list[0]), Some(SENTINEL));
+        assert_eq!(prev_owner(&list, list[1]), Some(list[0]));
+        assert_eq!(prev_owner(&list, list[2]), Some(list[1]));
+        assert_eq!(prev_owner(&list, addr(D).unwrap()), None);
+    }
+
+    /// Each change's calldata is the Safe's own, byte for byte as `cast
+    /// calldata` encodes it, sent to the multisig itself with nothing, at the
+    /// nonce given — and the review reads each back as that change.
+    #[test]
+    fn each_member_change_is_the_safes_call_as_cast_encodes_it() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        let state = members(&[A, B, C], 2);
+
+        // cast calldata "addOwnerWithThreshold(address,uint256)" D 2
+        let (tx, after) = ready(
+            &ms,
+            &state,
+            MemberChange::Add {
+                owner: D.into(),
+                threshold: None,
+            },
+        );
+        assert_eq!(
+            tx.data,
+            "0x0d582f1300000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000002"
+        );
+        assert_eq!(
+            after.owners,
+            checksummed(&[D, A, B, C]),
+            "a new owner heads the list"
+        );
+        assert_eq!(after.threshold, 2);
+        assert_eq!(
+            (tx.to.as_str(), tx.value.as_str(), tx.operation),
+            (ms.as_str(), "0x0", 0)
+        );
+        assert_eq!(tx.nonce, "0x5");
+        assert_eq!(
+            review(5042002, &ms, &tx).unwrap().action,
+            Some(Action::AddOwner {
+                owner: addr(D).unwrap().to_checksum(None),
+                threshold: "2".into()
+            })
+        );
+
+        // cast calldata "removeOwner(address,address,uint256)" A B 2
+        let (tx, after) = ready(
+            &ms,
+            &state,
+            MemberChange::Remove {
+                owner: B.into(),
+                threshold: None,
+            },
+        );
+        assert_eq!(
+            tx.data,
+            "0xf8dc5dd9000000000000000000000000111111111111111111111111111111111111111100000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000002"
+        );
+        assert_eq!(after.owners, checksummed(&[A, C]));
+        assert!(matches!(
+            review(5042002, &ms, &tx).unwrap().action,
+            Some(Action::RemoveOwner { .. })
+        ));
+
+        // The first owner's previous one is the sentinel; the threshold lowered with it.
+        // cast calldata "removeOwner(address,address,uint256)" 0x…01 A 1
+        let (tx, after) = ready(
+            &ms,
+            &state,
+            MemberChange::Remove {
+                owner: A.into(),
+                threshold: Some(1),
+            },
+        );
+        assert_eq!(
+            tx.data,
+            "0xf8dc5dd9000000000000000000000000000000000000000000000000000000000000000100000000000000000000000011111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000001"
+        );
+        assert_eq!((after.owners, after.threshold), (checksummed(&[B, C]), 1));
+
+        // cast calldata "swapOwner(address,address,address)" B C D
+        let (tx, after) = ready(
+            &ms,
+            &state,
+            MemberChange::Replace {
+                old_owner: C.into(),
+                new_owner: D.into(),
+            },
+        );
+        assert_eq!(
+            tx.data,
+            "0xe318b52b000000000000000000000000222222222222222222222222222222222222222200000000000000000000000033333333333333333333333333333333333333330000000000000000000000004444444444444444444444444444444444444444"
+        );
+        assert_eq!(
+            after.owners,
+            checksummed(&[A, B, D]),
+            "in the old one's place"
+        );
+        assert_eq!(
+            review(5042002, &ms, &tx).unwrap().action,
+            Some(Action::SwapOwner {
+                old_owner: addr(C).unwrap().to_checksum(None),
+                new_owner: addr(D).unwrap().to_checksum(None),
+            })
+        );
+
+        // cast calldata "changeThreshold(uint256)" 3
+        let (tx, after) = ready(&ms, &state, MemberChange::Threshold { threshold: 3 });
+        assert_eq!(
+            tx.data,
+            "0x694e80c30000000000000000000000000000000000000000000000000000000000000003"
+        );
+        assert_eq!((after.owners.len(), after.threshold), (3, 3));
+        assert_eq!(
+            review(5042002, &ms, &tx).unwrap().action,
+            Some(Action::ChangeThreshold {
+                threshold: "3".into()
+            })
+        );
+    }
+
+    /// Every state the Safe would refuse, or that would leave the funds stuck,
+    /// is refused before anything is signed — with the reason, not an error.
+    #[test]
+    fn an_impossible_member_change_is_refused_with_its_reason() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        let state = members(&[A, B, C], 2);
+        let add = |owner: &str, threshold: Option<u64>| MemberChange::Add {
+            owner: owner.into(),
+            threshold,
+        };
+        assert!(matches!(
+            refused(
+                &ms,
+                &state,
+                add("0x0000000000000000000000000000000000000000", None)
+            ),
+            MemberRefusal::NoOne { .. }
+        ));
+        assert!(matches!(
+            refused(
+                &ms,
+                &state,
+                add("0x0000000000000000000000000000000000000001", None)
+            ),
+            MemberRefusal::NoOne { .. }
+        ));
+        assert_eq!(
+            refused(&ms, &state, add(&ms, None)),
+            MemberRefusal::TheMultisig
+        );
+        assert_eq!(
+            refused(
+                &ms,
+                &state,
+                add(&B.to_uppercase().replace("0X", "0x"), None)
+            ),
+            MemberRefusal::AlreadyMember {
+                owner: addr(B).unwrap().to_checksum(None)
+            },
+            "the same address in another case is the same member"
+        );
+        assert!(matches!(
+            refused(&ms, &state, add("vitalik.eth", None)),
+            MemberRefusal::NotAnAddress { .. }
+        ));
+        assert_eq!(
+            refused(&ms, &state, add(D, Some(5))),
+            MemberRefusal::ThresholdTooHigh {
+                threshold: 5,
+                owners: 4
+            }
+        );
+        assert_eq!(
+            refused(&ms, &state, add(D, Some(0))),
+            MemberRefusal::ThresholdZero
+        );
+        let full: Vec<String> = (1..=MAX_OWNERS as u8)
+            .map(|i| Address::from([i + 0x10; 20]).to_checksum(None))
+            .collect();
+        let full = MemberState {
+            owners: full,
+            threshold: 2,
+            change_waiting: false,
+        };
+        assert_eq!(
+            refused(&ms, &full, add(D, None)),
+            MemberRefusal::TooMany {
+                max: MAX_OWNERS as u64
+            }
+        );
+
+        let remove = |owner: &str, threshold: Option<u64>| MemberChange::Remove {
+            owner: owner.into(),
+            threshold,
+        };
+        assert!(matches!(
+            refused(&ms, &state, remove(D, None)),
+            MemberRefusal::NotMember { .. }
+        ));
+        assert_eq!(
+            refused(&ms, &members(&[A], 1), remove(A, None)),
+            MemberRefusal::LastMember
+        );
+        // 3 of 3, one removed: two left, three must approve.
+        assert_eq!(
+            refused(&ms, &members(&[A, B, C], 3), remove(B, None)),
+            MemberRefusal::BelowThreshold {
+                owners: 2,
+                threshold: 3
+            }
+        );
+        assert_eq!(
+            refused(&ms, &state, remove(B, Some(3))),
+            MemberRefusal::ThresholdTooHigh {
+                threshold: 3,
+                owners: 2
+            }
+        );
+
+        assert!(matches!(
+            refused(
+                &ms,
+                &state,
+                MemberChange::Replace {
+                    old_owner: D.into(),
+                    new_owner: "0x5555555555555555555555555555555555555555".into()
+                }
+            ),
+            MemberRefusal::NotMember { .. }
+        ));
+        assert!(matches!(
+            refused(
+                &ms,
+                &state,
+                MemberChange::Replace {
+                    old_owner: C.into(),
+                    new_owner: A.into()
+                }
+            ),
+            MemberRefusal::AlreadyMember { .. }
+        ));
+        assert_eq!(
+            refused(
+                &ms,
+                &state,
+                MemberChange::Replace {
+                    old_owner: C.into(),
+                    new_owner: ms.clone()
+                }
+            ),
+            MemberRefusal::TheMultisig
+        );
+
+        assert_eq!(
+            refused(&ms, &state, MemberChange::Threshold { threshold: 4 }),
+            MemberRefusal::ThresholdTooHigh {
+                threshold: 4,
+                owners: 3
+            }
+        );
+        assert_eq!(
+            refused(&ms, &state, MemberChange::Threshold { threshold: 0 }),
+            MemberRefusal::ThresholdZero
+        );
+        assert_eq!(
+            refused(&ms, &state, MemberChange::Threshold { threshold: 2 }),
+            MemberRefusal::Unchanged
+        );
+
+        // One member change at a time on a network.
+        let waiting = MemberState {
+            change_waiting: true,
+            ..state.clone()
+        };
+        assert_eq!(
+            refused(&ms, &waiting, MemberChange::Threshold { threshold: 3 }),
+            MemberRefusal::ChangeWaiting
+        );
+    }
+
+    /// The JSON door speaks the shells' shapes: a verdict tagged by `kind`.
+    #[test]
+    fn a_member_change_goes_through_the_door() {
+        let ms = salted(&[A.into(), B.into()], 2, "0x7").unwrap().address;
+        let args = serde_json::json!({
+            "multisig": ms,
+            "state": { "owners": [A, B, C], "threshold": 2 },
+            "change": { "kind": "replace", "oldOwner": C, "newOwner": D },
+            "nonce": "0x2"
+        });
+        let out: serde_json::Value =
+            serde_json::from_str(&call_json("memberChangeTx", &args.to_string()).unwrap()).unwrap();
+        assert_eq!(out["kind"], "ready");
+        assert_eq!(out["tx"]["nonce"], "0x2");
+        assert_eq!(out["after"]["threshold"], 2);
+        let args = serde_json::json!({
+            "multisig": ms,
+            "state": { "owners": [A, B, C], "threshold": 2, "changeWaiting": false },
+            "change": { "kind": "threshold", "threshold": 9 },
+            "nonce": "0x2"
+        });
+        let out: serde_json::Value =
+            serde_json::from_str(&call_json("memberChangeTx", &args.to_string()).unwrap()).unwrap();
+        assert_eq!(out["kind"], "refused");
+        assert_eq!(out["refusal"]["kind"], "thresholdTooHigh");
+        assert_eq!(out["refusal"]["owners"], 3);
     }
 }

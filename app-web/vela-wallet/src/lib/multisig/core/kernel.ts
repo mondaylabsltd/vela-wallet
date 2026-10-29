@@ -304,6 +304,63 @@ export const defaultName = (safe: string) => call<string>('defaultName', { safe 
  */
 export const namedGenesis = (genesis: Genesis) => call<Genesis>('namedGenesis', { genesis });
 
+// -- changing the members (the core's `member_change_tx`) --------------------------
+
+/** A change the person asks for; built per network against that network's members. */
+export type MemberChange =
+	/** No threshold: keep the network's. */
+	| { kind: 'add'; owner: string; threshold?: number }
+	/** No threshold: keep the network's (refused when too few would be left for it). */
+	| { kind: 'remove'; owner: string; threshold?: number }
+	/** The way back from a lost passkey: the member's new account in its place. */
+	| { kind: 'replace'; oldOwner: string; newOwner: string }
+	| { kind: 'threshold'; threshold: number };
+
+/** One network's members now: owners as `getOwners()` lists them, and whether a member change waits there. */
+export interface MemberState {
+	owners: string[];
+	threshold: number;
+	changeWaiting: boolean;
+}
+
+export interface MemberSet {
+	owners: string[];
+	threshold: number;
+}
+
+/** Why a change cannot be made on a network (the core's `MemberRefusal`). */
+export type MemberRefusal =
+	| { kind: 'notAnAddress'; address: string }
+	| { kind: 'noOne'; address: string }
+	| { kind: 'theMultisig' }
+	| { kind: 'alreadyMember'; owner: string }
+	| { kind: 'notMember'; owner: string }
+	| { kind: 'lastMember' }
+	| { kind: 'thresholdTooHigh'; threshold: number; owners: number }
+	| { kind: 'thresholdZero' }
+	| { kind: 'belowThreshold'; owners: number; threshold: number }
+	| { kind: 'unchanged' }
+	| { kind: 'tooMany'; max: number }
+	| { kind: 'changeWaiting' };
+
+export type MemberVerdict =
+	| { kind: 'ready'; tx: SafeTx; before: MemberSet; after: MemberSet }
+	| { kind: 'refused'; refusal: MemberRefusal };
+
+/**
+ * `change` as the multisig's own transaction at `nonce` on a network whose
+ * members are `state` — `addOwnerWithThreshold`, `removeOwner` /
+ * `swapOwner` with the previous owner from that network's list, or
+ * `changeThreshold` — with the members before and after; or the core's
+ * reason it cannot be made there.
+ */
+export const memberChangeTx = (
+	multisig: string,
+	state: MemberState,
+	change: MemberChange,
+	nonce: string
+) => call<MemberVerdict>('memberChangeTx', { multisig, state, change, nonce });
+
 /** The multisig's transaction that renames its record in the registry, at `nonce`. */
 export const renameTx = (name: string, nonce: string) => call<SafeTx>('renameTx', { name, nonce });
 

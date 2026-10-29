@@ -6,6 +6,7 @@
  */
 import { queryWalletName } from '$lib/services/public-key-index';
 import { localName, shortenAddress } from './display';
+import { memberNotes } from './member-notes.svelte';
 
 class Names {
 	#registered = $state<Record<string, string>>({});
@@ -27,6 +28,9 @@ class Names {
 	label(address: string): string {
 		const local = localName(address);
 		if (local) return local;
+		// The name the person gave a member they added (this device's note).
+		const noted = memberNotes.get(address)?.name;
+		if (noted) return noted;
 		const key = address.toLowerCase();
 		const known = this.#registered[key];
 		if (known) return known;

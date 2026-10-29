@@ -797,6 +797,17 @@ pub fn verified_name_step(
     vela_core::app::name_verify::step_json(chain_id, registry, address, name, answers_json)
 }
 
+/// **The address a typed name points to** (`alice.eth`, a member to add):
+/// `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+/// walk as [`verified_name_step`], handing back the address (EIP-55) for the
+/// shell to show beside the name before anything uses it. `answers_json` is
+/// the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+#[wasm_bindgen(js_name = resolvedNameStep)]
+#[must_use]
+pub fn resolved_name_step(chain_id: u32, registry: &str, name: &str, answers_json: &str) -> String {
+    vela_core::app::name_verify::resolve_step_json(chain_id, registry, name, answers_json)
+}
+
 /// **Where to ask about a model the compiled catalog cannot name**, or
 /// `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
 /// one the catalog already answers offline.

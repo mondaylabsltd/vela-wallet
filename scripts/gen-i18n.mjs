@@ -1083,9 +1083,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   originalNote, currentOn, sameAsOriginal, added, removed,
 //   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
 //   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
-if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
+// 2490 (changing a multisig's members, round 4, 2026-10-29): + the
+//   `home.multisig.members` branch — Add member (address, ENS name or
+//   contact, the resolved address shown, a name and kind kept on this
+//   device), Replace and Remove per member, the approvals stepper, each one
+//   proposal per deployed network with its before → after, the changes
+//   waiting with per-network progress, and the passkey-native recovery
+//   paragraph (37 leaves) — and its `refuse` branch, one sentence per
+//   refusal of the core's `MemberRefusal` (12 leaves).
+//   2318 + 49 = 2367 leaves, 121 + 2 = 123 branches.
+if (PATHS.length !== 2490) fail(`expected 2490 paths (2367 leaf + 123 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2367) fail(`expected 2367 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 123) fail(`expected 123 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

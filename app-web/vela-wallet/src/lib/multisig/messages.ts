@@ -297,6 +297,84 @@ export interface MultisigMessages {
 		/** Nothing says which network it is used on: the person picks one. */
 		chooseNetwork: string;
 	};
+	/** Changing the members and the approvals needed (Settings), one proposal per network. */
+	members: MemberMessages;
+}
+
+/** `home.multisig.members`: changing who the members are and how many must approve. */
+export interface MemberMessages {
+	title: string;
+	add: string;
+	remove: string;
+	replace: string;
+	/** `{{name}}` */
+	removeLabel: string;
+	/** `{{name}}` */
+	replaceLabel: string;
+	lostPasskey: string;
+	entryLabel: string;
+	entryPlaceholder: string;
+	/** `{{name}}` */
+	resolving: string;
+	/** `{{name}}` */
+	nameNotFound: string;
+	/** `{{name}}` */
+	nameUnavailable: string;
+	suggestions: string;
+	memberName: string;
+	memberNamePlaceholder: string;
+	nameNote: string;
+	kind: string;
+	kindVela: string;
+	kindWallet: string;
+	newAccount: string;
+	/** `{{name}}` */
+	replaceIntro: string;
+	/** `{{name}}` */
+	removeIntro: string;
+	thresholdAfter: string;
+	thresholdTitle: string;
+	/** `{{m}}`, `{{n}}` */
+	ruleValue: string;
+	/** `{{network}}`, `{{before}}`, `{{after}}` */
+	onNetwork: string;
+	perNetwork: string;
+	noneDeployed: string;
+	/** `{{network}}` */
+	proposing: string;
+	/** `{{network}}` */
+	proposed: string;
+	/** `{{network}}`, `{{reason}}` */
+	failedOn: string;
+	waitingTitle: string;
+	/** `{{name}}` */
+	changeAdd: string;
+	/** `{{name}}` */
+	changeRemove: string;
+	/** `{{old}}`, `{{new}}` */
+	changeReplace: string;
+	/** `{{m}}`, `{{n}}`: passkey-native recovery, said where the rule is chosen. */
+	recovery: string;
+	/** Every member must approve: a lost passkey cannot be replaced. */
+	recoveryAll: string;
+	/** Why a change cannot be made on a network: one per refusal of the core's (`MemberRefusal`). */
+	refuse: {
+		notAnAddress: string;
+		noOne: string;
+		theMultisig: string;
+		alreadyMember: string;
+		notMember: string;
+		lastMember: string;
+		/** `{{threshold}}`, `{{owners}}` */
+		thresholdTooHigh: string;
+		thresholdZero: string;
+		/** `{{owners}}`, `{{threshold}}` */
+		belowThreshold: string;
+		unchanged: string;
+		/** `{{max}}` */
+		tooMany: string;
+		changeWaiting: string;
+	};
 }
 
 /** Every key of {@link MultisigMessages}, for the resolver to walk. */
@@ -553,5 +631,58 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		notMultisig: '',
 		chooseNetwork: ''
+	},
+	members: {
+		title: '',
+		add: '',
+		remove: '',
+		replace: '',
+		removeLabel: '',
+		replaceLabel: '',
+		lostPasskey: '',
+		entryLabel: '',
+		entryPlaceholder: '',
+		resolving: '',
+		nameNotFound: '',
+		nameUnavailable: '',
+		suggestions: '',
+		memberName: '',
+		memberNamePlaceholder: '',
+		nameNote: '',
+		kind: '',
+		kindVela: '',
+		kindWallet: '',
+		newAccount: '',
+		replaceIntro: '',
+		removeIntro: '',
+		thresholdAfter: '',
+		thresholdTitle: '',
+		ruleValue: '',
+		onNetwork: '',
+		perNetwork: '',
+		noneDeployed: '',
+		proposing: '',
+		proposed: '',
+		failedOn: '',
+		waitingTitle: '',
+		changeAdd: '',
+		changeRemove: '',
+		changeReplace: '',
+		recovery: '',
+		recoveryAll: '',
+		refuse: {
+			notAnAddress: '',
+			noOne: '',
+			theMultisig: '',
+			alreadyMember: '',
+			notMember: '',
+			lastMember: '',
+			thresholdTooHigh: '',
+			thresholdZero: '',
+			belowThreshold: '',
+			unchanged: '',
+			tooMany: '',
+			changeWaiting: ''
+		}
 	}
 };

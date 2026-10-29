@@ -35,15 +35,23 @@ vi.mock('../core/proposals.svelte', () => ({
 	proposals: {
 		get chains() {
 			return seams.chains;
-		}
+		},
+		items: []
 	},
 	MailboxUnreadableError: class extends Error {},
+	proposeMemberChange: async () => ({ safeTxHash: '0xabc' }),
 	membersAnywhere: (a: { owners: string[] }) => a.owners,
 	proposeRename: async (address: string, chainId: number, name: string) => {
 		seams.renamed.push([address, chainId, name]);
 		return { safeTxHash: '0xabc' };
 	}
 }));
+// Changing the members is its own component's (MemberChanges.svelte.test.ts).
+vi.mock('../core/member-entry', () => ({
+	looksLikeName: () => false,
+	resolveTypedName: async () => ({ state: 'unavailable' })
+}));
+vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
 vi.mock('../core/accounts', () => ({
 	recordHomeChain: async () => 100,
 	shareAgain: async () => {
@@ -64,6 +72,9 @@ vi.mock('../core/kernel', () => {
 		!!a && !!b && a.toLowerCase() === b.toLowerCase();
 	return {
 		validName: (n: string) => n.length > 0 && n.length <= 64 && n.trim() === n,
+		validOwner: () => true,
+		MEMBER_CHANGES: ['addOwner', 'removeOwner', 'swapOwner', 'changeThreshold'],
+		memberChangeTx: () => ({ kind: 'refused', refusal: { kind: 'unchanged' } }),
 		sameAddress: same,
 		// The core's rule, as it is.
 		memberDrift: (

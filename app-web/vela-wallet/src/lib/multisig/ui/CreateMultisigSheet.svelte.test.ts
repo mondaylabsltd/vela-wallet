@@ -145,9 +145,19 @@ describe('creating a multisig', () => {
 		expect(identiconViewer.current?.address).toBe(TWO);
 		expect(document.body.querySelector('button button')).toBeNull();
 
-		// Review: the address it will have.
+		// The rule: every member must approve says so (no recovery to offer);
+		// with one to spare, the passkey-native recovery is explained.
 		press('create.next');
 		await settle();
+		const recovery = () => document.body.querySelector('[data-testid="create-recovery"]');
+		expect(recovery()).toBeNull();
+		document.body.querySelector<HTMLButtonElement>('button[aria-label="create.fewer"]')?.click();
+		await settle();
+		expect(recovery()?.textContent?.trim()).toBe('members.recovery');
+		document.body.querySelector<HTMLButtonElement>('button[aria-label="create.more"]')?.click();
+		await settle();
+
+		// Review: the address it will have.
 		press('create.next');
 		await settle();
 		document.body.querySelector<HTMLButtonElement>('.hero button.identicon')?.click();
