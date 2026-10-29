@@ -68,7 +68,7 @@
    "pageSave": "Enregistrer",
    "pageAdd": "Ajouter une page de signature auto-hébergée",
    "pageDuplicate": "Cette page est déjà enregistrée.",
-   "keysOn": "Clés sur {{domain}}",
+   "keysOn": "Vos clés d'accès restent sur vos appareils et ne signent que pour {{domain}}",
    "pageSelfHosted": "Auto-hébergée · {{domain}}",
    "pageTrust": "Faire confiance à cette version",
    "pageRename": "Renommer",
@@ -76,15 +76,15 @@
    "pageName": "Nom"
   },
   "venue": {
-   "title": "Où vous vérifiez et signez",
-   "subtitle": "Pour les transactions et messages de ce compte. Vos clés ne changent pas.",
-   "inVela": "Vérifier et signer dans Vela",
-   "inVelaBody": "L'écran de signature de Vela",
-   "page": "Vérifier et signer sur une page de signature de confiance",
-   "pageBody": "Une page sans dépendances montre exactement ce que vous signez",
-   "blockedApp": "Vela ne peut pas utiliser les clés de {{domain}}.",
-   "blockedPage": "Cette page est sur {{pageDomain}} ; les clés de ce compte sont sur {{domain}}.",
-   "blockedWeb": "Les pages de signature s'ouvrent depuis les applis Vela, pas sur le web."
+   "title": "Comment vous signez",
+   "subtitle": "Choisissez où les transactions et messages de ce compte sont confirmés. Vos clés restent les mêmes.",
+   "inVela": "Signer avec Vela",
+   "inVelaBody": "L'écran de confirmation de Vela",
+   "page": "Signer sur une page de signature de confiance",
+   "pageBody": "Une page autonome qui signe exactement ce qu'elle affiche",
+   "blockedApp": "Les clés d'accès de ce compte ne signent que pour {{domain}}, donc Vela ne peut pas les utiliser ici.",
+   "blockedPage": "Cette page est sur {{pageDomain}}, mais les clés d'accès de ce compte ne signent que pour {{domain}}.",
+   "blockedWeb": "Indisponible sur le web. Ouvrez-le depuis l'appli Vela."
   },
   "advanced": {
    "networksTitle": "Réseaux",
@@ -2289,16 +2289,17 @@
    "urlRefused": "Non enregistré : utilisez une adresse https:// (http:// seulement pour cet ordinateur). L'adresse précédente reste utilisée."
   },
   "backup": {
-   "title": "Copier l'enregistrement de ce portefeuille sur Ethereum",
-   "backedUp": "Copié sur Ethereum",
-   "notBackedUp": "Pas encore copié (facultatif)",
+   "title": "Sauvegarder l'enregistrement du compte sur Ethereum",
+   "backedUp": "Sauvegardé",
+   "notBackedUp": "Non sauvegardé (facultatif)",
    "couldNotCheck": "Vérification impossible. Touchez pour réessayer.",
-   "cannotCopy": "Cet ancien portefeuille ne peut pas être copié",
-   "explain": "L'enregistrement de votre portefeuille sur Gnosis est public : son adresse et son nom, et pour chaque clé son nom, sa clé publique, son identifiant d'identification et le modèle d'authentificateur. Un appareil qui a l'une de vos clés d'accès retrouve ce portefeuille grâce à lui. Ici, une copie est aussi enregistrée sur Ethereum. C'est une transaction Ethereum : vous la confirmez avec une clé d'accès et payez ses frais de réseau avec une crypto détenue sur Ethereum. La copie ne peut ni déplacer d'argent ni récupérer une clé d'accès perdue."
+   "cannotCopy": "Cet ancien compte ne peut pas être sauvegardé",
+   "explain": "Un nouvel appareil retrouve ce compte grâce à son enregistrement public sur Gnosis. Une copie sur Ethereum lui permet de le retrouver même quand Gnosis est indisponible. Cela coûte une fois des frais de réseau Ethereum. Ce n'est pas une sauvegarde de vos clés d'accès, et cela ne peut pas déplacer de fonds."
   },
   "keys": {
    "title": "Clés",
-   "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
+   "subtitle": "N'importe laquelle signe pour ce compte sur tous les réseaux.",
+   "subtitleSingle": "Cette clé d'accès signe pour ce compte sur tous les réseaux.",
    "keyN": "Clé {{n}}",
    "notSynced": "Liée à l'appareil",
    "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient.",

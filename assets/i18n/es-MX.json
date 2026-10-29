@@ -68,7 +68,7 @@
    "pageSave": "Guardar",
    "pageAdd": "Agregar una página de firma alojada por ti",
    "pageDuplicate": "Esa página ya está guardada.",
-   "keysOn": "Llaves en {{domain}}",
+   "keysOn": "Tus llaves de acceso se quedan en tus dispositivos y solo firman para {{domain}}",
    "pageSelfHosted": "Alojada por ti · {{domain}}",
    "pageTrust": "Confiar en esta versión",
    "pageRename": "Cambiar nombre",
@@ -76,15 +76,15 @@
    "pageName": "Nombre"
   },
   "venue": {
-   "title": "Dónde revisas y firmas",
-   "subtitle": "Para las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
-   "inVela": "Revisa y firma en Vela",
-   "inVelaBody": "La pantalla de firma de Vela",
-   "page": "Revisa y firma en una página de firma de confianza",
-   "pageBody": "Una página sin dependencias muestra exactamente lo que firmas",
-   "blockedApp": "Vela no puede usar las llaves de {{domain}}.",
-   "blockedPage": "Esta página está en {{pageDomain}}; las llaves de esta cuenta están en {{domain}}.",
-   "blockedWeb": "Las páginas de firma se abren desde las apps de Vela, no en la web."
+   "title": "Cómo firmas",
+   "subtitle": "Elige dónde se confirman las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
+   "inVela": "Firmar con Vela",
+   "inVelaBody": "La pantalla de confirmación de Vela",
+   "page": "Firmar en una página de firma de confianza",
+   "pageBody": "Una página independiente que firma exactamente lo que muestra",
+   "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
+   "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
+   "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela."
   },
   "advanced": {
    "networksTitle": "Redes",
@@ -2289,16 +2289,17 @@
    "urlRefused": "No se guardó: usa una dirección https:// (http:// solo para esta computadora). Se sigue usando la dirección anterior."
   },
   "backup": {
-   "title": "Copiar el registro de esta billetera a Ethereum",
-   "backedUp": "Copiado en Ethereum",
-   "notBackedUp": "Aún sin copiar (opcional)",
+   "title": "Respaldar el registro de la cuenta en Ethereum",
+   "backedUp": "Respaldado",
+   "notBackedUp": "Sin respaldar (opcional)",
    "couldNotCheck": "No se pudo comprobar. Toca para reintentar.",
-   "cannotCopy": "Esta billetera es anterior y no se puede copiar",
-   "explain": "El registro de tu billetera en Gnosis es público: su dirección y su nombre, y de cada llave su nombre, llave pública, ID de credencial y modelo de autenticador. Un dispositivo con una de tus llaves de acceso encuentra esta billetera gracias a él. Aquí se guarda una copia también en Ethereum. Es una transacción de Ethereum: la confirmas con una llave de acceso y pagas su comisión de red con una moneda que tengas en Ethereum. La copia no puede mover dinero ni recuperar una llave de acceso perdida."
+   "cannotCopy": "Esta cuenta es anterior y no se puede respaldar",
+   "explain": "Un dispositivo nuevo encuentra esta cuenta por su registro público en Gnosis. Una copia en Ethereum le permite encontrarla aunque Gnosis no funcione. Cuesta una comisión de red de Ethereum. No respalda tus llaves de acceso ni puede mover fondos."
   },
   "keys": {
    "title": "Llaves",
-   "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
+   "subtitle": "Cualquiera de ellas firma por esta cuenta en todas las redes.",
+   "subtitleSingle": "Esta llave de acceso firma por esta cuenta en todas las redes.",
    "keyN": "Llave {{n}}",
    "notSynced": "Vinculada al dispositivo",
    "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",

@@ -68,7 +68,7 @@
    "pageSave": "Save",
    "pageAdd": "Add a self-hosted signing page",
    "pageDuplicate": "That page is already saved.",
-   "keysOn": "Keys on {{domain}}",
+   "keysOn": "Your passkeys stay on your devices and sign only for {{domain}}",
    "pageSelfHosted": "Self-hosted · {{domain}}",
    "pageTrust": "Trust this version",
    "pageRename": "Rename",
@@ -76,15 +76,15 @@
    "pageName": "Name"
   },
   "venue": {
-   "title": "Where you review and sign",
-   "subtitle": "For this account's transactions and messages. Your keys don't change.",
-   "inVela": "Review and sign in Vela",
-   "inVelaBody": "Vela's own signing sheet",
-   "page": "Review and sign on a trusted signing page",
-   "pageBody": "A zero-dependency page shows exactly what you sign",
-   "blockedApp": "Vela can't reach keys on {{domain}}.",
-   "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}.",
-   "blockedWeb": "Signing pages open from the Vela apps, not the web."
+   "title": "How you sign",
+   "subtitle": "Choose where this account's transactions and messages are confirmed. Your keys stay the same.",
+   "inVela": "Sign with Vela",
+   "inVelaBody": "Vela's own confirm sheet",
+   "page": "Sign on a trusted signing page",
+   "pageBody": "A standalone page that signs exactly what it shows",
+   "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
+   "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
+   "blockedWeb": "Not available on the web. Open it from the Vela app."
   },
   "advanced": {
    "networksTitle": "Networks",
@@ -2282,16 +2282,17 @@
    "urlRefused": "Not saved — use an https:// address (plain http:// only for this computer). The previous address is still in use."
   },
   "backup": {
-   "title": "Copy this wallet's record to Ethereum",
-   "backedUp": "Copied to Ethereum",
-   "notBackedUp": "Not copied yet (optional)",
+   "title": "Back up the account record on Ethereum",
+   "backedUp": "Backed up",
+   "notBackedUp": "Not backed up (optional)",
    "couldNotCheck": "Couldn't check. Tap to try again.",
-   "cannotCopy": "This older wallet can't be copied",
-   "explain": "Your wallet's record on Gnosis is public: its address and name, and for each key its name, public key, credential ID and authenticator model. A device with one of your passkeys finds this wallet through it. This puts a copy on Ethereum too. It's one Ethereum transaction: you confirm it with a passkey and pay its network fee in a coin you hold on Ethereum. The copy can't move money or bring back a lost passkey."
+   "cannotCopy": "This older account can't be backed up",
+   "explain": "A new device finds this account through its public record on Gnosis. A copy on Ethereum lets it find the account even when Gnosis is down. It costs one Ethereum network fee. It doesn't back up your passkeys and can't move funds."
   },
   "keys": {
    "title": "Keys",
-   "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
+   "subtitle": "Any one of them signs for this account on every network.",
+   "subtitleSingle": "This passkey signs for this account on every network.",
    "keyN": "Key {{n}}",
    "notSynced": "Device-bound",
    "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",

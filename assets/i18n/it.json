@@ -68,7 +68,7 @@
    "pageSave": "Salva",
    "pageAdd": "Aggiungi una pagina di firma ospitata da te",
    "pageDuplicate": "Questa pagina è già salvata.",
-   "keysOn": "Chiavi su {{domain}}",
+   "keysOn": "Le tue passkey restano sui tuoi dispositivi e firmano solo per {{domain}}",
    "pageSelfHosted": "Ospitata da te · {{domain}}",
    "pageTrust": "Fidati di questa versione",
    "pageRename": "Rinomina",
@@ -76,15 +76,15 @@
    "pageName": "Nome"
   },
   "venue": {
-   "title": "Dove controlli e firmi",
-   "subtitle": "Per le transazioni e i messaggi di questo account. Le tue chiavi non cambiano.",
-   "inVela": "Controlla e firma in Vela",
-   "inVelaBody": "La schermata di firma di Vela",
-   "page": "Controlla e firma su una pagina di firma di fiducia",
-   "pageBody": "Una pagina senza dipendenze mostra esattamente ciò che firmi",
-   "blockedApp": "Vela non può usare le chiavi su {{domain}}.",
-   "blockedPage": "Questa pagina è su {{pageDomain}}; le chiavi di questo account sono su {{domain}}.",
-   "blockedWeb": "Le pagine di firma si aprono dalle app di Vela, non dal web."
+   "title": "Come firmi",
+   "subtitle": "Scegli dove confermare le transazioni e i messaggi di questo account. Le tue chiavi restano le stesse.",
+   "inVela": "Firma con Vela",
+   "inVelaBody": "La schermata di conferma di Vela",
+   "page": "Firma su una pagina di firma di fiducia",
+   "pageBody": "Una pagina autonoma che firma esattamente ciò che mostra",
+   "blockedApp": "Le passkey di questo account firmano solo per {{domain}}, quindi Vela non può usarle qui.",
+   "blockedPage": "Questa pagina è su {{pageDomain}}, ma le passkey di questo account firmano solo per {{domain}}.",
+   "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela."
   },
   "advanced": {
    "networksTitle": "Reti",
@@ -2289,16 +2289,17 @@
    "urlRefused": "Non salvato: usa un indirizzo https:// (http:// semplice solo per questo computer). L'indirizzo precedente resta in uso."
   },
   "backup": {
-   "title": "Copia il record di questo wallet su Ethereum",
-   "backedUp": "Copiato su Ethereum",
-   "notBackedUp": "Non ancora copiato (facoltativo)",
+   "title": "Backup del record dell'account su Ethereum",
+   "backedUp": "Backup eseguito",
+   "notBackedUp": "Nessun backup (facoltativo)",
    "couldNotCheck": "Impossibile verificare. Tocca per riprovare.",
-   "cannotCopy": "Questo wallet meno recente non si può copiare",
-   "explain": "Il record del tuo wallet su Gnosis è pubblico: indirizzo e nome e, per ogni chiave, nome, chiave pubblica, ID della credenziale e modello di autenticatore. Un dispositivo con una delle tue passkey trova questo wallet grazie a esso. Qui se ne salva una copia anche su Ethereum. È una transazione Ethereum: la confermi con una passkey e paghi la commissione di rete con una moneta che hai su Ethereum. La copia non può spostare denaro né recuperare una passkey persa."
+   "cannotCopy": "Di questo account meno recente non si può fare il backup",
+   "explain": "Un nuovo dispositivo trova questo account tramite il suo record pubblico su Gnosis. Una copia su Ethereum gli permette di trovarlo anche quando Gnosis non funziona. Costa una commissione di rete Ethereum. Non è un backup delle tue passkey e non può spostare fondi."
   },
   "keys": {
    "title": "Chiavi",
-   "subtitle": "Una qualsiasi di queste passkey può firmare per questo wallet, su tutte le reti.",
+   "subtitle": "Una qualsiasi di esse firma per questo account su tutte le reti.",
+   "subtitleSingle": "Questa passkey firma per questo account su tutte le reti.",
    "keyN": "Chiave {{n}}",
    "notSynced": "Legata al dispositivo",
    "fromDevice": "Registro non raggiungibile. Viene mostrato ciò che ricorda questo dispositivo.",

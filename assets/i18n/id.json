@@ -68,7 +68,7 @@
    "pageSave": "Simpan",
    "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
    "pageDuplicate": "Halaman itu sudah disimpan.",
-   "keysOn": "Kunci di {{domain}}",
+   "keysOn": "Passkey Anda tetap di perangkat Anda dan hanya menandatangani untuk {{domain}}",
    "pageSelfHosted": "Di-host sendiri · {{domain}}",
    "pageTrust": "Percayai versi ini",
    "pageRename": "Ganti nama",
@@ -76,15 +76,15 @@
    "pageName": "Nama"
   },
   "venue": {
-   "title": "Tempat Anda meninjau dan menandatangani",
-   "subtitle": "Untuk transaksi dan pesan akun ini. Kunci Anda tidak berubah.",
-   "inVela": "Tinjau dan tanda tangani di Vela",
-   "inVelaBody": "Lembar tanda tangan milik Vela",
-   "page": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
-   "pageBody": "Halaman tanpa dependensi menampilkan persis apa yang Anda tanda tangani",
-   "blockedApp": "Vela tidak dapat menjangkau kunci di {{domain}}.",
-   "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}.",
-   "blockedWeb": "Halaman tanda tangan hanya dibuka dari aplikasi Vela, bukan web."
+   "title": "Cara Anda menandatangani",
+   "subtitle": "Pilih tempat transaksi dan pesan akun ini dikonfirmasi. Kunci Anda tetap sama.",
+   "inVela": "Tanda tangani dengan Vela",
+   "inVelaBody": "Lembar konfirmasi milik Vela",
+   "page": "Tanda tangani di halaman tanda tangan tepercaya",
+   "pageBody": "Halaman mandiri yang menandatangani persis apa yang ditampilkannya",
+   "blockedApp": "Passkey akun ini hanya menandatangani untuk {{domain}}, jadi Vela tidak bisa memakainya di sini.",
+   "blockedPage": "Halaman ini ada di {{pageDomain}}, tetapi passkey akun ini hanya menandatangani untuk {{domain}}.",
+   "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela."
   },
   "advanced": {
    "networksTitle": "Jaringan",
@@ -2282,16 +2282,17 @@
    "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
   },
   "backup": {
-   "title": "Salin catatan dompet ini ke Ethereum",
-   "backedUp": "Sudah disalin ke Ethereum",
-   "notBackedUp": "Belum disalin (opsional)",
+   "title": "Cadangkan catatan akun di Ethereum",
+   "backedUp": "Sudah dicadangkan",
+   "notBackedUp": "Belum dicadangkan (opsional)",
    "couldNotCheck": "Tidak dapat memeriksa. Ketuk untuk coba lagi.",
-   "cannotCopy": "Dompet lama ini tidak dapat disalin",
-   "explain": "Catatan dompet Anda di Gnosis bersifat publik: alamat dan namanya, serta untuk setiap kunci namanya, kunci publik, ID kredensial, dan model autentikatornya. Perangkat yang memiliki salah satu passkey Anda menemukan dompet ini lewat catatan itu. Di sini salinannya juga disimpan di Ethereum. Ini satu transaksi Ethereum: Anda mengonfirmasinya dengan passkey dan membayar biaya jaringannya dengan koin yang Anda miliki di Ethereum. Salinan ini tidak dapat memindahkan uang atau mengembalikan passkey yang hilang."
+   "cannotCopy": "Akun lama ini tidak dapat dicadangkan",
+   "explain": "Perangkat baru menemukan akun ini lewat catatan publiknya di Gnosis. Salinan di Ethereum membuat akun tetap bisa ditemukan saat Gnosis tidak tersedia. Biayanya satu kali biaya jaringan Ethereum. Ini bukan cadangan passkey Anda dan tidak dapat memindahkan dana."
   },
   "keys": {
    "title": "Kunci",
-   "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
+   "subtitle": "Salah satunya saja sudah bisa menandatangani untuk akun ini di semua jaringan.",
+   "subtitleSingle": "Passkey ini menandatangani untuk akun ini di semua jaringan.",
    "keyN": "Kunci {{n}}",
    "notSynced": "Terikat perangkat",
    "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",

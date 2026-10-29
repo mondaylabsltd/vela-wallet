@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2373 paths = 2253 leaf + 120 branch. Repeated per locale these key bytes
-//! would cost 973080 bytes; interned once they cost 67149.
+//! 2374 paths = 2254 leaf + 120 branch. Repeated per locale these key bytes
+//! would cost 973590 bytes; interned once they cost 67183.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2373] = [
+pub(crate) static PATHS: [&str; 2374] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -2319,6 +2319,7 @@ pub(crate) static PATHS: [&str; 2373] = [
     "settingsModals.keys.publicKey",
     "settingsModals.keys.signsHere",
     "settingsModals.keys.subtitle",
+    "settingsModals.keys.subtitleSingle",
     "settingsModals.keys.title",
     "settingsModals.keys.transport",
     "settingsModals.keys.userVerified",
@@ -2407,11 +2408,11 @@ pub(crate) static IS_BRANCH: [u8; 297] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x02, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x40, 0x08, 0x40, 0x12, 0x22, 0x40, 0x20, 0x10, 0x20,
     0x00, 0x10, 0x02, 0x00, 0x00, 0x40, 0x00, 0x83, 0x00, 0x00, 0x00, 0x00, 0x81, 0x00, 0x00, 0x21,
-    0x00, 0x02, 0x00, 0x01, 0x10, 0x08, 0x20, 0x08, 0x00,
+    0x00, 0x04, 0x00, 0x02, 0x20, 0x10, 0x40, 0x10, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2373;
+pub(crate) const N_PATHS: usize = 2374;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {
