@@ -27,10 +27,14 @@ const { DEFAULT_GENESIS_SERVICE_URL, RETRY_STEPS_MS, genesisService, serviceHost
 const {
 	checkService,
 	fetchGenesis,
+	fetchAllProposals,
 	fetchProposals,
 	genesisServiceURL,
 	importGenesis,
+	resetAllProposalsForTests,
 	retryAfterMs,
+	ServiceBusyError,
+	submitApproval,
 	serviceTable,
 	servedChains
 } = await import('./service');
@@ -376,5 +380,153 @@ describe('an outage', () => {
 			vi.useRealTimers();
 		}
 		expect(serviceOutage.down).toBe(false);
+	});
+});
+
+/**
+ * A write over the service's limit (`429`) is the caller's to send again
+ * with what it signed — never a failure; a read over it pauses the rounds
+ * nobody waits on, quietly (busy is not away).
+ */
+describe('a busy service (429)', () => {
+	const req = {
+		chainId: 100,
+		safe: '0x1',
+		safeTx: {} as never,
+		approval: { owner: '0x2', signature: '0x' }
+	};
+
+	it('answers a write with how long to wait, at once', async () => {
+		const fetch = vi.fn(
+			async () =>
+				new Response(JSON.stringify({ error: 'too many requests; retry in 24 s' }), {
+					status: 429
+				})
+		);
+		vi.stubGlobal('fetch', fetch);
+		const refused = await submitApproval(req).catch((e: unknown) => e);
+		expect(refused).toBeInstanceOf(ServiceBusyError);
+		expect((refused as InstanceType<typeof ServiceBusyError>).waitMs).toBe(24_000);
+		// Not waited out here, nor asked again: the outbox sends it again.
+		expect(fetch).toHaveBeenCalledTimes(1);
+		const header = vi.fn(
+			async () =>
+				new Response('{"error":"too many requests"}', {
+					status: 429,
+					headers: { 'retry-after': '5' }
+				})
+		);
+		vi.stubGlobal('fetch', header);
+		const imported = await importGenesis({ chainId: 100, safe: '0x1' }).catch((e: unknown) => e);
+		expect((imported as InstanceType<typeof ServiceBusyError>).waitMs).toBe(5_000);
+		expect(serviceOutage.down).toBe(false);
+	});
+
+	it('takes another 4xx as its answer to that request, never sent again', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify({ error: 'unknown Safe' }), { status: 404 }))
+		);
+		expect(await submitApproval(req)).toEqual({
+			ok: false,
+			refusal: { kind: 'error', status: 404, error: 'unknown Safe' }
+		});
+	});
+
+	it('pauses background reads until it says, without calling it away', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(JSON.stringify({ error: 'too many requests; retry in 40 s' }), {
+						status: 429
+					})
+			)
+		);
+		await expect(fetchProposals(100, '0xabc', { background: true })).rejects.toThrow('HTTP 429');
+		expect(serviceOutage.down).toBe(false);
+		expect(serviceOutage.blocked()).toBe(true);
+		expect(serviceOutage.blocked(Date.now() + 41_000)).toBe(false);
+		// A round: nothing asked, no probe — it is there, only busy.
+		const probe = vi.fn(async () => true);
+		expect(await serviceOutage.available(probe)).toBe(false);
+		expect(probe).not.toHaveBeenCalled();
+	});
+});
+
+/** `GET /api/proposals/{safe}` without a chain: every chain's, in one read. */
+describe('the cross-chain list', () => {
+	beforeEach(() => resetAllProposalsForTests());
+
+	const page = (offset: number, ids: number[], total: number) =>
+		new Response(
+			JSON.stringify({
+				safe: '0xabc',
+				total,
+				offset,
+				limit: 100,
+				chains: [{ chainId: 100, count: total }],
+				proposals: ids.map((n) => ({ chainId: 100, safeTxHash: `0x${n}` }))
+			}),
+			{ status: 200 }
+		);
+
+	it('reads every page, and an empty Safe is an empty list', async () => {
+		const fetch = vi.fn(async (url: string) =>
+			url.includes('offset=0')
+				? page(
+						0,
+						Array.from({ length: 100 }, (_, i) => i),
+						130
+					)
+				: page(
+						100,
+						Array.from({ length: 30 }, (_, i) => 100 + i),
+						130
+					)
+		);
+		vi.stubGlobal('fetch', fetch);
+		const all = await fetchAllProposals('0xabc');
+		expect(all?.proposals).toHaveLength(130);
+		expect(all?.chains).toEqual([{ chainId: 100, count: 130 }]);
+		expect(fetch).toHaveBeenCalledTimes(2);
+		expect(String(fetch.mock.calls[0][0])).toMatch(/\/api\/proposals\/0xabc\?offset=0&limit=100$/);
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => page(0, [], 0))
+		);
+		expect(await fetchAllProposals('0xdef')).toEqual({
+			proposals: [],
+			chains: [{ chainId: 100, count: 0 }]
+		});
+	});
+
+	it('is `null` from a service without it (404, or 400 for the missing chain), asked no more', async () => {
+		for (const status of [404, 400]) {
+			resetAllProposalsForTests();
+			const fetch = vi.fn(
+				async () => new Response(JSON.stringify({ error: 'chainId is required' }), { status })
+			);
+			vi.stubGlobal('fetch', fetch);
+			expect(await fetchAllProposals('0xabc')).toBeNull();
+			expect(await fetchAllProposals('0xabc')).toBeNull();
+			expect(fetch).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it('throws when it cannot be read (the caller says the list may be stale)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response('{"error":"down"}', { status: 502 }))
+		);
+		vi.useFakeTimers();
+		try {
+			const read = fetchAllProposals('0xabc').catch((e: unknown) => e);
+			await vi.advanceTimersByTimeAsync(10_000);
+			expect(await read).toBeInstanceOf(Error);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

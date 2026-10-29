@@ -81,6 +81,12 @@ export interface SendLiveInputs {
 		feeNote: string;
 		/** "Propose and approve" */
 		confirm: string;
+		/**
+		 * The network's members now, as this wallet read them there (owners are
+		 * each network's; owner, 2026-10-29) — `null` where nothing was read,
+		 * and the rule is the genesis's: what an undeployed multisig starts with.
+		 */
+		membersOn?: (chainId: number) => { threshold: number; owners: number } | null;
 	};
 	fee: FeeView;
 	m: WalletFlowMessages;
@@ -338,6 +344,21 @@ export function formChainOf(
 }
 
 /**
+ * "2 of 3 members approve" on the send's network: its members there now when
+ * this wallet read them, else the multisig's own rule (its genesis's, what a
+ * network it is not deployed on starts with).
+ */
+function multisigRule(inputs: SendLiveInputs, send: SendView): string {
+	const own = send.multisig!;
+	const chain = formChainOf(send);
+	const there = chain === null ? null : (inputs.multisig?.membersOn?.(chain) ?? null);
+	return fill(inputs.multisig!.rule, {
+		m: there?.threshold ?? own.threshold,
+		n: there?.owners ?? own.owners
+	});
+}
+
+/**
  * The fee's failure, as the send form and its confirm may draw it (PR 2
  * polish): only when it answered the form's own chain. Right after a token
  * switch the form names another chain before the fee machine has been asked
@@ -354,7 +375,7 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		return {
 			label: inputs.multisig.label,
 			mark: template.mark,
-			value: fill(inputs.multisig.rule, { m: send.multisig.threshold, n: send.multisig.owners }),
+			value: multisigRule(inputs, send),
 			openLabel: template.openLabel,
 			refreshLabel: m['send.feeRefresh'],
 			refreshing: false,
@@ -1411,7 +1432,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	const feeLabels = new Set([m['send.estFeeLabel'], m['send.feeTokenEstimate']]);
 	const approvals: FactRowModel = {
 		label: inputs.multisig.label,
-		value: fill(inputs.multisig.rule, { m: send.multisig.threshold, n: send.multisig.owners }),
+		value: multisigRule(inputs, send),
 		note: inputs.multisig.feeNote
 	};
 	return {

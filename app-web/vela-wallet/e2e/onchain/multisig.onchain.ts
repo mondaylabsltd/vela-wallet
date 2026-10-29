@@ -16,14 +16,20 @@ import {
 	RELAY,
 	UNREAD_CHAIN,
 	balanceOf,
+	calldata,
 	enterParallel,
 	landedRecord,
+	postApproval,
 	recordOnChain,
 	rpc,
+	safeTx,
+	servedGenesis,
 	setBalance,
+	signSafeTx,
 	undeployedSafe,
 	useHarness,
-	withInjectedWallet
+	withInjectedWallet,
+	type WireSafeTx
 } from './harness';
 
 const SHOTS = 'e2e/onchain/.shots';
@@ -274,7 +280,9 @@ test('the desktop: create, propose and the transaction dialog', async ({ browser
 
 	// Its settings are where a Vela account's are: Settings → Account.
 	await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
-	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
+		timeout: 30_000
+	});
 	await expect(page.getByText('Save its setup to Ethereum')).toBeVisible();
 	await shot(page, 'd7-settings');
 
@@ -550,9 +558,12 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 
 /**
  * Registry v4: the multisig renames its record itself — a transaction of its
- * own, proposed from its settings, approved and executed like any other (the
- * executor deploys it on Gnosis first). The device's label is untouched; the
- * name shown is the record's, read back from the chain.
+ * own, proposed from its settings, approved and executed like any other. A
+ * rename never deploys it (owner, 2026-10-29): until it is deployed on
+ * Gnosis, where its record is, Settings says only the multisig itself can
+ * rename it there and offers nothing; once a transfer there deployed it, the
+ * rename is offered. The device's label is untouched; the name shown is the
+ * record's, read back from the chain.
  */
 test('rename on chain: a proposal of its own, approved and executed; the registry holds the new name', async ({
 	browser
@@ -584,9 +595,39 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 	expect((await landedRecord(multisig)).genesis.name).toBe('Old name');
 	expect(await recordOnChain(multisig)).toEqual({ name: 'Old name', renamedAt: 0 });
 
+	await test.step('not deployed on Gnosis: nothing that deploys is offered', async () => {
+		await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
+		await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
+			timeout: 30_000
+		});
+		await expect(page.getByTestId('rename-not-deployed')).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByRole('button', { name: 'Rename on chain' })).toHaveCount(0);
+		await shot(page, 'r0-not-deployed');
+	});
+
+	await test.step('a transfer on Gnosis deploys it there', async () => {
+		await setBalance(multisig, 2n * 10n ** 18n);
+		await page.goto('/en/wallet');
+		await proposeSend(page, '0.1', 'r0-transfer');
+		await page.getByRole('button', { name: 'Approve and execute' }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		expect(await rpc<string>('eth_getCode', [multisig, 'latest'])).not.toBe('0x');
+		// Closed before Settings: the sheet is the wallet's, over any page.
+		await expect(async () => {
+			await page.keyboard.press('Escape');
+			await expect(page.getByRole('heading', { name: 'Multisig transaction' })).toHaveCount(0, {
+				timeout: 1_000
+			});
+		}).toPass({ timeout: 15_000 });
+	});
+
 	await test.step('propose the rename from its settings', async () => {
 		await page.getByRole('link', { name: '2 of 2 members approve' }).first().click();
-		await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
+			timeout: 30_000
+		});
 		await expect(page.getByTestId('registry-name')).toHaveText('Old name');
 		await page.getByRole('button', { name: 'Rename on chain' }).click();
 		await page.getByRole('textbox', { name: 'Name' }).fill('Team treasury');
@@ -611,8 +652,6 @@ test('rename on chain: a proposal of its own, approved and executed; the registr
 	const record = await recordOnChain(multisig);
 	expect(record?.name).toBe('Team treasury');
 	expect(record?.renamedAt).toBeGreaterThan(0);
-	// Deployed on Gnosis by its executor: renaming needs the Safe itself.
-	expect(await rpc<string>('eth_getCode', [multisig, 'latest'])).not.toBe('0x');
 	// The wallet shows the record's new name, read from the chain.
 	await page.keyboard.press('Escape');
 	await expect(page.getByTestId('registry-name')).toHaveText('Team treasury', { timeout: 30_000 });
@@ -664,7 +703,9 @@ test('a multisig the service has no record of: said as not shared, and shared ag
 		{ address: old.address, genesis: old.genesis, owners: [FIXTURES.three, FIXTURES.two] }
 	);
 	await page.goto('/en/settings');
-	await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible({
+		timeout: 30_000
+	});
 	await expect(page.getByText(/^Not shared yet/).first()).toBeVisible({ timeout: 30_000 });
 	await shot(page, 'o1-not-shared');
 	await page.getByRole('button', { name: 'Share it again' }).click();
@@ -677,4 +718,240 @@ test('a multisig the service has no record of: said as not shared, and shared ag
 	expect((await recordOnChain(old.address))?.name).toBe(landed.genesis.name);
 	expect(thrown).toEqual([]);
 	await ctx.close();
+});
+
+/**
+ * Owners are each network's (owner, 2026-10-29). A 1-of-2 — this device's
+ * account and an outside wallet — adds a third owner on Base (a network the
+ * service does not read, where it can only know the genesis) by a proposal
+ * the outside owner signs and this device executes. On the next proposal
+ * there, the new owner's approval is taken by the mailbox (flagged as not a
+ * genesis owner, never refused) and counted by the wallet, which reads
+ * Base's members itself.
+ */
+test('an owner added on one network: its approval is taken by the mailbox and counted there', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+
+	await test.step('create a 1-of-2 with an outside owner', async () => {
+		await page
+			.getByRole('button', { name: /Parallel One/ })
+			.first()
+			.click();
+		await page.getByRole('button', { name: 'Add account' }).click();
+		await page.getByRole('button', { name: /^Create multisig/ }).click();
+		await page.getByRole('textbox', { name: 'Name' }).fill('Grows on Base');
+		await page.getByPlaceholder("Member's address (0x…)").fill(EOA_ONE);
+		await page.getByRole('button', { name: 'Add', exact: true }).click();
+		await expect(page.getByText('Members · 2')).toBeVisible();
+		await page.getByRole('button', { name: 'Next' }).click();
+		await page.getByRole('button', { name: 'Fewer approvals' }).click();
+		await expect(page.getByText('1 of 2')).toBeVisible();
+		await page.getByRole('button', { name: 'Next' }).click();
+		await page.getByRole('button', { name: 'Create', exact: true }).click();
+		await page.getByRole('button', { name: 'Done' }).click();
+	});
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	const genesis = await servedGenesis(multisig);
+	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
+
+	let added = '';
+	await test.step('the outside owner proposes adding a member on Base; this device executes it', async () => {
+		const tx = safeTx(
+			multisig,
+			await calldata('addOwnerWithThreshold(address,uint256)', EOA_TWO, '2'),
+			0
+		);
+		const posted = await postApproval(
+			UNREAD_CHAIN,
+			multisig,
+			tx,
+			await signSafeTx(EOA_ONE, UNREAD_CHAIN, multisig, tx),
+			genesis
+		);
+		expect(posted.status).toBe(201);
+		expect(posted.body.proposal?.approvals[0]?.signerIsGenesisOwner).toBe(true);
+		added = posted.body.proposal!.safeTxHash;
+		await page.goto(`/en/wallet#ms=${UNREAD_CHAIN}.${multisig}.${added}`);
+		await expect(page.getByText('Add a member').first()).toBeVisible({ timeout: 90_000 });
+		await expect(page.getByText('1/1 approved').first()).toBeVisible();
+		await shot(page, 'w1-add-owner');
+		await page.getByRole('button', { name: 'Execute', exact: true }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		await shot(page, 'w2-added');
+		const owners = await calldata('getOwners()');
+		const read = await rpc<string>(
+			'eth_call',
+			[{ to: multisig, data: owners }, 'latest'],
+			UNREAD_CHAIN
+		);
+		expect(read.toLowerCase()).toContain(EOA_TWO.slice(2).toLowerCase());
+		await page.keyboard.press('Escape');
+	});
+
+	let next = '';
+	await test.step('the next proposal on Base waits for 2 of 3 there', async () => {
+		await page.reload();
+		await proposeSend(page, '0.5', 'w3-propose', { row: /^ETH Base/, symbol: 'ETH' });
+		await expect(page.getByText('1/2 approved').first()).toBeVisible();
+		const link = (await page.locator('code.link').textContent())!.trim();
+		next = link.split('.').pop()!;
+		expect(link).toContain(`#ms=${UNREAD_CHAIN}.`);
+	});
+
+	await test.step("the new owner's approval: taken by the mailbox, counted by the wallet", async () => {
+		const listed = (await (
+			await fetch(`${GENESIS}/api/proposals/${multisig}?chainId=${UNREAD_CHAIN}`)
+		).json()) as { proposals: { safeTxHash: string; safeTx: WireSafeTx }[] };
+		const tx = listed.proposals.find(
+			(p) => p.safeTxHash.toLowerCase() === next.toLowerCase()
+		)!.safeTx;
+		const posted = await postApproval(
+			UNREAD_CHAIN,
+			multisig,
+			tx,
+			await signSafeTx(EOA_TWO, UNREAD_CHAIN, multisig, tx)
+		);
+		expect(posted.status).toBe(200);
+		expect(posted.body.status).toBe('approved');
+		const mine = posted.body.proposal!.approvals.find(
+			(a) => a.owner.toLowerCase() === EOA_TWO.toLowerCase()
+		);
+		// Not a genesis owner: flagged, never refused.
+		expect(mine?.signerIsGenesisOwner).toBe(false);
+		// The wallet reads Base's members itself: the new owner counts.
+		await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
+		await shot(page, 'w4-counted');
+		const before = await balanceOf(RECIPIENT, UNREAD_CHAIN);
+		await page.getByRole('button', { name: 'Execute', exact: true }).click();
+		await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		expect((await balanceOf(RECIPIENT, UNREAD_CHAIN)) - before).toBe(5n * 10n ** 17n);
+		await page.keyboard.press('Escape');
+	});
+
+	await test.step('Settings: the original members, and the current ones on Base', async () => {
+		await page
+			.getByRole('link', { name: /members approve/ })
+			.first()
+			.click();
+		await expect(page.getByRole('heading', { name: 'Original members' })).toBeVisible({
+			timeout: 30_000
+		});
+		await expect(page.getByRole('heading', { name: 'Current members on Base' })).toBeVisible({
+			timeout: 30_000
+		});
+		await expect(page.getByTestId('member-added').first()).toBeVisible();
+		await shot(page, 'w5-members');
+	});
+	expect(thrown).toEqual([]);
+	await ctx.close();
+});
+
+/**
+ * Proposals are found on every chain: a member proposes on a network where
+ * the multisig is deployed nowhere yet, and another member's device — which
+ * has never used it there and got no link — finds it in the mailbox's
+ * cross-chain list, makes that network one of its networks, and approves.
+ */
+test('a proposal on a network it is not deployed on: found by another device without a link', async ({
+	browser
+}) => {
+	const a = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	const b = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(a);
+	await useHarness(b);
+	const pageA = await a.newPage();
+	const pageB = await b.newPage();
+	const thrownA = errors(pageA);
+	const thrownB = errors(pageB);
+	await enterParallel(pageA, [FIXTURES.one]);
+	await enterParallel(pageB, [FIXTURES.two]);
+
+	await pageA
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await pageA.getByRole('button', { name: 'Add account' }).click();
+	await pageA.getByRole('button', { name: /^Create multisig/ }).click();
+	await pageA.getByRole('textbox', { name: 'Name' }).fill('Found on Base');
+	await pageA.getByPlaceholder("Member's address (0x…)").fill(FIXTURES.two);
+	await pageA.getByRole('button', { name: 'Add', exact: true }).click();
+	await pageA.getByRole('button', { name: 'Next' }).click();
+	await pageA.getByRole('button', { name: 'Next' }).click();
+	await pageA.getByRole('button', { name: 'Create', exact: true }).click();
+	await pageA.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await pageA.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+	const genesis = await servedGenesis(multisig);
+	await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
+
+	await test.step('device B has it, used on Gnosis only', async () => {
+		await pageB.evaluate(
+			({ address, genesis, owners }) => {
+				localStorage.setItem(
+					'vela.multisigAccounts',
+					JSON.stringify([
+						{
+							address,
+							genesis,
+							owners,
+							threshold: 2,
+							recorded: false,
+							shared: true,
+							chainIds: [100],
+							addedMs: Date.now()
+						}
+					])
+				);
+				localStorage.setItem('vela.activeMultisig', address);
+			},
+			{ address: multisig, genesis, owners: [FIXTURES.one, FIXTURES.two] }
+		);
+		await pageB.reload();
+		await expect(pageB.getByRole('link', { name: '2 of 2 members approve' }).first()).toBeVisible();
+	});
+
+	await test.step('device A proposes on Base, where it is deployed nowhere', async () => {
+		await pageA.reload();
+		await proposeSend(pageA, '0.25', 'f1-propose', { row: /^ETH Base/, symbol: 'ETH' });
+		await expect(pageA.getByText('1/2 approved').first()).toBeVisible();
+		expect(await rpc<string>('eth_getCode', [multisig, 'latest'], UNREAD_CHAIN)).toBe('0x');
+	});
+
+	await test.step('device B finds it in the cross-chain list — no link — and executes', async () => {
+		await pageB.reload();
+		await expect(pageB.getByText('Waiting for approval').first()).toBeVisible({ timeout: 60_000 });
+		const row = pageB.getByText('Send 0.25 ETH').first();
+		await expect(row).toBeVisible({ timeout: 60_000 });
+		await shot(pageB, 'f2-found');
+		const kept = await pageB.evaluate(
+			() =>
+				(
+					JSON.parse(localStorage.getItem('vela.multisigAccounts') ?? '[]') as {
+						chainIds: number[];
+					}[]
+				)[0]?.chainIds
+		);
+		expect(kept).toContain(UNREAD_CHAIN);
+		await row.click();
+		const before = await balanceOf(RECIPIENT, UNREAD_CHAIN);
+		await pageB.getByRole('button', { name: 'Approve and execute' }).click();
+		await expect(pageB.getByText('Executed', { exact: true }).first()).toBeVisible({
+			timeout: 120_000
+		});
+		await shot(pageB, 'f3-executed');
+		expect((await balanceOf(RECIPIENT, UNREAD_CHAIN)) - before).toBe(25n * 10n ** 16n);
+	});
+	expect(thrownA).toEqual([]);
+	expect(thrownB).toEqual([]);
+	await a.close();
+	await b.close();
 });

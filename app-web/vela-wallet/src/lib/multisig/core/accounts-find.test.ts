@@ -21,6 +21,12 @@ const seams = vi.hoisted(() => ({
 	/** Chains whose mailbox read fails. */
 	mailboxDown: [] as number[],
 	mailboxReads: 0,
+	/**
+	 * The cross-chain list: `null`, a service without it (an older build); else
+	 * the chains it holds proposals on — any chain, this device's or not.
+	 */
+	listedOn: null as number[] | null,
+	listReads: 0,
 	table: null as { chains: Set<number> | null; homeChainId: number | null } | null
 }));
 const store = vi.hoisted(() => ({
@@ -83,6 +89,14 @@ vi.mock('./service', () => ({
 			proposals: seams.proposedOn.includes(chainId) ? [{ chainId }] : []
 		};
 	},
+	fetchAllProposals: async () => {
+		seams.listReads += 1;
+		if (seams.listedOn === null) return null;
+		return {
+			proposals: seams.listedOn.map((chainId) => ({ chainId })),
+			chains: seams.listedOn.map((chainId) => ({ chainId, count: 1 }))
+		};
+	},
 	servedChains: async () => seams.table?.chains ?? null,
 	serviceTable: async () => seams.table
 }));
@@ -112,6 +126,8 @@ beforeEach(() => {
 	seams.proposedOn = [];
 	seams.mailboxDown = [];
 	seams.mailboxReads = 0;
+	seams.listedOn = null;
+	seams.listReads = 0;
 	seams.table = null;
 	store.rows = [];
 	store.active = null;
@@ -178,6 +194,23 @@ describe('the networks of a multisig added by address', () => {
 		seams.proposedOn = [5042002, ARBITRUM];
 		const found = await findMultisig(SAFE, SPACE, 11155111);
 		expect(found).toMatchObject({ ok: true, account: { chainIds: [ARBITRUM, 11155111] } });
+		expect(seams.mailboxReads).toBe(0);
+	});
+
+	it('the cross-chain list: one read, every network it names that this device has', async () => {
+		seams.deployedOn = [];
+		// A member's own network (99999) this device lacks: never one of its networks here.
+		seams.listedOn = [99999, 5042002];
+		const found = await findMultisig(SAFE, SPACE);
+		expect(found).toMatchObject({ ok: true, account: { chainIds: [5042002] } });
+		expect(seams.listReads).toBe(1);
+		expect(seams.mailboxReads).toBe(0);
+	});
+
+	it('the cross-chain list naming only networks this device lacks: asks', async () => {
+		seams.deployedOn = [];
+		seams.listedOn = [99999];
+		expect(await findMultisig(SAFE, SPACE)).toEqual({ ok: false, reason: 'chooseNetwork' });
 		expect(seams.mailboxReads).toBe(0);
 	});
 

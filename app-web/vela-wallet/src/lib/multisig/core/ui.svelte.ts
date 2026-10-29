@@ -5,6 +5,7 @@
  */
 import type { DappCall } from './proposals.svelte';
 import type { LinkedProposals } from './linked.svelte';
+import type { ProposalLink } from './link';
 
 /**
  * A dApp's transaction from a multisig, owned by the request it came with
@@ -50,8 +51,14 @@ export type MultisigSheet =
 	 */
 	| { kind: 'preview'; chainId: number; safeTxHash: string; source: LinkedProposals }
 	| { kind: 'invite' }
-	/** ms-22: what a link could not open, said (a damaged link, a network Vela lacks). */
+	/** ms-22: what a link could not open, said (a damaged link). */
 	| { kind: 'notice'; text: string }
+	/**
+	 * A proposal on a network this device does not have (from the mailbox, or
+	 * a link): said, with Add network — nothing read, judged or counted until
+	 * it is added. `link`: the link that named it, opened again once it is.
+	 */
+	| { kind: 'missing'; chainId: number; link?: ProposalLink }
 	| { kind: 'dapp'; request: DappProposal };
 
 class MultisigUi {

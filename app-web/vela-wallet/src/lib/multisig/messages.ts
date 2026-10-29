@@ -37,6 +37,8 @@ export interface MultisigMessages {
 		waiting: string;
 		queued: string;
 		progress: string;
+		/** Signed here, not in the mailbox yet. */
+		unsent: string;
 	};
 	action: {
 		send: string;
@@ -106,7 +108,6 @@ export interface MultisigMessages {
 		/** ms-9: replaced by another transaction at its number (`{{nonce}}`). */
 		voidedByOther: string;
 		notInMailbox: string;
-		unknownNetwork: string;
 		badLink: string;
 		/** ms-21: a link's transaction on a device with no member of its multisig. */
 		previewNote: string;
@@ -116,8 +117,28 @@ export interface MultisigMessages {
 		watching: string;
 		/** A rename's review: the network it runs on, the one keeping its record (`{{network}}`). */
 		renameRuns: string;
-		/** …and it is not deployed there: executing deploys it there first (`{{network}}`). */
-		renameDeploys: string;
+		/** A rename where it is not deployed: it cannot be executed there (`{{network}}`). */
+		renameUndeployed: string;
+		/** The first execution on a network deploys it with the original members, said when others changed. */
+		startsOriginal: string;
+		/** (`{{m}}`, `{{n}}`, `{{networks}}`: where its members are others now.) */
+		startsOriginalNote: string;
+		/** Approvals by accounts that are not members on the network now (`{{network}}`, `{{names}}`). */
+		notCounted: string;
+		/** A proposal on a network this device lacks, its chain index name known (`{{name}}`, `{{chainId}}`). */
+		missingNetworkNamed: string;
+		missingNetwork: string;
+		missingNetworkBody: string;
+		/** How many wait there (`{{n}}`: a number, not a plural). */
+		missingCount: string;
+		addNetwork: string;
+		/** A signed approval waiting on a busy service (`{{seconds}}`). */
+		outboxBusy: string;
+		/** …on a service out of reach (`{{seconds}}`). */
+		outboxAway: string;
+		/** Not sent after a while: kept, Send again. */
+		outboxNotSent: string;
+		outboxSendAgain: string;
 	};
 	send: {
 		propose: string;
@@ -239,6 +260,19 @@ export interface MultisigMessages {
 		renameAction: string;
 		/** No network this wallet has holds its record. */
 		renameUnavailable: string;
+		/** Its record's chain is one it is not deployed on: nothing offered (`{{network}}`). */
+		renameNotDeployed: string;
+		originalMembers: string;
+		originalNote: string;
+		/** `{{network}}` */
+		currentOn: string;
+		sameAsOriginal: string;
+		added: string;
+		removed: string;
+		/** `{{was}}`, `{{is}}` */
+		thresholdChanged: string;
+		/** `{{network}}` */
+		undeployedOn: string;
 		/** The service lacks its setup: shared again with one passkey. */
 		shareAgain: string;
 		shareAgainNote: string;
@@ -297,7 +331,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		yourTurn: '',
 		waiting: '',
 		queued: '',
-		progress: ''
+		progress: '',
+		unsent: ''
 	},
 	action: {
 		send: '',
@@ -361,13 +396,24 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		voidedNote: '',
 		voidedByOther: '',
 		notInMailbox: '',
-		unknownNetwork: '',
 		badLink: '',
 		previewNote: '',
 		watch: '',
 		watching: '',
 		renameRuns: '',
-		renameDeploys: ''
+		renameUndeployed: '',
+		startsOriginal: '',
+		startsOriginalNote: '',
+		notCounted: '',
+		missingNetworkNamed: '',
+		missingNetwork: '',
+		missingNetworkBody: '',
+		missingCount: '',
+		addNetwork: '',
+		outboxBusy: '',
+		outboxAway: '',
+		outboxNotSent: '',
+		outboxSendAgain: ''
 	},
 	send: {
 		propose: '',
@@ -480,6 +526,15 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		renameNote: '',
 		renameAction: '',
 		renameUnavailable: '',
+		renameNotDeployed: '',
+		originalMembers: '',
+		originalNote: '',
+		currentOn: '',
+		sameAsOriginal: '',
+		added: '',
+		removed: '',
+		thresholdChanged: '',
+		undeployedOn: '',
 		shareAgain: '',
 		shareAgainNote: ''
 	},

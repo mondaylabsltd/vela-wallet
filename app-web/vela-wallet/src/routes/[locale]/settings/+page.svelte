@@ -28,6 +28,7 @@
 	 */
 	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
+	import { replaceUrl } from '$lib/ui/history';
 	import { goto } from '$app/navigation';
 	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
@@ -411,6 +412,24 @@
 		return shown.open(screen.page) ? null : 'this layout has no such settings page';
 	}
 	onMount(() => screenDesk.attach(['settings'], present));
+
+	// `?addNetwork=<chainId>` (a multisig's proposal on a network this device
+	// lacks): Add network, that chain filled in — the wizard looks it up in
+	// the chain index, and asks for an RPC when the index does not know it.
+	onMount(() => {
+		const asked = new URLSearchParams(location.search).get('addNetwork') ?? '';
+		if (!/^[1-9]\d{0,15}$/.test(asked)) return;
+		const chainId = Number(asked);
+		replaceUrl(location.pathname + location.hash);
+		void present({ type: 'settings', page: 'add-network' }).then((failed) => {
+			if (failed === null)
+				networkAdmin.dispatch({
+					type: 'chain_selected',
+					chain_id: chainId,
+					keep_custom_rpc: false
+				});
+		});
+	});
 
 	// Spec 106: back from clientmcp.dev — finish the sign-in where it began
 	// (its language), then show the AI agent page with the result.

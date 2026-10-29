@@ -293,3 +293,118 @@ export async function landedRecord(safe: string): Promise<{ genesis: { name?: st
 	}
 	throw new Error(`no landed record for ${safe}`);
 }
+
+/** A Safe transaction as the mailbox takes it (quantities hex). */
+export interface WireSafeTx {
+	to: string;
+	value: string;
+	data: string;
+	operation: number;
+	safeTxGas: string;
+	baseGas: string;
+	gasPrice: string;
+	gasToken: string;
+	refundReceiver: string;
+	nonce: string;
+}
+
+/** A plain call from the multisig, at `nonce`. */
+export function safeTx(to: string, data: string, nonce: number, value = '0x0'): WireSafeTx {
+	return {
+		to,
+		value,
+		data,
+		operation: 0,
+		safeTxGas: '0x0',
+		baseGas: '0x0',
+		gasPrice: '0x0',
+		gasToken: ZERO,
+		refundReceiver: ZERO,
+		nonce: `0x${nonce.toString(16)}`
+	};
+}
+
+/**
+ * An outside owner's approval: anvil's unlocked `owner` signs the SafeTx's
+ * EIP-712 data (`eth_signTypedData_v4`), as MetaMask would — on the fork
+ * answering as `chainId`.
+ */
+export async function signSafeTx(
+	owner: string,
+	chainId: number,
+	safe: string,
+	tx: WireSafeTx
+): Promise<{ owner: string; signature: string }> {
+	const typed = {
+		types: {
+			EIP712Domain: [
+				{ name: 'chainId', type: 'uint256' },
+				{ name: 'verifyingContract', type: 'address' }
+			],
+			SafeTx: [
+				{ name: 'to', type: 'address' },
+				{ name: 'value', type: 'uint256' },
+				{ name: 'data', type: 'bytes' },
+				{ name: 'operation', type: 'uint8' },
+				{ name: 'safeTxGas', type: 'uint256' },
+				{ name: 'baseGas', type: 'uint256' },
+				{ name: 'gasPrice', type: 'uint256' },
+				{ name: 'gasToken', type: 'address' },
+				{ name: 'refundReceiver', type: 'address' },
+				{ name: 'nonce', type: 'uint256' }
+			]
+		},
+		primaryType: 'SafeTx',
+		domain: { chainId, verifyingContract: safe },
+		message: tx
+	};
+	const signature = await rpc<string>(
+		'eth_signTypedData_v4',
+		[owner, JSON.stringify(typed)],
+		chainId
+	);
+	return { owner, signature };
+}
+
+/** Hand a transaction and one approval of it to the genesis service's mailbox. */
+export async function postApproval(
+	chainId: number,
+	safe: string,
+	tx: WireSafeTx,
+	approval: { owner: string; signature: string },
+	genesis?: unknown
+): Promise<{
+	status: number;
+	body: {
+		status?: string;
+		proposal?: {
+			safeTxHash: string;
+			approvals: { owner: string; signerIsGenesisOwner?: boolean; verified?: boolean }[];
+		};
+		refusal?: unknown;
+	};
+}> {
+	const r = await fetch(`${GENESIS}/api/proposals`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ chainId, safe, safeTx: tx, approval, genesis })
+	});
+	return { status: r.status, body: await r.json() };
+}
+
+/** `cast calldata`: a call's ABI encoding. */
+export async function calldata(signature: string, ...args: string[]): Promise<string> {
+	const { execFileSync } = await import('node:child_process');
+	return execFileSync('cast', ['calldata', signature, ...args], { encoding: 'utf8' }).trim();
+}
+
+/** The genesis the service hands out for `safe` (recorded, or kept until it lands). */
+export async function servedGenesis(safe: string): Promise<Record<string, unknown>> {
+	for (let i = 0; i < 30; i += 1) {
+		const r = await fetch(`${GENESIS}/api/genesis/${safe}`);
+		const body = (await r.json()) as { found?: boolean; genesis?: Record<string, unknown> };
+		if (r.status === 200 && body.found && body.genesis) return body.genesis;
+		await new Promise((done) => setTimeout(done, 1000));
+	}
+	throw new Error(`the service has no genesis for ${safe}`);
+}

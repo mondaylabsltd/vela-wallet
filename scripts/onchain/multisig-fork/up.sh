@@ -16,6 +16,10 @@
 # chain id, which the genesis service is NOT configured to read — a network the
 # wallet has and the service does not, where the mailbox judges by genesis.
 #
+# The service's rate limits are set out of reach: a suite's writes all come
+# from one address, and a limit hit there is the wallet's 429 path, unit-tested
+# on its own.
+#
 # Then point the browser at it (the dev console, or the Playwright harness):
 #   localStorage['vela.genesisServiceURL'] = 'http://127.0.0.1:8787'
 #   localStorage['vela.serviceEndpoints']  = '{"bundlerServiceURL":"http://127.0.0.1:8790"}'
@@ -99,6 +103,7 @@ REGISTRY_ADDRESS=$REGISTRY HOME_CHAIN_ID=100 \
 CHAINS='[{"chainId":100,"name":"Gnosis (fork)","rpcs":["'"$RPC"'"],"txService":"https://api.safe.global/tx-service/gno","registry":true}]' \
 PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
 MAX_FEE_WEI=100000000000 LISTEN_ADDR=127.0.0.1:$GENESIS_PORT DATABASE_PATH="$STATE/genesis.sqlite" \
+READS_PER_MINUTE=100000 WRITES_PER_MINUTE_PER_IP=100000 WRITES_PER_MINUTE_PER_SAFE=100000 WRITES_PER_MINUTE_PER_SIGNER=100000 \
 NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
   "$GENESIS_REPO/target/debug/genesis-server" >"$STATE/genesis.log" 2>&1 &
 echo $! >"$STATE/genesis.pid"

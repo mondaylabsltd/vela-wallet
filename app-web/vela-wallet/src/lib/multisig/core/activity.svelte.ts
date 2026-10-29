@@ -15,6 +15,7 @@ import { actionTitle, formatUnits, localName, shortenAddress, tokenInfo } from '
 import { checksumAddress } from '$lib/core/kernels';
 import { proposals, type ProposalItem } from './proposals.svelte';
 import { readCall } from './call-review.svelte';
+import { readChainDoc } from '$lib/services/chain-doc';
 import type { SigningMessages } from '$lib/signing/messages';
 
 /** The id an Activity row carries for a waiting transaction. */
@@ -25,6 +26,33 @@ export const MULTISIG_RETRY = 'multisig-retry';
 
 export function proposalRowId(item: Pick<ProposalItem, 'chainId' | 'safeTxHash'>): string {
 	return `${PROPOSAL_ROW_PREFIX}${item.chainId}:${item.safeTxHash}`;
+}
+
+/** The id of a row for proposals on a network this device does not have. */
+export const MISSING_ROW_PREFIX = 'multisig-network:';
+
+/** The network a missing-network row names, or `null` for any other row. */
+export function missingOfRow(id: string | undefined): number | null {
+	if (!id?.startsWith(MISSING_ROW_PREFIX)) return null;
+	const chainId = Number(id.slice(MISSING_ROW_PREFIX.length));
+	return Number.isSafeInteger(chainId) && chainId > 0 ? chainId : null;
+}
+
+/**
+ * "On Foo (chain 123) — a network this device doesn't have": the chain
+ * index's name when it knows the chain, else the number alone.
+ */
+export function missingTitle(m: MultisigMessages, chainId: number, name: string | null): string {
+	return name
+		? fillTemplate(m.proposal.missingNetworkNamed, { name, chainId })
+		: fillTemplate(m.proposal.missingNetwork, { chainId });
+}
+
+/** What the chain index calls `chainId`, or `null` (it does not know it, or did not answer). */
+export async function indexName(chainId: number): Promise<string | null> {
+	const doc = await readChainDoc(chainId).catch(() => null);
+	const name = doc?.kind === 'doc' ? doc.body.name : null;
+	return typeof name === 'string' && name.trim() !== '' ? name.trim() : null;
 }
 
 /** The proposal a row id names, or `null` for any other row. */
@@ -48,6 +76,14 @@ interface Drawn {
 class WaitingRows {
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
 	#drawn = $state<Record<string, Drawn>>({});
+	/** The chain index's names of the networks this device lacks, once read. */
+	#names = $state<Record<number, string | null>>({});
+	#asked = new Set<number>();
+
+	/** The chain index's name of a network this device lacks (`null` until known, or unknown). */
+	nameOf(chainId: number): string | null {
+		return this.#names[chainId] ?? null;
+	}
 
 	#draw(
 		m: MultisigMessages,
@@ -116,6 +152,13 @@ class WaitingRows {
 		multisigAddress: string | null = null
 	): void {
 		for (const item of proposals.open) this.#draw(m, item, multisigAddress, signing);
+		for (const missing of proposals.missing) {
+			if (this.#asked.has(missing.chainId)) continue;
+			this.#asked.add(missing.chainId);
+			void indexName(missing.chainId).then((name) => {
+				this.#names = { ...this.#names, [missing.chainId]: name };
+			});
+		}
 	}
 
 	/**
@@ -126,7 +169,8 @@ class WaitingRows {
 	 */
 	group(m: MultisigMessages, toName?: string): ActivityGroupModel | null {
 		const open = proposals.open;
-		if (open.length === 0 && !proposals.stale) return null;
+		const missing = proposals.missing;
+		if (open.length === 0 && missing.length === 0 && !proposals.stale) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
 			return {
@@ -160,6 +204,24 @@ class WaitingRows {
 				badgeLogoUrl: chainLogoURL(item.chainId)
 			};
 		});
+		// Proposals on a network this device lacks: said, with the way to add
+		// it (the row opens it) — never judged, never counted as anyone's turn.
+		for (const gap of missing) {
+			rows.push({
+				id: `${MISSING_ROW_PREFIX}${gap.chainId}`,
+				kind: 'sent',
+				title: missingTitle(m, gap.chainId, this.nameOf(gap.chainId)),
+				subtitle: [
+					fillTemplate(m.proposal.missingCount, { n: gap.count }),
+					m.proposal.addNetwork
+				].join(' · '),
+				amount: '',
+				unit: '',
+				positive: false,
+				masked: false,
+				badgeColor: chainColor(gap.chainId)
+			});
+		}
 		// The service away is said as itself, once for every network, with a
 		// Retry: its own schedule retries too, but nobody should have to wait.
 		if (proposals.unreachable) {
@@ -194,6 +256,8 @@ function recipientLine(item: ProposalItem, toName: string | undefined): string |
 }
 
 function statusOf(m: MultisigMessages, item: ProposalItem): string {
+	// Signed here, not in the mailbox yet: the one thing to know about it.
+	if (item.unsent) return m.status.unsent;
 	if (item.status === 'queued') return m.status.queued;
 	if (item.status === 'ready') return m.status.ready;
 	if (item.canApprove.length > 0) return m.status.yourTurn;

@@ -99,7 +99,12 @@
 	import { multisig } from '$lib/multisig/core/store.svelte';
 	import { multisigUi } from '$lib/multisig/core/ui.svelte';
 	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import { MULTISIG_RETRY, proposalOfRow, waitingRows } from '$lib/multisig/core/activity.svelte';
+	import {
+		MULTISIG_RETRY,
+		missingOfRow,
+		proposalOfRow,
+		waitingRows
+	} from '$lib/multisig/core/activity.svelte';
 	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
@@ -1418,7 +1423,14 @@
 									label: data.multisigMessages.proposal.approvals,
 									rule: data.multisigMessages.panel.title,
 									feeNote: data.multisigMessages.proposal.feeNote,
-									confirm: data.multisigMessages.send.propose
+									confirm: data.multisigMessages.send.propose,
+									// The rule on the send's network: its members there now.
+									membersOn: (chainId: number) => {
+										const there = multisigProposals.chain(chainId)?.members;
+										return there
+											? { threshold: there.threshold, owners: there.owners.length }
+											: null;
+									}
 								}
 							}
 						: {
@@ -1881,10 +1893,15 @@
 	/** A tap on Activity: a waiting multisig transaction opens as one; anything else, its detail. */
 	function openActivity(row: { id?: string }) {
 		const proposal = proposalOfRow(row.id);
+		const missing = missingOfRow(row.id);
 		if (proposal) {
 			// The row's own tap goes on to the transaction detail: not for this one.
 			proposalTapped = true;
 			multisigUi.open({ kind: 'proposal', ...proposal });
+		} else if (missing !== null) {
+			// Proposals on a network this device lacks: the way to add it.
+			proposalTapped = true;
+			multisigUi.open({ kind: 'missing', chainId: missing });
 		} else selectedTxId = row.id ?? null;
 	}
 	let proposalTapped = false;

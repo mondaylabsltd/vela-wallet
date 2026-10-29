@@ -94,9 +94,21 @@ class ServiceOutage {
 		window.addEventListener('online', () => this.reset());
 	}
 
-	/** Away, and its next step has not come: background reads ask nothing. */
+	/**
+	 * Until when it said it is over its limit for this client (a read's
+	 * `429`): background reads wait until then, quietly — it is there, only
+	 * busy, and nothing is said of it but a list that may be stale.
+	 */
+	#busyUntil = 0;
+
+	/** Away, and its next step has not come — or busy: background reads ask nothing. */
 	blocked(now = Date.now()): boolean {
-		return this.down && now < this.#retryAt;
+		return (this.down && now < this.#retryAt) || now < this.#busyUntil;
+	}
+
+	/** A read was refused as over the limit: background reads pause until `until`. */
+	busy(until: number): void {
+		this.#busyUntil = Math.max(this.#busyUntil, until);
 	}
 
 	/** When background reads may ask again (`0` when they may now). */
@@ -106,7 +118,7 @@ class ServiceOutage {
 
 	/** Nothing answered. Requests already out when it was marked count once. */
 	failed(now = Date.now()): void {
-		if (this.blocked(now)) return;
+		if (this.down && now < this.#retryAt) return;
 		this.#failures += 1;
 		this.down = true;
 		const step = RETRY_STEPS_MS[Math.min(this.#failures, RETRY_STEPS_MS.length) - 1];
@@ -122,6 +134,7 @@ class ServiceOutage {
 		this.down = false;
 		this.#failures = 0;
 		this.#retryAt = 0;
+		this.#busyUntil = 0;
 	}
 
 	/**
@@ -130,6 +143,8 @@ class ServiceOutage {
 	 * every caller of that round shares.
 	 */
 	available(probe: () => Promise<boolean>): Promise<boolean> {
+		// Busy is not away: no probe, only the wait it asked for.
+		if (Date.now() < this.#busyUntil) return Promise.resolve(false);
 		if (!this.down) return Promise.resolve(true);
 		if (this.blocked()) return Promise.resolve(false);
 		this.#probe ??= probe()

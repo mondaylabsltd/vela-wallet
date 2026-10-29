@@ -369,6 +369,11 @@ export interface NetworkEvidence {
 	named?: number | null;
 	/** What this device kept: the creator's pick, and every network used here since. */
 	kept?: number[];
+	/**
+	 * The networks this device has. Given, one it lacks is never a network
+	 * of the multisig here ({@link missingNetworks} lists it instead).
+	 */
+	have?: number[] | null;
 }
 
 /**
@@ -378,6 +383,34 @@ export interface NetworkEvidence {
  */
 export const multisigNetworks = (evidence: NetworkEvidence) =>
 	call<number[]>('multisigNetworks', { evidence });
+
+/**
+ * The networks the mailbox's proposals (or a link) put the multisig on that
+ * this device does not have (`have`): shown, offered to add, never read or
+ * judged.
+ */
+export const missingNetworks = (evidence: NetworkEvidence) =>
+	call<number[]>('missingNetworks', { evidence });
+
+/** How a network's members now differ from the original ones (the core's `MemberDrift`). */
+export interface MemberDrift {
+	same: boolean;
+	added: string[];
+	removed: string[];
+	thresholdWas: number;
+	thresholdIs: number;
+}
+
+export const memberDrift = (
+	original: { owners: string[]; threshold: number },
+	current: { owners: string[]; threshold: number }
+) =>
+	call<MemberDrift>('memberDrift', {
+		original: original.owners,
+		originalThreshold: original.threshold,
+		current: current.owners,
+		currentThreshold: current.threshold
+	});
 
 // -- the multisig service's health answer (`app::genesis_service`) ---------------
 

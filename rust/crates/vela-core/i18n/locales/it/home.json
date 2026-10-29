@@ -106,7 +106,8 @@
         "yourTurn": "Serve la tua approvazione",
         "waiting": "In attesa degli altri",
         "queued": "In coda",
-        "progress": "{{approved}}/{{threshold}} approvazioni"
+        "progress": "{{approved}}/{{threshold}} approvazioni",
+        "unsent": "Non ancora inviata"
       },
       "action": {
         "send": "Invia {{amount}} {{symbol}}",
@@ -170,13 +171,24 @@
         "voidedNote": "Sostituita da un annullamento con il numero {{nonce}}: questa transazione non potrà mai essere eseguita.",
         "voidedByOther": "Sostituita da un’altra transazione con il numero {{nonce}}: questa non potrà mai essere eseguita.",
         "notInMailbox": "Questa transazione non è nella casella di questo multisig. Chiedi a chi ha inviato il link di controllarlo.",
-        "unknownNetwork": "Questo link è per una rete che Vela non ha (chain {{chainId}}). Aggiungi la rete nelle Impostazioni, poi riapri il link.",
         "badLink": "Questo link a una transazione multisig è incompleto o danneggiato. Chiedilo di nuovo.",
         "previewNote": "Nessun account di questo dispositivo è membro di questo multisig. Aprire il link non l’ha aggiunto né ha cambiato account.",
         "watch": "Aggiungi a questo dispositivo",
         "watching": "Su questo dispositivo: è nel tuo elenco di account. L’account mostrato non è cambiato.",
         "renameRuns": "Viene eseguita su {{network}}, dove il registro conserva la sua voce: solo il multisig stesso può rinominarla lì.",
-        "renameDeploys": "Il multisig non è ancora distribuito su {{network}}. Eseguirla lo distribuisce prima lì, con i membri con cui è stato creato, e il membro che esegue paga anche per questo."
+        "renameUndeployed": "Il multisig non è distribuito su {{network}}, quindi questa transazione non può essere eseguita lì: solo il multisig distribuito può rinominare la sua voce, e una rinomina non lo distribuisce mai.",
+        "startsOriginal": "Questa rete parte con i membri originali",
+        "startsOriginalNote": "Eseguirla distribuisce qui il multisig con i membri con cui è stato creato — approvano {{m}} membri su {{n}} — non con quelli che ha ora su {{networks}}.",
+        "notCounted": "Non conta — al momento non è membro su {{network}}: {{names}}",
+        "missingNetworkNamed": "Su {{name}} (chain {{chainId}}) — una rete che questo dispositivo non ha",
+        "missingNetwork": "Sulla chain {{chainId}} — una rete che questo dispositivo non ha",
+        "missingNetworkBody": "Un membro ha proposto questa transazione su una rete che questo dispositivo non ha. Aggiungi la rete per leggerla e approvarla qui; fino ad allora non viene verificata né conteggiata.",
+        "missingCount": "In attesa lì: {{n}}",
+        "addNetwork": "Aggiungi rete",
+        "outboxBusy": "Il servizio multisig è occupato — nuovo invio tra {{seconds}} s.",
+        "outboxAway": "Impossibile raggiungere il servizio multisig — nuovo invio tra {{seconds}} s.",
+        "outboxNotSent": "Non ancora inviata: il servizio multisig non l’ha accettata. Resta su questo dispositivo, e gli altri membri non possono vederla finché non viene inviata.",
+        "outboxSendAgain": "Invia di nuovo"
       },
       "send": {
         "propose": "Proponi e approva",
@@ -299,11 +311,20 @@
         "backupNote": "La sua configurazione resta anche su Ethereum, così il multisig si può trovare e distribuire da lì. Un account di questo dispositivo paga la commissione.",
         "remove": "Rimuovi da questo dispositivo",
         "renameTitle": "Nome nel registro",
-        "renameNote": "I membri, e chiunque cerchi questo multisig, vedono questo nome. Rinominarlo è una delle sue transazioni su {{network}}, dove è conservata la sua voce: i membri la approvano come le altre, ed eseguirla distribuisce il multisig su {{network}} se non c’è ancora.",
+        "renameNote": "I membri, e chiunque cerchi questo multisig, vedono questo nome. Rinominarlo è una delle sue transazioni su {{network}}, dove è conservata la sua voce: i membri la approvano come le altre.",
         "renameAction": "Rinomina on-chain",
         "renameUnavailable": "Il suo record non è su una rete di questo wallet, quindi non si può rinominare da qui.",
         "shareAgain": "Condividi di nuovo",
-        "shareAgainNote": "Il servizio multisig non ha la sua configurazione; forse è stata salvata in un registro precedente. Condividerla di nuovo richiede una conferma con la passkey."
+        "shareAgainNote": "Il servizio multisig non ha la sua configurazione; forse è stata salvata in un registro precedente. Condividerla di nuovo richiede una conferma con la passkey.",
+        "renameNotDeployed": "La voce del registro può essere rinominata solo dal multisig stesso su {{network}}, dove non è distribuito.",
+        "originalMembers": "Membri originali",
+        "originalNote": "I membri con cui è stato creato. Una rete su cui non è distribuito parte con questi.",
+        "currentOn": "Membri attuali su {{network}}",
+        "sameAsOriginal": "Gli stessi dei membri originali.",
+        "added": "Aggiunti",
+        "removed": "Rimossi",
+        "thresholdChanged": "Approvazioni necessarie: {{was}} in origine, {{is}} ora.",
+        "undeployedOn": "Non ancora distribuito su {{network}}: lì partirà con i membri originali."
       },
       "service": {
         "customNote": "In uso un servizio multisig personalizzato ({{host}})",

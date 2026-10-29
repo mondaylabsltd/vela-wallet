@@ -21,12 +21,18 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
 	import { recordHomeChain, shareAgain } from '../core/accounts';
+	import { hasCode } from '../core/chain';
 	import { checkBackup, startBackup, type BackupState } from '../core/backup';
 	import { chainName } from '../core/display';
-	import { validName } from '../core/kernel';
+	import { memberDrift, sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
-	import { MailboxUnreadableError, proposals, proposeRename } from '../core/proposals.svelte';
+	import {
+		MailboxUnreadableError,
+		membersAnywhere,
+		proposals,
+		proposeRename
+	} from '../core/proposals.svelte';
 	import { fetchGenesis } from '../core/service';
 	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
@@ -43,14 +49,31 @@
 
 	let { m, account, payer, cancelLabel }: Props = $props();
 
-	/** The members now: a chain it is deployed on, else its genesis's. */
-	const members = $derived.by(() => {
-		const c = proposals.chains.find((x) => x.members.deployed) ?? proposals.chains[0];
-		return c
-			? { owners: c.members.owners, threshold: c.members.threshold }
-			: { owners: account.owners, threshold: account.threshold };
-	});
-	const local = $derived(localOwners(members.owners));
+	/**
+	 * Owners are each network's (owner, 2026-10-29): the original members (its
+	 * genesis) are where it starts, and each network it is deployed on has its
+	 * own members now, read through this wallet's RPC (`proposals`), shown
+	 * beside the original ones with what changed. A network it is not
+	 * deployed on starts with the original members.
+	 */
+	const original = $derived({ owners: account.owners, threshold: account.threshold });
+	const deployedOn = $derived(
+		proposals.chains
+			.filter((c) => c.members.deployed)
+			.map((c) => ({
+				chainId: c.chainId,
+				members: c.members,
+				drift: memberDrift(original, c.members)
+			}))
+	);
+	const undeployedOn = $derived(proposals.chains.filter((c) => !c.members.deployed));
+	/**
+	 * This device's members anywhere: on each network it is deployed on, and
+	 * the original ones wherever it is not (or nothing is read yet).
+	 */
+	const local = $derived(localOwners(membersAnywhere(account)));
+	/** Who proves an owner asks to share it: an original member (the service checks the genesis). */
+	const founders = $derived(localOwners(original.owners));
 
 	let backup = $state<BackupState>('checking');
 	let removing = $state(false);
@@ -65,11 +88,17 @@
 	 * wallet has a network for — the service's home chain (the index, Gnosis)
 	 * first, where it writes records. `rename` is called BY the Safe on the
 	 * chain whose registry holds the record it changes, so the transaction runs
-	 * there whatever networks the multisig is used on — deploying it there
-	 * first if it is not yet (said on the note and on the review). `null`: none
-	 * (or not recorded); `undefined`: not known yet.
+	 * there whatever networks the multisig is used on. `null`: none (or not
+	 * recorded); `undefined`: not known yet.
 	 */
 	let renameChain = $state<number | null | undefined>(undefined);
+	/**
+	 * Whether it is deployed on `renameChain` (this wallet's RPC). A rename
+	 * never deploys it (owner, 2026-10-29): deployed there, renaming is
+	 * offered; not, Settings says only the multisig itself can rename it
+	 * there, and offers nothing. `undefined`: not known yet.
+	 */
+	let renameDeployed = $state<boolean | undefined>(undefined);
 
 	async function findRenameChain() {
 		try {
@@ -82,6 +111,9 @@
 		} catch {
 			renameChain = null;
 		}
+		if (renameChain == null) return;
+		const chainId = renameChain;
+		renameDeployed = await hasCode(chainId, account.address).catch(() => undefined);
 	}
 
 	onMount(() => {
@@ -104,7 +136,8 @@
 	});
 
 	async function rename() {
-		if (!newNameOk || renameChain == null || cleanNewName === recordedName) return;
+		if (!newNameOk || renameChain == null || !renameDeployed || cleanNewName === recordedName)
+			return;
 		const chainId = renameChain;
 		renameBusy = true;
 		renameFailure = null;
@@ -128,7 +161,7 @@
 	let shareFailure = $state<string | null>(null);
 
 	async function share() {
-		const owner = local[0];
+		const owner = founders[0];
 		if (!owner || sharing) return;
 		sharing = true;
 		shareFailure = null;
@@ -165,17 +198,11 @@
 	);
 </script>
 
-<section class="multisig" aria-labelledby="multisig-members">
-	<header>
-		<h2 id="multisig-members">{m.panel.members}</h2>
-		<p class="rule">
-			{fillTemplate(m.panel.title, { m: members.threshold, n: members.owners.length })}
-		</p>
-	</header>
-	<CustomServiceNote {m} />
+{#snippet memberList(owners: string[], added: string[], removed: string[])}
 	<ul class="members">
-		{#each members.owners as owner (owner)}
-			{@const mine = local.some((o) => o.address.toLowerCase() === owner.toLowerCase())}
+		{#each owners as owner (owner)}
+			{@const mine = local.some((o) => sameAddress(o.address, owner))}
+			{@const isNew = added.some((a) => sameAddress(a, owner))}
 			<li>
 				<!-- The member's artwork opens the viewer on its address (founder
 				     call, 2026-09-05): the row itself is no control. -->
@@ -187,17 +214,75 @@
 						<span class="address">{shortenAddress(owner)}</span>
 					{/if}
 				</span>
+				{#if isNew}<span class="tag" data-testid="member-added">{m.settings.added}</span>{/if}
 				{#if mine}<span class="here">{m.panel.thisDevice}</span>{/if}
 			</li>
 		{/each}
+		{#each removed as owner (owner)}
+			<li class="gone">
+				<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
+				<span class="text">
+					<span class="name">{names.label(owner)}</span>
+					{#if names.label(owner) !== shortenAddress(owner)}
+						<span class="address">{shortenAddress(owner)}</span>
+					{/if}
+				</span>
+				<span class="tag" data-testid="member-removed">{m.settings.removed}</span>
+			</li>
+		{/each}
 	</ul>
+{/snippet}
+
+<section class="multisig" aria-labelledby="multisig-members">
+	<header>
+		<h2 id="multisig-members">{m.panel.members}</h2>
+	</header>
+	<CustomServiceNote {m} />
+	<div class="set" data-testid="members-original">
+		<div class="set-head">
+			<h3>{m.settings.originalMembers}</h3>
+			<p class="rule">
+				{fillTemplate(m.panel.title, { m: original.threshold, n: original.owners.length })}
+			</p>
+		</div>
+		<p class="note">{m.settings.originalNote}</p>
+		{@render memberList(original.owners, [], [])}
+	</div>
+	{#each deployedOn as c (c.chainId)}
+		<div class="set" data-testid="members-current">
+			<div class="set-head">
+				<h3>{fillTemplate(m.settings.currentOn, { network: chainName(c.chainId) })}</h3>
+				<p class="rule">
+					{fillTemplate(m.panel.title, { m: c.members.threshold, n: c.members.owners.length })}
+				</p>
+			</div>
+			{#if c.drift.same}
+				<p class="note">{m.settings.sameAsOriginal}</p>
+			{:else}
+				{@render memberList(c.members.owners, c.drift.added, c.drift.removed)}
+				{#if c.drift.thresholdWas !== c.drift.thresholdIs}
+					<p class="note">
+						{fillTemplate(m.settings.thresholdChanged, {
+							was: c.drift.thresholdWas,
+							is: c.drift.thresholdIs
+						})}
+					</p>
+				{/if}
+			{/if}
+		</div>
+	{/each}
+	{#each undeployedOn as c (c.chainId)}
+		<p class="note" data-testid="members-undeployed">
+			{fillTemplate(m.settings.undeployedOn, { network: chainName(c.chainId) })}
+		</p>
+	{/each}
 	{#if local.length === 0}
 		<p class="note">{m.panel.readOnly}</p>
 	{/if}
 	{#if !isShared(multisig.find(account.address) ?? account)}
 		<!-- Its record has not landed: another member cannot add it yet. -->
 		<p class="note" role="status">{m.panel.notShared}</p>
-		{#if local.length > 0}
+		{#if founders.length > 0}
 			<!-- The service has no record of it (an earlier registry's, or one that
 			     never landed): an owner here shares it again, one passkey. -->
 			<p class="note">{m.settings.shareAgainNote}</p>
@@ -224,7 +309,12 @@
 		</span>
 		{#if renameChain === null}
 			<p class="note">{m.settings.renameUnavailable}</p>
-		{:else if renameChain !== undefined}
+		{:else if renameChain !== undefined && renameDeployed === false}
+			<!-- A rename never deploys it: only the deployed multisig renames its record. -->
+			<p class="note" data-testid="rename-not-deployed">
+				{fillTemplate(m.settings.renameNotDeployed, { network: chainName(renameChain) })}
+			</p>
+		{:else if renameChain !== undefined && renameDeployed === true}
 			{#if renaming}
 				<label class="field">
 					<span>{m.create.name}</span>
@@ -339,6 +429,38 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.set {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.set-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-md);
+	}
+
+	h3 {
+		margin: 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.tag {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.gone .name,
+	.gone .address {
+		text-decoration: line-through;
+		color: var(--color-fg-subtle);
 	}
 
 	.members {

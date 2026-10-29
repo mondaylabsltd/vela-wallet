@@ -20,6 +20,8 @@ import { submitExecution } from './execute';
 import {
 	callsTx,
 	cancelTx,
+	missingNetworks,
+	multisigNetworks,
 	namedGenesis,
 	renameTx,
 	reviewTx,
@@ -36,16 +38,20 @@ import {
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import {
+	fetchAllProposals,
 	fetchProposals,
 	genesisServiceURL,
 	probeService,
+	ServiceBusyError,
+	ServiceUnavailableError,
 	submitApproval,
-	type Proposal
+	type Proposal,
+	type SubmitAnswer
 } from './service';
 import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { recordRemoteExecutions } from './records';
-import { networkRank } from '$lib/services/networks';
+import { networkForChainId, networkRank } from '$lib/services/networks';
 import { externalSigning } from '../external/signing.svelte';
 
 export type ProposalStatus =
@@ -60,10 +66,16 @@ export type ProposalStatus =
 
 export interface ApprovalRow {
 	owner: string;
-	/** Verified, and its owner is an owner on this chain now. */
+	/**
+	 * Verified, and its owner is an owner on this chain now. The mailbox takes
+	 * an approval from anyone whose signature is valid; one from an account
+	 * that is not a member here is shown as not counted, never counted.
+	 */
 	counts: boolean;
 	approval: Approval;
 	createdMs: number;
+	/** Signed on this device and not in the mailbox yet (kept, sent again). */
+	unsent?: boolean;
 }
 
 export interface ProposalItem {
@@ -85,6 +97,16 @@ export interface ProposalItem {
 	/** Another proposal at the same nonce that voids this one (a cancellation). */
 	cancelledBy: string | null;
 	createdMs: number;
+	/**
+	 * Something signed on this device for it has not reached the mailbox yet
+	 * (the proposal itself, or an approval): other members cannot see that.
+	 */
+	unsent: boolean;
+	/**
+	 * A rename on a network where the multisig is not deployed: it cannot be
+	 * executed there — a rename never deploys it (owner, 2026-10-29).
+	 */
+	renameUndeployed: boolean;
 }
 
 export interface ChainState {
@@ -157,8 +179,11 @@ export function readProposal(
 					(o) => !owners.some((x) => sameAddress(x.address, o.address))
 				)
 			: [];
+	// A rename runs only where the multisig is deployed: executed elsewhere it
+	// would deploy it there with its original members (the core refuses it too).
+	const renameUndeployed = review.action?.kind === 'rename' && !members.deployed;
 	const canExecute =
-		status === 'done' || status === 'queued' || review.action === null
+		status === 'done' || status === 'queued' || review.action === null || renameUndeployed
 			? []
 			: [...owners, ...anyone];
 	return {
@@ -175,8 +200,52 @@ export function readProposal(
 		canApprove: review.action === null || status === 'done' ? [] : canApprove,
 		canExecute,
 		cancelledBy: null,
-		createdMs: p.createdMs
+		createdMs: p.createdMs,
+		unsent: false,
+		renameUndeployed
 	};
+}
+
+/**
+ * The mailbox's list for one chain, with what this device signed for it and
+ * the mailbox has not taken yet ({@link outbox}): a proposal it lacks is
+ * there as it was signed, an approval it lacks is added to its proposal.
+ * Resolves which proposals and approvals are only here.
+ */
+function withKept(
+	account: MultisigAccount,
+	chainId: number,
+	list: Proposal[]
+): { list: Proposal[]; unsent: Map<string, Set<string>> } {
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
+	const unsent = new Map<string, Set<string>>();
+	const kept = outbox.kept(chainId, account.address);
+	if (kept.length === 0) return { list, unsent };
+	const out = list.map((p) => ({ ...p, approvals: [...p.approvals] }));
+	for (const req of kept) {
+		const hash = safeTxHash(chainId, account.address, req.safeTx).toLowerCase();
+		let p = out.find((x) => x.safeTxHash.toLowerCase() === hash);
+		if (!p) {
+			p = {
+				chainId,
+				safe: account.address,
+				safeTxHash: hash,
+				safeTx: req.safeTx,
+				proposer: req.approval.owner,
+				approvals: [],
+				createdMs: Date.now(),
+				updatedMs: Date.now()
+			};
+			out.push(p);
+		}
+		if (p.approvals.some((a) => sameAddress(a.owner, req.approval.owner))) continue;
+		p.approvals.push({ ...req.approval, createdMs: Date.now() });
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- part of the one read above
+		const owners = unsent.get(hash) ?? new Set<string>();
+		owners.add(req.approval.owner.toLowerCase());
+		unsent.set(hash, owners);
+	}
+	return { list: out, unsent };
 }
 
 /**
@@ -195,19 +264,39 @@ export async function readChain(
 	account: MultisigAccount,
 	chainId: number,
 	previous: Proposal[] | null = null,
-	{ background = false, mailbox: ask = true }: { background?: boolean; mailbox?: boolean } = {}
+	{
+		background = false,
+		mailbox: ask = true,
+		listed
+	}: {
+		background?: boolean;
+		mailbox?: boolean;
+		/** This chain's part of the cross-chain list, read for every chain at once. */
+		listed?: Proposal[];
+	} = {}
 ): Promise<ChainState & { proposals: Proposal[] }> {
 	const [members, answer] = await Promise.all([
 		readMembers(chainId, account.address, account.genesis),
 		// `false`: unread (a `null` is the mailbox knowing nothing of it).
-		ask
-			? fetchProposals(chainId, account.address, { background }).catch(() => false as const)
-			: (false as const)
+		listed !== undefined
+			? { proposals: listed }
+			: ask
+				? fetchProposals(chainId, account.address, { background }).catch(() => false as const)
+				: (false as const)
 	]);
 	const mailbox = answer !== false;
 	const list = answer === false ? (previous ?? []) : (answer?.proposals ?? []);
-	const items = list
-		.map((p) => readProposal(account, members, p))
+	const shown = withKept(account, chainId, list);
+	const items = shown.list
+		.map((p) => {
+			const item = readProposal(account, members, p);
+			const owners = shown.unsent.get(p.safeTxHash.toLowerCase());
+			if (item && owners) {
+				item.unsent = true;
+				for (const row of item.approvals) row.unsent = owners.has(row.owner.toLowerCase());
+			}
+			return item;
+		})
 		.filter((i): i is ProposalItem => i !== null);
 	markCancellations(account.address, items);
 	return { chainId, members, items, mailbox, proposals: list };
@@ -223,9 +312,50 @@ export function nextNonceOf(chain: ChainState): bigint {
 /** A refresh still out after this long: the person is told the list may be stale. */
 export const SLOW_REFRESH_MS = 8_000;
 
+/**
+ * Proposals the mailbox holds for the multisig on a network this device
+ * does not have (a member's own network, say): shown as that, with the way
+ * to add the network — never dropped, never judged (nothing there can be
+ * read), and never counted as waiting on anyone here until it is added.
+ */
+export interface MissingChain {
+	chainId: number;
+	/** How many proposals it holds there. */
+	count: number;
+}
+
+/** Whether this device has the network (built in, or one the person added). */
+export function hasNetwork(chainId: number): boolean {
+	return networkForChainId(chainId) !== null;
+}
+
+/**
+ * The cross-chain list split by chain: the networks something there puts
+ * the multisig on (the core's rule, `have` this device's), and those this
+ * device lacks.
+ */
+export function splitListed(
+	listed: Proposal[],
+	chainIds: number[]
+): { lists: Map<number, Proposal[]>; used: number[]; missing: MissingChain[] } {
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built for one read and returned, never state
+	const lists = new Map<number, Proposal[]>();
+	for (const p of listed) lists.set(p.chainId, [...(lists.get(p.chainId) ?? []), p]);
+	const proposed = [...lists.keys()];
+	const have = unique([...proposed, ...chainIds]).filter(hasNetwork);
+	const used = multisigNetworks({ proposals: proposed, kept: chainIds, have });
+	const missing = missingNetworks({ proposals: proposed, have }).map((chainId) => ({
+		chainId,
+		count: lists.get(chainId)?.length ?? 0
+	}));
+	return { lists, used, missing };
+}
+
 class Proposals {
 	/** Per chain the multisig is used on. */
 	chains = $state<ChainState[]>([]);
+	/** The networks the mailbox holds proposals of it on that this device lacks. */
+	missing = $state<MissingChain[]>([]);
 	loading = $state(false);
 	/**
 	 * The last refresh failed (offline, the service down) or is taking long:
@@ -245,6 +375,11 @@ class Proposals {
 	#account: MultisigAccount | null = null;
 	#online: (() => void) | null = null;
 
+	/** The multisig followed (`null`: none). */
+	get followed(): string | null {
+		return this.#address;
+	}
+
 	get items(): ProposalItem[] {
 		return this.chains.flatMap((c) => c.items).sort(sortKey);
 	}
@@ -263,6 +398,7 @@ class Proposals {
 		this.#online = null;
 		if (!sameAddress(this.#address, address)) {
 			this.chains = [];
+			this.missing = [];
 			this.#lists.clear();
 			this.stale = false;
 		}
@@ -319,14 +455,37 @@ class Proposals {
 			const next: ChainState[] = [];
 			// While the service is away: nothing until its next step, then one
 			// probe for every network — not a failed read per network per round.
-			const mailbox = await serviceOutage.available(probeService);
+			let mailbox = await serviceOutage.available(probeService);
+			// One read for every chain at once (a service that has the list):
+			// proposals on a network the multisig is not deployed on, or one
+			// this device lacks, are found without a link. `null`: an older
+			// service — asked network by network, as before.
+			let split: ReturnType<typeof splitListed> | null = null;
+			if (mailbox) {
+				try {
+					const all = await fetchAllProposals(account.address, { background: true });
+					if (all) split = splitListed(all.proposals, chainIds);
+				} catch {
+					mailbox = false;
+				}
+			}
+			if (split) {
+				// A network something there says it is on becomes one of its
+				// networks here (kept: the next refresh reads it too).
+				for (const id of split.used) {
+					if (!account.chainIds.includes(id)) multisig.useChain(account.address, id);
+				}
+				if (followed()) this.missing = split.missing;
+			}
+			const reading = split ? unique([...chainIds, ...split.used]) : chainIds;
 			await Promise.all(
-				chainIds.map(async (chainId) => {
+				reading.map(async (chainId) => {
 					const known = followed() ? (this.#lists.get(chainId) ?? null) : null;
 					try {
 						const read = await readChain(account, chainId, known, {
 							background: true,
-							mailbox
+							mailbox,
+							listed: split ? (split.lists.get(chainId) ?? []) : undefined
 						});
 						if (!read.mailbox) failed = true;
 						else if (followed()) this.#lists.set(chainId, read.proposals);
@@ -383,6 +542,28 @@ function markCancellations(multisigAddress: string, items: ProposalItem[]): void
 
 export const proposals = new Proposals();
 
+/**
+ * Everyone who is a member of `account` on some network: on each network it
+ * is deployed on, its members there now (as read for the multisig shown),
+ * and its original members wherever it is not — or for one not shown, whose
+ * networks are not read here. Who may sign on a given network is that
+ * network's alone (`readProposal`); this only says whether any member is.
+ */
+export function membersAnywhere(account: Pick<MultisigAccount, 'address' | 'owners'>): string[] {
+	if (!sameAddress(proposals.followed, account.address)) return account.owners;
+	const deployed = proposals.chains.filter((c) => c.members.deployed);
+	const undeployed = deployed.length < proposals.chains.length || deployed.length === 0;
+	return unique([
+		...deployed.flatMap((c) => c.members.owners),
+		...(undeployed ? account.owners : [])
+	]);
+}
+
+/** Each once, in order (addresses by their case: one network's list has one case). */
+function unique<T>(values: T[]): T[] {
+	return values.filter((v, i) => values.indexOf(v) === i);
+}
+
 // -- actions --------------------------------------------------------------------------
 
 /** Propose `tx` on `chainId`, approved at once by `owner` (one passkey prompt). */
@@ -409,6 +590,13 @@ export async function propose(
  * when a page comes up — so a reload or a closed window between the passkey
  * and the mailbox never loses what the person signed. The mailbox merges, so
  * sending one twice is harmless.
+ *
+ * A mailbox that is busy (`429`) or out of reach is never a failure of what
+ * was signed: the approval stays here, is shown as waiting to be sent (its
+ * transaction reads as any other, from what was signed), and is sent again
+ * on the service's word (`Retry-After`, else a backoff) for
+ * {@link OUTBOX_PATIENCE_MS}; then it is said as not sent, kept, with Send
+ * again. Nothing is ever signed twice.
  */
 const OUTBOX_KEY = 'vela.multisigOutbox';
 
@@ -435,36 +623,153 @@ function outboxKey(req: Submission): string {
 	return `${req.chainId}:${req.safe.toLowerCase()}:${safeTxHash(req.chainId, req.safe, req.safeTx)}:${req.approval.owner.toLowerCase()}`;
 }
 
-/** Hand one owner's signed approval to the mailbox, kept in the outbox until it answers. */
-async function submitKept(req: Submission) {
-	const key = outboxKey(req);
-	writeOutbox({ ...readOutbox(), [key]: req });
-	const answer = await submitApproval(req);
-	const { [key]: _sent, ...rest } = readOutbox();
-	void _sent;
-	writeOutbox(rest);
-	return answer;
+/** How long a kept approval is sent again on its own before it is said as not sent. */
+export const OUTBOX_PATIENCE_MS = 120_000;
+/** The backoff when the service names no wait: 2 s, doubling, at most this. */
+const OUTBOX_BACKOFF_MAX_MS = 30_000;
+
+/** Where one kept approval stands. */
+export interface OutboxEntry {
+	/** `busy`: the service said wait (429); `away`: nothing answered. */
+	why: 'busy' | 'away';
+	/** When it is sent again (`null`: not on its own any more — Send again). */
+	retryAt: number | null;
+}
+
+class Outbox {
+	/** Per kept approval (its key): why it is waiting, and until when. */
+	entries = $state<Record<string, OutboxEntry>>({});
+	/** When each began to wait, for the patience. */
+	#since = new Map<string, number>();
+	#tries = new Map<string, number>();
+	#timers = new Map<string, ReturnType<typeof setTimeout>>();
+	/** It reached the mailbox: whoever shows it reads again. */
+	onsent: ((safe: string) => void) | null = null;
+
+	/** The kept approvals of `safe` on `chainId`, as they were signed. */
+	kept(chainId: number, safe: string): Submission[] {
+		void this.entries;
+		return Object.values(readOutbox()).filter(
+			(r) => r.chainId === chainId && sameAddress(r.safe, safe)
+		);
+	}
+
+	/** Where `safeTxHash`'s kept approvals stand (the first that waits), or `null`. */
+	stateOf(chainId: number, safe: string, hash: string): OutboxEntry | null {
+		const prefix = `${chainId}:${safe.toLowerCase()}:${hash.toLowerCase()}:`;
+		for (const [key, entry] of Object.entries(this.entries)) {
+			if (key.toLowerCase().startsWith(prefix)) return entry;
+		}
+		return null;
+	}
+
+	/**
+	 * Hand one signed approval to the mailbox, kept until it answers.
+	 * Resolves the mailbox's answer, or `null` when it is kept to be sent
+	 * again (busy or away); a refusal is the mailbox's answer, and drops it.
+	 */
+	async send(req: Submission): Promise<SubmitAnswer | null> {
+		const key = outboxKey(req);
+		writeOutbox({ ...readOutbox(), [key]: req });
+		return this.#attempt(key, req);
+	}
+
+	async #attempt(key: string, req: Submission): Promise<SubmitAnswer | null> {
+		try {
+			const answer = await submitApproval(req);
+			this.#drop(key);
+			if (answer.ok) this.onsent?.(req.safe);
+			return answer;
+		} catch (error) {
+			// Only a mailbox that did not take it (busy, away, failing) keeps
+			// it; anything else is this device's own fault, said at once.
+			if (!(error instanceof ServiceUnavailableError)) {
+				this.#drop(key);
+				throw error;
+			}
+			this.#wait(key, req, error instanceof ServiceBusyError ? error : null);
+			return null;
+		}
+	}
+
+	#wait(key: string, req: Submission, busy: ServiceBusyError | null): void {
+		const now = Date.now();
+		const since = this.#since.get(key) ?? now;
+		this.#since.set(key, since);
+		const tries = (this.#tries.get(key) ?? 0) + 1;
+		this.#tries.set(key, tries);
+		const backoff = Math.min(OUTBOX_BACKOFF_MAX_MS, 2_000 * 2 ** (tries - 1));
+		const wait = Math.max(1_000, busy?.waitMs ?? backoff);
+		const why = busy ? 'busy' : 'away';
+		if (now + wait > since + OUTBOX_PATIENCE_MS) {
+			// Long enough: said as not sent, kept, and sent on the person's word.
+			this.entries = { ...this.entries, [key]: { why, retryAt: null } };
+			return;
+		}
+		this.entries = { ...this.entries, [key]: { why, retryAt: now + wait } };
+		clearTimeout(this.#timers.get(key));
+		this.#timers.set(
+			key,
+			setTimeout(() => {
+				this.#timers.delete(key);
+				const still = readOutbox()[key];
+				if (still) void this.#attempt(key, still);
+				else this.#drop(key);
+			}, wait)
+		);
+	}
+
+	#drop(key: string): void {
+		const { [key]: _gone, ...rest } = readOutbox();
+		void _gone;
+		writeOutbox(rest);
+		clearTimeout(this.#timers.get(key));
+		this.#timers.delete(key);
+		this.#since.delete(key);
+		this.#tries.delete(key);
+		if (key in this.entries) {
+			const { [key]: _done, ...left } = this.entries;
+			void _done;
+			this.entries = left;
+		}
+	}
+
+	/**
+	 * Send again what is kept — every approval, or those of one transaction
+	 * (`hash`) — with a fresh patience: a page coming up, or the person's
+	 * Send again. Resolves the multisigs whose mailbox took something.
+	 */
+	async sendAgain(match?: { chainId: number; safe: string; hash: string }): Promise<string[]> {
+		const sent: string[] = [];
+		const prefix = match
+			? `${match.chainId}:${match.safe.toLowerCase()}:${match.hash.toLowerCase()}:`
+			: '';
+		for (const [key, req] of Object.entries(readOutbox())) {
+			if (!key.toLowerCase().startsWith(prefix)) continue;
+			clearTimeout(this.#timers.get(key));
+			this.#since.delete(key);
+			this.#tries.delete(key);
+			const answer = await this.#attempt(key, req);
+			if (answer?.ok) sent.push(req.safe);
+		}
+		return sent;
+	}
+}
+
+export const outbox = new Outbox();
+
+/** Hand one owner's signed approval to the mailbox ({@link Outbox.send}). */
+function submitKept(req: Submission) {
+	return outbox.send(req);
 }
 
 /**
  * Send again what a page signed and never saw reach the mailbox (ms-19).
- * Quiet: a submission that still cannot go stays for the next page.
- * Resolves the multisigs whose mailbox took something.
+ * Quiet: a submission that still cannot go is kept, and sent again on its
+ * own for a while. Resolves the multisigs whose mailbox took something.
  */
-export async function flushOutbox(): Promise<string[]> {
-	const sent: string[] = [];
-	for (const [key, req] of Object.entries(readOutbox())) {
-		try {
-			const answer = await submitApproval(req);
-			const { [key]: _done, ...rest } = readOutbox();
-			void _done;
-			writeOutbox(rest);
-			if (answer.ok) sent.push(req.safe);
-		} catch {
-			// the mailbox is still out of reach: kept for the next page
-		}
-	}
-	return sent;
+export function flushOutbox(): Promise<string[]> {
+	return outbox.sendAgain();
 }
 
 /** Hand `tx` and one owner's approval of it to the mailbox. */
@@ -481,9 +786,14 @@ export async function submitProposal(
 		approval,
 		genesis: namedGenesis(account.genesis)
 	});
-	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
+	if (answer && !answer.ok) throw new MailboxRefusedError(answer.refusal);
 	multisig.useChain(account.address, chainId);
-	return { safeTxHash: safeTxHash(chainId, account.address, tx), proposal: answer.proposal };
+	// `null`: signed and kept, on its way to the mailbox (busy, or away) —
+	// shown from what was signed until the mailbox has it.
+	return {
+		safeTxHash: safeTxHash(chainId, account.address, tx),
+		proposal: answer?.proposal ?? null
+	};
 }
 
 /**
@@ -665,8 +975,9 @@ export async function approve(account: MultisigAccount, item: ProposalItem, owne
 		approval,
 		genesis: namedGenesis(account.genesis)
 	});
-	if (!answer.ok) throw new MailboxRefusedError(answer.refusal);
-	return answer.proposal;
+	if (answer && !answer.ok) throw new MailboxRefusedError(answer.refusal);
+	// `null`: kept, and sent again on its own (the sheet says so).
+	return answer?.proposal ?? null;
 }
 
 /** `executor` executes `item` (one passkey prompt); resolves with the transaction hash. */
@@ -721,3 +1032,9 @@ export class MailboxRefusedError extends Error {
 		this.name = 'MailboxRefusedError';
 	}
 }
+
+// Kept approvals that reach the mailbox: the shown multisig's list is read again.
+outbox.onsent = (safe) => {
+	const shown = multisig.find(safe);
+	if (shown) void proposals.refresh(shown, shown.chainIds);
+};

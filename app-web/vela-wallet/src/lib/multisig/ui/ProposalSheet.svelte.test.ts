@@ -37,14 +37,34 @@ const fake = vi.hoisted(() => ({
 	/** What the chain says executed a done proposal (ms-9, ms-10). */
 	executed: undefined as string | null | undefined,
 	/** What the chain says executed another hash (the cancellation's, ms-9). */
-	executedBy: {} as Record<string, string | null | undefined>
+	executedBy: {} as Record<string, string | null | undefined>,
+	/** The shown multisig's other networks, as `proposals` reads them. */
+	chains: [] as any[],
+	followed: null as string | null,
+	/** Where an approval signed here stands, while the mailbox lacks it. */
+	kept: null as any,
+	sentAgain: 0
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
 	proposals: {
 		loading: false,
 		chain: () => fake.chain,
-		refresh: async () => {}
+		refresh: async () => {},
+		get chains() {
+			return fake.chains;
+		},
+		get followed() {
+			return fake.followed;
+		}
+	},
+	outbox: {
+		stateOf: () => fake.kept,
+		sendAgain: async () => {
+			fake.sentAgain += 1;
+			fake.kept = null;
+			return [];
+		}
 	},
 	approve: async () => void fake.calls.push('approve'),
 	approveExternally: async () => void fake.calls.push('external'),
@@ -91,11 +111,19 @@ vi.mock('../core/display', () => ({
 	shortenAddress: (a: string) => a.slice(0, 8),
 	tokenInfo: async () => ({ symbol: 'xDAI', decimals: 18 })
 }));
-vi.mock('../core/kernel', () => ({
-	sameAddress: (a?: string | null, b?: string | null) =>
-		!!a && !!b && a.toLowerCase() === b.toLowerCase(),
-	transfersOf: () => []
-}));
+vi.mock('../core/kernel', () => {
+	const same = (a?: string | null, b?: string | null) =>
+		!!a && !!b && a.toLowerCase() === b.toLowerCase();
+	return {
+		sameAddress: same,
+		transfersOf: () => [],
+		memberDrift: (was: { owners: string[] }, is: { owners: string[] }) => ({
+			same:
+				was.owners.length === is.owners.length &&
+				was.owners.every((o) => is.owners.some((x) => same(x, o)))
+		})
+	};
+});
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
@@ -135,6 +163,8 @@ function item(overrides: Record<string, unknown> = {}) {
 		canExecute: [],
 		cancelledBy: null,
 		createdMs: 1,
+		unsent: false,
+		renameUndeployed: false,
 		...overrides
 	};
 }
@@ -183,6 +213,10 @@ beforeEach(() => {
 	fake.vela = [];
 	fake.executed = undefined;
 	fake.executedBy = {};
+	fake.chains = [];
+	fake.followed = null;
+	fake.kept = null;
+	fake.sentAgain = 0;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -430,18 +464,18 @@ describe('a batch of calls (owner, 2026-10-28)', () => {
 describe('a rename on chain (registry v4)', () => {
 	const rename = { review: { action: { kind: 'rename', name: 'Team' }, refusal: null } };
 
-	it('says it runs on the registry’s chain, and deploys the multisig there if it is not yet', async () => {
+	it('says it runs on the registry’s chain — and never that executing deploys it', async () => {
 		fake.chain = {
 			chainId: 100,
 			members: { ...members, deployed: false },
-			items: [item(rename)],
+			items: [item({ ...rename, renameUndeployed: true, canExecute: [] })],
 			mailbox: true
 		};
 		const screen = show();
 		await settle();
 		const where = document.querySelector('[data-testid="rename-where"]')?.textContent ?? '';
 		expect(where).toContain('proposal.renameRuns');
-		expect(where).toContain('proposal.renameDeploys');
+		expect(document.querySelector('[data-testid="rename-undeployed"]')).not.toBeNull();
 		await screen.unmount();
 	});
 
@@ -451,7 +485,7 @@ describe('a rename on chain (registry v4)', () => {
 		await settle();
 		const where = document.querySelector('[data-testid="rename-where"]')?.textContent ?? '';
 		expect(where).toContain('proposal.renameRuns');
-		expect(where).not.toContain('proposal.renameDeploys');
+		expect(document.querySelector('[data-testid="rename-undeployed"]')).toBeNull();
 		await screen.unmount();
 	});
 
@@ -630,5 +664,120 @@ describe('every artwork opens the identicon viewer (founder call, 2026-09-05)', 
 		expect(rows[1].textContent).toContain('external.signWithWallet');
 		expect(document.body.querySelector('button button')).toBeNull();
 		await screen.unmount();
+	});
+});
+
+const STRANGER = '0x00000000000000000000000000000000000000ee';
+const transfer = { kind: 'transfer', token: null, to: TO, amount: '1' };
+
+/** Owners are each network's: what the sheet says about who counts, and where it starts. */
+describe('members per network', () => {
+	it('shows an approval from an account that is no member here as not counted', async () => {
+		fake.chain = {
+			chainId: 100,
+			members,
+			mailbox: true,
+			items: [
+				item({
+					review: { action: transfer, refusal: null },
+					approvals: [{ owner: STRANGER, counts: false, approval: {}, createdMs: 1 }]
+				})
+			]
+		};
+		show();
+		await settle();
+		const line = document.body.querySelector('[data-testid="not-counted"]');
+		expect(line?.textContent).toContain('proposal.notCounted');
+		// Not among the members' rows either: only this network's members are listed.
+		expect(document.body.querySelectorAll('.approvals li')).toHaveLength(2);
+	});
+
+	it('says a new network starts with the original members when another network changed', async () => {
+		const undeployed = { owners: [ME, OTHER], threshold: 2, nonce: 0n, deployed: false };
+		fake.chain = {
+			chainId: 100,
+			members: undeployed,
+			mailbox: true,
+			items: [item({ review: { action: transfer, refusal: null } })]
+		};
+		fake.followed = SAFE;
+		fake.chains = [
+			{ chainId: 100, members: undeployed, items: [] },
+			{ chainId: 10, members: { owners: [ME, STRANGER], threshold: 1, deployed: true }, items: [] }
+		];
+		show();
+		await settle();
+		const notice = document.body.querySelector('[data-testid="starts-original"]');
+		expect(notice?.textContent).toContain('proposal.startsOriginal');
+		expect(notice?.querySelectorAll('li')).toHaveLength(2);
+	});
+
+	it('says nothing of it when every network still has the original members', async () => {
+		const undeployed = { owners: [ME, OTHER], threshold: 2, nonce: 0n, deployed: false };
+		fake.chain = { chainId: 100, members: undeployed, mailbox: true, items: [item()] };
+		fake.followed = SAFE;
+		fake.chains = [
+			{ chainId: 10, members: { owners: [OTHER, ME], threshold: 2, deployed: true }, items: [] }
+		];
+		show();
+		await settle();
+		expect(document.body.querySelector('[data-testid="starts-original"]')).toBeNull();
+	});
+});
+
+describe('a rename (registry v4)', () => {
+	it('never offers to deploy: where it is not deployed, it says so and cannot be executed', async () => {
+		fake.chain = {
+			chainId: 100,
+			members: { ...members, deployed: false },
+			mailbox: true,
+			items: [
+				item({
+					review: { action: { kind: 'rename', name: 'Team treasury' }, refusal: null },
+					renameUndeployed: true,
+					canExecute: [],
+					canApprove: []
+				})
+			]
+		};
+		show();
+		await settle();
+		expect(document.body.querySelector('[data-testid="rename-undeployed"]')?.textContent).toContain(
+			'proposal.renameUndeployed'
+		);
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+	});
+});
+
+describe('what was signed here and the mailbox has not taken', () => {
+	it('says when it is sent again, then offers Send again', async () => {
+		fake.chain = {
+			chainId: 100,
+			members,
+			mailbox: true,
+			items: [item({ unsent: true })]
+		};
+		fake.kept = { why: 'busy', retryAt: Date.now() + 24_000 };
+		const words0 = words();
+		words0.proposal.outboxBusy = 'busy — again in {{seconds}} s';
+		show({ m: words0 });
+		await settle();
+		const line = document.body.querySelector('[data-testid="proposal-unsent"]');
+		expect(line?.textContent).toMatch(/busy — again in 2[34] s/);
+		expect(buttons()).not.toContain('proposal.outboxSendAgain');
+	});
+
+	it('kept, not sent on its own any more: Send again sends what was signed', async () => {
+		fake.chain = { chainId: 100, members, mailbox: true, items: [item({ unsent: true })] };
+		fake.kept = { why: 'busy', retryAt: null };
+		show();
+		await settle();
+		expect(document.body.textContent).toContain('proposal.outboxNotSent');
+		press('proposal.outboxSendAgain');
+		await settle();
+		expect(fake.sentAgain).toBe(1);
+		// Never a second signature: no approve, no passkey.
+		expect(fake.calls).toEqual([]);
 	});
 });

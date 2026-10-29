@@ -19,12 +19,20 @@ const call = (data: string, value = '0') => ({
 	status: 'waiting',
 	canApprove: []
 });
-const seams = vi.hoisted(() => ({ open: [] as unknown[], stale: false, unreachable: false }));
+const seams = vi.hoisted(() => ({
+	open: [] as unknown[],
+	missing: [] as { chainId: number; count: number }[],
+	stale: false,
+	unreachable: false
+}));
 
 vi.mock('./proposals.svelte', () => ({
 	proposals: {
 		get open() {
 			return seams.open;
+		},
+		get missing() {
+			return seams.missing;
 		},
 		get stale() {
 			return seams.stale;
@@ -48,8 +56,13 @@ vi.mock('./call-review.svelte', () => ({
 vi.mock('$lib/flows/marks', () => ({ chainLogoURL: () => null }));
 vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
 vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-fg-muted)' }));
+// The chain index: it knows chain 77777 by name, and not 99999.
+vi.mock('$lib/services/chain-doc', () => ({
+	readChainDoc: async (chainId: number) =>
+		chainId === 77777 ? { kind: 'doc', body: { name: 'Member Chain' } } : { kind: 'absent' }
+}));
 
-const { MULTISIG_RETRY, waitingRows } = await import('./activity.svelte');
+const { MULTISIG_RETRY, missingOfRow, waitingRows } = await import('./activity.svelte');
 
 const m = {
 	action: { call: 'Contract call' },
@@ -59,6 +72,12 @@ const m = {
 		yourTurn: 'Your turn',
 		waiting: 'Waiting',
 		progress: '{{approved}}/{{threshold}}'
+	},
+	proposal: {
+		missingNetworkNamed: 'On {{name}} (chain {{chainId}}) — not here',
+		missingNetwork: 'On chain {{chainId}} — not here',
+		missingCount: 'Waiting there: {{n}}',
+		addNetwork: 'Add network'
 	},
 	panel: { pending: 'Waiting', stale: 'stale' },
 	service: { unreachableNote: 'service away', retry: 'Retry' }
@@ -113,5 +132,39 @@ describe('the waiting group while the multisig service is away', () => {
 		expect(group.action).toBeUndefined();
 		seams.stale = false;
 		expect(waitingRows.group(m)?.note).toBeUndefined();
+	});
+});
+
+/**
+ * Proposals the mailbox holds on a network this device lacks: in the
+ * waiting group, by the chain index's name when it has one, with Add network
+ * — never judged, and never anyone's turn here.
+ */
+describe('proposals on a network this device does not have', () => {
+	it('are a row of their own per network, with the way to add it', async () => {
+		seams.open = [];
+		seams.stale = false;
+		seams.unreachable = false;
+		seams.missing = [
+			{ chainId: 99999, count: 2 },
+			{ chainId: 77777, count: 1 }
+		];
+		waitingRows.follow(m, signing, MULTISIG);
+		await settle();
+		const group = waitingRows.group(m)!;
+		expect(group.rows.map((r) => [r.id, r.title, r.subtitle])).toEqual([
+			['multisig-network:99999', 'On chain 99999 — not here', 'Waiting there: 2 · Add network'],
+			[
+				'multisig-network:77777',
+				'On Member Chain (chain 77777) — not here',
+				'Waiting there: 1 · Add network'
+			]
+		]);
+		// No amount, no progress, no "your turn": nothing about it is counted.
+		expect(group.rows.every((r) => r.amount === '' && !/Your turn|\//.test(r.subtitle))).toBe(true);
+		expect(missingOfRow(group.rows[0].id)).toBe(99999);
+		expect(missingOfRow('multisig:100:0xab')).toBeNull();
+		seams.missing = [];
+		expect(waitingRows.group(m)).toBeNull();
 	});
 });

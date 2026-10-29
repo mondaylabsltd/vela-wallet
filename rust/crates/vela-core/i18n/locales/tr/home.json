@@ -105,7 +105,8 @@
         "yourTurn": "Onayın gerekiyor",
         "waiting": "Diğerleri bekleniyor",
         "queued": "Sırada",
-        "progress": "{{approved}}/{{threshold}} onay"
+        "progress": "{{approved}}/{{threshold}} onay",
+        "unsent": "Henüz gönderilmedi"
       },
       "action": {
         "send": "{{amount}} {{symbol}} gönder",
@@ -169,13 +170,24 @@
         "voidedNote": "#{{nonce}} numarasındaki bir iptal işlemiyle değiştirildi: bu işlem artık hiç çalışamaz.",
         "voidedByOther": "#{{nonce}} numarasındaki başka bir işlemle değiştirildi: bu işlem artık hiç çalışamaz.",
         "notInMailbox": "Bu işlem bu çoklu imzanın posta kutusunda yok. Bağlantıyı gönderen kişiden kontrol etmesini iste.",
-        "unknownNetwork": "Bu bağlantı Vela’da olmayan bir ağ için (zincir {{chainId}}). Ağı Ayarlar’dan ekle, sonra bağlantıyı yeniden aç.",
         "badLink": "Bu çoklu imza işlemi bağlantısı eksik ya da bozuk. Yeniden iste.",
         "previewNote": "Bu cihazdaki hiçbir hesap bu çoklu imzanın üyesi değil. Bağlantıyı açmak onu eklemedi ve hesap değiştirmedi.",
         "watch": "Bu cihaza ekle",
         "watching": "Bu cihazda: hesap listesinde. Gösterilen hesap değişmedi.",
         "renameRuns": "Bu, kayıt defterinin kaydını tuttuğu {{network}} üzerinde çalışır: orada adını yalnızca multisig'in kendisi değiştirebilir.",
-        "renameDeploys": "Multisig henüz {{network}} üzerinde dağıtılmadı. Bunu yürütmek onu önce oluşturulduğu üyelerle oraya dağıtır ve bunun ücretini de yürüten üye öder."
+        "renameUndeployed": "Multisig {{network}} üzerinde dağıtılmadı, bu yüzden bu orada yürütülemez: kaydını yalnızca dağıtılmış multisig yeniden adlandırabilir ve yeniden adlandırma onu asla dağıtmaz.",
+        "startsOriginal": "Bu ağ ilk üyelerle başlar",
+        "startsOriginalNote": "Bunu yürütmek multisig'i burada oluşturulduğu üyelerle dağıtır — {{n}} üyeden {{m}} onayı gerekir — {{networks}} üzerindeki şu anki üyeleriyle değil.",
+        "notCounted": "Sayılmadı — şu anda {{network}} üzerinde üye değil: {{names}}",
+        "missingNetworkNamed": "{{name}} üzerinde (zincir {{chainId}}) — bu cihazda olmayan bir ağ",
+        "missingNetwork": "Zincir {{chainId}} üzerinde — bu cihazda olmayan bir ağ",
+        "missingNetworkBody": "Bir üye bu işlemi bu cihazda olmayan bir ağda önerdi. Burada okuyup onaylamak için ağı ekle; o zamana kadar kontrol edilmez ve sayılmaz.",
+        "missingCount": "Orada bekleyen: {{n}}",
+        "addNetwork": "Ağ ekle",
+        "outboxBusy": "Multisig hizmeti meşgul — {{seconds}} sn sonra yeniden gönderilecek.",
+        "outboxAway": "Multisig hizmetine ulaşılamadı — {{seconds}} sn sonra yeniden gönderilecek.",
+        "outboxNotSent": "Henüz gönderilmedi: multisig hizmeti bunu kabul etmedi. Bu cihazda saklanıyor ve gönderilene kadar diğer üyeler onu göremez.",
+        "outboxSendAgain": "Yeniden gönder"
       },
       "send": {
         "propose": "Öner ve onayla",
@@ -297,11 +309,20 @@
         "backupNote": "Multisig'in kurulumu Ethereum'da da tutulur; böylece oradan bulunup dağıtılabilir. Ücreti bu cihazdaki bir hesap öder.",
         "remove": "Bu cihazdan kaldır",
         "renameTitle": "Kayıt defterindeki adı",
-        "renameNote": "Üyeler ve bu multisig'e bakan herkes bu adı görür. Yeniden adlandırmak, kaydının tutulduğu {{network}} üzerindeki işlemlerinden biridir: üyeler diğerleri gibi onaylar ve yürütüldüğünde multisig henüz yoksa {{network}} üzerinde dağıtılır.",
+        "renameNote": "Üyeler ve bu multisig'e bakan herkes bu adı görür. Yeniden adlandırmak, kaydının tutulduğu {{network}} üzerindeki işlemlerinden biridir: üyeler diğerleri gibi onaylar.",
         "renameAction": "Zincirde yeniden adlandır",
         "renameUnavailable": "Kaydı bu cüzdandaki hiçbir ağda değil, bu yüzden buradan yeniden adlandırılamaz.",
         "shareAgain": "Yeniden paylaş",
-        "shareAgainNote": "Multisig hizmetinde kurulumu yok; eski bir kayıt defterine kaydedilmiş olabilir. Yeniden paylaşmak bir passkey onayı gerektirir."
+        "shareAgainNote": "Multisig hizmetinde kurulumu yok; eski bir kayıt defterine kaydedilmiş olabilir. Yeniden paylaşmak bir passkey onayı gerektirir.",
+        "renameNotDeployed": "Kayıt defterindeki kaydı yalnızca multisig'in kendisi {{network}} üzerinde yeniden adlandırabilir; multisig orada dağıtılmış değil.",
+        "originalMembers": "İlk üyeler",
+        "originalNote": "Oluşturulduğu üyeler. Dağıtılmadığı bir ağ bu üyelerle başlar.",
+        "currentOn": "{{network}} üzerindeki mevcut üyeler",
+        "sameAsOriginal": "İlk üyelerle aynı.",
+        "added": "Eklenenler",
+        "removed": "Çıkarılanlar",
+        "thresholdChanged": "Gereken onay: başlangıçta {{was}}, şimdi {{is}}.",
+        "undeployedOn": "Henüz {{network}} üzerinde dağıtılmadı: orada ilk üyelerle başlayacak."
       },
       "service": {
         "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",

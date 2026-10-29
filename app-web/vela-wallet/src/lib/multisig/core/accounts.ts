@@ -49,6 +49,7 @@ import {
 } from './kernel';
 import { signOwnerProof, type LocalOwner } from './owners';
 import {
+	fetchAllProposals,
 	fetchGenesis,
 	fetchProposals,
 	fetchTask,
@@ -467,16 +468,34 @@ export async function findMultisig(
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
 	const used = await deployedChains(address, chainIds);
-	// The mailbox is asked network by network only when nothing else says:
-	// one read per network the wallet has would spend the service's per-client
-	// budget the person's next read needs.
-	const proposed =
-		used.length === 0 && network === undefined ? await proposalChains(address, chainIds) : [];
+	// The mailbox's proposals on every chain, in one read (a service that has
+	// the list). An older one is asked network by network, and only when
+	// nothing else says: one read per network the wallet has would spend the
+	// service's per-client budget the person's next read needs.
+	const all = await fetchAllProposals(address).catch(() => undefined);
+	const proposed = all
+		? [...new Set(all.proposals.map((p) => p.chainId))]
+		: all === null && used.length === 0 && network === undefined
+			? await proposalChains(address, chainIds)
+			: [];
 	// Where it is used, from what says so (the core's rule): the chains it is
 	// deployed on, those the mailbox holds proposals of it for, then the
-	// network the person (or a link) names. Never the chain its record is on
-	// — the registry is an index — nor the first network of the space shown.
-	const where = multisigNetworks({ deployed: used, proposals: proposed, named: network ?? null });
+	// network the person (or a link) names — those this device has. Never
+	// the chain its record is on — the registry is an index — nor the first
+	// network of the space shown. One it lacks is offered to add once it is
+	// shown (`proposals.missing`), never used here.
+	const have = [
+		...new Set([
+			...chainIds,
+			...[...proposed, ...(network ? [network] : [])].filter((id) => networkForChainId(id) !== null)
+		])
+	];
+	const where = multisigNetworks({
+		deployed: used,
+		proposals: proposed,
+		named: network ?? null,
+		have
+	});
 	if (where.length === 0) return { ok: false, reason: 'chooseNetwork' };
 	const { owners, threshold } = genesisMembers(genesis);
 	return {
@@ -578,8 +597,10 @@ const discovered = new Set<string>();
  * becomes one of its networks here (the core's rule, over what was kept).
  * Read with the wallet's own RPC only — never one mailbox read per network
  * per page, which spent the service's per-client budget the person's own
- * reads need; a network another member proposed on arrives with its link.
- * Quiet on failure; a network that cannot be read adds nothing.
+ * reads need; a network another member proposed on arrives with the
+ * mailbox's cross-chain list (`proposals.refresh`), or with its link from
+ * an older service. Quiet on failure; a network that cannot be read adds
+ * nothing.
  */
 export async function discoverChains(account: MultisigAccount, chainIds: number[]): Promise<void> {
 	const key = account.address.toLowerCase();

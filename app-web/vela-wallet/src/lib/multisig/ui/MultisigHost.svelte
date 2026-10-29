@@ -17,8 +17,11 @@
 	import { spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import { brokenLink, parseAddLink, parseProposalLink, type ProposalLink } from '../core/link';
-	import { chainMeta } from '$lib/services/chains';
-	import { flushOutbox, proposals } from '../core/proposals.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import Button from '$lib/ui/Button.svelte';
+	import { indexName, missingTitle } from '../core/activity.svelte';
+	import { flushOutbox, hasNetwork, proposals } from '../core/proposals.svelte';
 	import { recordExecution, useCancelTitle } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -89,6 +92,7 @@
 		// What each shared multisig's record is now (registry v4: its name may
 		// have changed; the service may have no record of an older registry's).
 		void checkRecords();
+		void resumeLink();
 		void answerLink();
 		const onhash = () => void answerLink();
 		window.addEventListener('hashchange', onhash);
@@ -146,13 +150,16 @@
 			return;
 		}
 		if (!proposal) return;
-		// ms-22: a network the wallet does not have is said in the sheet; the
-		// multisig is not added for it, nor the network taken into its list.
-		if (!chainMeta(proposal.chainId)) {
-			multisigUi.open({
-				kind: 'notice',
-				text: m.proposal.unknownNetwork.replace('{{chainId}}', String(proposal.chainId))
-			});
+		await openProposal(proposal);
+	}
+
+	/** A proposal link's transaction (from the hash, or kept while its network was added). */
+	async function openProposal(proposal: ProposalLink) {
+		// ms-22: a network this device does not have (built in or added) is
+		// said, with Add network; the multisig is not added for it, nor the
+		// network taken into its list. The link opens again once it is added.
+		if (!hasNetwork(proposal.chainId)) {
+			multisigUi.open({ kind: 'missing', chainId: proposal.chainId, link: proposal });
 			return;
 		}
 		// Reading the multisig may take a while (ms-16): said, never a blank wait.
@@ -182,6 +189,54 @@
 			safeTxHash: proposal.safeTxHash,
 			source: opening.source
 		});
+	}
+
+	/** A link whose network the person went to add: opened again once it is there. */
+	const PENDING_LINK_KEY = 'vela.multisigPendingLink';
+
+	async function resumeLink() {
+		let kept: ProposalLink | null;
+		try {
+			kept = JSON.parse(sessionStorage.getItem(PENDING_LINK_KEY) ?? 'null') as ProposalLink | null;
+		} catch {
+			kept = null;
+		}
+		if (!kept || !hasNetwork(kept.chainId) || parseProposalLink(location.hash)) return;
+		try {
+			sessionStorage.removeItem(PENDING_LINK_KEY);
+		} catch {
+			// best effort: it is opened now
+		}
+		await openProposal(kept);
+	}
+
+	/** The name the chain index gives a network this device lacks, for its sheet. */
+	let missingName = $state<string | null>(null);
+	$effect(() => {
+		const open = multisigUi.sheet;
+		missingName = null;
+		if (open?.kind !== 'missing') return;
+		let live = true;
+		void indexName(open.chainId).then((name) => {
+			if (live) missingName = name;
+		});
+		return () => {
+			live = false;
+		};
+	});
+
+	/** Settings → Add network, the chain filled in (the wizard reads it in the chain index). */
+	function addNetwork(chainId: number, link: ProposalLink | undefined) {
+		if (link) {
+			try {
+				sessionStorage.setItem(PENDING_LINK_KEY, JSON.stringify(link));
+			} catch {
+				// not kept: the link is opened again by hand
+			}
+		}
+		multisigUi.close();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Settings, resolved, with its query
+		void goto(`${resolve('/[locale]/settings', { locale })}?addNetwork=${chainId}`);
 	}
 
 	/** ms-21: the person chose to follow the linked multisig here. It is not shown. */
@@ -300,6 +355,16 @@
 			}}
 		/>
 	{/key}
+{:else if sheet?.kind === 'missing'}
+	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
+		<p class="missing-title" data-testid="missing-network">
+			{missingTitle(m, sheet.chainId, missingName)}
+		</p>
+		<p class="notice">{m.proposal.missingNetworkBody}</p>
+		<Button variant="primary" shape="rounded" onclick={() => addNetwork(sheet.chainId, sheet.link)}
+			>{m.proposal.addNetwork}</Button
+		>
+	</Sheet>
 {:else if sheet?.kind === 'notice'}
 	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
 		<p class="notice" role="alert">{sheet.text}</p>
@@ -330,6 +395,13 @@
 {/if}
 
 <style>
+	.missing-title {
+		margin: 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
 	.notice {
 		margin: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

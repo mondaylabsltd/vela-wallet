@@ -1071,8 +1071,20 @@ for (let i = 1; i < PATHS.length; i++) {
 //   rename's review says it runs on the registry's chain and deploys the
 //   multisig there if it is not yet). `settings.renameNote` changes value
 //   only. 2295 − 1 + 3 = 2297 leaves, 121 branches.
-if (PATHS.length !== 2418) fail(`expected 2418 paths (2297 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2297) fail(`expected 2297 leaf paths, got ${leafSet.size}`);
+// 2439 (owners are each network's, a rename never deploys, proposals found
+//   on every chain, 2026-10-29): − `home.multisig.proposal.{renameDeploys,
+//   unknownNetwork}` (a rename's review no longer says executing deploys it;
+//   a link's network this device lacks is the missing-network sheet now),
+//   + `home.multisig.proposal.{renameUndeployed, startsOriginal,
+//   startsOriginalNote, notCounted, missingNetworkNamed, missingNetwork,
+//   missingNetworkBody, missingCount, addNetwork, outboxBusy, outboxAway,
+//   outboxNotSent, outboxSendAgain}`, + `home.multisig.status.unsent`, +
+//   `home.multisig.settings.{renameNotDeployed, originalMembers,
+//   originalNote, currentOn, sameAsOriginal, added, removed,
+//   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
+//   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
+if (PATHS.length !== 2439) fail(`expected 2439 paths (2318 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2318) fail(`expected 2318 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

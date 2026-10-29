@@ -49,7 +49,7 @@
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
 	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
-	import { sameAddress, transfersOf } from '../core/kernel';
+	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
@@ -58,6 +58,7 @@
 		draftCalls,
 		execute,
 		MailboxUnreadableError,
+		outbox,
 		proposals,
 		proposeCancel,
 		type ChainState,
@@ -444,6 +445,58 @@
 		};
 	});
 
+	/** Approvals the mailbox holds from accounts that are not members on this network now. */
+	const notCounted = $derived(
+		(item?.approvals ?? [])
+			.filter((a) => !a.counts && !(members?.owners ?? []).some((o) => sameAddress(o, a.owner)))
+			.map((a) => a.owner)
+	);
+
+	/**
+	 * Its first execution on a network it is not deployed on deploys it there
+	 * with the original members. When another network's members now differ
+	 * from those, the networks where they do — said before anyone executes.
+	 */
+	const startsOriginal = $derived.by(() => {
+		if (!item || !members || members.deployed || item.status === 'done') return [];
+		if (item.canExecute.length === 0 && item.canApprove.length === 0) return [];
+		if (!sameAddress(proposals.followed, account.address)) return [];
+		const original = { owners: account.owners, threshold: account.threshold };
+		return proposals.chains
+			.filter((c) => c.chainId !== chainId && c.members.deployed)
+			.filter((c) => {
+				try {
+					return !memberDrift(original, c.members).same;
+				} catch {
+					return false;
+				}
+			})
+			.map((c) => c.chainId);
+	});
+
+	/** Where what was signed here for it stands, while the mailbox lacks it. */
+	const kept = $derived(
+		item?.unsent ? outbox.stateOf(chainId, account.address, item.safeTxHash) : null
+	);
+	/** A second's tick while a resend is counted down. */
+	let clock = $state(Date.now());
+	$effect(() => {
+		if (!kept?.retryAt) return;
+		const timer = setInterval(() => (clock = Date.now()), 1000);
+		return () => clearInterval(timer);
+	});
+	let resending = $state(false);
+	async function sendAgain() {
+		if (!item) return;
+		resending = true;
+		try {
+			await outbox.sendAgain({ chainId, safe: account.address, hash: item.safeTxHash });
+			await store.refresh(account, account.chainIds);
+		} finally {
+			resending = false;
+		}
+	}
+
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 	const busy = $derived(phase.kind === 'busy');
 	const recipient = $derived(item ? actionRecipient(item.review.action) : null);
@@ -531,13 +584,15 @@
 			</dl>
 			{#if item.review.action?.kind === 'rename'}
 				<!-- A rename runs on the registry's chain, where only the Safe itself
-				     can call it — which may mean deploying it there, said plainly. -->
+				     can call it; it never deploys it there (owner, 2026-10-29). -->
 				<p class="fine" data-testid="rename-where">
 					{fillTemplate(m.proposal.renameRuns, { network: chainName(chainId) })}
-					{#if members && !members.deployed}
-						{fillTemplate(m.proposal.renameDeploys, { network: chainName(chainId) })}
-					{/if}
 				</p>
+				{#if item.renameUndeployed}
+					<p class="warn" role="alert" data-testid="rename-undeployed">
+						{fillTemplate(m.proposal.renameUndeployed, { network: chainName(chainId) })}
+					</p>
+				{/if}
 			{/if}
 			{#if item.review.action?.kind === 'call' && item.review.action.data !== '0x'}
 				<!-- What the call carries, as it will be signed: every member can read it. -->
@@ -616,6 +671,57 @@
 				{/each}
 			</ul>
 		</section>
+
+		{#if notCounted.length > 0}
+			<!-- The mailbox takes any valid signature; only this network's members count. -->
+			<p class="fine" data-testid="not-counted">
+				{fillTemplate(m.proposal.notCounted, {
+					network: chainName(chainId),
+					names: notCounted.map((o) => names.label(o)).join(', ')
+				})}
+			</p>
+		{/if}
+
+		{#if startsOriginal.length > 0}
+			<!-- Executing here deploys it with its genesis: said when its members
+			     changed on another network, so nobody is surprised. -->
+			<section class="starts" data-testid="starts-original">
+				<p class="starts-title">{m.proposal.startsOriginal}</p>
+				<p class="fine">
+					{fillTemplate(m.proposal.startsOriginalNote, {
+						m: account.threshold,
+						n: account.owners.length,
+						networks: startsOriginal.map((id) => chainName(id)).join(', ')
+					})}
+				</p>
+				<ul class="starts-members">
+					{#each account.owners as owner (owner)}
+						<li>
+							<Identicon svg={identiconSvgForClient(owner)} size="compact" address={owner} />
+							<span class="who">{names.label(owner)}</span>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
+
+		{#if item.unsent && phase.kind !== 'sent'}
+			<!-- Signed here, not in the mailbox yet: kept, and sent again — said live. -->
+			<div class="unsent" role="status" data-testid="proposal-unsent">
+				{#if kept?.retryAt}
+					<p class="fine">
+						{fillTemplate(kept.why === 'busy' ? m.proposal.outboxBusy : m.proposal.outboxAway, {
+							seconds: Math.max(1, Math.ceil((kept.retryAt - clock) / 1000))
+						})}
+					</p>
+				{:else}
+					<p class="fine">{m.proposal.outboxNotSent}</p>
+					<Button variant="secondary" shape="rounded" disabled={resending} onclick={sendAgain}
+						>{m.proposal.outboxSendAgain}</Button
+					>
+				{/if}
+			</div>
+		{/if}
 
 		{#if item.status === 'done' && phase.kind !== 'sent'}
 			<!-- Said once it is read from the chain: executed (where), or voided. -->
@@ -847,6 +953,43 @@
 </Sheet>
 
 <style>
+	.starts {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding: var(--space-md);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-lg);
+	}
+
+	.starts-title {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.starts-members {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.starts-members li {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+	}
+
+	.unsent {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
 	.external {
 		padding: 0;
 		border: 0;

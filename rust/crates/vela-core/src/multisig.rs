@@ -1387,10 +1387,30 @@ pub struct ExecutionPlan {
     pub executor: Option<String>,
 }
 
+/// Whether `tx` is the multisig renaming its own record (`rename(name)` to
+/// [`GENESIS_REGISTRY`]).
+fn is_rename(tx: &SafeTx) -> bool {
+    let (Ok(to), Ok(data)) = (addr(&tx.to), unhex(&tx.data)) else {
+        return false;
+    };
+    to == addr(GENESIS_REGISTRY).unwrap_or_default()
+        && data.get(..4) == Some(&selector(RENAME_SIGNATURE)[..])
+}
+
 /// The executor's calls: deploy what has no code yet, then `execTransaction`.
+///
+/// A rename never deploys (owner, 2026-10-29): deploying a multisig on the
+/// registry's chain to rename its record would create it there with its
+/// ORIGINAL members, whoever controls it on its other networks now. A rename
+/// runs only where the multisig is deployed already.
 pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
     let mut calls = Vec::new();
     if let Some(g) = &plan.deploy_multisig {
+        if is_rename(&plan.tx) {
+            return Err(err(
+                "a rename runs only where the multisig is deployed: it never deploys it",
+            ));
+        }
         if genesis_address(g)? != addr(&plan.multisig)?.to_checksum(None) {
             return Err(err("the genesis does not deploy this multisig"));
         }
@@ -2056,6 +2076,10 @@ pub struct NetworkEvidence {
     /// What this device already keeps for it: the network its creator
     /// picked, and every one it was used on here since.
     pub kept: Vec<u64>,
+    /// The networks this device has (built in or added). Given, a network
+    /// it lacks is never one of the multisig's here — nothing can be read
+    /// there — and is listed by [`missing_networks`] instead.
+    pub have: Option<Vec<u64>>,
 }
 
 /// The networks a multisig is used on: where it is deployed, then where the
@@ -2073,11 +2097,65 @@ pub fn multisig_networks(e: &NetworkEvidence) -> Vec<u64> {
         .chain(e.named.iter())
         .chain(&e.kept)
     {
-        if *id > 0 && !out.contains(id) {
+        let here = e.have.as_ref().is_none_or(|have| have.contains(id));
+        if *id > 0 && here && !out.contains(id) {
             out.push(*id);
         }
     }
     out
+}
+
+/// The networks something says the multisig is on — the mailbox's
+/// proposals, a link — that this device does not have (`have`): each once,
+/// in that order. Nothing there is read or judged; the person is offered to
+/// add the network. Empty when `have` is not given.
+pub fn missing_networks(e: &NetworkEvidence) -> Vec<u64> {
+    let Some(have) = &e.have else {
+        return Vec::new();
+    };
+    let mut out: Vec<u64> = Vec::new();
+    for id in e.proposals.iter().chain(e.named.iter()) {
+        if *id > 0 && !have.contains(id) && !out.contains(id) {
+            out.push(*id);
+        }
+    }
+    out
+}
+
+/// How a network's members now differ from the ones a multisig was created
+/// with (its genesis): who was added, who removed, and the threshold before
+/// and now. Owners compare by address, whatever their case.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDrift {
+    /// Nothing differs.
+    pub same: bool,
+    /// Members now who were not among the original ones, in today's order.
+    pub added: Vec<String>,
+    /// Original members who are no longer members, in the original order.
+    pub removed: Vec<String>,
+    pub threshold_was: u64,
+    pub threshold_is: u64,
+}
+
+pub fn member_drift(
+    original: &[String],
+    original_threshold: u64,
+    current: &[String],
+    current_threshold: u64,
+) -> Result<MemberDrift, CoreError> {
+    let parse = |list: &[String]| list.iter().map(|o| addr(o)).collect::<Result<Vec<_>, _>>();
+    let (was, is) = (parse(original)?, parse(current)?);
+    let shown = |a: &Address| a.to_checksum(None);
+    let added: Vec<String> = is.iter().filter(|a| !was.contains(a)).map(shown).collect();
+    let removed: Vec<String> = was.iter().filter(|a| !is.contains(a)).map(shown).collect();
+    Ok(MemberDrift {
+        same: added.is_empty() && removed.is_empty() && original_threshold == current_threshold,
+        added,
+        removed,
+        threshold_was: original_threshold,
+        threshold_is: current_threshold,
+    })
 }
 
 /// The one door the shells use: `method` and its arguments as a JSON object,
@@ -2224,6 +2302,15 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
         "multisigNetworks" => out(serde_json::json!(multisig_networks(&arg(
             &args, "evidence"
         )?))),
+        "missingNetworks" => out(serde_json::json!(missing_networks(&arg(
+            &args, "evidence"
+        )?))),
+        "memberDrift" => out(json(&member_drift(
+            &arg::<Vec<String>>(&args, "original")?,
+            arg(&args, "originalThreshold")?,
+            &arg::<Vec<String>>(&args, "current")?,
+            arg(&args, "currentThreshold")?,
+        )?)),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]
         "serviceAnswer" => out(json(&crate::app::genesis_service::service_answer(
@@ -2368,6 +2455,7 @@ mod tests {
                 proposals: vec![8453, 10],
                 named: Some(137),
                 kept: vec![137, 1],
+                have: None,
             }),
             vec![42161, 8453, 10, 137, 1]
         );
@@ -2386,6 +2474,75 @@ mod tests {
         )
         .unwrap();
         assert_eq!(answer, "[10,42161]");
+    }
+
+    /// Proposals (or a link) on a network this device lacks: never one of
+    /// its networks here — nothing can be read there — but listed, so the
+    /// person can add it.
+    #[test]
+    fn a_network_this_device_lacks_is_missing_not_used() {
+        let e = NetworkEvidence {
+            deployed: vec![100],
+            proposals: vec![100, 99999, 8453],
+            named: Some(77777),
+            kept: vec![1],
+            have: Some(vec![100, 8453, 1]),
+        };
+        assert_eq!(multisig_networks(&e), vec![100, 8453, 1]);
+        assert_eq!(missing_networks(&e), vec![99999, 77777]);
+        // Without `have`, nothing is missing and every network is used.
+        let all = NetworkEvidence { have: None, ..e };
+        assert_eq!(missing_networks(&all), Vec::<u64>::new());
+        assert_eq!(multisig_networks(&all), vec![100, 99999, 8453, 77777, 1]);
+        let answer = call_json(
+            "missingNetworks",
+            r#"{"evidence":{"proposals":[10,99999],"have":[10]}}"#,
+        )
+        .unwrap();
+        assert_eq!(answer, "[99999]");
+    }
+
+    #[test]
+    fn member_drift_names_who_was_added_and_removed() {
+        let original = vec![A.to_string(), B.to_string()];
+        let same = member_drift(&original, 2, &[B.to_lowercase(), A.to_lowercase()], 2).unwrap();
+        assert!(
+            same.same,
+            "the same members in another order and case are the same"
+        );
+        let c = "0x00000000000000000000000000000000000000c3";
+        let swapped = member_drift(&original, 2, &[A.to_string(), c.to_string()], 1).unwrap();
+        assert!(!swapped.same);
+        assert_eq!(swapped.added, vec![addr(c).unwrap().to_checksum(None)]);
+        assert_eq!(swapped.removed, vec![addr(B).unwrap().to_checksum(None)]);
+        assert_eq!((swapped.threshold_was, swapped.threshold_is), (2, 1));
+        assert!(!member_drift(&original, 2, &original, 1).unwrap().same);
+        assert!(member_drift(&original, 2, &["nope".to_string()], 1).is_err());
+        let answer = call_json(
+            "memberDrift",
+            &serde_json::json!({"original": [A], "originalThreshold": 1, "current": [A, c], "currentThreshold": 1})
+                .to_string(),
+        )
+        .unwrap();
+        assert!(answer.contains(r#""same":false"#) && answer.contains(r#""thresholdIs":1"#));
+    }
+
+    /// A rename never deploys: executed where the multisig has no code, it
+    /// would create it there with its original members.
+    #[test]
+    fn a_rename_is_never_executed_with_a_deployment() {
+        let ms = salted(&[A.into(), B.into()], 1, "0x7").unwrap();
+        let plan = |deploy: bool| ExecutionPlan {
+            multisig: ms.address.clone(),
+            deploy_multisig: deploy.then(|| ms.genesis.clone()),
+            deploy_owners: vec![],
+            tx: rename_tx("Team treasury", "0").unwrap(),
+            approvals: vec![],
+            executor: Some(A.into()),
+        };
+        let refused = execution_calls(&plan(true)).unwrap_err();
+        assert!(format!("{refused:?}").contains("never deploys"));
+        assert_eq!(execution_calls(&plan(false)).unwrap().len(), 1);
     }
 
     #[test]

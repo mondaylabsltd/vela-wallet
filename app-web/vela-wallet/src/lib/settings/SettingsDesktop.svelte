@@ -251,6 +251,14 @@
 	 * `false` when the desktop has no such panel.
 	 */
 	export function open(id: string): boolean {
+		// Add network is the networks panel's dialog here, opened as its button does.
+		if (id === 'add-network') {
+			closeOverlay();
+			openPage('networks');
+			onnetevent?.({ kind: 'open-add' });
+			overlay = 'add-network';
+			return true;
+		}
 		const panel = id === 'signing-venue' ? 'account' : id;
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
 		if (panel === 'sites' && sites === undefined) return false;

@@ -3337,6 +3337,21 @@ describe('a multisig send', () => {
 		expect(confirm.facts.some((fact) => fact.label === m['send.estFeeLabel'])).toBe(false);
 	});
 
+	it("says the rule of the send's network, as its members are there now", () => {
+		const base = multisig({ selected_token: ETH, fee: QUOTE });
+		const chain = ETH.chain_id;
+		const on = (members: { threshold: number; owners: number } | null) => ({
+			...base,
+			multisig: { ...base.multisig!, membersOn: (id: number) => (id === chain ? members : null) }
+		});
+		// A member added and the threshold lowered on this network.
+		expect(liveSendForm(formModel(), on({ threshold: 1, owners: 4 })).fee.value).toBe(
+			'1 of 4 members approve'
+		);
+		// Nothing read there: the multisig's own rule (what it starts with).
+		expect(liveSendForm(formModel(), on(null)).fee.value).toBe('2 of 3 members approve');
+	});
+
 	it('a Vela account send is untouched', () => {
 		const fee = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE })).fee;
 		expect(fee.plain).toBeUndefined();

@@ -36,6 +36,18 @@ export class ServiceUnavailableError extends Error {
 	}
 }
 
+/**
+ * A write the service is over its limit for (`429`): never a failure — what
+ * was signed is kept and sent again after `waitMs` (what the service said,
+ * else `null`: the caller backs off on its own).
+ */
+export class ServiceBusyError extends ServiceUnavailableError {
+	constructor(readonly waitMs: number | null) {
+		super('busy (HTTP 429)');
+		this.name = 'ServiceBusyError';
+	}
+}
+
 interface Answer<T> {
 	status: number;
 	body: T;
@@ -71,7 +83,7 @@ export function retryAfterMs(header: string | null, body = ''): number | null {
 async function request<T>(
 	path: string,
 	init?: RequestInit,
-	{ background = false }: { background?: boolean } = {}
+	{ background = false, write = false }: { background?: boolean; write?: boolean } = {}
 ): Promise<Answer<T>> {
 	let last = 'no attempt';
 	for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
@@ -102,10 +114,18 @@ async function request<T>(
 				continue;
 			}
 			const text = await response.text();
-			// Over the service's per-client limit: a short wait is waited out
-			// once more; a long one is the answer (`429`), said as it is.
 			const wait =
 				response.status === 429 ? retryAfterMs(response.headers.get('retry-after'), text) : null;
+			if (response.status === 429) {
+				// A write over the limit is the caller's to send again, on the
+				// service's word, with what it signed (never a failure).
+				if (write) throw new ServiceBusyError(wait);
+				// Over it for reads: the rounds nobody waits on pause until it
+				// says (`serviceOutage.busy`), quietly — it is there, only busy.
+				serviceOutage.busy(Date.now() + (wait ?? RETRY_AFTER_MAX_MS));
+			}
+			// Over the service's per-client limit: a short wait is waited out
+			// once more; a long one is the answer (`429`), said as it is.
 			if (wait !== null && wait <= RETRY_AFTER_MAX_MS && attempt < ATTEMPTS - 1) {
 				last = 'HTTP 429';
 				await new Promise((r) => setTimeout(r, wait));
@@ -114,6 +134,7 @@ async function request<T>(
 			const body = JSON.parse(text) as T;
 			return { status: response.status, body };
 		} catch (error) {
+			if (error instanceof ServiceBusyError) throw error;
 			last = error instanceof Error ? error.message : String(error);
 		} finally {
 			clearTimeout(timer);
@@ -291,10 +312,11 @@ export async function importGenesis(req: {
 	ownerProof?: OwnerProof;
 	name?: string;
 }): Promise<ImportAnswer> {
-	const { status, body } = await request<Record<string, unknown>>('/api/import', {
-		method: 'POST',
-		body: JSON.stringify(req)
-	});
+	const { status, body } = await request<Record<string, unknown>>(
+		'/api/import',
+		{ method: 'POST', body: JSON.stringify(req) },
+		{ write: true }
+	);
 	if (status === 422) return { status: 'refused', refusal: body.refusal };
 	if (status >= 400) return { status: 'error', error: String(body.error ?? `HTTP ${status}`) };
 	return body as unknown as ImportAnswer;
@@ -361,6 +383,66 @@ export async function fetchProposals(
 	return body;
 }
 
+/** How many proposals {@link fetchAllProposals} asks for at once (the service's most). */
+const ALL_PAGE = 100;
+/** The most pages it reads: 1,000 proposals in 30 days is a list nobody reads anyway. */
+const ALL_PAGES = 10;
+
+/** The services found without the cross-chain list this session (an older build). */
+const withoutAll = new Set<string>();
+
+export interface AllProposalsAnswer {
+	/** Every proposal the mailbox holds for it, on every chain, each with its `chainId`. */
+	proposals: Proposal[];
+	/** The chains they are on, with how many each. */
+	chains: { chainId: number; count: number }[];
+}
+
+/**
+ * Every proposal the mailbox holds for `safe`, on EVERY chain it took one
+ * for (`GET /api/proposals/{safe}` without `chainId`) — one read where the
+ * per-chain list would be one per network, and the way to find a proposal
+ * on a network where the multisig is not deployed, or one this device does
+ * not have. `null`: this service has no such list (an older build answers
+ * the route `404`, or `400` for the missing `chainId`) — the caller asks
+ * network by network as before; it is asked again only when the service
+ * changes. A safe the mailbox holds nothing for is an empty list.
+ */
+export async function fetchAllProposals(
+	safe: string,
+	options?: { background?: boolean }
+): Promise<AllProposalsAnswer | null> {
+	const url = genesisServiceURL();
+	if (withoutAll.has(url)) return null;
+	const proposals: Proposal[] = [];
+	let chains: AllProposalsAnswer['chains'] = [];
+	for (let page = 0; page < ALL_PAGES; page += 1) {
+		const offset = page * ALL_PAGE;
+		const { status, body } = await request<{
+			total?: number;
+			chains?: AllProposalsAnswer['chains'];
+			proposals?: Proposal[];
+		}>(`/api/proposals/${safe}?offset=${offset}&limit=${ALL_PAGE}`, undefined, options);
+		if (status === 404 || status === 400) {
+			withoutAll.add(url);
+			return null;
+		}
+		if (status !== 200 || !Array.isArray(body.proposals)) {
+			throw new ServiceUnavailableError(`HTTP ${status}`);
+		}
+		proposals.push(...body.proposals);
+		if (page === 0) chains = Array.isArray(body.chains) ? body.chains : [];
+		const total = typeof body.total === 'number' ? body.total : proposals.length;
+		if (body.proposals.length === 0 || proposals.length >= total) break;
+	}
+	return { proposals, chains };
+}
+
+/** For tests: forget which services lacked the cross-chain list. */
+export function resetAllProposalsForTests(): void {
+	withoutAll.clear();
+}
+
 export type SubmitAnswer =
 	| { ok: true; status: 'created' | 'approved' | 'unchanged'; proposal: Proposal }
 	| { ok: false; refusal: unknown };
@@ -374,10 +456,11 @@ export async function submitApproval(req: {
 	/** The multisig's genesis: lets the mailbox take a proposal before the registry holds the record. */
 	genesis?: Genesis;
 }): Promise<SubmitAnswer> {
-	const { status, body } = await request<Record<string, unknown>>('/api/proposals', {
-		method: 'POST',
-		body: JSON.stringify(req)
-	});
+	const { status, body } = await request<Record<string, unknown>>(
+		'/api/proposals',
+		{ method: 'POST', body: JSON.stringify(req) },
+		{ write: true }
+	);
 	if (status === 200 || status === 201) {
 		return {
 			ok: true,
@@ -386,5 +469,10 @@ export async function submitApproval(req: {
 		};
 	}
 	if (status === 422) return { ok: false, refusal: body.refusal };
+	// It answered, and not with a wait: a request it will not take as it is
+	// (an unknown Safe, a malformed body) — its answer, never sent again.
+	if (status >= 400 && status < 500) {
+		return { ok: false, refusal: { kind: 'error', status, error: body.error ?? null } };
+	}
 	throw new ServiceUnavailableError(String(body.error ?? `HTTP ${status}`));
 }
