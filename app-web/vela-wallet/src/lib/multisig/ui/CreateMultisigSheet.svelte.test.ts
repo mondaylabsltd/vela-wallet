@@ -16,34 +16,44 @@ const ME = '0x00000000000000000000000000000000000000aa';
 const TWO = '0x00000000000000000000000000000000000000bb';
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 
-vi.mock('$lib/onboarding/core/storage', () => ({
+vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/onboarding/core/storage')>()),
 	loadAccounts: () => [
 		{ address: ME, name: 'Mine' },
 		{ address: TWO, name: 'Two' }
 	]
 }));
-vi.mock('$lib/services/networks', () => ({
+vi.mock('$lib/services/networks', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/networks')>()),
 	spaceNetworksSync: () => [{ chainId: 100, displayName: 'Gnosis' }]
 }));
-vi.mock('../core/accounts', () => ({
+vi.mock('../core/accounts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/accounts')>()),
 	newSaltNonce: () => '1',
 	draftGenesis: () => ({ address: SAFE }),
 	createMultisig: async () => ({ address: SAFE })
 }));
-vi.mock('../core/owners', () => ({
+vi.mock('../core/owners', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/owners')>()),
 	localOwners: (owners: string[]) =>
 		owners.map((address) => ({ address, name: address.slice(0, 6), account: { address } }))
 }));
-vi.mock('../core/display', () => ({
+vi.mock('../core/display', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/display')>()),
 	memberLabel: (a: string) => a.slice(0, 6),
 	shortenAddress: (a: string) => a.slice(0, 8)
 }));
-vi.mock('../core/kernel', () => ({
+vi.mock('../core/kernel', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/kernel')>()),
 	sameAddress: (a: string, b: string) => a.toLowerCase() === b.toLowerCase(),
 	validName: () => true
 }));
-vi.mock('../core/members', () => ({ memberProblem: () => null }));
-vi.mock('$lib/wallet/identicon', () => ({
+vi.mock('../core/members', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../core/members')>()),
+	memberProblem: () => null
+}));
+vi.mock('$lib/wallet/identicon', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/wallet/identicon')>()),
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 
