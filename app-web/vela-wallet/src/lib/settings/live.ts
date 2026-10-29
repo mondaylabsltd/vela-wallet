@@ -1439,6 +1439,7 @@ export function liveAccountsSheet(
 		primary: m.createNew,
 		secondary: m.signInExisting,
 		remove: m.remove,
+		removeNamed: m.removeNamed,
 		removeBody: m.removeBody,
 		removeCancel: m.cancel
 	};
@@ -1464,6 +1465,7 @@ export function withLiveAccounts(
 			// ob-14: an account can be removed from Settings as from the
 			// header's switcher — the same ×, the same confirm.
 			remove: m.accounts.remove,
+			removeNamed: m.accounts.removeNamed,
 			removeBody: m.accounts.removeBody,
 			removeCancel: m.accounts.cancel
 		}
@@ -1483,6 +1485,7 @@ export function withLiveAccountsDesktop(
 			summary: liveAccountsSummary(input, m.accounts),
 			rows: liveAccountRows(input, m.accounts.syncing),
 			remove: m.accounts.remove,
+			removeNamed: m.accounts.removeNamed,
 			removeBody: m.accounts.removeBody,
 			removeCancel: m.accounts.cancel
 		}

@@ -13,7 +13,8 @@
 	let { title, action, note, onaction }: Props = $props();
 </script>
 
-<header class="section">
+<!-- A div, not a <header>: a list's title row is no banner landmark. -->
+<div class="section">
 	<h2>{title}</h2>
 	{#if note !== undefined}
 		<span class="note">{note}</span>
@@ -24,7 +25,7 @@
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>
 	{/if}
-</header>
+</div>
 
 <style>
 	.section {

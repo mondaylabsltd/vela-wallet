@@ -11,6 +11,7 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import type { AccountsSheetModel } from '../model';
+	import { fillTemplate } from '$lib/i18n/fill';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -96,7 +97,9 @@
 				<button
 					type="button"
 					class="remove"
-					aria-label={sheet.remove}
+					aria-label={sheet.removeNamed
+						? fillTemplate(sheet.removeNamed, { name: row.name })
+						: sheet.remove}
 					onclick={() => (removing = i)}
 				>
 					<Icon icon={UTILITY_ICONS['x']} size="md" />
@@ -142,11 +145,17 @@
 	.summary {
 		margin: 0 0 var(--space-lg);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
+	/* r4D-12: never drawn smaller than the target floor (--size-targetMin). */
 	.remove {
 		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--size-targetMin);
+		min-height: var(--size-targetMin);
 		padding: var(--space-xs);
 		border: 0;
 		background: none;
@@ -240,12 +249,12 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.note {
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.amount {

@@ -173,6 +173,7 @@
 	--layout-contactsMenuW: 216px; /* web addition: spec 018 research D9: dropdown/context menu width (M1/M2) */
 	--color-onAccent: #FFFFFF; /* web addition: CTA label on accent.base, white in BOTH modes per mocks (fg.inverse flips) */
 	--opacity-hover: 0.92; /* web addition: pointer hover feedback; no export token exists for hover */
+	--size-targetMin: 24px; /* web addition: r4D-12: the smallest box a control is ever drawn in — WCAG 2.2 SC 2.5.8 (target size, minimum). A control drawn smaller than a fingertip still TAKES `--size-hitTarget` through `data-tap`; this is the floor of what it measures */
 	--color-viewerInk: #000000; /* web addition: 078 §C: the screenshot viewer's ground — pure black in BOTH themes, as every platform's photo viewer is, so a screenshot is judged against nothing */
 	--color-onViewer: #FFFFFF; /* web addition: 078 §C: the viewer's ✕, counter and arrows — white on its black in both themes */
 	--color-viewerDanger: #F87171; /* web addition: 078 §C: the viewer's Remove — the DARK theme's error.base, fixed, because the viewer is dark in both themes and the light theme's red fails on black (7.6:1 here) */
@@ -203,6 +204,9 @@
 	--color-fixed-desktopCanvas: #E8E8E8;
 	--color-fixed-splashBg: #1A1A18;
 	--color-fixed-androidAdaptiveIconBg: #0A1929;
+	--color-accent-fill: #BF441C; /* web addition (per mode): r4D-11: the value button’s fill (Button `value`) — accent.base one step darker, so its white label is 4.5:1 or more, at rest and under the hover dim, in both themes */
+	--color-error-fill: #D42A2A; /* web addition (per mode): r4D-11: a destructive button’s fill (Button `danger`) — light is error.base itself (5.6:1 under white); dark’s error.base is a text red (2.8:1 under white), so dark fills a step deeper */
+	--color-success-text: #3DA872; /* web addition (per mode): r4D-11: success as small TEXT (an incoming amount, “Approved”) — light success.base is 3.9:1 on the page, this is 4.5:1 or more on every light surface; dark keeps success.base, already 5:1 or more */
 }
 
 /* mode-light via system preference; a future in-app theme setting flips
@@ -236,6 +240,9 @@
 		--color-fixed-desktopCanvas: #E8E8E8;
 		--color-fixed-splashBg: #1A1A18;
 		--color-fixed-androidAdaptiveIconBg: #0A1929;
+		--color-accent-fill: #BF441C;
+		--color-error-fill: #C62828;
+		--color-success-text: #237A50;
 	}
 }
 
@@ -267,6 +274,9 @@
 	--color-fixed-desktopCanvas: #E8E8E8;
 	--color-fixed-splashBg: #1A1A18;
 	--color-fixed-androidAdaptiveIconBg: #0A1929;
+	--color-accent-fill: #BF441C;
+	--color-error-fill: #C62828;
+	--color-success-text: #237A50;
 }
 
 :root[data-theme='dark'] {
@@ -297,4 +307,7 @@
 	--color-fixed-desktopCanvas: #E8E8E8;
 	--color-fixed-splashBg: #1A1A18;
 	--color-fixed-androidAdaptiveIconBg: #0A1929;
+	--color-accent-fill: #BF441C;
+	--color-error-fill: #D42A2A;
+	--color-success-text: #3DA872;
 }

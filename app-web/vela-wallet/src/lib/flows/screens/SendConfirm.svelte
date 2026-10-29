@@ -241,7 +241,7 @@
 		padding-top: var(--space-xs);
 		font-family: var(--font-numeric);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	ul {
@@ -313,7 +313,7 @@
 		padding-bottom: var(--space-lg);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 	/* The first-time tell, under the facts it is about, in the warning colour:
 	   a never-before-paid address is what a poisoned look-alike is. */
@@ -339,7 +339,7 @@
 		padding-inline: var(--space-lg);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 	.check p {
 		margin: 0;

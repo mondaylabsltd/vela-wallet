@@ -203,7 +203,7 @@ test('an outside owner on Arc Testnet signs with their own wallet', async ({ bro
 	});
 
 	await test.step('the funder signs through the connect page; Alice executes', async () => {
-		await page.getByRole('button', { name: 'Sign with another wallet' }).first().click();
+		await page.getByRole('button', { name: 'Approve with another wallet' }).first().click();
 		const link = (await page.getByTestId('external-link').textContent())!.trim();
 		// ms-14: the member asked for rides in the fragment, never the query.
 		expect(new URL(link).search).toBe('');

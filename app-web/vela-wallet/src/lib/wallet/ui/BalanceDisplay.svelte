@@ -344,7 +344,7 @@
 	.label {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		letter-spacing: var(--letterSpacing-sectionLabel);
 	}
 
@@ -573,7 +573,7 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		cursor: pointer;
 		border-radius: var(--radius-sm);
 		transition: color var(--motion-hover) ease-out;

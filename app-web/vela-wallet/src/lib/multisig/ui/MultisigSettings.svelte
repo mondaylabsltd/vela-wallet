@@ -367,6 +367,7 @@
 					<span>{m.create.name}</span>
 					<input
 						class="name-field"
+						data-field
 						placeholder={m.create.namePlaceholder}
 						autocomplete="off"
 						bind:value={newName}
@@ -507,7 +508,7 @@
 	.gone .name,
 	.gone .address {
 		text-decoration: line-through;
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.members {
@@ -542,7 +543,7 @@
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.here {
@@ -598,7 +599,7 @@
 	}
 
 	.state.done {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.chev {

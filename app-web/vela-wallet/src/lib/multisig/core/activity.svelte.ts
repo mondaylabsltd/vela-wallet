@@ -233,12 +233,16 @@ class WaitingRows {
 				id: proposalRowId(item),
 				kind: 'sent',
 				title: drawn?.title ?? '…',
+				// r4D-13: ONE word about where it stands, so the line fits two
+				// lines on a 320-wide phone. "Ready to execute" already says every
+				// approval is in, "Needs your approval" is the one thing to do,
+				// "Queued" waits on another; only a plain wait says its count
+				// ("1/2 approved"), which says "waiting for others" by itself.
 				subtitle: [
 					drawn?.source,
-					statusOf(m, item, this.#multisig),
+					standing(m, item, this.#multisig),
 					// r4b-6: proposals at one number — only one of them can run.
 					item.sameNonce.length > 0 ? m.status.conflict : null,
-					progressLine(m, item.approved, item.threshold),
 					// r4a-1: the rule it meets and the one it leaves.
 					change?.rule,
 					// vis-18: whom a transfer goes to, as a Vela account's row
@@ -409,7 +413,11 @@ function blockedLine(
 	});
 }
 
-function statusOf(m: MultisigMessages, item: ProposalItem, multisigAddress: string | null): string {
+/**
+ * An Activity row's one word on where it stands (see `group`): a plain wait
+ * is said by its count, which already says "waiting for others".
+ */
+function standing(m: MultisigMessages, item: ProposalItem, multisigAddress: string | null): string {
 	// Signed here, not in the mailbox yet: the one thing to know about it.
 	if (item.unsent) return m.status.unsent;
 	// r4b-7: sent from here and may still land — not offered again.
@@ -417,7 +425,8 @@ function statusOf(m: MultisigMessages, item: ProposalItem, multisigAddress: stri
 	if (item.status === 'queued') return m.status.queued;
 	if (item.status === 'ready') return blockedLine(m, item, multisigAddress) ?? m.status.ready;
 	if (item.canApprove.length > 0) return m.status.yourTurn;
-	return m.status.waiting;
+	// r4b-17: never "3/2".
+	return progressLine(m, item.approved, item.threshold);
 }
 
 export const waitingRows = new WaitingRows();

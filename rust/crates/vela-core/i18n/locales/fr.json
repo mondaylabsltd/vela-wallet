@@ -34,6 +34,7 @@
       "switch": "Changer de compte",
       "contactsSubtitle": "Adresses enregistrées et destinataires récents",
       "remove": "Retirer de cet appareil",
+      "removeNamed": "Retirer {{name}} de cet appareil",
       "removeBody": "Seul ce portefeuille part, les autres restent.",
       "openInSafe": "Ce compte est un Safe standard — vous pouvez aussi l’ouvrir dans {{app}}"
     },

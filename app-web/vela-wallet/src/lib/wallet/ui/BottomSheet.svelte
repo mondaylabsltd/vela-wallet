@@ -907,7 +907,9 @@
 		     stays, so the layout above the content does not move. -->
 		<span class="handle" class:inert={explicitOnly} aria-hidden="true" data-sheet-grip></span>
 		{#if !hideTitle}
-			<header data-sheet-grip>
+			<!-- A div, not a <header>: a sheet is a dialog, and its title row is
+			     no second banner beside the page's own. -->
+			<div class="head" data-sheet-grip>
 				<h2>{title}</h2>
 				{#if trailingIcon === 'search'}
 					<span class="trailing"><Icon icon={UTILITY_ICONS.search} size="lg" /></span>
@@ -923,7 +925,7 @@
 						<Icon icon={UTILITY_ICONS.x} size="lg" />
 					</button>
 				{/if}
-			</header>
+			</div>
 		{/if}
 		<div class="content" bind:this={scroller}>
 			{@render children()}
@@ -1003,7 +1005,7 @@
 	/* The grabber and the title row are the sheet's to drag: no browser
 	   panning there, the finger is ours from the first pixel. */
 	.handle,
-	header {
+	.head {
 		touch-action: none;
 	}
 
@@ -1041,7 +1043,7 @@
 		overscroll-behavior: contain;
 	}
 
-	header {
+	.head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;

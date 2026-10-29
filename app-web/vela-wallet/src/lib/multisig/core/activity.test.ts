@@ -134,10 +134,10 @@ describe('a waiting contract call in Activity', () => {
 		await settle();
 		const rows = waitingRows.group(m)!.rows;
 		expect(rows[0].title).toBe('Approve');
-		expect(rows[0].subtitle).toBe('Read by Vela, from the transaction · Waiting · 1/2 · Gnosis');
+		expect(rows[0].subtitle).toBe('Read by Vela, from the transaction · 1/2 · Gnosis');
 		// Nobody could read it: the multisig's own line, and no source.
 		expect(rows[1].title).toBe('Contract call');
-		expect(rows[1].subtitle).toBe('Waiting · 1/2 · Gnosis');
+		expect(rows[1].subtitle).toBe('1/2 · Gnosis');
 	});
 
 	it('keeps the coin a call sends in its amount, not twice in its title', async () => {

@@ -16,6 +16,20 @@ export const MOTION = { fast: 150, base: 250, slow: 400 } as const;
 /** Web addition: CTA label color on accent surfaces, both modes (see tokens.css). */
 export const ON_ACCENT = '#FFFFFF';
 
+/** Web additions that flip per mode (see tokens.css), for the contrast gate. */
+export const WEB_COLORS = {
+	light: {
+		'color-accent-fill': '#BF441C',
+		'color-error-fill': '#C62828',
+		'color-success-text': '#237A50'
+	},
+	dark: {
+		'color-accent-fill': '#BF441C',
+		'color-error-fill': '#D42A2A',
+		'color-success-text': '#3DA872'
+	}
+} as const;
+
 /** Raw per-mode color tables (path -> value) for the contrast gate. */
 export const COLORS = {
 	light: {

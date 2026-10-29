@@ -34,6 +34,7 @@
       "switch": "Cambiar de cuenta",
       "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
       "remove": "Quitar de este dispositivo",
+      "removeNamed": "Quitar {{name}} de este dispositivo",
       "removeBody": "Solo se va esta cartera; las demás se quedan.",
       "openInSafe": "Esta cuenta es un Safe estándar: también puedes abrirla en {{app}}"
     },

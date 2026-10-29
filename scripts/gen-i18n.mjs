@@ -1169,8 +1169,20 @@ for (let i = 1; i < PATHS.length; i++) {
 //   value only. 2318 − 1 + 25 + 4 + 10 + 1 + 8 = 2365 leaves, 123 branches.
 // 2649 (the above on 2600, merged): 2473 − 1 + 48 = 2520 leaves, 127 + 2 =
 //   129 branches.
-if (PATHS.length !== 2649) fail(`expected 2649 paths (2520 leaf + 129 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2520) fail(`expected 2520 leaf paths, got ${leafSet.size}`);
+// 2442 (round 4, accessibility and words, 2026-10-29): + `settings.account.
+//   removeNamed` (the switcher's ✕ names the account it removes), +
+//   `home.multisig.create.networkHint` (what "First network" means), +
+//   `home.multisig.action.numberValue` (a transaction's number in the
+//   locale's own form, "#0" / "Nr. 0", not "Transaction # 0").
+//   `panel.title`, `action.number`, `action.rename`, `create.order`,
+//   `create.thresholdAll`, `settings.{renameTitle, renameAction, backupTitle,
+//   renameNotDeployed}`, `proposal.{renameRuns, renameUndeployed}`,
+//   `external.{signWithWallet, sheetTitle, signedBy, pageTitle, signTx}` and
+//   `panel.readOnly` change value only. 2318 + 3 = 2321 leaves, 121 branches.
+// 2651 (the above on 2649, merged): r4-create added `create.networkHint` too
+//   (one key, r4-a11y's words), so 2520 + 2 = 2522 leaves, 129 branches.
+if (PATHS.length !== 2651) fail(`expected 2651 paths (2522 leaf + 129 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2522) fail(`expected 2522 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 129) fail(`expected 129 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

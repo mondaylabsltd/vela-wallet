@@ -97,7 +97,7 @@
 
 	.label {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	/* The typed address reads as the drawn one: mono, the text's own colour
@@ -178,7 +178,7 @@
 
 	.note {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.note.warn {

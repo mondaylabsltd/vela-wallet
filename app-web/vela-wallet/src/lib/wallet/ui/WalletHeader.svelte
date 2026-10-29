@@ -184,6 +184,8 @@
 		z-index: 1;
 		display: flex;
 		align-items: center;
+		/* r4D-12: never smaller than --size-targetMin (the line is 20). */
+		min-height: var(--size-targetMin);
 		gap: var(--space-sm);
 		max-width: 100%;
 		padding: 0;
@@ -259,13 +261,15 @@
 		background: none;
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.copy {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-xs);
+		/* r4D-12: never smaller than --size-targetMin (the line is 14). */
+		min-height: var(--size-targetMin);
 		cursor: pointer;
 	}
 
@@ -289,11 +293,11 @@
 		gap: var(--space-xs) var(--space-sm);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.sync.stalled {
-		color: var(--color-fg-muted);
+		color: var(--color-fg-base);
 	}
 
 	.retry {
@@ -319,23 +323,40 @@
 	/* A multisig's mark: a small soft disc tucked on the artwork's lower
 	   edge, set off by a ring of the surface it sits on rather than an
 	   outline — it says "members" without covering the art. */
+	/* r4D-12: the link is the target floor (--size-targetMin) and leaves the
+	   artwork's own button at least that much uncovered: its box sits
+	   `--space-xs` further out than the disc, and the disc and its glyph are
+	   drawn back where they always sat (icon-md, its centre unmoved). */
 	.members {
+		--slack: calc((var(--size-targetMin) - var(--icon-md)) / 2 + var(--space-xs));
 		position: absolute;
-		inset-inline-end: calc(var(--space-sm) * -1);
-		inset-block-end: calc(var(--space-sm) * -1);
+		inset-inline-end: calc(var(--space-sm) * -1 - var(--slack));
+		inset-block-end: calc(var(--space-sm) * -1 - var(--slack));
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		/* r4D-7, r4D-12: a 24 px target (WCAG 2.5.8), not 18. */
-		width: calc(var(--icon-xs) * 2);
-		height: calc(var(--icon-xs) * 2);
+		width: var(--size-targetMin);
+		height: var(--size-targetMin);
 		border-radius: var(--radius-full);
-		background: var(--color-bg-sunken);
-		box-shadow: 0 0 0 var(--border-emphasis) var(--color-bg-base);
 		color: var(--color-fg-muted);
 	}
 
+	.members::before {
+		content: '';
+		position: absolute;
+		inset-inline-start: calc((var(--size-targetMin) - var(--icon-md)) / 2 - var(--space-xs));
+		inset-block-start: calc((var(--size-targetMin) - var(--icon-md)) / 2 - var(--space-xs));
+		width: var(--icon-md);
+		height: var(--icon-md);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-sunken);
+		box-shadow: 0 0 0 var(--border-emphasis) var(--color-bg-base);
+	}
+
 	.members :global(svg) {
+		position: relative;
+		inset-inline-end: var(--space-xs);
+		inset-block-end: var(--space-xs);
 		width: calc(var(--icon-xs) * 0.85);
 		height: calc(var(--icon-xs) * 0.85);
 		stroke-width: var(--icon-stroke-bold);
@@ -345,7 +366,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-xs);
-		padding: 0 var(--space-sm);
+		/* r4D-12: never smaller than --size-targetMin (the pill was 16). */
+		min-height: var(--size-targetMin);
+		padding: 0 var(--space-md);
 		border: var(--border-hairline) solid var(--color-border-base);
 		border-radius: var(--radius-full);
 		background: var(--color-bg-raised);

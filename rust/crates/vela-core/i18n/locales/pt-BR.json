@@ -34,6 +34,7 @@
       "switch": "Trocar de conta",
       "contactsSubtitle": "Endereços salvos e destinatários recentes",
       "remove": "Remover deste dispositivo",
+      "removeNamed": "Remover {{name}} deste dispositivo",
       "removeBody": "Só esta carteira sai; as outras ficam.",
       "openInSafe": "Esta conta é um Safe padrão — você também pode abri-la no {{app}}"
     },

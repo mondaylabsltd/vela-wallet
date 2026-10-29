@@ -34,6 +34,7 @@
       "switch": "Chuyển tài khoản",
       "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
       "remove": "Gỡ khỏi thiết bị này",
+      "removeNamed": "Gỡ {{name}} khỏi thiết bị này",
       "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn.",
       "openInSafe": "Tài khoản này là một Safe tiêu chuẩn — bạn cũng có thể mở nó trong {{app}}"
     },
