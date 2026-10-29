@@ -1063,8 +1063,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   record the service no longer has, said and shared again).
 //   `create.nameHint` changes value only (a name can be changed now).
 //   2285 + 10 = 2295 leaves, 121 branches.
-if (PATHS.length !== 2416) fail(`expected 2416 paths (2295 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2295) fail(`expected 2295 leaf paths, got ${leafSet.size}`);
+// 2418 (the registry is an index, not a home, owner model 2026-10-29): − the
+//   create sheet's `home.multisig.service.noNetworks` (the service's chains
+//   no longer bound where a multisig is created), + `home.multisig.create.
+//   noSafeNetworks` (no network of the person's has the Safe v1.4.1
+//   contracts), + `home.multisig.proposal.{renameRuns, renameDeploys}` (a
+//   rename's review says it runs on the registry's chain and deploys the
+//   multisig there if it is not yet). `settings.renameNote` changes value
+//   only. 2295 − 1 + 3 = 2297 leaves, 121 branches.
+if (PATHS.length !== 2418) fail(`expected 2418 paths (2297 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2297) fail(`expected 2297 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -29,9 +29,15 @@ vi.stubGlobal('localStorage', {
 const signed: string[] = [];
 const submitted: unknown[] = [];
 
+/** A chain the service does not read (not in its health table): Arbitrum. */
+const UNREAD = 42161;
 vi.mock('./chain', () => ({
 	hasCode: async () => true,
-	readMembers: async () => ({ owners: [OWNER], threshold: 2, nonce: 3n, deployed: true })
+	// Read through the wallet's own RPC: on Arbitrum the Safe is deployed, at nonce 7.
+	readMembers: async (chainId: number) =>
+		chainId === UNREAD
+			? { owners: [OWNER], threshold: 1, nonce: 7n, deployed: true }
+			: { owners: [OWNER], threshold: 2, nonce: 3n, deployed: true }
 }));
 vi.mock('./service', () => ({
 	genesisServiceURL: () => mailbox.url,
@@ -39,11 +45,25 @@ vi.mock('./service', () => ({
 		mailbox.probes += 1;
 		return !mailbox.down;
 	},
-	fetchProposals: async () => {
+	fetchProposals: async (chainId: number) => {
 		mailbox.reads += 1;
 		if (mailbox.slowMs) await new Promise((r) => setTimeout(r, mailbox.slowMs));
 		if (mailbox.down) throw new Error('mailbox down');
-		return { members: {}, proposals: mailbox.proposals };
+		// Arbitrum's own proposals there; every other network gets the rest.
+		const list = (mailbox.proposals as { chainId: number }[]).filter(
+			(p) => (p.chainId === UNREAD) === (chainId === UNREAD)
+		);
+		// What the service says on a chain it does not read: the genesis's, at nonce 0.
+		const members =
+			chainId === UNREAD
+				? {
+						deployed: false,
+						owners: ['0x00000000000000000000000000000000000000ee'],
+						threshold: '2',
+						nonce: '0x0'
+					}
+				: {};
+		return { members, proposals: list };
 	},
 	submitApproval: async (req: { safeTx: unknown }) => {
 		if (mailbox.postDown) throw new Error('mailbox down');
@@ -130,7 +150,7 @@ const {
 } = await import('./proposals.svelte');
 const { serviceOutage, RETRY_STEPS_MS } = await import('./service-state.svelte');
 
-function stored(nonce: number) {
+function stored(nonce: number, chainId = 100) {
 	const tx = {
 		to: TO,
 		value: '0x1',
@@ -144,7 +164,7 @@ function stored(nonce: number) {
 		nonce: `0x${nonce.toString(16)}`
 	};
 	return {
-		chainId: 100,
+		chainId,
 		safe: SAFE,
 		safeTxHash: `0x${nonce.toString(16).padStart(2, '0')}${'00'.repeat(31)}`,
 		safeTx: tx,
@@ -335,5 +355,36 @@ describe('a signed approval the mailbox has not taken (ms-19)', () => {
 	it('leaves nothing behind once the mailbox has it', async () => {
 		await proposeTransfers(SAFE, 100, [{ to: TO, token: null, amount: '1' }]);
 		expect(storage.size).toBe(0);
+	});
+});
+
+/**
+ * The mailbox takes proposals on any chain; the service reads only its own.
+ * On a network it does not read, its word on members is the genesis's at
+ * nonce 0 — the wallet never uses it: it reads the Safe's owners, threshold
+ * and nonce itself, through its own RPC, and every network the multisig is
+ * used on is polled alike.
+ */
+describe('proposals on a chain the service does not read', () => {
+	it('are polled, and judged by the chain as this wallet reads it', async () => {
+		mailbox.proposals = [stored(3), stored(6, UNREAD), stored(7, UNREAD), stored(8, UNREAD)];
+		proposals.follow(account, [100, UNREAD]);
+		await proposals.refresh(account, [100, UNREAD]);
+		const arbitrum = proposals.chain(UNREAD);
+		expect(arbitrum?.mailbox).toBe(true);
+		// The chain's members, not the service's genesis-at-nonce-0.
+		expect(arbitrum?.members).toMatchObject({ deployed: true, nonce: 7n, owners: [OWNER] });
+		expect(arbitrum?.items.map((i) => [i.nonce, i.status])).toEqual([
+			[6n, 'done'],
+			[7n, 'pending'],
+			[8n, 'queued']
+		]);
+		expect(proposals.chain(100)?.items.map((i) => i.nonce)).toEqual([3n]);
+	});
+
+	it('take the next number from the chain and the mailbox there', async () => {
+		mailbox.proposals = [stored(7, UNREAD)];
+		await proposeTransfers(SAFE, UNREAD, [{ to: TO, token: null, amount: '1' }]);
+		expect((submitted[0] as { nonce: string }).nonce).toBe('0x8');
 	});
 });

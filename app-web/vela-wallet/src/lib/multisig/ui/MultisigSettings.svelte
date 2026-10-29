@@ -62,8 +62,12 @@
 
 	/**
 	 * Where its record can be renamed: a registry chain holding it that this
-	 * wallet has a network for — the service's home chain first, where it
-	 * writes records. `null`: none (or not recorded); `undefined`: not known yet.
+	 * wallet has a network for — the service's home chain (the index, Gnosis)
+	 * first, where it writes records. `rename` is called BY the Safe on the
+	 * chain whose registry holds the record it changes, so the transaction runs
+	 * there whatever networks the multisig is used on — deploying it there
+	 * first if it is not yet (said on the note and on the review). `null`: none
+	 * (or not recorded); `undefined`: not known yet.
 	 */
 	let renameChain = $state<number | null | undefined>(undefined);
 

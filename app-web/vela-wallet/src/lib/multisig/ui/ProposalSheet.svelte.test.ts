@@ -421,6 +421,48 @@ describe('a batch of calls (owner, 2026-10-28)', () => {
 	});
 });
 
+/**
+ * A rename is called BY the Safe on the chain whose registry holds the
+ * record — the index chain (Gnosis) — whatever networks the multisig is used
+ * on: the review says where it runs, and that executing deploys the multisig
+ * there first when it is not yet.
+ */
+describe('a rename on chain (registry v4)', () => {
+	const rename = { review: { action: { kind: 'rename', name: 'Team' }, refusal: null } };
+
+	it('says it runs on the registry’s chain, and deploys the multisig there if it is not yet', async () => {
+		fake.chain = {
+			chainId: 100,
+			members: { ...members, deployed: false },
+			items: [item(rename)],
+			mailbox: true
+		};
+		const screen = show();
+		await settle();
+		const where = document.querySelector('[data-testid="rename-where"]')?.textContent ?? '';
+		expect(where).toContain('proposal.renameRuns');
+		expect(where).toContain('proposal.renameDeploys');
+		await screen.unmount();
+	});
+
+	it('says only where it runs once it is deployed there', async () => {
+		fake.chain.items = [item(rename)];
+		const screen = show();
+		await settle();
+		const where = document.querySelector('[data-testid="rename-where"]')?.textContent ?? '';
+		expect(where).toContain('proposal.renameRuns');
+		expect(where).not.toContain('proposal.renameDeploys');
+		await screen.unmount();
+	});
+
+	it('another transaction says neither', async () => {
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="rename-where"]')).toBeNull();
+		await screen.unmount();
+	});
+});
+
 describe('a transaction whose number is used (ms-9, ms-10)', () => {
 	const done = () => item({ status: 'done', canApprove: [], cancelledBy: `0x${'cd'.repeat(32)}` });
 

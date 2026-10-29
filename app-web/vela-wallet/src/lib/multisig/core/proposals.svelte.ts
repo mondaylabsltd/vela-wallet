@@ -6,7 +6,10 @@
  * re-hashes the transaction, re-reads what it does (`reviewTx`) and verifies
  * every approval (`verifyApproval`); an approval counts only if it verifies
  * AND its owner is an owner on that chain now. The members and nonce come from
- * the chain through the wallet's own RPC (`readMembers`).
+ * the chain through the wallet's own RPC (`readMembers`) — on every network the
+ * multisig is used on, including one the service does not read: the mailbox
+ * stores proposals for any chain, but there it knows only the genesis (its
+ * owners, nonce 0), so the service's own word on members is never used here.
  *
  * The four actions — propose, approve, execute, cancel — are each one passkey
  * prompt, and each is safe to retry: the mailbox merges, and an execution that

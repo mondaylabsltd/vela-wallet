@@ -336,6 +336,49 @@ export const readGenesisOf = (safe: string, ret: string) =>
 export const genesisFromCalldata = (input: string, safe: string) =>
 	call<Genesis | null>('genesisFromCalldata', { input, safe });
 
+// -- where a multisig can live, and where it does ---------------------------------
+
+/**
+ * The Safe v1.4.1 contracts a new multisig's genesis names (factory,
+ * singleton, fallback handler): a chain with code at all three can deploy it.
+ */
+export const multisigContracts = () =>
+	call<{ name: string; address: string }[]>('multisigContracts', {});
+
+/** Whether a chain holds those contracts, as the core reads it. */
+export type SafeContracts =
+	| { kind: 'present' }
+	| { kind: 'missing'; names: string[] }
+	/** The chain did not answer for some: nothing can be said either way. */
+	| { kind: 'unknown' };
+
+/**
+ * The core's verdict on one chain from `eth_getCode` of each of
+ * {@link multisigContracts}, in that order (`null`: the chain did not answer).
+ */
+export const safeContracts = (codes: (string | null)[]) =>
+	call<SafeContracts>('safeContracts', { codes });
+
+/** What says which networks a multisig is used on (the core's `NetworkEvidence`). */
+export interface NetworkEvidence {
+	/** Chains it has code on. */
+	deployed?: number[];
+	/** Chains the mailbox holds proposals of it for. */
+	proposals?: number[];
+	/** The network a link names, or the person picked. */
+	named?: number | null;
+	/** What this device kept: the creator's pick, and every network used here since. */
+	kept?: number[];
+}
+
+/**
+ * The networks a multisig is used on, by the core's rule: deployed, then
+ * proposals, then named, then kept — never the chain its record is on (the
+ * registry is an index). Empty: nothing says; ask the person.
+ */
+export const multisigNetworks = (evidence: NetworkEvidence) =>
+	call<number[]>('multisigNetworks', { evidence });
+
 // -- the multisig service's health answer (`app::genesis_service`) ---------------
 
 /** A chain the service says it serves (its own name for it, if any). */

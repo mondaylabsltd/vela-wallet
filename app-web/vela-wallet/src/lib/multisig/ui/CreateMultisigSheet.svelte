@@ -8,9 +8,11 @@
 	 * multisig. Nothing is deployed and no fee is paid until its first
 	 * transfer out.
 	 *
-	 * The first network is where that record is written, so only the
-	 * networks the service says it serves (`/api/health`'s chain table) are
-	 * offered — all of them while that is not known.
+	 * The record goes to the registry's index chain (the service's home,
+	 * Gnosis) whatever network is picked: the multisig is the same on every
+	 * chain with the Safe v1.4.1 contracts. So every network the person has
+	 * is offered but one the core finds without them (`safeContractsOn`); the
+	 * service's own chain table bounds nothing here.
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -30,7 +32,7 @@
 	import { localOwners } from '../core/owners';
 	import { addLink, shareOrigin } from '../core/link';
 	import { memberProblem } from '../core/members';
-	import { servedChains, servedOnly } from '../core/service';
+	import { safeContractsOn } from '../core/chain';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -51,10 +53,19 @@
 	const spaceNetworks = spaceNetworksSync();
 	const saltNonce = newSaltNonce();
 
-	/** The chains the service serves; `null` while not known (nothing narrowed). */
-	let served = $state<Set<number> | null>(null);
-	void servedChains().then((chains) => (served = chains));
-	const networks = $derived(servedOnly(spaceNetworks, served));
+	/** The networks the core found without the Safe contracts a multisig needs. */
+	let without = $state<number[]>([]);
+	for (const n of spaceNetworks) {
+		void safeContractsOn(n.chainId).then(
+			(v) => {
+				if (v.kind === 'missing') without = [...without, n.chainId];
+			},
+			() => {}
+		);
+	}
+	// A network that did not answer stays offered: nothing is deployed until
+	// the first transfer out, and nothing says it lacks them.
+	const networks = $derived(spaceNetworks.filter((n) => !without.includes(n.chainId)));
 
 	let step = $state<'members' | 'threshold' | 'review' | 'created'>('members');
 	// The account in front seeds the members once; the person edits from there.
@@ -68,7 +79,7 @@
 	let chainId = $state(
 		spaceNetworks.find((n) => n.chainId === 100)?.chainId ?? spaceNetworks[0]?.chainId ?? 100
 	);
-	// The service's table came: a network it does not serve is not the pick.
+	// A network found without the Safe contracts is not the pick.
 	$effect(() => {
 		if (networks.length > 0 && !networks.some((n) => n.chainId === chainId)) {
 			chainId = (networks.find((n) => n.chainId === 100) ?? networks[0]).chainId;
@@ -361,7 +372,7 @@
 			/>
 		</div>
 		{#if networks.length === 0}
-			<p class="error" role="alert">{m.service.noNetworks}</p>
+			<p class="error" role="alert">{m.create.noSafeNetworks}</p>
 		{/if}
 		{#if local.length > 1}
 			<div class="select">

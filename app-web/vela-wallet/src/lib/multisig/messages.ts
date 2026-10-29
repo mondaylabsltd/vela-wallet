@@ -114,6 +114,10 @@ export interface MultisigMessages {
 		watch: string;
 		/** ms-21: it was added, on the person's tap; the account shown is unchanged. */
 		watching: string;
+		/** A rename's review: the network it runs on, the one keeping its record (`{{network}}`). */
+		renameRuns: string;
+		/** …and it is not deployed there: executing deploys it there first (`{{network}}`). */
+		renameDeploys: string;
 	};
 	send: {
 		propose: string;
@@ -157,6 +161,8 @@ export interface MultisigMessages {
 		fewer: string;
 		more: string;
 		copyAddress: string;
+		/** Every network the person has lacks the Safe contracts a multisig needs. */
+		noSafeNetworks: string;
 	};
 	external: {
 		pageTitle: string;
@@ -244,8 +250,6 @@ export interface MultisigMessages {
 		/** Activity's waiting group while the service is away, over the last list. */
 		unreachableNote: string;
 		retry: string;
-		/** The create sheet: the service's chain table holds none of the wallet's networks. */
-		noNetworks: string;
 	};
 	add: {
 		title: string;
@@ -361,7 +365,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		badLink: '',
 		previewNote: '',
 		watch: '',
-		watching: ''
+		watching: '',
+		renameRuns: '',
+		renameDeploys: ''
 	},
 	send: {
 		propose: '',
@@ -402,7 +408,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		nameInvalid: '',
 		fewer: '',
 		more: '',
-		copyAddress: ''
+		copyAddress: '',
+		noSafeNetworks: ''
 	},
 	external: {
 		pageTitle: '',
@@ -479,8 +486,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	service: {
 		customNote: '',
 		unreachableNote: '',
-		retry: '',
-		noNetworks: ''
+		retry: ''
 	},
 	add: {
 		title: '',

@@ -529,6 +529,16 @@
 					<dd class="mono">{item.safeTxHash.slice(0, 10)}…{item.safeTxHash.slice(-8)}</dd>
 				</div>
 			</dl>
+			{#if item.review.action?.kind === 'rename'}
+				<!-- A rename runs on the registry's chain, where only the Safe itself
+				     can call it — which may mean deploying it there, said plainly. -->
+				<p class="fine" data-testid="rename-where">
+					{fillTemplate(m.proposal.renameRuns, { network: chainName(chainId) })}
+					{#if members && !members.deployed}
+						{fillTemplate(m.proposal.renameDeploys, { network: chainName(chainId) })}
+					{/if}
+				</p>
+			{/if}
 			{#if item.review.action?.kind === 'call' && item.review.action.data !== '0x'}
 				<!-- What the call carries, as it will be signed: every member can read it. -->
 				<details class="data">

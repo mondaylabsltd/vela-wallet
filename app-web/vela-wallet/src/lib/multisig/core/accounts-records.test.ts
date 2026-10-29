@@ -258,6 +258,19 @@ describe('sharing again', () => {
 		expect(store.calls).toEqual(['markShared']);
 	});
 
+	it('records on the index chain whatever network it is used on — one ask, no service chain needed', async () => {
+		// Used on Arbitrum only, which the service does not read.
+		const account = fresh({ recorded: false, shared: false, chainIds: [42161] });
+		store.rows = [account];
+		const owner = { address: A, name: 'One', account: { address: A } };
+		await shareAgain(account as never, owner as never);
+		expect(seams.imports).toEqual([expect.objectContaining({ chainId: 100 })]);
+		seams.imports = [];
+		seams.answer = { found: false };
+		await retryUnrecorded();
+		expect(seams.imports).toEqual([expect.objectContaining({ chainId: 100 })]);
+	});
+
 	it('is shared when the service keeps what the owner proved, though its sponsor will not pay now', async () => {
 		const account = fresh({ recorded: false, shared: false });
 		store.rows = [account];

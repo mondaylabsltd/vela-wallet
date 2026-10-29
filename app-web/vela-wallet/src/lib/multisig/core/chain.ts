@@ -6,7 +6,13 @@
  */
 import { checksumAddress } from '$lib/core/kernels';
 import { poolRpcCall } from '$lib/services/rpc-pool';
-import { genesisMembers, type Genesis } from './kernel';
+import {
+	genesisMembers,
+	multisigContracts,
+	safeContracts,
+	type Genesis,
+	type SafeContracts
+} from './kernel';
 
 const GET_OWNERS = '0xa0e67e2b';
 const GET_THRESHOLD = '0xe75235b8';
@@ -32,6 +38,32 @@ async function rpc<T>(chainId: number, method: string, params: unknown[]): Promi
 export async function hasCode(chainId: number, address: string): Promise<boolean> {
 	const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
 	return typeof code === 'string' && code !== '0x' && code !== '0x0';
+}
+
+/** Verdicts read this session: a contract's code does not come and go. */
+const contractVerdicts = new Map<number, SafeContracts>();
+
+/**
+ * Whether `chainId` holds the Safe v1.4.1 contracts a new multisig needs —
+ * read here (`eth_getCode` of each), judged by the core (`safeContracts`).
+ * A chain that does not answer is `unknown`, and asked again next time.
+ */
+export async function safeContractsOn(chainId: number): Promise<SafeContracts> {
+	const known = contractVerdicts.get(chainId);
+	if (known) return known;
+	const codes = await Promise.all(
+		multisigContracts().map(async ({ address }) => {
+			try {
+				const code = await rpc<string>(chainId, 'eth_getCode', [address, 'latest']);
+				return typeof code === 'string' ? code : null;
+			} catch {
+				return null;
+			}
+		})
+	);
+	const verdict = safeContracts(codes);
+	if (verdict.kind !== 'unknown') contractVerdicts.set(chainId, verdict);
+	return verdict;
 }
 
 function ethCall(chainId: number, to: string, data: string): Promise<string> {

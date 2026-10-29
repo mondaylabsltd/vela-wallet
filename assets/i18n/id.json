@@ -522,7 +522,9 @@
     "badLink": "Tautan ke transaksi multisig ini tidak lengkap atau rusak. Minta lagi tautannya.",
     "previewNote": "Tidak ada akun di perangkat ini yang menjadi anggota multisig ini. Membuka tautan ini tidak menambahkannya dan tidak mengganti akun.",
     "watch": "Tambahkan ke perangkat ini",
-    "watching": "Ada di perangkat ini: multisig ini ada di daftar akun. Akun yang ditampilkan tidak berubah."
+    "watching": "Ada di perangkat ini: multisig ini ada di daftar akun. Akun yang ditampilkan tidak berubah.",
+    "renameRuns": "Ini berjalan di {{network}}, tempat registri menyimpan catatannya: hanya multisig itu sendiri yang bisa mengganti namanya di sana.",
+    "renameDeploys": "Multisig ini belum di-deploy di {{network}}. Mengeksekusi ini akan men-deploy-nya di sana terlebih dahulu, dengan anggota saat dibuat, dan anggota yang mengeksekusi juga membayar untuk itu."
    },
    "send": {
     "propose": "Usulkan dan setujui",
@@ -564,7 +566,8 @@
     "nameInvalid": "Gunakan nama yang lebih pendek, tanpa karakter kontrol atau karakter tak terlihat, dan tanpa spasi di awal maupun akhir.",
     "fewer": "Lebih sedikit persetujuan",
     "more": "Lebih banyak persetujuan",
-    "copyAddress": "Salin alamat"
+    "copyAddress": "Salin alamat",
+    "noSafeNetworks": "Tidak ada jaringan Anda yang memiliki kontrak Safe yang dibutuhkan multisig. Tambahkan jaringan yang memilikinya di Pengaturan → Jaringan."
    },
    "add": {
     "title": "Tambah multisig",
@@ -643,7 +646,7 @@
     "backupNote": "Pengaturan multisig juga disimpan di Ethereum, sehingga bisa ditemukan dan di-deploy dari sana. Sebuah akun di perangkat ini membayar biayanya.",
     "remove": "Hapus dari perangkat ini",
     "renameTitle": "Nama di registri",
-    "renameNote": "Anggota, dan siapa pun yang mencari multisig ini, melihat nama ini. Mengganti namanya adalah salah satu transaksinya di {{network}}: anggota menyetujuinya seperti transaksi lain.",
+    "renameNote": "Anggota, dan siapa pun yang mencari multisig ini, melihat nama ini. Mengganti namanya adalah salah satu transaksinya di {{network}}, tempat catatannya disimpan: anggota menyetujuinya seperti transaksi lain, dan mengeksekusinya akan men-deploy multisig di {{network}} jika belum ada di sana.",
     "renameAction": "Ganti nama di chain",
     "renameUnavailable": "Catatannya tidak ada di jaringan mana pun di dompet ini, jadi namanya tidak bisa diganti dari sini.",
     "shareAgain": "Bagikan lagi",
@@ -652,8 +655,7 @@
    "service": {
     "customNote": "Menggunakan layanan multisig khusus ({{host}})",
     "unreachableNote": "Layanan multisig tidak dapat dijangkau — transaksi yang menunggu tidak bisa dimuat; akan dicoba lagi.",
-    "retry": "Coba lagi",
-    "noNetworks": "Layanan multisig tidak melayani satu pun jaringan Anda."
+    "retry": "Coba lagi"
    }
   },
   "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
