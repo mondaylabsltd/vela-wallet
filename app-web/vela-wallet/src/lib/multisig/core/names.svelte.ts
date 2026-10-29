@@ -11,7 +11,15 @@ class Names {
 	#registered = $state<Record<string, string>>({});
 	/** Addresses the passkey index holds: Vela accounts, whose key is a passkey. */
 	#vela = $state<Record<string, true>>({});
+	/** Addresses the index has answered for (a hit or a miss). */
+	#answered = $state<Record<string, true>>({});
 	#asked = new Set<string>();
+
+	/** Whether the passkey index has answered for `address` yet (so `isVela` is its word). */
+	answered(address: string): boolean {
+		void this.label(address);
+		return this.#answered[address.toLowerCase()] === true;
+	}
 
 	/**
 	 * Whether `address` is a Vela account somewhere (the passkey index holds
@@ -33,6 +41,7 @@ class Names {
 		if (!this.#asked.has(key)) {
 			this.#asked.add(key);
 			void queryWalletName(address).then((hit) => {
+				this.#answered = { ...this.#answered, [key]: true };
 				if (hit) this.#vela = { ...this.#vela, [key]: true };
 				if (hit?.name) this.#registered = { ...this.#registered, [key]: hit.name };
 			});

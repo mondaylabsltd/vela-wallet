@@ -24,7 +24,10 @@ import { checksumAddress } from '$lib/core/kernels';
 import { readMemberChanges } from './kernel';
 import { names } from './names.svelte';
 import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
-import { proposals, type ProposalItem } from './proposals.svelte';
+import { executionInput, proposals, type ProposalItem } from './proposals.svelte';
+import { blockOf, preflight } from './preflight.svelte';
+import { multisig } from './store.svelte';
+import { whyText } from './execution-words';
 import { readCall } from './call-review.svelte';
 import { readChainDoc } from '$lib/services/chain-doc';
 import type { SigningMessages } from '$lib/signing/messages';
@@ -105,6 +108,8 @@ interface Drawn {
 const who = (address: string) => memberWho(address, names.label(address));
 
 class WaitingRows {
+	/** The multisig `follow` was last told of: whose executions the rows were looked at for. */
+	#multisig = $state<string | null>(null);
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
 	#drawn = $state<Record<string, Drawn>>({});
 	/** The chain index's names of the networks this device lacks, once read. */
@@ -187,6 +192,14 @@ class WaitingRows {
 		multisigAddress: string | null = null
 	): void {
 		for (const item of proposals.open) this.#draw(m, item, multisigAddress, signing);
+		// r4-5: what is ready is looked at as it would run, so the row never
+		// says "Ready to execute" for one that cannot (the sheet's same looks).
+		this.#multisig = multisigAddress;
+		for (const item of proposals.open) {
+			for (const input of readyInputs(multisigAddress, item)) {
+				void preflight.check(input, HOME_FRESH_MS);
+			}
+		}
 		for (const missing of proposals.missing) {
 			if (this.#asked.has(missing.chainId)) continue;
 			this.#asked.add(missing.chainId);
@@ -222,7 +235,7 @@ class WaitingRows {
 				title: drawn?.title ?? '…',
 				subtitle: [
 					drawn?.source,
-					statusOf(m, item),
+					statusOf(m, item, this.#multisig),
 					// r4b-6: proposals at one number — only one of them can run.
 					item.sameNonce.length > 0 ? m.status.conflict : null,
 					progressLine(m, item.approved, item.threshold),
@@ -371,13 +384,38 @@ function memberChangeOf(m: MultisigMessages, item: ProposalItem): { rule: string
 	}
 }
 
-function statusOf(m: MultisigMessages, item: ProposalItem): string {
+/** How long the home lets an execution's look stand: it is re-read on every poll. */
+const HOME_FRESH_MS = 60_000;
+
+/** A ready transaction's execution by each of this device's executors. */
+function readyInputs(multisigAddress: string | null, item: ProposalItem) {
+	if (item.status !== 'ready' || item.canExecute.length === 0) return [];
+	const account = multisigAddress ? multisig.find(multisigAddress) : undefined;
+	const members = account ? proposals.chain(item.chainId)?.members : undefined;
+	if (!account || !members) return [];
+	return item.canExecute.map((o) => executionInput(account, item, o, members));
+}
+
+/** "Can't run now — …" for a ready one that cannot, else `null`. */
+function blockedLine(
+	m: MultisigMessages,
+	item: ProposalItem,
+	multisigAddress: string | null
+): string | null {
+	const block = blockOf(readyInputs(multisigAddress, item).map((input) => preflight.get(input)));
+	if (!block) return null;
+	return fillTemplate(m.status.cannotRun, {
+		reason: block.kind === 'fails' ? whyText(m, block.why) : m.status.nobodyPays
+	});
+}
+
+function statusOf(m: MultisigMessages, item: ProposalItem, multisigAddress: string | null): string {
 	// Signed here, not in the mailbox yet: the one thing to know about it.
 	if (item.unsent) return m.status.unsent;
 	// r4b-7: sent from here and may still land — not offered again.
 	if (item.executing) return m.status.executing;
 	if (item.status === 'queued') return m.status.queued;
-	if (item.status === 'ready') return m.status.ready;
+	if (item.status === 'ready') return blockedLine(m, item, multisigAddress) ?? m.status.ready;
 	if (item.canApprove.length > 0) return m.status.yourTurn;
 	return m.status.waiting;
 }

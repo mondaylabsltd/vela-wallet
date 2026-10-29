@@ -56,7 +56,16 @@
 	} from '../core/executed';
 	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
-	import { ExecutorCannotPayError } from '../core/execute';
+	import {
+		ExecutionUnpricedError,
+		ExecutionWouldFailError,
+		ExecutorCannotPayError,
+		stoppedBeforeSigning,
+		type ExecutionPreview
+	} from '../core/execute';
+	import { feeWords, whyText } from '../core/execution-words';
+	import { preflight, PREVIEW_FRESH_MS } from '../core/preflight.svelte';
+	import { signers } from '../core/signers.svelte';
 	import {
 		gateOf,
 		signingGate,
@@ -85,7 +94,9 @@
 		draftCalls,
 		execute,
 		MailboxRefusedError,
+		executionInput,
 		MailboxUnreadableError,
+		NoOutsideSignerError,
 		outbox,
 		proposals,
 		proposeCancel,
@@ -284,9 +295,53 @@
 	const executors = $derived(item?.canExecute ?? []);
 	const approvers = $derived(item?.canApprove ?? []);
 	const candidates = $derived(executors.length > 0 ? executors : approvers);
-	const actor = $derived<LocalOwner | null>(
-		candidates.find((o) => sameAddress(o.address, chosen)) ?? candidates[0] ?? null
+
+	/*
+	 * r4-5, r4-7: each executor's look at the execution — would it run, the
+	 * fee in its coin and what that pays for, whether it holds it — taken
+	 * before any tap, and again while the sheet is open, so the verdict and
+	 * the fee are on screen before the passkey, never after a spinner.
+	 */
+	const previewInputs = $derived(
+		item && members && !drafting && item.review.action !== null
+			? executors.map((o) => executionInput(account, item, o, members))
+			: []
 	);
+	$effect(() => {
+		const inputs = previewInputs;
+		if (inputs.length === 0) return;
+		for (const input of inputs) void preflight.check(input);
+		const timer = setInterval(() => {
+			for (const input of inputs) void preflight.check(input);
+		}, PREVIEW_FRESH_MS);
+		return () => clearInterval(timer);
+	});
+	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
+		const input = previewInputs.find(
+			(i) => owner && sameAddress(i.executor.address, owner.address)
+		);
+		return input ? preflight.get(input) : null;
+	}
+	/** Someone here who can pay the fee — the one picked unless the person picks. */
+	const payer = $derived(
+		executors.find((o) => {
+			const p = previewOf(o);
+			return p?.kind === 'priced' && p.canPay;
+		}) ?? null
+	);
+	const actor = $derived<LocalOwner | null>(
+		candidates.find((o) => sameAddress(o.address, chosen)) ?? payer ?? candidates[0] ?? null
+	);
+	const actorPreview = $derived(executors.length > 0 ? previewOf(actor) : null);
+	/** The executor shown cannot run it: it would fail, or it cannot pay the fee. */
+	const blocked = $derived(
+		actorPreview?.kind === 'refused' ||
+			actorPreview?.kind === 'fails' ||
+			(actorPreview?.kind === 'priced' && !actorPreview.canPay)
+	);
+	function recheck() {
+		for (const input of previewInputs) void preflight.check(input, 0);
+	}
 	const actorApproved = $derived(
 		!!item && !!actor && item.approvals.some((a) => a.counts && sameAddress(a.owner, actor.address))
 	);
@@ -311,7 +366,9 @@
 		| { kind: 'sent'; txHash: string | null; by: string }
 		/** r4b-1: how this device's execution ended when it was not the one that ran. */
 		| { kind: 'ended'; verdict: ExecutionVerdict; by: string }
-		| { kind: 'failed'; reason: string };
+		| { kind: 'failed'; reason: string }
+		/** r4-11: "Approve and execute" approved; only the execute part could not run. */
+		| { kind: 'partial'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
 	let rejecting = $state(false);
 	let copied = $state(false);
@@ -344,6 +401,11 @@
 	 */
 	function reasonOf(error: unknown): string {
 		console.warn('[multisig] not done:', error);
+		return reasonText(error);
+	}
+
+	/** {@link reasonOf}'s words alone — drawn from a preview too, so it logs nothing. */
+	function reasonText(error: unknown): string {
 		if (error instanceof ExecutorCannotPayError && actor) {
 			const symbol = nativeSymbol(chainId);
 			return fillTemplate(m.proposal.cannotPay, {
@@ -353,9 +415,14 @@
 				balance: `${formatUnits(error.have, 18)} ${symbol}`
 			});
 		}
+		if (error instanceof ExecutionWouldFailError) {
+			return fillTemplate(m.proposal.wouldFail, { reason: whyText(m, error.why) });
+		}
+		if (error instanceof ExecutionUnpricedError) return m.proposal.unpricedReason;
 		if (error instanceof MailboxUnreadableError) {
 			return offline() ? m.proposal.reason.offline : m.proposal.mailboxDown;
 		}
+		if (error instanceof NoOutsideSignerError) return m.proposal.noOutsideSigner;
 		if (error instanceof SigningRefusedError) {
 			const why = error.findings.map((f) =>
 				f.from === 'genesis' ? refusalText(m, f.reason, f.chainId) : ''
@@ -447,6 +514,13 @@
 
 	async function onExecute() {
 		if (!item || !actor || !members) return;
+		// "Approve and execute": should only the execute part be unable to run
+		// (before its passkey — a fee it cannot pay, a transaction that would
+		// fail), the approval is still given and kept (r4-11).
+		const approving =
+			!actorApproved &&
+			item.approved < item.threshold &&
+			approvers.some((o) => sameAddress(o.address, actor.address));
 		phase = { kind: 'busy', what: 'execute' };
 		let result: Awaited<ReturnType<typeof execute>>;
 		const by = actor.address;
@@ -460,8 +534,24 @@
 			item.threshold
 		);
 		try {
-			result = await execute(account, item, actor, members);
+			// The look on screen when it is fresh — its calls and fee are what is
+			// signed — else a new one, said the same way.
+			const preview = await preflight.check(executionInput(account, item, actor, members));
+			result = await execute(account, item, actor, members, preview);
 		} catch (error) {
+			if (approving && stoppedBeforeSigning(error)) {
+				const reason =
+					error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
+				phase = { kind: 'busy', what: 'approve' };
+				try {
+					await approve(account, item, actor);
+					await store.refresh(account, account.chainIds);
+					phase = { kind: 'partial', reason };
+				} catch (again) {
+					phase = { kind: 'failed', reason: reasonOf(again) };
+				}
+				return;
+			}
 			phase = { kind: 'failed', reason: reasonOf(error) };
 			return;
 		}
@@ -566,21 +656,30 @@
 		}
 	}
 
-	/**
-	 * Owners still to approve whose wallets are elsewhere: an outside wallet
-	 * can sign for any — a queued one too (its approval waits like any other).
-	 * Not a Vela account on another device (ms-11): its key is a passkey, and
-	 * it approves in Vela, from the link.
-	 */
-	const outside = $derived(
+	/** Owners still to approve, on no device here — while their approval is still needed. */
+	const missingOwners = $derived(
 		!item || item.status === 'done' || item.review.action === null || readOnly
 			? []
 			: (members?.owners ?? []).filter(
-					(o) =>
-						localOwners([o]).length === 0 &&
-						!names.isVela(o) &&
-						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
+					(o) => !item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
+	);
+	/** Enough members approved: nobody else's approval is needed (r4D-6). */
+	const enough = $derived(!!item && item.approved >= item.threshold);
+	/**
+	 * Owners still to approve whose wallets are elsewhere: an outside wallet
+	 * can sign for a plain account — a queued transaction too (its approval
+	 * waits like any other). Never for a smart account (ms-11, r4-9): code at
+	 * its address on this network, or a Vela account the index knows — its
+	 * key is a passkey, and it approves in Vela, from the link. Nothing is
+	 * offered once enough have approved.
+	 */
+	const outside = $derived(
+		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'wallet')
+	);
+	/** Vela members elsewhere still to approve: they approve in Vela, from the link. */
+	const elsewhere = $derived(
+		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'vela')
 	);
 
 	async function onExternal() {
@@ -1060,9 +1159,21 @@
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.executed}
 							{:else if row}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.proposal.approved}
-							{:else if !drafting && outside.some( (o) => sameAddress(o, owner) ) && phase.kind === 'idle'}
+							{:else if item.status !== 'done' && enough}
+								<!-- Enough approved: theirs is not needed, and nothing asks for it. -->
+								{m.proposal.notNeeded}
+							{:else if !drafting && outside.some((o) => sameAddress(o, owner)) && !busy}
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
+								>
+							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
+								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9). -->
+								{m.proposal.waiting} ·
+								<button
+									type="button"
+									class="external"
+									title={fillTemplate(m.proposal.approvesInVela, { names: names.label(owner) })}
+									onclick={canShare ? shareLink : copyLink}>{m.proposal.sendLink}</button
 								>
 							{:else if item.status !== 'done'}
 								{m.proposal.waiting}
@@ -1250,7 +1361,12 @@
 						shape="rounded"
 						loading={busy && phase.kind === 'busy' && phase.what === 'propose'}
 						disabled={busy}
-						onclick={onPropose}>{executeNow ? m.proposal.approveAndExecute : m.send.propose}</Button
+						onclick={onPropose}
+						>{executeNow
+							? m.proposal.approveAndExecute
+							: rejecters.length > 0
+								? m.send.propose
+								: m.send.proposeOnly}</Button
 					>
 				{/if}
 			</div>
@@ -1300,6 +1416,8 @@
 				<fieldset class="actor">
 					<legend>{m.proposal.as}</legend>
 					{#each candidates as owner (owner.address)}
+						<!-- An executor's coin here, and whether it covers the fee (r4-10). -->
+						{@const look = executors.length > 0 ? previewOf(owner) : null}
 						<label class:on={actor?.address === owner.address}>
 							<input
 								type="radio"
@@ -1308,24 +1426,64 @@
 								checked={actor?.address === owner.address}
 								onchange={() => (chosen = owner.address)}
 							/>
-							{owner.name}
+							<span class="actor-name">{owner.name}</span>
+							{#if look?.kind === 'priced' && look.balance !== null}
+								<span class="actor-balance" data-testid="actor-balance"
+									>{formatUnits(look.balance, 18)}
+									{nativeSymbol(
+										chainId
+									)}{#if !look.canPay}{` · ${m.proposal.pickerCantPay}`}{/if}</span
+								>
+							{/if}
 						</label>
 					{/each}
 				</fieldset>
 			{/if}
 
 			{#if phase.kind === 'failed'}
-				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
+				<p class="warn" role="alert" data-testid="proposal-failed">
+					{fillTemplate(m.proposal.failed, { reason: phase.reason })}
+				</p>
+			{:else if phase.kind === 'partial'}
+				<p class="fine" role="status" data-testid="approved-not-executed">
+					{fillTemplate(m.proposal.approvedNotExecuted, { reason: phase.reason })}
+				</p>
 			{/if}
 
 			<div class="primary">
 				{#if executors.length > 0 && actor}
 					{@const approveFirst = !actorApproved && item.approved < item.threshold}
-					<div class:two={approveFirst && canApproveOnly}>
+					{#if actorPreview?.kind === 'refused'}
+						<!-- §3.5: it would deploy from a genesis the core does not find Verified here. -->
+						<p class="warn" role="alert" data-testid="execute-refused">
+							{reasonText(actorPreview.error)}
+						</p>
+					{:else if actorPreview?.kind === 'fails'}
+						<!-- r4-5: it would fail: said why, before any passkey, and not offered. -->
+						<p class="warn" role="alert" data-testid="execute-would-fail">
+							{fillTemplate(m.proposal.wouldFail, { reason: whyText(m, actorPreview.why) })}
+						</p>
+					{:else if actorPreview?.kind === 'priced' && !actorPreview.canPay}
+						<!-- r4D-1: who cannot pay, and who here can — before the tap. -->
+						<p class="warn" role="alert" data-testid="execute-cant-pay">
+							{payer && !sameAddress(payer.address, actor.address)
+								? fillTemplate(m.proposal.cantPayOther, {
+										name: names.label(actor.address),
+										other: names.label(payer.address)
+									})
+								: fillTemplate(m.proposal.cannotPay, {
+										name: names.label(actor.address),
+										symbol: nativeSymbol(chainId),
+										fee: `${formatUnits(actorPreview.fee.amount, 18)} ${nativeSymbol(chainId)}`,
+										balance: `${formatUnits(actorPreview.balance ?? 0n, 18)} ${nativeSymbol(chainId)}`
+									})}
+						</p>
+					{/if}
+					{#if blocked}
+						<!-- It cannot run by this executor: approving is the one thing left to do. -->
 						{#if approveFirst && canApproveOnly}
-							<!-- Executing pays the fee; approving alone does not. -->
 							<Button
-								variant="secondary"
+								variant="value"
 								shape="rounded"
 								loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
 								disabled={busy}
@@ -1334,17 +1492,62 @@
 								{m.proposal.approve}
 							</Button>
 						{/if}
-						<Button
-							variant="value"
-							shape="rounded"
-							loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
-							disabled={busy}
-							onclick={onExecute}
-						>
-							{approveFirst ? m.proposal.approveAndExecute : m.proposal.execute}
-						</Button>
-					</div>
-					<p class="fine">{m.proposal.feeNote}</p>
+					{:else}
+						<div class:two={approveFirst && canApproveOnly}>
+							{#if approveFirst && canApproveOnly}
+								<!-- Executing pays the fee; approving alone does not. -->
+								<Button
+									variant="secondary"
+									shape="rounded"
+									loading={busy && phase.kind === 'busy' && phase.what === 'approve'}
+									disabled={busy}
+									onclick={onApprove}
+								>
+									{m.proposal.approve}
+								</Button>
+							{/if}
+							<Button
+								variant="value"
+								shape="rounded"
+								loading={busy && phase.kind === 'busy' && phase.what === 'execute'}
+								disabled={busy || actorPreview === null}
+								onclick={onExecute}
+							>
+								{approveFirst ? m.proposal.approveAndExecute : m.proposal.execute}
+							</Button>
+						</div>
+					{/if}
+					{#if actorPreview?.kind === 'priced'}
+						<!-- r4-7: the fee before the passkey, in the executor's coin, and what it pays for. -->
+						{@const words = feeWords(m, actorPreview, {
+							executor: actor.address,
+							symbol: nativeSymbol(chainId),
+							network: chainName(chainId),
+							label: (a) => names.label(a)
+						})}
+						<div class="fee" data-testid="execute-fee">
+							<p class="fine">{words.fee}</p>
+							{#if words.setup}
+								<p class="fine">{words.setup}</p>
+								<ul class="fine setup">
+									{#each words.items as line, i (i)}
+										<li>{line}</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
+					{:else if actorPreview?.kind === 'unpriced'}
+						<p class="fine" data-testid="execute-unpriced">
+							{m.proposal.feeUnpriced}
+							<button type="button" class="text-button" onclick={recheck}
+								>{m.proposal.feeRetry}</button
+							>
+						</p>
+					{:else if actorPreview === null}
+						<p class="fine" aria-busy="true" data-testid="execute-checking">
+							{m.proposal.feeChecking}
+						</p>
+					{/if}
 				{:else if approvers.length > 0 && actor}
 					<Button
 						variant="value"
@@ -1386,6 +1589,14 @@
 			<section class="invite">
 				<h3>{m.proposal.invite}</h3>
 				<p class="fine">{m.proposal.inviteHint}</p>
+				{#if elsewhere.length > 0}
+					<!-- Vela members elsewhere: never an outside wallet — the link, in Vela (r4-9). -->
+					<p class="fine" data-testid="approves-in-vela">
+						{fillTemplate(m.proposal.approvesInVela, {
+							names: elsewhere.map((o) => names.label(o)).join(', ')
+						})}
+					</p>
+				{/if}
 				<div class="link-row">
 					<code class="link">{link}</code>
 				</div>
@@ -1407,17 +1618,26 @@
 		{/if}
 
 		<!-- Any member here may withdraw it, the proposer included, approved or not. -->
-		{#if !drafting && !readOnly && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent' && phase.kind !== 'ended'}
+		{#if !drafting && !readOnly && item.status !== 'done' && item.review.action?.kind !== 'cancel' && !item.cancelledBy && rejecter && phase.kind !== 'sent' && phase.kind !== 'ended' && !(phase.kind === 'busy' && phase.what === 'execute')}
+			<!-- Not while it is being executed; and a way back from it (r4D-14). -->
 			<div class="reject">
 				{#if rejecting}
 					<p class="fine">{fillTemplate(m.proposal.rejectHint, { threshold: item.threshold })}</p>
-					<Button
-						variant="danger"
-						shape="rounded"
-						loading={busy && phase.kind === 'busy' && phase.what === 'reject'}
-						disabled={busy}
-						onclick={onReject}>{m.proposal.reject}</Button
-					>
+					<div class="two">
+						<Button
+							variant="secondary"
+							shape="rounded"
+							disabled={busy}
+							onclick={() => (rejecting = false)}>{m.proposal.rejectCancel}</Button
+						>
+						<Button
+							variant="danger"
+							shape="rounded"
+							loading={busy && phase.kind === 'busy' && phase.what === 'reject'}
+							disabled={busy}
+							onclick={onReject}>{m.proposal.reject}</Button
+						>
+					</div>
 				{:else}
 					<button type="button" class="text-button" data-tap onclick={() => (rejecting = true)}
 						>{m.proposal.reject}</button
@@ -1789,6 +2009,20 @@
 
 	.primary {
 		margin-block-start: var(--space-xl);
+	}
+
+	.actor-balance {
+		color: var(--color-fg-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.primary > .warn {
+		margin-block-end: var(--space-md);
+	}
+
+	.setup {
+		margin-block-start: var(--space-xs);
+		padding-inline-start: var(--space-lg);
 	}
 
 	.fine {

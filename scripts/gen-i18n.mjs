@@ -1129,8 +1129,19 @@ for (let i = 1; i < PATHS.length; i++) {
 //   2318 + 28 = 2346 leaves, 121 + 1 = 122 branches.
 // 2524 (the above on 2495, merged): 2371 + 28 = 2399 leaves, 124 + 1 = 125
 //   branches.
-if (PATHS.length !== 2524) fail(`expected 2524 paths (2399 leaf + 125 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2399) fail(`expected 2399 leaf paths, got ${leafSet.size}`);
+// 2464 (an execution is looked at before its passkey — would it run, its fee
+//   and what that pays for, who can pay, how each member signs, 2026-10-29):
+//   + `home.multisig.status.{cannotRun, nobodyPays}`, + `home.multisig.
+//   proposal.{wouldFail, whyShort, whyReverts, whyRevertsPlain,
+//   unpricedReason, feeLine, feeChecking, feeUnpriced, feeRetry, feeSetup,
+//   feeSetupPlain, setupMultisig, setupMember, setupExecutor, cantPayOther,
+//   pickerCantPay, approvedNotExecuted, notNeeded, sendLink, approvesInVela,
+//   rejectCancel, noOutsideSigner}`, + `home.multisig.send.proposeOnly` (a
+//   device with no member proposes; nobody here approves). 2318 + 25 = 2343
+//   leaves, 121 branches.
+// 2549 (the above on 2524, merged): 2399 + 25 = 2424 leaves, 125 branches.
+if (PATHS.length !== 2549) fail(`expected 2549 paths (2424 leaf + 125 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2424) fail(`expected 2424 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 125) fail(`expected 125 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -62,7 +62,13 @@ const fake = vi.hoisted(() => ({
 	inflight: null as any,
 	ended: [] as string[],
 	/** r4b-3: networks that did not answer. */
-	unreadable: [] as number[]
+	unreadable: [] as number[],
+	/** Each executor's look at the execution (r4-5, r4-7), by address. */
+	previews: {} as Record<string, any>,
+	/** The look each execute was handed. */
+	executedWith: [] as any[],
+	/** What execute throws before its passkey (r4-11). */
+	executeThrows: null as any
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -93,22 +99,53 @@ vi.mock('../core/proposals.svelte', () => ({
 		fake.calls.push('approve');
 	},
 	approveExternally: async () => void fake.calls.push('external'),
-	execute: async () => {
+	execute: async (_a: unknown, _i: unknown, _o: unknown, _m: unknown, preview: unknown) => {
+		fake.executedWith.push(preview);
+		if (fake.executeThrows) throw fake.executeThrows;
 		fake.calls.push('execute');
 		return fake.execution;
 	},
+	executionInput: (_a: unknown, item: any, executor: any, members: unknown) => ({
+		chainId: item.chainId,
+		executor,
+		members
+	}),
 	proposeCancel: async () => void fake.calls.push('reject'),
 	draftCalls: async () => fake.draft,
 	MailboxUnreadableError: class extends Error {},
-	MailboxRefusedError: class extends Error {}
+	MailboxRefusedError: class extends Error {},
+	NoOutsideSignerError: class extends Error {}
 }));
 // §3.5: the network's check, as the chain would answer it (`recheck.test.ts` reads it).
 vi.mock('../core/recheck', () => ({
 	checkOn: async () => fake.checked,
 	findingsOn: () => []
 }));
-vi.mock('../core/execute', () => ({
-	ExecutorCannotPayError: class extends Error {}
+vi.mock('../core/execute', () => {
+	class ExecutorCannotPayError extends Error {}
+	class ExecutionWouldFailError extends Error {
+		constructor(readonly why: unknown) {
+			super('would fail');
+		}
+	}
+	class ExecutionUnpricedError extends Error {}
+	return {
+		ExecutorCannotPayError,
+		ExecutionWouldFailError,
+		ExecutionUnpricedError,
+		stoppedBeforeSigning: (e: unknown) =>
+			e instanceof ExecutorCannotPayError ||
+			e instanceof ExecutionWouldFailError ||
+			e instanceof ExecutionUnpricedError,
+		relayRefused: async () => fake.refused
+	};
+});
+vi.mock('../core/preflight.svelte', () => ({
+	PREVIEW_FRESH_MS: 15_000,
+	preflight: {
+		get: (input: any) => fake.previews[input.executor.address] ?? null,
+		check: async (input: any) => fake.previews[input.executor.address] ?? { kind: 'unpriced' }
+	}
 }));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
 vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
@@ -122,6 +159,13 @@ vi.mock('../core/execution-watch.svelte', () => ({
 		if (fake.verdict) return fake.verdict;
 		if (fake.refused) return { kind: 'notSent' };
 		return { kind: 'executed', txHash: await fake.execution.waitForTxHash() };
+	}
+}));
+// How each member signs: this device's, a Vela account the index knows, else a plain wallet.
+vi.mock('../core/signers.svelte', () => ({
+	signers: {
+		kindOf: (_chain: number, a: string) =>
+			a.toLowerCase() === ME ? 'here' : fake.vela.includes(a) ? 'vela' : 'wallet'
 	}
 }));
 vi.mock('../core/owners', () => ({
@@ -245,6 +289,19 @@ function item(overrides: Record<string, unknown> = {}) {
 
 const account = { address: SAFE, genesis: {}, owners: [ME, OTHER], threshold: 2 } as any;
 
+/** A look that says it runs, for `fee` wei, by an executor holding `balance`. */
+function priced(over: Record<string, unknown> = {}) {
+	return {
+		kind: 'priced',
+		calls: [],
+		fee: { amount: 35n * 10n ** 15n, recipient: '0xfe' },
+		balance: 1000n,
+		canPay: true,
+		setup: { multisig: false, members: [], executor: false, amount: null },
+		...over
+	};
+}
+
 /** The signing sheet's words, each its own name (a proposal's call reads as that sheet does). */
 const names = { get: (_: object, key: string | symbol) => String(key) };
 const signing = new Proxy({} as SigningMessages, {
@@ -301,6 +358,9 @@ beforeEach(() => {
 	fake.inflight = null;
 	fake.ended = [];
 	fake.unreadable = [];
+	fake.previews = { [ME]: priced() };
+	fake.executedWith = [];
+	fake.executeThrows = null;
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 });
@@ -1288,6 +1348,225 @@ describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)'
 		const screen = show({ m });
 		await settle();
 		expect(document.body.textContent).toContain('after #0, #1, #2');
+		await screen.unmount();
+	});
+});
+
+describe('an execution looked at before its passkey (r4-5, r4-7)', () => {
+	const ready = (over: Record<string, unknown> = {}) =>
+		item({
+			approved: 1,
+			status: 'pending',
+			canExecute: [local],
+			approvals: [{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }],
+			canApprove: [local],
+			...over
+		});
+
+	it('that would fail says why, and offers Approve — never Execute', async () => {
+		fake.chain.items = [ready()];
+		fake.previews = {
+			[ME]: {
+				kind: 'fails',
+				why: { kind: 'short', symbol: 'USDC', decimals: 0, have: 28n, need: 50n }
+			}
+		};
+		const m = words();
+		m.proposal.wouldFail = 'Would fail: {{reason}}.';
+		m.proposal.whyShort = 'holds {{have}}, needs {{need}}';
+		const screen = show({ m });
+		await settle();
+		const said = document.querySelector('[data-testid="execute-would-fail"]');
+		expect(said?.textContent?.trim()).toBe('Would fail: holds 28 USDC, needs 50 USDC.');
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(buttons()).toContain('proposal.approve');
+		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('shows the fee before the tap, with what it sets up, and signs that very look', async () => {
+		fake.chain.items = [ready()];
+		const look = priced({
+			setup: { multisig: true, members: [OTHER], executor: false, amount: 20n * 10n ** 15n }
+		});
+		fake.previews = { [ME]: look };
+		fake.execution = { maybeSent: false, userOpHash: '0x01', waitForTxHash: async () => '0x02' };
+		const m = words();
+		m.proposal.feeLine = 'Fee {{fee}} by {{name}}';
+		m.proposal.feeSetup = 'Setup on {{network}} {{amount}}:';
+		m.proposal.setupMember = 'activating {{name}}';
+		const screen = show({ m });
+		await settle();
+		const fee = document.querySelector('[data-testid="execute-fee"]')?.textContent ?? '';
+		expect(fee).toContain('Fee 0.035 xDAI by 0x0000');
+		expect(fee).toContain('Setup on Gnosis 0.02 xDAI:');
+		expect(fee).toContain('proposal.setupMultisig');
+		expect(fee).toContain('activating 0x0000');
+		press('proposal.approveAndExecute');
+		await settle();
+		expect(fake.calls).toEqual(['execute']);
+		expect(fake.executedWith).toEqual([look]);
+		await screen.unmount();
+	});
+
+	it('while the look is out, says so and holds Execute', async () => {
+		fake.chain.items = [ready()];
+		fake.previews = {};
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="execute-checking"]')).not.toBeNull();
+		const execute = [...document.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === 'proposal.approveAndExecute'
+		) as HTMLButtonElement;
+		expect(execute.disabled).toBe(true);
+		await screen.unmount();
+	});
+});
+
+describe('who executes (r4-10, r4D-1)', () => {
+	const SECOND = { address: OTHER, name: 'Second', account: { address: OTHER } };
+
+	it('lists each executor’s coin, marks who cannot pay, and picks one who can', async () => {
+		fake.chain.items = [
+			item({
+				approved: 2,
+				status: 'ready',
+				canApprove: [],
+				canExecute: [local, SECOND],
+				approvals: [
+					{ owner: ME, counts: true, approval: {}, createdMs: 1 },
+					{ owner: OTHER, counts: true, approval: {}, createdMs: 1 }
+				]
+			})
+		];
+		fake.previews = {
+			[ME]: priced({ balance: 10n, canPay: false }),
+			[OTHER]: priced({ balance: 900n })
+		};
+		const screen = show();
+		await settle();
+		const balances = [...document.querySelectorAll('[data-testid="actor-balance"]')].map((b) =>
+			b.textContent?.replace(/\s+/g, ' ').trim()
+		);
+		expect(balances).toEqual(['10 xDAI · proposal.pickerCantPay', '900 xDAI']);
+		const on = document.querySelector('.actor label.on')?.textContent ?? '';
+		expect(on, 'the one who can pay is picked').toContain('Second');
+		expect(buttons()).toContain('proposal.execute');
+		await screen.unmount();
+	});
+
+	it('picked one who cannot pay: said before the tap; Approve is the action', async () => {
+		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
+		fake.previews = { [ME]: priced({ balance: 0n, canPay: false }) };
+		const m = words();
+		m.proposal.cannotPay = '{{name}} cannot pay {{fee}}, has {{balance}}';
+		const screen = show({ m });
+		await settle();
+		expect(document.querySelector('[data-testid="execute-cant-pay"]')?.textContent?.trim()).toBe(
+			`0x0000 cannot pay ${35n * 10n ** 15n} xDAI, has 0 xDAI`
+		);
+		expect(buttons()).not.toContain('proposal.approveAndExecute');
+		expect(buttons()).toContain('proposal.approve');
+		await screen.unmount();
+	});
+});
+
+describe('"Approve and execute" whose execute part cannot run (r4-11)', () => {
+	it('keeps the approval, and says only executing could not run', async () => {
+		fake.chain.items = [item({ approved: 1, canExecute: [local], canApprove: [local] })];
+		const { ExecutorCannotPayError } = await import('../core/execute');
+		fake.executeThrows = new ExecutorCannotPayError(1n, 0n);
+		const screen = show();
+		await settle();
+		press('proposal.approveAndExecute');
+		await settle();
+		expect(fake.calls).toEqual(['approve']);
+		const said = document.querySelector('[data-testid="approved-not-executed"]');
+		expect(said?.textContent).toContain('proposal.approvedNotExecuted');
+		expect(document.body.textContent).not.toContain('Failed:');
+		await screen.unmount();
+	});
+});
+
+describe('how each missing member approves (r4-9, r4D-6)', () => {
+	it('a Vela member elsewhere: never an outside wallet — the link, in Vela', async () => {
+		fake.vela = [OTHER];
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).toContain('proposal.sendLink');
+		expect(document.querySelector('[data-testid="approves-in-vela"]')).not.toBeNull();
+		await screen.unmount();
+	});
+
+	it('enough approved: the others are "Not needed", and nothing asks them to sign', async () => {
+		fake.chain = {
+			chainId: 100,
+			members: { ...members, owners: [ME, TO, OTHER] },
+			mailbox: true,
+			items: [
+				item({
+					approved: 2,
+					status: 'ready',
+					canApprove: [],
+					approvals: [
+						{ owner: ME, counts: true, approval: {}, createdMs: 1 },
+						{ owner: TO, counts: true, approval: {}, createdMs: 1 }
+					]
+				})
+			]
+		};
+		const screen = show();
+		await settle();
+		expect(document.body.textContent).toContain('proposal.notNeeded');
+		expect(buttons()).not.toContain('external.signWithWallet');
+		expect(buttons()).not.toContain('proposal.sendLink');
+		await screen.unmount();
+	});
+});
+
+describe('Reject (r4D-14)', () => {
+	it('has a way back', async () => {
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		press('proposal.reject');
+		await settle();
+		expect(buttons()).toContain('proposal.rejectCancel');
+		press('proposal.rejectCancel');
+		await settle();
+		expect(buttons()).not.toContain('proposal.rejectCancel');
+		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+});
+
+describe('a dApp’s transaction on a device with no member (r4C-10)', () => {
+	it('says "Propose", never "Propose and approve": nobody here approves it', async () => {
+		const THIRD = '0x00000000000000000000000000000000000000cc';
+		const strangers = { owners: [OTHER, THIRD], threshold: 2, nonce: 0n, deployed: true };
+		fake.draft = {
+			chain: { chainId: 100, members: strangers, items: [], mailbox: true },
+			item: item({ canApprove: [], canExecute: [] })
+		};
+		const draft = {
+			rid: 'r1',
+			address: SAFE,
+			chainId: 100,
+			method: 'eth_sendTransaction',
+			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
+			origin: 'https://app.example',
+			safeTxHash: null,
+			propose: async () => HASH,
+			decline: () => {},
+			close: () => {}
+		};
+		const screen = show({ draft, safeTxHash: '' });
+		await settle();
+		expect(buttons()).toContain('send.proposeOnly');
+		expect(buttons()).not.toContain('send.propose');
 		await screen.unmount();
 	});
 });
