@@ -312,6 +312,12 @@
 			>
 		</div>
 		<p class="note" class:risky>{thresholdNote}</p>
+		<!-- Passkey-native recovery: a lost passkey's member is replaced by the others. -->
+		{#if threshold < owners.length}
+			<p class="hint" data-testid="create-recovery">
+				{fillTemplate(m.members.recovery, { m: threshold, n: owners.length })}
+			</p>
+		{/if}
 		<div class="nav two">
 			<Button variant="secondary" shape="rounded" onclick={() => (step = 'members')}
 				>{m.create.back}</Button

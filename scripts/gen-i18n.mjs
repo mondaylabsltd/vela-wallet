@@ -1140,9 +1140,20 @@ for (let i = 1; i < PATHS.length; i++) {
 //   device with no member proposes; nobody here approves). 2318 + 25 = 2343
 //   leaves, 121 branches.
 // 2549 (the above on 2524, merged): 2399 + 25 = 2424 leaves, 125 branches.
-if (PATHS.length !== 2549) fail(`expected 2549 paths (2424 leaf + 125 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2424) fail(`expected 2424 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 125) fail(`expected 125 branch paths, got ${branchSet.size}`);
+// 2490 (changing a multisig's members, round 4, 2026-10-29): + the
+//   `home.multisig.members` branch — Add member (address, ENS name or
+//   contact, the resolved address shown, a name and kind kept on this
+//   device), Replace and Remove per member, the approvals stepper, each one
+//   proposal per deployed network with its before → after, the changes
+//   waiting with per-network progress, and the passkey-native recovery
+//   paragraph (37 leaves) — and its `refuse` branch, one sentence per
+//   refusal of the core's `MemberRefusal` (12 leaves).
+//   2318 + 49 = 2367 leaves, 121 + 2 = 123 branches.
+// 2600 (the above on 2549, merged): 2424 + 49 = 2473 leaves, 125 + 2 = 127
+//   branches.
+if (PATHS.length !== 2600) fail(`expected 2600 paths (2473 leaf + 127 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2473) fail(`expected 2473 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 127) fail(`expected 127 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

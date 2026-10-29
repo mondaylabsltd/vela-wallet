@@ -40,6 +40,7 @@
 	import { multisigUi } from '../core/ui.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
+	import MemberChanges from './MemberChanges.svelte';
 
 	interface Props {
 		m: MultisigMessages;
@@ -304,6 +305,8 @@
 	{#if local.length === 0}
 		<p class="note">{m.panel.readOnly}</p>
 	{/if}
+	<!-- Add, replace, remove, the approvals needed: one proposal per deployed network. -->
+	<MemberChanges {m} {account} {cancelLabel} />
 	{#if !isShared(multisig.find(account.address) ?? account)}
 		<!-- Its record has not landed: another member cannot add it yet. -->
 		<p class="note" role="status">{m.panel.notShared}</p>

@@ -81,7 +81,10 @@ async function shot(page: Page, name: string): Promise<void> {
 
 function errors(page: Page): string[] {
 	const seen: string[] = [];
-	page.on('pageerror', (e) => seen.push(e.message));
+	page.on('pageerror', (e) => {
+		seen.push(e.message);
+		console.log(`[pageerror] ${e.message.slice(0, 400)}`);
+	});
 	// The wallet's own log, for whoever reads a failed run.
 	page.on('console', (m) => {
 		if (!/worldchain|Chainlink|Failed to load resource|favicon/.test(m.text())) {
@@ -1175,6 +1178,143 @@ test('a genesis that hands the multisig to a module: refused; deployed, said and
 		await expect(page.getByTestId('flag-refused')).toBeVisible({ timeout: 30_000 });
 		await expect(page.getByTestId('flag-risk')).toBeVisible();
 		await shot(page, 'h7-switcher');
+	});
+	expect(thrown).toEqual([]);
+	await ctx.close();
+});
+
+/** A Safe's owners and threshold on `chainId`, as the chain holds them (`getOwners`, `getThreshold`). */
+async function ownersOn(
+	safe: string,
+	chainId: number
+): Promise<{ owners: string; threshold: number }> {
+	const read = async (signature: string) =>
+		rpc<string>('eth_call', [{ to: safe, data: await calldata(signature) }, 'latest'], chainId);
+	return {
+		owners: (await read('getOwners()')).toLowerCase(),
+		threshold: Number(BigInt(await read('getThreshold()')))
+	};
+}
+
+/**
+ * Members changed from Settings (r4D-3): one action — Add member — is one
+ * proposal per network the multisig is deployed on, each built against that
+ * network's own members; the two read as one change with each network's
+ * progress, and each is approved and executed there like any other
+ * transaction. The chain says the rest.
+ */
+test('members changed from Settings: one proposal per deployed network, executed on each', async ({
+	browser
+}) => {
+	test.setTimeout(480_000);
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	await page
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await page.getByRole('button', { name: 'Add account' }).click();
+	await page.getByRole('button', { name: /^Create multisig/ }).click();
+	await page.getByRole('textbox', { name: 'Name' }).fill('Changes hands');
+	await page.getByText('Parallel Two', { exact: true }).click();
+	await page.getByText('Parallel Three', { exact: true }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByText('2 of 3', { exact: true })).toBeVisible();
+	// The rule chosen, the way back from a lost passkey said with it.
+	await expect(page.getByTestId('create-recovery')).toBeVisible();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Create', exact: true }).click();
+	await page.getByRole('button', { name: 'Done' }).click();
+	const multisig = (await page.evaluate(() => localStorage.getItem('vela.activeMultisig')))!;
+
+	const closeSheet = () =>
+		expect(async () => {
+			await page.keyboard.press('Escape');
+			await expect(page.getByRole('heading', { name: 'Multisig transaction' })).toHaveCount(0, {
+				timeout: 1_000
+			});
+		}).toPass({ timeout: 15_000 });
+
+	await test.step('deployed on Gnosis and on Base: a transfer out on each', async () => {
+		await setBalance(multisig, 2n * 10n ** 18n);
+		await setBalance(multisig, 2n * 10n ** 18n, UNREAD_CHAIN);
+		await page.reload();
+		for (const coin of [
+			{ row: /^xDAI Gnosis/, symbol: 'xDAI' },
+			{ row: /^ETH Base/, symbol: 'ETH' }
+		]) {
+			await proposeSend(page, '0.1', `mc0-${coin.symbol}`, coin);
+			await page.getByRole('button', { name: 'Approve and execute' }).click();
+			await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+				timeout: 120_000
+			});
+			await closeSheet();
+			await page.goto('/en/wallet');
+		}
+		expect(await rpc<string>('eth_getCode', [multisig, 'latest'])).not.toBe('0x');
+		expect(await rpc<string>('eth_getCode', [multisig, 'latest'], UNREAD_CHAIN)).not.toBe('0x');
+	});
+
+	await test.step('Add member: the change on each network, then one proposal each', async () => {
+		await page.getByRole('link', { name: '2 of 3 members approve' }).first().click();
+		const changes = page.getByTestId('member-changes');
+		await expect(changes.locator('.rows li')).toHaveCount(3, { timeout: 60_000 });
+		await expect(page.getByTestId('recovery')).toBeVisible();
+		await page.getByRole('button', { name: 'Add member' }).click();
+		const entry = page.getByTestId('member-entry');
+		// The multisig itself is no member: refused in words, on each network.
+		await entry.fill(multisig);
+		await entry.press('Tab');
+		await expect(page.getByTestId('member-plan')).toContainText(
+			"Gnosis: The multisig can't be its own member."
+		);
+		await entry.fill(EOA_ONE);
+		await entry.press('Tab');
+		await expect(page.getByTestId('member-resolved')).toContainText(EOA_ONE);
+		await page.getByTestId('member-name').fill('Outside One');
+		await expect(page.getByTestId('member-plan')).toContainText('Gnosis: 2 of 3 → 2 of 4');
+		await expect(page.getByTestId('member-plan')).toContainText('Base: 2 of 3 → 2 of 4');
+		await shot(page, 'mc1-add-plan');
+		await page.getByRole('button', { name: 'Propose and approve' }).click();
+		// One change, two networks (in the wallet's network order), each 1 of 2 so far.
+		await expect(page.getByTestId('member-group')).toHaveAttribute(
+			'data-progress',
+			'Base 1/2 · Gnosis 1/2',
+			{ timeout: 90_000 }
+		);
+		await expect(page.getByTestId('member-group')).toContainText('Add Outside One');
+		await shot(page, 'mc2-group');
+	});
+
+	await test.step('each network approves and executes its own', async () => {
+		for (const network of ['Gnosis', 'Base']) {
+			await page
+				.getByTestId('member-group')
+				.getByRole('button', { name: new RegExp(`^${network} `) })
+				.click();
+			await expect(page.getByText('Add a member').first()).toBeVisible({ timeout: 30_000 });
+			await page.getByRole('button', { name: 'Approve and execute' }).click();
+			await expect(page.getByText('Executed', { exact: true }).first()).toBeVisible({
+				timeout: 120_000
+			});
+			await shot(page, `mc3-executed-${network}`);
+			await closeSheet();
+		}
+		for (const chainId of [100, UNREAD_CHAIN]) {
+			const now = await ownersOn(multisig, chainId);
+			expect(now.owners).toContain(EOA_ONE.slice(2).toLowerCase());
+			expect(now.threshold).toBe(2);
+		}
+		// Nothing waits any more; the rows are the four members now.
+		await page.reload();
+		await expect(page.getByTestId('member-changes').locator('.rows li')).toHaveCount(4, {
+			timeout: 60_000
+		});
+		await expect(page.getByTestId('member-group')).toHaveCount(0);
+		await shot(page, 'mc4-four');
 	});
 	expect(thrown).toEqual([]);
 	await ctx.close();

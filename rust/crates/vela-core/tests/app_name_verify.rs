@@ -7,7 +7,10 @@
 
 #![cfg(feature = "crux")]
 
-use vela_core::app::name_verify::{step, step_json, ForwardState, VerifyStep};
+use vela_core::app::name_verify::{
+    resolve_step, resolve_step_json, step, step_json, ForwardState, ResolveState, ResolveStep,
+    VerifyStep,
+};
 use vela_core::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
 /// The ENS registry on Ethereum, as every shell's table holds it.
@@ -348,4 +351,92 @@ fn the_forward_lookup_stays_on_the_chain_it_was_asked_about() {
         unreachable!("expected an eth_call");
     };
     assert_eq!(*chain_id, 56);
+}
+
+// -- a typed name, resolved forward (a member added by ENS) ---------------------
+
+fn resolve(name: &str, mut answer: impl FnMut(&str) -> Option<String>) -> ResolveStep {
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..16 {
+        let next = resolve_step(1, REGISTRY, name, &answers);
+        let ResolveStep::Ask { requests } = next else {
+            return next;
+        };
+        for request in requests {
+            let LookupRequest::EthCall { id, .. } = request else {
+                unreachable!("this machine only asks for eth_call");
+            };
+            answers.push(match answer(&id) {
+                Some(body) => ok(&id, &body),
+                None => failed(&id),
+            });
+        }
+    }
+    unreachable!("the machine never finished");
+}
+
+/// A name the person typed resolves to the address its resolver gives, in
+/// EIP-55, with the name as it was resolved — through the same walk the
+/// reverse check uses, wildcard (ENSIP-10) included.
+#[test]
+fn a_typed_name_resolves_to_its_address() {
+    let done = resolve("Vitalik.ETH", |id| match id {
+        "resolver:0" => Some(address_word(RESOLVER)),
+        "addr" => Some(address_word(THEIRS)),
+        _ => None,
+    });
+    assert_eq!(
+        done,
+        ResolveStep::Done {
+            state: ResolveState::Resolved,
+            address: Some(THEIRS.to_owned()),
+            name: Some("vitalik.eth".to_owned()),
+        }
+    );
+    let wildcard = resolve("alice.base.eth", |id| match id {
+        "resolver:0" => Some(zero_word()),
+        "resolver:1" => Some(address_word(RESOLVER)),
+        "resolve" => Some(resolve_return(MINE)),
+        _ => None,
+    });
+    assert!(matches!(
+        wildcard,
+        ResolveStep::Done { state: ResolveState::Resolved, address: Some(ref a), .. } if a == MINE
+    ));
+}
+
+/// No address, no name, nobody answering: each said as itself, never an
+/// address made up.
+#[test]
+fn a_typed_name_without_an_address_is_not_found_and_silence_is_unavailable() {
+    let none = resolve("nobody.eth", |id| match id {
+        "resolver:0" => Some(address_word(RESOLVER)),
+        "addr" => Some(zero_word()),
+        _ => None,
+    });
+    assert!(matches!(
+        none,
+        ResolveStep::Done {
+            state: ResolveState::NotFound,
+            address: None,
+            ..
+        }
+    ));
+    assert!(matches!(
+        resolve("not a name", |_| None),
+        ResolveStep::Done {
+            state: ResolveState::NotFound,
+            ..
+        }
+    ));
+    assert!(matches!(
+        resolve("vitalik.eth", |_| None),
+        ResolveStep::Done {
+            state: ResolveState::Unavailable,
+            address: None,
+            ..
+        }
+    ));
+    let json = resolve_step_json(1, REGISTRY, "vitalik.eth", "[]");
+    assert!(json.contains("\"type\":\"ask\""), "{json}");
 }

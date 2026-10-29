@@ -31,10 +31,13 @@ import {
 	sameAddress,
 	verifyApproval,
 	verifyEcdsaApproval,
+	memberChangeTx,
 	type Approval,
+	type MemberChangeRequest,
 	type Review,
 	type SafeTx
 } from './kernel';
+import { MemberChangeRefusedError, memberStateOf } from './member-changes';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { localOwners, signApproval, type LocalOwner } from './owners';
 import { plainAccounts } from './signers.svelte';
@@ -1049,6 +1052,31 @@ export async function proposeRename(
 }
 
 /**
+ * A change of members or approvals on `chainId`, built by the core against
+ * that network's members as the chain holds them NOW (read again here, with
+ * the open proposals: `prevOwner` comes from that network's own list) and
+ * proposed at the next free nonce, approved at once like a transfer. Throws
+ * {@link MemberChangeRefusedError} when the core refuses it there — the
+ * members moved since the person looked, say.
+ */
+export async function proposeMemberChange(
+	address: string,
+	chainId: number,
+	change: MemberChangeRequest
+): Promise<{ safeTxHash: string }> {
+	return proposeBuilt(address, chainId, (nonce, chain) => {
+		const verdict = memberChangeTx(
+			address,
+			memberStateOf(chain),
+			change,
+			`0x${nonce.toString(16)}`
+		);
+		if (verdict.kind === 'refused') throw new MemberChangeRefusedError(verdict.refusal);
+		return verdict.tx;
+	});
+}
+
+/**
  * A dApp's call (`eth_sendTransaction`'s `to`, `value`, `data`, or one of
  * `wallet_sendCalls`' calls): `value` a quantity, `data` hex.
  */
@@ -1136,7 +1164,7 @@ export async function proposeCalls(
 async function proposeBuilt(
 	address: string,
 	chainId: number,
-	build: (nonce: bigint) => SafeTx,
+	build: (nonce: bigint, chain: ChainState) => SafeTx,
 	signal?: AbortSignal
 ): Promise<{ safeTxHash: string }> {
 	const account = multisig.find(address);
@@ -1151,7 +1179,7 @@ async function proposeBuilt(
 	// The owners on that chain now (a Safe's owners may have changed since its genesis).
 	const owners = chain.members.owners;
 	const owner = localOwners(owners)[0];
-	const tx = build(nextNonceOf(chain));
+	const tx = build(nextNonceOf(chain), chain);
 	const review = reviewTx(chainId, account.address, tx);
 	if (review.action === null) throw new Error(review.refusal ?? 'refused');
 	stopIfWithdrawn(signal);

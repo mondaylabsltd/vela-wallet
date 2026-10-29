@@ -5544,6 +5544,37 @@ export function registryResolveUnitStep(unit_id, source, answers_json) {
 }
 
 /**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+ * walk as [`verified_name_step`], handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ * @param {number} chain_id
+ * @param {string} registry
+ * @param {string} name
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function resolvedNameStep(chain_id, registry, name, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.resolvedNameStep(chain_id, ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * How long an endpoint rests after `consecutive_failures` failures in a
  * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
  * `rpc_pool::cooldown_ms`.
