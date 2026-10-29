@@ -479,12 +479,18 @@ export interface SettingsMessages {
 		unsyncedAck: string;
 	};
 	bugReport: {
-		title: string;
-		subtitle: string;
-		whatPlaceholder: string;
-		addSteps: string;
-		stepsPlaceholder: string;
-		previewToggle: string;
+		/**
+		 * The sheet asks for help rather than for a ticket (round 3, owner):
+		 * "Need help?", one box, and everything else said only when it is
+		 * needed. The old words (`title`, `addSteps`, `screenshotsHint`, …)
+		 * stay in the corpus for iOS, Android and desktop, which still read
+		 * them; the web reads these.
+		 */
+		helpTitle: string;
+		helpSubtitle: string;
+		helpPlaceholder: string;
+		/** "What happened?" — the box's accessible name. */
+		whatLabel: string;
 		previewVersion: string;
 		previewPlatform: string;
 		previewLanguage: string;
@@ -498,29 +504,34 @@ export interface SettingsMessages {
 		chainFallback: string;
 		previewFailures: string;
 		previewNone: string;
+		/** The one quiet line the diagnostics fold into, and its toggle. */
+		detailsIncluded: string;
+		detailsView: string;
+		detailsHide: string;
 		consent: string;
-		send: string;
+		sendHelp: string;
 		/** Spec 081: the button while the endpoint is being asked. */
 		sending: string;
-		/** Filed — `successBody*` carry `{{number}}`. */
-		successTitle: string;
-		successBodyNew: string;
-		successBodyDeduped: string;
+		/** Filed: the thank-you, and the issue it became, as a quiet link. */
+		thanksTitle: string;
+		thanksBody: string;
+		followUpGithub: string;
+		/** The toast's action when the sheet was closed before the outcome. */
 		viewIssue: string;
 		/** The endpoint could not file it; the prefilled form still can. */
 		fallbackTitle: string;
 		fallbackBody: string;
 		openGithub: string;
-		openGithubForm: string;
 		/** Screenshots (078 round 3). `{{max}}` = 5, `{{index}}` 1-based. */
 		screenshotsLabel: string;
-		addScreenshots: string;
-		screenshotsHint: string;
+		attachScreenshot: string;
 		screenshotsPublic: string;
 		removeScreenshot: string;
+		/** A sixth image refused; `screenshotsFull` is said at five, before one is. */
 		screenshotsLimit: string;
+		screenshotsFull: string;
 		screenshotUnsupported: string;
-		/** Web only: the section is a drop target and paste adds images. */
+		/** Web only: the page is a drop target and paste adds images. */
 		dropHint: string;
 		/** Filed, but some images could not be stored. */
 		screenshotsDropped: string;
@@ -1126,12 +1137,10 @@ export const SETTINGS_KEYS = [
 	'settings.eraseDevice.failed',
 	'settings.eraseDevice.unsynced',
 	'settings.eraseDevice.unsyncedAck',
-	'componentsUi.bugReport.title',
-	'componentsUi.bugReport.subtitle',
-	'componentsUi.bugReport.whatPlaceholder',
-	'componentsUi.bugReport.addSteps',
-	'componentsUi.bugReport.stepsPlaceholder',
-	'componentsUi.bugReport.previewToggle',
+	'componentsUi.bugReport.helpTitle',
+	'componentsUi.bugReport.helpSubtitle',
+	'componentsUi.bugReport.helpPlaceholder',
+	'componentsUi.bugReport.whatLabel',
 	'componentsUi.bugReport.previewVersion',
 	'componentsUi.bugReport.previewPlatform',
 	'componentsUi.bugReport.previewLanguage',
@@ -1139,23 +1148,25 @@ export const SETTINGS_KEYS = [
 	'assets.chainFallback',
 	'componentsUi.bugReport.previewFailures',
 	'componentsUi.bugReport.previewNone',
+	'componentsUi.bugReport.detailsIncluded',
+	'componentsUi.bugReport.detailsView',
+	'componentsUi.bugReport.detailsHide',
 	'componentsUi.bugReport.consent',
-	'componentsUi.bugReport.send',
+	'componentsUi.bugReport.sendHelp',
 	'componentsUi.bugReport.sending',
-	'componentsUi.bugReport.successTitle',
-	'componentsUi.bugReport.successBodyNew',
-	'componentsUi.bugReport.successBodyDeduped',
+	'componentsUi.bugReport.thanksTitle',
+	'componentsUi.bugReport.thanksBody',
+	'componentsUi.bugReport.followUpGithub',
 	'componentsUi.bugReport.viewIssue',
 	'componentsUi.bugReport.fallbackTitle',
 	'componentsUi.bugReport.fallbackBody',
 	'componentsUi.bugReport.openGithub',
-	'componentsUi.bugReport.openGithubForm',
 	'componentsUi.bugReport.screenshotsLabel',
-	'componentsUi.bugReport.addScreenshots',
-	'componentsUi.bugReport.screenshotsHint',
+	'componentsUi.bugReport.attachScreenshot',
 	'componentsUi.bugReport.screenshotsPublic',
 	'componentsUi.bugReport.removeScreenshot',
 	'componentsUi.bugReport.screenshotsLimit',
+	'componentsUi.bugReport.screenshotsFull',
 	'componentsUi.bugReport.screenshotUnsupported',
 	'componentsUi.bugReport.dropHint',
 	'componentsUi.bugReport.screenshotsDropped',

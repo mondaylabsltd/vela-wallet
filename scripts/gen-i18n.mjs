@@ -987,8 +987,15 @@ for (let i = 1; i < PATHS.length; i++) {
 // 2333 (the home says a wallet is saved here and still syncing, ob-2): +
 //   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
 // 2373 (round 3 merged: + onboarding & erase, 2026-10-29): 2248 + 5 = 2253 leaves, 120 branches.
-if (PATHS.length !== 2373) fail(`expected 2373 paths (2253 leaf + 120 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2253) fail(`expected 2253 leaf paths, got ${leafSet.size}`);
+// 2383 (the report reads as asking for help, round 3 feedback): + 12
+//   `componentsUi.bugReport.{helpTitle, helpSubtitle, helpPlaceholder,
+//   attachScreenshot, screenshotsFull, detailsIncluded, detailsView,
+//   detailsHide, sendHelp, thanksTitle, thanksBody, followUpGithub}` (the web
+//   sheet's new words; iOS, Android and desktop still read the old ones), − 2
+//   orphans no client read (`bugReport.{stepsLabel, cancel}`).
+//   2253 + 10 = 2263 leaves, 120 branches.
+if (PATHS.length !== 2383) fail(`expected 2383 paths (2263 leaf + 120 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2263) fail(`expected 2263 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 120) fail(`expected 120 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

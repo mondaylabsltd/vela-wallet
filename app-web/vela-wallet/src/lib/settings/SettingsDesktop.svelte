@@ -105,7 +105,7 @@
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
 		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
-		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onfeedbacksend?: (report: { what: string; screenshots: string[] }) => void;
 		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
 		onfeedbackdone?: () => void;
 		feedbackSending?: boolean;

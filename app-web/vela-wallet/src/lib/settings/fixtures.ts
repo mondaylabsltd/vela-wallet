@@ -986,12 +986,15 @@ export type FeedbackMessages = Pick<SettingsMessages, 'bugReport'> & {
  */
 export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 	return {
-		title: m.bugReport.title,
-		subtitle: m.bugReport.subtitle,
-		placeholder: m.bugReport.whatPlaceholder,
-		addSteps: m.bugReport.addSteps,
-		stepsPlaceholder: m.bugReport.stepsPlaceholder,
-		previewToggle: m.bugReport.previewToggle,
+		title: m.bugReport.helpTitle,
+		subtitle: m.bugReport.helpSubtitle,
+		placeholder: m.bugReport.helpPlaceholder,
+		label: m.bugReport.whatLabel,
+		details: {
+			included: m.bugReport.detailsIncluded,
+			view: m.bugReport.detailsView,
+			hide: m.bugReport.detailsHide
+		},
 		// Label AND value on every line: the point of this block is that the
 		// person can read what is about to leave their device, and a bare list
 		// of values is not readable.
@@ -1009,13 +1012,12 @@ export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 			`${m.bugReport.previewFailures}: ${m.bugReport.previewNone}`
 		],
 		consent: m.bugReport.consent,
-		send: m.bugReport.send,
+		send: m.bugReport.sendHelp,
 		sending: m.bugReport.sending,
 		success: {
-			title: m.bugReport.successTitle,
-			bodyNew: m.bugReport.successBodyNew,
-			bodyDeduped: m.bugReport.successBodyDeduped,
-			view: m.bugReport.viewIssue,
+			title: m.bugReport.thanksTitle,
+			body: m.bugReport.thanksBody,
+			followUp: m.bugReport.followUpGithub,
 			dropped: m.bugReport.screenshotsDropped,
 			done: m.bugReport.done
 		},
@@ -1026,14 +1028,13 @@ export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 			screenshots: m.bugReport.fallbackScreenshots,
 			retry: m.common.tryAgain
 		},
-		githubLink: m.bugReport.openGithubForm,
 		screenshots: {
 			label: m.bugReport.screenshotsLabel,
-			add: m.bugReport.addScreenshots,
-			hint: fill(m.bugReport.screenshotsHint, { max: MAX_SCREENSHOTS }),
+			add: m.bugReport.attachScreenshot,
 			public: m.bugReport.screenshotsPublic,
 			remove: m.bugReport.removeScreenshot,
 			limit: fill(m.bugReport.screenshotsLimit, { max: MAX_SCREENSHOTS }),
+			full: fill(m.bugReport.screenshotsFull, { max: MAX_SCREENSHOTS }),
 			unsupported: m.bugReport.screenshotUnsupported,
 			dropHint: m.bugReport.dropHint,
 			max: MAX_SCREENSHOTS,

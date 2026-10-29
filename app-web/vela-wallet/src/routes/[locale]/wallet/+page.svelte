@@ -2312,7 +2312,7 @@
 					: rescue === 'relay-unreachable'
 						? rm.relayUnreachable.title
 						: rescue === 'relay-report'
-							? rm.bugReport.title
+							? rm.bugReport.helpTitle
 							: rm.relayer.title
 	);
 
@@ -2488,33 +2488,28 @@
 		// by the stop as it stands now.
 		if (!relayReportSend.sending) {
 			relayReportSend.done();
-			relayReportSend.draft.what = report.what;
-			relayReportSend.draft.steps = report.steps;
-			relayReportSend.draft.stepsOpen = report.steps !== '';
+			relayReportSend.draft.seed(report.what, report.steps);
 		}
 		void readWorkerFailureLines().then((lines) => (relayWorkerFailures = lines));
 		rescue = 'relay-report';
 	}
 
-	async function sendRelayReport(typed: {
-		what: string;
-		steps: string;
-		screenshots: string[];
-	}): Promise<void> {
+	async function sendRelayReport(typed: { what: string; screenshots: string[] }): Promise<void> {
 		const report = relayReport;
 		if (report === null) return;
 		// Read now: the words of the page that sent, for a toast that may be
 		// shown on another page.
 		const copy = {
-			filed: rm.bugReport.successTitle,
+			filed: rm.bugReport.thanksTitle,
 			view: rm.bugReport.viewIssue,
 			fellBack: rm.bugReport.fallbackTitle,
 			open: rm.bugReport.openGithub,
 			close: rm.common.close
 		};
 		const payload = buildBugReport({
+			// The core's steps were folded into the words at the seed — what the
+			// person read in the one box is what is sent.
 			what: typed.what,
-			steps: typed.steps,
 			area: report.area,
 			fingerprint: report.fingerprint,
 			labels: feedbackLabels(rm),

@@ -123,7 +123,7 @@
 		 * `onsend`, and nothing ever passed one, so the button was inert on the
 		 * real screen while the sheet promised a report was being filed.
 		 */
-		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onfeedbacksend?: (report: { what: string; screenshots: string[] }) => void;
 		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
 		onfeedbackdone?: () => void;
 		/** The route is waiting on the bug-report endpoint. */

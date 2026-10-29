@@ -17,7 +17,7 @@ import type { FeedbackResult } from './model';
 
 /** The words a toast may need, from the settings corpus of the page that sent. */
 export interface ReportToastCopy {
-	/** `componentsUi.bugReport.successTitle` */
+	/** `componentsUi.bugReport.thanksTitle` */
 	filed: string;
 	/** `componentsUi.bugReport.viewIssue` */
 	view: string;

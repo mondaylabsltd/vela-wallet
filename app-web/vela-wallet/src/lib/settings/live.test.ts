@@ -1172,7 +1172,8 @@ describe('the relayer bootstrap sheet', () => {
 			failures: []
 		};
 		const panel = liveRelayReport(rm, facts);
-		expect(panel.send).toBe(m.bugReport.send);
+		expect(panel.send).toBe(m.bugReport.sendHelp);
+		expect(panel.title).toBe(m.bugReport.helpTitle);
 		expect(panel.consent).toBe(m.bugReport.consent);
 		expect(panel.fallback.retry).toBe(m.common.tryAgain);
 		expect(panel.previewLines).toEqual([
