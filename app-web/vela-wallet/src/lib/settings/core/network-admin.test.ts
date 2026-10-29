@@ -119,6 +119,7 @@ describe('the Vela networks shown on the person’s word (owner decision 2026-10
 	it('lists the core’s rows in the web table’s order, and shows one again in one step', async () => {
 		const { CHAINS } = await import('$lib/services/chains');
 		const { spaceNetworksSync } = await import('$lib/services/networks');
+		const networkAdmin = await resident();
 		await networkAdmin.boot();
 		await vi.waitFor(() => expect(networkAdmin.view.loaded).toBe(true));
 		// This device had no record: settled on the twenty, before the ledger read it.

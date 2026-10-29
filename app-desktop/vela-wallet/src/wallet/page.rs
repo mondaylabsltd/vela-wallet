@@ -22928,7 +22928,6 @@ mod tests {
                 "DST3",
                 "DST4",
                 "DST4b",
-                "DST5",
                 "DST6",
                 "DST7",
                 "DST8",
@@ -22960,17 +22959,18 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 12);
+        // RPC Providers retired (round 3): eleven panels.
+        assert_eq!(SettingsPage::ALL.len(), 11);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         // The AI agent after the service endpoints (spec 103).
-        assert_eq!(SettingsPage::ALL[6], SettingsPage::Agent);
-        assert_eq!(SettingsPage::ALL[7], SettingsPage::FeeSpeed);
+        assert_eq!(SettingsPage::ALL[5], SettingsPage::Agent);
+        assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
         // Signing pages beside the speed (spec 071, 102).
-        assert_eq!(SettingsPage::ALL[8], SettingsPage::Signing);
+        assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
         // Community, About, then Send feedback — the phones' order
         // (2026-09-27); Community is drawn above About.
-        assert_eq!(SettingsPage::ALL[10], SettingsPage::About);
-        assert_eq!(SettingsPage::ALL[11], SettingsPage::Feedback);
+        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::Feedback);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips

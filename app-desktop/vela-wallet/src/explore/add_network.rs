@@ -168,6 +168,9 @@ mod tests {
             reported_chain_id: None,
             compat: None,
             can_add: phase == NetDappAddPhase::Ready,
+            rpc_from_site: false,
+            can_add_unverified: false,
+            vela_network: false,
         }
     }
 

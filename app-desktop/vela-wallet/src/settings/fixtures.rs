@@ -295,11 +295,6 @@ pub const NETWORKS: [NetworkFixture; 8] = [
 pub const DESKTOP_NETWORK_IDS: [&str; 6] =
     ["ethereum", "bnb", "polygon", "arbitrum", "base", "xlayer"];
 
-/// What the DRAWN boards say. The live About page counts the core's built-ins
-/// plus this person's own networks instead (`page.rs`), because the number a
-/// person opens About to read must be the one they are running.
-pub const NETWORK_COUNT: u32 = 24;
-
 /// "链 1" — the line under each network's name.
 pub fn chain_meta(s: &SettingsStrings, chain_id: u64) -> SharedString {
     SharedString::from(fill(&s.chain_id, "chainId", &chain_id.to_string()))
@@ -925,12 +920,9 @@ mod about_tests {
     }
 }
 
-/// Label / value / mono, in DST8's order.
-pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)> {
-    about_rows_with(s, NETWORK_COUNT)
-}
-
-/// The same rows with a network count somebody counted rather than drew.
+/// Label / value / mono, in DST8's order, with a network count somebody
+/// counted (`page.rs`: the core's built-ins plus this person's own networks,
+/// the number a person opens About to read).
 pub fn about_rows_with(
     s: &SettingsStrings,
     networks: u32,

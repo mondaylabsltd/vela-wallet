@@ -1082,13 +1082,16 @@ fn conformance_corpus() {
             }
         };
         seen_suites.push(suite.suite.clone());
-        // The marks rule lives in `app::remote_mark`, which only exists with
-        // the `crux` feature. Every CI run has it (the workspace build turns it
-        // on through vela-core-uniffi and vela-core-wasm); a crate-only run
-        // without it says so instead of counting cases it could not check.
-        if suite.suite == "marks" && !cfg!(feature = "crux") {
+        // The marks rule lives in `app::remote_mark` and the intents in
+        // `app::intent_json`, which only exist with the `crux` feature. Every
+        // CI run has it (the workspace build turns it on through
+        // vela-core-uniffi and vela-core-wasm); a crate-only run without it
+        // says so instead of counting cases it could not check (the intents'
+        // 19 read as "no dispatch arm" failures before this).
+        if matches!(suite.suite.as_str(), "marks" | "intents") && !cfg!(feature = "crux") {
             println!(
-                "conformance: the marks suite ({} cases) needs the `crux` feature — skipped",
+                "conformance: the {} suite ({} cases) needs the `crux` feature — skipped",
+                suite.suite,
                 suite.cases.len()
             );
             continue;

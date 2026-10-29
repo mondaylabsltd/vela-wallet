@@ -2210,8 +2210,8 @@ fn a_saved_key_becomes_the_rpc_of_every_network_it_served() {
     let (sut, ops) = load_with_keys(vec![], vec![], provider_keys(None, None, Some(FAKE_ANKR)));
     let configs = retired_configs(&ops).expect("configs to write");
     let chains: Vec<u32> = configs.iter().map(|c| c.chain_id).collect();
-    // Ankr's eight, in the built-in order.
-    assert_eq!(chains, vec![1, 56, 137, 42161, 10, 8453, 43114, 100]);
+    // Ankr's eight, in the built-in order (the owner's, 2026-10-29).
+    assert_eq!(chains, vec![1, 56, 8453, 137, 42161, 43114, 10, 100]);
     let gnosis = configs.iter().find(|c| c.chain_id == 100).expect("gnosis");
     assert_eq!(
         gnosis.rpc_url,

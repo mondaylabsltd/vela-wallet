@@ -5387,6 +5387,7 @@ mod tests {
             Some(SendRecipientRisk {
                 is_contract: Some(false),
                 first_time: Some(first_time),
+                history_unread: false,
             })
         };
         send.recipient_risk = risk(false);
@@ -5443,6 +5444,7 @@ mod tests {
         let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         let mut send = CoreHost::<Send>::new().view();
         send.receipt = Some(SendReceiptView {
+            still_unknown: false,
             can_send_again: false,
             status,
             hold_reason: hold,
@@ -5555,6 +5557,7 @@ mod tests {
         };
         send.tx_hash = Some("0xtx".to_owned());
         send.receipt = Some(SendReceiptView {
+            still_unknown: false,
             can_send_again: false,
             status: SendReceiptStatus::Confirmed,
             hold_reason: None,
@@ -10115,6 +10118,7 @@ mod payee_tests {
             });
             view.tx_hash = Some("0xtx".to_owned());
             let receipt = |status| SendReceiptView {
+                still_unknown: false,
                 can_send_again: false,
                 status,
                 hold_reason: None,
@@ -10201,6 +10205,7 @@ mod payee_tests {
         crate::executor::storage::tests::with_temp_state("payee-one-coin", || {
             let mut view = CoreHost::<SendMachine>::new().view();
             view.receipt = Some(SendReceiptView {
+                still_unknown: false,
                 can_send_again: false,
                 status: SendReceiptStatus::Confirmed,
                 hold_reason: None,

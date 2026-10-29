@@ -725,6 +725,7 @@ mod tests {
         health: Option<NetProbeHealth>,
     ) -> NetNetworkRow {
         NetNetworkRow {
+            optional: false,
             rpc_url_refused: false,
             explorer_url_refused: false,
             own_rpc: false,
@@ -1405,6 +1406,7 @@ mod wizard_tests {
     fn row(mismatch: Option<(u32, u32)>, deferred: bool) -> NetNetworkRow {
         use vela_core::app::network_admin::NetChainMismatch;
         NetNetworkRow {
+            optional: false,
             rpc_url_refused: false,
             explorer_url_refused: false,
             own_rpc: false,
