@@ -1195,6 +1195,14 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 export function minGasPriceWei(chain_id: number): string;
 
 /**
+ * Where a multisig member's approval goes on the web
+ * (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
+ * this build cannot read. `account_json` is the member's record as stored.
+ */
+export function multisigApprovalRoute(account_json: string): string | undefined;
+
+/**
  * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
  * arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
  * the executor's calls and the review. The shell moves JSON; the rules are
@@ -1660,6 +1668,21 @@ export function tokenMark(ethereum_data_url: string, chain_id: number, symbol: s
 export function tokenProvenance(chain_id: number, token: string, symbol: string, native_symbol: string): string;
 
 /**
+ * The page's answer as the member's approval (`PasskeyApproval`, JSON), or
+ * an error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `malformed`) — accepted
+ * only as `trusted_signer::approval::accept` accepts it.
+ */
+export function trustedSignerApprovalAccept(args_json: string): string;
+
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`): the method, the raw SafeTx, the
+ * core's safeTxHash, the member, its keys and route, the multisig's name.
+ */
+export function trustedSignerApprovalRequest(args_json: string): string;
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's
@@ -1674,6 +1697,26 @@ export function trustedSignerCeremonyKeyLabel(operation_json: string): string | 
  * not a ceremony. The web runs none; its gallery draws the apps' card.
  */
 export function trustedSignerCeremonyTitleKey(operation_json: string): string | undefined;
+
+/**
+ * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
+ * served (`launch::admit`): `{line, launch, versionToTrust}` — the integrity
+ * line (`IntegrityLine`), the address to open with the request handed over
+ * by `postMessage` (`CheckedPage::post_launch`; `null` unless the page was
+ * admitted and the check is fresh), and the version a self-hosted page asks
+ * to be trusted. `observed` is the sha256 of the body (`null` when it could
+ * not be fetched); `now_ms` the shell's clock.
+ */
+export function trustedSignerPageAdmit(base: string, index_json: string | null | undefined, trusted_json: string, observed: string | null | undefined, now_ms: number, lang: string): string;
+
+/**
+ * R6 for the web: which version of the page at `base` to check and open
+ * (`launch::target`) — `{url, version, shortVersion}`, or an error naming
+ * why there is none (`nothing_published` | `all_blocked`). `index_json` is
+ * the body of the deployment's `index.json`, `null` when it could not be
+ * read; `trusted_json` the versions the person trusted for this page.
+ */
+export function trustedSignerPageTarget(base: string, index_json: string | null | undefined, trusted_json: string): string;
 
 /**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
@@ -2070,6 +2113,7 @@ export interface InitOutput {
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
+    readonly multisigApprovalRoute: (a: number, b: number) => [number, number];
     readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
@@ -2171,8 +2215,12 @@ export interface InitOutput {
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
+    readonly trustedSignerApprovalAccept: (a: number, b: number) => [number, number, number, number];
+    readonly trustedSignerApprovalRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerCeremonyKeyLabel: (a: number, b: number) => [number, number];
     readonly trustedSignerCeremonyTitleKey: (a: number, b: number) => [number, number];
+    readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly trustedSignerPageTarget: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
     readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];

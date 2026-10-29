@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zG6hD7cWjTOCsub238RRAX03F2bdGFB1QmN2A7Yj0Tw='; style-src 'sha256-knEomczs+zj9InkRGE1jgt2WelpcdjHQib29cABjL/0='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Y9OGYllD1jtJtMYCjMjrrrDgbPfGR+MhQXo1d1PGRs8='; style-src 'sha256-UEbMxBqoN5BMFcqEZ3oYgtitb8Zd2vXFVy1cYhg25h8='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -984,6 +984,37 @@ details.fee-wrap[open] summary.fee .chevron { transform: rotate(90deg); }
   cursor: pointer;
 }
 
+.copy-button-small { padding: 2px var(--space-md); font-size: var(--text-sm); }
+
+/* A multisig approval's hashes, in full, each with its copy button: what a
+   member matches on another screen (a hardware wallet, another device). */
+.ms-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-sunken);
+}
+.ms-hashes-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--letterSpacing-sectionLabel);
+  text-transform: uppercase;
+  color: var(--color-fg-muted);
+}
+.ms-hash { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ms-hash-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.ms-hash-label { font-size: var(--text-base); color: var(--color-fg-muted); }
+.ms-hash-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  color: var(--color-fg-base);
+  overflow-wrap: anywhere;
+}
+.ms-hashes-note { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--color-fg-muted); }
+
 /* The one control, and the one accent: the app's primary button, full
    width, pill. Spec 079: it stays in reach on a phone, however long the
    sheet. */
@@ -1615,6 +1646,54 @@ window.VelaCS.i18n.register('en', {
   'warn.notThisAccount': 'Goes to an address that is not this account ({to}) — what this gives back would not reach you.',
   'warn.dustMinimum': 'The least this accepts in return is {amount} — next to nothing. If the price moves or someone trades ahead of you, almost nothing may come back.',
   'tag.byApp': 'per the app',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Multisig approval",
+  'intent.msReject': "Reject a multisig transaction",
+  'intent.msAddOwner': "Add a member",
+  'intent.msRemoveOwner': "Remove a member",
+  'intent.msSwapOwner': "Replace a member",
+  'intent.msThreshold': "Change approvals needed",
+  'intent.msRename': "Rename the multisig",
+  'tag.multisig': "multisig",
+  'tag.thisMultisig': "this multisig",
+  'field.multisig': "Multisig",
+  'field.member': "Member",
+  'field.newMember': "New member",
+  'field.oldMember': "Replaces",
+  'field.threshold': "Approvals needed",
+  'field.newName': "New name",
+  'sentence.msReject': "You approve rejecting whatever else waits at nonce {nonce}: once executed, nothing is sent and that nonce is used up.",
+  'sentence.msAddOwner': "{owner} becomes a member, and {threshold} approvals will be needed.",
+  'sentence.msRemoveOwner': "{owner} stops being a member, and {threshold} approvals will be needed.",
+  'sentence.msSwapOwner': "{newOwner} takes the place of {oldOwner}.",
+  'sentence.msThreshold': "From now on {threshold} approvals will be needed.",
+  'sentence.msRename': "The multisig’s record is renamed to “{name}”. Nothing else changes.",
+  'sentence.msBatch': "{count} calls in one multisig transaction.",
+  'warn.msMembers': "This changes who controls the multisig. Check every address with the other members before you approve.",
+  'ui.msHashes': "Hashes to compare",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Domain hash",
+  'ui.msMessageHash': "Message hash",
+  'ui.msHashesNote': "Computed by this page from the fields above. Match them on another screen — a hardware wallet, another member’s device — before you approve.",
+  'ui.msHashesMismatch': "Computed by this page from the fields above. They are not the hashes the app named.",
+  'ui.copy': "Copy",
+  'button.msApprove': "Approve",
+  'button.msReject': "Approve rejection",
+  'refuse.msShape': "This multisig request is not in a shape this page reads exactly, so what is shown could differ from what would be approved. Not signing.",
+  'refuse.msTooLarge': "This transaction is too large for this page to show in full. Not signing.",
+  'refuse.msHashMismatch': "The app says these fields make {claimed}, but they make {computed}. What you would approve is not what the app describes. Not signing.",
+  'refuse.msChainMismatch': "The request names two different networks. Not signing.",
+  'refuse.msMemberMismatch': "The request names one member to approve as and another account to sign with. Not signing.",
+  'refuse.msGasRefund': "This transaction would pay gas or a refund out of the multisig. Vela never signs that. Not signing.",
+  'refuse.msDelegateCall': "This runs another contract’s code as the multisig (a delegatecall), the technique used to drain Bybit. Only Safe’s batch contract (MultiSendCallOnly) may be called that way. Not signing.",
+  'refuse.msUnknownOperation': "This transaction has an operation type Safe does not define. Not signing.",
+  'refuse.msSelfCall': "This asks the multisig to call {fn} on itself, which would hand control to something other than its members. Not signing.",
+  'refuse.msNotSigned': "The multisig would call itself in a way that is not a member change. Vela signs only transfers, calls, member changes, renames and rejections. Not signing.",
+  'refuse.msBatchUnreadable': "This batch cannot be read in full. Not signing.",
+  'refuse.msBatchDelegate': "A call in this batch is a delegatecall: it would run another contract’s code as the multisig. Not signing.",
+  'refuse.msBatchZero': "A call in this batch goes to the zero address, which the batch contract reads as the multisig itself. Not signing.",
+  'refuse.msRegistryCoins': "This sends coins to the genesis registry, which takes none. Not signing.",
+  'refuse.msRenameUnreadable': "This renames the multisig to a name that cannot be shown in full. Not signing.",
 });
 
 // 简体中文。每一句签名提示的措辞都在这里，改词不用碰逻辑。
@@ -1945,6 +2024,54 @@ window.VelaCS.i18n.register('zh', {
   'warn.notThisAccount': '去向不是本账户（{to}）—— 换回来的东西不会到你手里。',
   'warn.dustMinimum': '它最少只要求换回 {amount} —— 几乎等于零。价格一变或有人抢先交易，你可能几乎什么都拿不回来。',
   'tag.byApp': 'App 的说法',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "多签批准",
+  'intent.msReject': "拒绝一笔多签交易",
+  'intent.msAddOwner': "添加成员",
+  'intent.msRemoveOwner': "移除成员",
+  'intent.msSwapOwner': "替换成员",
+  'intent.msThreshold': "修改所需批准数",
+  'intent.msRename': "重命名多签",
+  'tag.multisig': "多签",
+  'tag.thisMultisig': "本多签",
+  'field.multisig': "多签",
+  'field.member': "成员",
+  'field.newMember': "新成员",
+  'field.oldMember': "替换",
+  'field.threshold': "所需批准数",
+  'field.newName': "新名称",
+  'sentence.msReject': "你批准拒绝在 nonce {nonce} 上等待的其他交易：执行后不会发出任何东西，这个 nonce 会被用掉。",
+  'sentence.msAddOwner': "{owner} 成为成员，之后需要 {threshold} 个批准。",
+  'sentence.msRemoveOwner': "{owner} 不再是成员，之后需要 {threshold} 个批准。",
+  'sentence.msSwapOwner': "{newOwner} 取代 {oldOwner}。",
+  'sentence.msThreshold': "从现在起需要 {threshold} 个批准。",
+  'sentence.msRename': "多签的记录改名为「{name}」。其他都不变。",
+  'sentence.msBatch': "一笔多签交易里的 {count} 个调用。",
+  'warn.msMembers': "这会改变谁控制这个多签。批准前，和其他成员逐一核对每个地址。",
+  'ui.msHashes': "用来比对的哈希",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "域哈希",
+  'ui.msMessageHash': "消息哈希",
+  'ui.msHashesNote': "由本页根据上面的字段算出。批准前，在另一块屏幕上核对 —— 硬件钱包、另一位成员的设备。",
+  'ui.msHashesMismatch': "由本页根据上面的字段算出。它们不是 App 给出的哈希。",
+  'ui.copy': "复制",
+  'button.msApprove': "批准",
+  'button.msReject': "批准拒绝",
+  'refuse.msShape': "这个多签请求的格式本页无法精确读取，显示的内容可能与将被批准的不同。不签。",
+  'refuse.msTooLarge': "这笔交易太大，本页无法完整显示。不签。",
+  'refuse.msHashMismatch': "App 说这些字段得出 {claimed}，但它们得出的是 {computed}。你将批准的不是 App 描述的那一笔。不签。",
+  'refuse.msChainMismatch': "请求里写了两个不同的网络。不签。",
+  'refuse.msMemberMismatch': "请求要以一个成员的身份批准，却要用另一个账户签名。不签。",
+  'refuse.msGasRefund': "这笔交易会从多签里支付 gas 或退款。Vela 从不签这种交易。不签。",
+  'refuse.msDelegateCall': "这会以多签的身份运行另一个合约的代码（delegatecall）—— 正是掏空 Bybit 的手法。只有 Safe 的批量合约（MultiSendCallOnly）可以这样调用。不签。",
+  'refuse.msUnknownOperation': "这笔交易的操作类型不是 Safe 定义的。不签。",
+  'refuse.msSelfCall': "这会让多签对自己调用 {fn}，把控制权交给成员以外的东西。不签。",
+  'refuse.msNotSigned': "多签会以非成员变更的方式调用自己。Vela 只签转账、调用、成员变更、改名和拒绝。不签。",
+  'refuse.msBatchUnreadable': "这个批量无法完整读取。不签。",
+  'refuse.msBatchDelegate': "批量里有一个调用是 delegatecall：它会以多签的身份运行另一个合约的代码。不签。",
+  'refuse.msBatchZero': "批量里有一个调用发往零地址，批量合约会把它当作多签自己。不签。",
+  'refuse.msRegistryCoins': "这会向创世登记合约转币，而它不收任何币。不签。",
+  'refuse.msRenameUnreadable': "这会把多签改成一个无法完整显示的名字。不签。",
 });
 
 // 繁體中文（台灣）。每一句簽署提示的措辭都在這裡，改字不用動到邏輯。
@@ -2254,6 +2381,54 @@ window.VelaCS.i18n.register('zh-TW', {
   'warn.notThisAccount': '去向不是本帳戶（{to}）——換回來的東西不會到你手上。',
   'warn.dustMinimum': '它最少只要求換回 {amount}——幾乎等於零。價格一變或有人搶先交易，你可能幾乎什麼都拿不回來。',
   'tag.byApp': 'App 的說法',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "多簽核准",
+  'intent.msReject': "拒絕一筆多簽交易",
+  'intent.msAddOwner': "新增成員",
+  'intent.msRemoveOwner': "移除成員",
+  'intent.msSwapOwner': "替換成員",
+  'intent.msThreshold': "修改所需核准數",
+  'intent.msRename': "重新命名多簽",
+  'tag.multisig': "多簽",
+  'tag.thisMultisig': "本多簽",
+  'field.multisig': "多簽",
+  'field.member': "成員",
+  'field.newMember': "新成員",
+  'field.oldMember': "替換",
+  'field.threshold': "所需核准數",
+  'field.newName': "新名稱",
+  'sentence.msReject': "你核准拒絕在 nonce {nonce} 上等待的其他交易：執行後不會送出任何東西，這個 nonce 會被用掉。",
+  'sentence.msAddOwner': "{owner} 成為成員，之後需要 {threshold} 個核准。",
+  'sentence.msRemoveOwner': "{owner} 不再是成員，之後需要 {threshold} 個核准。",
+  'sentence.msSwapOwner': "{newOwner} 取代 {oldOwner}。",
+  'sentence.msThreshold': "從現在起需要 {threshold} 個核准。",
+  'sentence.msRename': "多簽的紀錄改名為「{name}」。其他都不變。",
+  'sentence.msBatch': "一筆多簽交易裡的 {count} 個呼叫。",
+  'warn.msMembers': "這會改變誰控制這個多簽。核准前，和其他成員逐一核對每個地址。",
+  'ui.msHashes': "用來比對的雜湊",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "網域雜湊",
+  'ui.msMessageHash': "訊息雜湊",
+  'ui.msHashesNote': "由本頁根據上面的欄位算出。核准前，在另一個螢幕上核對 —— 硬體錢包、另一位成員的裝置。",
+  'ui.msHashesMismatch': "由本頁根據上面的欄位算出。它們不是 App 給出的雜湊。",
+  'ui.copy': "複製",
+  'button.msApprove': "核准",
+  'button.msReject': "核准拒絕",
+  'refuse.msShape': "這個多簽請求的格式本頁無法精確讀取，顯示的內容可能與將被核准的不同。不簽。",
+  'refuse.msTooLarge': "這筆交易太大，本頁無法完整顯示。不簽。",
+  'refuse.msHashMismatch': "App 說這些欄位得出 {claimed}，但它們得出的是 {computed}。你將核准的不是 App 描述的那一筆。不簽。",
+  'refuse.msChainMismatch': "請求裡寫了兩個不同的網路。不簽。",
+  'refuse.msMemberMismatch': "請求要以一個成員的身分核准，卻要用另一個帳戶簽名。不簽。",
+  'refuse.msGasRefund': "這筆交易會從多簽裡支付 gas 或退款。Vela 從不簽這種交易。不簽。",
+  'refuse.msDelegateCall': "這會以多簽的身分執行另一個合約的程式碼（delegatecall）—— 正是掏空 Bybit 的手法。只有 Safe 的批次合約（MultiSendCallOnly）可以這樣呼叫。不簽。",
+  'refuse.msUnknownOperation': "這筆交易的操作類型不是 Safe 定義的。不簽。",
+  'refuse.msSelfCall': "這會讓多簽對自己呼叫 {fn}，把控制權交給成員以外的東西。不簽。",
+  'refuse.msNotSigned': "多簽會以非成員變更的方式呼叫自己。Vela 只簽轉帳、呼叫、成員變更、改名和拒絕。不簽。",
+  'refuse.msBatchUnreadable': "這個批次無法完整讀取。不簽。",
+  'refuse.msBatchDelegate': "批次裡有一個呼叫是 delegatecall：它會以多簽的身分執行另一個合約的程式碼。不簽。",
+  'refuse.msBatchZero': "批次裡有一個呼叫發往零地址，批次合約會把它當作多簽自己。不簽。",
+  'refuse.msRegistryCoins': "這會向創世登記合約轉幣，而它不收任何幣。不簽。",
+  'refuse.msRenameUnreadable': "這會把多簽改成一個無法完整顯示的名字。不簽。",
 });
 
 // 繁體中文（香港）。每一句簽署提示的措辭都在這裏，改字不用動到邏輯。
@@ -2563,6 +2738,54 @@ window.VelaCS.i18n.register('zh-HK', {
   'warn.notThisAccount': '去向並非本帳戶（{to}）——換回來的東西不會到你手上。',
   'warn.dustMinimum': '它最少只要求換回 {amount}——幾乎等於零。價格一變或有人搶先交易，你可能差不多甚麼都拿不回來。',
   'tag.byApp': 'App 的說法',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "多簽批准",
+  'intent.msReject': "拒絕一筆多簽交易",
+  'intent.msAddOwner': "加入成員",
+  'intent.msRemoveOwner': "移除成員",
+  'intent.msSwapOwner': "替換成員",
+  'intent.msThreshold': "修改所需批准數",
+  'intent.msRename': "重新命名多簽",
+  'tag.multisig': "多簽",
+  'tag.thisMultisig': "本多簽",
+  'field.multisig': "多簽",
+  'field.member': "成員",
+  'field.newMember': "新成員",
+  'field.oldMember': "替換",
+  'field.threshold': "所需批准數",
+  'field.newName': "新名稱",
+  'sentence.msReject': "你批准拒絕在 nonce {nonce} 上等待的其他交易：執行後不會發出任何嘢，呢個 nonce 會被用掉。",
+  'sentence.msAddOwner': "{owner} 成為成員，之後需要 {threshold} 個批准。",
+  'sentence.msRemoveOwner': "{owner} 唔再係成員，之後需要 {threshold} 個批准。",
+  'sentence.msSwapOwner': "{newOwner} 取代 {oldOwner}。",
+  'sentence.msThreshold': "由而家起需要 {threshold} 個批准。",
+  'sentence.msRename': "多簽嘅紀錄改名為「{name}」。其他都唔變。",
+  'sentence.msBatch': "一筆多簽交易入面嘅 {count} 個調用。",
+  'warn.msMembers': "呢個會改變邊個控制呢個多簽。批准之前，同其他成員逐一核對每個地址。",
+  'ui.msHashes': "用嚟比對嘅雜湊",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "域雜湊",
+  'ui.msMessageHash': "訊息雜湊",
+  'ui.msHashesNote': "由本頁根據上面嘅欄位計出。批准之前，喺另一塊螢幕上核對 —— 硬件錢包、另一位成員嘅裝置。",
+  'ui.msHashesMismatch': "由本頁根據上面嘅欄位計出。佢哋唔係 App 畀出嘅雜湊。",
+  'ui.copy': "複製",
+  'button.msApprove': "批准",
+  'button.msReject': "批准拒絕",
+  'refuse.msShape': "呢個多簽請求嘅格式本頁無法準確讀取，顯示嘅內容可能同將被批准嘅唔同。唔簽。",
+  'refuse.msTooLarge': "呢筆交易太大，本頁無法完整顯示。唔簽。",
+  'refuse.msHashMismatch': "App 話呢啲欄位得出 {claimed}，但佢哋得出嘅係 {computed}。你將批准嘅唔係 App 描述嗰筆。唔簽。",
+  'refuse.msChainMismatch': "請求寫咗兩個唔同嘅網絡。唔簽。",
+  'refuse.msMemberMismatch': "請求要以一個成員嘅身份批准，卻要用另一個帳戶簽名。唔簽。",
+  'refuse.msGasRefund': "呢筆交易會從多簽度支付 gas 或退款。Vela 從來唔簽呢種交易。唔簽。",
+  'refuse.msDelegateCall': "呢個會以多簽嘅身份運行另一個合約嘅程式碼（delegatecall）—— 正係掏空 Bybit 嘅手法。只有 Safe 嘅批量合約（MultiSendCallOnly）可以咁樣調用。唔簽。",
+  'refuse.msUnknownOperation': "呢筆交易嘅操作類型唔係 Safe 定義嘅。唔簽。",
+  'refuse.msSelfCall': "呢個會令多簽對自己調用 {fn}，將控制權交畀成員以外嘅嘢。唔簽。",
+  'refuse.msNotSigned': "多簽會以非成員變更嘅方式調用自己。Vela 只簽轉賬、調用、成員變更、改名同拒絕。唔簽。",
+  'refuse.msBatchUnreadable': "呢個批量無法完整讀取。唔簽。",
+  'refuse.msBatchDelegate': "批量入面有一個調用係 delegatecall：佢會以多簽嘅身份運行另一個合約嘅程式碼。唔簽。",
+  'refuse.msBatchZero': "批量入面有一個調用發去零地址，批量合約會當佢係多簽自己。唔簽。",
+  'refuse.msRegistryCoins': "呢個會向創世登記合約轉幣，而佢唔收任何幣。唔簽。",
+  'refuse.msRenameUnreadable': "呢個會將多簽改成一個無法完整顯示嘅名字。唔簽。",
 });
 
 // 日本語。署名ページに表示される文言はすべてここにあります。言い回しを変えるのにロジックに触れる必要はありません。
@@ -2870,6 +3093,54 @@ window.VelaCS.i18n.register('ja', {
   'warn.notThisAccount': 'このアカウントではないアドレス（{to}）に送られます — 受け取るはずのものはあなたに届きません。',
   'warn.dustMinimum': '受け取る最低額は {amount} — ほぼゼロです。価格が動いたり先回りの取引をされたりすると、ほとんど何も戻ってこない可能性があります。',
   'tag.byApp': 'アプリによる',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "マルチシグの承認",
+  'intent.msReject': "マルチシグ取引の却下",
+  'intent.msAddOwner': "メンバーを追加",
+  'intent.msRemoveOwner': "メンバーを削除",
+  'intent.msSwapOwner': "メンバーを入れ替え",
+  'intent.msThreshold': "必要な承認数を変更",
+  'intent.msRename': "マルチシグの名前を変更",
+  'tag.multisig': "マルチシグ",
+  'tag.thisMultisig': "このマルチシグ",
+  'field.multisig': "マルチシグ",
+  'field.member': "メンバー",
+  'field.newMember': "新しいメンバー",
+  'field.oldMember': "置き換え対象",
+  'field.threshold': "必要な承認数",
+  'field.newName': "新しい名前",
+  'sentence.msReject': "nonce {nonce} で待っているほかの取引を却下することを承認します。実行されると何も送られず、その nonce は使い切られます。",
+  'sentence.msAddOwner': "{owner} がメンバーになり、承認は {threshold} 件必要になります。",
+  'sentence.msRemoveOwner': "{owner} がメンバーでなくなり、承認は {threshold} 件必要になります。",
+  'sentence.msSwapOwner': "{newOwner} が {oldOwner} の代わりになります。",
+  'sentence.msThreshold': "今後は承認が {threshold} 件必要になります。",
+  'sentence.msRename': "マルチシグの記録名が「{name}」に変わります。ほかは何も変わりません。",
+  'sentence.msBatch': "1 件のマルチシグ取引に含まれる {count} 件の呼び出し。",
+  'warn.msMembers': "マルチシグを管理する人が変わります。承認する前に、ほかのメンバーとすべてのアドレスを確認してください。",
+  'ui.msHashes': "照合用のハッシュ",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "ドメインハッシュ",
+  'ui.msMessageHash': "メッセージハッシュ",
+  'ui.msHashesNote': "上の各項目からこのページが計算しました。承認する前に、別の画面（ハードウェアウォレットやほかのメンバーの端末）で照合してください。",
+  'ui.msHashesMismatch': "上の各項目からこのページが計算しました。アプリが示したハッシュとは一致しません。",
+  'ui.copy': "コピー",
+  'button.msApprove': "承認する",
+  'button.msReject': "却下を承認する",
+  'refuse.msShape': "このマルチシグのリクエストはこのページが正確に読める形ではないため、表示内容と承認される内容が異なる可能性があります。署名しません。",
+  'refuse.msTooLarge': "この取引は大きすぎて、このページでは全体を表示できません。署名しません。",
+  'refuse.msHashMismatch': "アプリはこれらの項目から {claimed} になると言っていますが、実際は {computed} です。承認しようとしている取引はアプリの説明と違います。署名しません。",
+  'refuse.msChainMismatch': "リクエストに 2 つの異なるネットワークが書かれています。署名しません。",
+  'refuse.msMemberMismatch': "リクエストは、あるメンバーとして承認し、別のアカウントで署名しようとしています。署名しません。",
+  'refuse.msGasRefund': "この取引はマルチシグからガス代や払い戻しを支払います。Vela はこれに署名しません。署名しません。",
+  'refuse.msDelegateCall': "これはマルチシグとして別のコントラクトのコードを実行します（delegatecall）。Bybit の資金流出に使われた手口です。この方法で呼べるのは Safe のバッチ用コントラクト（MultiSendCallOnly）だけです。署名しません。",
+  'refuse.msUnknownOperation': "この取引の操作種別は Safe で定義されていません。署名しません。",
+  'refuse.msSelfCall': "これはマルチシグに自分自身の {fn} を呼ばせ、メンバー以外のものに管理を渡します。署名しません。",
+  'refuse.msNotSigned': "マルチシグがメンバー変更ではない形で自分自身を呼び出します。Vela が署名するのは送金、呼び出し、メンバー変更、名前変更、却下だけです。署名しません。",
+  'refuse.msBatchUnreadable': "このバッチは全体を読み取れません。署名しません。",
+  'refuse.msBatchDelegate': "このバッチの呼び出しの 1 つが delegatecall です。マルチシグとして別のコントラクトのコードを実行します。署名しません。",
+  'refuse.msBatchZero': "このバッチの呼び出しの 1 つがゼロアドレス宛てで、バッチ用コントラクトはそれをマルチシグ自身として扱います。署名しません。",
+  'refuse.msRegistryCoins': "これはジェネシス登録コントラクトにコインを送りますが、そこは何も受け取りません。署名しません。",
+  'refuse.msRenameUnreadable': "これはマルチシグの名前を、全体を表示できない名前に変えます。署名しません。",
 });
 
 // 한국어. 서명 페이지에 표시되는 모든 문구가 여기에 있습니다. 표현을 바꿀 때 로직은 건드리지 않아도 됩니다.
@@ -3177,6 +3448,54 @@ window.VelaCS.i18n.register('ko', {
   'warn.notThisAccount': '이 계정이 아닌 주소({to})로 갑니다 — 돌려받을 것이 내게 오지 않습니다.',
   'warn.dustMinimum': '돌려받는 최소 금액이 {amount}로 사실상 0입니다. 가격이 움직이거나 누군가 앞서 거래하면 거의 아무것도 돌려받지 못할 수 있습니다.',
   'tag.byApp': '앱 기준',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "멀티시그 승인",
+  'intent.msReject': "멀티시그 거래 거부",
+  'intent.msAddOwner': "멤버 추가",
+  'intent.msRemoveOwner': "멤버 제거",
+  'intent.msSwapOwner': "멤버 교체",
+  'intent.msThreshold': "필요한 승인 수 변경",
+  'intent.msRename': "멀티시그 이름 변경",
+  'tag.multisig': "멀티시그",
+  'tag.thisMultisig': "이 멀티시그",
+  'field.multisig': "멀티시그",
+  'field.member': "멤버",
+  'field.newMember': "새 멤버",
+  'field.oldMember': "교체 대상",
+  'field.threshold': "필요한 승인 수",
+  'field.newName': "새 이름",
+  'sentence.msReject': "nonce {nonce}에서 기다리는 다른 거래를 거부하는 것을 승인합니다. 실행되면 아무것도 보내지 않고 그 nonce가 소진됩니다.",
+  'sentence.msAddOwner': "{owner} 님이 멤버가 되고, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msRemoveOwner': "{owner} 님이 더 이상 멤버가 아니며, 승인이 {threshold}개 필요해집니다.",
+  'sentence.msSwapOwner': "{newOwner} 님이 {oldOwner} 님을 대신합니다.",
+  'sentence.msThreshold': "이제부터 승인이 {threshold}개 필요합니다.",
+  'sentence.msRename': "멀티시그 기록의 이름이 “{name}”(으)로 바뀝니다. 다른 것은 바뀌지 않습니다.",
+  'sentence.msBatch': "멀티시그 거래 하나에 담긴 호출 {count}개.",
+  'warn.msMembers': "멀티시그를 누가 관리하는지가 바뀝니다. 승인하기 전에 다른 멤버와 모든 주소를 확인하세요.",
+  'ui.msHashes': "대조할 해시",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "도메인 해시",
+  'ui.msMessageHash': "메시지 해시",
+  'ui.msHashesNote': "위 항목으로 이 페이지가 계산했습니다. 승인하기 전에 다른 화면(하드웨어 지갑, 다른 멤버의 기기)에서 대조하세요.",
+  'ui.msHashesMismatch': "위 항목으로 이 페이지가 계산했습니다. 앱이 알려 준 해시와 다릅니다.",
+  'ui.copy': "복사",
+  'button.msApprove': "승인",
+  'button.msReject': "거부 승인",
+  'refuse.msShape': "이 멀티시그 요청은 이 페이지가 정확히 읽을 수 있는 형태가 아니어서, 보이는 내용과 승인될 내용이 다를 수 있습니다. 서명하지 않습니다.",
+  'refuse.msTooLarge': "이 거래는 너무 커서 이 페이지에서 전부 보여줄 수 없습니다. 서명하지 않습니다.",
+  'refuse.msHashMismatch': "앱은 이 항목들이 {claimed}을(를) 만든다고 하지만 실제로는 {computed}입니다. 승인하려는 거래는 앱이 설명한 거래가 아닙니다. 서명하지 않습니다.",
+  'refuse.msChainMismatch': "요청에 서로 다른 네트워크 두 개가 적혀 있습니다. 서명하지 않습니다.",
+  'refuse.msMemberMismatch': "요청이 한 멤버로 승인하면서 다른 계정으로 서명하려 합니다. 서명하지 않습니다.",
+  'refuse.msGasRefund': "이 거래는 멀티시그에서 가스비나 환급금을 지급합니다. Vela는 이런 거래에 서명하지 않습니다. 서명하지 않습니다.",
+  'refuse.msDelegateCall': "이것은 멀티시그로서 다른 컨트랙트의 코드를 실행합니다(delegatecall). Bybit 자금 유출에 쓰인 수법입니다. 이렇게 호출할 수 있는 것은 Safe의 배치 컨트랙트(MultiSendCallOnly)뿐입니다. 서명하지 않습니다.",
+  'refuse.msUnknownOperation': "이 거래의 작업 유형은 Safe에 정의되어 있지 않습니다. 서명하지 않습니다.",
+  'refuse.msSelfCall': "이것은 멀티시그가 자기 자신의 {fn}을(를) 호출하게 하여 멤버가 아닌 것에 관리를 넘깁니다. 서명하지 않습니다.",
+  'refuse.msNotSigned': "멀티시그가 멤버 변경이 아닌 방식으로 자기 자신을 호출합니다. Vela는 송금, 호출, 멤버 변경, 이름 변경, 거부에만 서명합니다. 서명하지 않습니다.",
+  'refuse.msBatchUnreadable': "이 배치는 전부 읽을 수 없습니다. 서명하지 않습니다.",
+  'refuse.msBatchDelegate': "이 배치의 호출 하나가 delegatecall입니다. 멀티시그로서 다른 컨트랙트의 코드를 실행합니다. 서명하지 않습니다.",
+  'refuse.msBatchZero': "이 배치의 호출 하나가 영(0) 주소로 가며, 배치 컨트랙트는 이를 멀티시그 자신으로 읽습니다. 서명하지 않습니다.",
+  'refuse.msRegistryCoins': "이것은 제네시스 레지스트리에 코인을 보내지만, 그곳은 아무것도 받지 않습니다. 서명하지 않습니다.",
+  'refuse.msRenameUnreadable': "이것은 멀티시그 이름을 전부 보여줄 수 없는 이름으로 바꿉니다. 서명하지 않습니다.",
 });
 
 // Tiếng Việt. Mọi câu chữ của trang ký nằm ở đây; đổi chữ không cần đụng tới logic.
@@ -3484,6 +3803,54 @@ window.VelaCS.i18n.register('vi', {
   'warn.notThisAccount': 'Đi đến một địa chỉ không phải tài khoản này ({to}) — thứ nhận về sẽ không đến tay bạn.',
   'warn.dustMinimum': 'Mức tối thiểu nhận về chỉ là {amount} — gần như bằng không. Nếu giá biến động hoặc có người giao dịch chặn trước, bạn có thể gần như không nhận lại được gì.',
   'tag.byApp': 'theo ứng dụng',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Phê duyệt đa chữ ký",
+  'intent.msReject': "Từ chối một giao dịch đa chữ ký",
+  'intent.msAddOwner': "Thêm thành viên",
+  'intent.msRemoveOwner': "Gỡ thành viên",
+  'intent.msSwapOwner': "Thay thành viên",
+  'intent.msThreshold': "Đổi số phê duyệt cần có",
+  'intent.msRename': "Đổi tên ví đa chữ ký",
+  'tag.multisig': "đa chữ ký",
+  'tag.thisMultisig': "ví đa chữ ký này",
+  'field.multisig': "Ví đa chữ ký",
+  'field.member': "Thành viên",
+  'field.newMember': "Thành viên mới",
+  'field.oldMember': "Thay cho",
+  'field.threshold': "Số phê duyệt cần có",
+  'field.newName': "Tên mới",
+  'sentence.msReject': "Bạn phê duyệt việc từ chối mọi giao dịch khác đang chờ ở nonce {nonce}: khi thực thi, không gì được gửi đi và nonce đó được dùng hết.",
+  'sentence.msAddOwner': "{owner} trở thành thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msRemoveOwner': "{owner} không còn là thành viên, và sẽ cần {threshold} phê duyệt.",
+  'sentence.msSwapOwner': "{newOwner} thay chỗ của {oldOwner}.",
+  'sentence.msThreshold': "Từ nay sẽ cần {threshold} phê duyệt.",
+  'sentence.msRename': "Bản ghi của ví đa chữ ký được đổi tên thành “{name}”. Không gì khác thay đổi.",
+  'sentence.msBatch': "{count} lệnh gọi trong một giao dịch đa chữ ký.",
+  'warn.msMembers': "Việc này thay đổi người kiểm soát ví đa chữ ký. Hãy đối chiếu từng địa chỉ với các thành viên khác trước khi phê duyệt.",
+  'ui.msHashes': "Mã băm để đối chiếu",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Mã băm miền",
+  'ui.msMessageHash': "Mã băm thông điệp",
+  'ui.msHashesNote': "Trang này tính từ các trường ở trên. Hãy đối chiếu trên một màn hình khác — ví phần cứng, thiết bị của thành viên khác — trước khi phê duyệt.",
+  'ui.msHashesMismatch': "Trang này tính từ các trường ở trên. Chúng không phải mã băm mà ứng dụng đưa ra.",
+  'ui.copy': "Sao chép",
+  'button.msApprove': "Phê duyệt",
+  'button.msReject': "Phê duyệt từ chối",
+  'refuse.msShape': "Yêu cầu đa chữ ký này không ở dạng trang này đọc được chính xác, nên điều hiển thị có thể khác điều sẽ được phê duyệt. Không ký.",
+  'refuse.msTooLarge': "Giao dịch này quá lớn để trang này hiển thị đầy đủ. Không ký.",
+  'refuse.msHashMismatch': "Ứng dụng nói các trường này tạo ra {claimed}, nhưng thực tế là {computed}. Thứ bạn sắp phê duyệt không phải điều ứng dụng mô tả. Không ký.",
+  'refuse.msChainMismatch': "Yêu cầu ghi hai mạng khác nhau. Không ký.",
+  'refuse.msMemberMismatch': "Yêu cầu phê duyệt với tư cách một thành viên nhưng ký bằng một tài khoản khác. Không ký.",
+  'refuse.msGasRefund': "Giao dịch này sẽ trả phí gas hoặc hoàn tiền từ ví đa chữ ký. Vela không bao giờ ký điều đó. Không ký.",
+  'refuse.msDelegateCall': "Việc này chạy mã của hợp đồng khác với tư cách ví đa chữ ký (delegatecall) — thủ đoạn đã rút sạch Bybit. Chỉ hợp đồng gộp của Safe (MultiSendCallOnly) được gọi theo cách đó. Không ký.",
+  'refuse.msUnknownOperation': "Giao dịch này có loại thao tác mà Safe không định nghĩa. Không ký.",
+  'refuse.msSelfCall': "Việc này bắt ví đa chữ ký tự gọi {fn}, trao quyền kiểm soát cho thứ không phải thành viên. Không ký.",
+  'refuse.msNotSigned': "Ví đa chữ ký sẽ tự gọi chính nó theo cách không phải thay đổi thành viên. Vela chỉ ký chuyển tiền, lệnh gọi, thay đổi thành viên, đổi tên và từ chối. Không ký.",
+  'refuse.msBatchUnreadable': "Không thể đọc đầy đủ lô này. Không ký.",
+  'refuse.msBatchDelegate': "Một lệnh gọi trong lô là delegatecall: nó sẽ chạy mã của hợp đồng khác với tư cách ví đa chữ ký. Không ký.",
+  'refuse.msBatchZero': "Một lệnh gọi trong lô gửi tới địa chỉ 0, mà hợp đồng gộp hiểu là chính ví đa chữ ký. Không ký.",
+  'refuse.msRegistryCoins': "Việc này gửi tiền tới hợp đồng đăng ký genesis, nơi không nhận gì cả. Không ký.",
+  'refuse.msRenameUnreadable': "Việc này đổi tên ví đa chữ ký thành một tên không thể hiển thị đầy đủ. Không ký.",
 });
 
 // Bahasa Indonesia. Semua kalimat halaman tanda tangan ada di sini; mengganti kata tidak perlu menyentuh logika.
@@ -3791,6 +4158,54 @@ window.VelaCS.i18n.register('id', {
   'warn.notThisAccount': 'Dikirim ke alamat yang bukan akun ini ({to}) — yang dikembalikan tidak akan sampai ke Anda.',
   'warn.dustMinimum': 'Jumlah minimum yang diterima hanya {amount} — nyaris nol. Jika harga bergerak atau ada yang bertransaksi lebih dulu, Anda bisa hampir tidak menerima apa-apa.',
   'tag.byApp': 'menurut aplikasi',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Persetujuan multisig",
+  'intent.msReject': "Tolak transaksi multisig",
+  'intent.msAddOwner': "Tambah anggota",
+  'intent.msRemoveOwner': "Hapus anggota",
+  'intent.msSwapOwner': "Ganti anggota",
+  'intent.msThreshold': "Ubah jumlah persetujuan",
+  'intent.msRename': "Ganti nama multisig",
+  'tag.multisig': "multisig",
+  'tag.thisMultisig': "multisig ini",
+  'field.multisig': "Multisig",
+  'field.member': "Anggota",
+  'field.newMember': "Anggota baru",
+  'field.oldMember': "Menggantikan",
+  'field.threshold': "Persetujuan yang dibutuhkan",
+  'field.newName': "Nama baru",
+  'sentence.msReject': "Anda menyetujui penolakan transaksi lain yang menunggu di nonce {nonce}: setelah dijalankan, tidak ada yang dikirim dan nonce itu terpakai.",
+  'sentence.msAddOwner': "{owner} menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msRemoveOwner': "{owner} tidak lagi menjadi anggota, dan {threshold} persetujuan akan dibutuhkan.",
+  'sentence.msSwapOwner': "{newOwner} menggantikan {oldOwner}.",
+  'sentence.msThreshold': "Mulai sekarang {threshold} persetujuan dibutuhkan.",
+  'sentence.msRename': "Catatan multisig diganti namanya menjadi “{name}”. Tidak ada yang lain berubah.",
+  'sentence.msBatch': "{count} panggilan dalam satu transaksi multisig.",
+  'warn.msMembers': "Ini mengubah siapa yang mengendalikan multisig. Periksa setiap alamat bersama anggota lain sebelum menyetujui.",
+  'ui.msHashes': "Hash untuk dicocokkan",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Hash domain",
+  'ui.msMessageHash': "Hash pesan",
+  'ui.msHashesNote': "Dihitung halaman ini dari kolom di atas. Cocokkan di layar lain — dompet perangkat keras, perangkat anggota lain — sebelum menyetujui.",
+  'ui.msHashesMismatch': "Dihitung halaman ini dari kolom di atas. Ini bukan hash yang disebut aplikasi.",
+  'ui.copy': "Salin",
+  'button.msApprove': "Setujui",
+  'button.msReject': "Setujui penolakan",
+  'refuse.msShape': "Permintaan multisig ini tidak dalam bentuk yang dapat dibaca halaman ini dengan tepat, jadi yang ditampilkan bisa berbeda dari yang akan disetujui. Tidak menandatangani.",
+  'refuse.msTooLarge': "Transaksi ini terlalu besar untuk ditampilkan utuh di halaman ini. Tidak menandatangani.",
+  'refuse.msHashMismatch': "Aplikasi bilang kolom-kolom ini menghasilkan {claimed}, tetapi hasilnya {computed}. Yang akan Anda setujui bukan yang dijelaskan aplikasi. Tidak menandatangani.",
+  'refuse.msChainMismatch': "Permintaan menyebut dua jaringan berbeda. Tidak menandatangani.",
+  'refuse.msMemberMismatch': "Permintaan menyetujui sebagai satu anggota tetapi menandatangani dengan akun lain. Tidak menandatangani.",
+  'refuse.msGasRefund': "Transaksi ini akan membayar gas atau pengembalian dana dari multisig. Vela tidak pernah menandatangani itu. Tidak menandatangani.",
+  'refuse.msDelegateCall': "Ini menjalankan kode kontrak lain sebagai multisig (delegatecall), teknik yang dipakai untuk menguras Bybit. Hanya kontrak batch Safe (MultiSendCallOnly) yang boleh dipanggil seperti itu. Tidak menandatangani.",
+  'refuse.msUnknownOperation': "Transaksi ini punya jenis operasi yang tidak didefinisikan Safe. Tidak menandatangani.",
+  'refuse.msSelfCall': "Ini meminta multisig memanggil {fn} pada dirinya sendiri, menyerahkan kendali kepada sesuatu selain anggotanya. Tidak menandatangani.",
+  'refuse.msNotSigned': "Multisig akan memanggil dirinya sendiri dengan cara yang bukan perubahan anggota. Vela hanya menandatangani transfer, panggilan, perubahan anggota, penggantian nama, dan penolakan. Tidak menandatangani.",
+  'refuse.msBatchUnreadable': "Batch ini tidak dapat dibaca utuh. Tidak menandatangani.",
+  'refuse.msBatchDelegate': "Satu panggilan dalam batch ini adalah delegatecall: ia akan menjalankan kode kontrak lain sebagai multisig. Tidak menandatangani.",
+  'refuse.msBatchZero': "Satu panggilan dalam batch ini menuju alamat nol, yang dibaca kontrak batch sebagai multisig itu sendiri. Tidak menandatangani.",
+  'refuse.msRegistryCoins': "Ini mengirim koin ke registri genesis, yang tidak menerima apa pun. Tidak menandatangani.",
+  'refuse.msRenameUnreadable': "Ini mengganti nama multisig dengan nama yang tidak dapat ditampilkan utuh. Tidak menandatangani.",
 });
 
 // Türkçe. İmza sayfasının tüm cümleleri burada; bir sözcüğü değiştirmek için mantığa dokunmak gerekmez.
@@ -4098,6 +4513,54 @@ window.VelaCS.i18n.register('tr', {
   'warn.notThisAccount': 'Bu hesap olmayan bir adrese gidiyor ({to}) — karşılığında gelen size ulaşmaz.',
   'warn.dustMinimum': 'Karşılığında kabul edilen en düşük miktar {amount} — neredeyse sıfır. Fiyat oynarsa ya da biri önünüze geçerse neredeyse hiçbir şey geri gelmeyebilir.',
   'tag.byApp': 'uygulamaya göre',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Çoklu imza onayı",
+  'intent.msReject': "Bir çoklu imza işlemini reddet",
+  'intent.msAddOwner': "Üye ekle",
+  'intent.msRemoveOwner': "Üyeyi çıkar",
+  'intent.msSwapOwner': "Üyeyi değiştir",
+  'intent.msThreshold': "Gereken onay sayısını değiştir",
+  'intent.msRename': "Çoklu imzayı yeniden adlandır",
+  'tag.multisig': "çoklu imza",
+  'tag.thisMultisig': "bu çoklu imza",
+  'field.multisig': "Çoklu imza",
+  'field.member': "Üye",
+  'field.newMember': "Yeni üye",
+  'field.oldMember': "Yerine geçtiği",
+  'field.threshold': "Gereken onay",
+  'field.newName': "Yeni ad",
+  'sentence.msReject': "{nonce} nonce’unda bekleyen diğer işlemlerin reddini onaylıyorsunuz: yürütüldüğünde hiçbir şey gönderilmez ve o nonce kullanılmış olur.",
+  'sentence.msAddOwner': "{owner} üye olur ve {threshold} onay gerekir.",
+  'sentence.msRemoveOwner': "{owner} artık üye değildir ve {threshold} onay gerekir.",
+  'sentence.msSwapOwner': "{newOwner}, {oldOwner} yerine geçer.",
+  'sentence.msThreshold': "Bundan sonra {threshold} onay gerekir.",
+  'sentence.msRename': "Çoklu imzanın kaydı “{name}” olarak yeniden adlandırılır. Başka hiçbir şey değişmez.",
+  'sentence.msBatch': "Tek bir çoklu imza işleminde {count} çağrı.",
+  'warn.msMembers': "Bu, çoklu imzayı kimin yönettiğini değiştirir. Onaylamadan önce her adresi diğer üyelerle kontrol edin.",
+  'ui.msHashes': "Karşılaştırılacak özetler",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Alan özeti",
+  'ui.msMessageHash': "Mesaj özeti",
+  'ui.msHashesNote': "Bu sayfa yukarıdaki alanlardan hesapladı. Onaylamadan önce başka bir ekranda — donanım cüzdanı, başka bir üyenin cihazı — eşleştirin.",
+  'ui.msHashesMismatch': "Bu sayfa yukarıdaki alanlardan hesapladı. Uygulamanın verdiği özetler bunlar değil.",
+  'ui.copy': "Kopyala",
+  'button.msApprove': "Onayla",
+  'button.msReject': "Reddi onayla",
+  'refuse.msShape': "Bu çoklu imza isteği bu sayfanın tam olarak okuyabileceği biçimde değil; gösterilen, onaylanacak olandan farklı olabilir. İmzalanmıyor.",
+  'refuse.msTooLarge': "Bu işlem bu sayfada tamamen gösterilemeyecek kadar büyük. İmzalanmıyor.",
+  'refuse.msHashMismatch': "Uygulama bu alanların {claimed} verdiğini söylüyor ama {computed} veriyorlar. Onaylayacağınız şey uygulamanın anlattığı değil. İmzalanmıyor.",
+  'refuse.msChainMismatch': "İstek iki farklı ağ belirtiyor. İmzalanmıyor.",
+  'refuse.msMemberMismatch': "İstek bir üye olarak onaylayıp başka bir hesapla imzalamak istiyor. İmzalanmıyor.",
+  'refuse.msGasRefund': "Bu işlem çoklu imzadan gas ya da iade öder. Vela bunu asla imzalamaz. İmzalanmıyor.",
+  'refuse.msDelegateCall': "Bu, başka bir sözleşmenin kodunu çoklu imza olarak çalıştırır (delegatecall); Bybit’i boşaltan teknik budur. Bu şekilde yalnızca Safe’in toplu işlem sözleşmesi (MultiSendCallOnly) çağrılabilir. İmzalanmıyor.",
+  'refuse.msUnknownOperation': "Bu işlemin işlem türü Safe’te tanımlı değil. İmzalanmıyor.",
+  'refuse.msSelfCall': "Bu, çoklu imzanın kendi üzerinde {fn} çağırmasını ister ve kontrolü üyeleri dışında bir şeye verir. İmzalanmıyor.",
+  'refuse.msNotSigned': "Çoklu imza kendini üye değişikliği olmayan bir şekilde çağıracak. Vela yalnızca transferleri, çağrıları, üye değişikliklerini, yeniden adlandırmaları ve retleri imzalar. İmzalanmıyor.",
+  'refuse.msBatchUnreadable': "Bu toplu işlem tamamen okunamıyor. İmzalanmıyor.",
+  'refuse.msBatchDelegate': "Bu toplu işlemdeki bir çağrı delegatecall: başka bir sözleşmenin kodunu çoklu imza olarak çalıştırır. İmzalanmıyor.",
+  'refuse.msBatchZero': "Bu toplu işlemdeki bir çağrı sıfır adrese gidiyor; toplu işlem sözleşmesi bunu çoklu imzanın kendisi olarak okur. İmzalanmıyor.",
+  'refuse.msRegistryCoins': "Bu, hiçbir şey kabul etmeyen genesis kayıt sözleşmesine coin gönderir. İmzalanmıyor.",
+  'refuse.msRenameUnreadable': "Bu, çoklu imzayı tamamen gösterilemeyen bir adla yeniden adlandırır. İmzalanmıyor.",
 });
 
 // Español (México). Cada frase de la página de firma vive aquí; cambiar una palabra no toca la lógica.
@@ -4405,6 +4868,54 @@ window.VelaCS.i18n.register('es-MX', {
   'warn.notThisAccount': 'Va a una dirección que no es esta cuenta ({to}) — lo que esto devuelve no te llegaría a ti.',
   'warn.dustMinimum': 'Lo mínimo que acepta a cambio es {amount} — prácticamente nada. Si el precio se mueve o alguien opera antes que tú, podría no volver casi nada.',
   'tag.byApp': 'según la app',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Aprobación multifirma",
+  'intent.msReject': "Rechazar una transacción multifirma",
+  'intent.msAddOwner': "Agregar un miembro",
+  'intent.msRemoveOwner': "Quitar un miembro",
+  'intent.msSwapOwner': "Reemplazar un miembro",
+  'intent.msThreshold': "Cambiar las aprobaciones necesarias",
+  'intent.msRename': "Renombrar la multifirma",
+  'tag.multisig': "multifirma",
+  'tag.thisMultisig': "esta multifirma",
+  'field.multisig': "Multifirma",
+  'field.member': "Miembro",
+  'field.newMember': "Nuevo miembro",
+  'field.oldMember': "Reemplaza a",
+  'field.threshold': "Aprobaciones necesarias",
+  'field.newName': "Nuevo nombre",
+  'sentence.msReject': "Apruebas rechazar lo que más espere en el nonce {nonce}: al ejecutarse no se envía nada y ese nonce queda usado.",
+  'sentence.msAddOwner': "{owner} se vuelve miembro y se necesitarán {threshold} aprobaciones.",
+  'sentence.msRemoveOwner': "{owner} deja de ser miembro y se necesitarán {threshold} aprobaciones.",
+  'sentence.msSwapOwner': "{newOwner} ocupa el lugar de {oldOwner}.",
+  'sentence.msThreshold': "A partir de ahora se necesitarán {threshold} aprobaciones.",
+  'sentence.msRename': "El registro de la multifirma se renombra a “{name}”. Nada más cambia.",
+  'sentence.msBatch': "{count} llamadas en una sola transacción multifirma.",
+  'warn.msMembers': "Esto cambia quién controla la multifirma. Revisa cada dirección con los demás miembros antes de aprobar.",
+  'ui.msHashes': "Hashes para comparar",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Hash del dominio",
+  'ui.msMessageHash': "Hash del mensaje",
+  'ui.msHashesNote': "Calculados por esta página a partir de los campos de arriba. Compáralos en otra pantalla —una billetera de hardware, el dispositivo de otro miembro— antes de aprobar.",
+  'ui.msHashesMismatch': "Calculados por esta página a partir de los campos de arriba. No son los hashes que indicó la app.",
+  'ui.copy': "Copiar",
+  'button.msApprove': "Aprobar",
+  'button.msReject': "Aprobar rechazo",
+  'refuse.msShape': "Esta solicitud multifirma no tiene una forma que esta página lea con exactitud, así que lo que se muestra podría diferir de lo que se aprobaría. No se firma.",
+  'refuse.msTooLarge': "Esta transacción es demasiado grande para mostrarla completa en esta página. No se firma.",
+  'refuse.msHashMismatch': "La app dice que estos campos dan {claimed}, pero dan {computed}. Lo que aprobarías no es lo que describe la app. No se firma.",
+  'refuse.msChainMismatch': "La solicitud indica dos redes distintas. No se firma.",
+  'refuse.msMemberMismatch': "La solicitud aprueba como un miembro y firma con otra cuenta. No se firma.",
+  'refuse.msGasRefund': "Esta transacción pagaría gas o un reembolso con fondos de la multifirma. Vela nunca firma eso. No se firma.",
+  'refuse.msDelegateCall': "Esto ejecuta el código de otro contrato como la multifirma (un delegatecall), la técnica con la que vaciaron Bybit. Solo el contrato de lotes de Safe (MultiSendCallOnly) puede llamarse así. No se firma.",
+  'refuse.msUnknownOperation': "Esta transacción tiene un tipo de operación que Safe no define. No se firma.",
+  'refuse.msSelfCall': "Esto pide a la multifirma llamar a {fn} sobre sí misma, lo que entregaría el control a algo distinto de sus miembros. No se firma.",
+  'refuse.msNotSigned': "La multifirma se llamaría a sí misma de una forma que no es un cambio de miembros. Vela solo firma transferencias, llamadas, cambios de miembros, renombres y rechazos. No se firma.",
+  'refuse.msBatchUnreadable': "Este lote no se puede leer completo. No se firma.",
+  'refuse.msBatchDelegate': "Una llamada de este lote es un delegatecall: ejecutaría el código de otro contrato como la multifirma. No se firma.",
+  'refuse.msBatchZero': "Una llamada de este lote va a la dirección cero, que el contrato de lotes lee como la propia multifirma. No se firma.",
+  'refuse.msRegistryCoins': "Esto envía monedas al registro génesis, que no acepta ninguna. No se firma.",
+  'refuse.msRenameUnreadable': "Esto renombra la multifirma con un nombre que no se puede mostrar completo. No se firma.",
 });
 
 // Português (Brasil). Cada frase da página de assinatura mora aqui; trocar uma palavra não mexe na lógica.
@@ -4712,6 +5223,54 @@ window.VelaCS.i18n.register('pt-BR', {
   'warn.notThisAccount': 'Vai para um endereço que não é esta conta ({to}) — o que isto devolve não chegaria a você.',
   'warn.dustMinimum': 'O mínimo que aceita em troca é {amount} — praticamente nada. Se o preço mudar ou alguém negociar na sua frente, pode não voltar quase nada.',
   'tag.byApp': 'segundo o app',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Aprovação multisig",
+  'intent.msReject': "Rejeitar uma transação multisig",
+  'intent.msAddOwner': "Adicionar um membro",
+  'intent.msRemoveOwner': "Remover um membro",
+  'intent.msSwapOwner': "Substituir um membro",
+  'intent.msThreshold': "Alterar aprovações necessárias",
+  'intent.msRename': "Renomear o multisig",
+  'tag.multisig': "multisig",
+  'tag.thisMultisig': "este multisig",
+  'field.multisig': "Multisig",
+  'field.member': "Membro",
+  'field.newMember': "Novo membro",
+  'field.oldMember': "Substitui",
+  'field.threshold': "Aprovações necessárias",
+  'field.newName': "Novo nome",
+  'sentence.msReject': "Você aprova rejeitar o que mais estiver esperando no nonce {nonce}: ao executar, nada é enviado e esse nonce é consumido.",
+  'sentence.msAddOwner': "{owner} passa a ser membro, e serão necessárias {threshold} aprovações.",
+  'sentence.msRemoveOwner': "{owner} deixa de ser membro, e serão necessárias {threshold} aprovações.",
+  'sentence.msSwapOwner': "{newOwner} assume o lugar de {oldOwner}.",
+  'sentence.msThreshold': "A partir de agora serão necessárias {threshold} aprovações.",
+  'sentence.msRename': "O registro do multisig passa a se chamar “{name}”. Nada mais muda.",
+  'sentence.msBatch': "{count} chamadas em uma única transação multisig.",
+  'warn.msMembers': "Isto muda quem controla o multisig. Confira cada endereço com os outros membros antes de aprovar.",
+  'ui.msHashes': "Hashes para comparar",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Hash do domínio",
+  'ui.msMessageHash': "Hash da mensagem",
+  'ui.msHashesNote': "Calculados por esta página a partir dos campos acima. Compare em outra tela — uma carteira de hardware, o aparelho de outro membro — antes de aprovar.",
+  'ui.msHashesMismatch': "Calculados por esta página a partir dos campos acima. Não são os hashes que o app informou.",
+  'ui.copy': "Copiar",
+  'button.msApprove': "Aprovar",
+  'button.msReject': "Aprovar rejeição",
+  'refuse.msShape': "Esta solicitação multisig não está em um formato que esta página lê com exatidão, então o que aparece pode diferir do que seria aprovado. Não vou assinar.",
+  'refuse.msTooLarge': "Esta transação é grande demais para esta página mostrar por inteiro. Não vou assinar.",
+  'refuse.msHashMismatch': "O app diz que estes campos dão {claimed}, mas eles dão {computed}. O que você aprovaria não é o que o app descreve. Não vou assinar.",
+  'refuse.msChainMismatch': "A solicitação indica duas redes diferentes. Não vou assinar.",
+  'refuse.msMemberMismatch': "A solicitação aprova como um membro e assina com outra conta. Não vou assinar.",
+  'refuse.msGasRefund': "Esta transação pagaria gas ou um reembolso com fundos do multisig. A Vela nunca assina isso. Não vou assinar.",
+  'refuse.msDelegateCall': "Isto executa o código de outro contrato como o multisig (um delegatecall), a técnica usada para esvaziar a Bybit. Só o contrato de lotes da Safe (MultiSendCallOnly) pode ser chamado assim. Não vou assinar.",
+  'refuse.msUnknownOperation': "Esta transação tem um tipo de operação que a Safe não define. Não vou assinar.",
+  'refuse.msSelfCall': "Isto pede ao multisig que chame {fn} em si mesmo, entregando o controle a algo que não são seus membros. Não vou assinar.",
+  'refuse.msNotSigned': "O multisig chamaria a si mesmo de um jeito que não é uma mudança de membros. A Vela só assina transferências, chamadas, mudanças de membros, renomeações e rejeições. Não vou assinar.",
+  'refuse.msBatchUnreadable': "Este lote não pode ser lido por inteiro. Não vou assinar.",
+  'refuse.msBatchDelegate': "Uma chamada deste lote é um delegatecall: executaria o código de outro contrato como o multisig. Não vou assinar.",
+  'refuse.msBatchZero': "Uma chamada deste lote vai para o endereço zero, que o contrato de lotes lê como o próprio multisig. Não vou assinar.",
+  'refuse.msRegistryCoins': "Isto envia moedas ao registro gênese, que não aceita nenhuma. Não vou assinar.",
+  'refuse.msRenameUnreadable': "Isto renomeia o multisig com um nome que não pode ser mostrado por inteiro. Não vou assinar.",
 });
 
 // Français. Chaque phrase de la page de signature est ici ; changer un mot ne touche pas à la logique.
@@ -5021,6 +5580,54 @@ window.VelaCS.i18n.register('fr', {
   'warn.notThisAccount': 'Part vers une adresse qui n’est pas ce compte ({to}) — ce que cela rend ne vous parviendrait pas.',
   'warn.dustMinimum': 'Le minimum accepté en retour est de {amount} — presque rien. Si le prix bouge ou si quelqu’un passe devant vous, presque rien pourrait revenir.',
   'tag.byApp': 'selon l’app',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Approbation multisig",
+  'intent.msReject': "Rejeter une transaction multisig",
+  'intent.msAddOwner': "Ajouter un membre",
+  'intent.msRemoveOwner': "Retirer un membre",
+  'intent.msSwapOwner': "Remplacer un membre",
+  'intent.msThreshold': "Changer le nombre d’approbations",
+  'intent.msRename': "Renommer le multisig",
+  'tag.multisig': "multisig",
+  'tag.thisMultisig': "ce multisig",
+  'field.multisig': "Multisig",
+  'field.member': "Membre",
+  'field.newMember': "Nouveau membre",
+  'field.oldMember': "Remplace",
+  'field.threshold': "Approbations requises",
+  'field.newName': "Nouveau nom",
+  'sentence.msReject': "Vous approuvez le rejet de tout ce qui attend au nonce {nonce} : une fois exécuté, rien n’est envoyé et ce nonce est consommé.",
+  'sentence.msAddOwner': "{owner} devient membre, et {threshold} approbations seront requises.",
+  'sentence.msRemoveOwner': "{owner} n’est plus membre, et {threshold} approbations seront requises.",
+  'sentence.msSwapOwner': "{newOwner} prend la place de {oldOwner}.",
+  'sentence.msThreshold': "Désormais, {threshold} approbations seront requises.",
+  'sentence.msRename': "L’enregistrement du multisig est renommé « {name} ». Rien d’autre ne change.",
+  'sentence.msBatch': "{count} appels dans une seule transaction multisig.",
+  'warn.msMembers': "Ceci change qui contrôle le multisig. Vérifiez chaque adresse avec les autres membres avant d’approuver.",
+  'ui.msHashes': "Empreintes à comparer",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Empreinte du domaine",
+  'ui.msMessageHash': "Empreinte du message",
+  'ui.msHashesNote': "Calculées par cette page à partir des champs ci-dessus. Comparez-les sur un autre écran — un portefeuille matériel, l’appareil d’un autre membre — avant d’approuver.",
+  'ui.msHashesMismatch': "Calculées par cette page à partir des champs ci-dessus. Ce ne sont pas les empreintes annoncées par l’app.",
+  'ui.copy': "Copier",
+  'button.msApprove': "Approuver",
+  'button.msReject': "Approuver le rejet",
+  'refuse.msShape': "Cette demande multisig n’a pas une forme que cette page lit exactement : ce qui s’affiche pourrait différer de ce qui serait approuvé. Pas de signature.",
+  'refuse.msTooLarge': "Cette transaction est trop grande pour être affichée en entier sur cette page. Pas de signature.",
+  'refuse.msHashMismatch': "L’app dit que ces champs donnent {claimed}, mais ils donnent {computed}. Ce que vous approuveriez n’est pas ce que l’app décrit. Pas de signature.",
+  'refuse.msChainMismatch': "La demande indique deux réseaux différents. Pas de signature.",
+  'refuse.msMemberMismatch': "La demande approuve au nom d’un membre et signe avec un autre compte. Pas de signature.",
+  'refuse.msGasRefund': "Cette transaction paierait du gas ou un remboursement avec les fonds du multisig. Vela ne signe jamais cela. Pas de signature.",
+  'refuse.msDelegateCall': "Ceci exécute le code d’un autre contrat en tant que multisig (un delegatecall), la technique qui a vidé Bybit. Seul le contrat de lots de Safe (MultiSendCallOnly) peut être appelé ainsi. Pas de signature.",
+  'refuse.msUnknownOperation': "Cette transaction a un type d’opération que Safe ne définit pas. Pas de signature.",
+  'refuse.msSelfCall': "Ceci demande au multisig d’appeler {fn} sur lui-même, ce qui confierait le contrôle à autre chose que ses membres. Pas de signature.",
+  'refuse.msNotSigned': "Le multisig s’appellerait lui-même d’une façon qui n’est pas un changement de membres. Vela ne signe que des transferts, des appels, des changements de membres, des renommages et des rejets. Pas de signature.",
+  'refuse.msBatchUnreadable': "Ce lot ne peut pas être lu en entier. Pas de signature.",
+  'refuse.msBatchDelegate': "Un appel de ce lot est un delegatecall : il exécuterait le code d’un autre contrat en tant que multisig. Pas de signature.",
+  'refuse.msBatchZero': "Un appel de ce lot va à l’adresse zéro, que le contrat de lots lit comme le multisig lui-même. Pas de signature.",
+  'refuse.msRegistryCoins': "Ceci envoie des jetons au registre genesis, qui n’en accepte aucun. Pas de signature.",
+  'refuse.msRenameUnreadable': "Ceci renomme le multisig avec un nom qui ne peut pas être affiché en entier. Pas de signature.",
 });
 
 // Deutsch. Jede Formulierung der Signaturseite steht hier; ein Wort zu ändern berührt keine Logik.
@@ -5330,6 +5937,54 @@ window.VelaCS.i18n.register('de', {
   'warn.notThisAccount': 'Geht an eine Adresse, die nicht dieses Konto ist ({to}) — was zurückkommt, erreicht dich nicht.',
   'warn.dustMinimum': 'Das Mindeste, was dafür zurückkommen muss, ist {amount} — so gut wie nichts. Bewegt sich der Preis oder handelt jemand vor dir, kommt womöglich fast nichts zurück.',
   'tag.byApp': 'laut App',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Multisig-Freigabe",
+  'intent.msReject': "Eine Multisig-Transaktion ablehnen",
+  'intent.msAddOwner': "Mitglied hinzufügen",
+  'intent.msRemoveOwner': "Mitglied entfernen",
+  'intent.msSwapOwner': "Mitglied ersetzen",
+  'intent.msThreshold': "Benötigte Freigaben ändern",
+  'intent.msRename': "Multisig umbenennen",
+  'tag.multisig': "Multisig",
+  'tag.thisMultisig': "dieses Multisig",
+  'field.multisig': "Multisig",
+  'field.member': "Mitglied",
+  'field.newMember': "Neues Mitglied",
+  'field.oldMember': "Ersetzt",
+  'field.threshold': "Benötigte Freigaben",
+  'field.newName': "Neuer Name",
+  'sentence.msReject': "Sie geben frei, alles andere abzulehnen, was bei Nonce {nonce} wartet: Nach der Ausführung wird nichts gesendet und diese Nonce ist verbraucht.",
+  'sentence.msAddOwner': "{owner} wird Mitglied, und es werden {threshold} Freigaben benötigt.",
+  'sentence.msRemoveOwner': "{owner} ist kein Mitglied mehr, und es werden {threshold} Freigaben benötigt.",
+  'sentence.msSwapOwner': "{newOwner} tritt an die Stelle von {oldOwner}.",
+  'sentence.msThreshold': "Ab jetzt werden {threshold} Freigaben benötigt.",
+  'sentence.msRename': "Der Eintrag des Multisigs wird in „{name}“ umbenannt. Sonst ändert sich nichts.",
+  'sentence.msBatch': "{count} Aufrufe in einer einzigen Multisig-Transaktion.",
+  'warn.msMembers': "Das ändert, wer das Multisig kontrolliert. Prüfen Sie jede Adresse mit den anderen Mitgliedern, bevor Sie freigeben.",
+  'ui.msHashes': "Hashes zum Abgleichen",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Domain-Hash",
+  'ui.msMessageHash': "Nachrichten-Hash",
+  'ui.msHashesNote': "Von dieser Seite aus den Feldern oben berechnet. Gleichen Sie sie vor der Freigabe auf einem anderen Bildschirm ab – einer Hardware-Wallet, dem Gerät eines anderen Mitglieds.",
+  'ui.msHashesMismatch': "Von dieser Seite aus den Feldern oben berechnet. Es sind nicht die Hashes, die die App genannt hat.",
+  'ui.copy': "Kopieren",
+  'button.msApprove': "Freigeben",
+  'button.msReject': "Ablehnung freigeben",
+  'refuse.msShape': "Diese Multisig-Anfrage hat keine Form, die diese Seite exakt lesen kann – das Angezeigte könnte vom Freigegebenen abweichen. Keine Signatur.",
+  'refuse.msTooLarge': "Diese Transaktion ist zu groß, um sie auf dieser Seite vollständig zu zeigen. Keine Signatur.",
+  'refuse.msHashMismatch': "Die App sagt, diese Felder ergeben {claimed}, aber sie ergeben {computed}. Was Sie freigeben würden, ist nicht das, was die App beschreibt. Keine Signatur.",
+  'refuse.msChainMismatch': "Die Anfrage nennt zwei verschiedene Netzwerke. Keine Signatur.",
+  'refuse.msMemberMismatch': "Die Anfrage gibt als ein Mitglied frei und signiert mit einem anderen Konto. Keine Signatur.",
+  'refuse.msGasRefund': "Diese Transaktion würde Gas oder eine Erstattung aus dem Multisig bezahlen. Vela signiert das nie. Keine Signatur.",
+  'refuse.msDelegateCall': "Das führt den Code eines anderen Vertrags als das Multisig aus (ein delegatecall) – die Technik, mit der Bybit geleert wurde. Nur Safes Batch-Vertrag (MultiSendCallOnly) darf so aufgerufen werden. Keine Signatur.",
+  'refuse.msUnknownOperation': "Diese Transaktion hat einen Operationstyp, den Safe nicht definiert. Keine Signatur.",
+  'refuse.msSelfCall': "Das lässt das Multisig {fn} auf sich selbst aufrufen und gibt die Kontrolle an etwas anderes als seine Mitglieder. Keine Signatur.",
+  'refuse.msNotSigned': "Das Multisig würde sich selbst auf eine Weise aufrufen, die keine Mitgliederänderung ist. Vela signiert nur Überweisungen, Aufrufe, Mitgliederänderungen, Umbenennungen und Ablehnungen. Keine Signatur.",
+  'refuse.msBatchUnreadable': "Dieser Batch kann nicht vollständig gelesen werden. Keine Signatur.",
+  'refuse.msBatchDelegate': "Ein Aufruf in diesem Batch ist ein delegatecall: Er würde den Code eines anderen Vertrags als das Multisig ausführen. Keine Signatur.",
+  'refuse.msBatchZero': "Ein Aufruf in diesem Batch geht an die Nulladresse, die der Batch-Vertrag als das Multisig selbst liest. Keine Signatur.",
+  'refuse.msRegistryCoins': "Das sendet Coins an das Genesis-Register, das keine annimmt. Keine Signatur.",
+  'refuse.msRenameUnreadable': "Das benennt das Multisig in einen Namen um, der nicht vollständig angezeigt werden kann. Keine Signatur.",
 });
 
 // Русский. Все формулировки страницы подписи собраны здесь; правка слов не затрагивает логику.
@@ -5639,6 +6294,54 @@ window.VelaCS.i18n.register('ru', {
   'warn.notThisAccount': 'Уходит на адрес, который не является этим аккаунтом ({to}), — то, что вернётся, до вас не дойдёт.',
   'warn.dustMinimum': 'Минимум, который нужно получить взамен, — {amount}, то есть почти ничего. Если цена сдвинется или кто-то совершит сделку раньше вас, может не вернуться почти ничего.',
   'tag.byApp': 'по данным приложения',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Одобрение мультиподписи",
+  'intent.msReject': "Отклонить транзакцию мультиподписи",
+  'intent.msAddOwner': "Добавить участника",
+  'intent.msRemoveOwner': "Удалить участника",
+  'intent.msSwapOwner': "Заменить участника",
+  'intent.msThreshold': "Изменить число одобрений",
+  'intent.msRename': "Переименовать мультиподпись",
+  'tag.multisig': "мультиподпись",
+  'tag.thisMultisig': "эта мультиподпись",
+  'field.multisig': "Мультиподпись",
+  'field.member': "Участник",
+  'field.newMember': "Новый участник",
+  'field.oldMember': "Заменяет",
+  'field.threshold': "Нужно одобрений",
+  'field.newName': "Новое название",
+  'sentence.msReject': "Вы одобряете отклонение всего остального, что ждёт на nonce {nonce}: после исполнения ничего не отправляется, а этот nonce расходуется.",
+  'sentence.msAddOwner': "{owner} становится участником, и понадобится одобрений: {threshold}.",
+  'sentence.msRemoveOwner': "{owner} перестаёт быть участником, и понадобится одобрений: {threshold}.",
+  'sentence.msSwapOwner': "{newOwner} занимает место {oldOwner}.",
+  'sentence.msThreshold': "Отныне понадобится одобрений: {threshold}.",
+  'sentence.msRename': "Запись мультиподписи переименовывается в «{name}». Больше ничего не меняется.",
+  'sentence.msBatch': "Вызовов в одной транзакции мультиподписи: {count}.",
+  'warn.msMembers': "Это меняет, кто управляет мультиподписью. Сверьте каждый адрес с другими участниками, прежде чем одобрять.",
+  'ui.msHashes': "Хеши для сверки",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Хеш домена",
+  'ui.msMessageHash': "Хеш сообщения",
+  'ui.msHashesNote': "Вычислены этой страницей из полей выше. Сверьте их на другом экране — в аппаратном кошельке, на устройстве другого участника, — прежде чем одобрять.",
+  'ui.msHashesMismatch': "Вычислены этой страницей из полей выше. Это не те хеши, что назвало приложение.",
+  'ui.copy': "Копировать",
+  'button.msApprove': "Одобрить",
+  'button.msReject': "Одобрить отклонение",
+  'refuse.msShape': "Этот запрос мультиподписи не в той форме, которую эта страница читает точно, поэтому показанное может отличаться от того, что будет одобрено. Не подписываю.",
+  'refuse.msTooLarge': "Эта транзакция слишком велика, чтобы показать её здесь целиком. Не подписываю.",
+  'refuse.msHashMismatch': "Приложение говорит, что эти поля дают {claimed}, но они дают {computed}. Вы одобрили бы не то, что описывает приложение. Не подписываю.",
+  'refuse.msChainMismatch': "В запросе указаны две разные сети. Не подписываю.",
+  'refuse.msMemberMismatch': "Запрос одобряет от имени одного участника, а подписывает другим аккаунтом. Не подписываю.",
+  'refuse.msGasRefund': "Эта транзакция оплатит газ или возврат из средств мультиподписи. Vela никогда этого не подписывает. Не подписываю.",
+  'refuse.msDelegateCall': "Это выполняет код другого контракта от имени мультиподписи (delegatecall) — так опустошили Bybit. Так можно вызывать только пакетный контракт Safe (MultiSendCallOnly). Не подписываю.",
+  'refuse.msUnknownOperation': "У этой транзакции тип операции, которого нет в Safe. Не подписываю.",
+  'refuse.msSelfCall': "Это заставляет мультиподпись вызвать {fn} у самой себя и передать управление не её участникам. Не подписываю.",
+  'refuse.msNotSigned': "Мультиподпись вызовет саму себя не для смены участников. Vela подписывает только переводы, вызовы, смену участников, переименования и отклонения. Не подписываю.",
+  'refuse.msBatchUnreadable': "Этот пакет нельзя прочитать целиком. Не подписываю.",
+  'refuse.msBatchDelegate': "Один из вызовов пакета — delegatecall: он выполнит код другого контракта от имени мультиподписи. Не подписываю.",
+  'refuse.msBatchZero': "Один из вызовов пакета идёт на нулевой адрес, который пакетный контракт считает самой мультиподписью. Не подписываю.",
+  'refuse.msRegistryCoins': "Это отправляет монеты в реестр genesis, который ничего не принимает. Не подписываю.",
+  'refuse.msRenameUnreadable': "Это переименовывает мультиподпись в название, которое нельзя показать целиком. Не подписываю.",
 });
 
 // Italiano. Ogni frase della pagina di firma vive qui; cambiare una parola non tocca la logica.
@@ -5946,6 +6649,54 @@ window.VelaCS.i18n.register('it', {
   'warn.notThisAccount': 'Va a un indirizzo che non è questo account ({to}) — ciò che restituisce non arriverebbe a te.',
   'warn.dustMinimum': 'Il minimo accettato in cambio è {amount} — praticamente nulla. Se il prezzo si muove o qualcuno opera prima di te, potrebbe tornare quasi nulla.',
   'tag.byApp': 'secondo l’app',
+  // A multisig member's approval (vela_multisigApprove, 2026-10-29).
+  'intent.msApprove': "Approvazione multisig",
+  'intent.msReject': "Rifiuta una transazione multisig",
+  'intent.msAddOwner': "Aggiungi un membro",
+  'intent.msRemoveOwner': "Rimuovi un membro",
+  'intent.msSwapOwner': "Sostituisci un membro",
+  'intent.msThreshold': "Cambia le approvazioni necessarie",
+  'intent.msRename': "Rinomina il multisig",
+  'tag.multisig': "multisig",
+  'tag.thisMultisig': "questo multisig",
+  'field.multisig': "Multisig",
+  'field.member': "Membro",
+  'field.newMember': "Nuovo membro",
+  'field.oldMember': "Sostituisce",
+  'field.threshold': "Approvazioni necessarie",
+  'field.newName': "Nuovo nome",
+  'sentence.msReject': "Approvi il rifiuto di tutto ciò che attende al nonce {nonce}: una volta eseguito, non viene inviato nulla e quel nonce è consumato.",
+  'sentence.msAddOwner': "{owner} diventa membro e serviranno {threshold} approvazioni.",
+  'sentence.msRemoveOwner': "{owner} non è più membro e serviranno {threshold} approvazioni.",
+  'sentence.msSwapOwner': "{newOwner} prende il posto di {oldOwner}.",
+  'sentence.msThreshold': "D’ora in poi serviranno {threshold} approvazioni.",
+  'sentence.msRename': "Il record del multisig viene rinominato «{name}». Nient’altro cambia.",
+  'sentence.msBatch': "{count} chiamate in un’unica transazione multisig.",
+  'warn.msMembers': "Questo cambia chi controlla il multisig. Verifica ogni indirizzo con gli altri membri prima di approvare.",
+  'ui.msHashes': "Hash da confrontare",
+  'ui.msSafeTxHash': "safeTxHash",
+  'ui.msDomainHash': "Hash del dominio",
+  'ui.msMessageHash': "Hash del messaggio",
+  'ui.msHashesNote': "Calcolati da questa pagina dai campi sopra. Confrontali su un altro schermo — un portafoglio hardware, il dispositivo di un altro membro — prima di approvare.",
+  'ui.msHashesMismatch': "Calcolati da questa pagina dai campi sopra. Non sono gli hash indicati dall’app.",
+  'ui.copy': "Copia",
+  'button.msApprove': "Approva",
+  'button.msReject': "Approva il rifiuto",
+  'refuse.msShape': "Questa richiesta multisig non ha una forma che questa pagina legge con esattezza, quindi ciò che vedi potrebbe differire da ciò che verrebbe approvato. Non firmo.",
+  'refuse.msTooLarge': "Questa transazione è troppo grande per essere mostrata per intero in questa pagina. Non firmo.",
+  'refuse.msHashMismatch': "L’app dice che questi campi danno {claimed}, ma danno {computed}. Ciò che approveresti non è ciò che l’app descrive. Non firmo.",
+  'refuse.msChainMismatch': "La richiesta indica due reti diverse. Non firmo.",
+  'refuse.msMemberMismatch': "La richiesta approva come un membro e firma con un altro account. Non firmo.",
+  'refuse.msGasRefund': "Questa transazione pagherebbe gas o un rimborso con i fondi del multisig. Vela non lo firma mai. Non firmo.",
+  'refuse.msDelegateCall': "Questo esegue il codice di un altro contratto come il multisig (un delegatecall), la tecnica usata per svuotare Bybit. Solo il contratto batch di Safe (MultiSendCallOnly) può essere chiamato così. Non firmo.",
+  'refuse.msUnknownOperation': "Questa transazione ha un tipo di operazione che Safe non definisce. Non firmo.",
+  'refuse.msSelfCall': "Questo chiede al multisig di chiamare {fn} su se stesso, cedendo il controllo a qualcosa che non sono i suoi membri. Non firmo.",
+  'refuse.msNotSigned': "Il multisig chiamerebbe se stesso in un modo che non è un cambio di membri. Vela firma solo trasferimenti, chiamate, cambi di membri, rinomine e rifiuti. Non firmo.",
+  'refuse.msBatchUnreadable': "Questo batch non può essere letto per intero. Non firmo.",
+  'refuse.msBatchDelegate': "Una chiamata di questo batch è un delegatecall: eseguirebbe il codice di un altro contratto come il multisig. Non firmo.",
+  'refuse.msBatchZero': "Una chiamata di questo batch va all’indirizzo zero, che il contratto batch legge come il multisig stesso. Non firmo.",
+  'refuse.msRegistryCoins': "Questo invia monete al registro genesis, che non ne accetta. Non firmo.",
+  'refuse.msRenameUnreadable': "Questo rinomina il multisig con un nome che non può essere mostrato per intero. Non firmo.",
 });
 
 // @generated by samples/gen-catalog.mjs from vela-core — do not edit.
@@ -7505,7 +8256,7 @@ window.VelaCS = window.VelaCS || {};
     var tag = null;
     var self = ctx.selfAccount;
 
-    if (self && lower === String(self).toLowerCase()) tag = 'tag.self';
+    if (self && lower === String(self).toLowerCase()) tag = ctx.selfTag || 'tag.self';
     else if (hints.isCallTarget) tag = 'tag.calledContract';
     else if (known && known.descriptor) tag = 'tag.localDescriptor';
     else if (known && known.verified) tag = 'tag.sourceVerified';
@@ -7516,7 +8267,7 @@ window.VelaCS = window.VelaCS || {};
       // Local, deterministic, and impossible for a requester to influence.
       identicon: address ? ns.identicon.forAddress(address) : null,
       tag: tag,
-      kind: tag === 'tag.self' ? 'own' : known ? 'contract' : 'unknown',
+      kind: tag === 'tag.self' || (tag && tag === ctx.selfTag) ? 'own' : known ? 'contract' : 'unknown',
       // Kept for guards; never rendered as a name.
       contractName: known && known.name ? known.name : null,
     };
@@ -8772,6 +9523,7 @@ window.VelaCS = window.VelaCS || {};
     'intent.create': 'button.create',
     'intent.proofVerify': 'button.confirm', 'intent.proofRecover': 'button.confirm',
     'intent.memberProof': 'button.confirm',
+    'intent.msReject': 'button.msReject',
   };
 
   function confirmKey(view) {
@@ -8837,10 +9589,16 @@ window.VelaCS = window.VelaCS || {};
    * Will this request's answer reach the Vela wallet on this device, and
    * nothing else? (spec 102 R7)
    *
-   * Only the URL channel can say yes, and only when its answer address is
-   * exactly the wallet's. postMessage answers whoever opened this page — any
-   * site can — and the loopback socket is retired (the published page's
-   * `default-src 'none'` cannot open it).
+   * The URL channel can say yes when its answer address is exactly the
+   * wallet's. postMessage answers whoever opened this page — any site can —
+   * so it says yes for ONE request only: a multisig member's approval
+   * (`vela_multisigApprove`), and only when the browser reports the opener as
+   * Vela's web wallet (`isWebWallet`). The web wallet is where multisigs live
+   * and it cannot receive `velawallet://`; the browser's own `event.origin`
+   * names the window the answer goes to, which is a stronger fact than any
+   * callback address. Every other signature over postMessage stays refused,
+   * whoever opened the page. The loopback socket is retired (the published
+   * page's `default-src 'none'` cannot open it).
    *
    * ONE rule, used everywhere the answer's destination matters: a signature
    * is refused without it (`resolve`), so is every key ceremony on the URL
@@ -8853,7 +9611,32 @@ window.VelaCS = window.VelaCS || {};
    * (`build-single.mjs` reads only what `src/sign.html` names).
    */
   function answersToWallet(ctx) {
-    return !!ctx && ctx.channel === 'url' && ctx.callback === WALLET_CALLBACK;
+    if (!ctx) return false;
+    if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
+    return ctx.channel === 'post' && ctx.method === MULTISIG_APPROVE && ctx.originVerified === true &&
+      isWebWallet(ctx.requester);
+  }
+
+  /**
+   * The web wallet, by the origin the BROWSER reports for the window that
+   * opened this page (postMessage's `event.origin` — not a claim): Vela's own
+   * web wallet, and nothing else on `getvela.app` (a subdomain is not the
+   * wallet). A page served from this machine's loopback — a developer's — is
+   * also answered by a wallet on the loopback: such a page can only use the
+   * loopback's own passkeys, never `getvela.app`'s, so nothing it signs is of
+   * use to anyone but that developer.
+   */
+  var WEB_WALLETS = ['https://wallet.getvela.app', 'https://getvela.app'];
+  var MULTISIG_APPROVE = 'vela_multisigApprove';
+
+  function isWebWallet(origin) {
+    if (typeof origin !== 'string') return false;
+    if (WEB_WALLETS.indexOf(origin) >= 0) return true;
+    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    var parsed = null;
+    try { parsed = new URL(origin); } catch (e) { return false; }
+    return LOOPBACK_HOST.test(here) && parsed.protocol === 'http:' && LOOPBACK_HOST.test(parsed.hostname) &&
+      origin === parsed.origin;
   }
 
   /**
@@ -9304,9 +10087,237 @@ window.VelaCS = window.VelaCS || {};
       : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: shown }] };
   }
 
+  // --- a multisig member's approval (vela_multisigApprove) -----------------
+  //
+  // The app hands over a SafeTx, the multisig and the chain. Everything on
+  // the card is read here from those bytes (lib/multisig.js, the core's own
+  // rules): the hashes are recomputed, the reading is the core's `review`,
+  // and the passkey signs the approval bytes lib/digest.js derives from the
+  // hash THIS page computed. The app's words — the multisig's name, the
+  // member's name, the network's name on a chain this page does not know —
+  // are drawn as the app's.
+
+  var MEMBER_INTENTS = {
+    addOwner: 'intent.msAddOwner',
+    removeOwner: 'intent.msRemoveOwner',
+    swapOwner: 'intent.msSwapOwner',
+    changeThreshold: 'intent.msThreshold',
+  };
+
+  function refuseWith(view, key, params) {
+    view.refuse = true;
+    raise(view, 'danger');
+    view.warnings.push({ tone: 'danger', key: key, params: params });
+  }
+
+  /** A member, by its address and the avatar derived from it — never a name. */
+  function memberIdentity(address, ctx) {
+    return identify(address, ctx, {});
+  }
+
+  /** The rows and words of a member change, the multisig's own call. */
+  function memberChange(action, ctx, view) {
+    view.intentKey = MEMBER_INTENTS[action.kind];
+    provenance(view, 'read');
+    raise(view, 'caution');
+    if (action.kind === 'addOwner' || action.kind === 'removeOwner') {
+      var who = memberIdentity(action.owner, ctx);
+      view.fields.push({ label: action.kind === 'addOwner' ? 'field.newMember' : 'field.member', identity: who });
+      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      view.sentence = text(action.kind === 'addOwner' ? 'sentence.msAddOwner' : 'sentence.msRemoveOwner',
+        { owner: who.short, threshold: action.threshold });
+    } else if (action.kind === 'swapOwner') {
+      var gone = memberIdentity(action.oldOwner, ctx);
+      var next = memberIdentity(action.newOwner, ctx);
+      view.fields.push({ label: 'field.newMember', identity: next });
+      view.fields.push({ label: 'field.oldMember', identity: gone });
+      view.sentence = text('sentence.msSwapOwner', { newOwner: next.short, oldOwner: gone.short });
+    } else {
+      view.fields.push({ label: 'field.threshold', value: action.threshold, emphasis: true });
+      view.sentence = text('sentence.msThreshold', { threshold: action.threshold });
+    }
+    if (!view.warnings.some(function (w) { return w.key === 'warn.msMembers'; })) {
+      view.warnings.push({ tone: 'caution', key: 'warn.msMembers' });
+    }
+  }
+
+  /**
+   * One action of the core's reading, drawn onto `view`: a transfer or a
+   * call through the page's own call ladder (the same as a transaction's —
+   * token standards are read, descriptors described, the rest a contract
+   * call), a member change, a rename. `call` is the call as packed.
+   */
+  function multisigAction(action, call, ctx, view, isLeg) {
+    if (MEMBER_INTENTS[action.kind]) return memberChange(action, ctx, view);
+    if (action.kind === 'rename') {
+      view.intentKey = 'intent.msRename';
+      provenance(view, 'read');
+      view.fields.push({ label: 'field.newName', value: visible(action.name, view), emphasis: true });
+      view.sentence = text('sentence.msRename', { name: visible(action.name, view) });
+      return view;
+    }
+    // A transfer (native or ERC-20) or a call to another contract.
+    return resolveCall(call, ctx, view, isLeg);
+  }
+
+  function hexValue(decimal) {
+    return '0x' + BigInt(decimal).toString(16);
+  }
+
+  function resolveMultisig(intent, ctx) {
+    var request = ns.multisig.request(intent);
+    // The chain the approval is for is the request's own (it is in the
+    // digest's domain): the card names that one, whatever else the context says.
+    var named = ctx.chainId;
+    if (!request.error) ctx.chainId = request.chainId;
+    ctx.selfAccount = request.error ? null : request.safe;
+    ctx.selfTag = 'tag.thisMultisig';
+    ctx.coin = coinOf(ctx);
+    var view = baseView(intent, ctx);
+    view.method = intent.method;
+    view.intentKey = 'intent.msApprove';
+    view.badge = 'tag.multisig';
+    view.hero = null;
+
+    if (request.error) {
+      refuseWith(view, request.error);
+      view.account = null;
+      return finishSigning(view, ctx);
+    }
+    var tx = request.tx;
+    view.account = request.member;
+    if (named !== undefined && named !== null && Number(named) !== request.chainId) {
+      refuseWith(view, 'refuse.msChainMismatch');
+    }
+    // The member the approval is made as is in the digest (its domain): the
+    // context's account — whose keys the browser is asked for — must be it.
+    if (typeof ctx.account === 'string' && ctx.account.toLowerCase() !== request.member.toLowerCase()) {
+      refuseWith(view, 'refuse.msMemberMismatch');
+    }
+
+    var hashes = ns.multisig.hashes(request.chainId, request.safe, tx);
+    var matches = hashes.safeTxHash === request.claimed;
+    if (!matches) {
+      // Loud and first: the app describes one transaction and hands over the
+      // fields of another (or a hash of something else entirely).
+      view.refuse = true;
+      view.risk = 'hard-danger';
+      view.warnings.unshift({
+        tone: 'danger', key: 'refuse.msHashMismatch',
+        params: { claimed: request.claimed, computed: hashes.safeTxHash },
+      });
+    }
+
+    // The multisig: its address and avatar are facts (the address is in the
+    // safeTxHash's domain); its name is the app's.
+    var name = ctx.multisig && typeof ctx.multisig.name === 'string' && ctx.multisig.name.trim()
+      ? visible(ctx.multisig.name.trim().slice(0, 64), view) : null;
+    var safeIdentity = identify(request.safe, ctx, {});
+    safeIdentity.contractName = name;
+    safeIdentity.tag = name ? 'tag.nameByApp' : null;
+    view.multisig = {
+      address: request.safe,
+      name: name,
+      nonce: tx.nonce.toString(),
+      hashes: hashes,
+      hashMatches: matches,
+    };
+
+    var reading = ns.multisig.read(request.safe, tx);
+    var call = { to: tx.to, value: hexValue(tx.value), data: tx.data };
+    if (reading.refusal) {
+      refuseWith(view, reading.refusal, reading.params);
+      view.tech = techFor('SafeTx (EIP-712)', null, tx.data, {
+        addresses: [{ roleKey: 'field.target', name: shortAddress(tx.to), address: tx.to }],
+      });
+    } else if (reading.action.kind === 'cancel') {
+      view.intentKey = 'intent.msReject';
+      provenance(view, 'read');
+      view.sentence = text('sentence.msReject', { nonce: tx.nonce.toString() });
+    } else if (reading.action.kind === 'batch') {
+      view.intentKey = 'intent.batch';
+      view.legs = reading.action.calls.map(function (leg, i) {
+        var legView = baseView(intent, ctx);
+        multisigAction(leg.action, { to: leg.to, value: hexValue(leg.value), data: leg.data }, ctx, legView, true);
+        return { index: i + 1, view: legView };
+      });
+      view.sentence = text('sentence.msBatch', { count: reading.action.calls.length });
+      view.risk = view.legs.reduce(function (worst, leg) {
+        return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
+      }, view.risk);
+      view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
+      liftLegWarnings(view);
+      provenance(view, 'read');
+      view.tech = techFor('multiSend(bytes) · MultiSendCallOnly (delegatecall)', null, tx.data, {
+        addresses: [{ roleKey: 'field.target', name: 'MultiSendCallOnly', address: tx.to }],
+      });
+    } else {
+      var badge = view.badge;
+      multisigAction(reading.action, call, ctx, view, false);
+      view.badge = badge;
+      if (!view.tech) view.tech = techFor('SafeTx (EIP-712)', null, tx.data, {});
+    }
+
+    // The rows every approval carries: which multisig, at which nonce.
+    view.fields.unshift({ label: 'field.multisig', identity: safeIdentity });
+    view.fields.push({ label: 'field.nonce', value: tx.nonce.toString(), mono: true });
+
+    var finished = finishSigning(view, ctx);
+    if (!finished.refuse) {
+      finished.confirmKey = reading.action && reading.action.kind === 'cancel' ? 'button.msReject' : 'button.msApprove';
+    }
+    return finished;
+  }
+
+  /**
+   * What every signature card ends with, whatever it signs: the answer must
+   * reach the wallet (R7), the keys must be readable, and the key route and
+   * the button are this page's own.
+   */
+  function finishSigning(view, ctx) {
+    // Spec 102 R7: a signature goes to the Vela wallet on this device and
+    // nowhere else. Any site can open this page with an operation of its
+    // choosing and its own answer address; the card would describe that
+    // operation truthfully, and a person who tapped would hand a usable
+    // signature to whoever named the address. So nothing is offered — the
+    // button is off, no passkey prompt — and the card says where the answer would
+    // have gone. Fails closed: a context that does not say the answer
+    // reaches the wallet is refused, previews included (they pass the
+    // address the apps send).
+    if (!ns.resolve.answersToWallet(ctx)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      var destination = answerDestination(ctx);
+      view.warnings.unshift(destination
+        ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
+        : { tone: 'danger', key: 'refuse.answerNotToWallet' });
+    }
+
+    // The account's keys, as the browser will be asked for them. One that
+    // cannot be read cannot be asked for: refused here, with the reason,
+    // rather than failing inside the tap.
+    var allow = ctx.allowCredentials;
+    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
+    }
+
+    // The key that signs, and where it lives (spec 102 R5). sign.js asks for
+    // this one credential; the card says where the person will confirm.
+    view.key = keyRoute(ctx.keyRoute, ctx.allowCredentials);
+    view.keyLabel = 'field.confirmWith';
+    view.confirmKey = confirmKey(view);
+    return view;
+  }
+
   function resolve(requested, ctx) {
     // Ours, never the requester's: whatever `selfAccount` it sent is replaced.
     ctx = Object.assign({}, ctx || {});
+    // What is being asked, for the answer rule (`answersToWallet`): never the
+    // requester's word for it, the intent's own method.
+    ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
+    if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
@@ -9376,40 +10387,7 @@ window.VelaCS = window.VelaCS || {};
       view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin', near: 'requester' });
     }
 
-    // Spec 102 R7: a signature goes to the Vela wallet on this device and
-    // nowhere else. Any site can open this page with an operation of its
-    // choosing and its own answer address; the card would describe that
-    // operation truthfully, and a person who tapped would hand a usable
-    // signature to whoever named the address. So nothing is offered — the
-    // button is off, no passkey prompt — and the card says where the answer would
-    // have gone. Fails closed: a context that does not say the answer
-    // reaches the wallet is refused, previews included (they pass the
-    // address the apps send).
-    if (!ns.resolve.answersToWallet(ctx)) {
-      view.refuse = true;
-      view.risk = 'danger';
-      var destination = answerDestination(ctx);
-      view.warnings.unshift(destination
-        ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
-        : { tone: 'danger', key: 'refuse.answerNotToWallet' });
-    }
-
-    // The account's keys, as the browser will be asked for them. One that
-    // cannot be read cannot be asked for: refused here, with the reason,
-    // rather than failing inside the tap.
-    var allow = ctx.allowCredentials;
-    if (allow !== undefined && allow !== null && !(Array.isArray(allow) && allow.every(credentialIdOk))) {
-      view.refuse = true;
-      view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: 'refuse.badKeyId' });
-    }
-
-    // The key that signs, and where it lives (spec 102 R5). sign.js asks for
-    // this one credential; the card says where the person will confirm.
-    view.key = keyRoute(ctx.keyRoute, ctx.allowCredentials);
-    view.keyLabel = 'field.confirmWith';
-    view.confirmKey = confirmKey(view);
-    return view;
+    return finishSigning(view, ctx);
   }
 
   ns.resolve = resolve;
@@ -9572,6 +10550,63 @@ window.VelaCS = window.VelaCS || {};
     side.appendChild(copy);
     panel.appendChild(side);
     return panel;
+  }
+
+  /** A button that copies `text`, saying so for a moment once it has. */
+  function copyButton(text, labelKey) {
+    var copy = el('button', 'copy-button', t(labelKey));
+    copy.type = 'button';
+    copy.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var done = function () {
+        copy.textContent = t('ui.copied');
+        setTimeout(function () { copy.textContent = t(labelKey); }, 1600);
+      };
+      var fallback = function () {
+        var field = document.createElement('textarea');
+        field.value = text;
+        document.body.appendChild(field);
+        field.select();
+        try { document.execCommand('copy'); done(); } catch (e) { /* give up quietly */ }
+        document.body.removeChild(field);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else {
+        fallback();
+      }
+    });
+    return copy;
+  }
+
+  /**
+   * A multisig approval's three hashes, computed by this page from the
+   * SafeTx (lib/multisig.js): the safeTxHash, and the domain and message
+   * hashes a hardware wallet shows for it — in full, each with a copy
+   * button, so a member can match them on another screen before approving.
+   */
+  function hashesBlock(view) {
+    var m = view.multisig;
+    if (!m || !m.hashes) return null;
+    var box = el('section', 'ms-hashes');
+    box.appendChild(el('div', 'ms-hashes-title', t('ui.msHashes')));
+    [
+      ['ui.msSafeTxHash', m.hashes.safeTxHash],
+      ['ui.msDomainHash', m.hashes.domainHash],
+      ['ui.msMessageHash', m.hashes.messageHash],
+    ].forEach(function (pair) {
+      var row = el('div', 'ms-hash');
+      var head = el('div', 'ms-hash-head');
+      head.appendChild(el('span', 'ms-hash-label', t(pair[0])));
+      var button = copyButton(pair[1], 'ui.copy');
+      button.classList.add('copy-button-small');
+      head.appendChild(button);
+      row.appendChild(head);
+      row.appendChild(el('code', 'ms-hash-value', pair[1]));
+      box.appendChild(row);
+    });
+    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? 'ui.msHashesNote' : 'ui.msHashesMismatch')));
+    return box;
   }
 
   function expandableIdentity(identity, size) {
@@ -10144,6 +11179,9 @@ window.VelaCS = window.VelaCS || {};
       .forEach(function (field) { rows.appendChild(fieldRow(field)); });
     if (rows.children.length) blocks.appendChild(rows);
 
+    var hashes = hashesBlock(view);
+    if (hashes) blocks.appendChild(hashes);
+
     if (view.balance) blocks.appendChild(balanceCard(view.balance));
     warningsOf(view, false).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
     sheet.appendChild(blocks);
@@ -10387,6 +11425,501 @@ window.VelaCS = window.VelaCS || {};
   };
 })(window.VelaCS);
 
+// A multisig member's approval (`vela_multisigApprove`): what a member of a
+// Vela multisig (a Safe v1.4.1) signs to approve one of its transactions.
+//
+// The app hands this page the raw SafeTx, the multisig's address and the
+// chain, and says which hash it thinks they make. This page trusts none of it
+// as a conclusion: it recomputes the safeTxHash from the fields itself
+// (EIP-712, the Safe's own domain), refuses when the app's hash differs, reads
+// what the transaction does from its bytes, and signs only the approval bytes
+// it derived — never a hash the app supplied.
+//
+// Transcribed from vela-core (`rust/crates/vela-core/src/multisig.rs`:
+// `safe_tx_hashes`, `approval_challenge`, `review`) and cross-checked against
+// its compiled wasm in samples/multisig-test.mjs, case by case: two
+// independent readings agreeing is the only reason to believe either. The
+// rules are the core's, on purpose — the page must never offer to sign what
+// Vela itself refuses, nor read a transaction differently from it.
+//
+// What the member's passkey signs (`approvalChallenge`): a v1.4.1 Safe asks
+// each owner `isValidSignature(txHashData, sig)` (EIP-1271, legacy form); a
+// Vela account answers through its CompatibilityFallbackHandler, which checks
+// `SafeMessage(keccak256(txHashData))` — i.e. `SafeMessage(safeTxHash)` —
+// under the MEMBER's own domain. Not lib/safeop.js's `messageHash`, whose
+// extra keccak is the dApp path: a dApp signature can never pass for an
+// approval, and an approval can never pass for a dApp signature.
+window.VelaCS = window.VelaCS || {};
+(function (ns) {
+  'use strict';
+
+  var keccak = ns.keccak;
+
+  /** Safe v1.4.1 `MultiSendCallOnly`: the one delegatecall target Vela signs. */
+  var MULTI_SEND_CALL_ONLY = '0x9641d764fc13c8B624c04430C7356C1C7C8102e2';
+  /** The Safe Genesis Registry (v4): where a multisig renames its record. */
+  var GENESIS_REGISTRY = '0xF412388bF908E510066d3Be5c704bd9A327f945d';
+  var ZERO = '0x0000000000000000000000000000000000000000';
+
+  var SAFE_TX_TYPE = 'SafeTx(address to,uint256 value,bytes data,uint8 operation,' +
+    'uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,' +
+    'address refundReceiver,uint256 nonce)';
+  var DOMAIN_TYPE = 'EIP712Domain(uint256 chainId,address verifyingContract)';
+  var SAFE_MESSAGE_TYPE = 'SafeMessage(bytes message)';
+
+  /**
+   * The most calldata this page reads, in bytes. Every byte of a SafeTx is
+   * drawn (the details hold its calldata in full), and a page that froze on a
+   * crafted megabyte would be a page nobody can refuse on. A real batch of
+   * sixty transfers is about ten kilobytes.
+   */
+  var MAX_DATA_BYTES = 64 * 1024;
+  /** The most legs of a batch this page draws. */
+  var MAX_LEGS = 64;
+  /** The registry's `MAX_NAME_LENGTH`, in bytes (vela-core `MAX_NAME_BYTES`). */
+  var MAX_NAME_BYTES = 64;
+  var MAX_UINT256 = (1n << 256n) - 1n;
+
+  var FIELDS = ['to', 'value', 'data', 'operation', 'safeTxGas', 'baseGas', 'gasPrice',
+    'gasToken', 'refundReceiver', 'nonce'];
+
+  // --- bytes ----------------------------------------------------------------
+
+  function utf8(text) {
+    return new TextEncoder().encode(text);
+  }
+
+  function concat(parts) {
+    var total = parts.reduce(function (n, p) { return n + p.length; }, 0);
+    var out = new Uint8Array(total);
+    var at = 0;
+    parts.forEach(function (p) { out.set(p, at); at += p.length; });
+    return out;
+  }
+
+  function fromHex(hex) {
+    var body = String(hex).replace(/^0x/i, '');
+    var out = new Uint8Array(body.length / 2);
+    for (var i = 0; i < out.length; i++) out[i] = parseInt(body.substr(i * 2, 2), 16);
+    return out;
+  }
+
+  function toHex(bytes) {
+    var s = '0x';
+    for (var i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+    return s;
+  }
+
+  function word(value) {
+    return fromHex(BigInt(value).toString(16).padStart(64, '0'));
+  }
+
+  function addressWord(address) {
+    return fromHex(address.slice(2).toLowerCase().padStart(64, '0'));
+  }
+
+  function wordAt(bytes, at) {
+    if (at + 32 > bytes.length) return null;
+    var hex = '';
+    for (var i = at; i < at + 32; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return BigInt('0x' + hex);
+  }
+
+  function addressOf(bytes, at) {
+    return checksum(toHex(bytes.subarray(at, at + 20)));
+  }
+
+  /** EIP-55 casing: how the core (and every block explorer) writes an address. */
+  function checksum(address) {
+    var body = String(address).replace(/^0x/i, '').toLowerCase();
+    var hash = keccak.hex(utf8(body)).slice(2);
+    var out = '0x';
+    for (var i = 0; i < body.length; i++) {
+      out += parseInt(hash[i], 16) >= 8 ? body[i].toUpperCase() : body[i];
+    }
+    return out;
+  }
+
+  function same(a, b) {
+    return String(a).toLowerCase() === String(b).toLowerCase();
+  }
+
+  function selector(signature) {
+    return keccak.selector(signature);
+  }
+
+  function selectorOf(bytes) {
+    return bytes.length >= 4 ? toHex(bytes.subarray(0, 4)) : null;
+  }
+
+  // --- the SafeTx as the app sent it ---------------------------------------
+
+  var ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+  var HEX_BYTES = /^0x(?:[0-9a-fA-F]{2})*$/;
+
+  /**
+   * A quantity as the core reads one (`multisig::quantity`): `0x` hex (`0x`
+   * alone is zero) or decimal digits, surrounding spaces ignored, at most
+   * 2^256 − 1. Anything else — a number, a sign, a fraction — is not one.
+   */
+  function quantity(value) {
+    if (typeof value !== 'string') return null;
+    var text = value.trim();
+    var parsed;
+    if (/^0x[0-9a-fA-F]*$/.test(text)) parsed = text.length === 2 ? 0n : BigInt(text);
+    else if (/^[0-9]+$/.test(text)) parsed = BigInt(text);
+    else return null;
+    return parsed <= MAX_UINT256 ? parsed : null;
+  }
+
+  /**
+   * The SafeTx fields as values this page can hash, or why not (an i18n key).
+   * Strict on purpose: a field this page reads differently from the core
+   * would make a hash that differs from the one approved.
+   */
+  function parseTx(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'refuse.msShape' };
+    for (var i = 0; i < FIELDS.length; i++) {
+      if (raw[FIELDS[i]] === undefined || raw[FIELDS[i]] === null) return { error: 'refuse.msShape' };
+    }
+    if (!ADDRESS.test(raw.to) || !ADDRESS.test(raw.gasToken) || !ADDRESS.test(raw.refundReceiver)) {
+      return { error: 'refuse.msShape' };
+    }
+    if (typeof raw.data !== 'string' || !HEX_BYTES.test(raw.data)) return { error: 'refuse.msShape' };
+    if ((raw.data.length - 2) / 2 > MAX_DATA_BYTES) return { error: 'refuse.msTooLarge' };
+    var operation = raw.operation;
+    if (typeof operation !== 'number' || !Number.isInteger(operation) || operation < 0 || operation > 255) {
+      return { error: 'refuse.msShape' };
+    }
+    var tx = {
+      to: checksum(raw.to),
+      data: '0x' + raw.data.slice(2).toLowerCase(),
+      operation: operation,
+      gasToken: checksum(raw.gasToken),
+      refundReceiver: checksum(raw.refundReceiver),
+    };
+    var quantities = ['value', 'safeTxGas', 'baseGas', 'gasPrice', 'nonce'];
+    for (var q = 0; q < quantities.length; q++) {
+      var parsed = quantity(raw[quantities[q]]);
+      if (parsed === null) return { error: 'refuse.msShape' };
+      tx[quantities[q]] = parsed;
+    }
+    return { tx: tx };
+  }
+
+  // --- hashes ---------------------------------------------------------------
+
+  function domainSeparator(chainId, verifyingContract) {
+    return keccak.hash(concat([
+      keccak.hash(utf8(DOMAIN_TYPE)),
+      word(chainId),
+      addressWord(verifyingContract),
+    ]));
+  }
+
+  function eip712(domain, struct) {
+    return keccak.hash(concat([new Uint8Array([0x19, 0x01]), domain, struct]));
+  }
+
+  function structHash(tx) {
+    return keccak.hash(concat([
+      keccak.hash(utf8(SAFE_TX_TYPE)),
+      addressWord(tx.to),
+      word(tx.value),
+      keccak.hash(fromHex(tx.data)),
+      word(tx.operation),
+      word(tx.safeTxGas),
+      word(tx.baseGas),
+      word(tx.gasPrice),
+      addressWord(tx.gasToken),
+      addressWord(tx.refundReceiver),
+      word(tx.nonce),
+    ]));
+  }
+
+  /**
+   * The three hashes a hardware wallet shows for a SafeTx (vela-core
+   * `safe_tx_hashes`): the domain hash (`EIP712Domain{chainId,
+   * verifyingContract: safe}`), the message hash (the SafeTx struct hash) and
+   * the safeTxHash they make. Hex, `0x`, lowercase.
+   */
+  function hashes(chainId, safe, tx) {
+    var domain = domainSeparator(chainId, safe);
+    var message = structHash(tx);
+    return {
+      domainHash: toHex(domain),
+      messageHash: toHex(message),
+      safeTxHash: toHex(eip712(domain, message)),
+    };
+  }
+
+  /**
+   * What the member's passkey signs to approve `safeTxHash` (32 bytes, hex)
+   * on `chainId` (vela-core `approval_challenge`): `SafeMessage(safeTxHash)`
+   * under the member's own domain. The bytes, for the WebAuthn challenge.
+   */
+  function approvalChallenge(chainId, member, safeTxHash) {
+    var inner = keccak.hash(concat([keccak.hash(utf8(SAFE_MESSAGE_TYPE)), fromHex(safeTxHash)]));
+    return eip712(domainSeparator(chainId, member), inner);
+  }
+
+  // --- what it does (vela-core `review`) -----------------------------------
+
+  var OWNER_MANAGEMENT = {};
+  OWNER_MANAGEMENT[selector('addOwnerWithThreshold(address,uint256)')] = 'addOwner';
+  OWNER_MANAGEMENT[selector('removeOwner(address,address,uint256)')] = 'removeOwner';
+  OWNER_MANAGEMENT[selector('swapOwner(address,address,address)')] = 'swapOwner';
+  OWNER_MANAGEMENT[selector('changeThreshold(uint256)')] = 'changeThreshold';
+
+  /**
+   * The Safe's own functions that hand it to something other than its
+   * members — named on the card when a SafeTx calls one on the multisig.
+   * Refused like every self-call that is not a member change (the core reads
+   * those as "not a transaction Vela signs"); the name only says which.
+   */
+  var TAKEOVER = {};
+  [
+    'enableModule(address)', 'disableModule(address,address)', 'setGuard(address)',
+    'setModuleGuard(address)', 'setFallbackHandler(address)',
+    'setup(address[],uint256,address,bytes,address,address,uint256,address)',
+    'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)',
+    'execTransactionFromModule(address,uint256,bytes,uint8)',
+    'execTransactionFromModuleReturnData(address,uint256,bytes,uint8)',
+    'approveHash(bytes32)',
+    'simulateAndRevert(address,bytes)',
+  ].forEach(function (signature) { TAKEOVER[selector(signature)] = signature.split('(')[0]; });
+  // A singleton change is a storage write a delegatecall makes; the multisig
+  // has no function for it. Said by name so the card can say what it is.
+  TAKEOVER[selector('changeMasterCopy(address)')] = 'changeMasterCopy';
+
+  var TRANSFER = selector('transfer(address,uint256)');
+  var MULTI_SEND = selector('multiSend(bytes)');
+  var RENAME = selector('rename(string)');
+
+  /** vela-core `read_owner_management`: one of the four, exactly encoded. */
+  function readOwnerManagement(data) {
+    var kind = OWNER_MANAGEMENT[selectorOf(data)];
+    if (!kind) return null;
+    var w = function (i) { return wordAt(data, 4 + i * 32); };
+    var a = function (i) {
+      var v = w(i);
+      if (v === null) return null;
+      // `Address::from_word`: the low 20 bytes, whatever the high 12 hold.
+      return checksum('0x' + (v & ((1n << 160n) - 1n)).toString(16).padStart(40, '0'));
+    };
+    if (kind === 'addOwner' && data.length === 68) {
+      return { kind: 'addOwner', owner: a(0), threshold: w(1).toString() };
+    }
+    if (kind === 'removeOwner' && data.length === 100) {
+      return { kind: 'removeOwner', owner: a(1), threshold: w(2).toString() };
+    }
+    if (kind === 'swapOwner' && data.length === 100) {
+      return { kind: 'swapOwner', oldOwner: a(1), newOwner: a(2) };
+    }
+    if (kind === 'changeThreshold' && data.length === 36) {
+      return { kind: 'changeThreshold', threshold: w(0).toString() };
+    }
+    return null;
+  }
+
+  /** vela-core `read_transfer`: native with no calldata, or an exact ERC-20 `transfer`. */
+  function readTransfer(to, value, data) {
+    if (!data.length) return { kind: 'transfer', token: null, to: to, amount: value.toString() };
+    if (value === 0n && data.length === 68 && selectorOf(data) === TRANSFER) {
+      for (var i = 4; i < 16; i++) if (data[i] !== 0) return null;
+      return {
+        kind: 'transfer',
+        token: to,
+        to: addressOf(data, 16),
+        amount: wordAt(data, 36).toString(),
+      };
+    }
+    return null;
+  }
+
+  /** Characters that draw nothing or reorder what is drawn (vela-core `hidden`). */
+  function hidden(code) {
+    return code === 0xad || code === 0x61c || code === 0x180e ||
+      (code >= 0x200b && code <= 0x200f) || (code >= 0x202a && code <= 0x202e) ||
+      (code >= 0x2060 && code <= 0x2064) || (code >= 0x2066 && code <= 0x206f) ||
+      code === 0xfeff || (code >= 0xfff9 && code <= 0xfffb);
+  }
+
+  function pictograph(code) {
+    return (code >= 0x2600 && code <= 0x27bf) || (code >= 0x2b00 && code <= 0x2bff) ||
+      (code >= 0x1f000 && code <= 0x1faff);
+  }
+
+  /**
+   * vela-core `valid_name`: a name every member reads in full — no space
+   * around it, at most 64 bytes, no control character, nothing invisible
+   * (a zero-width joiner only inside an emoji).
+   */
+  function validName(name) {
+    if (typeof name !== 'string' || !name || name.trim() !== name) return false;
+    if (utf8(name).length > MAX_NAME_BYTES) return false;
+    var chars = Array.from(name).map(function (c) { return c.codePointAt(0); });
+    return chars.every(function (c, i) {
+      if (c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0xfffd) return false;
+      if (!hidden(c)) return true;
+      return c === 0x200d && i > 0 && (pictograph(chars[i - 1]) || chars[i - 1] === 0xfe0f) &&
+        i + 1 < chars.length && pictograph(chars[i + 1]);
+    });
+  }
+
+  /** vela-core `read_rename`: exactly one canonical `rename(string)` of text. */
+  function readRename(data) {
+    if (selectorOf(data) !== RENAME || wordAt(data, 4) !== 0x20n) return null;
+    var len = wordAt(data, 36);
+    if (len === null || len > BigInt(data.length)) return null;
+    var n = Number(len);
+    var padded = n + ((32 - (n % 32)) % 32);
+    if (data.length !== 68 + padded) return null;
+    for (var i = 68 + n; i < data.length; i++) if (data[i] !== 0) return null;
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(data.subarray(68, 68 + n));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function readRegistryCall(to, value, data) {
+    if (value !== 0n) return { refusal: 'refuse.msRegistryCoins' };
+    if (selectorOf(data) === RENAME) {
+      var name = readRename(data);
+      return name !== null && validName(name)
+        ? { action: { kind: 'rename', name: name } }
+        : { refusal: 'refuse.msRenameUnreadable' };
+    }
+    return { action: { kind: 'call', to: to, value: value.toString(), data: toHex(data) } };
+  }
+
+  function selfCallRefusal(data) {
+    var fn = TAKEOVER[selectorOf(data)];
+    return fn ? { refusal: 'refuse.msSelfCall', params: { fn: fn } } : { refusal: 'refuse.msNotSigned' };
+  }
+
+  /** vela-core `read_batch`: the calls of a canonical MultiSendCallOnly batch, every one a CALL. */
+  function readBatch(data, me) {
+    var unreadable = { refusal: 'refuse.msBatchUnreadable' };
+    if (selectorOf(data) !== MULTI_SEND || wordAt(data, 4) !== 0x20n) return unreadable;
+    var len = wordAt(data, 36);
+    if (len === null || len > BigInt(data.length)) return unreadable;
+    var n = Number(len);
+    if (68 + n > data.length) return unreadable;
+    // Canonical encoding only: nothing may hide in padding or trailing bytes.
+    if (data.length !== 68 + n + ((32 - (n % 32)) % 32)) return unreadable;
+    for (var z = 68 + n; z < data.length; z++) if (data[z] !== 0) return unreadable;
+    var packed = data.subarray(68, 68 + n);
+    var calls = [];
+    var i = 0;
+    while (i < packed.length) {
+      if (i + 85 > packed.length) return unreadable;
+      // A delegatecall leg runs another contract's code AS the multisig.
+      if (packed[i] !== 0) return { refusal: 'refuse.msBatchDelegate' };
+      var to = addressOf(packed, i + 1);
+      var value = wordAt(packed, i + 21);
+      var size = wordAt(packed, i + 53);
+      if (size > BigInt(packed.length)) return unreadable;
+      var end = i + 85 + Number(size);
+      if (end > packed.length) return unreadable;
+      var legData = packed.subarray(i + 85, end);
+      // MultiSend reads the zero address as the multisig itself: a call that
+      // hides where it goes.
+      if (same(to, ZERO)) return { refusal: 'refuse.msBatchZero' };
+      var action;
+      if (same(to, me)) {
+        // Into the multisig itself: only the four member changes, no coin.
+        action = value === 0n ? readOwnerManagement(legData) : null;
+        if (!action) return selfCallRefusal(legData);
+      } else if (same(to, GENESIS_REGISTRY)) {
+        var registry = readRegistryCall(to, value, legData);
+        if (registry.refusal) return registry;
+        action = registry.action;
+      } else {
+        action = readTransfer(to, value, legData) ||
+          { kind: 'call', to: to, value: value.toString(), data: toHex(legData) };
+      }
+      calls.push({ to: to, value: value.toString(), data: toHex(legData), action: action });
+      if (calls.length > MAX_LEGS) return { refusal: 'refuse.msTooLarge' };
+      i = end;
+    }
+    if (!calls.length) return unreadable;
+    return { action: { kind: 'batch', calls: calls } };
+  }
+
+  /**
+   * What `tx` does for `multisig`, read the core's way: `{action}` — one of
+   * transfer, batch, cancel, addOwner, removeOwner, swapOwner,
+   * changeThreshold, rename, call, in the core's own field names — or
+   * `{refusal, params}` (an i18n key) for what Vela never signs.
+   */
+  function read(multisig, tx) {
+    var data = fromHex(tx.data);
+    if (tx.safeTxGas !== 0n || tx.baseGas !== 0n || tx.gasPrice !== 0n ||
+      !same(tx.gasToken, ZERO) || !same(tx.refundReceiver, ZERO)) {
+      return { refusal: 'refuse.msGasRefund' };
+    }
+    if (tx.operation === 1) {
+      if (same(tx.to, MULTI_SEND_CALL_ONLY) && tx.value === 0n) return readBatch(data, multisig);
+      return { refusal: 'refuse.msDelegateCall' };
+    }
+    if (tx.operation !== 0) return { refusal: 'refuse.msUnknownOperation' };
+    if (same(tx.to, multisig)) {
+      if (tx.value === 0n && !data.length) return { action: { kind: 'cancel' } };
+      var members = tx.value === 0n ? readOwnerManagement(data) : null;
+      return members ? { action: members } : selfCallRefusal(data);
+    }
+    if (same(tx.to, GENESIS_REGISTRY)) return readRegistryCall(tx.to, tx.value, data);
+    return {
+      action: readTransfer(tx.to, tx.value, data) ||
+        { kind: 'call', to: tx.to, value: tx.value.toString(), data: toHex(data) },
+    };
+  }
+
+  /**
+   * The request's one parameter, read: `{chainId, safe, member, tx, claimed}`
+   * — or `{error}` (an i18n key). `claimed` is the safeTxHash the app says the
+   * fields make; nothing is derived from it, it is only compared.
+   */
+  function request(intent) {
+    var params = intent && Array.isArray(intent.params) ? intent.params : null;
+    var p = params && params.length === 1 ? params[0] : null;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return { error: 'refuse.msShape' };
+    var chainId = typeof p.chainId === 'number' && Number.isSafeInteger(p.chainId) && p.chainId > 0
+      ? p.chainId : null;
+    if (!chainId || !ADDRESS.test(p.safe) || !ADDRESS.test(p.member)) return { error: 'refuse.msShape' };
+    if (typeof p.safeTxHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(p.safeTxHash)) {
+      return { error: 'refuse.msShape' };
+    }
+    var parsed = parseTx(p.safeTx);
+    if (parsed.error) return { error: parsed.error };
+    return {
+      chainId: chainId,
+      safe: checksum(p.safe),
+      member: checksum(p.member),
+      tx: parsed.tx,
+      claimed: p.safeTxHash.toLowerCase(),
+    };
+  }
+
+  ns.multisig = {
+    METHOD: 'vela_multisigApprove',
+    MULTI_SEND_CALL_ONLY: MULTI_SEND_CALL_ONLY,
+    GENESIS_REGISTRY: GENESIS_REGISTRY,
+    MAX_DATA_BYTES: MAX_DATA_BYTES,
+    MAX_LEGS: MAX_LEGS,
+    request: request,
+    parseTx: parseTx,
+    hashes: hashes,
+    approvalChallenge: approvalChallenge,
+    read: read,
+    validName: validName,
+    checksum: checksum,
+    toHex: toHex,
+  };
+})(window.VelaCS);
+
 // What actually gets signed.
 //
 // The single most dangerous shortcut in a signing UI is to let the requester
@@ -10555,6 +12088,20 @@ window.VelaCS = window.VelaCS || {};
       var data = ns.resolve && ns.resolve.typedDocument ? ns.resolve.typedDocument(intent) : null;
       if (!data) return { refuse: 'refuse.typedShape' };
       return forAccount(typedDataHash(data), 'EIP-712');
+    }
+    // A multisig member's approval: `SafeMessage(safeTxHash)` under the
+    // member's own domain (lib/multisig.js) — over the safeTxHash THIS page
+    // computed from the SafeTx's fields. The hash the app sent is only ever
+    // compared with it, and a difference is a refusal, never a choice.
+    if (ns.multisig && intent.method === ns.multisig.METHOD) {
+      var request = ns.multisig.request(intent);
+      if (request.error) return { refuse: request.error };
+      var computed = ns.multisig.hashes(request.chainId, request.safe, request.tx).safeTxHash;
+      if (computed !== request.claimed) return { refuse: 'refuse.msHashMismatch' };
+      return {
+        hash: ns.multisig.approvalChallenge(request.chainId, request.member, computed),
+        describes: 'SafeMessage(safeTxHash)',
+      };
     }
     if (intent.method === 'eth_sign') {
       // The payload IS the digest. Signing it is exactly the blind signature the
@@ -11357,6 +12904,20 @@ window.VelaCS = window.VelaCS || {};
         originVerified: true,
         requester: event.origin,
       }, function (kind, body) {
+        // The same rule as the card's, where the bytes leave (spec 102 R7):
+        // an answer goes to the opener only when the answer rule says the
+        // opener is the wallet — today, a multisig approval answered to Vela's
+        // web wallet. Anything else gets the refusal code and nothing more.
+        // A key ceremony keeps its own rule (resolve.js `walletRequester`).
+        var method = data.intent && typeof data.intent.method === 'string' ? data.intent.method : '';
+        var ceremony = !!(ns.ceremony && ns.ceremony.kindOf(method));
+        var toWallet = ceremony || (ns.resolve && ns.resolve.answersToWallet({
+          channel: 'post', originVerified: true, requester: peer.origin, method: method,
+        }));
+        if (kind === 'result' && !toWallet) {
+          post({ vela: 'error', id: id, code: 'refused' });
+          return;
+        }
         post(Object.assign({ vela: kind, id: id }, body));
       });
     }
@@ -11840,7 +13401,10 @@ window.VelaCS = window.VelaCS || {};
     if (digest.refuse) {
       view.refuse = true;
       view.confirmKey = 'button.cannotSign';
-      view.warnings.push({ tone: 'danger', key: digest.refuse });
+      // Said once: resolve.js may already have said it, with its facts.
+      if (!view.warnings.some(function (w) { return w.key === digest.refuse; })) {
+        view.warnings.push({ tone: 'danger', key: digest.refuse });
+      }
     }
     if (digest.warn) view.warnings.push({ tone: 'danger', key: digest.warn });
     if (digest.hash) {
@@ -12037,6 +13601,9 @@ window.VelaCS = window.VelaCS || {};
       // the page can say about the other end truthfully.
       callback: session.callback || '',
       rpId: ns.signer.relyingPartyId(),
+      // The answer rule asks what is being signed (a multisig approval may be
+      // answered to the web wallet over postMessage): the intent's own method.
+      method: request.intent && typeof request.intent.method === 'string' ? request.intent.method : '',
     });
     var view = ns.resolve(request.intent, context);
     state.kind = view.kind === 'ceremony' ? view.ceremony.kind : 'sign';

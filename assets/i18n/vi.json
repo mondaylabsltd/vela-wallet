@@ -87,7 +87,8 @@
    "pageBody": "Trang độc lập, ký đúng những gì nó hiển thị",
    "blockedApp": "Passkey của tài khoản này chỉ ký cho {{domain}}, nên Vela không dùng được chúng ở đây.",
    "blockedPage": "Trang này ở {{pageDomain}}, nhưng passkey của tài khoản này chỉ ký cho {{domain}}.",
-   "blockedWeb": "Không dùng được trên web. Hãy mở từ ứng dụng Vela."
+   "blockedWeb": "Không dùng được trên web. Hãy mở từ ứng dụng Vela.",
+   "webApprovals": "Trên web, trang ký sẽ xem xét và ký các phê duyệt đa chữ ký của bạn. Các giao dịch và tin nhắn khác được xác nhận trong Vela."
   },
   "advanced": {
    "networksTitle": "Mạng lưới",

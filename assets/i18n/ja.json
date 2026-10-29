@@ -87,7 +87,8 @@
    "pageBody": "表示した内容そのままに署名する単独のページ",
    "blockedApp": "このアカウントのパスキーは {{domain}} のためだけに署名するため、Vela ではここで使えません。",
    "blockedPage": "このページは {{pageDomain}} にありますが、このアカウントのパスキーは {{domain}} のためだけに署名します。",
-   "blockedWeb": "Web 版では使えません。Vela アプリから開いてください。"
+   "blockedWeb": "Web 版では使えません。Vela アプリから開いてください。",
+   "webApprovals": "Web 版では、マルチシグの承認は署名ページで確認・署名します。そのほかの取引やメッセージは Vela で確認します。"
   },
   "advanced": {
    "networksTitle": "ネットワーク",

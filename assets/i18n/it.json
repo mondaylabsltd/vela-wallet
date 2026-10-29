@@ -87,7 +87,8 @@
    "pageBody": "Una pagina autonoma che firma esattamente ciò che mostra",
    "blockedApp": "Le passkey di questo account firmano solo per {{domain}}, quindi Vela non può usarle qui.",
    "blockedPage": "Questa pagina è su {{pageDomain}}, ma le passkey di questo account firmano solo per {{domain}}.",
-   "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela."
+   "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela.",
+   "webApprovals": "Sul web, una pagina di firma esamina e firma le tue approvazioni multisig. Le altre transazioni e i messaggi si confermano in Vela."
   },
   "advanced": {
    "networksTitle": "Reti",
