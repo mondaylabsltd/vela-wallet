@@ -25,6 +25,13 @@ const ALL = {
 	// record's rows are the network, the multisig's address and its name.
 	intentSaveMultisigSetup: true,
 	intentRenameInRegistry: true,
+	// A multisig's own member changes — Safe's owner management called on the
+	// Safe itself — read by Vela from the bytes (r4a-15): what each does, the
+	// member it adds, removes or brings in, and the approvals it then needs.
+	intentAddMember: true,
+	intentRemoveMember: true,
+	intentReplaceMember: true,
+	intentChangeThreshold: true,
 	intentBorrow: true,
 	intentBridge: true,
 	intentBurn: true,
@@ -49,6 +56,9 @@ const ALL = {
 	intentWrap: true,
 	intentWrapEth: true,
 	labelAddress: true,
+	labelMember: true,
+	labelNewMember: true,
+	labelApprovalsRequired: true,
 	labelAmount: true,
 	labelAmountToSpend: true,
 	labelApproved: true,

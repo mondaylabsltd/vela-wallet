@@ -256,6 +256,14 @@ export const WALLET_FLOW_KEYS = [
 	'send.selectAllValuable',
 	'send.sendTitle',
 	'send.maxBtn',
+	// r4a-2: a token nobody vouches for shows its contract; a lookalike of
+	// the native coin or a vouched token says it is not the real one — the
+	// multisig's words, one set for every surface that names a token.
+	'home.multisig.token.unverified',
+	'home.multisig.token.lookalike',
+	'home.multisig.token.contract',
+	'home.multisig.proposal.copy',
+	'home.multisig.proposal.explorer',
 	'send.balanceLabel',
 	'send.recipientLabel',
 	'send.recipientN',

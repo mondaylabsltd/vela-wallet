@@ -366,11 +366,11 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 		['0.043790209243313861', '0.04379'],
 		['0.0439686', '0.043969'],
 		['1.22456789123456789', '1.2246'],
-		['1234.567', '1234.57'],
+		['1234.567', '1,234.57'],
 		['2', '2'],
 		['0', '0'],
 		['0.9999996', '1'],
-		['999.99996', '1000'],
+		['999.99996', '1,000'],
 		['0.0000001234', '0.00000012'],
 		['5.000000', '5']
 	])('%s reads %s', (exact, shown) => {
@@ -399,6 +399,23 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 		preferences.setNumberFormat('dot_comma');
 		try {
 			expect(tokenAmountText('0.043968123456789012')).toBe('0,043968');
+		} finally {
+			preferences.setNumberFormat('comma_dot');
+		}
+	});
+
+	// r4a-21: one number format everywhere — the multisig's sheet read
+	// "1,000" where the confirm and Activity read "1000".
+	it('groups by the preset, as every other figure does', async () => {
+		const { preferences } = await import('$lib/services/preferences.svelte');
+		expect(tokenAmountText('1000')).toBe('1,000');
+		try {
+			preferences.setNumberFormat('dot_comma');
+			expect(tokenAmountText('1234567.891')).toBe('1.234.567,89');
+			preferences.setNumberFormat('space_comma');
+			expect(tokenAmountText('5000')).toBe('5 000');
+			preferences.setNumberFormat('indian');
+			expect(tokenAmountText('1234567')).toBe('12,34,567');
 		} finally {
 			preferences.setNumberFormat('comma_dot');
 		}

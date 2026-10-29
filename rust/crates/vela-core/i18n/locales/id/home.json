@@ -125,6 +125,21 @@
         "batchCalls": "{{total}} panggilan dalam satu transaksi",
         "rename": "Ganti nama multisig ini di registri menjadi “{{name}}”"
       },
+      "change": {
+        "add": "Tambah {{member}}",
+        "remove": "Hapus {{member}}",
+        "replace": "Ganti {{old}} dengan {{new}}",
+        "threshold": "Ubah persetujuan yang dibutuhkan",
+        "rule": "Persetujuan: {{before}} → {{after}}",
+        "caution": "Ini mengubah siapa yang mengendalikan multisig ini di {{network}}. Setujui hanya jika semua anggota mengharapkannya.",
+        "rowCaution": "Mengubah siapa yang mengendalikan multisig ini",
+        "doesNotFit": "Ini tidak cocok dengan anggotanya di {{network}} sekarang: mengeksekusinya akan gagal."
+      },
+      "token": {
+        "unverified": "Token belum terverifikasi",
+        "lookalike": "Bukan {{symbol}} asli — kontrak lain memakai nama ini",
+        "contract": "Kontrak token"
+      },
       "proposal": {
         "title": "Transaksi multisig",
         "approvals": "Persetujuan",
@@ -187,7 +202,11 @@
         "outboxBusy": "Layanan multisig sedang sibuk — mengirim lagi dalam {{seconds}} detik.",
         "outboxAway": "Tidak bisa menjangkau layanan multisig — mengirim lagi dalam {{seconds}} detik.",
         "outboxNotSent": "Belum terkirim: layanan multisig tidak menerimanya. Transaksi ini disimpan di perangkat ini, dan anggota lain tidak bisa melihatnya sampai terkirim.",
-        "outboxSendAgain": "Kirim lagi"
+        "outboxSendAgain": "Kirim lagi",
+        "copy": "Salin",
+        "executedBy": "Dieksekusi oleh {{name}}",
+        "countedThen": "{{approved}} dari {{threshold}} persetujuan dihitung saat dieksekusi",
+        "approvalsSigned": "Anggota ini menyetujuinya. Persetujuan mana yang dihitung saat dieksekusi tidak tercatat di perangkat ini."
       },
       "send": {
         "propose": "Usulkan dan setujui",

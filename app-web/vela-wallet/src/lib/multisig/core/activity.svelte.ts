@@ -11,8 +11,19 @@ import { chainName } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { ActivityGroupModel, ActivityRowModel } from '$lib/wallet/model';
 import type { MultisigMessages } from '../messages';
-import { actionTitle, formatUnits, localName, shortenAddress, tokenInfo } from './display';
+import {
+	actionTitle,
+	changeLines,
+	formatUnits,
+	localName,
+	memberWho,
+	shortenAddress,
+	tokenInfo
+} from './display';
 import { checksumAddress } from '$lib/core/kernels';
+import { readMemberChanges } from './kernel';
+import { names } from './names.svelte';
+import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 import { proposals, type ProposalItem } from './proposals.svelte';
 import { readCall } from './call-review.svelte';
 import { readChainDoc } from '$lib/services/chain-doc';
@@ -71,7 +82,12 @@ interface Drawn {
 	unit: string;
 	/** Who read a contract call its title names ("Read by Vela, from the transaction"). */
 	source?: string | null;
+	/** r4a-2: the token a transfer sends, when nobody vouches for it. */
+	note?: ProvenanceNote | null;
 }
+
+/** A member as a row names it: the name this device knows, and the short address. */
+const who = (address: string) => memberWho(address, names.label(address));
 
 class WaitingRows {
 	/** Titles and amounts are read from the chain (a token's symbol): kept once read. */
@@ -114,7 +130,7 @@ class WaitingRows {
 				});
 		}
 		void Promise.all([
-			actionTitle(m, item.chainId, action, item.nonce),
+			actionTitle(m, item.chainId, action, item.nonce, who),
 			action?.kind === 'transfer'
 				? tokenInfo(item.chainId, action.token).catch(() => null)
 				: // A call's own coin, so a read title keeps what the call sends.
@@ -133,11 +149,15 @@ class WaitingRows {
 			// sends stands in the amount, not twice in its title.
 			const read = this.#drawn[key]?.source !== undefined ? this.#drawn[key] : null;
 			const own = action?.kind === 'call' && amount !== '' ? m.action.call : title;
+			const note =
+				action?.kind === 'transfer' && token
+					? provenanceNote(item.chainId, action.token, token.symbol, m.token)
+					: null;
 			this.#drawn = {
 				...this.#drawn,
 				[key]: read
-					? { ...read, amount, unit: token?.symbol ?? '' }
-					: { title: own, amount, unit: token?.symbol ?? '' }
+					? { ...read, amount, unit: token?.symbol ?? '', note }
+					: { title: own, amount, unit: token?.symbol ?? '', note }
 			};
 		});
 	}
@@ -173,6 +193,8 @@ class WaitingRows {
 		if (open.length === 0 && missing.length === 0 && !proposals.stale) return null;
 		const rows: ActivityRowModel[] = open.map((item) => {
 			const drawn = this.#drawn[proposalRowId(item)];
+			const change = memberChangeOf(m, item);
+			const note = drawn?.note ?? null;
 			return {
 				id: proposalRowId(item),
 				kind: 'sent',
@@ -184,13 +206,26 @@ class WaitingRows {
 						approved: item.approved,
 						threshold: item.threshold
 					}),
+					// r4a-1: the rule it meets and the one it leaves.
+					change?.rule,
 					// vis-18: whom a transfer goes to, as a Vela account's row
 					// says it; the chain logo on the glyph already names the
-					// network, so a transfer's line has room for the person.
-					recipientLine(item, toName) ?? chainName(item.chainId)
+					// network, so a transfer's line has room for the person. A
+					// member change names its network: that is where it applies.
+					change
+						? chainName(item.chainId)
+						: (recipientLine(item, toName) ?? chainName(item.chainId))
 				]
 					.filter(Boolean)
 					.join(' · '),
+				// What must be read first: it changes who controls the multisig,
+				// or it sends a token nobody vouches for (its contract, and a
+				// lookalike's "not the real USDC").
+				...(change
+					? { caution: m.change.rowCaution }
+					: note
+						? { caution: `${note.text} · ${note.short}` }
+						: {}),
 				// The typographic minus every other row's amount carries (vis-18).
 				amount: drawn?.amount
 					? drawn.amount.startsWith('<')
@@ -253,6 +288,23 @@ function recipientLine(item: ProposalItem, toName: string | undefined): string |
 		// Not an address the core can read: shown as it came.
 	}
 	return fillTemplate(toName, { name: localName(address) ?? shortenAddress(address) });
+}
+
+/**
+ * r4a-1: a waiting transaction's member changes on its Home row — the rule
+ * it meets and the one it leaves, against its network's members now (the
+ * core's reading) — or `null` when it changes none.
+ */
+function memberChangeOf(m: MultisigMessages, item: ProposalItem): { rule: string } | null {
+	const action = item.review.action;
+	const members = proposals.chain(item.chainId)?.members;
+	if (!action || !members) return null;
+	try {
+		const reading = readMemberChanges(action, members);
+		return reading ? { rule: changeLines(m, reading, chainName(item.chainId), who).rule } : null;
+	} catch {
+		return null;
+	}
 }
 
 function statusOf(m: MultisigMessages, item: ProposalItem): string {

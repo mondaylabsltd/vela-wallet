@@ -12,6 +12,7 @@
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import ProvenanceNote from '../ui/ProvenanceNote.svelte';
 	import type { FactRowModel, SendConfirmModel } from '../model';
 
 	interface Props {
@@ -83,6 +84,17 @@
 			{/if}
 		</p>
 		<p class="subline">{model.subline}</p>
+		{#if model.provenance !== undefined}
+			<!-- r4a-2: the page that signs says which contract this coin is. -->
+			<div class="provenance">
+				<ProvenanceNote
+					note={model.provenance.note}
+					contractLabel={model.provenance.contractLabel}
+					copyLabel={model.provenance.copyLabel}
+					explorerLabel={model.provenance.explorerLabel}
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<ul class="facts">
@@ -216,6 +228,12 @@
 		background: var(--color-bg-sunken);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.provenance {
+		display: flex;
+		justify-content: center;
+		padding-top: var(--space-sm);
 	}
 
 	.subline {

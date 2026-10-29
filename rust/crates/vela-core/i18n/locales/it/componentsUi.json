@@ -313,7 +313,14 @@
       "passkeyTimedOut": "La richiesta della passkey è scaduta, quindi non è stato firmato nulla. Riprova quando sei pronto.",
       "intentSaveMultisigSetup": "Salva la configurazione di questo multisig",
       "intentRenameInRegistry": "Rinomina nel registro",
-      "labelName": "Nome"
+      "labelName": "Nome",
+      "intentAddMember": "Aggiungi un membro",
+      "intentRemoveMember": "Rimuovi un membro",
+      "intentReplaceMember": "Sostituisci un membro",
+      "intentChangeThreshold": "Cambia le approvazioni richieste",
+      "labelMember": "Membro",
+      "labelNewMember": "Nuovo membro",
+      "labelApprovalsRequired": "Approvazioni richieste"
     },
     "signingApprove": {
       "resultingTotal": "Nuovo limite totale",

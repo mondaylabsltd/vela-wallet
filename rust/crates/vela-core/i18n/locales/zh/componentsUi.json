@@ -313,7 +313,14 @@
       "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。",
       "intentSaveMultisigSetup": "保存这个多签的配置",
       "intentRenameInRegistry": "在注册表中改名",
-      "labelName": "名称"
+      "labelName": "名称",
+      "intentAddMember": "添加成员",
+      "intentRemoveMember": "移除成员",
+      "intentReplaceMember": "替换成员",
+      "intentChangeThreshold": "修改需要的批准数",
+      "labelMember": "成员",
+      "labelNewMember": "新成员",
+      "labelApprovalsRequired": "需要的批准数"
     },
     "currency": {
       "title": "显示货币",

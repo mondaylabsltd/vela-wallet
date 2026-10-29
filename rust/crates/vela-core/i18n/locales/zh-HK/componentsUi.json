@@ -313,7 +313,14 @@
       "passkeyTimedOut": "通行密鑰視窗已逾時，所以甚麼都未簽署。準備好之後再試一次。",
       "intentSaveMultisigSetup": "儲存這個多簽的設定",
       "intentRenameInRegistry": "在登記冊中改名",
-      "labelName": "名稱"
+      "labelName": "名稱",
+      "intentAddMember": "新增成員",
+      "intentRemoveMember": "移除成員",
+      "intentReplaceMember": "更換成員",
+      "intentChangeThreshold": "修改需要的批准數",
+      "labelMember": "成員",
+      "labelNewMember": "新成員",
+      "labelApprovalsRequired": "需要的批准數"
     },
     "currency": {
       "title": "顯示貨幣",

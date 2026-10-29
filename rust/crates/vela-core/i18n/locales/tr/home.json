@@ -125,6 +125,21 @@
         "batchCalls": "Tek işlemde {{total}} çağrı",
         "rename": "Bu multisig'i kayıt defterinde “{{name}}” olarak yeniden adlandır"
       },
+      "change": {
+        "add": "{{member}} ekle",
+        "remove": "{{member}} çıkar",
+        "replace": "{{old}} yerine {{new}}",
+        "threshold": "Gereken onayı değiştir",
+        "rule": "Onaylar: {{before}} → {{after}}",
+        "caution": "Bu, {{network}} üzerinde bu çoklu imzayı kimin yönettiğini değiştirir. Yalnızca tüm üyeler bunu bekliyorsa onayla.",
+        "rowCaution": "Bu çoklu imzayı kimin yönettiğini değiştirir",
+        "doesNotFit": "Bu, {{network}} üzerindeki şimdiki üyelerine uymuyor: yürütmek başarısız olur."
+      },
+      "token": {
+        "unverified": "Doğrulanmamış token",
+        "lookalike": "Gerçek {{symbol}} değil — bu adı başka bir sözleşme kullanıyor",
+        "contract": "Token sözleşmesi"
+      },
       "proposal": {
         "title": "Çoklu imza işlemi",
         "approvals": "Onaylar",
@@ -187,7 +202,11 @@
         "outboxBusy": "Multisig hizmeti meşgul — {{seconds}} sn sonra yeniden gönderilecek.",
         "outboxAway": "Multisig hizmetine ulaşılamadı — {{seconds}} sn sonra yeniden gönderilecek.",
         "outboxNotSent": "Henüz gönderilmedi: multisig hizmeti bunu kabul etmedi. Bu cihazda saklanıyor ve gönderilene kadar diğer üyeler onu göremez.",
-        "outboxSendAgain": "Yeniden gönder"
+        "outboxSendAgain": "Yeniden gönder",
+        "copy": "Kopyala",
+        "executedBy": "{{name}} yürüttü",
+        "countedThen": "Yürütüldüğünde {{threshold}} onaydan {{approved}} tanesi sayıldı",
+        "approvalsSigned": "Bu üyeler onayladı. Yürütüldüğünde hangi onayların sayıldığı bu cihazda kayıtlı değil."
       },
       "send": {
         "propose": "Öner ve onayla",

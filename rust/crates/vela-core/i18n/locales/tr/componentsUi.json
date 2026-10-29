@@ -313,7 +313,14 @@
       "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin.",
       "intentSaveMultisigSetup": "Bu multisig'in kurulumunu kaydet",
       "intentRenameInRegistry": "Kayıt defterinde yeniden adlandır",
-      "labelName": "Ad"
+      "labelName": "Ad",
+      "intentAddMember": "Üye ekle",
+      "intentRemoveMember": "Üye çıkar",
+      "intentReplaceMember": "Üye değiştir",
+      "intentChangeThreshold": "Gereken onayı değiştir",
+      "labelMember": "Üye",
+      "labelNewMember": "Yeni üye",
+      "labelApprovalsRequired": "Gereken onay"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

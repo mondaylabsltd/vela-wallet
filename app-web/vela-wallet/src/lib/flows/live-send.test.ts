@@ -3352,6 +3352,23 @@ describe('a multisig send', () => {
 		expect(liveSendForm(formModel(), on(null)).fee.value).toBe('2 of 3 members approve');
 	});
 
+	// r4a-6: while the network's members are being read, no rule is said —
+	// never the genesis's standing in for a chain whose members changed.
+	it("says no rule while the send's network is still being read", () => {
+		const base = multisig({ selected_token: ETH, fee: QUOTE });
+		const reading = {
+			...base,
+			multisig: { ...base.multisig!, membersOn: () => 'reading' as const }
+		};
+		expect(liveSendForm(formModel(), reading).fee.value).toBe('…');
+		expect(
+			liveSendConfirm(confirmModel(), {
+				...reading,
+				send: { ...reading.send, confirm_amount: '1' }
+			}).facts.find((f) => f.label === reading.multisig.label)?.value
+		).toBe('…');
+	});
+
 	it('a Vela account send is untouched', () => {
 		const fee = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE })).fee;
 		expect(fee.plain).toBeUndefined();
@@ -3614,5 +3631,80 @@ describe('the send flow’s round-2 findings', () => {
 			})
 		);
 		expect(receipt.captions[0]).toContain(`Bob (${shortenAddress(BOB)})`);
+	});
+});
+
+// r4a-2: a token's name is its contract's word; the wallet vouches only for
+// the chain's own coin and the tokens its registry lists there.
+describe('a token nobody vouches for', () => {
+	const ARC_USDC: SendToken = {
+		...USDT,
+		network: 'chain-5042002',
+		chain_id: 5042002,
+		symbol: 'USDC',
+		token_address: null,
+		decimals: 18
+	};
+	const FAKE: SendToken = {
+		...ARC_USDC,
+		token_address: '0x57e64022d8d9a420dFE08a22d6a687caaBc6B7C6',
+		decimals: 6
+	};
+	const R4T: SendToken = {
+		...ARC_USDC,
+		symbol: 'R4T',
+		token_address: '0x883881E9265818b5Ed0077f6b8c6E762A46Ab646'
+	};
+	const BASE_USDC: SendToken = {
+		...USDT,
+		network: 'base-mainnet',
+		chain_id: 8453,
+		symbol: 'USDC',
+		token_address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+	};
+
+	it('the picker never draws two rows of one name alike', () => {
+		const rows = liveSendPick(pickModel(), inputs({ tokens: [ARC_USDC, FAKE, R4T] })).rows;
+		const [native, fake, other] = rows;
+		expect(native.provenance).toBeUndefined();
+		expect(fake.ticker).toBe(native.ticker);
+		expect(fake.provenance).toMatchObject({
+			tone: 'danger',
+			text: fill(m['home.multisig.token.lookalike'], { symbol: 'USDC' }),
+			contract: FAKE.token_address,
+			short: shortenAddress(FAKE.token_address!)
+		});
+		expect(other.provenance).toMatchObject({
+			tone: 'caution',
+			text: m['home.multisig.token.unverified']
+		});
+	});
+
+	it('the form and the confirm say which contract it is, with its copy and explorer', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: FAKE }));
+		expect(form.token?.provenance).toMatchObject({
+			contractLabel: m['home.multisig.token.contract'],
+			copyLabel: m['home.multisig.proposal.copy'],
+			explorerLabel: m['home.multisig.proposal.explorer'],
+			note: { tone: 'danger', contract: FAKE.token_address }
+		});
+		expect(form.token?.provenance?.note.explorerUrl).toContain(FAKE.token_address);
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: FAKE, confirm_amount: '5' })
+		);
+		expect(confirm.provenance?.note.tone).toBe('danger');
+	});
+
+	it('the native coin and a token the registry lists draw nothing', () => {
+		const rows = liveSendPick(pickModel(), inputs({ tokens: [ARC_USDC, BASE_USDC] })).rows;
+		expect(rows.map((row) => row.provenance)).toEqual([undefined, undefined]);
+		expect(
+			liveSendForm(formModel(), inputs({ selected_token: BASE_USDC })).token?.provenance
+		).toBeUndefined();
+		expect(
+			liveSendConfirm(confirmModel(), inputs({ selected_token: ARC_USDC, confirm_amount: '1' }))
+				.provenance
+		).toBeUndefined();
 	});
 });

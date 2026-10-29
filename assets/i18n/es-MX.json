@@ -475,6 +475,21 @@
     "batchCalls": "{{total}} llamadas en una transacción",
     "rename": "Cambiar el nombre de este multisig en el registro a “{{name}}”"
    },
+   "change": {
+    "add": "Agregar a {{member}}",
+    "remove": "Quitar a {{member}}",
+    "replace": "Reemplazar a {{old}} por {{new}}",
+    "threshold": "Cambiar las aprobaciones necesarias",
+    "rule": "Aprobaciones: {{before}} → {{after}}",
+    "caution": "Esto cambia quién controla esta multifirma en {{network}}. Apruébala solo si todos los miembros lo esperan.",
+    "rowCaution": "Cambia quién controla esta multifirma",
+    "doesNotFit": "Esto no corresponde a los miembros que tiene ahora en {{network}}: ejecutarla fallaría."
+   },
+   "token": {
+    "unverified": "Token no verificado",
+    "lookalike": "No es el {{symbol}} real: otro contrato usa este nombre",
+    "contract": "Contrato del token"
+   },
    "proposal": {
     "title": "Transacción multifirma",
     "approvals": "Aprobaciones",
@@ -537,7 +552,11 @@
     "outboxBusy": "El servicio multifirma está ocupado: se volverá a enviar en {{seconds}} s.",
     "outboxAway": "No se pudo conectar con el servicio multifirma: se volverá a enviar en {{seconds}} s.",
     "outboxNotSent": "Aún no se envía: el servicio multifirma no la aceptó. Se guarda en este dispositivo, y los demás miembros no la ven hasta que se envíe.",
-    "outboxSendAgain": "Enviar de nuevo"
+    "outboxSendAgain": "Enviar de nuevo",
+    "copy": "Copiar",
+    "executedBy": "Ejecutada por {{name}}",
+    "countedThen": "Contaron {{approved}} de {{threshold}} aprobaciones al ejecutarla",
+    "approvalsSigned": "Estos miembros la aprobaron. Qué aprobaciones contaron al ejecutarla no está registrado en este dispositivo."
    },
    "send": {
     "propose": "Proponer y aprobar",
@@ -1992,7 +2011,14 @@
    "passkeyTimedOut": "La solicitud de la passkey expiró, así que no se firmó nada. Inténtalo de nuevo cuando estés listo.",
    "intentSaveMultisigSetup": "Guardar la configuración de este multisig",
    "intentRenameInRegistry": "Cambiar el nombre en el registro",
-   "labelName": "Nombre"
+   "labelName": "Nombre",
+   "intentAddMember": "Agregar un miembro",
+   "intentRemoveMember": "Quitar un miembro",
+   "intentReplaceMember": "Reemplazar un miembro",
+   "intentChangeThreshold": "Cambiar las aprobaciones necesarias",
+   "labelMember": "Miembro",
+   "labelNewMember": "Nuevo miembro",
+   "labelApprovalsRequired": "Aprobaciones necesarias"
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",

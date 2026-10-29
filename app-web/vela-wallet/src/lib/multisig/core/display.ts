@@ -11,13 +11,43 @@ import { loadAccounts } from '$lib/onboarding/core/storage';
 import { chainMeta } from '$lib/services/chains';
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { shortenAddress } from '$lib/wallet/identity';
+import { sentAmountText } from '$lib/wallet/live';
 import type { MultisigMessages } from '../messages';
-import { sameAddress, validName, type Action } from './kernel';
-import { formatUnits } from './units';
+import {
+	sameAddress,
+	validName,
+	type Action,
+	type MemberChange,
+	type MemberChanges
+} from './kernel';
+import { formatUnits as cutUnits, plainUnits } from './units';
 
-export { formatUnits, parseUnits } from './units';
+export { parseUnits } from './units';
 
 export { shortenAddress };
+
+/**
+ * An amount in base units as every money surface reads it (r4a-21): the
+ * confirm's and Activity's own rule (`sentAmountText` — the ladder, cut,
+ * the person's decimal mark and grouping), so "Send 1,000 USDC" on the sheet
+ * and "1,000" on the confirm are one figure.
+ */
+export function formatUnits(amount: string | bigint, decimals: number): string {
+	try {
+		return sentAmountText(plainUnits(amount.toString(), decimals));
+	} catch {
+		return cutUnits(amount, decimals);
+	}
+}
+
+/**
+ * A member as a change names it: its name and short address, never the name
+ * alone — a name is a claim, the address is who gets the say.
+ */
+export function memberWho(address: string, name: string | null = localName(address)): string {
+	const short = shortenAddress(address);
+	return name && name !== short ? `${name} (${short})` : short;
+}
 
 /** A member's name on this device, or `null` when it is not one of its accounts. */
 export function localName(address: string): string | null {
@@ -105,12 +135,14 @@ export function tokenInfo(chainId: number, token: string | null): Promise<TokenI
 	return hit;
 }
 
-/** A transaction's one line, e.g. "Send 500 USDC". */
+/** A transaction's one line, e.g. "Send 500 USDC", "Add Bob (0x12…34)". */
 export async function actionTitle(
 	m: MultisigMessages,
 	chainId: number,
 	action: Action | null,
-	nonce: bigint
+	nonce: bigint,
+	/** How a member is named (the sheet's: with the names this device knows). */
+	who: (address: string) => string = (a) => memberWho(a)
 ): Promise<string> {
 	if (action === null) return m.action.unsupported;
 	switch (action.kind) {
@@ -133,12 +165,16 @@ export async function actionTitle(
 			);
 		case 'cancel':
 			return fillTemplate(m.action.cancel, { nonce: nonce.toString() });
+		// r4a-1: who it adds, removes or replaces — never only "Add a member".
 		case 'addOwner':
-			return m.action.addOwner;
+			return fillTemplate(m.change.add, { member: who(action.owner) });
 		case 'removeOwner':
-			return m.action.removeOwner;
+			return fillTemplate(m.change.remove, { member: who(action.owner) });
 		case 'swapOwner':
-			return m.action.swapOwner;
+			return fillTemplate(m.change.replace, {
+				old: who(action.oldOwner),
+				new: who(action.newOwner)
+			});
 		case 'changeThreshold':
 			return fillTemplate(m.action.changeThreshold, { threshold: action.threshold });
 		case 'rename':
@@ -184,6 +220,59 @@ export function memberChanges(m: MultisigMessages, action: Action | null): strin
 		}
 		return [fillTemplate(m.proposal.changesMembers, { index: i + 1, change })];
 	});
+}
+
+/** "2 of 3": a rule as the create sheet writes one. */
+export function ruleText(m: MultisigMessages, rule: { threshold: number; owners: number }): string {
+	return fillTemplate(m.create.thresholdValue, { m: rule.threshold, n: rule.owners });
+}
+
+/** One member change, in words: "Add Bob (0x12…34)", "Replace A with B". */
+export function changeText(
+	m: MultisigMessages,
+	change: Pick<MemberChange, 'kind' | 'added' | 'removed'>,
+	who: (address: string) => string = (a) => memberWho(a)
+): string {
+	switch (change.kind) {
+		case 'add':
+			return fillTemplate(m.change.add, { member: who(change.added ?? '') });
+		case 'remove':
+			return fillTemplate(m.change.remove, { member: who(change.removed ?? '') });
+		case 'replace':
+			return fillTemplate(m.change.replace, {
+				old: who(change.removed ?? ''),
+				new: who(change.added ?? '')
+			});
+		case 'threshold':
+			return m.change.threshold;
+	}
+}
+
+/**
+ * A transaction's member changes as a member must read them before
+ * approving (r4a-1): each change ("#2 · Add Bob (0x12…34)" in a batch), the
+ * rule it meets and the one it leaves ("Approvals: 2 of 3 → 2 of 4"), the
+ * network, and the caution — the core's reading against the network's
+ * members now. `doesNotFit`: the Safe would refuse it there.
+ */
+export function changeLines(
+	m: MultisigMessages,
+	reading: MemberChanges,
+	network: string,
+	who: (address: string) => string = (a) => memberWho(a)
+): { changes: string[]; rule: string; caution: string; doesNotFit: string | null } {
+	return {
+		changes: reading.changes.map((c) => {
+			const text = changeText(m, c, who);
+			return c.call === null ? text : `#${c.call} · ${text}`;
+		}),
+		rule: fillTemplate(m.change.rule, {
+			before: ruleText(m, reading.before),
+			after: ruleText(m, reading.after)
+		}),
+		caution: fillTemplate(m.change.caution, { network }),
+		doesNotFit: reading.fits ? null : fillTemplate(m.change.doesNotFit, { network })
+	};
 }
 
 /** Who a transaction pays, when it pays one address. */

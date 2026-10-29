@@ -60,9 +60,11 @@ import type {
 	SendPickModel,
 	SendReceiptModel,
 	TokenMarkModel,
-	BreakdownRowModel
+	BreakdownRowModel,
+	ProvenanceView
 } from './model';
 import type { AssetRowModel } from '$lib/wallet/model';
+import { provenanceNote } from '$lib/services/token-provenance';
 
 export interface SendLiveInputs {
 	send: SendView;
@@ -83,10 +85,12 @@ export interface SendLiveInputs {
 		confirm: string;
 		/**
 		 * The network's members now, as this wallet read them there (owners are
-		 * each network's; owner, 2026-10-29) — `null` where nothing was read,
-		 * and the rule is the genesis's: what an undeployed multisig starts with.
+		 * each network's; owner, 2026-10-29) — an undeployed network's are what
+		 * its genesis starts it with. `'reading'`: being read now, and no rule
+		 * is said yet (r4a-6: never the genesis's standing in for the chain's);
+		 * `null`: the chain could not be read, and the rule is the genesis's.
 		 */
-		membersOn?: (chainId: number) => { threshold: number; owners: number } | null;
+		membersOn?: (chainId: number) => { threshold: number; owners: number } | 'reading' | null;
 	};
 	fee: FeeView;
 	m: WalletFlowMessages;
@@ -231,10 +235,49 @@ function mark(token: SendToken): TokenMarkModel {
 	return tokenMarkFor(token.chain_id, token.symbol, token.token_address, token.logo_urls);
 }
 
-/** A token row for the picker: the balance the core carries, priced by it too. */
-function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
-	const art = mark(token);
+/** The words a token's provenance note is drawn with (r4a-2). */
+function provenanceWords(m: WalletFlowMessages) {
 	return {
+		unverified: m['home.multisig.token.unverified'],
+		lookalike: m['home.multisig.token.lookalike']
+	};
+}
+
+/**
+ * r4a-2: a token nobody vouches for on its chain — the core's ruling — with
+ * its contract and the words its copy and explorer controls are named with;
+ * nothing for the native coin or a token the registry lists there.
+ */
+function provenanceView(token: SendToken, m: WalletFlowMessages): ProvenanceView | undefined {
+	const note = provenanceNote(
+		token.chain_id,
+		token.token_address,
+		token.symbol,
+		provenanceWords(m)
+	);
+	return note
+		? {
+				note,
+				contractLabel: m['home.multisig.token.contract'],
+				copyLabel: m['home.multisig.proposal.copy'],
+				explorerLabel: m['home.multisig.proposal.explorer']
+			}
+		: undefined;
+}
+
+/** A token row for the picker: the balance the core carries, priced by it too. */
+function tokenRow(token: SendToken, currency: CurrencyView, m: WalletFlowMessages): AssetRowModel {
+	const art = mark(token);
+	// Two tokens of one name never read as one row: one nobody vouches for
+	// carries its contract, and a lookalike says it is not the real one.
+	const provenance = provenanceNote(
+		token.chain_id,
+		token.token_address,
+		token.symbol,
+		provenanceWords(m)
+	);
+	return {
+		...(provenance ? { provenance } : {}),
 		ticker: token.symbol,
 		chain: chainName(token.chain_id),
 		badgeColor: chainColor(token.chain_id),
@@ -352,6 +395,7 @@ function multisigRule(inputs: SendLiveInputs, send: SendView): string {
 	const own = send.multisig!;
 	const chain = formChainOf(send);
 	const there = chain === null ? null : (inputs.multisig?.membersOn?.(chain) ?? null);
+	if (there === 'reading') return '…';
 	return fill(inputs.multisig!.rule, {
 		m: there?.threshold ?? own.threshold,
 		n: there?.owners ?? own.owners
@@ -543,7 +587,7 @@ export function speedWords(m: WalletFlowMessages): SpeedWords {
 export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): SendPickModel {
 	const { send, currency, m } = inputs;
 	const visible = visibleSendTokens(send, inputs);
-	const rows = visible.map((token) => tokenRow(token, currency));
+	const rows = visible.map((token) => tokenRow(token, currency, m));
 	const classFilter = inputs.classFilter ?? 'all';
 	const filters = SEND_CLASS_FILTERS.map((id) => ({
 		id,
@@ -909,7 +953,8 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					max: split ? undefined : m['send.maxBtn'],
 					// The card is the way to another asset (issue 326) wherever the
 					// core says the asset is the payer's to change.
-					change: send.can_change_token ? m['send.selectTokenTitle'] : undefined
+					change: send.can_change_token ? m['send.selectTokenTitle'] : undefined,
+					...(provenanceView(token, m) ? { provenance: provenanceView(token, m) } : {})
 				}
 			: undefined,
 		// Split mode is the core's: it decides when one recipient becomes many,
@@ -1628,6 +1673,9 @@ function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): S
 		amount: sentAmountText(send.confirm_amount),
 		amountUnit: token?.symbol || undefined,
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
+		// r4a-2: on the page that signs, a coin nobody vouches for shows its
+		// contract — and a lookalike says it is not the real one.
+		...(token && provenanceView(token, m) ? { provenance: provenanceView(token, m) } : {}),
 		facts,
 		breakdown: undefined,
 		recipientTag,

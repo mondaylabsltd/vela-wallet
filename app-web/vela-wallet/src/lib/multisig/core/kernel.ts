@@ -418,6 +418,79 @@ export const memberDrift = (
 		currentThreshold: current.threshold
 	});
 
+// -- what a transaction changes about the members; an execution's facts ----------
+
+/** "M of N": approvals needed, of how many members. */
+export interface Rule {
+	threshold: number;
+	owners: number;
+}
+
+/** One member change, read against the members it meets (the core's `MemberChange`). */
+export interface MemberChange {
+	/** Its call's number in a batch (from 1); `null` for a transaction that is the change alone. */
+	call: number | null;
+	kind: 'add' | 'remove' | 'replace' | 'threshold';
+	added: string | null;
+	removed: string | null;
+	before: Rule;
+	after: Rule;
+	/** Safe accepts it against the members it meets; `false`: executing it would revert. */
+	fits: boolean;
+}
+
+export interface MemberChanges {
+	changes: MemberChange[];
+	before: Rule;
+	after: Rule;
+	fits: boolean;
+}
+
+/**
+ * The member changes `action` makes to a multisig whose members on that
+ * network are `owners` with `threshold` — in order, each against what the
+ * ones before it left — or `null` when it makes none (`multisig_reading`).
+ */
+export const readMemberChanges = (
+	action: Action,
+	members: { owners: string[]; threshold: number }
+) =>
+	call<MemberChanges | null>('memberChanges', {
+		action,
+		owners: members.owners,
+		threshold: members.threshold
+	});
+
+/** One log of a transaction receipt, as the node gave it. */
+export interface ReceiptLog {
+	address: string;
+	topics: string[];
+	data: string;
+}
+
+/** What an executed transaction was then, from its own receipt (the core's `ExecutionFacts`). */
+export interface ExecutionFacts {
+	executor: string;
+	threshold: number;
+	nonce: string;
+	/** The members whose approvals counted, in the order Safe checked them. */
+	approvers: string[];
+	/** The executor approved by sending it. */
+	executorApproved: boolean;
+}
+
+/**
+ * The frozen facts of `safeTxHash`'s execution, read from the receipt logs of
+ * the transaction that executed it; `null` when they do not say (a Safe that
+ * is not an L2 one emits no `SafeMultiSigTransaction`).
+ */
+export const executionFacts = (
+	chainId: number,
+	safe: string,
+	safeTxHash: string,
+	logs: ReceiptLog[]
+) => call<ExecutionFacts | null>('executionFacts', { chainId, safe, safeTxHash, logs });
+
 // -- the multisig service's health answer (`app::genesis_service`) ---------------
 
 /** A chain the service says it serves (its own name for it, if any). */

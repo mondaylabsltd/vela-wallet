@@ -106,6 +106,7 @@
 		waitingRows
 	} from '$lib/multisig/core/activity.svelte';
 	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
+	import { readMembers } from '$lib/multisig/core/chain';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
@@ -1402,6 +1403,43 @@
 		}
 	});
 
+	/**
+	 * r4a-6: the send's network's members, read from its chain when the
+	 * multisig's own refresh has not read that network (a network it is not
+	 * followed on yet) — `'reading'` meanwhile, so the form never says the
+	 * genesis's rule for a chain whose members have changed.
+	 */
+	let sendMembers = $state<Record<string, { threshold: number; owners: number } | 'failed'>>({});
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- which reads were asked: never drawn
+	const askedMembers = new Set<string>();
+	function sendMembersOn(
+		chainId: number
+	): { threshold: number; owners: number } | 'reading' | null {
+		const there = multisigProposals.chain(chainId)?.members;
+		if (there) return { threshold: there.threshold, owners: there.owners.length };
+		const shown = multisig.active;
+		if (!shown) return null;
+		const key = `${shown.address.toLowerCase()}:${chainId}`;
+		const read = sendMembers[key];
+		if (read === 'failed') return null;
+		if (read) return read;
+		// Asked once; the answer lands outside the derivation that asked.
+		if (!askedMembers.has(key)) {
+			askedMembers.add(key);
+			void readMembers(chainId, shown.address, shown.genesis)
+				.then((read) => {
+					sendMembers = {
+						...sendMembers,
+						[key]: { threshold: read.threshold, owners: read.owners.length }
+					};
+				})
+				.catch(() => {
+					sendMembers = { ...sendMembers, [key]: 'failed' };
+				});
+		}
+		return 'reading';
+	}
+
 	const sendInputs = $derived(
 		sendView && identity
 			? {
@@ -1425,12 +1463,7 @@
 									feeNote: data.multisigMessages.proposal.feeNote,
 									confirm: data.multisigMessages.send.propose,
 									// The rule on the send's network: its members there now.
-									membersOn: (chainId: number) => {
-										const there = multisigProposals.chain(chainId)?.members;
-										return there
-											? { threshold: there.threshold, owners: there.owners.length }
-											: null;
-									}
+									membersOn: sendMembersOn
 								}
 							}
 						: {

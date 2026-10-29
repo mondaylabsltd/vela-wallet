@@ -474,6 +474,21 @@
     "batchCalls": "{{total}} Aufrufe in einer Transaktion",
     "rename": "Dieses Multisig im Register in „{{name}}“ umbenennen"
    },
+   "change": {
+    "add": "{{member}} hinzufügen",
+    "remove": "{{member}} entfernen",
+    "replace": "{{old}} durch {{new}} ersetzen",
+    "threshold": "Erforderliche Genehmigungen ändern",
+    "rule": "Genehmigungen: {{before}} → {{after}}",
+    "caution": "Das ändert, wer diesen Multisig auf {{network}} kontrolliert. Genehmige nur, wenn alle Mitglieder das erwarten.",
+    "rowCaution": "Ändert, wer diesen Multisig kontrolliert",
+    "doesNotFit": "Das passt nicht zu den Mitgliedern, die er jetzt auf {{network}} hat: Die Ausführung würde fehlschlagen."
+   },
+   "token": {
+    "unverified": "Nicht verifizierter Token",
+    "lookalike": "Nicht der echte {{symbol}} — ein anderer Vertrag nutzt diesen Namen",
+    "contract": "Token-Vertrag"
+   },
    "proposal": {
     "title": "Multisig-Transaktion",
     "approvals": "Genehmigungen",
@@ -536,7 +551,11 @@
     "outboxBusy": "Der Multisig-Dienst ist ausgelastet – erneutes Senden in {{seconds}} s.",
     "outboxAway": "Der Multisig-Dienst war nicht erreichbar – erneutes Senden in {{seconds}} s.",
     "outboxNotSent": "Noch nicht gesendet: Der Multisig-Dienst hat sie nicht angenommen. Sie bleibt auf diesem Gerät, und andere Mitglieder sehen sie erst, wenn sie gesendet ist.",
-    "outboxSendAgain": "Erneut senden"
+    "outboxSendAgain": "Erneut senden",
+    "copy": "Kopieren",
+    "executedBy": "Ausgeführt von {{name}}",
+    "countedThen": "{{approved}} von {{threshold}} Genehmigungen zählten bei der Ausführung",
+    "approvalsSigned": "Diese Mitglieder haben genehmigt. Welche Genehmigungen bei der Ausführung zählten, ist auf diesem Gerät nicht festgehalten."
    },
    "send": {
     "propose": "Vorschlagen und genehmigen",
@@ -1985,7 +2004,14 @@
    "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist.",
    "intentSaveMultisigSetup": "Einrichtung dieses Multisig speichern",
    "intentRenameInRegistry": "Im Register umbenennen",
-   "labelName": "Name"
+   "labelName": "Name",
+   "intentAddMember": "Mitglied hinzufügen",
+   "intentRemoveMember": "Mitglied entfernen",
+   "intentReplaceMember": "Mitglied ersetzen",
+   "intentChangeThreshold": "Erforderliche Genehmigungen ändern",
+   "labelMember": "Mitglied",
+   "labelNewMember": "Neues Mitglied",
+   "labelApprovalsRequired": "Erforderliche Genehmigungen"
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",

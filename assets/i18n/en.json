@@ -474,6 +474,21 @@
     "batchCalls": "{{total}} calls in one transaction",
     "rename": "Rename this multisig in the registry to “{{name}}”"
    },
+   "change": {
+    "add": "Add {{member}}",
+    "remove": "Remove {{member}}",
+    "replace": "Replace {{old}} with {{new}}",
+    "threshold": "Change the approvals required",
+    "rule": "Approvals: {{before}} → {{after}}",
+    "caution": "This changes who controls this multisig on {{network}}. Approve only if every member expects it.",
+    "rowCaution": "Changes who controls this multisig",
+    "doesNotFit": "This doesn’t fit the members it has on {{network}} now: executing it would fail."
+   },
+   "token": {
+    "unverified": "Unverified token",
+    "lookalike": "Not the real {{symbol}} — a different contract uses this name",
+    "contract": "Token contract"
+   },
    "proposal": {
     "title": "Multisig transaction",
     "approvals": "Approvals",
@@ -536,7 +551,11 @@
     "outboxBusy": "The multisig service is busy — sending again in {{seconds}} s.",
     "outboxAway": "Couldn’t reach the multisig service — sending again in {{seconds}} s.",
     "outboxNotSent": "Not sent yet: the multisig service didn’t take it. It’s kept on this device, and other members can’t see it until it’s sent.",
-    "outboxSendAgain": "Send again"
+    "outboxSendAgain": "Send again",
+    "copy": "Copy",
+    "executedBy": "Executed by {{name}}",
+    "countedThen": "{{approved}} of {{threshold}} approvals counted when it was executed",
+    "approvalsSigned": "These members approved it. Which approvals counted when it was executed isn’t recorded on this device."
    },
    "send": {
     "propose": "Propose and approve",
@@ -2037,7 +2056,14 @@
    "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready.",
    "intentSaveMultisigSetup": "Save this multisig's setup",
    "intentRenameInRegistry": "Rename in the registry",
-   "labelName": "Name"
+   "labelName": "Name",
+   "intentAddMember": "Add a member",
+   "intentRemoveMember": "Remove a member",
+   "intentReplaceMember": "Replace a member",
+   "intentChangeThreshold": "Change approvals required",
+   "labelMember": "Member",
+   "labelNewMember": "New member",
+   "labelApprovalsRequired": "Approvals required"
   },
   "currency": {
    "title": "Display currency",

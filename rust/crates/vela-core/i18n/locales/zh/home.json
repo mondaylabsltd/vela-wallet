@@ -125,6 +125,21 @@
         "batchCalls": "一笔交易中的 {{total}} 个调用",
         "rename": "把这个多签在注册表中的名称改为“{{name}}”"
       },
+      "change": {
+        "add": "添加 {{member}}",
+        "remove": "移除 {{member}}",
+        "replace": "将 {{old}} 替换为 {{new}}",
+        "threshold": "修改需要的批准数",
+        "rule": "批准：{{before}} → {{after}}",
+        "caution": "这会改变 {{network}} 上由谁控制这个多签。只有在所有成员都知情时才批准。",
+        "rowCaution": "会改变由谁控制这个多签",
+        "doesNotFit": "这与它现在在 {{network}} 上的成员不符：执行会失败。"
+      },
+      "token": {
+        "unverified": "未验证的代币",
+        "lookalike": "不是真正的 {{symbol}}——另一个合约用了这个名字",
+        "contract": "代币合约"
+      },
       "proposal": {
         "title": "多签交易",
         "approvals": "批准情况",
@@ -187,7 +202,11 @@
         "outboxBusy": "多签服务繁忙——{{seconds}} 秒后重新发送。",
         "outboxAway": "无法连接多签服务——{{seconds}} 秒后重新发送。",
         "outboxNotSent": "尚未发出：多签服务没有接收。它保存在本设备上，发出之前其他成员看不到。",
-        "outboxSendAgain": "重新发送"
+        "outboxSendAgain": "重新发送",
+        "copy": "复制",
+        "executedBy": "由 {{name}} 执行",
+        "countedThen": "执行时计入的批准：{{threshold}} 位中的 {{approved}} 位",
+        "approvalsSigned": "这些成员批准了它。执行时计入了哪些批准，这台设备上没有记录。"
       },
       "send": {
         "propose": "发起并批准",

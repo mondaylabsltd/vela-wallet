@@ -252,3 +252,19 @@ describe('a dApp row’s title wraps only between what was done and where', () =
 		view.done();
 	});
 });
+
+describe('a row that must be read first (r4a-1, r4a-2)', () => {
+	it('draws its caution under the subtitle', () => {
+		const screen = render(ActivityRow, {
+			props: { row: row({ caution: 'Changes who controls this multisig' }) }
+		});
+		expect(screen.container.querySelector('[data-testid="activity-caution"]')?.textContent).toBe(
+			'Changes who controls this multisig'
+		);
+	});
+
+	it('draws none without one', () => {
+		const screen = render(ActivityRow, { props: { row: row({}) } });
+		expect(screen.container.querySelector('[data-testid="activity-caution"]')).toBeNull();
+	});
+});

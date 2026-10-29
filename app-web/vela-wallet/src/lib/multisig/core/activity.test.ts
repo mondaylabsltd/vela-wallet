@@ -28,6 +28,7 @@ const seams = vi.hoisted(() => ({
 
 vi.mock('./proposals.svelte', () => ({
 	proposals: {
+		chain: () => undefined,
 		get open() {
 			return seams.open;
 		},

@@ -1103,9 +1103,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   high-risk network asks), + `signUnchecked` (who can act for it there
 //   could not be read: nothing is signed yet). 2342 + 7 = 2349 leaves, 122
 //   branches.
-if (PATHS.length !== 2471) fail(`expected 2471 paths (2349 leaf + 122 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2349) fail(`expected 2349 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 122) fail(`expected 122 branch paths, got ${branchSet.size}`);
+// 2463 (round-4 multisig review, 2026-10-29): + `home.multisig.change.{add,
+//   remove, replace, threshold, rule, caution, rowCaution, doesNotFit}` (a
+//   member change read in full: who, the rule before → after, the network,
+//   the caution), + `home.multisig.token.{unverified, lookalike, contract}`
+//   (a token nobody vouches for shows its contract; a lookalike of the
+//   native coin or a vouched token says it is not the real one), +
+//   `home.multisig.proposal.{copy, executedBy, countedThen,
+//   approvalsSigned}` (the full hash; an executed transaction's frozen
+//   facts), + `componentsUi.signing.{intentAddMember, intentRemoveMember,
+//   intentReplaceMember, intentChangeThreshold, labelMember, labelNewMember,
+//   labelApprovalsRequired}` (Safe's own member changes on the Safe itself,
+//   read by Vela). 2318 + 22 = 2340 leaves, 121 + 2 = 123 branches.
+// 2495 (the above on 2471, merged): 2349 + 22 = 2371 leaves, 122 + 2 = 124
+//   branches.
+if (PATHS.length !== 2495) fail(`expected 2495 paths (2371 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2371) fail(`expected 2371 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

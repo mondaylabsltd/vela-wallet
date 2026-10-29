@@ -126,6 +126,21 @@
         "batchCalls": "{{total}} appels en une transaction",
         "rename": "Renommer ce multisig dans le registre en « {{name}} »"
       },
+      "change": {
+        "add": "Ajouter {{member}}",
+        "remove": "Retirer {{member}}",
+        "replace": "Remplacer {{old}} par {{new}}",
+        "threshold": "Modifier les approbations requises",
+        "rule": "Approbations : {{before}} → {{after}}",
+        "caution": "Ceci change qui contrôle ce multisig sur {{network}}. N’approuvez que si chaque membre s’y attend.",
+        "rowCaution": "Change qui contrôle ce multisig",
+        "doesNotFit": "Ceci ne correspond pas aux membres qu’il a maintenant sur {{network}} : l’exécuter échouerait."
+      },
+      "token": {
+        "unverified": "Jeton non vérifié",
+        "lookalike": "Pas le vrai {{symbol}} — un autre contrat utilise ce nom",
+        "contract": "Contrat du jeton"
+      },
       "proposal": {
         "title": "Transaction multisig",
         "approvals": "Approbations",
@@ -188,7 +203,11 @@
         "outboxBusy": "Le service multisig est occupé — nouvel envoi dans {{seconds}} s.",
         "outboxAway": "Impossible de joindre le service multisig — nouvel envoi dans {{seconds}} s.",
         "outboxNotSent": "Pas encore envoyée : le service multisig ne l’a pas acceptée. Elle est conservée sur cet appareil, et les autres membres ne la voient pas tant qu’elle n’est pas envoyée.",
-        "outboxSendAgain": "Renvoyer"
+        "outboxSendAgain": "Renvoyer",
+        "copy": "Copier",
+        "executedBy": "Exécutée par {{name}}",
+        "countedThen": "{{approved}} approbations sur {{threshold}} comptaient à son exécution",
+        "approvalsSigned": "Ces membres l’ont approuvée. Quelles approbations comptaient à son exécution n’est pas enregistré sur cet appareil."
       },
       "send": {
         "propose": "Proposer et approuver",
