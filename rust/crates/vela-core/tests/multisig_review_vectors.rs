@@ -74,3 +74,22 @@ fn what_moves_from_the_probe_where_nothing_else_answers() {
     assert_eq!(got["simulation"]["deltas"][0]["kind"], json!("native"));
     assert_eq!(got["state"]["verdict"]["kind"], json!("unchanged"));
 }
+
+/// Arc Testnet (`rpc.testnet.arc.network`, 2026-10-29): no trace, no
+/// eth_simulateV1 — the probe alone, on a multisig deployed nowhere yet: the
+/// override puts it in place from its verified genesis (the singleton's code
+/// read from Arc and checked against its hash).
+#[test]
+fn arc_undeployed_the_probe_puts_the_safe_in_place() {
+    let (got, expect) = run("arc-undeployed-add-owner-probe");
+    assert_eq!(got["state"], expect["state"]);
+    assert_eq!(
+        got["state"],
+        json!({ "source": "probe", "verdict": { "kind": "declared" } })
+    );
+    // 0.01 USDC out of a Safe holding none: it would fail — the sheet's danger.
+    let (got, _) = run("arc-undeployed-transfer-probe");
+    assert_eq!(got["state"]["verdict"]["kind"], json!("reverts"));
+    assert_eq!(got["simulation"]["kind"], json!("reverts"));
+    assert_eq!(got["sign"], json!({ "allowed": true, "anyway": true }));
+}
