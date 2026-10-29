@@ -33,6 +33,7 @@ import {
 } from './live';
 import type { DeviceStorageReport } from '$lib/services/device-storage';
 import { buildDesktopState, buildMobileState } from './fixtures';
+import { removeNetworkQuestion } from './questions';
 import { resolveNetworkSpaceMessages } from '$lib/i18n/engine.server';
 import { fill } from '$lib/wallet/messages';
 import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
@@ -53,6 +54,7 @@ const ROW: NetNetworkRow = {
 	display_name: 'Ethereum',
 	native_symbol: 'ETH',
 	is_custom: false,
+	optional: false,
 	rpc_url: 'https://eth.llamarpc.com',
 	explorer_url: 'https://etherscan.io',
 	bundler_url: '',
@@ -89,7 +91,8 @@ const WIZARD_IDLE: NetWizardView = {
 	rpc_field: 'none',
 	rpc_field_label_key: null,
 	can_add: false,
-	testnet: true
+	testnet: true,
+	vela_network: false
 };
 
 const VIEW: NetView = {
@@ -113,7 +116,8 @@ const VIEW: NetView = {
 		}
 	],
 	last_added_chain_id: null,
-	dapp_add: null
+	dapp_add: null,
+	hidden_vela_chain_ids: []
 };
 
 describe('liveNetworkRows', () => {
@@ -180,6 +184,134 @@ describe('the network list in a space', () => {
 
 	it('without the words, the whole list as before', () => {
 		expect(liveNetworkRows(view, m).map((r) => r.id)).toHaveLength(4);
+	});
+});
+
+describe('a Vela network shown on the person’s word (owner decision 2026-10-29)', () => {
+	const words = resolveNetworkSpaceMessages('en');
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const PLUME: NetNetworkRow = {
+		...ROW,
+		id: 'plume',
+		chain_id: 98866,
+		display_name: 'Plume',
+		native_symbol: 'PLUME',
+		optional: true
+	};
+
+	it('can be taken out of the list — the question says its settings stay', () => {
+		const rows = liveNetworkRows({ ...VIEW, networks: [ROW, PLUME] }, m);
+		expect(rows[0].removable).toBe(false);
+		expect(rows[1]).toMatchObject({ removable: true, removeBody: m.networks.hideBody });
+		expect(rows[1].tag, 'not a custom network').toBeUndefined();
+		const sheet = removeNetworkQuestion(
+			{
+				rows,
+				removeSheet: {
+					title: '',
+					body: m.networks.removeBody,
+					confirm: '',
+					cancel: '',
+					tone: 'danger'
+				}
+			},
+			'plume'
+		);
+		expect(sheet).toMatchObject({ title: 'Plume', body: m.networks.hideBody });
+	});
+
+	it('the list names the ones out of it, under the mainnet heading only', () => {
+		const view: NetView = { ...VIEW, hidden_vela_chain_ids: [988, 4326] };
+		const model = withLiveNetworks(buildMobileState('st1', m, IDENTICON), view, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(model.networks.space?.hint).toBe(
+			`${words.mainnetHint} ${fill(m.networks.moreNetworks, { names: 'Stable, MegaETH' })}`
+		);
+		const testnet = withLiveNetworks(buildMobileState('st1', m, IDENTICON), view, m, undefined, {
+			current: 'testnet',
+			words
+		});
+		expect(testnet.networks.space?.hint).toBe(words.testnetHint);
+		const none = withLiveNetworks(buildMobileState('st1', m, IDENTICON), VIEW, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(none.networks.space?.hint).toBe(words.mainnetHint);
+	});
+
+	it('Add network finds one as Vela’s, and its pick needs no check', () => {
+		const suggested = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'suggested',
+				query: 'plu',
+				suggestions: [
+					{
+						chain_id: 98866,
+						name: 'Plume',
+						short_name: 'plume',
+						native_currency_symbol: 'PLUME',
+						has_logo: true,
+						vela: true
+					}
+				]
+			},
+			m
+		);
+		expect(suggested.results?.[0]).toMatchObject({ name: 'Plume', tag: m.addNetwork.velaNetwork });
+
+		const picked = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'checked',
+				query: 'plu',
+				chain_info: {
+					chain_id: 98866,
+					name: 'Plume',
+					short_name: 'plume',
+					native_name: 'PLUME',
+					native_symbol: 'PLUME',
+					native_decimals: 18,
+					rpc_url: 'https://rpc.plume.org',
+					rpc_urls: ['https://rpc.plume.org'],
+					explorer_url: 'https://explorer.plume.org',
+					logo_url: '',
+					is_testnet: false
+				},
+				compat: {
+					chain_id: 98866,
+					compatible: true,
+					multi_key_ready: true,
+					contracts: [],
+					p256_available: true,
+					best_rpc_url: null,
+					best_rpc_latency_ms: null,
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
+				},
+				can_add: true,
+				testnet: false,
+				vela_network: true
+			},
+			m,
+			words
+		);
+		expect(picked.candidate?.badge).toEqual({
+			tone: 'ok',
+			label: m.addNetwork.velaNetwork,
+			dot: true
+		});
+		expect(picked.callout).toEqual({ tone: 'info', text: m.addNetwork.velaNetworkHint });
+		expect(picked.primary).toBe(m.addNetwork.addNetworkBtn);
+		// No checklist claiming a check that was not made, no space to pick,
+		// no RPC field: it is added as Vela ships it.
+		expect(picked.checks).toBeUndefined();
+		expect(picked.space).toBeUndefined();
+		expect(picked.customRpc).toBeUndefined();
 	});
 });
 

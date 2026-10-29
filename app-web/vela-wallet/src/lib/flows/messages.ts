@@ -196,6 +196,9 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.labelNativeToken',
 	'addToken.compatible',
 	'addToken.notCompatible',
+	// A Vela network out of the person's list (owner decision 2026-10-29).
+	'settingsModals.addNetwork.velaNetwork',
+	'settingsModals.addNetwork.velaNetworkHint',
 	'addToken.networkAdded',
 	'addToken.addNetworkBtn',
 	// The live add-token sheet (spec 028 T442): the probe in flight, and a

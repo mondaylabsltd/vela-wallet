@@ -421,6 +421,7 @@ pub fn refused_wizard(
         rpc_field_label_key: None,
         can_add: false,
         testnet: false,
+        vela_network: false,
     }
 }
 
@@ -560,6 +561,7 @@ pub fn refused_dapp_add(
         reported_chain_id: None,
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         can_add: false,
+        vela_network: false,
     }
 }
 

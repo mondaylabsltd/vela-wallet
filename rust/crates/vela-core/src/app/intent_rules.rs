@@ -178,6 +178,9 @@ pub struct NetworkFacts {
     pub display_name: String,
     pub native_symbol: String,
     pub is_custom: bool,
+    /// A Vela network shown on the person's word (`NetNetworkRow::optional`):
+    /// removable, as a network they added is.
+    pub optional: bool,
     pub rpc_url: String,
     pub explorer_url: String,
     pub rpc_chain_mismatch: Option<Value>,
@@ -1089,7 +1092,9 @@ fn examine_networks(action: &Action, networks: &NetworksFacts) -> Examined {
                 ReasonCode::NotFound,
                 "the wallet has no network with that chain id",
             ),
-            Some(row) if row.is_custom => Examined::Go,
+            // A Vela network shown on the person's word leaves the list (what
+            // is stored for it stays); the rest the wallet ships stay put.
+            Some(row) if row.is_custom || row.optional => Examined::Go,
             Some(_) => refused(
                 ReasonCode::Refused,
                 "a network the wallet ships with cannot be removed",
@@ -1309,7 +1314,8 @@ fn verdict_networks(action: &Action, networks: Option<&NetworksFacts>) -> Verdic
                     ),
                 };
             }
-            held(network(networks, *chain_id).is_some_and(|row| row.is_custom))
+            // Added by hand, or a Vela network shown again.
+            held(network(networks, *chain_id).is_some_and(|row| row.is_custom || row.optional))
         }
         Action::SetNetworkEndpoint {
             chain_id,
@@ -1334,7 +1340,7 @@ fn verdict_networks(action: &Action, networks: Option<&NetworksFacts>) -> Verdic
             held(network(networks, *chain_id).is_some_and(|row| row.only_mine == *on))
         }
         Action::RemoveNetwork { chain_id } => {
-            held(!network(networks, *chain_id).is_some_and(|row| row.is_custom))
+            held(!network(networks, *chain_id).is_some_and(|row| row.is_custom || row.optional))
         }
 
         Action::SetServiceEndpoint { field, url } => held(

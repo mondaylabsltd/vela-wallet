@@ -318,6 +318,7 @@ fn decode_search_index(value: &Value) -> Vec<NetChainIndexEntry> {
                 short_name: text("shortName"),
                 native_currency_symbol: text("nativeCurrencySymbol"),
                 has_logo: object.get("hasLogo") == Some(&Value::Bool(true)),
+                vela: false,
             })
         })
         .collect()
@@ -403,6 +404,12 @@ fn read_store() -> NetShellResult {
             ankr: provider_keys.ankr,
         },
         multisig_service: false,
+        // Which Vela networks shown on the person's word they show. None
+        // stored (this shell does not settle a device yet): every one is shown.
+        shown_networks: storage::read_value(vela_core::app::shown_networks::KEY)
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_value(value).ok()),
     }
 }
 
@@ -588,6 +595,13 @@ impl Machine for NetworkAdmin {
                 // save. Without this line the new index took effect on the
                 // next launch — and the screen said it had been saved.
                 super::registry::set_registry_url(&endpoints.passkey_index_url);
+                Answer::Now(NetShellResult::Written)
+            }
+            NetOperation::WriteShownNetworks { record } => {
+                let _ = storage::write_value(
+                    vela_core::app::shown_networks::KEY,
+                    serde_json::to_value(record).unwrap_or(Value::Null),
+                );
                 Answer::Now(NetShellResult::Written)
             }
             // NOT best-effort: what really happened is the answer, so a

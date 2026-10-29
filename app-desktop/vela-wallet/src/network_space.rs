@@ -29,6 +29,7 @@ use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
 use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView};
 use vela_core::app::network_admin::{BUILTIN_CHAINS, NetCustomNetwork};
 use vela_core::app::network_space::{KEY, NetworkSpace, chain_is_testnet};
+use vela_core::app::shown_networks::{self, NetShownNetworks};
 
 use crate::executor::storage;
 use crate::resident;
@@ -39,6 +40,9 @@ struct Snapshot {
     path: Option<PathBuf>,
     space: NetworkSpace,
     custom: Vec<NetCustomNetwork>,
+    /// Which Vela networks shown on the person's word they show; `None`
+    /// (never settled on this shell yet) shows every one.
+    shown: Option<NetShownNetworks>,
 }
 
 static SNAPSHOT: Mutex<Option<Snapshot>> = Mutex::new(None);
@@ -62,6 +66,10 @@ fn with_snapshot<R>(f: impl FnOnce(&Snapshot) -> R) -> R {
             path,
             space: NetworkSpace::parse(stored.as_ref().and_then(Value::as_str)),
             custom: crate::executor::network_admin::read_store_custom_networks(),
+            shown: storage::read_value(shown_networks::KEY)
+                .ok()
+                .flatten()
+                .and_then(|value| serde_json::from_value(value).ok()),
         });
     }
     match guard.as_ref() {
@@ -89,16 +97,19 @@ pub fn testnet() -> bool {
 pub fn in_space(chain_id: u32) -> bool {
     with_snapshot(|snapshot| {
         chain_is_testnet(chain_id, &snapshot.custom) == (snapshot.space == NetworkSpace::Testnet)
+            && shown_networks::is_shown(chain_id, snapshot.shown.as_ref())
     })
 }
 
-/// `ids` without the other space's chains, in their order.
+/// `ids` without the other space's chains, nor a Vela network out of the
+/// person's lists (`shown_networks`), in their order.
 #[must_use]
 pub fn retain(ids: Vec<u32>) -> Vec<u32> {
     with_snapshot(|snapshot| {
         let testnet = snapshot.space == NetworkSpace::Testnet;
         ids.into_iter()
             .filter(|id| chain_is_testnet(*id, &snapshot.custom) == testnet)
+            .filter(|id| shown_networks::is_shown(*id, snapshot.shown.as_ref()))
             .collect()
     })
 }

@@ -49,4 +49,10 @@ can_add: boolean,
  * ([`Event::WizardTestnetChosen`]), else what the chain registry says the
  * chain is (set-5), else a testnet.
  */
-testnet: boolean, };
+testnet: boolean, 
+/**
+ * The pick is a Vela network out of the person's lists: Vela supports
+ * it, so there is nothing to check, and "Add network" shows it again —
+ * as the Vela network it is, with whatever was stored for it.
+ */
+vela_network: boolean, };

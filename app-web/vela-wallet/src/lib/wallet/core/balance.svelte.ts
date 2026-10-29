@@ -16,7 +16,7 @@
 
 import { loadCore } from '$lib/core/client';
 import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { ensureCustomNetworks, inSpace } from '$lib/services/networks';
+import { ensureShownNetworks, inSpace } from '$lib/services/networks';
 import { loadHoldings, saveHoldings } from '$lib/services/holdings-cache';
 import { onPrivacyElsewhere } from './privacy-sync';
 import { announceWalletSync, onWalletSyncElsewhere } from './wallet-sync';
@@ -57,8 +57,10 @@ class Balance {
 			// The stored custom networks come first (spec 038 #E9): the first
 			// fetch walks `getAllNetworksSync()`, and a snapshot that has not
 			// read storage yet is the builtin table — an added network would be
-			// neither fetched nor listed until a Settings write.
-			await Promise.all([ensureCustomNetworks(), loadCore()]);
+			// neither fetched nor listed until a Settings write. And the Vela
+			// networks out of the person's lists (owner decision 2026-10-29)
+			// are settled before the first read, so none is read and then hidden.
+			await Promise.all([ensureShownNetworks(), loadCore()]);
 			ensureBalanceDashboard();
 			subscribeBalanceDashboard((view) => {
 				this.#keepSettledRows(view);

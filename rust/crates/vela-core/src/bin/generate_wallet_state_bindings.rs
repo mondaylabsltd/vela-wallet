@@ -80,6 +80,7 @@ use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, S
 use vela_core::app::session::{
     Event as SessionEvent, SessionOperation, SessionShellResult, SessionView,
 };
+use vela_core::app::shown_networks::{NetShownSettled, NetUseEvidence};
 use vela_core::app::sign_confirm::ConfirmState;
 use vela_core::app::sign_request::{
     Event as SignEvent, SignEnding, SignEndingState, SignOperation, SignShellResult, SignView,
@@ -194,6 +195,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     NetOperation::export_all(&config)?;
     NetShellResult::export_all(&config)?;
     NetView::export_all(&config)?;
+    // The shown-networks kernel's JSON (owner decision 2026-10-29).
+    NetUseEvidence::export_all(&config)?;
+    NetShownSettled::export_all(&config)?;
     SignEvent::export_all(&config)?;
     SignOperation::export_all(&config)?;
     SignShellResult::export_all(&config)?;

@@ -76,6 +76,9 @@ export interface AddNetworkMessages {
 	 */
 	hints: Record<NetHintKey, string>;
 	singleKeyOnly: string;
+	/** Owner decision 2026-10-29: a Vela network out of the list — the pill, and what Add does. */
+	velaNetwork: string;
+	velaNetworkHint: string;
 	unableToVerify: string;
 	/** dapp-13: the catalog knows the chain but lists no RPC Vela uses — the RPC is the site's. */
 	rpcFromSite: string;

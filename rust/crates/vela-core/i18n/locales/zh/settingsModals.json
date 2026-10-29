@@ -14,7 +14,9 @@
       "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。",
       "fallback": "你的节点没有响应——暂时改用公共节点",
       "onlyMine": "只使用我的节点",
-      "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。"
+      "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。",
+      "hideBody": "它会从你的网络列表中移除。它的设置会保留，随时可以通过“添加网络”加回来。",
+      "moreNetworks": "同样支持、但不在你列表中的网络：{{names}}。可在“添加网络”中添加。"
     },
     "account": {
       "modalTitle": "账户",
@@ -84,7 +86,9 @@
       "discardTitle": "放弃添加这个网络？",
       "discardBody": "你在这里输入的内容将会丢失。",
       "discardConfirm": "放弃",
-      "discardCancel": "继续编辑"
+      "discardCancel": "继续编辑",
+      "velaNetwork": "Vela 网络",
+      "velaNetworkHint": "Vela 支持此网络。添加后它会回到你的网络列表，你之前的设置都还在。"
     },
     "treasury": {
       "modalTitle": "金库",

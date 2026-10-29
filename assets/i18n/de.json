@@ -2224,7 +2224,9 @@
    "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt.",
    "fallback": "Dein Knoten antwortet nicht – vorerst werden öffentliche Knoten verwendet",
    "onlyMine": "Nur meinen Knoten verwenden",
-   "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist."
+   "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist.",
+   "hideBody": "Es verschwindet aus deiner Netzwerkliste. Seine Einstellungen bleiben erhalten, und „Netzwerk hinzufügen“ holt es jederzeit zurück.",
+   "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu."
   },
   "account": {
    "modalTitle": "Konten",
@@ -2294,7 +2296,9 @@
    "discardTitle": "Dieses Netzwerk verwerfen?",
    "discardBody": "Was du hier eingegeben hast, geht verloren.",
    "discardConfirm": "Verwerfen",
-   "discardCancel": "Weiter bearbeiten"
+   "discardCancel": "Weiter bearbeiten",
+   "velaNetwork": "Vela-Netzwerk",
+   "velaNetworkHint": "Vela unterstützt dieses Netzwerk. Hinzufügen bringt es mit deinen bisherigen Einstellungen zurück in deine Netzwerkliste."
   },
   "treasury": {
    "modalTitle": "Treasury",

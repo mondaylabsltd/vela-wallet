@@ -14,7 +14,9 @@
       "relayNotice": "O relay que envia suas transações recebe o endereço RPC desta rede — incluindo qualquer chave de API — para alcançar a rede que você usa.",
       "fallback": "Seu nó não está respondendo — usando nós públicos por enquanto",
       "onlyMine": "Usar só o meu nó",
-      "onlyMineHint": "Nada sobre sua conta vai para nós públicos. Se o seu nó parar de responder, esta rede não poderá ser lida até ele voltar."
+      "onlyMineHint": "Nada sobre sua conta vai para nós públicos. Se o seu nó parar de responder, esta rede não poderá ser lida até ele voltar.",
+      "hideBody": "Ela sai da sua lista de redes. As configurações dela são mantidas, e Adicionar rede a traz de volta quando quiser.",
+      "moreNetworks": "Também compatíveis, fora da sua lista: {{names}}. Adicione em Adicionar rede."
     },
     "account": {
       "modalTitle": "Contas",
@@ -84,7 +86,9 @@
       "discardTitle": "Descartar esta rede?",
       "discardBody": "O que você digitou aqui será perdido.",
       "discardConfirm": "Descartar",
-      "discardCancel": "Continuar editando"
+      "discardCancel": "Continuar editando",
+      "velaNetwork": "Rede da Vela",
+      "velaNetworkHint": "A Vela é compatível com esta rede. Ao adicioná-la, ela volta para sua lista de redes, com as configurações que você tinha."
     },
     "treasury": {
       "modalTitle": "Tesouraria",

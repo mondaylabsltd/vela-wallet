@@ -51,6 +51,7 @@ fn store_loaded(customs: Vec<NetCustomNetwork>, overrides: Vec<NetNetworkConfig>
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     }
 }
 
@@ -262,6 +263,7 @@ fn a_partially_stored_endpoints_blob_merges_with_the_defaults() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     let view = sut.view();
     assert_eq!(view.endpoints[0].value, "https://my-data.example");
@@ -377,6 +379,7 @@ fn index_entry(chain_id: u32, name: &str, short: &str, symbol: &str) -> NetChain
         short_name: short.to_owned(),
         native_currency_symbol: symbol.to_owned(),
         has_logo: true,
+        vela: false,
     }
 }
 
@@ -938,6 +941,7 @@ fn custom_service_endpoints_feed_the_new_network_record() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -997,6 +1001,7 @@ fn a_new_networks_logo_is_the_marks_one_rule() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -1480,6 +1485,7 @@ fn a_builtin_rows_bundler_follows_the_configured_relay() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     let row = &sut.view().networks[0];
     assert_eq!(row.chain_id, 1);
@@ -1522,6 +1528,7 @@ fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1549,6 +1556,7 @@ fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1686,6 +1694,7 @@ fn a_page_opened_before_the_store_answers_probes_the_stored_urls() {
         },
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     assert!(
         ops.contains(&Op::FetchServiceHealth {
@@ -2146,6 +2155,7 @@ fn load_with_keys(
         endpoints: NetStoredEndpoints::default(),
         provider_keys: keys,
         multisig_service: false,
+        shown_networks: None,
     });
     (sut, ops)
 }
@@ -2393,6 +2403,7 @@ fn a_finished_retirement_flushes_the_pools_and_is_not_repeated() {
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     assert!(ops.is_empty());
     assert_eq!(shown_rpc(&sut, 1), url);
@@ -2420,6 +2431,7 @@ fn a_failed_retirement_keeps_the_keys_and_retries() {
         endpoints: NetStoredEndpoints::default(),
         provider_keys: keys,
         multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(retired_configs(&ops), Some(first));
 }
@@ -2443,6 +2455,7 @@ fn a_half_finished_retirement_finishes_without_writing_twice() {
         endpoints: NetStoredEndpoints::default(),
         provider_keys: keys,
         multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(ops, vec![Op::RetireProviderKeys { configs: None }]);
 }
@@ -3396,6 +3409,7 @@ fn started_with_multisig(endpoints: NetStoredEndpoints) -> Sut {
         endpoints,
         provider_keys: NetProviderKeys::default(),
         multisig_service: true,
+        shown_networks: None,
     });
     sut
 }

@@ -42,4 +42,9 @@ rpc_from_site: boolean,
  * ([`Event::DappAddApprovedUnverified`]). A local node a probe cannot
  * reach is not a dead end.
  */
-can_add_unverified: boolean, };
+can_add_unverified: boolean, 
+/**
+ * A Vela network out of the person's lists: supported, nothing was
+ * checked, and "Add Network" shows it again ([`shown_networks`]).
+ */
+vela_network: boolean, };

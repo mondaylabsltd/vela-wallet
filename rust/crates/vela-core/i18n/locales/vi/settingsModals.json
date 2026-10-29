@@ -14,7 +14,9 @@
       "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng.",
       "fallback": "Node của bạn không phản hồi — tạm thời dùng node công khai",
       "onlyMine": "Chỉ dùng node của tôi",
-      "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại."
+      "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại.",
+      "hideBody": "Mạng sẽ rời khỏi danh sách của bạn. Cài đặt của mạng được giữ lại và bạn có thể thêm lại bất cứ lúc nào từ Thêm mạng.",
+      "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng."
     },
     "account": {
       "modalTitle": "Tài khoản",
@@ -84,7 +86,9 @@
       "discardTitle": "Bỏ mạng này?",
       "discardBody": "Những gì bạn đã nhập ở đây sẽ mất.",
       "discardConfirm": "Bỏ",
-      "discardCancel": "Tiếp tục sửa"
+      "discardCancel": "Tiếp tục sửa",
+      "velaNetwork": "Mạng của Vela",
+      "velaNetworkHint": "Vela hỗ trợ mạng này. Thêm vào sẽ đưa mạng trở lại danh sách của bạn, cùng mọi cài đặt bạn đã có."
     },
     "treasury": {
       "modalTitle": "Ngân quỹ",

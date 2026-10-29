@@ -2813,6 +2813,7 @@ mod tests {
                             endpoints: NetStoredEndpoints::default(),
                             provider_keys: NetProviderKeys::default(),
                             multisig_service: false,
+                            shown_networks: None,
                         },
                     );
                 }

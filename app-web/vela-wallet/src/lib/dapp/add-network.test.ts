@@ -41,6 +41,7 @@ function view(over: Partial<NetDappAddView> = {}): NetDappAddView {
 		can_add: true,
 		rpc_from_site: false,
 		can_add_unverified: false,
+		vela_network: false,
 		...over
 	};
 }
@@ -73,6 +74,25 @@ const MISSING_CONTRACTS: NetDappAddView['compat'] = {
 };
 
 describe('the add-network card', () => {
+	it('names a Vela network out of the list as Vela’s, with no checklist (owner decision 2026-10-29)', () => {
+		const card = addNetworkCard(
+			view({
+				chain_id: 98866,
+				name: 'Plume',
+				native_symbol: 'PLUME',
+				vela_network: true,
+				compat: { ...view().compat!, chain_id: 98866, best_rpc_url: null }
+			}),
+			m
+		);
+		expect(card.pill).toEqual({ tone: 'ok', label: m.velaNetwork, dot: true });
+		expect(card.note).toBe(m.velaNetworkHint);
+		expect(card.checks).toEqual([]);
+		expect(card.checksTitle).toBeNull();
+		expect(card.add).toBe('Add Network');
+		expect(card.fromSite).toBeNull();
+	});
+
 	it('offers Add for a compatible chain, naming who asks', () => {
 		const card = addNetworkCard(view(), m);
 		expect(card.title).toBe('Add Network');

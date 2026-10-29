@@ -83,6 +83,7 @@ pub mod self_call_guard;
 pub mod send;
 pub mod session;
 pub mod shell;
+pub mod shown_networks;
 pub mod sign_confirm;
 pub mod sign_request;
 pub mod signing_pages;

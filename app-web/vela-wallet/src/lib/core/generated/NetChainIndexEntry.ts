@@ -3,4 +3,9 @@
 /**
  * One row of the chain search index (`fuse-chains.json`, `ChainSearchResult`).
  */
-export type NetChainIndexEntry = { chain_id: number, name: string, short_name: string, native_currency_symbol: string, has_logo: boolean, };
+export type NetChainIndexEntry = { chain_id: number, name: string, short_name: string, native_currency_symbol: string, has_logo: boolean, 
+/**
+ * One of Vela's own networks, out of the person's lists — the core put
+ * it there, never the chain index ([`shown_networks`]).
+ */
+vela: boolean, };

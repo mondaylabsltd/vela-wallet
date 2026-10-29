@@ -1046,8 +1046,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   nothing; the tab says Vela is open in the side panel, its wallet kept
 //   beneath. 2259 + 3 = 2262 leaves, 120 branches.
 // 2402 (One wallet surface, 2026-10-28): 2281 leaves, 121 branches.
-if (PATHS.length !== 2402) fail(`expected 2402 paths (2281 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2281) fail(`expected 2281 leaf paths, got ${leafSet.size}`);
+// 2378 (four Vela networks shown on the person's word, 2026-10-29): +
+//   `settingsModals.addNetwork.{velaNetwork, velaNetworkHint}` (Add network
+//   and a site's sheet name one as Vela's) and
+//   `settingsModals.network.{hideBody, moreNetworks}` (taking one out keeps
+//   its settings; the list says which can be added). 2254 + 4 = 2258 leaves,
+//   120 branches.
+// 2406 (Default networks, 2026-10-28): 2285 leaves, 121 branches.
+if (PATHS.length !== 2406) fail(`expected 2406 paths (2285 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2285) fail(`expected 2285 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

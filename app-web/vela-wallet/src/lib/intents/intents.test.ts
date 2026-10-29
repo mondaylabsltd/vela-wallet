@@ -357,6 +357,7 @@ function net(
 		display_name: `Chain ${chain_id}`,
 		native_symbol: 'ETH',
 		is_custom: custom,
+		optional: false,
 		rpc_url,
 		explorer_url: `https://scan.${chain_id}.example`,
 		bundler_url: '',

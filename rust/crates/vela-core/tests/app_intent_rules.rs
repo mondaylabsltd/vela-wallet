@@ -151,6 +151,14 @@ fn an_rpc_for_another_chain_is_refused_and_one_being_checked_is_not_yet() {
         code(&examine(&remove, &row(json!({})))),
         Some(ReasonCode::Refused)
     );
+    // …unless it is a Vela network shown on the person's word (owner decision
+    // 2026-10-29): it leaves the list, and is gone from it once the list says so.
+    let optional = row(json!({ "optional": true }));
+    assert_eq!(code(&examine(&remove, &optional)), None);
+    let mut base = baseline(&remove, &optional);
+    assert_eq!(verdict(&remove, &optional, &mut base), Verdict::NotYet);
+    let gone = world(json!({ "networks": { "networks": [] } }));
+    assert_eq!(verdict(&remove, &gone, &mut base), Verdict::Held);
 }
 
 /// "Only use my node", for the agent (round 3): it reads the switch, and a

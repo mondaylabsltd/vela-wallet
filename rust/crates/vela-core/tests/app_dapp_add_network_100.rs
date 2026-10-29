@@ -160,6 +160,7 @@ fn admin_with(customs: Vec<NetCustomNetwork>) -> Admin {
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     sut
 }
@@ -646,6 +647,7 @@ fn a_network_a_page_adds_wears_the_marks_logo_url() {
             },
             provider_keys: NetProviderKeys::default(),
             multisig_service: false,
+            shown_networks: None,
         });
         requested(&mut sut, site_ask(NEW_CHAIN, &[SITE_RPC]));
         let rpc = if from_catalog {
@@ -1016,6 +1018,7 @@ fn a_request_before_the_ledger_is_read_begins_once_it_is() {
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
         multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(
         ops,

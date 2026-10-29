@@ -279,6 +279,13 @@ export interface SettingsMessages {
 		ownNodeDown: string;
 		onlyMine: string;
 		onlyMineHint: string;
+		/**
+		 * Owner decision 2026-10-29: removing a Vela network shown on the
+		 * person's word — it leaves the list, its settings are kept.
+		 */
+		hideBody: string;
+		/** Template with `{{names}}`: the Vela networks out of the list, to add. */
+		moreNetworks: string;
 	};
 	addNetwork: {
 		description: string;
@@ -325,6 +332,12 @@ export interface SettingsMessages {
 		 * crossed rows in the checklist.
 		 */
 		singleKeyOnly: string;
+		/**
+		 * Owner decision 2026-10-29: a Vela network out of the person's list —
+		 * the suggestion's tag and the pick's badge, and what adding it does.
+		 */
+		velaNetwork: string;
+		velaNetworkHint: string;
 		openChainSetupTool: string;
 		recheckWithRpc: string;
 		testnet: string;
@@ -1002,6 +1015,8 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.fallback',
 	'settingsModals.network.onlyMine',
 	'settingsModals.network.onlyMineHint',
+	'settingsModals.network.hideBody',
+	'settingsModals.network.moreNetworks',
 	'assets.ownNodeUnreachable',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
@@ -1030,6 +1045,8 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.recheckWithRpc',
 	'settingsModals.addNetwork.testnet',
 	'settingsModals.addNetwork.bestRpc',
+	'settingsModals.addNetwork.velaNetwork',
+	'settingsModals.addNetwork.velaNetworkHint',
 	'settingsModals.addNetwork.checkSafe',
 	'settingsModals.addNetwork.checkSigner',
 	'settingsModals.addNetwork.checkRemaining',

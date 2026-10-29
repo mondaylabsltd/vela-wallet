@@ -205,7 +205,10 @@ export function liveNetworkRows(
 		meta: chainMeta(m, row.chain_id),
 		badge: row.is_custom ? undefined : probePill(row.rpc_health, m),
 		tag: row.is_custom ? m.networks.custom : undefined,
-		removable: row.is_custom,
+		// Owner decision 2026-10-29: a Vela network shown on the person's word
+		// can be taken out of the list again; its settings stay.
+		removable: row.is_custom || row.optional,
+		...(row.optional ? { removeBody: m.networks.hideBody } : {}),
 		expanded: expandedId === row.id,
 		...(space !== undefined && row.is_custom
 			? { move: testnet ? space.words.moveToMainnet : space.words.moveToTestnet }
@@ -219,12 +222,17 @@ function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]
 	return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
 
-/** Spec 105: the network list's heading, and the switch beside it. */
-export function liveSpaceHeading(space: LiveSpace): NetworkSpaceHeadingModel {
+/**
+ * Spec 105: the network list's heading, and the switch beside it. `more`:
+ * the line naming the Vela networks out of the list (owner decision
+ * 2026-10-29), said under the mainnet heading — where they would be.
+ */
+export function liveSpaceHeading(space: LiveSpace, more?: string): NetworkSpaceHeadingModel {
 	const testnet = space.current === 'testnet';
+	const hint = testnet ? space.words.testnetHint : space.words.mainnetHint;
 	return {
 		heading: testnet ? space.words.headingTestnet : space.words.headingMainnet,
-		hint: testnet ? space.words.testnetHint : space.words.mainnetHint,
+		hint: !testnet && more !== undefined ? `${hint} ${more}` : hint,
 		switchLabel: testnet ? space.words.toMainnet : space.words.toTestnet,
 		testnet
 	};
@@ -318,9 +326,13 @@ export function liveNetworkDetail(
 function suggestionRow(entry: NetChainIndexEntry, m: SettingsMessages): NetworkRowModel {
 	return {
 		id: String(entry.chain_id),
-		mark: chainMark('', entry.name, entry.has_logo ? entry.chain_id : undefined),
+		mark: entry.vela
+			? chainMark(entry.short_name, entry.name, entry.chain_id)
+			: chainMark('', entry.name, entry.has_logo ? entry.chain_id : undefined),
 		name: entry.name,
-		meta: chainMeta(m, entry.chain_id)
+		meta: chainMeta(m, entry.chain_id),
+		// One of Vela's own networks, out of the list — said as what it is.
+		...(entry.vela ? { tag: m.addNetwork.velaNetwork } : {})
 	};
 }
 
@@ -480,6 +492,24 @@ function addNetworkBody(
 			// refusal: another endpoint would not change that verdict.
 			...rpc,
 			secondary: setupLink(refusal, m)
+		};
+	}
+
+	// A Vela network out of the person's list: nothing was checked — Vela
+	// supports it — and adding it shows it again, settings and all.
+	if (wizard.phase === 'checked' && wizard.vela_network && info !== null) {
+		return {
+			...base,
+			subtitle: `${name} · ${meta}`,
+			results: [],
+			candidate: {
+				mark: chainMark(info.short_name, name, info.chain_id),
+				name,
+				meta,
+				badge: { tone: 'ok', label: m.addNetwork.velaNetwork, dot: true }
+			},
+			callout: { tone: 'info', text: m.addNetwork.velaNetworkHint },
+			...(wizard.can_add ? { primary: m.addNetwork.addNetworkBtn } : {})
 		};
 	}
 
@@ -665,13 +695,23 @@ export function withLiveNetworks(
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId, space, nodes),
-			...(space === undefined ? {} : { space: liveSpaceHeading(space) })
+			...(space === undefined ? {} : { space: liveSpaceHeading(space, moreNetworks(view, m)) })
 		},
 		networkDetail:
 			expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		endpoints: liveEndpoints(view, m)
 	};
+}
+
+/**
+ * "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
+ * the core says are out of the person's list, by name; none, no line.
+ */
+function moreNetworks(view: NetView, m: SettingsMessages): string | undefined {
+	const hidden = view.hidden_vela_chain_ids ?? [];
+	if (hidden.length === 0) return undefined;
+	return fill(m.networks.moreNetworks, { names: hidden.map((id) => chainName(id)).join(', ') });
 }
 
 /** The row of the chain just added, once the ledger lists it. */
@@ -695,7 +735,7 @@ export function withLiveNetworksDesktop(
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId, space, nodes),
-			...(space === undefined ? {} : { space: liveSpaceHeading(space) }),
+			...(space === undefined ? {} : { space: liveSpaceHeading(space, moreNetworks(view, m)) }),
 			detail: expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networks.detail
 		},
 		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),

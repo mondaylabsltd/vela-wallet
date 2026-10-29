@@ -3049,6 +3049,24 @@ pub fn network_chain_is_testnet(chain_id: u32, custom_json: String) -> bool {
     vela_core::app::network_space::chain_is_testnet_json(chain_id, &custom_json)
 }
 
+/// The device's shown Vela networks (owner decision 2026-10-29,
+/// `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+/// none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+/// `NetShownSettled` as JSON — store its `record` when `write` is true.
+#[uniffi::export]
+#[must_use]
+pub fn shown_networks_settle(stored: String, evidence_json: String) -> String {
+    vela_core::app::shown_networks::settle_json(&stored, &evidence_json)
+}
+
+/// The Vela networks out of the person's lists, in list order, from the
+/// stored `vela.shownNetworks` bytes (`""`: none — nothing is hidden).
+#[uniffi::export]
+#[must_use]
+pub fn shown_networks_hidden(stored: String) -> Vec<u32> {
+    vela_core::app::shown_networks::hidden_chain_ids_json(&stored)
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.
