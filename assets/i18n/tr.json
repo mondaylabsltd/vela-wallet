@@ -455,7 +455,9 @@
     "waiting": "Diğerleri bekleniyor",
     "queued": "Sırada",
     "progress": "{{approved}}/{{threshold}} onay",
-    "unsent": "Henüz gönderilmedi"
+    "unsent": "Henüz gönderilmedi",
+    "cannotRun": "Şu an çalıştırılamaz — {{reason}}",
+    "nobodyPays": "bu cihazdaki hiçbir hesap ağ ücretini ödeyemiyor"
    },
    "action": {
     "send": "{{amount}} {{symbol}} gönder",
@@ -536,12 +538,35 @@
     "outboxBusy": "Multisig hizmeti meşgul — {{seconds}} sn sonra yeniden gönderilecek.",
     "outboxAway": "Multisig hizmetine ulaşılamadı — {{seconds}} sn sonra yeniden gönderilecek.",
     "outboxNotSent": "Henüz gönderilmedi: multisig hizmeti bunu kabul etmedi. Bu cihazda saklanıyor ve gönderilene kadar diğer üyeler onu göremez.",
-    "outboxSendAgain": "Yeniden gönder"
+    "outboxSendAgain": "Yeniden gönder",
+    "wouldFail": "Şimdi yürütülürse başarısız olur: {{reason}}.",
+    "whyShort": "multisig {{have}} tutuyor, bunun için {{need}} gerekiyor",
+    "whyReverts": "ağ bunu reddediyor — “{{reason}}”",
+    "whyRevertsPlain": "çalışırken geri alınıyor ve ağ bir neden belirtmiyor",
+    "unpricedReason": "ağ ücreti hesaplanamadı — birazdan yeniden deneyin",
+    "feeLine": "Ağ ücreti ≈ {{fee}}, ödeyen: {{name}}",
+    "feeChecking": "Çalışıp çalışmayacağı ve ağ ücreti kontrol ediliyor…",
+    "feeUnpriced": "Ağ ücreti şu anda hesaplanamadı.",
+    "feeRetry": "Yeniden kontrol et",
+    "feeSetup": "{{network}} üzerinde tek seferlik kurulum dahil ≈ {{amount}}:",
+    "feeSetupPlain": "{{network}} üzerinde tek seferlik kurulum dahil:",
+    "setupMultisig": "bu multisig’i dağıtma",
+    "setupMember": "{{name}} hesabını etkinleştirme — multisig onayını bu hesap üzerinden denetler",
+    "setupExecutor": "ücreti ödeyen {{name}} hesabını etkinleştirme",
+    "cantPayOther": "{{name}} ağ ücretini ödeyemiyor — {{other}} yürütebilir.",
+    "pickerCantPay": "ücreti ödeyemiyor",
+    "approvedNotExecuted": "Onayınız alındı. Yürütme gerçekleşemedi: {{reason}}",
+    "notNeeded": "Gerekmiyor",
+    "sendLink": "Bağlantı gönder",
+    "approvesInVela": "Kendi cihazındaki Vela’da onaylar: {{names}}. Onlara bu bağlantıyı gönderin.",
+    "rejectCancel": "Vazgeç",
+    "noOutsideSigner": "bu cihazda hiçbir üye yok ve her üye kendi cihazındaki Vela’da onaylıyor — üyelerden birinden önermesini isteyin"
    },
    "send": {
     "propose": "Öner ve onayla",
     "invalidAddress": "Geçerli bir adres gir.",
-    "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın."
+    "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+    "proposeOnly": "Öner"
    },
    "create": {
     "title": "Yeni çoklu imza",

@@ -456,7 +456,9 @@
     "waiting": "Esperando a otros",
     "queued": "En cola",
     "progress": "{{approved}}/{{threshold}} aprobadas",
-    "unsent": "Aún no se envía"
+    "unsent": "Aún no se envía",
+    "cannotRun": "No se puede ejecutar ahora — {{reason}}",
+    "nobodyPays": "ninguna cuenta de este dispositivo puede pagar la comisión de red"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -537,12 +539,35 @@
     "outboxBusy": "El servicio multifirma está ocupado: se volverá a enviar en {{seconds}} s.",
     "outboxAway": "No se pudo conectar con el servicio multifirma: se volverá a enviar en {{seconds}} s.",
     "outboxNotSent": "Aún no se envía: el servicio multifirma no la aceptó. Se guarda en este dispositivo, y los demás miembros no la ven hasta que se envíe.",
-    "outboxSendAgain": "Enviar de nuevo"
+    "outboxSendAgain": "Enviar de nuevo",
+    "wouldFail": "Esto fallaría si se ejecutara ahora: {{reason}}.",
+    "whyShort": "el multisig tiene {{have}} y esto necesita {{need}}",
+    "whyReverts": "la red lo rechaza — “{{reason}}”",
+    "whyRevertsPlain": "se revierte al ejecutarse, y la red no da ningún motivo",
+    "unpricedReason": "no se pudo calcular la comisión de red — inténtalo de nuevo en un momento",
+    "feeLine": "Comisión de red ≈ {{fee}}, la paga {{name}}",
+    "feeChecking": "Comprobando que se ejecutaría, y la comisión de red…",
+    "feeUnpriced": "No se pudo calcular la comisión de red en este momento.",
+    "feeRetry": "Comprobar de nuevo",
+    "feeSetup": "Incluye una configuración única en {{network}} ≈ {{amount}}:",
+    "feeSetupPlain": "Incluye una configuración única en {{network}}:",
+    "setupMultisig": "desplegar este multisig",
+    "setupMember": "activar la cuenta de {{name}} — el multisig comprueba su aprobación a través de ella",
+    "setupExecutor": "activar la cuenta de {{name}}, que paga la comisión",
+    "cantPayOther": "{{name}} no puede pagar la comisión de red — {{other}} puede ejecutarla.",
+    "pickerCantPay": "no puede pagar la comisión",
+    "approvedNotExecuted": "Tu aprobación quedó registrada. La ejecución no pudo realizarse: {{reason}}",
+    "notNeeded": "No hace falta",
+    "sendLink": "Enviar enlace",
+    "approvesInVela": "Aprueba en Vela desde su propio dispositivo: {{names}}. Envíales este enlace.",
+    "rejectCancel": "Cancelar",
+    "noOutsideSigner": "ningún miembro está en este dispositivo, y todos aprueban en Vela desde su propio dispositivo — pídele a uno que lo proponga"
    },
    "send": {
     "propose": "Proponer y aprobar",
     "invalidAddress": "Ingresa una dirección válida.",
-    "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla."
+    "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla.",
+    "proposeOnly": "Proponer"
    },
    "create": {
     "title": "Nueva multifirma",

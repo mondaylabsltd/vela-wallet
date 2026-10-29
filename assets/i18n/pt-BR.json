@@ -456,7 +456,9 @@
     "waiting": "Aguardando os outros",
     "queued": "Na fila",
     "progress": "{{approved}}/{{threshold}} aprovações",
-    "unsent": "Ainda não enviada"
+    "unsent": "Ainda não enviada",
+    "cannotRun": "Não dá para executar agora — {{reason}}",
+    "nobodyPays": "nenhuma conta deste dispositivo pode pagar a taxa de rede"
    },
    "action": {
     "send": "Enviar {{amount}} {{symbol}}",
@@ -537,12 +539,35 @@
     "outboxBusy": "O serviço multisig está ocupado — enviando de novo em {{seconds}} s.",
     "outboxAway": "Não foi possível acessar o serviço multisig — enviando de novo em {{seconds}} s.",
     "outboxNotSent": "Ainda não enviada: o serviço multisig não a aceitou. Ela fica guardada neste dispositivo, e os outros membros não a veem até que seja enviada.",
-    "outboxSendAgain": "Enviar de novo"
+    "outboxSendAgain": "Enviar de novo",
+    "wouldFail": "Isso falharia se fosse executado agora: {{reason}}.",
+    "whyShort": "o multisig tem {{have}}, e isto precisa de {{need}}",
+    "whyReverts": "a rede recusa — “{{reason}}”",
+    "whyRevertsPlain": "ela é revertida ao ser executada, e a rede não informa o motivo",
+    "unpricedReason": "não foi possível calcular a taxa de rede — tente de novo em instantes",
+    "feeLine": "Taxa de rede ≈ {{fee}}, paga por {{name}}",
+    "feeChecking": "Verificando se seria executada, e a taxa de rede…",
+    "feeUnpriced": "Não foi possível calcular a taxa de rede agora.",
+    "feeRetry": "Verificar de novo",
+    "feeSetup": "Inclui uma configuração única em {{network}} ≈ {{amount}}:",
+    "feeSetupPlain": "Inclui uma configuração única em {{network}}:",
+    "setupMultisig": "implantar este multisig",
+    "setupMember": "ativar a conta de {{name}} — o multisig verifica a aprovação por meio dela",
+    "setupExecutor": "ativar a conta de {{name}}, que paga a taxa",
+    "cantPayOther": "{{name}} não pode pagar a taxa de rede — {{other}} pode executá-la.",
+    "pickerCantPay": "não pode pagar a taxa",
+    "approvedNotExecuted": "Sua aprovação foi registrada. A execução não pôde ser feita: {{reason}}",
+    "notNeeded": "Não é necessário",
+    "sendLink": "Enviar link",
+    "approvesInVela": "Aprova no Vela pelo próprio dispositivo: {{names}}. Envie este link a eles.",
+    "rejectCancel": "Cancelar",
+    "noOutsideSigner": "nenhum membro está neste dispositivo, e todos aprovam no Vela pelo próprio dispositivo — peça a um deles para propor"
    },
    "send": {
     "propose": "Propor e aprovar",
     "invalidAddress": "Digite um endereço válido.",
-    "invalidChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo."
+    "invalidChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo.",
+    "proposeOnly": "Propor"
    },
    "create": {
     "title": "Nova multisig",

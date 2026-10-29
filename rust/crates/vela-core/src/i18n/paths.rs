@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 2439 paths = 2318 leaf + 121 branch. Repeated per locale these key bytes
-//! would cost 1005600 bytes; interned once they cost 69338.
+//! 2464 paths = 2343 leaf + 121 branch. Repeated per locale these key bytes
+//! would cost 1018350 bytes; interned once they cost 70188.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 2439] = [
+pub(crate) static PATHS: [&str; 2464] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -1313,10 +1313,13 @@ pub(crate) static PATHS: [&str; 2439] = [
     "home.multisig.proposal.approve",
     "home.multisig.proposal.approveAndExecute",
     "home.multisig.proposal.approved",
+    "home.multisig.proposal.approvedNotExecuted",
+    "home.multisig.proposal.approvesInVela",
     "home.multisig.proposal.as",
     "home.multisig.proposal.badLink",
     "home.multisig.proposal.cancelPending",
     "home.multisig.proposal.cannotPay",
+    "home.multisig.proposal.cantPayOther",
     "home.multisig.proposal.changesMembers",
     "home.multisig.proposal.copied",
     "home.multisig.proposal.copyLink",
@@ -1327,7 +1330,13 @@ pub(crate) static PATHS: [&str; 2439] = [
     "home.multisig.proposal.executing",
     "home.multisig.proposal.explorer",
     "home.multisig.proposal.failed",
+    "home.multisig.proposal.feeChecking",
+    "home.multisig.proposal.feeLine",
     "home.multisig.proposal.feeNote",
+    "home.multisig.proposal.feeRetry",
+    "home.multisig.proposal.feeSetup",
+    "home.multisig.proposal.feeSetupPlain",
+    "home.multisig.proposal.feeUnpriced",
     "home.multisig.proposal.hash",
     "home.multisig.proposal.invite",
     "home.multisig.proposal.inviteHint",
@@ -1337,24 +1346,32 @@ pub(crate) static PATHS: [&str; 2439] = [
     "home.multisig.proposal.missingNetworkBody",
     "home.multisig.proposal.missingNetworkNamed",
     "home.multisig.proposal.noExpiry",
+    "home.multisig.proposal.noOutsideSigner",
     "home.multisig.proposal.notCounted",
     "home.multisig.proposal.notFound",
     "home.multisig.proposal.notInMailbox",
     "home.multisig.proposal.notLanded",
     "home.multisig.proposal.notMember",
+    "home.multisig.proposal.notNeeded",
     "home.multisig.proposal.notSent",
     "home.multisig.proposal.opening",
     "home.multisig.proposal.outboxAway",
     "home.multisig.proposal.outboxBusy",
     "home.multisig.proposal.outboxNotSent",
     "home.multisig.proposal.outboxSendAgain",
+    "home.multisig.proposal.pickerCantPay",
     "home.multisig.proposal.previewNote",
     "home.multisig.proposal.queuedNote",
     "home.multisig.proposal.refused",
     "home.multisig.proposal.reject",
+    "home.multisig.proposal.rejectCancel",
     "home.multisig.proposal.rejectHint",
     "home.multisig.proposal.renameRuns",
     "home.multisig.proposal.renameUndeployed",
+    "home.multisig.proposal.sendLink",
+    "home.multisig.proposal.setupExecutor",
+    "home.multisig.proposal.setupMember",
+    "home.multisig.proposal.setupMultisig",
     "home.multisig.proposal.share",
     "home.multisig.proposal.siteAsks",
     "home.multisig.proposal.siteFollows",
@@ -1364,16 +1381,22 @@ pub(crate) static PATHS: [&str; 2439] = [
     "home.multisig.proposal.startsOriginalNote",
     "home.multisig.proposal.stillNeeded",
     "home.multisig.proposal.title",
+    "home.multisig.proposal.unpricedReason",
     "home.multisig.proposal.voided",
     "home.multisig.proposal.voidedByOther",
     "home.multisig.proposal.voidedNote",
     "home.multisig.proposal.waiting",
     "home.multisig.proposal.watch",
     "home.multisig.proposal.watching",
+    "home.multisig.proposal.whyReverts",
+    "home.multisig.proposal.whyRevertsPlain",
+    "home.multisig.proposal.whyShort",
+    "home.multisig.proposal.wouldFail",
     "home.multisig.send",
     "home.multisig.send.invalidAddress",
     "home.multisig.send.invalidChecksum",
     "home.multisig.send.propose",
+    "home.multisig.send.proposeOnly",
     "home.multisig.service",
     "home.multisig.service.customNote",
     "home.multisig.service.retry",
@@ -1402,6 +1425,8 @@ pub(crate) static PATHS: [&str; 2439] = [
     "home.multisig.settings.unavailable",
     "home.multisig.settings.undeployedOn",
     "home.multisig.status",
+    "home.multisig.status.cannotRun",
+    "home.multisig.status.nobodyPays",
     "home.multisig.status.progress",
     "home.multisig.status.queued",
     "home.multisig.status.ready",
@@ -2454,7 +2479,7 @@ pub(crate) static PATHS: [&str; 2439] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 305] = [
+pub(crate) static IS_BRANCH: [u8; 308] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x10, 0x00,
     0x00, 0x00, 0x04, 0x18, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x20, 0x42, 0x08, 0x00,
     0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x21, 0x11, 0x02, 0x00, 0x00, 0x00, 0x02,
@@ -2465,20 +2490,20 @@ pub(crate) static IS_BRANCH: [u8; 305] = [
     0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x01, 0x03, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x10,
-    0x00, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x22, 0x02, 0x00, 0x00, 0x81, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x01, 0x00,
-    0x00, 0x00, 0x02, 0x40, 0x08, 0x00, 0x80, 0x93, 0x24, 0x09, 0x01, 0x80, 0x00, 0x00, 0x08, 0x00,
-    0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x41, 0x00,
-    0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x80, 0x04, 0x08,
-    0x01, 0x90, 0x84, 0x08, 0x10, 0x08, 0x08, 0x10, 0x00, 0x08, 0x01, 0x00, 0x00, 0x20, 0x80, 0x41,
-    0x00, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x08, 0x01, 0x20, 0x00, 0x40, 0x40, 0x20, 0x80, 0x20,
-    0x00,
+    0x00, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x10, 0x01, 0x00,
+    0x80, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+    0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x80, 0x10, 0x00, 0x00, 0x27, 0x49, 0x12, 0x02, 0x00, 0x01,
+    0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x60, 0x82, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x09, 0x10, 0x02, 0x20, 0x09, 0x11, 0x20, 0x10, 0x10, 0x20, 0x00, 0x10, 0x02, 0x00, 0x00,
+    0x40, 0x00, 0x83, 0x00, 0x00, 0x00, 0x00, 0x04, 0x02, 0x00, 0x10, 0x02, 0x40, 0x00, 0x80, 0x80,
+    0x40, 0x00, 0x41, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 2439;
+pub(crate) const N_PATHS: usize = 2464;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {
