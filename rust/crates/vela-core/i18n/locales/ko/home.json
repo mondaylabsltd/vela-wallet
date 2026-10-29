@@ -308,6 +308,7 @@
     "syncStalledLine": "이 기기에 저장됨 · 아직 동기화되지 않음",
     "totalUnpriced": "아직 가격 없음",
     "allUnpriced": "보유한 토큰의 가격을 하나도 가져오지 못했습니다.",
-    "currencyUnavailable": "지금은 {{code}} 환율을 불러올 수 없어 금액을 미국 달러로 표시합니다."
+    "currencyUnavailable": "지금은 {{code}} 환율을 불러올 수 없어 금액을 미국 달러로 표시합니다.",
+    "networkFilterOnly": "{{network}}만 표시 중"
   }
 }

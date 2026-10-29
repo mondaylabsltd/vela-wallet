@@ -657,7 +657,8 @@
   "syncStalledLine": "已保存在这台设备上 · 尚未同步",
   "totalUnpriced": "暂无价格",
   "allUnpriced": "你的代币都无法获取价格。",
-  "currencyUnavailable": "暂时无法获取 {{code}} 汇率——金额以美元显示。"
+  "currencyUnavailable": "暂时无法获取 {{code}} 汇率——金额以美元显示。",
+  "networkFilterOnly": "仅显示 {{network}}"
  },
  "send": {
   "selectTokenTitle": "选择代币",
@@ -1453,7 +1454,14 @@
   "ext": {
    "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
    "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
-   "accessAllow": "允许访问"
+   "accessAllow": "允许访问",
+   "openInTabTitle": "Vela 已在标签页中打开",
+   "openInTabBody": "一个窗口只开一个钱包：该标签页开着时，侧边栏会让位。这里的内容会原样保留。",
+   "goToTab": "前往标签页",
+   "useHereInstead": "改在这里使用",
+   "openInPanelTitle": "Vela 已在侧边栏中打开",
+   "openInPanelBody": "一个窗口只开一个钱包：使用侧边栏期间，此标签页会让位。这里的内容会原样保留。",
+   "goToPanel": "前往侧边栏"
   }
  },
  "signHandoff": {

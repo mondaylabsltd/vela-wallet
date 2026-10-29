@@ -1036,8 +1036,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.agent.action.setProviderKey` stays to name an old agent's
 //   refused call in the activity. 2253 − 4 = 2249 leaves, 120 branches.
 // 2394 (RPC providers removal, 2026-10-28): 2273 leaves, 121 branches.
-if (PATHS.length !== 2394) fail(`expected 2394 paths (2273 leaf + 121 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2273) fail(`expected 2273 leaf paths, got ${leafSet.size}`);
+// 2379 (one wallet per window, the same state in each, 2026-10-29): +
+//   `connect.ext.{openInTabTitle, openInTabBody, goToTab, useHereInstead}`
+//   (the side panel stands aside while its window has Vela open in a tab)
+//   and `home.networkFilterOnly` (the phone home says when it is narrowed to
+//   one network). 2254 + 5 = 2259 leaves, 120 branches.
+// 2382 (the tab steps aside too, 2026-10-29): + `connect.ext.{openInPanelTitle,
+//   openInPanelBody, goToPanel}` — "Use here instead" in the panel closes
+//   nothing; the tab says Vela is open in the side panel, its wallet kept
+//   beneath. 2259 + 3 = 2262 leaves, 120 branches.
+// 2402 (One wallet surface, 2026-10-28): 2281 leaves, 121 branches.
+if (PATHS.length !== 2402) fail(`expected 2402 paths (2281 leaf + 121 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2281) fail(`expected 2281 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 121) fail(`expected 121 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

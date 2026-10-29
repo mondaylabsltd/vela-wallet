@@ -657,7 +657,8 @@
   "syncStalledLine": "この端末に保存済み · まだ同期されていません",
   "totalUnpriced": "価格はまだありません",
   "allUnpriced": "どのトークンの価格も取得できませんでした。",
-  "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。"
+  "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。",
+  "networkFilterOnly": "{{network}} のみ表示中"
  },
  "send": {
   "filterStable": "ステーブルコイン",
@@ -1453,7 +1454,14 @@
   "ext": {
    "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
    "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
-   "accessAllow": "アクセスを許可"
+   "accessAllow": "アクセスを許可",
+   "openInTabTitle": "Vela はタブで開いています",
+   "openInTabBody": "1 つのウィンドウに 1 つのウォレット。そのタブが開いている間、サイドパネルは表示を控えます。ここの内容はそのまま残ります。",
+   "goToTab": "タブへ移動",
+   "useHereInstead": "代わりにここで使う",
+   "openInPanelTitle": "Vela はサイドパネルで開いています",
+   "openInPanelBody": "1 つのウィンドウに 1 つのウォレット。サイドパネルを使っている間、このタブは表示を控えます。ここの内容はそのまま残ります。",
+   "goToPanel": "サイドパネルへ移動"
   }
  },
  "signHandoff": {

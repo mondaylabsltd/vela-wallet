@@ -11,6 +11,7 @@
 import { DisplayCurrencyCore, loadCore } from '$lib/core/client';
 import { createJsonWasmShell } from '$lib/core/json-shell';
 import type { EffectLoop } from '$lib/core/effect-loop';
+import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
 import type { CurrencyEvent } from '$lib/core/generated/CurrencyEvent';
 import type { CurrencyShellResult } from '$lib/core/generated/CurrencyShellResult';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -51,6 +52,11 @@ class Currency {
 				onError: (error) => console.error('[display-currency] core fault:', error)
 			});
 			this.#loop.start({ type: 'refresh' });
+			// A currency chosen in another document (a tab, the side panel):
+			// read the stored choice again, as a focus refresh does.
+			onWalletSyncElsewhere((message) => {
+				if (message.topic === 'currency') this.refresh();
+			});
 		})();
 		return this.#booted;
 	}

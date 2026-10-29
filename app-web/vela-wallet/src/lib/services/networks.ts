@@ -18,6 +18,7 @@ import {
 	type NetworkConfigRecord
 } from './records';
 import { allowedOrNull } from './url-policy';
+import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
@@ -120,7 +121,13 @@ let _firstLoad: Promise<void> | null = null;
  * after a write stays as it is; this only guarantees the first one.
  */
 export function ensureCustomNetworks(): Promise<void> {
-	_firstLoad ??= refreshCustomNetworks();
+	if (_firstLoad) return _firstLoad;
+	_firstLoad = refreshCustomNetworks();
+	// A network added or edited in another document (a tab, the side panel)
+	// reaches this one: IndexedDB tells nobody, the writer says so.
+	onWalletSyncElsewhere((message) => {
+		if (message.topic === 'networks') void refreshCustomNetworks().catch(() => {});
+	});
 	return _firstLoad;
 }
 

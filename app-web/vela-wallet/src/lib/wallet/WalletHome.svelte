@@ -45,6 +45,15 @@
 		banner?: Snippet;
 		/** An activity group's own action (its note's Retry), by id. Live only. */
 		ongroupaction?: (id: string) => void;
+		/**
+		 * The home is narrowed to one network (the pill on Assets, History or
+		 * Send set it): said here, with the way back. The pill that said so
+		 * on the home itself is gone (founder call, 2026-08-26), and without
+		 * this line a narrowed list looked like the whole wallet — the side
+		 * panel showed BNB Chain's three tokens under the whole wallet's total.
+		 */
+		narrowed?: { label: string; action: string };
+		onshowall?: () => void;
 	}
 
 	let {
@@ -59,7 +68,9 @@
 		onstatus,
 		onbalancerefresh,
 		banner,
-		ongroupaction
+		ongroupaction,
+		narrowed,
+		onshowall
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -102,6 +113,13 @@
 			onsend={() => onflow?.('send')}
 			onscan={() => onflow?.('scan')}
 		/>
+
+		{#if narrowed}
+			<div class="narrowed" role="status" data-testid="home-narrowed">
+				<span>{narrowed.label}</span>
+				<button type="button" onclick={() => onshowall?.()}>{narrowed.action}</button>
+			</div>
+		{/if}
 
 		<SectionHeader
 			title={model.activitySection.title}
@@ -218,6 +236,31 @@
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.narrowed {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-lg);
+		padding: var(--space-sm) var(--space-md);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-sunken);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.narrowed button {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	ul {

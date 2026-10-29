@@ -84,6 +84,7 @@
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import {
@@ -294,6 +295,24 @@
 	let sendView = $state<SendView | null>(null);
 	let sendSession: SendSession | null = null;
 	const feeQuote = new FeeQuote();
+
+	/**
+	 * One wallet per window (`one-surface.svelte.ts`): a surface with a send
+	 * or a signature in flight never steps aside for the other one — the
+	 * person is watching it go.
+	 */
+	const signingInFlight = $derived(
+		(sendView !== null &&
+			(sendView.sending ||
+				sendView.tx_status === 'preparing' ||
+				sendView.tx_status === 'signing' ||
+				sendView.tx_status === 'submitting')) ||
+			signRequest.view.phase !== 'idle'
+	);
+	$effect(() => {
+		if (!signingInFlight) return;
+		return oneSurface.hold();
+	});
 	/**
 	 * The signing sheet's OWN fee session. It used to be handed Send's, which was
 	 * harmless only while nothing priced a signing request; now the host asks for
@@ -2240,6 +2259,21 @@
 	 * narrow to it. Shell state, as the sidebar's is.
 	 */
 	let chainSheetOpen = $state(false);
+	/**
+	 * The phone home says when that filter narrows it, with the way back: the
+	 * side panel showed one network's tokens under the whole wallet's total,
+	 * and nothing on the home said so (the owner's report).
+	 */
+	const homeNarrowed = $derived(
+		chainFilter.chainId === null
+			? undefined
+			: {
+					label: fill(data.walletMessages.networkFilter.only, {
+						network: chainName(chainFilter.chainId)
+					}),
+					action: data.walletMessages.networkFilter.showEvery
+				}
+	);
 	const chainRows = $derived(
 		liveChainRows(
 			balance.view,
@@ -2738,6 +2772,8 @@
 					onactivity={openActivity}
 					ongroupaction={groupAction}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
+					narrowed={homeNarrowed}
+					onshowall={() => chainFilter.select(null)}
 				/>
 				{#if shownFlowState !== undefined}
 					<!-- Note 16: a transaction or a holding tapped on the home opens

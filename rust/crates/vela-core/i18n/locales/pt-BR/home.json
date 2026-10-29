@@ -310,6 +310,7 @@
     "syncStalledLine": "Salva neste dispositivo · ainda não sincronizada",
     "totalUnpriced": "Ainda sem preço",
     "allUnpriced": "Não foi possível obter o preço de nenhum dos seus tokens.",
-    "currencyUnavailable": "Não é possível carregar as cotações de {{code}} agora — os valores estão em dólares americanos."
+    "currencyUnavailable": "Não é possível carregar as cotações de {{code}} agora — os valores estão em dólares americanos.",
+    "networkFilterOnly": "Mostrando só {{network}}"
   }
 }

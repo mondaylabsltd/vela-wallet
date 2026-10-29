@@ -1055,6 +1055,71 @@ describe('the toolbar button (089)', () => {
 		);
 		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
 	});
+
+	/**
+	 * One wallet per window (the owner's report: a wallet tab and the side
+	 * panel in one window, disagreeing). The button pressed in a window with
+	 * a wallet tab goes to THAT tab — focused, not reloaded under the person
+	 * — and the window's side panel closes where Chrome can (141+), unless it
+	 * owes a dApp's request.
+	 */
+	it('focuses the wallet tab of the window it was pressed in, without reloading it', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{ id: 41, windowId: 9, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' },
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/settings.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledTimes(1);
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(42, { active: true });
+		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
+	});
+
+	it('opens a wallet tab in the window it was pressed in', async () => {
+		const env = makeEnv();
+		withTabs(env, []);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html',
+			windowId: 3
+		});
+	});
+
+	it('closes that window’s side panel where Chrome can, the panel owing nothing', async () => {
+		const env = makeEnv();
+		const close = vi.fn(async () => {});
+		(env.chrome.sidePanel as any).close = close;
+		withTabs(env, [
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(close).toHaveBeenCalledWith({ windowId: 3 });
+	});
+
+	it('never closes a side panel that owes a request — spec 082 answers it there', async () => {
+		const env = makeEnv();
+		const close = vi.fn(async () => {});
+		(env.chrome.sidePanel as any).close = close;
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'u1:1');
+		env.panel(3);
+		await settleAll();
+		withTabs(env, [
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(42, { active: true });
+		expect(close).not.toHaveBeenCalled();
+		expect(reqKeys(env.session)).toEqual(['vela.req.7:u1:1']);
+	});
 });
 
 describe('where the worker opens a surface (issue 317)', () => {

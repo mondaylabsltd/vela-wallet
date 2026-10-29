@@ -310,6 +310,7 @@
     "syncStalledLine": "Salvato su questo dispositivo · non ancora sincronizzato",
     "totalUnpriced": "Ancora nessun prezzo",
     "allUnpriced": "Non è stato possibile ottenere il prezzo di nessuno dei tuoi token.",
-    "currencyUnavailable": "Al momento non è possibile caricare i tassi in {{code}}: gli importi sono in dollari USA."
+    "currencyUnavailable": "Al momento non è possibile caricare i tassi in {{code}}: gli importi sono in dollari USA.",
+    "networkFilterOnly": "Solo {{network}}"
   }
 }

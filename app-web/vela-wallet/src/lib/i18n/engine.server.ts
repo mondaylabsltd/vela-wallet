@@ -251,7 +251,9 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		networkFilter: {
 			pillAll: k('componentsUi.networkFilter.pillAll'),
 			sheetTitle: k('componentsUi.networkFilter.selectChain'),
-			allNetworks: k('componentsUi.networkFilter.allNetworks')
+			allNetworks: k('componentsUi.networkFilter.allNetworks'),
+			only: k('home.networkFilterOnly'),
+			showEvery: k('componentsUi.networkFilter.showEvery')
 		},
 		sidebar: {
 			networks: k('settingsModals.network.modalTitle')
@@ -1200,7 +1202,14 @@ export function resolveExtensionMessages(locale: Locale): ExtensionMessages {
 		installedNote: k('connect.ext.installedNote'),
 		accessNote: k('connect.ext.accessNote'),
 		accessAllow: k('connect.ext.accessAllow'),
-		dismiss: k('common.gotIt')
+		dismiss: k('common.gotIt'),
+		openInTabTitle: k('connect.ext.openInTabTitle'),
+		openInTabBody: k('connect.ext.openInTabBody'),
+		goToTab: k('connect.ext.goToTab'),
+		useHereInstead: k('connect.ext.useHereInstead'),
+		openInPanelTitle: k('connect.ext.openInPanelTitle'),
+		openInPanelBody: k('connect.ext.openInPanelBody'),
+		goToPanel: k('connect.ext.goToPanel')
 	};
 }
 

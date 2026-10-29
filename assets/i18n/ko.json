@@ -657,7 +657,8 @@
   "syncStalledLine": "이 기기에 저장됨 · 아직 동기화되지 않음",
   "totalUnpriced": "아직 가격 없음",
   "allUnpriced": "보유한 토큰의 가격을 하나도 가져오지 못했습니다.",
-  "currencyUnavailable": "지금은 {{code}} 환율을 불러올 수 없어 금액을 미국 달러로 표시합니다."
+  "currencyUnavailable": "지금은 {{code}} 환율을 불러올 수 없어 금액을 미국 달러로 표시합니다.",
+  "networkFilterOnly": "{{network}}만 표시 중"
  },
  "send": {
   "filterStable": "스테이블코인",
@@ -1453,7 +1454,14 @@
   "ext": {
    "installedNote": "이미 열려 있던 탭을 새로고침해야 사이트에서 Vela를 찾을 수 있습니다.",
    "accessNote": "사이트 액세스가 제한되어 사이트에서 Vela를 찾을 수 없고 패스키도 쓸 수 없습니다.",
-   "accessAllow": "액세스 허용"
+   "accessAllow": "액세스 허용",
+   "openInTabTitle": "Vela가 탭에서 열려 있습니다",
+   "openInTabBody": "창 하나에 지갑 하나: 그 탭이 열려 있는 동안 사이드 패널은 물러나 있습니다. 여기 있던 내용은 그대로 남아 있습니다.",
+   "goToTab": "탭으로 이동",
+   "useHereInstead": "대신 여기서 사용",
+   "openInPanelTitle": "Vela가 사이드 패널에서 열려 있습니다",
+   "openInPanelBody": "창 하나에 지갑 하나: 사이드 패널을 쓰는 동안 이 탭은 물러나 있습니다. 여기 있던 내용은 그대로 남아 있습니다.",
+   "goToPanel": "사이드 패널로 이동"
   }
  },
  "signHandoff": {
