@@ -572,7 +572,8 @@
     "notFound": "Nenhuma multisig com este endereço é conhecida ainda. Se ela acabou de ser criada, tente de novo em um minuto.",
     "unavailable": "Não foi possível acessar o serviço. Tente novamente.",
     "unsupported": "Esta versão do Safe ainda não é compatível.",
-    "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler."
+    "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler.",
+    "chooseNetwork": "Ainda nada indica em qual rede este multisig é usado. Escolha a rede dele:"
    },
    "external": {
     "pageTitle": "Assinar para a Vela",

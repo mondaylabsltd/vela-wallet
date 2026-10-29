@@ -570,7 +570,8 @@
     "notFound": "還沒有找到這個地址的多簽設定。如果剛建立，請稍後再試。",
     "unavailable": "暫時無法連線服務，請重試。",
     "unsupported": "暫不支援這個版本的 Safe。",
-    "notMultisig": "這個地址不是 Vela 能辨識的多簽帳戶。"
+    "notMultisig": "這個地址不是 Vela 能辨識的多簽帳戶。",
+    "chooseNetwork": "目前還無法得知這個多簽用在哪個網路上，請選擇它的網路："
    },
    "external": {
     "pageTitle": "為 Vela 簽署",

@@ -570,7 +570,8 @@
     "notFound": "Chưa biết đa chữ ký nào có địa chỉ này. Nếu vừa tạo, hãy thử lại sau một phút.",
     "unavailable": "Không kết nối được dịch vụ. Hãy thử lại.",
     "unsupported": "Phiên bản Safe này chưa được hỗ trợ.",
-    "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được."
+    "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
+    "chooseNetwork": "Chưa có thông tin multisig này được dùng trên mạng nào. Hãy chọn mạng của nó:"
    },
    "external": {
     "pageTitle": "Ký cho Vela",

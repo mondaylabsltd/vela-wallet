@@ -570,7 +570,8 @@
     "notFound": "No multisig with this address is known yet. If it was just created, try again in a minute.",
     "unavailable": "Couldn't reach the service. Try again.",
     "unsupported": "This Safe's version isn't supported yet.",
-    "notMultisig": "This address isn't a multisig Vela can read."
+    "notMultisig": "This address isn't a multisig Vela can read.",
+    "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network:"
    },
    "external": {
     "pageTitle": "Sign with your wallet for Vela",
