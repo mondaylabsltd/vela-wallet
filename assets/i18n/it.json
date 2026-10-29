@@ -27,13 +27,15 @@
    "localization": "Lingua e formati",
    "advanced": "Avanzate",
    "community": "Community",
+   "privacy": "Privacy",
    "developer": "Sviluppatore"
   },
   "account": {
    "switch": "Cambia account",
    "contactsSubtitle": "Indirizzi salvati e destinatari recenti",
    "remove": "Rimuovi da questo dispositivo",
-   "removeBody": "Se ne va solo questo portafoglio, gli altri restano."
+   "removeBody": "Se ne va solo questo portafoglio, gli altri restano.",
+   "openInSafe": "Questo account è un Safe standard: puoi aprirlo anche in {{app}}"
   },
   "appearance": {
    "themeLight": "Chiaro",
@@ -1497,12 +1499,12 @@
   "techNetworksLabel": "Reti",
   "techNetworksValue": "{{count}} reti EVM",
   "linkWebsite": "Sito web",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Codice open source",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Informativa sulla privacy",
   "linkTerms": "Termini di servizio",
   "linkSupport": "Assistenza",
-  "footer": "Realizzato con cura. Le tue chiavi, le tue cripto.",
+  "footer": "Il portafoglio Ethereum davvero tuo",
   "sectionLinks": "Link",
   "debugMode": "Modalità debug",
   "debugModeBody": "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",

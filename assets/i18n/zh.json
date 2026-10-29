@@ -27,13 +27,15 @@
    "localization": "区域格式",
    "advanced": "高级",
    "community": "社区",
+   "privacy": "隐私",
    "developer": "开发者"
   },
   "account": {
    "switch": "切换账户",
    "contactsSubtitle": "已保存地址与最近收款人",
    "remove": "从这台设备移除",
-   "removeBody": "只有这个钱包离开，其余的不动。"
+   "removeBody": "只有这个钱包离开，其余的不动。",
+   "openInSafe": "这个账户是标准的 Safe，你也可以在 {{app}} 中打开它"
   },
   "appearance": {
    "themeLight": "浅色",
@@ -1490,12 +1492,12 @@
   "techNetworksLabel": "网络",
   "techNetworksValue": "{{count}} 条 EVM 链",
   "linkWebsite": "官网",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "开源代码",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "隐私政策",
   "linkTerms": "服务条款",
   "linkSupport": "帮助与支持",
-  "footer": "用心构建。您的密钥，您的资产。",
+  "footer": "真正属于你的以太坊钱包",
   "sectionLinks": "链接",
   "debugMode": "调试模式",
   "debugModeBody": "让局域网内的 http 网页使用钱包。仅供开发使用。",

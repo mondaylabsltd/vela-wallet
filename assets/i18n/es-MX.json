@@ -27,13 +27,15 @@
    "localization": "Regional",
    "advanced": "Avanzado",
    "community": "Comunidad",
+   "privacy": "Privacidad",
    "developer": "Desarrollador"
   },
   "account": {
    "switch": "Cambiar de cuenta",
    "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
    "remove": "Quitar de este dispositivo",
-   "removeBody": "Solo se va esta cartera; las demás se quedan."
+   "removeBody": "Solo se va esta cartera; las demás se quedan.",
+   "openInSafe": "Esta cuenta es un Safe estándar: también puedes abrirla en {{app}}"
   },
   "appearance": {
    "themeLight": "Claro",
@@ -1497,12 +1499,12 @@
   "techNetworksLabel": "Redes",
   "techNetworksValue": "{{count}} cadenas EVM",
   "linkWebsite": "Sitio web",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Código abierto",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Política de privacidad",
   "linkTerms": "Términos del servicio",
   "linkSupport": "Soporte",
-  "footer": "Hecho con cariño. Tus llaves, tus monedas.",
+  "footer": "La cartera de Ethereum que de verdad es tuya",
   "sectionLinks": "Enlaces",
   "debugMode": "Modo de depuración",
   "debugModeBody": "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",

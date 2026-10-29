@@ -27,13 +27,15 @@
    "localization": "Регион и форматы",
    "advanced": "Дополнительно",
    "community": "Сообщество",
+   "privacy": "Конфиденциальность",
    "developer": "Для разработчиков"
   },
   "account": {
    "switch": "Сменить аккаунт",
    "contactsSubtitle": "Сохранённые адреса и недавние получатели",
    "remove": "Убрать с этого устройства",
-   "removeBody": "Уходит только этот кошелёк, остальные остаются."
+   "removeBody": "Уходит только этот кошелёк, остальные остаются.",
+   "openInSafe": "Этот аккаунт — стандартный Safe: его можно открыть и в {{app}}"
   },
   "appearance": {
    "themeLight": "Светлая",
@@ -1504,12 +1506,12 @@
   "techNetworksLabel": "Сети",
   "techNetworksValue": "{{count}} сетей EVM",
   "linkWebsite": "Сайт",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Открытый исходный код",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Политика конфиденциальности",
   "linkTerms": "Условия использования",
   "linkSupport": "Поддержка",
-  "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
+  "footer": "Ethereum-кошелёк, который по-настоящему ваш",
   "sectionLinks": "Ссылки",
   "debugMode": "Режим отладки",
   "debugModeBody": "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",

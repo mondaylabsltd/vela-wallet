@@ -27,13 +27,15 @@
    "localization": "Localisation",
    "advanced": "Avancé",
    "community": "Communauté",
+   "privacy": "Confidentialité",
    "developer": "Développeur"
   },
   "account": {
    "switch": "Changer de compte",
    "contactsSubtitle": "Adresses enregistrées et destinataires récents",
    "remove": "Retirer de cet appareil",
-   "removeBody": "Seul ce portefeuille part, les autres restent."
+   "removeBody": "Seul ce portefeuille part, les autres restent.",
+   "openInSafe": "Ce compte est un Safe standard — vous pouvez aussi l’ouvrir dans {{app}}"
   },
   "appearance": {
    "themeLight": "Clair",
@@ -1497,12 +1499,12 @@
   "techNetworksLabel": "Réseaux",
   "techNetworksValue": "{{count}} chaînes EVM",
   "linkWebsite": "Site web",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Code open source",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Politique de confidentialité",
   "linkTerms": "Conditions d'utilisation",
   "linkSupport": "Assistance",
-  "footer": "Conçu avec soin. Vos clés, vos cryptos.",
+  "footer": "Le portefeuille Ethereum qui vous appartient vraiment",
   "sectionLinks": "Liens",
   "debugMode": "Mode débogage",
   "debugModeBody": "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",

@@ -27,13 +27,15 @@
    "localization": "Localização",
    "advanced": "Avançado",
    "community": "Comunidade",
+   "privacy": "Privacidade",
    "developer": "Desenvolvedor"
   },
   "account": {
    "switch": "Trocar de conta",
    "contactsSubtitle": "Endereços salvos e destinatários recentes",
    "remove": "Remover deste dispositivo",
-   "removeBody": "Só esta carteira sai; as outras ficam."
+   "removeBody": "Só esta carteira sai; as outras ficam.",
+   "openInSafe": "Esta conta é um Safe padrão — você também pode abri-la no {{app}}"
   },
   "appearance": {
    "themeLight": "Claro",
@@ -1497,12 +1499,12 @@
   "techNetworksLabel": "Redes",
   "techNetworksValue": "{{count}} chains EVM",
   "linkWebsite": "Site",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Código aberto",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Política de Privacidade",
   "linkTerms": "Termos de Serviço",
   "linkSupport": "Suporte",
-  "footer": "Feito com cuidado. Suas chaves, suas moedas.",
+  "footer": "A carteira Ethereum que é realmente sua",
   "sectionLinks": "Links",
   "debugMode": "Modo de depuração",
   "debugModeBody": "Permite que páginas http da sua rede local usem a carteira. Só para desenvolvimento.",

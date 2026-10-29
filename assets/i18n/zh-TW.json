@@ -27,13 +27,15 @@
    "localization": "在地化",
    "advanced": "進階",
    "community": "社群",
+   "privacy": "隱私",
    "developer": "開發者"
   },
   "account": {
    "switch": "切換帳戶",
    "contactsSubtitle": "已儲存的地址與最近收款人",
    "remove": "從這台裝置移除",
-   "removeBody": "只有這個錢包離開，其餘的不動。"
+   "removeBody": "只有這個錢包離開，其餘的不動。",
+   "openInSafe": "這個帳戶是標準的 Safe，你也可以在 {{app}} 中開啟它"
   },
   "appearance": {
    "themeLight": "淺色",
@@ -1490,12 +1492,12 @@
   "techNetworksLabel": "網路",
   "techNetworksValue": "{{count}} 條 EVM 鏈",
   "linkWebsite": "官方網站",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "開源程式碼",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "隱私政策",
   "linkTerms": "服務條款",
   "linkSupport": "說明與支援",
-  "footer": "用心打造。您的金鑰，您的幣。",
+  "footer": "真正屬於你的以太坊錢包",
   "sectionLinks": "連結",
   "debugMode": "除錯模式",
   "debugModeBody": "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",

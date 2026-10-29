@@ -27,13 +27,15 @@
    "localization": "Lokalisierung",
    "advanced": "Erweitert",
    "community": "Community",
+   "privacy": "Datenschutz",
    "developer": "Entwickler"
   },
   "account": {
    "switch": "Konto wechseln",
    "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
    "remove": "Von diesem Gerät entfernen",
-   "removeBody": "Nur diese Wallet geht, die anderen bleiben."
+   "removeBody": "Nur diese Wallet geht, die anderen bleiben.",
+   "openInSafe": "Dieses Konto ist ein Standard-Safe – du kannst es auch in {{app}} öffnen"
   },
   "appearance": {
    "themeLight": "Hell",
@@ -1490,12 +1492,12 @@
   "techNetworksLabel": "Netzwerke",
   "techNetworksValue": "{{count}} EVM-Chains",
   "linkWebsite": "Website",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Open-Source-Code",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Datenschutzerklärung",
   "linkTerms": "Nutzungsbedingungen",
   "linkSupport": "Support",
-  "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
+  "footer": "Die Ethereum-Wallet, die wirklich dir gehört",
   "sectionLinks": "Links",
   "debugMode": "Debug-Modus",
   "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
