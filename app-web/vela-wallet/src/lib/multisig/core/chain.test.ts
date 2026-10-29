@@ -1,7 +1,8 @@
 /**
- * Where a multisig can live: a chain with code at the Safe v1.4.1 contracts
- * its genesis names (factory, singleton, fallback handler) — read here with
- * the wallet's own RPC, judged by the core. The registry plays no part.
+ * Where a multisig can live: a chain with Safe's own code at the Safe v1.4.1
+ * contracts its genesis names (factory, singleton, fallback handler) — read
+ * here with the wallet's own RPC, judged by the core against each contract's
+ * code hash. The registry plays no part.
  */
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,14 @@ import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
 const HANDLER = '0xfd0732dc9e303f09fcef3a7388ad10a83459ec99';
+/** Safe's own runtime code, as Gnosis holds it (the core's vectors). */
+const code = (name: string) =>
+	readFileSync(`../../rust/crates/vela-core/tests/vectors/safe-code/${name}.hex`, 'utf8').trim();
+const SAFE_CODE: Record<string, string> = {
+	'0x4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67': code('safe-proxy-factory-1.4.1'),
+	'0x29fcb43b46531bca003ddc8fcb67ffe91900c762': code('safe-l2-1.4.1'),
+	[HANDLER]: code('compatibility-fallback-handler-1.4.1')
+};
 
 const seams = vi.hoisted(() => ({
 	/** Per chain: what `eth_getCode` answers for the handler, or `throw`. */
@@ -18,10 +27,11 @@ const seams = vi.hoisted(() => ({
 vi.mock('$lib/services/rpc-pool', () => ({
 	poolRpcCall: async (_method: string, params: [string], chainId: number) => {
 		seams.asked.push(chainId);
-		if (params[0].toLowerCase() !== HANDLER) return { result: '0x6080' };
-		const code = seams.handler[chainId] ?? '0x6080';
-		if (code === 'throw') throw new Error('no answer');
-		return { result: code };
+		const at = params[0].toLowerCase();
+		if (at !== HANDLER) return { result: SAFE_CODE[at] ?? '0x' };
+		const answer = seams.handler[chainId] ?? SAFE_CODE[HANDLER];
+		if (answer === 'throw') throw new Error('no answer');
+		return { result: answer };
 	}
 }));
 
@@ -45,10 +55,18 @@ describe('the Safe contracts on a chain', () => {
 		});
 	});
 
+	it('missing too: code at its address that is not Safe’s', async () => {
+		seams.handler[998] = '0x6080604052';
+		expect(await safeContractsOn(998)).toEqual({
+			kind: 'missing',
+			names: ['Compatibility Fallback Handler']
+		});
+	});
+
 	it('unknown when the chain does not answer, and asked again next time', async () => {
 		seams.handler[8453] = 'throw';
 		expect(await safeContractsOn(8453)).toEqual({ kind: 'unknown' });
-		seams.handler[8453] = '0x6080';
+		seams.handler[8453] = SAFE_CODE[HANDLER];
 		expect(await safeContractsOn(8453)).toEqual({ kind: 'present' });
 		// A verdict is kept: asked once a session.
 		seams.asked = [];

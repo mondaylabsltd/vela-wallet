@@ -46,7 +46,9 @@
 		shortenAddress,
 		tokenInfo
 	} from '../core/display';
+	import { GenesisRefusedError } from '../core/refusal';
 	import { ExecutorCannotPayError, relayRefused } from '../core/execute';
+	import { refusalText } from './findings';
 	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
 	import { memberDrift, sameAddress, transfersOf } from '../core/kernel';
@@ -265,6 +267,15 @@
 			});
 		}
 		if (error instanceof MailboxUnreadableError) return m.proposal.mailboxDown;
+		// §3.5: the executor deploys only a genesis the core finds Verified there.
+		if (error instanceof GenesisRefusedError) {
+			const network = chainName(error.chainId);
+			if (error.authority.kind === 'unknown') {
+				return fillTemplate(m.authority.deployUnverified, { network });
+			}
+			const why = error.authority.reasons.map((r) => refusalText(m, r, error.chainId));
+			return [fillTemplate(m.authority.deployRefused, { network }), ...new Set(why)].join(' ');
+		}
 		return error instanceof Error ? error.message : String(error);
 	}
 

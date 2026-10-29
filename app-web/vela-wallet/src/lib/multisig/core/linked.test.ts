@@ -115,4 +115,13 @@ describe('a proposal link opened here (ms-21)', () => {
 		fake.found = { ok: false, reason: 'unavailable' };
 		expect(await openProposalLink(LINK)).toEqual({ kind: 'failed', reason: 'unavailable' });
 	});
+
+	it('a genesis the core refuses, or a high-risk multisig: nothing read, nothing kept', async () => {
+		for (const reason of ['refused', 'highRisk', 'unverified']) {
+			fake.found = { ok: false, reason };
+			expect(await openProposalLink(LINK)).toEqual({ kind: 'failed', reason });
+		}
+		expect(fake.reads).toBe(0);
+		expect(fake.writes).toEqual([]);
+	});
 });

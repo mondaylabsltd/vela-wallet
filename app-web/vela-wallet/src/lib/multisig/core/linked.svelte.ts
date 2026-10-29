@@ -70,8 +70,24 @@ export type LinkOpening =
 	| { kind: 'member'; account: MultisigAccount; added: boolean }
 	/** None is: the transaction, read only — nothing added, nothing switched. */
 	| { kind: 'preview'; source: LinkedProposals; added: boolean }
-	/** The multisig could not be found or read. */
-	| { kind: 'failed'; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' };
+	/**
+	 * The multisig could not be found or read — or who can act for it is not
+	 * only its members (§3.5): its genesis refused (`refused`), not checkable
+	 * yet (`unverified`), or deployed with more than its members acting for
+	 * it (`highRisk`). Nothing of it is read or signed here; the add sheet
+	 * says why, and only the person's explicit tap adds a high-risk one.
+	 */
+	| {
+			kind: 'failed';
+			reason:
+				| 'notFound'
+				| 'unavailable'
+				| 'unsupported'
+				| 'notMultisig'
+				| 'refused'
+				| 'unverified'
+				| 'highRisk';
+	  };
 
 /** How the link's transaction opens here. Changes nothing on this device. */
 export async function openProposalLink(link: ProposalLink): Promise<LinkOpening> {

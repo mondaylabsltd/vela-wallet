@@ -134,6 +134,12 @@ export interface ExecutionPlan {
 	approvals: Approval[];
 	/** The executor when it is an owner (it approves as `msg.sender`); `null` for any other sender. */
 	executor: string | null;
+	/**
+	 * The code of what `deployMultisig` depends on, read on the chain just now
+	 * ({@link counterfactualReads}): the core deploys it only from a genesis
+	 * Verified there.
+	 */
+	deployFacts?: ChainFacts | null;
 }
 
 /** One Safe in a Safe{Wallet} export, across the chains it is listed on. */
@@ -439,3 +445,81 @@ export type ServiceAnswer =
 /** Whether a health answer (its status and body text) is a multisig service's. */
 export const serviceAnswer = (status: number, body: string) =>
 	call<ServiceAnswer>('serviceAnswer', { status, body });
+
+// -- who can act for a Safe: its chain, or the counterfactual rule (§3.5) ----------
+
+/** `eth_getCode` answers on one chain, by address (`null`: the chain did not answer). */
+export interface ChainFacts {
+	codes: Record<string, string | null>;
+}
+
+/** Why a genesis is not the Safe it claims, or cannot be stood behind on a chain (the core's). */
+export type Refusal =
+	| { kind: 'wrongAddress' }
+	| { kind: 'notSetup' }
+	| { kind: 'badMembers' }
+	| { kind: 'unknownFactory'; address: string }
+	| { kind: 'unknownSingleton'; address: string }
+	/** Its setup enables a module: it can move funds without the members. */
+	| { kind: 'module'; address: string }
+	/** Its setup runs code there (a delegatecall) Vela cannot read in full. */
+	| { kind: 'setupCode'; address: string }
+	| { kind: 'handler'; address: string }
+	/** Its setup pays `amount` (base units) of `token` (zero: the coin) to `receiver` on deployment. */
+	| { kind: 'payment'; token: string; amount: string; receiver: string }
+	| { kind: 'missingCode'; name: string; address: string }
+	| { kind: 'wrongCode'; name: string; address: string };
+
+/** Who can act for a Safe not deployed on a chain yet, once deployed there (the core's verdict). */
+export type Authority =
+	| { kind: 'verified'; owners: string[]; threshold: number }
+	| { kind: 'refused'; reasons: Refusal[] }
+	/** Nothing wrong found, but the chain did not answer for these: not verified yet. */
+	| { kind: 'unknown'; unread: string[] };
+
+/** The contracts whose code the counterfactual verdict needs read on the target chain. */
+export const counterfactualReads = (genesis: Genesis, safe: string) =>
+	call<string[]>('counterfactualReads', { genesis, safe });
+
+/** The core's counterfactual verdict for `safe` from `genesis`, with the target chain's code. */
+export const counterfactualAuthority = (genesis: Genesis, safe: string, facts: ChainFacts) =>
+	call<Authority>('counterfactualAuthority', { genesis, safe, facts });
+
+/** What can act for a deployed Safe besides its members, as its chain shows (the core's). */
+export type Risk =
+	| { kind: 'module'; address: string }
+	| { kind: 'guard'; address: string }
+	| { kind: 'handler'; address: string }
+	| { kind: 'singleton'; address: string };
+
+/** The reads a deployed Safe's check takes: `getModulesPaginated` call data and storage slots. */
+export interface DeployedReads {
+	modulesCall: string;
+	guardSlot: string;
+	moduleGuardSlot: string;
+	handlerSlot: string;
+	singletonSlot: string;
+}
+
+/** What was read on a deployed Safe's chain (`null`: the chain did not answer). */
+export interface DeployedFacts {
+	modules: string | null;
+	guard: string | null;
+	moduleGuard: string | null;
+	handler: string | null;
+	singleton: string | null;
+	codes: Record<string, string | null>;
+}
+
+export interface DeployedCheck {
+	risks: Risk[];
+	/** Read `eth_getCode` of these and ask again with them in `codes`. */
+	needCode: string[];
+	/** The chain did not answer for something: nothing can be said yet. */
+	unread: boolean;
+}
+
+export const deployedReads = () => call<DeployedReads>('deployedReads', {});
+
+export const deployedCheck = (facts: DeployedFacts) =>
+	call<DeployedCheck>('deployedCheck', { facts });

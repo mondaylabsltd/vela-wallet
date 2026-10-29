@@ -10,6 +10,11 @@
 	 * Or importing Safes from a Safe{Wallet} export: the file is read by the
 	 * core on this device, the person picks the Safes, and each is imported
 	 * with a genesis the core re-derives its address from (`importExported`).
+	 *
+	 * Who can act for it is the chain's, or the core's counterfactual rule
+	 * (§3.5): a genesis it refuses is said with every reason and nothing adds
+	 * it; a deployed one something besides its members can act for is shown
+	 * with what that is, and added only on the person's explicit tap.
 	 */
 	import { untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -21,9 +26,11 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
-	import { addMultisig, importExported } from '../core/accounts';
+	import { addMultisig, importExported, type AddOutcome } from '../core/accounts';
+	import type { Finding } from '../core/refusal';
 	import { parseSafeExport, type ExportedSafe } from '../core/kernel';
 	import { multisig } from '../core/store.svelte';
+	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -51,8 +58,12 @@
 	let choosing = $state(false);
 	let chosen = $state<number | null>(null);
 	let menuOpen = $state(false);
+	/** The core refused its genesis: why, every reason — and nothing adds it. */
+	let refused = $state<Finding[] | null>(null);
+	/** Deployed, and more than its members can act for it: added only on the person's tap. */
+	let risky = $state<Finding[] | null>(null);
 
-	async function add() {
+	async function add(acceptRisks = false) {
 		if (!valid) {
 			failure = entry === 'checksum' ? m.send.invalidChecksum : m.send.invalidAddress;
 			return;
@@ -60,15 +71,26 @@
 		if (choosing && chosen === null) return;
 		busy = true;
 		failure = null;
+		refused = null;
+		if (!acceptRisks) risky = null;
 		const outcome = await addMultisig(
 			address.trim(),
 			networks.map((n) => n.chainId),
-			choosing && chosen !== null ? chosen : undefined
+			choosing && chosen !== null ? chosen : undefined,
+			{ acceptRisks }
 		);
 		busy = false;
+		said(outcome);
+	}
+
+	function said(outcome: AddOutcome) {
 		if (outcome.ok) onadded(outcome.account.address);
 		else if (outcome.reason === 'chooseNetwork') choosing = true;
-		else failure = m.add[outcome.reason];
+		else if (outcome.reason === 'refused') refused = outcome.findings;
+		else if (outcome.reason === 'highRisk') risky = outcome.findings;
+		else if (outcome.reason === 'unverified') {
+			failure = fillTemplate(m.authority.unverified, { network: chainName(outcome.chainId) });
+		} else failure = m.add[outcome.reason];
 	}
 
 	$effect(() => {
@@ -81,8 +103,23 @@
 	let picked = $state<string[]>([]);
 	let fileFailure = $state<string | null>(null);
 	let results = $state<
-		Record<string, 'busy' | 'ok' | 'notFound' | 'unavailable' | 'unsupported' | 'notDeployed'>
+		Record<
+			string,
+			| 'busy'
+			| 'ok'
+			| 'notFound'
+			| 'unavailable'
+			| 'unsupported'
+			| 'notDeployed'
+			| 'refused'
+			| 'highRisk'
+			| 'unverified'
+		>
 	>({});
+	/** What the core found for a Safe it refused, or one only its person's tap imports. */
+	let found = $state<Record<string, Finding[]>>({});
+	/** Where a Safe could not be checked. */
+	let unchecked = $state<Record<string, number>>({});
 	const importing = $derived(Object.values(results).some((r) => r === 'busy'));
 	const finished = $derived(
 		exported !== null &&
@@ -117,10 +154,20 @@
 	async function importPicked() {
 		if (!exported) return;
 		for (const safe of exported.filter((s) => picked.includes(s.address))) {
-			results = { ...results, [safe.address]: 'busy' };
-			const outcome = await importExported(safe);
-			results = { ...results, [safe.address]: outcome.ok ? 'ok' : outcome.reason };
+			if (results[safe.address] === 'ok') continue;
+			await importOne(safe);
 		}
+	}
+
+	async function importOne(safe: ExportedSafe, acceptRisks = false) {
+		results = { ...results, [safe.address]: 'busy' };
+		const outcome = await importExported(safe, { acceptRisks });
+		if (!outcome.ok && 'findings' in outcome)
+			found = { ...found, [safe.address]: outcome.findings };
+		if (!outcome.ok && outcome.reason === 'unverified') {
+			unchecked = { ...unchecked, [safe.address]: outcome.chainId };
+		}
+		results = { ...results, [safe.address]: outcome.ok ? 'ok' : outcome.reason };
 	}
 
 	function rule(safe: ExportedSafe): string {
@@ -161,6 +208,14 @@
 								{m.import.importing}
 							{:else if result === 'ok'}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />{m.import.imported}
+							{:else if result === 'refused' || result === 'highRisk'}
+								<!-- Said below, in full. -->
+							{:else if result === 'unverified'}
+								<span class="error"
+									>{fillTemplate(m.authority.unverified, {
+										network: chainName(unchecked[safe.address] ?? 0)
+									})}</span
+								>
 							{:else if result}
 								<span class="error"
 									>{result === 'notDeployed' ? m.import.notDeployed : m.add[result]}</span
@@ -168,6 +223,23 @@
 							{/if}
 						</span>
 					</label>
+					{#if result === 'refused' || result === 'highRisk'}
+						<div class="found">
+							<AuthorityNotice
+								{m}
+								kind={result === 'refused' ? 'refused' : 'risk'}
+								findings={found[safe.address] ?? []}
+							/>
+							{#if result === 'highRisk'}
+								<Button
+									variant="danger"
+									shape="rounded"
+									disabled={importing}
+									onclick={() => void importOne(safe, true)}>{m.authority.riskConfirm}</Button
+								>
+							{/if}
+						</div>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -202,12 +274,25 @@
 				bind:value={address}
 				oninput={() => {
 					failure = null;
+					refused = null;
+					risky = null;
 					choosing = false;
 					chosen = null;
 				}}
-				aria-invalid={failure !== null}
+				aria-invalid={failure !== null || refused !== null}
 			/>
 			{#if failure}<p class="error" role="alert">{failure}</p>{/if}
+			{#if refused}<AuthorityNotice {m} kind="refused" findings={refused} />{/if}
+			{#if risky}
+				<AuthorityNotice {m} kind="risk" findings={risky} />
+				<Button
+					variant="danger"
+					shape="rounded"
+					loading={busy}
+					disabled={busy}
+					onclick={() => void add(true)}>{m.authority.riskConfirm}</Button
+				>
+			{/if}
 			{#if choosing}
 				<p class="choose" role="status">{m.add.chooseNetwork}</p>
 				<Dropdown
@@ -226,13 +311,15 @@
 					}}
 				/>
 			{/if}
-			<Button
-				variant="primary"
-				shape="rounded"
-				loading={busy}
-				disabled={busy || (choosing && chosen === null)}
-				onclick={() => void add()}>{m.add.add}</Button
-			>
+			{#if !risky}
+				<Button
+					variant="primary"
+					shape="rounded"
+					loading={busy}
+					disabled={busy || refused !== null || (choosing && chosen === null)}
+					onclick={() => void add()}>{m.add.add}</Button
+				>
+			{/if}
 		</form>
 
 		<section class="import">
@@ -359,6 +446,13 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
+	}
+
+	.found {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+		padding-block-end: var(--space-sm);
 	}
 
 	.choose {

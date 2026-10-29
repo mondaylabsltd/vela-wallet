@@ -28,6 +28,8 @@
 //!   whether Vela signs it at all. Vela signs only shapes it can read in full,
 //!   with no delegatecall (except to MultiSendCallOnly) and no gas refund.
 
+use std::collections::BTreeMap;
+
 use alloy_primitives::{keccak256, Address, B256, U256};
 use serde::{Deserialize, Serialize};
 
@@ -294,6 +296,7 @@ fn encode_setup(owners: &[Address], threshold: u64, fallback_handler: Address) -
 }
 
 /// `setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)`.
+#[derive(Clone)]
 struct SetupArgs {
     owners: Vec<Address>,
     threshold: U256,
@@ -1385,6 +1388,11 @@ pub struct ExecutionPlan {
     /// must meet the threshold.
     #[serde(default)]
     pub executor: Option<String>,
+    /// The code of what `deploy_multisig` depends on, read on the chain just
+    /// now ([`counterfactual_reads`]): the multisig is deployed only if its
+    /// genesis is Verified there ([`counterfactual_authority`]).
+    #[serde(default)]
+    pub deploy_facts: Option<ChainFacts>,
 }
 
 /// Whether `tx` is the multisig renaming its own record (`rename(name)` to
@@ -1403,6 +1411,10 @@ fn is_rename(tx: &SafeTx) -> bool {
 /// registry's chain to rename its record would create it there with its
 /// ORIGINAL members, whoever controls it on its other networks now. A rename
 /// runs only where the multisig is deployed already.
+///
+/// The multisig is deployed only from a genesis Verified on this chain — with
+/// the chain's code in `deploy_facts` — never one that would hand it to
+/// anything but its members.
 pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
     let mut calls = Vec::new();
     if let Some(g) = &plan.deploy_multisig {
@@ -1414,6 +1426,7 @@ pub fn execution_calls(plan: &ExecutionPlan) -> Result<Vec<Call>, CoreError> {
         if genesis_address(g)? != addr(&plan.multisig)?.to_checksum(None) {
             return Err(err("the genesis does not deploy this multisig"));
         }
+        deploy_verified(plan, g)?;
         calls.push(deploy_call(g)?);
     }
     for g in &plan.deploy_owners {
@@ -2024,9 +2037,10 @@ pub const MULTISIG_CONTRACTS: [(&str, &str); 3] = [
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SafeContracts {
-    /// Every one has code there.
+    /// Every one holds Safe's own code there.
     Present,
-    /// These have no code there: it cannot be deployed on this chain.
+    /// These have no code there, or code that is not Safe's: it cannot be
+    /// deployed on this chain.
     Missing { names: Vec<String> },
     /// The chain did not answer for some, and none of those it answered for
     /// is missing: nothing can be said either way.
@@ -2036,19 +2050,20 @@ pub enum SafeContracts {
 /// The verdict on one chain from `eth_getCode` of each of
 /// [`MULTISIG_CONTRACTS`], in that order: `Some(code)` as the chain answered,
 /// `None` where it did not. A missing contract is a verdict even while
-/// another went unanswered; an empty code (`0x`) is a missing one.
+/// another went unanswered; an empty code (`0x`) is a missing one, and so is
+/// code whose hash is not the canonical contract's.
 pub fn safe_contracts(codes: &[Option<String>]) -> SafeContracts {
     let mut missing = Vec::new();
     let mut unanswered = codes.len() < MULTISIG_CONTRACTS.len();
-    for (i, (name, _)) in MULTISIG_CONTRACTS.iter().enumerate() {
-        match codes.get(i).and_then(|c| c.as_deref()) {
-            None => unanswered = true,
-            Some(code) => {
-                let body = code.strip_prefix("0x").unwrap_or(code);
-                if body.trim_start_matches('0').is_empty() {
-                    missing.push((*name).to_owned());
-                }
-            }
+    for (i, (name, address)) in MULTISIG_CONTRACTS.iter().enumerate() {
+        let canonical = address.parse::<Address>().ok().and_then(canonical_at);
+        match (canonical, codes.get(i).and_then(|c| c.as_deref())) {
+            (_, None) => unanswered = true,
+            (Some(c), Some(code)) => match code_is(Some(code), c) {
+                CodeIs::Canonical | CodeIs::Unread => {}
+                CodeIs::Missing | CodeIs::Wrong => missing.push((*name).to_owned()),
+            },
+            (None, Some(_)) => missing.push((*name).to_owned()),
         }
     }
     if !missing.is_empty() {
@@ -2156,6 +2171,728 @@ pub fn member_drift(
         threshold_was: original_threshold,
         threshold_is: current_threshold,
     })
+}
+
+// -- who can act for a Safe: its chain, or the counterfactual rule ---------------------
+//
+// Neither the registry nor the mailbox decides who can act for a Safe
+// (docs/multisig-vault-design.md §3.5). Where it is deployed, the chain does:
+// its owners and threshold, and anything else that can act — a module, a
+// guard, an unknown fallback handler or singleton ([`deployed_check`]).
+// Where it is not deployed yet, only this rule does ([`counterfactual_authority`]):
+// a genesis is the Safe it deploys only if everything its `setup` runs is
+// known and read in full here, and the contracts it names hold Safe's own code
+// on that chain.
+
+/// A Safe release this wallet reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Release {
+    V130,
+    V141,
+    V150,
+}
+
+/// What a Safe contract is in a creation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Role {
+    Factory,
+    Singleton,
+    SingletonL2,
+    /// `CompatibilityFallbackHandler`.
+    Handler,
+    /// `SafeToL2Setup`: `setupToL2(l2Singleton)` switches a new Safe to the
+    /// L2 singleton on any chain but Ethereum, nothing else.
+    ToL2Setup,
+}
+
+/// A canonical Safe deployment and the runtime code it must hold.
+struct Canonical {
+    name: &'static str,
+    address: &'static str,
+    release: Release,
+    role: Role,
+    /// keccak256 of its runtime code, as `eth_getCode` answers it.
+    code_hash: &'static str,
+}
+
+/// The Safe contracts a multisig this wallet uses may depend on — the
+/// factories and singletons the import path accepts (v1.3.0 canonical and
+/// eip155, v1.4.1, v1.5.0; L1 and L2), each release's
+/// CompatibilityFallbackHandler and SafeToL2Setup — with their runtime code
+/// hashes. Source: safe-deployments @ b45417dd (the genesis service's
+/// `genesis-rules/data/known-contracts.json`); every hash recomputed on
+/// 2026-10-29 as keccak256(`eth_getCode`) on Gnosis (100) and Arc Testnet
+/// (5042002), identical on both. The v1.4.1 codes are kept as test vectors
+/// (`tests/vectors/safe-code/`), and the onchain suite recomputes every hash
+/// on the fork.
+const CANONICAL: [Canonical; 18] = [
+    Canonical {
+        name: "Safe Proxy Factory 1.3.0",
+        address: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
+        release: Release::V130,
+        role: Role::Factory,
+        code_hash: "0x337d7f54be11b6ed55fef7b667ea5488db53db8320a05d1146aa4bd169a39a9b",
+    },
+    Canonical {
+        name: "Safe Proxy Factory 1.3.0",
+        address: "0xC22834581EbC8527d974F8a1c97E1bEA4EF910BC",
+        release: Release::V130,
+        role: Role::Factory,
+        code_hash: "0x337d7f54be11b6ed55fef7b667ea5488db53db8320a05d1146aa4bd169a39a9b",
+    },
+    Canonical {
+        name: "Safe Proxy Factory 1.4.1",
+        address: safe::SAFE_PROXY_FACTORY,
+        release: Release::V141,
+        role: Role::Factory,
+        code_hash: "0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317",
+    },
+    Canonical {
+        name: "Safe Proxy Factory 1.5.0",
+        address: "0x14F2982D601c9458F93bd70B218933A6f8165e7b",
+        release: Release::V150,
+        role: Role::Factory,
+        code_hash: "0x967dae4cda22b0c9ef7f31b010bdc1ceb0af9904b0c3dc060b5302e4c18a4529",
+    },
+    Canonical {
+        name: "Safe 1.3.0",
+        address: "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552",
+        release: Release::V130,
+        role: Role::Singleton,
+        code_hash: "0xbba688fbdb21ad2bb58bc320638b43d94e7d100f6f3ebaab0a4e4de6304b1c2e",
+    },
+    Canonical {
+        name: "Safe 1.3.0",
+        address: "0x69f4D1788e39c87893C980c06EdF4b7f686e2938",
+        release: Release::V130,
+        role: Role::Singleton,
+        code_hash: "0xbba688fbdb21ad2bb58bc320638b43d94e7d100f6f3ebaab0a4e4de6304b1c2e",
+    },
+    Canonical {
+        name: "Safe L2 1.3.0",
+        address: "0x3E5c63644E683549055b9Be8653de26E0B4CD36E",
+        release: Release::V130,
+        role: Role::SingletonL2,
+        code_hash: "0x21842597390c4c6e3c1239e434a682b054bd9548eee5e9b1d6a4482731023c0f",
+    },
+    Canonical {
+        name: "Safe L2 1.3.0",
+        address: "0xfb1bffC9d739B8D520DaF37dF666da4C687191EA",
+        release: Release::V130,
+        role: Role::SingletonL2,
+        code_hash: "0x21842597390c4c6e3c1239e434a682b054bd9548eee5e9b1d6a4482731023c0f",
+    },
+    Canonical {
+        name: "Safe 1.4.1",
+        address: "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+        release: Release::V141,
+        role: Role::Singleton,
+        code_hash: "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4",
+    },
+    Canonical {
+        name: "Safe L2 1.4.1",
+        address: safe::SAFE_SINGLETON,
+        release: Release::V141,
+        role: Role::SingletonL2,
+        code_hash: "0xb1f926978a0f44a2c0ec8fe822418ae969bd8c3f18d61e5103100339894f81ff",
+    },
+    Canonical {
+        name: "Safe 1.5.0",
+        address: "0xFf51A5898e281Db6DfC7855790607438dF2ca44b",
+        release: Release::V150,
+        role: Role::Singleton,
+        code_hash: "0xdda019cbd7c867a533a2a86e5c53434fdc50b13122b5a5ddb4a8df61b31c20f2",
+    },
+    Canonical {
+        name: "Safe L2 1.5.0",
+        address: "0xEdd160fEBBD92E350D4D398fb636302fccd67C7e",
+        release: Release::V150,
+        role: Role::SingletonL2,
+        code_hash: "0x180193227186ccb85316c94db1f0d156ed932b14712cfaac78901899178572dc",
+    },
+    Canonical {
+        name: "Compatibility Fallback Handler 1.3.0",
+        address: "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4",
+        release: Release::V130,
+        role: Role::Handler,
+        code_hash: "0x03e69f7ce809e81687c69b19a7d7cca45b6d551ffdec73d9bb87178476de1abf",
+    },
+    Canonical {
+        name: "Compatibility Fallback Handler 1.3.0",
+        address: "0x017062a1dE2FE6b99BE3d9d37841FeD19F573804",
+        release: Release::V130,
+        role: Role::Handler,
+        code_hash: "0x03e69f7ce809e81687c69b19a7d7cca45b6d551ffdec73d9bb87178476de1abf",
+    },
+    Canonical {
+        name: "Compatibility Fallback Handler 1.4.1",
+        address: COMPATIBILITY_FALLBACK_HANDLER,
+        release: Release::V141,
+        role: Role::Handler,
+        code_hash: "0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9",
+    },
+    Canonical {
+        name: "Compatibility Fallback Handler 1.5.0",
+        address: "0x3EfCBb83A4A7AfcB4F68D501E2c2203a38be77f4",
+        release: Release::V150,
+        role: Role::Handler,
+        code_hash: "0x3c6a85bcf7b563daa624b884b4e9a1b9fa5371edde7be945d998071a48f28bbc",
+    },
+    Canonical {
+        name: "Safe To L2 Setup 1.4.1",
+        address: "0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54",
+        release: Release::V141,
+        role: Role::ToL2Setup,
+        code_hash: "0x2f25df28caf984366ee584e13241707e85dcd5a6ea0c14267928dafc1fd6274b",
+    },
+    Canonical {
+        name: "Safe To L2 Setup 1.5.0",
+        address: "0x900C7589200010D6C6eCaaE5B06EBe653bc2D82a",
+        release: Release::V150,
+        role: Role::ToL2Setup,
+        code_hash: "0xf6034d841bcbff8912aa55526b0f1609212536aaf60bb16f5e8a269a4ab38f18",
+    },
+];
+
+/// Safe's `SafeModuleSetup` (safe-modules v0.2.0, v0.3.0): `enableModules`
+/// in a setup is read as what it is — modules enabled from the start.
+const MODULE_SETUPS: [&str; 2] = [
+    "0x8EcD4ec46D4D2a6B64fE960B3D64e8B94B2234eb",
+    safe::SAFE_MODULE_SETUP,
+];
+
+/// Safe's `GuardManager` slot: `keccak256("guard_manager.guard.address")`.
+pub const GUARD_STORAGE_SLOT: &str =
+    "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8";
+/// Safe v1.5.0's module guard: `keccak256("module_manager.module_guard.address")`.
+pub const MODULE_GUARD_STORAGE_SLOT: &str =
+    "0xb104e0b93118902c651344349b610029d694cfdec91c589c91ebafbcd0289947";
+/// Safe's `FallbackManager` slot: `keccak256("fallback_manager.handler.address")`.
+pub const FALLBACK_HANDLER_STORAGE_SLOT: &str =
+    "0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5";
+/// The proxy's singleton: storage slot 0.
+pub const SINGLETON_STORAGE_SLOT: &str = "0x0";
+/// How many modules one `getModulesPaginated` read asks for. More than this
+/// shows as the page's `next`, itself a module.
+const MODULES_PAGE: usize = 10;
+/// The most owners a setup read here may list (Safe sets no bound).
+const MAX_SETUP_OWNERS: usize = 64;
+
+const SETUP_SIGNATURE: &str =
+    "setup(address[],uint256,address,bytes,address,address,uint256,address)";
+
+fn canonical_at(a: Address) -> Option<&'static Canonical> {
+    CANONICAL
+        .iter()
+        .find(|c| c.address.parse::<Address>().ok() == Some(a))
+}
+
+fn canonical_as(a: Address, roles: &[Role]) -> Option<&'static Canonical> {
+    canonical_at(a).filter(|c| roles.contains(&c.role))
+}
+
+/// A Safe `setup` call, read in full: every field, and nothing besides —
+/// the bytes must be exactly Safe's own ABI encoding of what was read, so
+/// nothing can hide in an offset, a padding or a tail.
+fn read_setup(init: &[u8]) -> Option<SetupArgs> {
+    if init.get(..4)? != selector(SETUP_SIGNATURE) {
+        return None;
+    }
+    let body = &init[4..];
+    let word = |at: usize| body.get(at..at.checked_add(32)?).map(U256::from_be_slice);
+    let small = |at: usize| -> Option<usize> { word(at)?.try_into().ok() };
+    let address = |at: usize| {
+        let w = word(at)?;
+        (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+    };
+    let owners_at = small(0)?;
+    let count = small(owners_at)?;
+    if count > MAX_SETUP_OWNERS {
+        return None;
+    }
+    let owners = (0..count)
+        .map(|i| address(owners_at + 32 + i * 32))
+        .collect::<Option<Vec<_>>>()?;
+    let data_at = small(96)?;
+    let len = small(data_at)?;
+    let from = data_at.checked_add(32)?;
+    let data = body.get(from..from.checked_add(len)?)?.to_vec();
+    let a = SetupArgs {
+        owners,
+        threshold: word(32)?,
+        to: address(64)?,
+        data,
+        fallback_handler: address(128)?,
+        payment_token: address(160)?,
+        payment: word(192)?,
+        payment_receiver: address(224)?,
+    };
+    (encode_setup_full(&a) == init).then_some(a)
+}
+
+/// The modules in an `enableModules(address[])` call, if `data` is exactly one.
+fn read_enable_modules(data: &[u8]) -> Option<Vec<Address>> {
+    if data.get(..4)? != selector("enableModules(address[])") {
+        return None;
+    }
+    let body = &data[4..];
+    let word = |at: usize| body.get(at..at.checked_add(32)?).map(U256::from_be_slice);
+    let at: usize = word(0)?.try_into().ok()?;
+    let count: usize = word(at)?.try_into().ok()?;
+    if count > MAX_SETUP_OWNERS {
+        return None;
+    }
+    (0..count)
+        .map(|i| {
+            let w = word(at + 32 + i * 32)?;
+            (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+        })
+        .collect()
+}
+
+/// The L2 singleton in a `setupToL2(address)` call, if `data` is exactly one.
+fn read_setup_to_l2(data: &[u8]) -> Option<Address> {
+    if data.len() != 36 || data[..4] != selector("setupToL2(address)") {
+        return None;
+    }
+    let w = U256::from_be_slice(&data[4..36]);
+    (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+}
+
+/// Why a genesis is not the Safe it claims, or not yet one Vela can stand
+/// behind on a chain. Each says what it found, for the person to read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Refusal {
+    /// It does not make the address it was offered for.
+    WrongAddress,
+    /// Its initializer is not a Safe `setup` call in Safe's own encoding.
+    NotSetup,
+    /// Its members or rule are ones Safe's `setup` refuses: it can never deploy.
+    BadMembers,
+    /// Deployed through a contract that is not a Safe proxy factory Vela knows.
+    UnknownFactory { address: String },
+    /// Runs a singleton that is not a Safe release Vela supports.
+    UnknownSingleton { address: String },
+    /// Its setup enables a module: it can move funds without the members.
+    Module { address: String },
+    /// Its setup runs code at `address` (a delegatecall) that Vela cannot
+    /// read in full: anything may be done to the Safe there.
+    SetupCode { address: String },
+    /// Its fallback handler is not Safe's CompatibilityFallbackHandler for
+    /// its release.
+    Handler { address: String },
+    /// Its setup pays `amount` of `token` (zero: the chain's coin) out of the
+    /// Safe to `receiver` as it is deployed.
+    Payment {
+        token: String,
+        amount: String,
+        receiver: String,
+    },
+    /// On this chain, a contract it depends on has no code.
+    MissingCode { name: String, address: String },
+    /// On this chain, a contract it depends on holds code that is not Safe's.
+    WrongCode { name: String, address: String },
+}
+
+/// Who can act for a Safe that is not deployed on a chain yet — the one
+/// answer to that question the wallet uses.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Authority {
+    /// Deployed there, it is exactly these owners and this threshold, and
+    /// nothing else can act for it.
+    Verified { owners: Vec<String>, threshold: u64 },
+    /// Vela neither deploys it there nor signs for it, for these reasons.
+    Refused { reasons: Vec<Refusal> },
+    /// Nothing wrong found, but the chain did not answer for these contracts:
+    /// it cannot be verified yet (and is not Verified).
+    Unknown { unread: Vec<String> },
+}
+
+/// What the wallet read on the target chain for a counterfactual verdict:
+/// `eth_getCode` of each address [`counterfactual_reads`] names — the code,
+/// or `null` where the chain did not answer. Addresses in any case.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChainFacts {
+    pub codes: BTreeMap<String, Option<String>>,
+}
+
+impl ChainFacts {
+    /// `Some(code)` as the chain answered for `a`, `None` if it did not.
+    fn code(&self, a: Address) -> Option<&str> {
+        self.codes
+            .iter()
+            .find(|(k, _)| k.parse::<Address>().ok() == Some(a))
+            .and_then(|(_, v)| v.as_deref())
+    }
+}
+
+/// What a code answer is, against the code a canonical contract must hold.
+enum CodeIs {
+    Unread,
+    Missing,
+    Wrong,
+    Canonical,
+}
+
+fn code_is(code: Option<&str>, c: &Canonical) -> CodeIs {
+    let Some(code) = code else {
+        return CodeIs::Unread;
+    };
+    let body = code.trim().strip_prefix("0x").unwrap_or(code.trim());
+    if body.trim_start_matches('0').is_empty() {
+        return CodeIs::Missing;
+    }
+    match unhex(code) {
+        Ok(bytes) if hex(keccak256(&bytes).as_slice()) == c.code_hash => CodeIs::Canonical,
+        _ => CodeIs::Wrong,
+    }
+}
+
+/// A genesis that passed every rule that needs no chain: its members, and
+/// the canonical contracts whose code it needs on the chain it deploys on.
+struct Vetted {
+    owners: Vec<Address>,
+    threshold: u64,
+    depends: Vec<&'static Canonical>,
+}
+
+/// The rules a genesis must meet on every chain (§3.5, 1 and 3–5): it makes
+/// `safe`; its factory and singleton are canonical Safe deployments; its
+/// setup runs nothing, or exactly `SafeToL2Setup.setupToL2(<that release's
+/// L2 singleton>)`; its fallback handler is none or that release's
+/// CompatibilityFallbackHandler; it pays nothing; its members are ones Safe
+/// accepts.
+fn vet_genesis(g: &Genesis, safe: Address) -> Result<Vetted, Vec<Refusal>> {
+    let parsed = |s: &str| s.parse::<Address>().unwrap_or(Address::ZERO);
+    let factory_at = parsed(&g.factory);
+    let singleton_at = parsed(&g.singleton);
+    let factory = canonical_as(factory_at, &[Role::Factory]);
+    let singleton = canonical_as(singleton_at, &[Role::Singleton, Role::SingletonL2]);
+    let mut reasons = Vec::new();
+    if factory.is_none() {
+        reasons.push(Refusal::UnknownFactory {
+            address: factory_at.to_checksum(None),
+        });
+    }
+    if singleton.is_none() {
+        reasons.push(Refusal::UnknownSingleton {
+            address: singleton_at.to_checksum(None),
+        });
+    }
+    let (Some(factory), Some(singleton)) = (factory, singleton) else {
+        return Err(reasons);
+    };
+    match genesis_address(g) {
+        Ok(a) if a == safe.to_checksum(None) => {}
+        _ => return Err(vec![Refusal::WrongAddress]),
+    }
+    let Some(setup) = unhex(&g.initializer).ok().and_then(|i| read_setup(&i)) else {
+        return Err(vec![Refusal::NotSetup]);
+    };
+    let mut depends = vec![factory, singleton];
+    let threshold = u64::try_from(setup.threshold).unwrap_or(u64::MAX);
+    let members_ok = !setup.owners.is_empty()
+        && threshold >= 1
+        && threshold as usize <= setup.owners.len()
+        && setup.owners.iter().enumerate().all(|(i, o)| {
+            *o != Address::ZERO && *o != SENTINEL && *o != safe && !setup.owners[..i].contains(o)
+        });
+    if !members_ok {
+        reasons.push(Refusal::BadMembers);
+    }
+    // The setup hook: nothing, or the one Safe{Wallet} adds (SafeToL2Setup).
+    if setup.to == Address::ZERO {
+        if !setup.data.is_empty() {
+            reasons.push(Refusal::NotSetup);
+        }
+    } else if let Some(hook) = canonical_as(setup.to, &[Role::ToL2Setup]) {
+        let l2 = read_setup_to_l2(&setup.data)
+            .and_then(|a| canonical_as(a, &[Role::SingletonL2]))
+            .filter(|l2| l2.release == hook.release && singleton.release == hook.release);
+        match l2 {
+            Some(l2) => {
+                depends.push(hook);
+                if l2.address != singleton.address {
+                    depends.push(l2);
+                }
+            }
+            None => reasons.push(Refusal::SetupCode {
+                address: setup.to.to_checksum(None),
+            }),
+        }
+    } else if let Some(modules) = MODULE_SETUPS
+        .iter()
+        .any(|m| m.parse::<Address>().ok() == Some(setup.to))
+        .then(|| read_enable_modules(&setup.data))
+        .flatten()
+        .filter(|m| !m.is_empty())
+    {
+        reasons.extend(modules.into_iter().map(|m| Refusal::Module {
+            address: m.to_checksum(None),
+        }));
+    } else {
+        reasons.push(Refusal::SetupCode {
+            address: setup.to.to_checksum(None),
+        });
+    }
+    if setup.fallback_handler != Address::ZERO {
+        match canonical_as(setup.fallback_handler, &[Role::Handler])
+            .filter(|h| h.release == singleton.release)
+        {
+            Some(h) => depends.push(h),
+            None => reasons.push(Refusal::Handler {
+                address: setup.fallback_handler.to_checksum(None),
+            }),
+        }
+    }
+    if setup.payment_token != Address::ZERO
+        || !setup.payment.is_zero()
+        || setup.payment_receiver != Address::ZERO
+    {
+        reasons.push(Refusal::Payment {
+            token: setup.payment_token.to_checksum(None),
+            amount: setup.payment.to_string(),
+            receiver: setup.payment_receiver.to_checksum(None),
+        });
+    }
+    if !reasons.is_empty() {
+        return Err(reasons);
+    }
+    Ok(Vetted {
+        owners: setup.owners,
+        threshold,
+        depends,
+    })
+}
+
+/// The contracts whose code [`counterfactual_authority`] needs read on the
+/// target chain for `g` (`eth_getCode` of each): its factory, its
+/// singleton, its fallback handler and its setup hook with the singleton
+/// that hook switches to. Empty for a genesis refused on every chain — no
+/// read can change that verdict.
+pub fn counterfactual_reads(g: &Genesis, safe: &str) -> Result<Vec<String>, CoreError> {
+    let Ok(vetted) = vet_genesis(g, addr(safe)?) else {
+        return Ok(Vec::new());
+    };
+    vetted
+        .depends
+        .iter()
+        .map(|c| addr(c.address).map(|a| a.to_checksum(None)))
+        .collect()
+}
+
+/// Who can act for `safe`, not deployed on a chain yet, once deployed there
+/// from `g` (§3.5): Verified — exactly the genesis's owners and threshold,
+/// nothing else — only when every rule holds (it makes `safe`; canonical
+/// factory, singleton and handler; no setup hook but SafeToL2Setup to its
+/// own L2 singleton; no payment) AND every contract it depends on holds
+/// Safe's own code on that chain (`facts`). A contract the chain did not
+/// answer for leaves it Unknown: never Verified.
+pub fn counterfactual_authority(
+    g: &Genesis,
+    safe: &str,
+    facts: &ChainFacts,
+) -> Result<Authority, CoreError> {
+    let vetted = match vet_genesis(g, addr(safe)?) {
+        Ok(v) => v,
+        Err(reasons) => return Ok(Authority::Refused { reasons }),
+    };
+    let mut reasons = Vec::new();
+    let mut unread = Vec::new();
+    for c in &vetted.depends {
+        let at = addr(c.address)?;
+        let (name, address) = (c.name.to_owned(), at.to_checksum(None));
+        match code_is(facts.code(at), c) {
+            CodeIs::Canonical => {}
+            CodeIs::Unread => unread.push(address),
+            CodeIs::Missing => reasons.push(Refusal::MissingCode { name, address }),
+            CodeIs::Wrong => reasons.push(Refusal::WrongCode { name, address }),
+        }
+    }
+    Ok(if !reasons.is_empty() {
+        Authority::Refused { reasons }
+    } else if !unread.is_empty() {
+        Authority::Unknown { unread }
+    } else {
+        Authority::Verified {
+            owners: vetted.owners.iter().map(|o| o.to_checksum(None)).collect(),
+            threshold: vetted.threshold,
+        }
+    })
+}
+
+/// What can act for a deployed Safe besides its owners, as read from its
+/// chain: each one is shown, plainly, and makes the multisig high-risk.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Risk {
+    /// An enabled module: it can move funds without the members.
+    Module { address: String },
+    /// A transaction guard (or v1.5.0 module guard): it can block or change
+    /// what the members do.
+    Guard { address: String },
+    /// A fallback handler that is not a Safe CompatibilityFallbackHandler.
+    Handler { address: String },
+    /// Its proxy runs code that is not a Safe release Vela knows.
+    Singleton { address: String },
+}
+
+/// What the wallet read on a deployed Safe's chain for [`deployed_check`]:
+/// the `getModulesPaginated(SENTINEL, 10)` answer, the guard, module guard,
+/// fallback handler and singleton storage words — `null` where the chain did
+/// not answer — and `eth_getCode` of the addresses a first check named in
+/// `needCode`.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DeployedFacts {
+    pub modules: Option<String>,
+    pub guard: Option<String>,
+    pub module_guard: Option<String>,
+    pub handler: Option<String>,
+    pub singleton: Option<String>,
+    pub codes: BTreeMap<String, Option<String>>,
+}
+
+/// The core's reading of a deployed Safe beyond its owners.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployedCheck {
+    /// What can act for it besides its members.
+    pub risks: Vec<Risk>,
+    /// Read `eth_getCode` of these and ask again with them in `codes`.
+    pub need_code: Vec<String>,
+    /// The chain did not answer for something: nothing can be said yet.
+    pub unread: bool,
+}
+
+/// The reads [`deployed_check`] takes, for the shell to make: the
+/// `getModulesPaginated` call data and the storage slots.
+pub fn deployed_reads() -> serde_json::Value {
+    let mut modules = selector("getModulesPaginated(address,uint256)").to_vec();
+    modules.extend_from_slice(&word_addr(SENTINEL));
+    modules.extend_from_slice(&word_usize(MODULES_PAGE));
+    serde_json::json!({
+        "modulesCall": hex(&modules),
+        "guardSlot": GUARD_STORAGE_SLOT,
+        "moduleGuardSlot": MODULE_GUARD_STORAGE_SLOT,
+        "handlerSlot": FALLBACK_HANDLER_STORAGE_SLOT,
+        "singletonSlot": SINGLETON_STORAGE_SLOT,
+    })
+}
+
+/// The address in a storage word, if it is one.
+fn word_address(word: &str) -> Option<Address> {
+    let w = quantity(word).ok()?;
+    (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+}
+
+/// The modules a `getModulesPaginated` answer lists, with the page's `next`
+/// when it is another module (more than one page).
+fn read_modules(ret: &str) -> Option<Vec<Address>> {
+    let ret = unhex(ret).ok()?;
+    let word = |at: usize| ret.get(at..at.checked_add(32)?).map(U256::from_be_slice);
+    let address = |at: usize| {
+        let w = word(at)?;
+        (w >> 160 == U256::ZERO).then(|| Address::from_word(B256::from(w)))
+    };
+    let at: usize = word(0)?.try_into().ok()?;
+    let next = address(32)?;
+    let count: usize = word(at)?.try_into().ok()?;
+    if count > MODULES_PAGE {
+        return None;
+    }
+    let mut out = (0..count)
+        .map(|i| address(at + 32 + i * 32))
+        .collect::<Option<Vec<_>>>()?;
+    if next != SENTINEL && next != Address::ZERO && !out.contains(&next) {
+        out.push(next);
+    }
+    Some(out)
+}
+
+/// What can act for a deployed Safe besides its owners (§3.5): its modules,
+/// its guards, a fallback handler that is not a canonical
+/// CompatibilityFallbackHandler, a singleton that is not a canonical Safe
+/// release — each with Safe's own code on this chain. Called once with the
+/// storage reads, then again with the code of what it names in `needCode`.
+pub fn deployed_check(f: &DeployedFacts) -> DeployedCheck {
+    let mut out = DeployedCheck::default();
+    let codes = ChainFacts {
+        codes: f.codes.clone(),
+    };
+    match f.modules.as_deref().map(read_modules) {
+        None | Some(None) => out.unread = true,
+        Some(Some(modules)) => out.risks.extend(modules.into_iter().map(|m| Risk::Module {
+            address: m.to_checksum(None),
+        })),
+    }
+    for guard in [&f.guard, &f.module_guard] {
+        match guard.as_deref().map(word_address) {
+            None | Some(None) => out.unread = true,
+            Some(Some(a)) if a == Address::ZERO => {}
+            Some(Some(a)) => out.risks.push(Risk::Guard {
+                address: a.to_checksum(None),
+            }),
+        }
+    }
+    let mut known = |word: &Option<String>, roles: &[Role], risk: fn(String) -> Risk, zero_ok| {
+        let Some(a) = word.as_deref().map(word_address) else {
+            out.unread = true;
+            return;
+        };
+        let Some(a) = a else {
+            out.unread = true;
+            return;
+        };
+        if a == Address::ZERO && zero_ok {
+            return;
+        }
+        let Some(c) = canonical_as(a, roles) else {
+            out.risks.push(risk(a.to_checksum(None)));
+            return;
+        };
+        let asked = f.codes.keys().any(|k| k.parse::<Address>().ok() == Some(a));
+        match code_is(codes.code(a), c) {
+            CodeIs::Canonical => {}
+            CodeIs::Unread if !asked => out.need_code.push(a.to_checksum(None)),
+            CodeIs::Unread => out.unread = true,
+            CodeIs::Missing | CodeIs::Wrong => out.risks.push(risk(a.to_checksum(None))),
+        }
+    };
+    known(
+        &f.handler,
+        &[Role::Handler],
+        |address| Risk::Handler { address },
+        true,
+    );
+    known(
+        &f.singleton,
+        &[Role::Singleton, Role::SingletonL2],
+        |address| Risk::Singleton { address },
+        false,
+    );
+    out
+}
+
+/// The verdict the executor needs before it deploys `plan`'s multisig.
+fn deploy_verified(plan: &ExecutionPlan, g: &Genesis) -> Result<(), CoreError> {
+    let facts = plan
+        .deploy_facts
+        .as_ref()
+        .ok_or_else(|| err("deploying a multisig needs its chain's code read first"))?;
+    match counterfactual_authority(g, &plan.multisig, facts)? {
+        Authority::Verified { .. } => Ok(()),
+        Authority::Unknown { .. } => Err(err(
+            "the chain did not answer for the Safe contracts this multisig needs: it is not deployed",
+        )),
+        Authority::Refused { reasons } => Err(err(format!(
+            "Vela does not deploy this multisig: {}",
+            serde_json::to_string(&reasons).unwrap_or_default()
+        ))),
+    }
 }
 
 /// The one door the shells use: `method` and its arguments as a JSON object,
@@ -2311,6 +3048,22 @@ pub fn call_json(method: &str, args_json: &str) -> Result<String, CoreError> {
             &arg::<Vec<String>>(&args, "current")?,
             arg(&args, "currentThreshold")?,
         )?)),
+        "counterfactualReads" => out(serde_json::json!(counterfactual_reads(
+            &arg(&args, "genesis")?,
+            &arg::<String>(&args, "safe")?,
+        )?)),
+        "counterfactualAuthority" => out(json(&counterfactual_authority(
+            &arg(&args, "genesis")?,
+            &arg::<String>(&args, "safe")?,
+            &arg::<Option<ChainFacts>>(&args, "facts")?.unwrap_or_default(),
+        )?)),
+        "deployedReads" => out(deployed_reads()),
+        // The pinned table, for a suite that recomputes it from a chain's code.
+        "canonicalContracts" => out(serde_json::json!(CANONICAL
+            .iter()
+            .map(|c| serde_json::json!({"name": c.name, "address": c.address, "codeHash": c.code_hash}))
+            .collect::<Vec<_>>())),
+        "deployedCheck" => out(json(&deployed_check(&arg(&args, "facts")?))),
         // How the multisig service's health answer reads (`app::genesis_service`).
         #[cfg(feature = "crux")]
         "serviceAnswer" => out(json(&crate::app::genesis_service::service_answer(
@@ -2400,32 +3153,52 @@ mod tests {
 
     #[test]
     fn a_chain_with_every_safe_contract_can_hold_a_multisig() {
-        let code = Some("0x6080".to_owned());
+        let [factory, singleton, handler] = [
+            Some(safe_code("safe-proxy-factory-1.4.1")),
+            Some(safe_code("safe-l2-1.4.1")),
+            Some(safe_code("compatibility-fallback-handler-1.4.1")),
+        ];
         assert_eq!(
-            safe_contracts(&[code.clone(), code.clone(), code.clone()]),
+            safe_contracts(&[factory.clone(), singleton.clone(), handler.clone()]),
             SafeContracts::Present
         );
         // One without code: missing, named — even while another went unanswered.
         assert_eq!(
-            safe_contracts(&[code.clone(), None, Some("0x".into())]),
+            safe_contracts(&[factory.clone(), None, Some("0x".into())]),
             SafeContracts::Missing {
                 names: vec!["Compatibility Fallback Handler".into()]
             }
         );
         assert_eq!(
-            safe_contracts(&[Some("0x0".into()), code.clone(), code.clone()]),
+            safe_contracts(&[Some("0x0".into()), singleton.clone(), handler.clone()]),
             SafeContracts::Missing {
                 names: vec!["Safe Proxy Factory".into()]
             }
         );
+        // Code that is not Safe's at Safe's address is no Safe contract.
+        assert_eq!(
+            safe_contracts(&[factory.clone(), Some("0x6080".into()), handler.clone()]),
+            SafeContracts::Missing {
+                names: vec!["Safe L2".into()]
+            }
+        );
         // The chain did not answer: nothing said either way.
         assert_eq!(
-            safe_contracts(&[code.clone(), None, code.clone()]),
+            safe_contracts(&[factory.clone(), None, handler]),
             SafeContracts::Unknown
         );
-        assert_eq!(safe_contracts(&[code]), SafeContracts::Unknown);
+        assert_eq!(safe_contracts(&[factory]), SafeContracts::Unknown);
         // Through the door, as the shells read it.
-        let answer = call_json("safeContracts", r#"{"codes":["0x60","0x","0x60"]}"#).unwrap();
+        let answer = call_json(
+            "safeContracts",
+            &serde_json::json!({"codes": [
+                safe_code("safe-proxy-factory-1.4.1"),
+                "0x",
+                safe_code("compatibility-fallback-handler-1.4.1")
+            ]})
+            .to_string(),
+        )
+        .unwrap();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&answer).unwrap(),
             serde_json::json!({"kind": "missing", "names": ["Safe L2"]})
@@ -2539,6 +3312,8 @@ mod tests {
             tx: rename_tx("Team treasury", "0").unwrap(),
             approvals: vec![],
             executor: Some(A.into()),
+            // The rename is refused before any genesis is judged.
+            deploy_facts: None,
         };
         let refused = execution_calls(&plan(true)).unwrap_err();
         assert!(format!("{refused:?}").contains("never deploys"));
@@ -2933,6 +3708,7 @@ mod tests {
             tx: tx.clone(),
             approvals: vec![Approval::Passkey(Box::new(approval))],
             executor: Some(fx::account(0).unwrap().address),
+            deploy_facts: Some(safe_141_facts()),
         };
         let calls = execution_calls(&plan).unwrap();
         assert_eq!(calls.len(), 2);
@@ -2960,6 +3736,7 @@ mod tests {
             tx,
             approvals: vec![],
             executor: Some(A.into()),
+            deploy_facts: Some(safe_141_facts()),
         };
         assert!(execution_calls(&plan).is_err());
     }
@@ -3581,5 +4358,749 @@ mod tests {
         // Another Safe's address finds nothing in it.
         assert_eq!(genesis_from_calldata(&hex(&outer), B).unwrap(), None);
         assert_eq!(genesis_from_calldata("0x1234", &ms.address).unwrap(), None);
+    }
+
+    // -- who can act for a Safe (§3.5) -------------------------------------------------
+
+    /// A canonical contract's runtime code, as `eth_getCode` answered it on
+    /// Gnosis on 2026-10-29 (`tests/vectors/safe-code/`).
+    fn safe_code(name: &str) -> String {
+        let code = match name {
+            "safe-proxy-factory-1.4.1" => {
+                include_str!("../tests/vectors/safe-code/safe-proxy-factory-1.4.1.hex")
+            }
+            "safe-1.4.1" => include_str!("../tests/vectors/safe-code/safe-1.4.1.hex"),
+            "safe-l2-1.4.1" => include_str!("../tests/vectors/safe-code/safe-l2-1.4.1.hex"),
+            "compatibility-fallback-handler-1.4.1" => {
+                include_str!("../tests/vectors/safe-code/compatibility-fallback-handler-1.4.1.hex")
+            }
+            "safe-to-l2-setup-1.4.1" => {
+                include_str!("../tests/vectors/safe-code/safe-to-l2-setup-1.4.1.hex")
+            }
+            other => panic!("no code kept for {other}"),
+        };
+        code.trim().to_owned()
+    }
+
+    const SAFE_141: &str = "0x41675C099F32341bf84BFc5382aF534df5C7461a";
+    const TO_L2_SETUP_141: &str = "0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54";
+    const HANDLER_130: &str = "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4";
+
+    /// Gnosis's answers for every Safe v1.4.1 contract a multisig may depend on.
+    fn safe_141_facts() -> ChainFacts {
+        ChainFacts {
+            codes: [
+                (safe::SAFE_PROXY_FACTORY, "safe-proxy-factory-1.4.1"),
+                (SAFE_141, "safe-1.4.1"),
+                (safe::SAFE_SINGLETON, "safe-l2-1.4.1"),
+                (
+                    COMPATIBILITY_FALLBACK_HANDLER,
+                    "compatibility-fallback-handler-1.4.1",
+                ),
+                (TO_L2_SETUP_141, "safe-to-l2-setup-1.4.1"),
+            ]
+            .into_iter()
+            .map(|(a, n)| (a.to_lowercase(), Some(safe_code(n))))
+            .collect(),
+        }
+    }
+
+    /// A genesis of `setup` through the v1.4.1 factory, with its address.
+    fn setup_genesis(singleton: &str, a: &SetupArgs) -> (String, Genesis) {
+        let g = Genesis {
+            factory: safe::SAFE_PROXY_FACTORY.into(),
+            singleton: singleton.into(),
+            salt_nonce: "0x7".into(),
+            initializer: hex(&encode_setup_full(a)),
+            name: None,
+        };
+        (genesis_address(&g).unwrap(), g)
+    }
+
+    fn plain_setup() -> SetupArgs {
+        SetupArgs {
+            owners: vec![addr(A).unwrap(), addr(B).unwrap()],
+            threshold: U256::from(2),
+            to: Address::ZERO,
+            data: Vec::new(),
+            fallback_handler: addr(COMPATIBILITY_FALLBACK_HANDLER).unwrap(),
+            payment_token: Address::ZERO,
+            payment: U256::ZERO,
+            payment_receiver: Address::ZERO,
+        }
+    }
+
+    fn refusals(g: &Genesis, safe: &str) -> Vec<Refusal> {
+        match counterfactual_authority(g, safe, &safe_141_facts()).unwrap() {
+            Authority::Refused { reasons } => reasons,
+            other => panic!("not refused: {other:?}"),
+        }
+    }
+
+    /// The pinned hashes are the code's: recomputed from the code read on
+    /// Gnosis (kept as vectors), and the table names every factory and
+    /// singleton an address may be derived with — no fewer, no more.
+    #[test]
+    fn the_canonical_code_hashes_are_the_codes() {
+        for (address, name) in [
+            (safe::SAFE_PROXY_FACTORY, "safe-proxy-factory-1.4.1"),
+            (SAFE_141, "safe-1.4.1"),
+            (safe::SAFE_SINGLETON, "safe-l2-1.4.1"),
+            (
+                COMPATIBILITY_FALLBACK_HANDLER,
+                "compatibility-fallback-handler-1.4.1",
+            ),
+            (TO_L2_SETUP_141, "safe-to-l2-setup-1.4.1"),
+        ] {
+            let c = canonical_at(addr(address).unwrap()).unwrap();
+            assert_eq!(
+                hex(keccak256(unhex(&safe_code(name)).unwrap()).as_slice()),
+                c.code_hash,
+                "{name}"
+            );
+        }
+        let roles = |roles: &[Role]| -> Vec<Address> {
+            let mut v: Vec<Address> = CANONICAL
+                .iter()
+                .filter(|c| roles.contains(&c.role))
+                .map(|c| addr(c.address).unwrap())
+                .collect();
+            v.sort();
+            v
+        };
+        let mut factories: Vec<Address> = KNOWN_FACTORIES
+            .iter()
+            .map(|(f, _)| addr(f).unwrap())
+            .collect();
+        factories.sort();
+        assert_eq!(roles(&[Role::Factory]), factories);
+        let mut singletons: Vec<Address> =
+            KNOWN_SINGLETONS.iter().map(|s| addr(s).unwrap()).collect();
+        singletons.sort();
+        assert_eq!(roles(&[Role::Singleton, Role::SingletonL2]), singletons);
+        for c in &CANONICAL {
+            assert_eq!(c.code_hash.len(), 66, "{}", c.name);
+            assert_eq!(addr(c.address).unwrap().to_checksum(None), c.address);
+        }
+        // The slots are Safe's.
+        assert_eq!(
+            hex(keccak256("guard_manager.guard.address").as_slice()),
+            GUARD_STORAGE_SLOT
+        );
+        assert_eq!(
+            hex(keccak256("module_manager.module_guard.address").as_slice()),
+            MODULE_GUARD_STORAGE_SLOT
+        );
+        assert_eq!(
+            hex(keccak256("fallback_manager.handler.address").as_slice()),
+            FALLBACK_HANDLER_STORAGE_SLOT
+        );
+    }
+
+    /// The multisig Vela creates is Verified wherever Safe's code is: its
+    /// genesis's owners and threshold, nothing else — and the code it needs is
+    /// what the wallet is told to read.
+    #[test]
+    fn a_vela_genesis_is_verified_where_safe_code_is() {
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        assert_eq!(
+            counterfactual_authority(&ms.genesis, &ms.address, &safe_141_facts()).unwrap(),
+            Authority::Verified {
+                owners: ms.owners.clone(),
+                threshold: 2
+            }
+        );
+        assert_eq!(
+            counterfactual_reads(&ms.genesis, &ms.address).unwrap(),
+            vec![
+                safe::SAFE_PROXY_FACTORY.to_owned(),
+                safe::SAFE_SINGLETON.to_owned(),
+                COMPATIBILITY_FALLBACK_HANDLER.to_owned()
+            ]
+        );
+        // No handler at all is a plain Safe too.
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                fallback_handler: Address::ZERO,
+                ..plain_setup()
+            },
+        );
+        assert!(matches!(
+            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap(),
+            Authority::Verified { .. }
+        ));
+        // Another address for the same genesis: refused before anything else.
+        assert_eq!(refusals(&ms.genesis, B), vec![Refusal::WrongAddress]);
+    }
+
+    /// The chain decides the code: none there, code that is not Safe's, or no
+    /// answer — never Verified.
+    #[test]
+    fn safe_code_must_be_on_the_chain() {
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        let handler = COMPATIBILITY_FALLBACK_HANDLER.to_lowercase();
+        let mut facts = safe_141_facts();
+        facts.codes.insert(handler.clone(), Some("0x".into()));
+        assert_eq!(
+            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            Authority::Refused {
+                reasons: vec![Refusal::MissingCode {
+                    name: "Compatibility Fallback Handler 1.4.1".into(),
+                    address: COMPATIBILITY_FALLBACK_HANDLER.into()
+                }]
+            }
+        );
+        facts
+            .codes
+            .insert(handler.clone(), Some("0x6080604052".into()));
+        assert_eq!(
+            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            Authority::Refused {
+                reasons: vec![Refusal::WrongCode {
+                    name: "Compatibility Fallback Handler 1.4.1".into(),
+                    address: COMPATIBILITY_FALLBACK_HANDLER.into()
+                }]
+            }
+        );
+        // Unanswered, or never asked: it cannot be verified yet.
+        facts.codes.insert(handler.clone(), None);
+        assert_eq!(
+            counterfactual_authority(&ms.genesis, &ms.address, &facts).unwrap(),
+            Authority::Unknown {
+                unread: vec![COMPATIBILITY_FALLBACK_HANDLER.into()]
+            }
+        );
+        assert!(matches!(
+            counterfactual_authority(&ms.genesis, &ms.address, &ChainFacts::default()).unwrap(),
+            Authority::Unknown { unread } if unread.len() == 3
+        ));
+    }
+
+    /// The factory and singleton must be Safe's own deployments.
+    #[test]
+    fn a_factory_or_singleton_vela_does_not_know_is_refused() {
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        let attacker = "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1";
+        let g = Genesis {
+            factory: attacker.into(),
+            ..ms.genesis.clone()
+        };
+        assert_eq!(
+            refusals(&g, &ms.address),
+            vec![Refusal::UnknownFactory {
+                address: attacker.into()
+            }]
+        );
+        let g = Genesis {
+            singleton: attacker.into(),
+            ..ms.genesis.clone()
+        };
+        assert_eq!(
+            refusals(&g, &ms.address),
+            vec![Refusal::UnknownSingleton {
+                address: attacker.into()
+            }]
+        );
+    }
+
+    /// Safe{Wallet}'s v1.4.1 genesis: the L1 singleton with
+    /// `SafeToL2Setup.setupToL2(SafeL2)` — allowed, decoded in full, its
+    /// hook and the L2 singleton it switches to checked on the chain. Any
+    /// other target for it, or another release's, is code Vela cannot read.
+    #[test]
+    fn safe_to_l2_setup_is_the_one_hook_allowed() {
+        let mut to_l2 = selector("setupToL2(address)").to_vec();
+        to_l2.extend_from_slice(&word_addr(addr(safe::SAFE_SINGLETON).unwrap()));
+        let hooked = SetupArgs {
+            to: addr(TO_L2_SETUP_141).unwrap(),
+            data: to_l2.clone(),
+            ..plain_setup()
+        };
+        let (address, g) = setup_genesis(SAFE_141, &hooked);
+        assert_eq!(
+            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap(),
+            Authority::Verified {
+                owners: vec![
+                    addr(A).unwrap().to_checksum(None),
+                    addr(B).unwrap().to_checksum(None)
+                ],
+                threshold: 2
+            }
+        );
+        assert_eq!(
+            counterfactual_reads(&g, &address).unwrap(),
+            vec![
+                safe::SAFE_PROXY_FACTORY.to_owned(),
+                SAFE_141.to_owned(),
+                TO_L2_SETUP_141.to_owned(),
+                safe::SAFE_SINGLETON.to_owned(),
+                COMPATIBILITY_FALLBACK_HANDLER.to_owned()
+            ]
+        );
+        // Its own code is checked on the chain too.
+        let mut facts = safe_141_facts();
+        facts.codes.remove(&TO_L2_SETUP_141.to_lowercase());
+        assert_eq!(
+            counterfactual_authority(&g, &address, &facts).unwrap(),
+            Authority::Unknown {
+                unread: vec![TO_L2_SETUP_141.into()]
+            }
+        );
+        // Switching to anything but Safe's L2 singleton of its release.
+        for target in ["0x9813461E88aDD60D0eC0943B74A83368CA2E36D1", SAFE_141] {
+            let mut data = selector("setupToL2(address)").to_vec();
+            data.extend_from_slice(&word_addr(addr(target).unwrap()));
+            let (address, g) = setup_genesis(
+                SAFE_141,
+                &SetupArgs {
+                    data,
+                    ..hooked.clone()
+                },
+            );
+            assert_eq!(
+                refusals(&g, &address),
+                vec![Refusal::SetupCode {
+                    address: TO_L2_SETUP_141.into()
+                }]
+            );
+        }
+        // Anything after the call, or another function of it.
+        let mut longer = to_l2.clone();
+        longer.extend_from_slice(&[0u8; 32]);
+        let (address, g) = setup_genesis(
+            SAFE_141,
+            &SetupArgs {
+                data: longer,
+                ..hooked.clone()
+            },
+        );
+        assert!(matches!(
+            refusals(&g, &address)[..],
+            [Refusal::SetupCode { .. }]
+        ));
+        // v1.4.1's hook under a v1.5.0 singleton.
+        let (address, g) = setup_genesis(
+            "0xFf51A5898e281Db6DfC7855790607438dF2ca44b",
+            &SetupArgs {
+                fallback_handler: Address::ZERO,
+                ..hooked.clone()
+            },
+        );
+        assert!(matches!(
+            refusals(&g, &address)[..],
+            [Refusal::SetupCode { .. }]
+        ));
+    }
+
+    /// A module the setup enables, or code it runs, is said for what it is.
+    #[test]
+    fn a_setup_that_enables_a_module_or_runs_code_is_refused() {
+        let module = addr("0x9813461E88aDD60D0eC0943B74A83368CA2E36D1").unwrap();
+        let mut enable = selector("enableModules(address[])").to_vec();
+        enable.extend_from_slice(&word_usize(0x20));
+        enable.extend_from_slice(&word_usize(1));
+        enable.extend_from_slice(&word_addr(module));
+        for setup in MODULE_SETUPS {
+            let (address, g) = setup_genesis(
+                safe::SAFE_SINGLETON,
+                &SetupArgs {
+                    to: addr(setup).unwrap(),
+                    data: enable.clone(),
+                    ..plain_setup()
+                },
+            );
+            assert_eq!(
+                refusals(&g, &address),
+                vec![Refusal::Module {
+                    address: module.to_checksum(None)
+                }]
+            );
+        }
+        // The same call to a contract that is no Safe module setup: code at it.
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                to: module,
+                data: enable,
+                ..plain_setup()
+            },
+        );
+        assert_eq!(
+            refusals(&g, &address),
+            vec![Refusal::SetupCode {
+                address: module.to_checksum(None)
+            }]
+        );
+        // A target with no data still runs its code; data with no target is
+        // not Safe's plain setup.
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                to: module,
+                ..plain_setup()
+            },
+        );
+        assert!(matches!(
+            refusals(&g, &address)[..],
+            [Refusal::SetupCode { .. }]
+        ));
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                data: vec![1, 2, 3, 4],
+                ..plain_setup()
+            },
+        );
+        assert_eq!(refusals(&g, &address), vec![Refusal::NotSetup]);
+    }
+
+    /// The handler must be that release's CompatibilityFallbackHandler, and
+    /// nothing may be paid out on deployment.
+    #[test]
+    fn a_strange_handler_or_a_payment_is_refused() {
+        let attacker = addr("0x9813461E88aDD60D0eC0943B74A83368CA2E36D1").unwrap();
+        for handler in [attacker, addr(HANDLER_130).unwrap()] {
+            let (address, g) = setup_genesis(
+                safe::SAFE_SINGLETON,
+                &SetupArgs {
+                    fallback_handler: handler,
+                    ..plain_setup()
+                },
+            );
+            assert_eq!(
+                refusals(&g, &address),
+                vec![Refusal::Handler {
+                    address: handler.to_checksum(None)
+                }]
+            );
+        }
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                payment: U256::from(5),
+                payment_receiver: attacker,
+                ..plain_setup()
+            },
+        );
+        assert_eq!(
+            refusals(&g, &address),
+            vec![Refusal::Payment {
+                token: Address::ZERO.to_checksum(None),
+                amount: "5".into(),
+                receiver: attacker.to_checksum(None)
+            }]
+        );
+        // A receiver alone (a zero payment) is still not Safe's plain setup.
+        let (address, g) = setup_genesis(
+            safe::SAFE_SINGLETON,
+            &SetupArgs {
+                payment_receiver: attacker,
+                ..plain_setup()
+            },
+        );
+        assert!(matches!(
+            refusals(&g, &address)[..],
+            [Refusal::Payment { .. }]
+        ));
+    }
+
+    /// Members Safe refuses, and a setup not in Safe's own encoding.
+    #[test]
+    fn members_safe_refuses_and_odd_encodings_are_refused() {
+        for (owners, threshold) in [
+            (vec![A, A], 1u64),
+            (vec![A, B], 3),
+            (vec![A, B], 0),
+            (vec!["0x0000000000000000000000000000000000000001"], 1),
+        ] {
+            let (address, g) = setup_genesis(
+                safe::SAFE_SINGLETON,
+                &SetupArgs {
+                    owners: owners.iter().map(|o| addr(o).unwrap()).collect(),
+                    threshold: U256::from(threshold),
+                    ..plain_setup()
+                },
+            );
+            assert_eq!(refusals(&g, &address), vec![Refusal::BadMembers]);
+        }
+        // A word after the encoded call: the same fields, other bytes.
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        let g = Genesis {
+            initializer: format!("{}{}", ms.genesis.initializer, "00".repeat(32)),
+            ..ms.genesis.clone()
+        };
+        let address = genesis_address(&g).unwrap();
+        assert_eq!(refusals(&g, &address), vec![Refusal::NotSetup]);
+        let g = Genesis {
+            initializer: "0x12345678".into(),
+            ..ms.genesis
+        };
+        let address = genesis_address(&g).unwrap();
+        assert_eq!(refusals(&g, &address), vec![Refusal::NotSetup]);
+    }
+
+    /// The tester's payloads (r4-e): the clean one passes, every other is
+    /// refused with what it does — among them the genesis of a Safe really
+    /// deployed on Arc Testnet with the attacker's module enabled.
+    #[test]
+    fn the_hostile_geneses_are_refused_for_what_they_do() {
+        let file: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/vectors/multisig/hostile-geneses.json"
+        ))
+        .unwrap();
+        let attacker = file["attacker"].as_str().unwrap().to_owned();
+        let verdict = |name: &str| {
+            let row = file["geneses"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["name"] == name)
+                .unwrap();
+            let g = Genesis {
+                factory: file["factory"].as_str().unwrap().into(),
+                singleton: file["singleton"].as_str().unwrap().into(),
+                salt_nonce: row["saltNonce"].as_str().unwrap().into(),
+                initializer: row["initializer"].as_str().unwrap().into(),
+                name: None,
+            };
+            let address = genesis_address(&g).unwrap();
+            if let Some(a) = row["address"].as_str() {
+                assert_eq!(address, a);
+            }
+            counterfactual_authority(&g, &address, &safe_141_facts()).unwrap()
+        };
+        assert!(matches!(
+            verdict("CLEAN"),
+            Authority::Verified { threshold: 1, .. }
+        ));
+        let refused = |reasons: Vec<Refusal>| Authority::Refused { reasons };
+        assert_eq!(
+            verdict("HOOK_MODULE"),
+            refused(vec![Refusal::Module {
+                address: attacker.clone()
+            }])
+        );
+        for name in ["HOOK", "ADDOWNER_HOOK"] {
+            assert_eq!(
+                verdict(name),
+                refused(vec![Refusal::SetupCode {
+                    address: attacker.clone()
+                }])
+            );
+        }
+        assert_eq!(
+            verdict("BADHANDLER"),
+            refused(vec![Refusal::Handler {
+                address: attacker.clone()
+            }])
+        );
+        assert!(matches!(
+            verdict("PAYR"),
+            Authority::Refused { reasons } if matches!(&reasons[..], [Refusal::Payment { receiver, .. }] if *receiver == attacker)
+        ));
+    }
+
+    /// The executor deploys a multisig only from a genesis Verified on its
+    /// chain, read just now — a hooked one never, nor one with no code read.
+    #[test]
+    fn the_executor_deploys_only_a_verified_genesis() {
+        let file: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/vectors/multisig/hostile-geneses.json"
+        ))
+        .unwrap();
+        let row = &file["geneses"][5];
+        let hooked = Genesis {
+            factory: file["factory"].as_str().unwrap().into(),
+            singleton: file["singleton"].as_str().unwrap().into(),
+            salt_nonce: row["saltNonce"].as_str().unwrap().into(),
+            initializer: row["initializer"].as_str().unwrap().into(),
+            name: None,
+        };
+        let ms = salted(&[A.into(), B.into()], 1, "0x7").unwrap();
+        let tx = cancel_tx(&ms.address, "0x0").unwrap();
+        let plan = |multisig: &str, g: &Genesis, facts: Option<ChainFacts>| ExecutionPlan {
+            multisig: multisig.into(),
+            deploy_multisig: Some(g.clone()),
+            deploy_owners: vec![],
+            tx: tx.clone(),
+            approvals: vec![],
+            executor: Some(A.into()),
+            deploy_facts: facts,
+        };
+        let calls =
+            execution_calls(&plan(&ms.address, &ms.genesis, Some(safe_141_facts()))).unwrap();
+        assert_eq!(calls[0], deploy_call(&ms.genesis).unwrap());
+        assert!(execution_calls(&plan(&ms.address, &ms.genesis, None)).is_err());
+        assert!(
+            execution_calls(&plan(&ms.address, &ms.genesis, Some(ChainFacts::default()))).is_err()
+        );
+        let error = execution_calls(&plan(
+            "0x2F53cC750594bB97c21Bf3c18A4837bb5Ad911f6",
+            &hooked,
+            Some(safe_141_facts()),
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("module"), "{error}");
+        // Already deployed: nothing to deploy, nothing to check here.
+        let deployed = ExecutionPlan {
+            deploy_multisig: None,
+            ..plan(&ms.address, &ms.genesis, None)
+        };
+        assert_eq!(execution_calls(&deployed).unwrap().len(), 1);
+    }
+
+    fn word_of(a: &str) -> String {
+        hex(&word_addr(addr(a).unwrap()))
+    }
+
+    fn modules_answer(modules: &[&str], next: &str) -> String {
+        let mut out = word_usize(0x40).to_vec();
+        out.extend_from_slice(&word_addr(addr(next).unwrap()));
+        out.extend_from_slice(&word_usize(modules.len()));
+        for m in modules {
+            out.extend_from_slice(&word_addr(addr(m).unwrap()));
+        }
+        hex(&out)
+    }
+
+    /// A deployed Safe: the chain says what can act for it besides its
+    /// members — a module, a guard, a handler or singleton that is not Safe's.
+    #[test]
+    fn a_deployed_safe_shows_what_else_can_act_for_it() {
+        let zero = hex(&[0u8; 32]);
+        let sentinel = "0x0000000000000000000000000000000000000001";
+        let clean = DeployedFacts {
+            modules: Some(modules_answer(&[], sentinel)),
+            guard: Some(zero.clone()),
+            module_guard: Some("0x".into()),
+            handler: Some(word_of(COMPATIBILITY_FALLBACK_HANDLER)),
+            singleton: Some(word_of(safe::SAFE_SINGLETON)),
+            codes: BTreeMap::new(),
+        };
+        // First the storage, then the code of what it names.
+        let first = deployed_check(&clean);
+        assert_eq!(
+            first,
+            DeployedCheck {
+                risks: vec![],
+                need_code: vec![
+                    COMPATIBILITY_FALLBACK_HANDLER.into(),
+                    safe::SAFE_SINGLETON.into()
+                ],
+                unread: false
+            }
+        );
+        let read = DeployedFacts {
+            codes: safe_141_facts().codes,
+            ..clean.clone()
+        };
+        assert_eq!(deployed_check(&read), DeployedCheck::default());
+        // No handler at all is fine.
+        let no_handler = DeployedFacts {
+            handler: Some(zero.clone()),
+            ..read.clone()
+        };
+        assert_eq!(deployed_check(&no_handler), DeployedCheck::default());
+
+        let attacker = "0x9813461E88aDD60D0eC0943B74A83368CA2E36D1";
+        let other = "0x2222222222222222222222222222222222222222";
+        let risky = DeployedFacts {
+            modules: Some(modules_answer(&[attacker], other)),
+            guard: Some(word_of(other)),
+            handler: Some(word_of(attacker)),
+            singleton: Some(word_of(attacker)),
+            ..read.clone()
+        };
+        assert_eq!(
+            deployed_check(&risky).risks,
+            vec![
+                Risk::Module {
+                    address: attacker.into()
+                },
+                // The page's `next`: another module, past the page.
+                Risk::Module {
+                    address: addr(other).unwrap().to_checksum(None)
+                },
+                Risk::Guard {
+                    address: addr(other).unwrap().to_checksum(None)
+                },
+                Risk::Handler {
+                    address: attacker.into()
+                },
+                Risk::Singleton {
+                    address: attacker.into()
+                },
+            ]
+        );
+        // Safe's addresses holding other code are not Safe's contracts.
+        let mut codes = safe_141_facts().codes;
+        codes.insert(safe::SAFE_SINGLETON.to_lowercase(), Some("0x6080".into()));
+        assert_eq!(
+            deployed_check(&DeployedFacts {
+                codes,
+                ..read.clone()
+            })
+            .risks,
+            vec![Risk::Singleton {
+                address: safe::SAFE_SINGLETON.into()
+            }]
+        );
+        // A read the chain did not answer: nothing said yet.
+        assert!(
+            deployed_check(&DeployedFacts {
+                modules: None,
+                ..read.clone()
+            })
+            .unread
+        );
+        let mut codes = safe_141_facts().codes;
+        codes.insert(safe::SAFE_SINGLETON.to_lowercase(), None);
+        assert!(deployed_check(&DeployedFacts { codes, ..read }).unread);
+    }
+
+    /// The door: the reads, and the verdicts as the shells take them.
+    #[test]
+    fn the_authority_answers_through_the_door() {
+        let reads: serde_json::Value =
+            serde_json::from_str(&call_json("deployedReads", "{}").unwrap()).unwrap();
+        assert_eq!(
+            reads["modulesCall"],
+            format!(
+                "0xcc2f8452{}{}",
+                "0".repeat(63) + "1",
+                "0".repeat(62) + "0a"
+            )
+        );
+        let ms = multisig_genesis(&[A.into(), B.into()], 2, "Team fund", "0x7").unwrap();
+        let facts = serde_json::json!({"codes": safe_141_facts().codes});
+        let answer: serde_json::Value = serde_json::from_str(
+            &call_json(
+                "counterfactualAuthority",
+                &serde_json::json!({"genesis": ms.genesis, "safe": ms.address, "facts": facts})
+                    .to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            answer,
+            serde_json::json!({"kind": "verified", "owners": ms.owners, "threshold": 2})
+        );
+        let answer: serde_json::Value = serde_json::from_str(
+            &call_json(
+                "counterfactualAuthority",
+                &serde_json::json!({"genesis": ms.genesis, "safe": B}).to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            answer,
+            serde_json::json!({"kind": "refused", "reasons": [{"kind": "wrongAddress"}]})
+        );
+        let check: serde_json::Value =
+            serde_json::from_str(&call_json("deployedCheck", r#"{"facts":{}}"#).unwrap()).unwrap();
+        assert_eq!(check["unread"], true);
     }
 }

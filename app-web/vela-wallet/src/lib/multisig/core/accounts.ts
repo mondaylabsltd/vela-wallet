@@ -11,7 +11,12 @@
  * Adding needs only the address: the genesis comes from the service and is
  * accepted only if the core re-derives the address from it — a different
  * genesis for the same address would take a 160-bit preimage, so the service
- * cannot hand over a wrong one.
+ * cannot hand over a wrong one. Deriving the address is not enough to know
+ * who controls it, though (§3.5): where it is deployed, the chain says
+ * (modules, guards, handler, singleton — shown, and added only on the
+ * person's confirmation); where it is not, the core's counterfactual rule
+ * must find its genesis Verified (no setup code, module, strange handler or
+ * payment; Safe's own code on the chain), else it is not added at all.
  *
  * Registry v4 (2026-10-29): every record carries a name, and the multisig
  * itself may rename its record (a transaction of its own). What a record's
@@ -30,6 +35,7 @@
  * never the chain its record is on.
  */
 import { poolRpcCall } from '$lib/services/rpc-pool';
+import { counterfactualOn, deployedOn, type Finding } from './authority';
 import { hasCode } from './chain';
 import { creationGenesis, hasTransactionService } from './safe-service';
 import {
@@ -363,6 +369,20 @@ export function followUnrecorded(retry: () => Promise<void> = retryUnrecorded): 
 	};
 }
 
+/**
+ * Why a multisig is not added as it stands (§3.5): `refused` — not deployed
+ * on any of its networks, and its genesis is one the core will not deploy
+ * or sign for (its findings say why); `unverified` — the chain did not
+ * answer for the Safe contracts it needs (`chainId`), so who would control
+ * it cannot be said yet; `highRisk` — deployed, and something besides its
+ * members can act for it there: added only on the person's explicit
+ * confirmation (`acceptRisks`), and the findings stay shown.
+ */
+export type AuthorityOutcome =
+	| { ok: false; reason: 'refused'; findings: Finding[] }
+	| { ok: false; reason: 'unverified'; chainId: number }
+	| { ok: false; reason: 'highRisk'; findings: Finding[]; account: MultisigAccount };
+
 export type AddOutcome =
 	| { ok: true; account: MultisigAccount }
 	| {
@@ -374,18 +394,22 @@ export type AddOutcome =
 			 * it is not guessed.
 			 */
 			reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' | 'chooseNetwork';
-	  };
+	  }
+	| AuthorityOutcome;
 
 /**
  * Add a multisig by address, and show it. When the registry does not hold it
  * yet but it is deployed on one of `chainIds`, the service resolves its
  * genesis from that chain and records it (its creator paid for a
  * deployment, so the service pays), and the address is looked up again.
+ * A high-risk one is added only with `acceptRisks` — the person's tap on
+ * the warning, read again now — and keeps its findings.
  */
 export async function addMultisig(
 	address: string,
 	chainIds: number[],
-	network?: number
+	network?: number,
+	options: { acceptRisks?: boolean } = {}
 ): Promise<AddOutcome> {
 	const existing = multisig.find(address);
 	if (existing) {
@@ -393,10 +417,56 @@ export async function addMultisig(
 		return { ok: true, account: existing };
 	}
 	const found = await findMultisig(address, chainIds, network);
-	if (!found.ok) return found;
-	const account = keepMultisig(found.account);
+	let account: MultisigAccount;
+	if (found.ok) account = keepMultisig(found.account);
+	else if (found.reason === 'highRisk' && options.acceptRisks) {
+		account = keepMultisig(found.account, found.findings);
+	} else return found;
 	multisig.activate(account.address);
 	return { ok: true, account };
+}
+
+/**
+ * Who can act for `address` on its networks (§3.5): where it is deployed,
+ * what else can act for it there; where it is deployed nowhere, whether its
+ * genesis is Verified on each network it is used on. `null`: nothing found.
+ */
+async function vetAuthority(
+	address: string,
+	genesis: Genesis,
+	deployed: number[],
+	used: number[]
+): Promise<
+	| { ok: false; reason: 'refused'; findings: Finding[] }
+	| { ok: false; reason: 'unverified'; chainId: number }
+	| { ok: false; reason: 'unavailable' }
+	| { ok: true; findings: Finding[] }
+> {
+	const findings: Finding[] = [];
+	for (const chainId of deployed) {
+		const check = await deployedOn(chainId, address);
+		if (check.unread) return { ok: false, reason: 'unavailable' };
+		findings.push(...check.risks.map((risk) => ({ from: 'chain' as const, chainId, risk })));
+	}
+	// Deployed somewhere: the chain is its authority there; the executor
+	// still deploys it nowhere else unless its genesis is Verified there.
+	if (deployed.length > 0) return { ok: true, findings };
+	for (const chainId of used) {
+		const authority = await counterfactualOn(chainId, address, genesis);
+		if (authority.kind === 'refused') {
+			return {
+				ok: false,
+				reason: 'refused',
+				findings: authority.reasons.map((reason) => ({
+					from: 'genesis' as const,
+					chainId,
+					reason
+				}))
+			};
+		}
+		if (authority.kind === 'unknown') return { ok: false, reason: 'unverified', chainId };
+	}
+	return { ok: true, findings };
 }
 
 /**
@@ -497,31 +567,38 @@ export async function findMultisig(
 		have
 	});
 	if (where.length === 0) return { ok: false, reason: 'chooseNetwork' };
+	// The service's genesis decides nothing by itself (§3.5): the chain where
+	// it is deployed, the core's counterfactual rule where it is not.
+	const vetted = await vetAuthority(address, genesis, used, where);
+	if (!vetted.ok) return vetted;
 	const { owners, threshold } = genesisMembers(genesis);
-	return {
-		ok: true,
-		account: {
-			address,
-			genesis,
-			owners,
-			threshold,
-			recorded: !answer.pending,
-			// It came from the service: the service can hand it out.
-			shared: true,
-			chainIds: where,
-			addedMs: Date.now()
-		}
+	const account: MultisigAccount = {
+		address,
+		genesis,
+		owners,
+		threshold,
+		recorded: !answer.pending,
+		// It came from the service: the service can hand it out.
+		shared: true,
+		chainIds: where,
+		addedMs: Date.now()
 	};
+	if (vetted.findings.length > 0) {
+		return { ok: false, reason: 'highRisk', findings: vetted.findings, account };
+	}
+	return { ok: true, account };
 }
 
 /**
  * Keep a multisig {@link findMultisig} read on this device — in the account
- * list, not shown: which account is shown stays the person's to pick.
+ * list, not shown: which account is shown stays the person's to pick. A
+ * high-risk one keeps what was found, to be shown wherever it is.
  */
-export function keepMultisig(found: MultisigAccount): MultisigAccount {
+export function keepMultisig(found: MultisigAccount, findings: Finding[] = []): MultisigAccount {
 	const account = multisig.add(found.address, found.genesis, found.recorded, found.chainIds);
 	// It came from the service: the service can hand it out.
 	multisig.markShared(account.address);
+	if (findings.length > 0) multisig.setFindings(account.address, findings);
 	return multisig.find(account.address) ?? account;
 }
 
@@ -625,7 +702,9 @@ async function waitForTask(id: string): Promise<void> {
 
 export type ImportOutcome =
 	| { ok: true; account: MultisigAccount }
-	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notDeployed' };
+	| { ok: false; reason: 'notFound' | 'unavailable' | 'unsupported' | 'notDeployed' }
+	| { ok: false; reason: 'refused' | 'highRisk'; findings: Finding[] }
+	| { ok: false; reason: 'unverified'; chainId: number };
 
 /**
  * Import one Safe from a Safe{Wallet} export. Its genesis is, in order: the
@@ -635,9 +714,14 @@ export type ImportOutcome =
  * importing never depends on the genesis service, which is then asked to
  * record it (best effort). Whichever it is, the core must derive the Safe's
  * address from it. The address book's name is kept as this device's label.
- * A Safe already here is kept, and given the label if it has none.
+ * A Safe already here is kept, and given the label if it has none. Who
+ * controls it is vetted as for an address added (§3.5): a refused genesis
+ * is not imported; a high-risk Safe only with `acceptRisks`.
  */
-export async function importExported(safe: ExportedSafe): Promise<ImportOutcome> {
+export async function importExported(
+	safe: ExportedSafe,
+	options: { acceptRisks?: boolean } = {}
+): Promise<ImportOutcome> {
 	const chainIds = safe.chains.map((c) => c.chainId);
 	const existing = multisig.find(safe.address);
 	if (existing) {
@@ -704,19 +788,38 @@ export async function importExported(safe: ExportedSafe): Promise<ImportOutcome>
 	} catch {
 		return { ok: false, reason: 'unsupported' };
 	}
+	// Who controls it, on the export's networks this wallet can read (§3.5):
+	// the chain where it is deployed, the core's rule where it is not. None
+	// readable: nothing can be said, and it is not imported unchecked.
+	const readable = chainIds.filter((id) => networkForChainId(id) !== null);
+	if (readable.length === 0) return { ok: false, reason: 'unverified', chainId: chainIds[0] ?? 0 };
+	const live = await Promise.all(
+		readable.map(async (id) => ((await hasCode(id, safe.address).catch(() => false)) ? id : null))
+	);
+	const vetted = await vetAuthority(
+		safe.address,
+		genesis,
+		live.filter((id): id is number => id !== null),
+		readable
+	);
+	if (!vetted.ok) return vetted;
+	if (vetted.findings.length > 0 && !options.acceptRisks) {
+		return { ok: false, reason: 'highRisk', findings: vetted.findings };
+	}
 	const account = multisig.add(safe.address, genesis, recorded, chainIds);
+	if (vetted.findings.length > 0) multisig.setFindings(account.address, vetted.findings);
 	if (safe.name) multisig.setLabel(account.address, safe.name);
 	if (recorded) multisig.markShared(account.address);
 	else {
 		// The genesis service, if it is there, records it for other devices: a
 		// deployment on a chain it reads is its evidence (it pays); on another
 		// chain it is the genesis read here, sent to its index chain.
-		const deployedOn = safe.chains.filter((c) => c.deployed).map((c) => c.chainId);
-		if (deployedOn.length > 0) {
+		const listedDeployed = safe.chains.filter((c) => c.deployed).map((c) => c.chainId);
+		if (listedDeployed.length > 0) {
 			const named = genesis;
 			void (async () => {
 				const served = await servedChains().catch(() => null);
-				const read = deployedOn.find((id) => served?.has(id));
+				const read = listedDeployed.find((id) => served?.has(id));
 				if (read === undefined) await record(safe.address, named, undefined);
 				else await importGenesis({ chainId: read, safe: safe.address });
 			})().catch(() => {});

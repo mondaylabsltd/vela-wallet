@@ -55,7 +55,8 @@ vi.mock('../core/service', () => ({
 	fetchGenesis: async () => ({ found: true, recordedOn: seams.recordedOn })
 }));
 vi.mock('$lib/services/networks', () => ({
-	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null)
+	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null),
+	chainName: (id: number) => `Chain ${id}`
 }));
 vi.mock('../core/display', () => ({ chainName: (id: number) => `Chain ${id}` }));
 vi.mock('../core/chain', () => ({ hasCode: async () => seams.deployed }));

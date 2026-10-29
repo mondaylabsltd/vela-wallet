@@ -58,3 +58,17 @@ export async function speedDefaults(): Promise<{ factory: Speed; offered: Speed[
 		machine.free();
 	}
 }
+
+/**
+ * The Safe contracts the core pins (`multisig::CANONICAL`): each one's
+ * address and the keccak256 of the runtime code it must hold — for a suite
+ * that recomputes them from a chain.
+ */
+export async function canonicalSafeContracts(): Promise<
+	{ name: string; address: string; codeHash: string }[]
+> {
+	const core = (await shippedCore()) as unknown as {
+		multisigCall(method: string, args: string): string;
+	};
+	return JSON.parse(core.multisigCall('canonicalContracts', '{}'));
+}

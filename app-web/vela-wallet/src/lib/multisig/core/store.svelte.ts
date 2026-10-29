@@ -15,6 +15,7 @@
  * genesis's are kept as the multisig's founding members, for display before
  * a chain answers.
  */
+import type { Finding } from './refusal';
 import { genesisAddress, genesisMembers, sameAddress, type Genesis } from './kernel';
 
 export const MULTISIG_ACCOUNTS_KEY = 'vela.multisigAccounts';
@@ -42,6 +43,12 @@ export interface MultisigAccount {
 	 */
 	label?: string;
 	addedMs: number;
+	/**
+	 * What else can act for it, as the chain showed when the person added it
+	 * anyway (§3.5: a module, a guard, a handler or singleton that is not
+	 * Safe's) — kept to be shown wherever it is, never hidden.
+	 */
+	findings?: Finding[];
 }
 
 /**
@@ -208,6 +215,14 @@ class MultisigStore {
 		if (!row || row.genesis.name === name) return;
 		this.accounts = this.accounts.map((a) =>
 			sameAddress(a.address, address) ? { ...a, genesis: { ...a.genesis, name } } : a
+		);
+		write(this.accounts);
+	}
+
+	/** What else can act for it, accepted by the person when it was added (shown, never hidden). */
+	setFindings(address: string, findings: Finding[]): void {
+		this.accounts = this.accounts.map((a) =>
+			sameAddress(a.address, address) ? { ...a, findings } : a
 		);
 		write(this.accounts);
 	}

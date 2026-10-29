@@ -7,6 +7,7 @@
  * itself) and the service built from the registry repository's tree.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { canonicalSafeContracts } from '../core-facts';
 import { en } from '../live-helpers';
 import {
 	EOA_ONE,
@@ -18,6 +19,8 @@ import {
 	balanceOf,
 	calldata,
 	enterParallel,
+	hookedSafe,
+	keccak,
 	landedRecord,
 	postApproval,
 	recordOnChain,
@@ -34,6 +37,8 @@ import {
 
 const SHOTS = 'e2e/onchain/.shots';
 const RECIPIENT = '0x000000000000000000000000000000000000bEEF';
+/** The r4-e attacker's module address. */
+const ATTACKER_MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
 
 /**
  * The send every account has — token, recipient, amount, Continue — whose
@@ -954,4 +959,121 @@ test('a proposal on a network it is not deployed on: found by another device wit
 	expect(thrownB).toEqual([]);
 	await a.close();
 	await b.close();
+});
+
+/**
+ * §3.5: the pinned code hashes are what the chain holds — every canonical
+ * Safe contract the core accepts, read on the fork (Gnosis's state) and
+ * hashed here.
+ */
+test('the canonical Safe contracts on the fork hold exactly the code the core pins', async () => {
+	const table = await canonicalSafeContracts();
+	expect(table.length).toBeGreaterThanOrEqual(18);
+	for (const c of table) {
+		const code = await rpc<string>('eth_getCode', [c.address, 'latest']);
+		expect(code.length, c.name).toBeGreaterThan(2);
+		expect(await keccak(code), `${c.name} ${c.address}`).toBe(c.codeHash);
+	}
+});
+
+/**
+ * r4-e (S1): a malicious genesis service hands out a genesis whose setup
+ * enables an attacker's module. The address derives — and the wallet says
+ * no: undeployed, the core refuses it (nothing adds it, nothing deploys it);
+ * deployed with its module, the chain shows it, said plainly, and it is added
+ * only on the person's explicit tap, flagged from then on.
+ */
+test('a genesis that hands the multisig to a module: refused; deployed, said and added only on a tap', async ({
+	browser
+}) => {
+	const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+	await useHarness(ctx);
+	const hooked = await hookedSafe([FIXTURES.one], ATTACKER_MODULE, String(Date.now()));
+	// The malicious service: the hooked genesis for this address, as found and checked.
+	await ctx.route('**/api/genesis/**', async (route) => {
+		if (!route.request().url().toLowerCase().includes(hooked.address.toLowerCase())) {
+			return route.continue();
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				found: true,
+				genesis: { ...hooked.genesis, name: 'Treasury' },
+				recordedOn: [100],
+				readFrom: 100,
+				verified: true,
+				nameBySafe: true,
+				renamedAt: 0
+			})
+		});
+	});
+	const page = await ctx.newPage();
+	const thrown = errors(page);
+	await enterParallel(page);
+	await page
+		.getByRole('button', { name: /Parallel One/ })
+		.first()
+		.click();
+	await page.getByRole('button', { name: 'Add account' }).click();
+	await page.getByRole('button', { name: /^Add multisig/ }).click();
+	const field = page.getByPlaceholder('Multisig address (0x…)');
+	const add = page.getByRole('button', { name: 'Add', exact: true });
+	const module = new RegExp(`module that can move funds without its members: ${ATTACKER_MODULE}`);
+
+	await test.step('undeployed: the core refuses its genesis, and nothing adds it', async () => {
+		await field.fill(hooked.address);
+		await add.click();
+		// Nothing says which network it is on: the person names one.
+		await page.getByRole('button', { name: 'Network' }).click();
+		await page.getByRole('option', { name: /^Gnosis/ }).click();
+		await add.click();
+		const notice = page.getByTestId('authority-refused');
+		await expect(notice).toBeVisible({ timeout: 60_000 });
+		await expect(notice).toContainText("Vela won't use this multisig");
+		await expect(notice).toContainText(module);
+		await expect(add).toBeDisabled();
+		await expect(page.getByRole('button', { name: /add it anyway/ })).toHaveCount(0);
+		await shot(page, 'h1-refused');
+		expect(await page.evaluate(() => localStorage.getItem('vela.multisigAccounts'))).toBeNull();
+	});
+
+	await hooked.deploy();
+	expect(
+		await rpc<string>('eth_call', [
+			{ to: hooked.address, data: `0x2d9ad53d${ATTACKER_MODULE.slice(2).padStart(64, '0')}` },
+			'latest'
+		])
+	).toBe(`0x${'0'.repeat(63)}1`);
+
+	await test.step('deployed with its module: shown plainly, added only on the tap', async () => {
+		await field.fill('');
+		await field.fill(hooked.address);
+		await add.click();
+		const notice = page.getByTestId('authority-risk');
+		await expect(notice).toBeVisible({ timeout: 60_000 });
+		await expect(notice).toContainText(
+			new RegExp(`On Gnosis.*, this multisig has a ${module.source}`)
+		);
+		expect(await page.evaluate(() => localStorage.getItem('vela.multisigAccounts'))).toBeNull();
+		await shot(page, 'h2-high-risk');
+		await page.getByRole('button', { name: 'I understand — add it anyway' }).click();
+		await expect(page.getByText('Treasury', { exact: true }).first()).toBeVisible({
+			timeout: 30_000
+		});
+		const kept = JSON.parse(
+			(await page.evaluate(() => localStorage.getItem('vela.multisigAccounts')))!
+		) as { address: string; findings?: unknown[] }[];
+		expect(kept[0].findings).toEqual([
+			{ from: 'chain', chainId: 100, risk: { kind: 'module', address: ATTACKER_MODULE } }
+		]);
+	});
+
+	await test.step('and it stays said: the switcher and its settings', async () => {
+		await page.goto('/en/settings');
+		await expect(page.getByTestId('authority-risk')).toContainText(module, { timeout: 30_000 });
+		await shot(page, 'h3-settings');
+	});
+	expect(thrown).toEqual([]);
+	await ctx.close();
 });

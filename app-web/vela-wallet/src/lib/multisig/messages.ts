@@ -297,6 +297,37 @@ export interface MultisigMessages {
 		/** Nothing says which network it is used on: the person picks one. */
 		chooseNetwork: string;
 	};
+	/**
+	 * Who can act for a multisig (§3.5): a genesis the core refuses or cannot
+	 * check yet, one line per reason it gives (`{{address}}`, `{{network}}`),
+	 * what else can act for a deployed one, and the executor's refusal.
+	 */
+	authority: {
+		refusedTitle: string;
+		refusedBody: string;
+		unverified: string;
+		wrongAddress: string;
+		notSetup: string;
+		badMembers: string;
+		unknownFactory: string;
+		unknownSingleton: string;
+		module: string;
+		setupCode: string;
+		handler: string;
+		payment: string;
+		missingCode: string;
+		wrongCode: string;
+		riskTitle: string;
+		riskBody: string;
+		riskModule: string;
+		riskGuard: string;
+		riskHandler: string;
+		riskSingleton: string;
+		riskConfirm: string;
+		riskFlag: string;
+		deployRefused: string;
+		deployUnverified: string;
+	};
 }
 
 /** Every key of {@link MultisigMessages}, for the resolver to walk. */
@@ -553,5 +584,31 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		notMultisig: '',
 		chooseNetwork: ''
+	},
+	authority: {
+		refusedTitle: '',
+		refusedBody: '',
+		unverified: '',
+		wrongAddress: '',
+		notSetup: '',
+		badMembers: '',
+		unknownFactory: '',
+		unknownSingleton: '',
+		module: '',
+		setupCode: '',
+		handler: '',
+		payment: '',
+		missingCode: '',
+		wrongCode: '',
+		riskTitle: '',
+		riskBody: '',
+		riskModule: '',
+		riskGuard: '',
+		riskHandler: '',
+		riskSingleton: '',
+		riskConfirm: '',
+		riskFlag: '',
+		deployRefused: '',
+		deployUnverified: ''
 	}
 };

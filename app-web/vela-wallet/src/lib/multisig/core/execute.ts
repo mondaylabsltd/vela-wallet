@@ -7,6 +7,11 @@
  * no code on the chain yet — both permissionless, from their geneses — then
  * `execTransaction`. The executor counts as an approval of its own
  * (`msg.sender`), so it needs no second signature.
+ *
+ * The multisig is deployed only from a genesis the core finds Verified on
+ * that chain (§3.5), with the chain's code read right before the call is
+ * built — never one whose setup could hand it to anything but its members,
+ * and never on a chain that did not answer.
  */
 import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
 import { findAccountByAddress } from '$lib/services/accounts';
@@ -20,8 +25,11 @@ import {
 	type SubmitResult
 } from '$lib/services/safe-transaction';
 import { signChallenge } from '$lib/signing/sign-challenge';
+import { counterfactualFacts } from './authority';
+import { GenesisRefusedError } from './refusal';
 import { hasCode, type ChainMembers } from './chain';
 import {
+	counterfactualAuthority,
 	executionCalls,
 	isEcdsaApproval,
 	sameAddress,
@@ -60,13 +68,21 @@ export async function planCalls(input: ExecutionInput) {
 			deployOwners.push(a.ownerGenesis);
 		}
 	}
+	// Deploying it: its genesis must be Verified on this chain, on code read now.
+	let deployFacts = null;
+	if (!input.members.deployed) {
+		deployFacts = await counterfactualFacts(input.chainId, input.multisig, input.genesis);
+		const authority = counterfactualAuthority(input.genesis, input.multisig, deployFacts);
+		if (authority.kind !== 'verified') throw new GenesisRefusedError(input.chainId, authority);
+	}
 	return executionCalls({
 		multisig: input.multisig,
 		deployMultisig: input.members.deployed ? null : input.genesis,
 		deployOwners,
 		tx: input.tx,
 		approvals: others,
-		executor: owner ? input.executor.address : null
+		executor: owner ? input.executor.address : null,
+		deployFacts
 	});
 }
 
