@@ -1377,6 +1377,15 @@ export function registryResolveKeyStep(public_key_hex: string, answers_json: str
 export function registryResolveUnitStep(unit_id: number, source: string, answers_json: string): string;
 
 /**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+ * walk as [`verified_name_step`], handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ */
+export function resolvedNameStep(chain_id: number, registry: string, name: string, answers_json: string): string;
+
+/**
  * How long an endpoint rests after `consecutive_failures` failures in a
  * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
  * `rpc_pool::cooldown_ms`.
@@ -2089,6 +2098,7 @@ export interface InitOutput {
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly resolvedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
     readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly rpcHedgeAfterMs: () => number;
