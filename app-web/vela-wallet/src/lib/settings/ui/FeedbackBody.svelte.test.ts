@@ -585,10 +585,13 @@ describe('FeedbackBody — the endings', () => {
 			}
 		});
 		expect(root.querySelector('.filed-dropped')).toBeNull();
-		expect(root.querySelector('.filed .primary')).toBeNull();
 		expect(root.querySelector('.filed .value')).toBeNull();
-		// Done the one outlined button; the issue a quiet link above it.
-		expect(root.querySelectorAll('.filed .secondary')).toHaveLength(1);
+		// Done, the one action, is the neutral primary — full ink, never the
+		// muted outline that read as disabled; the issue a quiet link above it.
+		const done = root.querySelector('.filed .button') as HTMLElement;
+		expect(done.classList.contains('primary')).toBe(true);
+		expect(done.textContent?.trim()).toBe(String(panel().success.done));
+		expect(root.querySelectorAll('.filed .secondary')).toHaveLength(0);
 		expect(root.querySelector('.filed a.github')).not.toBeNull();
 	});
 
@@ -1177,27 +1180,29 @@ describe('FeedbackBody — review fixes', () => {
 		);
 	});
 
-	it('the thank-you sits at the 2:3 optical centre of the pane it is seen in', async () => {
-		const host = document.createElement('div');
-		host.style.cssText = 'height: 900px; overflow-y: auto; width: 560px';
-		document.body.appendChild(host);
-		try {
-			render(FeedbackBody, {
-				target: host,
-				props: { panel: panel(), result: { filed: true, number: 3, screenshotsDropped: 0 } }
-			});
-			await tick();
-			const block = host.querySelector('.filed-block') as HTMLElement;
-			const frame = host.getBoundingClientRect();
-			const box = block.getBoundingClientRect();
-			const free = frame.height - box.height;
-			const above = box.top - frame.top;
-			// Two parts of the free room above, three below.
-			expect(above / free).toBeGreaterThan(0.35);
-			expect(above / free).toBeLessThan(0.45);
-		} finally {
-			host.remove();
-		}
+	it('the thank-you takes its own height, not the form’s — the sheet shrinks to it', async () => {
+		const { screen, root } = await drawn();
+		const field = root.querySelector('textarea') as HTMLTextAreaElement;
+		field.value = 'The send froze';
+		field.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		const send = [...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === String(panel().send)
+		) as HTMLButtonElement;
+		send.click();
+		await tick();
+		await screen.rerender({ result: { filed: true, number: 3, url: 'https://x/3' } });
+		const filed = root.querySelector('.filed') as HTMLElement;
+		const block = root.querySelector('.filed-block') as HTMLElement;
+		const style = getComputedStyle(filed);
+		// No held frame: the box is its block plus its own padding, nothing more.
+		expect(style.minHeight).toMatch(/^(0px|auto)$/);
+		expect(
+			filed.getBoundingClientRect().height -
+				block.getBoundingClientRect().height -
+				parseFloat(style.paddingTop) -
+				parseFloat(style.paddingBottom)
+		).toBeLessThanOrEqual(1);
 	});
 });
 

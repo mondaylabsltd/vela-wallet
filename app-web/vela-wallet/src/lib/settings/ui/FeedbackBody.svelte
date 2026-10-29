@@ -177,32 +177,12 @@
 			fallbackRoad.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
 		}
 	});
-	/**
-	 * The frame the thank-you sits in (v2 A7, 078 review): the room this body
-	 * is SEEN in — from its top to the bottom of the sheet or pane that
-	 * scrolls it. In the phone sheet that is the form's visible height (the
-	 * sheet hugs its content), so the sheet does not collapse under the
-	 * thumb; in the desktop pane it is the pane, so the block lands at the
-	 * pane's 2:3 optical centre instead of high up in a frame the size of a
-	 * short form.
-	 */
-	let held = $state(0);
-
 	function scrollerOf(el: HTMLElement): HTMLElement | null {
 		let node = el.parentElement;
 		while (node !== null && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) {
 			node = node.parentElement;
 		}
 		return node;
-	}
-
-	function visibleRoom(el: HTMLElement): number {
-		const scroller = scrollerOf(el);
-		const top = el.getBoundingClientRect().top;
-		if (scroller === null) return Math.max(0, window.innerHeight - top);
-		const offset = top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-		const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
-		return Math.max(0, scroller.clientHeight - offset - padding);
 	}
 
 	/**
@@ -227,9 +207,7 @@
 	onMount(() => {
 		const outcome = outcomeAtMount;
 		if (outcome === undefined || root === undefined) return;
-		if (outcome.filed) {
-			held = visibleRoom(root);
-		} else if (fallbackRoad !== undefined) {
+		if (!outcome.filed && fallbackRoad !== undefined) {
 			fallbackTitle?.focus({ preventScroll: true });
 			reveal(fallbackRoad);
 		}
@@ -350,7 +328,6 @@
 	 */
 	async function send(): Promise<void> {
 		if (draft.waiting) return;
-		if (root !== undefined) held = visibleRoom(root);
 		// A send is the next change: the refusal has been read. (A tile that
 		// fails while this send waits says so again.)
 		draft.refusal = null;
@@ -373,7 +350,6 @@
 
 	function done(): void {
 		draft.reset();
-		held = 0;
 		ondone?.();
 	}
 
@@ -399,15 +375,12 @@
 		{@const dropped = (result.screenshotsDropped ?? 0) > 0}
 		<!-- Filed: a thank-you, warm and short. The issue it became is a quiet
 		     link under it — a person who reported something is owed a way back
-		     to it, and when images were lost, that page is where they go. Held
-		     at the form's height with the block at the 2:3 optical centre (v2
-		     A7). No accent: nothing here moves value. -->
-		<div
-			class="filed"
-			class:held={held > 0}
-			style:--held={held > 0 ? `${held}px` : undefined}
-			in:fade={{ duration: 150 }}
-		>
+		     to it, and when images were lost, that page is where they go. Its
+		     own height, no more (round 3): the phone sheet hugs it rather than
+		     keeping the form's height, and the desktop pane shows it under the
+		     title, not at the foot of a tall empty frame. No accent: nothing
+		     here moves value. -->
+		<div class="filed" in:fade={{ duration: 150 }}>
 			<div class="filed-block" role="group" aria-labelledby="{uid}-filed">
 				<span class="disc"><Icon icon={UTILITY_ICONS.check} size="tab" /></span>
 				<p
@@ -430,7 +403,9 @@
 					>
 				{/if}
 				<div class="filed-actions">
-					<Button variant="secondary" shape="rounded" onclick={done}>{panel.success.done}</Button>
+					<!-- The one action here, in the neutral primary: an outlined Done
+					     in muted ink read as disabled. -->
+					<Button variant="primary" shape="rounded" onclick={done}>{panel.success.done}</Button>
 				</div>
 			</div>
 		</div>
@@ -1133,26 +1108,6 @@
 		display: flex;
 		flex-direction: column;
 		padding-block: var(--space-2xl) var(--space-md);
-	}
-
-	/* Held at the form's height: the block sits at the 2:3 optical centre —
-	   two parts of the free room above it, three below. */
-	.filed.held {
-		min-height: var(--held);
-		padding-block: 0;
-	}
-
-	.filed.held::before,
-	.filed.held::after {
-		content: '';
-	}
-
-	.filed.held::before {
-		flex: 2;
-	}
-
-	.filed.held::after {
-		flex: 3;
 	}
 
 	.filed-block {
