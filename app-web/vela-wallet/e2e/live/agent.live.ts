@@ -22,14 +22,16 @@ import {
 
 test.skip(!live || !mcpReady, 'needs ARC_FUNDER(_KEY), a ClientMCP bridge and its tokens');
 
+/** Text someone other than Vela wrote, as vela_state hands it over (r4e-2). */
+type Untrusted = { untrusted_text: string; from: string };
 type Account = {
 	address: string;
-	name: string;
+	name: Untrusted;
 	active: boolean;
 	agent_allowed: boolean;
 	multisig?: { threshold: number; members: string[]; waiting_proposals: number | null };
 };
-type Token = { chain_id: number; symbol: string; balance: string | null };
+type Token = { chain_id: number; symbol: string | Untrusted; balance: string | null };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -114,7 +116,11 @@ test('an AI agent over ClientMCP: a Vela account, then a multisig', async ({ bro
 		});
 		const rows = state.accounts as Account[];
 		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({ name: 'Agent Alice', active: true, agent_allowed: true });
+		expect(rows[0]).toMatchObject({
+			name: { untrusted_text: 'Agent Alice', from: 'this_device' },
+			active: true,
+			agent_allowed: true
+		});
 		expect(rows[0].multisig).toBeUndefined();
 		expect(await arcUsdc(agent)).toBeCloseTo(0.3, 6);
 	});
