@@ -466,10 +466,12 @@ export async function findMultisig(
 		return { ok: false, reason: 'unsupported' };
 	}
 	if (!sameAddress(derived, address)) return { ok: false, reason: 'notFound' };
-	const [used, proposed] = await Promise.all([
-		deployedChains(address, chainIds),
-		proposalChains(address, chainIds)
-	]);
+	const used = await deployedChains(address, chainIds);
+	// The mailbox is asked network by network only when nothing else says:
+	// one read per network the wallet has would spend the service's per-client
+	// budget the person's next read needs.
+	const proposed =
+		used.length === 0 && network === undefined ? await proposalChains(address, chainIds) : [];
 	// Where it is used, from what says so (the core's rule): the chains it is
 	// deployed on, those the mailbox holds proposals of it for, then the
 	// network the person (or a link) names. Never the chain its record is on
@@ -543,29 +545,40 @@ async function deployedChains(address: string, chainIds: number[]): Promise<numb
 	return results.filter((id): id is number => id !== null);
 }
 
+/** How many mailbox reads {@link proposalChains} has out at once. */
+const MAILBOX_READS_AT_ONCE = 3;
+
 /**
  * Which of `chainIds` the mailbox holds proposals of `address` for. The
- * mailbox takes proposals on any chain, so this is asked per network the
- * wallet has; one that cannot be read says nothing (it is not a "no").
+ * mailbox takes proposals on any chain and has no list across them, so this
+ * is asked per network, a few at a time; one that cannot be read says
+ * nothing (it is not a "no").
  */
 async function proposalChains(address: string, chainIds: number[]): Promise<number[]> {
-	const results = await Promise.all(
-		chainIds.map(async (id) => {
-			const answer = await fetchProposals(id, address, { background: true }).catch(() => null);
-			return answer && answer.proposals.length > 0 ? id : null;
-		})
-	);
-	return results.filter((id): id is number => id !== null);
+	const found: number[] = [];
+	for (let i = 0; i < chainIds.length; i += MAILBOX_READS_AT_ONCE) {
+		const batch = chainIds.slice(i, i + MAILBOX_READS_AT_ONCE);
+		const results = await Promise.all(
+			batch.map(async (id) => {
+				const answer = await fetchProposals(id, address, { background: true }).catch(() => null);
+				return answer && answer.proposals.length > 0 ? id : null;
+			})
+		);
+		found.push(...results.filter((id): id is number => id !== null));
+	}
+	return found;
 }
 
 /** Multisigs whose networks were looked for this session. */
 const discovered = new Set<string>();
 
 /**
- * Once a session, look on every network of `chainIds` for what says the
- * multisig is used there that this device did not see (another member
- * deployed it, or proposed on a network of their own): such a network
+ * Once a session, look on every network of `chainIds` for a deployment this
+ * device did not see (another member deployed it there): such a network
  * becomes one of its networks here (the core's rule, over what was kept).
+ * Read with the wallet's own RPC only — never one mailbox read per network
+ * per page, which spent the service's per-client budget the person's own
+ * reads need; a network another member proposed on arrives with its link.
  * Quiet on failure; a network that cannot be read adds nothing.
  */
 export async function discoverChains(account: MultisigAccount, chainIds: number[]): Promise<void> {
@@ -574,11 +587,8 @@ export async function discoverChains(account: MultisigAccount, chainIds: number[
 	discovered.add(key);
 	const unseen = chainIds.filter((id) => !account.chainIds.includes(id));
 	if (unseen.length === 0) return;
-	const [deployed, proposals] = await Promise.all([
-		deployedChains(account.address, unseen),
-		proposalChains(account.address, unseen)
-	]);
-	const where = multisigNetworks({ deployed, proposals, kept: account.chainIds });
+	const deployed = await deployedChains(account.address, unseen);
+	const where = multisigNetworks({ deployed, kept: account.chainIds });
 	for (const id of where) {
 		if (!account.chainIds.includes(id)) multisig.useChain(account.address, id);
 	}

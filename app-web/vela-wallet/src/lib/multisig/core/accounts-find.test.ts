@@ -20,6 +20,7 @@ const seams = vi.hoisted(() => ({
 	proposedOn: [] as number[],
 	/** Chains whose mailbox read fails. */
 	mailboxDown: [] as number[],
+	mailboxReads: 0,
 	table: null as { chains: Set<number> | null; homeChainId: number | null } | null
 }));
 const store = vi.hoisted(() => ({
@@ -75,6 +76,7 @@ vi.mock('./service', () => ({
 		recordedOn: seams.recordedOn
 	}),
 	fetchProposals: async (chainId: number) => {
+		seams.mailboxReads += 1;
 		if (seams.mailboxDown.includes(chainId)) throw new Error('away');
 		return {
 			members: {},
@@ -109,6 +111,7 @@ beforeEach(() => {
 	seams.recordedOn = undefined;
 	seams.proposedOn = [];
 	seams.mailboxDown = [];
+	seams.mailboxReads = 0;
 	seams.table = null;
 	store.rows = [];
 	store.active = null;
@@ -170,14 +173,12 @@ describe('the networks of a multisig added by address', () => {
 		expect(found).toMatchObject({ ok: true, account: { chainIds: [5042002] } });
 	});
 
-	it('deployed, proposed on, and named: each once, in that order', async () => {
+	it('deployed and named: each once, in that order — the mailbox not asked per network', async () => {
 		seams.deployedOn = [ARBITRUM];
 		seams.proposedOn = [5042002, ARBITRUM];
 		const found = await findMultisig(SAFE, SPACE, 11155111);
-		expect(found).toMatchObject({
-			ok: true,
-			account: { chainIds: [ARBITRUM, 5042002, 11155111] }
-		});
+		expect(found).toMatchObject({ ok: true, account: { chainIds: [ARBITRUM, 11155111] } });
+		expect(seams.mailboxReads).toBe(0);
 	});
 
 	it('when nothing says (its record on the registry chain is not a home), asks', async () => {
@@ -221,12 +222,13 @@ describe('where a record goes', () => {
  * wallet looks, and such a network becomes one of its networks here.
  */
 describe('networks another member made it used on', () => {
-	it('are found once a session: deployed there, or proposals there', async () => {
+	it('are found once a session where it is deployed, with no mailbox read per network', async () => {
 		seams.deployedOn = [42161];
 		seams.proposedOn = [8453];
 		const account = { address: SAFE, chainIds: [100] };
 		await discoverChains(account as never, [100, 42161, 8453, 10]);
-		expect(store.calls).toEqual(['useChain:42161', 'useChain:8453']);
+		expect(store.calls).toEqual(['useChain:42161']);
+		expect(seams.mailboxReads).toBe(0);
 		store.calls = [];
 		await discoverChains(account as never, [100, 42161, 8453, 10]);
 		expect(store.calls).toEqual([]);
