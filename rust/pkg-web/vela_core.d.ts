@@ -479,6 +479,70 @@ export class ManageTokensCore {
 }
 
 /**
+ * r" The multisigs on this device: create, add, import, records, recheck.
+ */
+export class MultisigAccountsCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
+ * r" Who the members are on each network, what a change would be, and
+ * r" the waiting changes with their per-network progress.
+ */
+export class MultisigMembersCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
+ * r" The connect page acting for an outside owner (§11.2, §11.3): the
+ * r" approve-later link, verification, the gate, sign / approveHash /
+ * r" execute / reject through the injected wallet, its outbox.
+ */
+export class MultisigOutsidePageCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
+ * r" Vela's side of a live session with an outside owner's wallet.
+ */
+export class MultisigOutsideSessionCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
+ * r" A multisig's transactions in flight: read, verify, propose, approve,
+ * r" the signing gate, the outbox, execute and follow.
+ */
+export class MultisigProposalsCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
  * r" Network & endpoint configuration: add-network wizard, overrides,
  * r" service endpoints, provider keys.
  */
@@ -1209,6 +1273,14 @@ export function multisigApprovalRoute(account_json: string): string | undefined;
  * the core's.
  */
 export function multisigCall(method: string, args_json: string): string;
+
+/**
+ * **Multisig links** (`vela_core::multisig_link`): the proposal link
+ * (`#ms=`), the invite (`#msa=`, networks, member names and kinds, the
+ * checksum refusal), the connect page's link (`ms=`, `for=`, damaged),
+ * row ids and units — `method` plus its arguments as JSON, as `multisigCall`.
+ */
+export function multisigLinkCall(method: string, args_json: string): string;
 
 /**
  * Whether `chain_id` is a testnet (spec 105).
@@ -1943,6 +2015,11 @@ export interface InitOutput {
     readonly __wbg_i18n_free: (a: number, b: number) => void;
     readonly __wbg_logincore_free: (a: number, b: number) => void;
     readonly __wbg_managetokenscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigaccountscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigmemberscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigoutsidepagecore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigoutsidesessioncore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigproposalscore_free: (a: number, b: number) => void;
     readonly __wbg_networkadmincore_free: (a: number, b: number) => void;
     readonly __wbg_paymentrequestcore_free: (a: number, b: number) => void;
     readonly __wbg_receivewatchcore_free: (a: number, b: number) => void;
@@ -2141,6 +2218,27 @@ export interface InitOutput {
     readonly minGasPriceWei: (a: number) => [number, number];
     readonly multisigApprovalRoute: (a: number, b: number) => [number, number];
     readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly multisigLinkCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly multisigaccountscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigaccountscore_new: () => number;
+    readonly multisigaccountscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigaccountscore_view: (a: number) => [number, number, number, number];
+    readonly multisigmemberscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigmemberscore_new: () => number;
+    readonly multisigmemberscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigmemberscore_view: (a: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_new: () => number;
+    readonly multisigoutsidepagecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_view: (a: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_new: () => number;
+    readonly multisigoutsidesessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_view: (a: number) => [number, number, number, number];
+    readonly multisigproposalscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigproposalscore_new: () => number;
+    readonly multisigproposalscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigproposalscore_view: (a: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
     readonly networkSpaceRead: (a: number, b: number) => [number, number];
