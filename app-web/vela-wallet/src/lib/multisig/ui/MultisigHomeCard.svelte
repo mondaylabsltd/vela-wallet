@@ -51,13 +51,13 @@
 	 * something (not spam) on its first network, as the wallet's balance read
 	 * it for the address shown.
 	 */
+	/** Its invite was handed on (shown, copied or shared): the accounts machine's word. */
+	const invited = $derived(!!active && (multisig.row(active.address)?.invite_shared ?? false));
 	const funded = $derived(
 		!!active &&
 			network !== null &&
-			balance.view.address.toLowerCase() === active.address.toLowerCase() &&
-			balance.view.tokens.some(
-				(t) => t.chain_id === network && !t.spam && /[1-9]/.test(t.balance)
-			)
+			balance.view.address?.toLowerCase() === active.address.toLowerCase() &&
+			balance.view.tokens.some((t) => t.chain_id === network && !t.spam && /[1-9]/.test(t.balance))
 	);
 	/** r5reg-18: a multisig of one has no members to invite. */
 	const solo = $derived(!!active && active.owners.length === 1);
@@ -88,8 +88,19 @@
 		<ol>
 			{#if !solo}
 				<li>
-					<button type="button" class="step" onclick={() => multisigUi.open({ kind: 'invite' })}>
-						<span class="icon"><Icon icon={UTILITY_ICONS['qr-code']} size="md" /></span>
+					<button
+						type="button"
+						class="step"
+						class:done={invited}
+						data-testid="first-run-invite"
+						onclick={() => multisigUi.open({ kind: 'invite' })}
+					>
+						<span class="icon"
+							><Icon
+								icon={invited ? UTILITY_ICONS.check : UTILITY_ICONS['qr-code']}
+								size="md"
+							/></span
+						>
 						<span class="text">
 							<span class="title">{m.create.firstRunInvite}</span>
 							<span class="note">{m.create.firstRunInviteNote}</span>
