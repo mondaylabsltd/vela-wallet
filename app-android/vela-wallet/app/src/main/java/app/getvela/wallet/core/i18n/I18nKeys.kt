@@ -456,6 +456,9 @@ object I18nKeys {
         const val SAVE = "contacts.save"
         const val INVALID_ADDRESS = "contacts.invalidAddress"
         const val SECTION_FAVORITES = "contacts.sectionFavorites"
+        // P2.5: a contact's note — the form's field and the detail's section (web round 3).
+        const val NOTE_LABEL = "contacts.noteLabel"
+        const val NOTE_PLACEHOLDER = "contacts.notePlaceholder"
         const val CONTRACT_TAG = "componentsUi.signing.contractTag"
         const val WALLET_TAG = "componentsUi.signing.walletTag"
         const val FIRST_TIME_TAG = "componentsUi.signing.firstTimeTagNeutral"

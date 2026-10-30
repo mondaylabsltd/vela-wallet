@@ -2066,6 +2066,8 @@ fun VelaNavHost(
                 var formEdit by rememberSaveable { mutableStateOf<Boolean?>(null) }
                 var formName by rememberSaveable { mutableStateOf("") }
                 var formAddress by rememberSaveable { mutableStateOf("") }
+                // P2.5: the form's note (the web's round-3 field), seeded from the contact on edit.
+                var formNote by rememberSaveable { mutableStateOf("") }
                 var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
                 // Issue #437: the two pick lists hold their ticks until 保存 —
                 // `null` is closed. 添加成员's are addresses (ContactsLive.pickKey),
@@ -2078,7 +2080,12 @@ fun VelaNavHost(
                 // Read the book for THIS account: the core keys history-derived
                 // entries by whose wallet they belong to.
                 LaunchedEffect(session.address) {
-                    contacts.open(session.address.takeIf { it.isNotEmpty() })
+                    // P2.5: a visit to the book already read for this account
+                    // re-reads only its send history (`history_changed`).
+                    contacts.visit(session.address.takeIf { it.isNotEmpty() })
+                    // P2.4 (perf-10): this page draws no balance — the account
+                    // is noted (its cached total for the switcher), no network read.
+                    application.container.wallet.noteAccount(session.address)
                 }
                 // The AI agent's screen (spec 103): the book, a contact, a group.
                 val agentDetail by agent.detail.collectAsStateWithLifecycle()
@@ -2192,10 +2199,10 @@ fun VelaNavHost(
                 }
                 val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
                 val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
-                val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
+                val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it, noted = true) } }
                 val shown = model.copy(
                     groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
-                    form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
+                    form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress, note = formNote) },
                     notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
                 )
                 // A pick list belongs to the page that opened it: leaving the
@@ -2324,15 +2331,18 @@ fun VelaNavHost(
                                     menuOpen = false
                                     formName = ""
                                     formAddress = ""
+                                    formNote = ""
                                     formEdit = false
                                 }
                                 "contacts.edit" -> selected?.let { contact ->
                                     formName = contact.name ?: contact.resolved_name ?: ""
                                     formAddress = contact.address
+                                    formNote = contact.note.orEmpty()
                                     formEdit = true
                                 }
                                 "contacts.form.save" -> {
-                                    agent.person(intent("save_contact", "address" to formAddress.trim(), "name" to formName.trim())) { outcome ->
+                                    // P2.5: the note rides along — an emptied one clears it (web `saveContact`).
+                                    agent.person(intent("save_contact", "address" to formAddress.trim(), "name" to ContactsLive.cleanName(formName), "note" to ContactsLive.cleanNote(formNote))) { outcome ->
                                         if (outcome.done) formEdit = null
                                     }
                                 }
@@ -2412,6 +2422,7 @@ fun VelaNavHost(
                         onGroup = { row -> openGroup = book.groups.firstOrNull { it.name == row.name }?.id },
                         onFormName = { formName = it },
                         onFormAddress = { formAddress = it },
+                        onFormNote = { formNote = it },
                         onQueryChange = { typed -> query = typed },
                         onDismissMenu = {
                             menuOpen = false

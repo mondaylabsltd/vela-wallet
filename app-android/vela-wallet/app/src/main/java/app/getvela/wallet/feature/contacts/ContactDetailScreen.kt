@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -194,6 +196,9 @@ fun ContactDetailScreen(
                 model = detail.address,
                 onCopy = { actions.onAction("contacts.copyAddress") },
             )
+            // P2.5 (web round 3): the person's own words about this contact —
+            // a section label and the note as written, lines kept, on the page.
+            detail.note?.let { note -> ContactNote(note) }
 
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             SectionHeader(
@@ -231,6 +236,33 @@ fun ContactDetailScreen(
             model = confirm,
             onDismiss = actions.onDismissMenu,
             onConfirm = { actions.onAction("contacts.delete") },
+        )
+    }
+}
+
+/** A contact's note (web `ContactDetailPanel` `.note-label` + `.note`): open on the page, no box. */
+@Composable
+private fun ContactNote(note: app.getvela.wallet.feature.contacts.ContactNoteModel) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
+    ) {
+        Spacer(modifier = Modifier.height(VelaSpacing.xl2))
+        Text(
+            text = note.label,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        Text(
+            text = note.text,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.testTag("contact-note-text"),
         )
     }
 }

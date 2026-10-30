@@ -57,7 +57,14 @@ internal class AgentPerform(private val wallet: AgentWallet, private val agent: 
             "sign_out" -> DONE.also { wallet.session.signOut() }
             "set_preference" -> setPreference(action.optJSONObject("preference") ?: JSONObject())
             "save_contact" -> DONE.also {
-                wallet.contacts.save(ContactSaveInput(address = text("address"), name = text("name")))
+                // Absent keeps the note; given (an empty one clears it), it is the note (web `perform.ts`).
+                wallet.contacts.save(
+                    ContactSaveInput(
+                        address = text("address"),
+                        name = text("name"),
+                        note = if (action.has("note") && !action.isNull("note")) text("note") else null,
+                    ),
+                )
             }
             "delete_contact" -> DONE.also { wallet.contacts.delete(action.optString("address")) }
             "save_group" -> DONE.also {

@@ -609,6 +609,12 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
                 wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
             }
+            // P2.5: a send opening reads the book's send history again — the
+            // picker's suggestions come from it and a send may have landed
+            // since (web `openSend` → `history_changed`). The book stays.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                controller.opens.collect { opened -> if (opened > 0) contacts.historyChanged() }
+            }
             // The passkey's ceremony, for the AI agent's transfers to follow:
             // a transfer is awaiting its passkey once the prompt is up.
             controller.onCeremony = { event -> agent.ceremony(event) }

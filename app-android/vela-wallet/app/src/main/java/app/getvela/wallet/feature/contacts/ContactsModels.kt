@@ -154,7 +154,13 @@ data class ContactDetailModel(
     /** Accessible name for the header pencil. */
     val editLabel: String,
     val deleteLabel: String,
+    /** P2.5 (web round 3): the person's own words about this contact — only when they wrote some. */
+    val note: ContactNoteModel? = null,
 )
+
+/** A contact's note on its page: the section's label and the words as written (lines kept). */
+@Immutable
+data class ContactNoteModel(val label: String, val text: String)
 
 @Immutable
 data class GroupDetailModel(
@@ -202,6 +208,14 @@ data class ContactFormModel(
     val addressLocked: Boolean = false,
     /** The core's word for a bad address, shown on the error line once something was typed. */
     val invalidAddress: String = "",
+    /**
+     * P2.5 (web round 3): the note field — drawn where the caller gave it
+     * words (the live form; the gallery's C7/C8 keep their two fields, as on
+     * the web). [note] is what is typed.
+     */
+    val noteLabel: String? = null,
+    val notePlaceholder: String? = null,
+    val note: String = "",
 )
 
 /**
