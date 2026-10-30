@@ -92,7 +92,12 @@ export async function executionRows(
 	// Anything else — a call, calls in a batch, a member change, a rename, a
 	// cancellation — is one row titled as its proposal, moving only the coin
 	// a call sends.
-	const to = action?.kind === 'call' ? action.to : action?.kind === 'batch' ? item.tx.to : multisig;
+	const to =
+		action?.kind === 'call'
+			? action.to
+			: action?.kind === 'batch'
+				? (item.tx?.to ?? multisig)
+				: multisig;
 	const sends = action?.kind === 'call' ? BigInt(action.value) : 0n;
 	const coin =
 		sends > 0n

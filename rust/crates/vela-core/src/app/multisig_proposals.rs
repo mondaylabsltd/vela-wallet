@@ -55,8 +55,8 @@ use super::multisig_gather;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
-    MultisigShellResult, Notice, PasskeyPurpose, Proposal, Service, ServiceFail, Shared,
-    StoredApproval, Submission, SubmitAnswer,
+    MultisigShellResult, Notice, PasskeyPurpose, Proposal, SendPurpose, Service, ServiceFail,
+    Shared, StoredApproval, Submission, SubmitAnswer,
 };
 use super::multisig_signers::{self as signers, SignerKind, SignerRead};
 use crate::multisig::{self, Action, Approval, Call, SafeTx};
@@ -81,6 +81,9 @@ const WAITING_CAP: usize = 20;
 pub const REVIEW_READ_MS: u32 = 8_000;
 /// A review gathered this recently, at these very members, is signed from.
 pub const REVIEW_FRESH_MS: f64 = 30_000.0;
+/// A priced look this recent is what Execute signs (`PREVIEW_FRESH_MS`);
+/// an older one, or one that did not price it, is taken again first.
+pub const PREVIEW_FRESH_MS: f64 = 15_000.0;
 const RECENT_CAP: usize = 16;
 /// An on-chain "no" is asked again after this.
 pub const ONCHAIN_RECHECK_MS: f64 = 30_000.0;
@@ -505,10 +508,14 @@ pub enum Event {
     Watch,
     Unwatch,
     /// Gather the one review of a proposal (its sheet), or of the draft.
+    /// `blind`: the clear reading's `sign_anyway` — a call Vela cannot read
+    /// (`ProposalReview.read(blind)`: the Blind concern, `sign.anyway`).
     Review {
         #[cfg_attr(feature = "bindings", ts(type = "number"))]
         chain_id: u64,
         safe_tx_hash: String,
+        #[serde(default)]
+        blind: bool,
     },
     /// Draw a new proposal at the next free nonce, with its review — no
     /// passkey yet (`reviewFirst`).
@@ -792,12 +799,22 @@ pub struct ProposalsView {
     /// The one review per `<chainId>:<safeTxHash>`.
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub reviews: BTreeMap<String, Value>,
-    /// The execution preview per `<chainId>:<safeTxHash>`.
+    /// The execution preview per executor (`preflight`'s one look per
+    /// execution and executor), keyed
+    /// `<chainId>:<safeTxHash lowercase>:<executor lowercase>`.
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub previews: BTreeMap<String, Value>,
-    /// How each execution followed here ended (or stands).
+    /// How each execution followed here ended (or stands), per
+    /// `<chainId>:<safeTxHash lowercase>`; also what ran when a look found
+    /// its number used (`settleSpent`).
     #[cfg_attr(feature = "bindings", ts(type = "Record<string, unknown>"))]
     pub executions: BTreeMap<String, Value>,
+    /// An executed proposal's frozen facts, per `<chainId>:<safeTxHash
+    /// lowercase>` (read on [`Event::Timeline`]).
+    pub frozen: BTreeMap<String, super::multisig_presence::FrozenFacts>,
+    /// The followed multisig's member used here last (lowercase), noted when
+    /// more than one of its members is on this device (`lastActor`).
+    pub last_actor: Option<String>,
     /// What waits on this device, per multisig on it (lowercase address):
     /// `None` until read — never a zero it did not see; a multisig not read
     /// yet on this page says what the list kept from an earlier one says.
@@ -907,8 +924,11 @@ pub struct State {
     actions: BTreeMap<String, ActionState>,
     reviews: BTreeMap<String, Value>,
     previews: BTreeMap<String, Value>,
-    preview_plans: BTreeMap<String, Preview>,
+    /// Each executor's last look ([`preview_key`]): when it was taken, what it said.
+    preview_plans: BTreeMap<String, (f64, Preview)>,
     verdicts: BTreeMap<String, Value>,
+    /// The executions being watched ([`exec_key`]): each flight followed once.
+    watching: BTreeSet<String>,
     /// Presence, timelines, dApp requests, links, outside wallets.
     more: flows::More,
     /// r7: the proposals whose signers were asked (`<chainId>:<safeTxHash>`).
@@ -1015,6 +1035,21 @@ fn exec_key(chain_id: u64, safe: &str, hash: &str) -> String {
     )
 }
 
+/// One execution by one executor (`previewKey`):
+/// `<chainId>:<safeTxHash lowercase>:<executor lowercase>`.
+fn preview_key(chain_id: u64, hash: &str, executor: &str) -> String {
+    format!(
+        "{chain_id}:{}:{}",
+        hash.to_ascii_lowercase(),
+        executor.to_ascii_lowercase()
+    )
+}
+
+/// An execution's verdict (and a frozen fact) per `<chainId>:<safeTxHash lowercase>`.
+fn verdict_key(chain_id: u64, hash: &str) -> String {
+    format!("{chain_id}:{}", hash.to_ascii_lowercase())
+}
+
 #[derive(Default)]
 pub struct Model {
     state: Shared<State>,
@@ -1071,6 +1106,10 @@ impl App for MultisigProposals {
                 flow(model, |io, st| async move {
                     load(&io, &st).await;
                     flush_outbox(&io, &st, None).await;
+                    // A Follow that came before the store was read.
+                    let now = io.now().await;
+                    let flights = flights_to_resume(&mut lock(&st), now);
+                    resume_flights(&io, &st, flights);
                 })
             }
             Event::Follow { account } => {
@@ -1105,7 +1144,12 @@ impl App for MultisigProposals {
                     return render();
                 }
                 flow(model, |io, st| async move {
-                    refresh(&io, &st, false, false).await
+                    // r4b-7: what this device sent for it before a reload is
+                    // watched again, once its list is read.
+                    let now = io.now().await;
+                    let flights = flights_to_resume(&mut lock(&st), now);
+                    refresh(&io, &st, false, false).await;
+                    resume_flights(&io, &st, flights);
                 })
             }
             Event::Account { account } => {
@@ -1179,16 +1223,17 @@ impl App for MultisigProposals {
             Event::Review {
                 chain_id,
                 safe_tx_hash,
+                blind,
             } => flow(model, move |io, st| async move {
-                let found = {
-                    let s = lock(&st);
-                    s.item(chain_id, &safe_tx_hash).zip(s.account.clone())
-                };
-                let Some(((item, members), account)) = found else {
+                // The followed list's proposal, or a link's read-only one.
+                let found = flows::find_item(&lock(&st), chain_id, &safe_tx_hash);
+                let Some((item, chain, account)) = found else {
                     return;
                 };
-                let input =
-                    gather_review(&io, &st, &account, chain_id, &item.tx, &members, None).await;
+                let mut input =
+                    gather_review(&io, &st, &account, chain_id, &item.tx, &chain.members, None)
+                        .await;
+                input.blind = blind;
                 let out = multisig_review::multisig_review(&input)
                     .ok()
                     .and_then(|r| serde_json::to_value(r).ok())
@@ -1289,6 +1334,9 @@ impl App for MultisigProposals {
                     .insert(key.clone(), ActionState::Working);
                 flow(model, move |io, st| async move {
                     let outcome = approve(&io, &st, chain_id, &safe_tx_hash, &owner).await;
+                    if matches!(outcome, ActionState::Done { .. }) {
+                        note_actor(&io, &st, chain_id, &owner).await;
+                    }
                     lock(&st).actions.insert(key, outcome);
                     refresh(&io, &st, false, true).await;
                 })
@@ -1301,12 +1349,9 @@ impl App for MultisigProposals {
                 let Some(input) = execution_input(&st, chain_id, &safe_tx_hash, &executor) else {
                     return;
                 };
-                let preview = preview_execution(&io, &st, &input).await;
-                let key = format!("{chain_id}:{}", safe_tx_hash.to_ascii_lowercase());
-                let mut s = lock(&st);
-                flows::keep_look(&mut s, &input, &preview);
-                s.previews.insert(key.clone(), preview.to_value());
-                s.preview_plans.insert(key, preview);
+                if look_now(&io, &st, &input).await == Preview::Spent {
+                    settle_spent(&io, &st, &input).await;
+                }
             }),
             Event::Execute {
                 chain_id,
@@ -1321,6 +1366,9 @@ impl App for MultisigProposals {
                     let input = execution_input(&st, chain_id, &safe_tx_hash, &executor);
                     let outcome = execute(&io, &st, chain_id, &safe_tx_hash, &executor).await;
                     flows::remember_execution(&io, &st, input.as_ref(), &outcome).await;
+                    if matches!(outcome, ActionState::Done { .. }) {
+                        note_actor(&io, &st, chain_id, &executor).await;
+                    }
                     lock(&st).actions.insert(key, outcome);
                     refresh(&io, &st, false, true).await;
                 })
@@ -1408,6 +1456,11 @@ impl App for MultisigProposals {
             reviews: s.reviews.clone(),
             previews: s.previews.clone(),
             executions: s.verdicts.clone(),
+            frozen: more.frozen,
+            last_actor: s
+                .account
+                .as_ref()
+                .and_then(|a| s.last_actor.get(&a.address.to_ascii_lowercase()).cloned()),
             presence: more.presence,
             others_waiting: more.others_waiting,
             standings: more.standings,
@@ -3175,13 +3228,25 @@ async fn execute(
             detail: "this account cannot execute it now".to_owned(),
         };
     }
-    // A look that says it stops, stops before the gate asks anything.
-    let key = format!("{chain_id}:{}", hash.to_ascii_lowercase());
-    let shown = lock(st).preview_plans.get(&key).cloned();
+    // A look that says it stops, stops before the gate asks anything. This
+    // executor's own look when it priced it within PREVIEW_FRESH_MS (its
+    // calls and fee are what is signed), else a new one, kept the same way —
+    // so what it carried is what is remembered.
+    let key = preview_key(chain_id, hash, &input.executor.address);
+    let looked = io.now().await;
+    let shown = lock(st)
+        .preview_plans
+        .get(&key)
+        .filter(|(at, p)| matches!(p, Preview::Priced { .. }) && looked - at < PREVIEW_FRESH_MS)
+        .map(|(_, p)| p.clone());
     let preview = match shown {
         Some(p) => p,
-        None => preview_execution(io, st, &input).await,
+        None => look_now(io, st, &input).await,
     };
+    if preview == Preview::Spent {
+        // r5reg-21: its number was used meanwhile — what ran is said.
+        settle_spent(io, st, &input).await;
+    }
     let Preview::Priced { planned, fee, .. } = &preview else {
         return ActionState::Stopped {
             preview: preview.to_value(),
@@ -3202,21 +3267,11 @@ async fn execute(
     {
         return s;
     }
-    // An executor that signs on a page approves there first (its approval
-    // must be one it read on the page); the gate above is not asked again.
-    if input.executor.route == ApprovalRoute::Page
-        && input
-            .item
-            .can_approve
-            .iter()
-            .any(|o| same_address(o, &input.executor.address))
-    {
-        let approved =
-            approve_authorized(io, st, &input.account, &input.item, &input.executor).await;
-        if !matches!(approved, ActionState::Done { .. }) {
-            return approved;
-        }
-    }
+    // r7-3: one signature, the executor's own operation — on its page when
+    // it signs on one (the shell hands the page the operation and
+    // `SendPurpose::Execute`). It counts as its approval as `msg.sender`
+    // where one is missing; no approval of its own is asked first, which
+    // would be a second trip to the page for nothing the chain needs.
     // The deploy gate, right before the deployment's calls are sent.
     if !input.members.deployed {
         if let Err(PlanFail::Refused(a)) = verified_deploy_facts(io, &input).await {
@@ -3232,6 +3287,12 @@ async fn execute(
             from: input.executor.address.clone(),
             calls: planned.calls.clone(),
             fee: Some(fee.clone()),
+            purpose: Some(SendPurpose::Execute {
+                multisig: input.account.address.clone(),
+                name: input.account.genesis.name.clone(),
+                threshold: input.members.threshold,
+                tx: Box::new(input.item.tx.clone()),
+            }),
         })
         .await;
     let (user_op_hash, maybe_sent, own) = match sent {
@@ -3264,42 +3325,121 @@ async fn execute(
     };
     let executing = {
         let mut s = lock(st);
-        s.executing.insert(
-            exec_key(chain_id, &flight.multisig, &flight.safe_tx_hash),
-            flight.clone(),
-        );
+        let k = exec_key(chain_id, &flight.multisig, &flight.safe_tx_hash);
+        // Watched from now: a Follow never watches it a second time.
+        s.watching.insert(k.clone());
+        s.executing.insert(k, flight.clone());
         s.executing.clone()
     };
     save_json(io, EXECUTING_KEY, &executing, true).await;
     io.emit(Event::Changed);
-    let verdict = watch_execution(io, st, &flight, own).await;
-    let value = serde_json::to_value(&verdict).unwrap_or(Value::Null);
-    lock(st).verdicts.insert(key, value);
-    if let ExecutionVerdict::Executed { tx_hash } = &verdict {
-        remember_lookup(
-            io,
-            st,
-            chain_id,
-            &flight.multisig,
-            &flight.safe_tx_hash,
-            Some(tx_hash),
-        )
-        .await;
-        io.notice(Notice::ActivityRows {
-            rows: vec![execution_row(
-                &input.account.address,
-                &input.item,
-                tx_hash,
-                &flight.user_op_hash,
-                now,
-            )],
-        })
-        .await;
-    }
+    follow_flight(io, st, &flight, own, Some(&input.item)).await;
     ActionState::Done {
         safe_tx_hash: input.item.safe_tx_hash.clone(),
         kept: false,
     }
+}
+
+/// One look at `input`, kept for its executor (`preflight.check`'s `keep`):
+/// when it was taken and what it said — for the sheet, the home's "Can't run
+/// now", and Execute.
+async fn look_now(io: &Io<Event>, st: &Shared<State>, input: &ExecutionInput) -> Preview {
+    let preview = preview_execution(io, st, input).await;
+    let at = io.now().await;
+    let key = preview_key(
+        input.chain_id,
+        &input.item.safe_tx_hash,
+        &input.executor.address,
+    );
+    let mut s = lock(st);
+    flows::keep_look(&mut s, input, &preview);
+    s.previews.insert(key.clone(), preview.to_value());
+    s.preview_plans.insert(key, (at, preview.clone()));
+    preview
+}
+
+/// r5reg-21 (`settleSpent`): a look found its number used — another member
+/// executed it, or another transaction at its number ran — so what ran is
+/// read (its execution, final at its number) and said the way a lost race
+/// is, never "it would fail"; then the list is read again. Not while this
+/// device's own execution of it is followed, nor over a verdict already
+/// said (an execution's own watch says how that one ended).
+async fn settle_spent(io: &Io<Event>, st: &Shared<State>, input: &ExecutionInput) {
+    let (chain_id, safe, hash) = (
+        input.chain_id,
+        input.account.address.as_str(),
+        input.item.safe_tx_hash.as_str(),
+    );
+    let key = verdict_key(chain_id, hash);
+    let followed = |s: &State, now: f64| {
+        s.watching.contains(&exec_key(chain_id, safe, hash))
+            || s.is_executing(chain_id, safe, hash, now)
+            || s.verdicts.contains_key(&key)
+    };
+    let now = io.now().await;
+    if followed(&lock(st), now) {
+        return;
+    }
+    let found = lookup_execution(
+        io,
+        st,
+        safe,
+        chain_id,
+        hash,
+        input.item.created_ms,
+        true,
+        Some(input.item.nonce),
+    )
+    .await;
+    let verdict = multisig_watch::execution_verdict(&ExecutionFacts {
+        nonce_used: Some(true),
+        executed_in: match found {
+            Ok(Some(tx_hash)) => ExecutedIn::Found { tx_hash },
+            Ok(None) => ExecutedIn::None,
+            Err(_) => ExecutedIn::Unknown,
+        },
+        // Nothing of this device's was sent.
+        our_op: OurOp::Unknown,
+        receipt: OurReceipt::Unread,
+        elapsed_ms: 0,
+        limit_ms: 0,
+    });
+    {
+        let mut s = lock(st);
+        if followed(&s, now) {
+            return;
+        }
+        s.verdicts
+            .insert(key, serde_json::to_value(&verdict).unwrap_or(Value::Null));
+    }
+    io.emit(Event::Changed);
+    refresh(io, st, false, true).await;
+}
+
+/// The member used here last for the followed multisig (`lastActor.note`),
+/// noted only when more than one of its members on `chain_id` is on this
+/// device.
+async fn note_actor(io: &Io<Event>, st: &Shared<State>, chain_id: u64, actor: &str) {
+    let map = {
+        let mut s = lock(st);
+        let Some(account) = s.account.clone() else {
+            return;
+        };
+        let here = s
+            .chains
+            .iter()
+            .find(|c| c.chain_id == chain_id)
+            .map_or(0, |c| local_owners(&s.locals, &c.members.owners).len());
+        if here <= 1 {
+            return;
+        }
+        s.last_actor.insert(
+            account.address.to_ascii_lowercase(),
+            actor.to_ascii_lowercase(),
+        );
+        s.last_actor.clone()
+    };
+    save_json(io, keys::LAST_ACTOR, &map, false).await;
 }
 
 /// One activity row for an executed proposal: the facts; the shell's own
@@ -3515,6 +3655,105 @@ async fn watch_execution(
         let _ = key;
         io.emit(Event::Changed);
         io.wait(EXECUTION_PAUSE_MS).await;
+    }
+}
+
+/// Follow `flight` to its end (the sheet's `follow`): the verdict kept for
+/// its sheet; any end but "waiting" ends it in flight here
+/// (`executions.end`); executed, its lookup remembered and `item`'s
+/// activity row handed on.
+async fn follow_flight(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    flight: &InFlight,
+    own: Option<String>,
+    item: Option<&ProposalItem>,
+) -> ExecutionVerdict {
+    let key = exec_key(flight.chain_id, &flight.multisig, &flight.safe_tx_hash);
+    lock(st).watching.insert(key.clone());
+    let verdict = watch_execution(io, st, flight, own).await;
+    let ended = {
+        let mut s = lock(st);
+        s.watching.remove(&key);
+        s.verdicts.insert(
+            verdict_key(flight.chain_id, &flight.safe_tx_hash),
+            serde_json::to_value(&verdict).unwrap_or(Value::Null),
+        );
+        let ended = verdict != ExecutionVerdict::Waiting && s.executing.remove(&key).is_some();
+        ended.then(|| s.executing.clone())
+    };
+    if let Some(executing) = ended {
+        save_json(io, EXECUTING_KEY, &executing, true).await;
+    }
+    if let ExecutionVerdict::Executed { tx_hash } = &verdict {
+        remember_lookup(
+            io,
+            st,
+            flight.chain_id,
+            &flight.multisig,
+            &flight.safe_tx_hash,
+            Some(tx_hash),
+        )
+        .await;
+        if let Some(item) = item {
+            io.notice(Notice::ActivityRows {
+                rows: vec![execution_row(
+                    &flight.multisig,
+                    item,
+                    tx_hash,
+                    &flight.user_op_hash,
+                    flight.started_ms,
+                )],
+            })
+            .await;
+        }
+    }
+    io.emit(Event::Changed);
+    verdict
+}
+
+/// r4b-7: the executions this device sent for the followed multisig that
+/// may still land (`executions.get`) and are not watched yet — marked
+/// watched, so each flight is followed once.
+fn flights_to_resume(s: &mut State, now: f64) -> Vec<InFlight> {
+    let Some(account) = s.account.clone() else {
+        return Vec::new();
+    };
+    let found: Vec<(String, InFlight)> = s
+        .executing
+        .values()
+        .filter(|f| {
+            same_address(&f.multisig, &account.address)
+                && now - f.started_ms < EXECUTION_LIMIT_MS + 60_000.0
+        })
+        .map(|f| {
+            (
+                exec_key(f.chain_id, &f.multisig, &f.safe_tx_hash),
+                f.clone(),
+            )
+        })
+        .filter(|(k, _)| !s.watching.contains(k))
+        .collect();
+    for (k, _) in &found {
+        s.watching.insert(k.clone());
+    }
+    found.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Watch each flight again (the sheet's resume effect) — never offered as
+/// if nothing was sent: followed to its end as `execute`'s own is, then the
+/// list read again.
+fn resume_flights(io: &Io<Event>, st: &Shared<State>, flights: Vec<InFlight>) {
+    for flight in flights {
+        let state = st.clone();
+        io.spawn(move |io| async move {
+            let item = lock(&state)
+                .item(flight.chain_id, &flight.safe_tx_hash)
+                .map(|(i, _)| i);
+            follow_flight(&io, &state, &flight, None, item.as_ref()).await;
+            refresh(&io, &state, false, true).await;
+            io.emit(Event::Changed);
+        });
     }
 }
 

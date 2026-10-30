@@ -3,6 +3,7 @@ import type { MultisigActionState } from "./MultisigActionState";
 import type { MultisigChainState } from "./MultisigChainState";
 import type { MultisigDappAnswer } from "./MultisigDappAnswer";
 import type { MultisigDraft } from "./MultisigDraft";
+import type { MultisigFrozenFacts } from "./MultisigFrozenFacts";
 import type { MultisigHeldRequest } from "./MultisigHeldRequest";
 import type { MultisigItemSigners } from "./MultisigItemSigners";
 import type { MultisigLinkedView } from "./MultisigLinkedView";
@@ -45,13 +46,27 @@ actions: { [key in string]: MultisigActionState },
  */
 reviews: Record<string, unknown>, 
 /**
- * The execution preview per `<chainId>:<safeTxHash>`.
+ * The execution preview per executor (`preflight`'s one look per
+ * execution and executor), keyed
+ * `<chainId>:<safeTxHash lowercase>:<executor lowercase>`.
  */
 previews: Record<string, unknown>, 
 /**
- * How each execution followed here ended (or stands).
+ * How each execution followed here ended (or stands), per
+ * `<chainId>:<safeTxHash lowercase>`; also what ran when a look found
+ * its number used (`settleSpent`).
  */
 executions: Record<string, unknown>, 
+/**
+ * An executed proposal's frozen facts, per `<chainId>:<safeTxHash
+ * lowercase>` (read on [`Event::Timeline`]).
+ */
+frozen: { [key in string]: MultisigFrozenFacts }, 
+/**
+ * The followed multisig's member used here last (lowercase), noted when
+ * more than one of its members is on this device (`lastActor`).
+ */
+last_actor: string | null, 
 /**
  * What waits on this device, per multisig on it (lowercase address):
  * `None` until read — never a zero it did not see; a multisig not read

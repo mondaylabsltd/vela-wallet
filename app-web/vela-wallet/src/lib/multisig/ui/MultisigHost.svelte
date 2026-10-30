@@ -31,7 +31,8 @@
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
-	import { flushOutbox, hasNetwork, proposals } from '../core/proposals.svelte';
+	import { hasNetwork, proposals } from '../core/proposals.svelte';
+	import { proposalsHost } from '../shell/proposals-host.svelte';
 	import { recordExecution, useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
@@ -45,7 +46,6 @@
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
 	import RiskConfirmSheet from './RiskConfirmSheet.svelte';
-	import { reviewFirstHost } from '../core/review-first.svelte';
 	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -113,18 +113,11 @@
 		multisig.boot();
 		// §3.5: a signature on a high-risk network asks here, on top of any sheet.
 		const detachRisk = riskConfirmation.attach();
-		// §3.6: the proposer's own review before its first passkey, on top of any sheet.
-		const detachReview = reviewFirstHost.attach();
 		// ms-9, r4a-3: an executed transaction's Activity row is titled as its proposal.
 		useRecordWords(m);
+		// Executed rows the proposals machine wrote to the activity: balances and activity move.
+		// (ms-19: what was signed and never reached the mailbox goes when it starts.)
 		proposals.onrecorded = () => onchanged?.();
-		// ms-19: what was signed and never reached the mailbox goes now.
-		void flushOutbox().then((sent) => {
-			const shown = multisig.active;
-			if (shown && sent.some((safe) => safe.toLowerCase() === shown.address.toLowerCase())) {
-				void proposals.refresh(shown, shown.chainIds);
-			}
-		});
 		// A record that has not landed is asked about again while any page is
 		// up; and, once a session, what each shared multisig's record is now
 		// (registry v4: its name may have changed; the service may have no
@@ -146,7 +139,8 @@
 		window.addEventListener('hashchange', onhash);
 		return () => {
 			detachRisk();
-			detachReview();
+			// §3.6: a review nobody can see any more is withdrawn — nothing is signed.
+			proposalsHost.withdrawDraft();
 			stopRecords();
 			window.removeEventListener('hashchange', onhash);
 			proposals.follow(null, []);
@@ -423,9 +417,7 @@
 		{wide}
 		{closeLabel}
 		onclose={() => multisigUi.close()}
-		onexecuted={({ item, txHash, userOpHash }) => {
-			void recordExecution(active.address, item, txHash, userOpHash).finally(() => onchanged?.());
-		}}
+		onexecuted={() => onchanged?.()}
 	/>
 {:else if sheet?.kind === 'preview'}
 	<!-- ms-21: a link's transaction on a device with none of its members. -->
@@ -461,11 +453,7 @@
 			{wide}
 			{closeLabel}
 			onclose={() => sheet.request.close()}
-			onexecuted={({ item, txHash, userOpHash }) => {
-				void recordExecution(dappAccount.address, item, txHash, userOpHash).finally(() =>
-					onchanged?.()
-				);
-			}}
+			onexecuted={() => onchanged?.()}
 		/>
 	{/key}
 {:else if sheet?.kind === 'missing'}
@@ -512,8 +500,8 @@
 {/if}
 
 <!-- §3.6: a proposal's review before the proposer signs it (send, rename, members): on top. -->
-{#if reviewFirstHost.request}
-	{@const first = reviewFirstHost.request}
+{#if proposalsHost.reviewing && proposalsHost.view?.draft}
+	{@const first = proposalsHost.reviewing}
 	{@const firstAccount = multisig.find(first.address)}
 	{#if firstAccount}
 		{#key first}
@@ -522,12 +510,12 @@
 				{m}
 				account={firstAccount}
 				chainId={first.chainId}
-				safeTxHash={first.item.safeTxHash}
+				safeTxHash={proposalsHost.view.draft.item.safeTxHash}
 				prebuilt={first}
 				{locale}
 				{wide}
 				{closeLabel}
-				onclose={() => first.decline()}
+				onclose={() => proposalsHost.withdrawDraft()}
 			/>
 		{/key}
 	{/if}

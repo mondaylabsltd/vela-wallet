@@ -17,6 +17,13 @@
 	 * Decline — nothing is signed until the person has seen what the site
 	 * asks. Once proposed it is the transaction like any other.
 	 *
+	 * Everything it reads and does on the shown multisig is the core's
+	 * proposals machine's (`proposals.view`, events through `proposalsHost`):
+	 * the one review, each executor's look, how each member still to approve
+	 * signs, its story, where approve / execute / reject / send again stand —
+	 * this draws them, and words a failure as the corpus always has
+	 * (`shell/proposal-failure.ts`).
+	 *
 	 * A link's transaction on a device with none of its members (`source`,
 	 * `watch`, ms-21) is read from its own source, the multisig neither
 	 * added nor shown: following it here, or signing with a member's wallet,
@@ -40,7 +47,14 @@
 		readableCalls,
 		reviewedCalls
 	} from '../core/call-review.svelte';
-	import { ProposalReview } from '../core/proposal-review.svelte';
+	import {
+		ProposalReview,
+		REVIEW_FRESH_MS,
+		REVIEW_RETRY_MS,
+		simEndedOf
+	} from '../core/proposal-review.svelte';
+	import type { SimEnded } from '$lib/signing/verdict';
+	import type { MultisigReviewOut } from '../core/kernel';
 	import {
 		anywayLabel,
 		partyAddresses,
@@ -74,12 +88,7 @@
 		tokenInfo
 	} from '../core/display';
 	import { GenesisRefusedError, type Finding } from '../core/refusal';
-	import {
-		factsOfExecution,
-		frozenFacts,
-		rememberExecution,
-		type FrozenFacts
-	} from '../core/executed';
+	import { frozenFacts, type FrozenFacts } from '../core/executed';
 	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
 	import ProposalTimeline from './ProposalTimeline.svelte';
@@ -94,9 +103,6 @@
 		type ExecutionPreview
 	} from '../core/execute';
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
-	import { preflight, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
-	import { signers } from '../core/signers.svelte';
-	import { defaultActor, lastActor } from '../core/actor';
 	import {
 		declinedRisk,
 		gateOf,
@@ -110,8 +116,18 @@
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { findExecution } from '../core/records';
 	import { ChainUnavailableError } from '../core/chain';
-	import { executions, watchExecution, type InFlight } from '../core/execution-watch.svelte';
 	import { progressLine } from '../core/progress';
+	import { signers } from '../core/signers.svelte';
+	import { PREVIEW_CAP_MS, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
+	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
+	import {
+		actionError,
+		previewOf as previewFrom,
+		shortToken,
+		type TokenWords
+	} from '../shell/proposal-failure';
+	import type { MultisigActionState } from '../generated/MultisigActionState';
+	import type { MultisigTimelineStep } from '../generated/MultisigTimelineStep';
 	import { multisigUi } from '../core/ui.svelte';
 	import { PasskeyCheckError } from '../core/owners';
 	import { PageApprovalError } from '../core/page-approval.svelte';
@@ -120,36 +136,28 @@
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
-	import {
-		executionVerdict,
-		memberDrift,
-		readMemberChanges,
-		sameAddress,
-		transfersOf
-	} from '../core/kernel';
+	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { connectLink } from '../external/connect-link';
 	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
-		approve,
 		approveExternally,
 		draftCalls,
-		execute,
-		MailboxRefusedError,
-		executionInput,
-		MailboxUnreadableError,
-		NoOutsideSignerError,
-		outbox,
+		itemOf,
 		proposals,
-		proposeCancel,
 		type ChainState,
 		type ProposalItem
 	} from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
+	import {
+		MailboxRefusedError,
+		MailboxUnreadableError,
+		NoOutsideSignerError
+	} from '../core/proposal-errors';
 	import { typedName } from '../core/typed-name';
 	import type { DappProposal } from '../core/ui.svelte';
-	import type { ReviewFirstRequest } from '../core/review-first.svelte';
+	import type { DraftAsk } from '../shell/proposals-host.svelte';
 	import type { ProposalSource } from '../core/linked.svelte';
 	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
@@ -173,7 +181,7 @@
 		 * §3.6: the proposer's own transaction (a transfer, a rename, a member
 		 * change), built at its number and reviewed here before its passkey.
 		 */
-		prebuilt?: ReviewFirstRequest | null;
+		prebuilt?: DraftAsk | null;
 		/** ms-21: where the transaction is read from when it is not the shown multisig's. */
 		source?: ProposalSource | null;
 		/**
@@ -241,16 +249,32 @@
 	const gate = $derived(checked ? gateOf(checked, chainId) : signingGate(account, chainId));
 	const readOnly = $derived(gate.kind === 'refused');
 
+	/**
+	 * The proposals machine's view: the shown multisig's transactions, their
+	 * one review, each executor's look, where every action stands. A link's
+	 * own source and a dApp's draft are still read apart (`source`, `draft`).
+	 */
+	const machine = $derived(proposals.view);
+	/** Drawn and reviewed by the machine: the shown multisig's, or its draft (§3.6). */
+	const onMachine = $derived(!source && !(draft && !draft.safeTxHash));
+	/** The machine's draft, while this sheet is its review (§3.6). */
+	const machineDraft = $derived(prebuilt ? (machine?.draft ?? null) : null);
+	const machineDraftItem = $derived(machineDraft ? itemOf(machineDraft.item) : null);
+	/** Its key in the machine's maps (`<chainId>:<safeTxHash>`). */
+	const key = $derived(`${chainId}:${safeTxHash.toLowerCase()}`);
+
 	const item = $derived(
 		drafting
-			? (prebuilt?.item ?? drafted?.item ?? null)
+			? (machineDraftItem ?? drafted?.item ?? null)
 			: (store
 					.chain(chainId)
 					?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null)
 	);
 	const members = $derived(
 		drafting
-			? (prebuilt?.chain.members ?? drafted?.chain.members ?? null)
+			? prebuilt
+				? (proposals.chain(chainId)?.members ?? null)
+				: (drafted?.chain.members ?? null)
 			: (store.chain(chainId)?.members ?? null)
 	);
 	// r5reg-14: the shown multisig's transaction, still waiting (or not read
@@ -368,9 +392,76 @@
 			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}:${item.status === 'done'}`
 			: ''
 	);
+	/** Whether a call Vela cannot read is in it: the review says "… anyway" (`blind`). */
+	const blind = $derived(reading?.clear.sign_anyway === true);
+	/*
+	 * The shown multisig's: the machine's one review (`review`), asked when
+	 * the sheet opens and whenever what it is of changes, again every
+	 * REVIEW_FRESH_MS while it waits, and every REVIEW_RETRY_MS while the last
+	 * could not reach the chain. Its draft's comes with the draft.
+	 */
+	const askKey = $derived(onMachine && !prebuilt && reviewKey ? `${reviewKey}:${blind}` : '');
+	$effect(() => {
+		if (!askKey) return;
+		const ask = () =>
+			proposalsHost.send({
+				type: 'review',
+				chain_id: chainId,
+				safe_tx_hash: untrack(() => item?.safeTxHash ?? safeTxHash),
+				blind: untrack(() => blind)
+			});
+		ask();
+		// Its hashes and fields are read once for a finished one; nothing is re-checked.
+		if (untrack(() => item?.status === 'done')) return;
+		const fresh = setInterval(ask, REVIEW_FRESH_MS);
+		const retry = setInterval(() => {
+			if (untrack(() => machineUnread)) ask();
+		}, REVIEW_RETRY_MS);
+		return () => {
+			clearInterval(fresh);
+			clearInterval(retry);
+		};
+	});
+	/** The machine's review: absent while gathered, `null` when it could not be. */
+	const machineReview = $derived.by((): MultisigReviewOut | null | undefined => {
+		if (!onMachine) return undefined;
+		if (prebuilt) {
+			const d = machine?.draft;
+			return d && d.review !== null && d.review !== undefined
+				? (d.review as MultisigReviewOut)
+				: undefined;
+		}
+		const reviews = machine?.reviews ?? {};
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		const found = Object.entries(reviews).find(([k]) => k.toLowerCase() === `${chainId}:${hash}`);
+		if (!found) return undefined;
+		return (found[1] as MultisigReviewOut | null) ?? null;
+	});
+	/** The last review could not read the chain (its state or its simulation): asked again soon. */
+	const machineUnread = $derived(
+		machineReview === null ||
+			(!!machineReview &&
+				(machineReview.state.verdict.kind === 'unavailable' ||
+					machineReview.simulation.kind === 'unreachable'))
+	);
+	/** The simulation as the signing sheet draws it, judged by the token rules for the Safe. */
+	let machineSim = $state.raw<SimEnded | null>(null);
+	$effect(() => {
+		const review = machineReview;
+		if (!review) return;
+		let live = true;
+		void simEndedOf(review, chainId, account.address).then((sim) => {
+			if (live) machineSim = sim;
+		});
+		return () => {
+			live = false;
+		};
+	});
+
+	/** A link's own source, or a dApp's draft: its review read here (`ProposalReview`). */
 	let proposalReview = $state<ProposalReview | null>(null);
 	$effect(() => {
-		if (!reviewKey) return;
+		if (!reviewKey || onMachine) return;
 		const subject = untrack(() => ({
 			safe: account.address,
 			chainId,
@@ -392,7 +483,29 @@
 		};
 	});
 	/** The core's review now, with the call's reading: blind (`sign_anyway`) or not. */
-	const fullReview = $derived(proposalReview?.read(reading?.clear.sign_anyway === true) ?? null);
+	const fullReview = $derived(
+		onMachine ? (machineReview ?? null) : (proposalReview?.read(blind) ?? null)
+	);
+	/** Its simulation, as the signing sheet draws it. */
+	const reviewSim = $derived(onMachine ? machineSim : (proposalReview?.sim ?? null));
+	/** The review could not be gathered at all. */
+	const reviewFailed = $derived(
+		onMachine ? machineReview === null : proposalReview?.failed === true
+	);
+	/** Read the review again now (the gate found it changed who controls the multisig). */
+	function reviewAgain(): void {
+		if (!onMachine) {
+			void proposalReview?.refresh();
+			return;
+		}
+		if (prebuilt || !item) return;
+		proposalsHost.send({
+			type: 'review',
+			chain_id: chainId,
+			safe_tx_hash: item.safeTxHash,
+			blind
+		});
+	}
 	const reviewContext = $derived({
 		m,
 		signing,
@@ -419,7 +532,7 @@
 	const signBlocked = $derived(signRule?.allowed === false);
 	const anyway = $derived(signRule?.anyway === true);
 	/** The signing sheet holds its confirm while its simulation is out; so does this. */
-	const reviewHolding = $derived(!fullReview && proposalReview?.failed !== true);
+	const reviewHolding = $derived(!fullReview && !reviewFailed);
 	const valueVariant = $derived<'value' | 'danger'>(anyway ? 'danger' : 'value');
 
 	// The AI's opinion on this proposal (spec 103): published for
@@ -436,8 +549,8 @@
 				clear: reading?.clear ?? null,
 				guard: reading?.guard ?? null,
 				fee: null,
-				simulation: proposalReview?.sim ?? null,
-				simulation_pending: !proposalReview?.sim
+				simulation: reviewSim,
+				simulation_pending: !reviewSim
 			}
 		});
 	});
@@ -460,28 +573,80 @@
 	 * before any tap, and again while the sheet is open, so the verdict and
 	 * the fee are on screen before the passkey, never after a spinner.
 	 */
-	const previewInputs = $derived(
-		item && members && !drafting && item.review.action !== null
-			? executors.map((o) => executionInput(account, item, o, members))
+	/** The executors the machine looks at for it (the shown multisig's, not a draft). */
+	const looked = $derived(
+		item && onMachine && !drafting && item.review.action !== null
+			? executors.map((o) => o.address)
 			: []
 	);
+	/** One executor's look, in the machine's `previews` (`<chainId>:<hash>:<executor>`). */
+	const lookKey = (executor: string) =>
+		`${chainId}:${(item?.safeTxHash ?? safeTxHash).toLowerCase()}:${executor.toLowerCase()}`;
+	/** What the machine's look at `executor` says now (`undefined`: none yet). */
+	const lookOf = (executor: string): unknown =>
+		Object.entries(machine?.previews ?? {}).find(
+			([k]) => k.toLowerCase() === lookKey(executor)
+		)?.[1];
+	/** When each look was asked, and what stood then (a look past its cap is said as unchecked). */
+	let asked = $state<Record<string, { at: number; was: unknown }>>({});
+	let clockLook = $state(Date.now());
+	function look(executor: string): void {
+		// Asked from an effect: what it reads here is not what it depends on.
+		untrack(() => {
+			if (!item) return;
+			asked = { ...asked, [executor.toLowerCase()]: { at: Date.now(), was: lookOf(executor) } };
+			proposalsHost.send({
+				type: 'preview',
+				chain_id: chainId,
+				safe_tx_hash: item.safeTxHash,
+				executor
+			});
+		});
+	}
+	const lookKeys = $derived(looked.join(','));
 	$effect(() => {
-		const inputs = previewInputs;
-		if (inputs.length === 0) return;
-		for (const input of inputs) void preflight.check(input);
-		// r5reg-14: asked every 5 s — a priced look still stands its 15 s
-		// (`check` keeps a fresh one); one that could not price or check it
-		// (an RPC outage) is taken again within 5 s of the network's return.
+		if (!lookKeys) return;
+		const executors = untrack(() => looked);
+		for (const e of executors) look(e);
+		// r5reg-14: asked every 5 s — a priced look still stands its 15 s; one
+		// that could not price or check it (an RPC outage) is taken again
+		// within 5 s of the network's return.
 		const timer = setInterval(() => {
-			for (const input of inputs) void preflight.check(input);
+			clockLook = Date.now();
+			for (const e of executors) {
+				const at = untrack(() => asked[e.toLowerCase()]?.at ?? 0);
+				const now = untrack(() => previewOf(localOwners([e])[0] ?? null));
+				const soon = !now || now.kind === 'unpriced' || now.kind === 'unchecked';
+				if (Date.now() - at >= (soon ? UNPRICED_FRESH_MS : PREVIEW_FRESH_MS)) look(e);
+			}
 		}, UNPRICED_FRESH_MS);
 		return () => clearInterval(timer);
 	});
+	/** The token a `short` look is about, worded (`tokenInfo`; the chain's coin by its symbol). */
+	let tokenWords = $state<Record<string, TokenWords>>({});
+	function wordsFor(value: unknown): TokenWords | null {
+		const token = shortToken(value);
+		if (token === undefined) return null;
+		if (token === null) return { symbol: nativeSymbol(chainId), decimals: 18 };
+		const known = tokenWords[token.toLowerCase()];
+		if (!known) {
+			void tokenInfo(chainId, token)
+				.catch(() => ({ symbol: '', decimals: 18 }))
+				.then((info) => (tokenWords = { ...tokenWords, [token.toLowerCase()]: info }));
+		}
+		return known ?? null;
+	}
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
-		const input = previewInputs.find(
-			(i) => owner && sameAddress(i.executor.address, owner.address)
-		);
-		return input ? preflight.get(input) : null;
+		if (!owner || !looked.some((e) => sameAddress(e, owner.address))) return null;
+		const value = lookOf(owner.address);
+		const sent = asked[owner.address.toLowerCase()];
+		// Round 5: a look that has not answered within its cap is said as not checked.
+		if (sent && value === sent.was && clockLook - sent.at >= PREVIEW_CAP_MS) {
+			return value === undefined
+				? { kind: 'unchecked' }
+				: previewFrom(value, chainId, wordsFor(value));
+		}
+		return value === undefined ? null : previewFrom(value, chainId, wordsFor(value));
 	}
 	/** Someone here who can pay the fee — the one picked unless the person picks. */
 	const payer = $derived(
@@ -495,10 +660,16 @@
 	 * here last; else the first — among those who have not approved yet (or
 	 * can execute). With two or more, "As" shows who it is, drafting too.
 	 */
+	const usedLast = $derived(
+		machineDraft?.defaultMember ??
+			machine?.last_actor ??
+			null
+	);
 	const actor = $derived<LocalOwner | null>(
 		candidates.find((o) => sameAddress(o.address, chosen)) ??
 			payer ??
-			defaultActor(candidates, account.address) ??
+			candidates.find((o) => sameAddress(o.address, usedLast)) ??
+			candidates[0] ??
 			null
 	);
 	const actorPreview = $derived(executors.length > 0 ? previewOf(actor) : null);
@@ -510,7 +681,7 @@
 			(actorPreview?.kind === 'priced' && !actorPreview.canPay)
 	);
 	function recheck() {
-		for (const input of previewInputs) void preflight.check(input, 0);
+		for (const e of looked) look(e);
 	}
 	const actorApproved = $derived(
 		!!item && !!actor && item.approvals.some((a) => a.counts && sameAddress(a.owner, actor.address))
@@ -547,7 +718,7 @@
 	 */
 	const past = $derived(item?.status === 'done' || (phase.kind === 'sent' && !!phase.txHash));
 	const checks = $derived(
-		past ? [] : reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext, drawnParties)
+		past ? [] : reviewBlocks(fullReview, reviewSim, reviewContext, drawnParties)
 	);
 	let rejecting = $state(false);
 	let copied = $state(false);
@@ -631,7 +802,7 @@
 		}
 		// §3.6: read again right before the passkey, it changes who controls the multisig.
 		if (error instanceof SigningBlockedError) {
-			proposalReview?.refresh();
+			reviewAgain();
 			return m.review.blocked;
 		}
 		// §3.5: the executor deploys only a genesis the core finds Verified there.
@@ -720,13 +891,32 @@
 	 */
 	const executeNow = $derived(drafting && !prebuilt && !!item && item.canExecute.length > 0);
 
-	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
+	/** Where one of this sheet's actions stands in the machine (`approve:<hash>`, `execute:<hash>`). */
+	const actionOf = (what: 'approve' | 'execute'): MultisigActionState | null => {
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		return machine?.actions[`${what}:${hash}`] ?? null;
+	};
+
+	/**
+	 * Send `event` for action `key` and wait until it settles: `null` when it
+	 * went, else the error the sheet words (`actionError`).
+	 */
+	async function act(
+		key: string,
+		event: Parameters<typeof proposalsHost.send>[0]
+	): Promise<{ error: unknown; state: MultisigActionState | null }> {
+		proposalsHost.send(event);
+		const state = await proposalsHost.settled(key);
+		return { error: state ? actionError(state, chainId) : null, state };
+	}
+
+	/** The person confirmed the transaction: propose it, approved by this device's member. */
 	async function onPropose() {
 		// §3.6: the proposer's own transaction goes on to its passkey (the host closes this).
 		// r5reg-5: the member shown under "As" proposes it — never another, silently.
 		if (prebuilt) {
 			phase = { kind: 'busy', what: 'propose' };
-			prebuilt.confirm(actor?.address ?? null);
+			proposalsHost.confirmDraft(actor?.address ?? null);
 			return;
 		}
 		if (!draft || !item) return;
@@ -744,23 +934,31 @@
 		if (thenExecute && item?.status === 'ready' && actor) await onExecute();
 	}
 
+	/** `owner` approves it (one passkey prompt); `null` when it went, else why not. */
+	async function approveAs(owner: LocalOwner): Promise<unknown> {
+		if (!item) return null;
+		const hash = item.safeTxHash;
+		const { error } = await act(`approve:${hash.toLowerCase()}`, {
+			type: 'approve',
+			chain_id: chainId,
+			safe_tx_hash: hash,
+			owner: owner.address
+		});
+		return error;
+	}
+
 	async function onApprove() {
 		if (!item || !actor) return;
 		phase = { kind: 'busy', what: 'approve' };
-		try {
-			await approve(account, item, actor);
-			if (candidates.length > 1) lastActor.note(account.address, actor.address);
-			// r5reg-14: read after the approval — never a read begun before it.
-			await store.refresh(account, account.chainIds, { fresh: true });
-			phase = { kind: 'idle' };
-		} catch (error) {
-			phase = failedPhase(error);
-		}
+		const error = await approveAs(actor);
+		// The machine reads the list again after it (never a read begun before it).
+		phase = error ? failedPhase(error) : { kind: 'idle' };
 	}
 
-	/** The watch of this device's execution in flight; stopped when the sheet goes. */
-	let watching: AbortController | null = null;
-	$effect(() => () => watching?.abort());
+	/** Who executed it from here (the sheet's tap, or a flight resumed after a reload). */
+	let executedBy = $state<string | null>(null);
+	/** The execution this sheet followed to its end: its verdict's side effects run once. */
+	let ended = $state<string | null>(null);
 
 	async function onExecute() {
 		if (!item || !actor || !members) return;
@@ -772,176 +970,101 @@
 			item.approved < item.threshold &&
 			approvers.some((o) => sameAddress(o.address, actor.address));
 		phase = { kind: 'busy', what: 'execute' };
-		let result: Awaited<ReturnType<typeof execute>>;
 		const by = actor.address;
-		const executing = item;
-		let sent: ReturnType<typeof factsOfExecution> | undefined;
-		try {
-			// The look on screen when it is fresh — its calls and fee are what is
-			// signed — else a new one, said the same way. One that could not
-			// check (or price) it is never reused: Execute looks again before
-			// its passkey (round 5), bounded like every look.
-			const input = executionInput(account, item, actor, members);
-			const shown = preflight.get(input);
-			const preview = await preflight.check(input, shown?.kind === 'priced' ? PREVIEW_FRESH_MS : 0);
-			// What this execution counts, as it is sent — the approvals its
-			// calls carry (r7-3): kept, so the transaction reads its own facts
-			// later, never today's owners re-counted (r4a-8).
-			if (preview.kind === 'priced') {
-				sent = factsOfExecution(preview.carries, by, preview.executorApproves, item.threshold);
-			}
-			result = await execute(account, item, actor, members, preview);
-		} catch (error) {
-			// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
-			if (error instanceof ExecutionSpentError) {
-				phase = { kind: 'idle' };
-				await settleSpent(executing, by);
-				return;
-			}
-			if (approving && stoppedBeforeSigning(error)) {
-				const reason =
-					error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
-				phase = { kind: 'busy', what: 'approve' };
-				try {
-					await approve(account, item, actor);
-					await store.refresh(account, account.chainIds, { fresh: true });
-					phase = { kind: 'partial', reason };
-				} catch (again) {
-					phase = failedPhase(again);
-				}
-				return;
-			}
-			phase = failedPhase(error);
+		executedBy = by;
+		ended = null;
+		const hash = item.safeTxHash;
+		// The machine looks again before the passkey unless its look is fresh,
+		// signs that look's calls and fee, and follows the operation to its end.
+		const { error } = await act(`execute:${hash.toLowerCase()}`, {
+			type: 'execute',
+			chain_id: chainId,
+			safe_tx_hash: hash,
+			executor: by
+		});
+		if (!error) return;
+		// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
+		if (error instanceof ExecutionSpentError) {
+			phase = { kind: 'idle' };
 			return;
 		}
-		if (candidates.length > 1) lastActor.note(account.address, by);
-		// r4b-7: written down the moment the relay has it — a reload resumes
-		// watching it, and it is not offered again while it may land.
-		const flight = executions.start({
-			chainId,
-			multisig: account.address,
-			safeTxHash: executing.safeTxHash,
-			nonce: executing.nonce.toString(),
-			userOpHash: result.userOpHash,
-			by,
-			maybeSent: result.maybeSent,
-			startedMs: Date.now(),
-			createdMs: executing.createdMs
-		});
-		// The submit's own wait for its receipt, beside the watch.
-		let own: string | null = null;
-		void result
-			.waitForTxHash(180_000, (watching = new AbortController()).signal)
-			.then((hash) => (own = hash))
-			.catch(() => {});
-		await follow(flight, executing, () => own, sent);
+		if (approving && stoppedBeforeSigning(error)) {
+			const reason =
+				error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
+			phase = { kind: 'busy', what: 'approve' };
+			const again = await approveAs(actor);
+			phase = again ? failedPhase(again) : { kind: 'partial', reason };
+			return;
+		}
+		phase = failedPhase(error);
 	}
 
 	/**
-	 * r4b-1: watch an execution sent from here to its end — the core's
-	 * verdict on the chain's nonce, the relay's word and the transaction
-	 * that executed it — within seconds of a race lost, bounded always.
+	 * r4b-1, r4b-7: how an execution from this device stands — the machine
+	 * follows it (one it sent before a reload too) to the core's verdict on
+	 * the chain's nonce, the relay's word and the transaction that executed
+	 * it; a look that found its number used says what ran (r5reg-21).
 	 */
-	async function follow(
-		flight: InFlight,
-		executing: ProposalItem,
-		own: () => string | null,
-		sent?: ReturnType<typeof factsOfExecution>
-	) {
-		phase = { kind: 'sent', txHash: null, by: flight.by };
-		const controller = watching ?? new AbortController();
-		watching = controller;
-		const verdict = await watchExecution(flight, { signal: controller.signal, own });
-		if (controller.signal.aborted) return;
-		controller.abort();
-		watching = null;
-		if (verdict.kind !== 'waiting') executions.end(chainId, account.address, flight.safeTxHash);
-		await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
-		switch (verdict.kind) {
-			case 'executed':
-				if (sent) rememberExecution(chainId, account.address, flight.safeTxHash, sent);
-				phase = { kind: 'sent', txHash: verdict.txHash, by: flight.by };
-				// A rename: the record's new name is read from the chain now.
-				if (executing.review.action?.kind === 'rename')
-					multisig.send({ type: 'recheck_record', address: account.address });
-				onexecuted?.({ item: executing, txHash: verdict.txHash, userOpHash: flight.userOpHash });
-				// A dApp's transaction: its site gets the transaction, now.
-				draft?.executed(verdict.txHash);
-				return;
-			case 'executedByOther':
-				phase = { kind: 'ended', verdict, by: flight.by };
-				// Executed all the same: the site waiting for it gets its hash.
-				draft?.executed(verdict.txHash);
-				return;
-			case 'notSent':
-				phase = { kind: 'failed', reason: m.proposal.notSent };
-				return;
-			case 'timedOut':
-				phase = { kind: 'failed', reason: m.proposal.notLanded };
-				return;
-			case 'waiting':
-				return;
-			default:
-				phase = { kind: 'ended', verdict, by: flight.by };
-		}
-	}
-
-	// r4b-7: an execution this device sent before a reload (or with the sheet
-	// closed) is watched again — never offered as if nothing was sent.
-	const resumeKey = $derived(item && !drafting ? `${chainId}:${item.safeTxHash}` : '');
-	$effect(() => {
-		if (!resumeKey) return;
-		untrack(() => {
-			if (!item || phase.kind !== 'idle' || item.status === 'done') return;
-			const flight = executions.get(chainId, account.address, item.safeTxHash);
-			if (flight) void follow(flight, item, () => null);
-		});
+	const verdict = $derived.by((): ExecutionVerdict | null => {
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		const found = Object.entries(machine?.executions ?? {}).find(
+			([k]) => k.toLowerCase() === `${chainId}:${hash}`
+		);
+		return (found?.[1] as ExecutionVerdict | undefined) ?? null;
 	});
-
-	/*
-	 * r5reg-21: the look found its number used on the chain — another member
-	 * executed it (or another transaction at its number ran) while this sheet
-	 * was open. Read what ran and say it the way a lost race is said — never
-	 * "it would fail" — and refresh the list, so the sheet becomes the
-	 * executed one.
-	 */
-	let settling: string | null = null;
-	async function settleSpent(spent: ProposalItem, by: string) {
-		if (settling === spent.safeTxHash) return;
-		settling = spent.safeTxHash;
-		try {
-			const found = await findExecution(account.address, chainId, spent.safeTxHash, {
-				sinceMs: spent.createdMs,
-				final: true,
-				nonce: spent.nonce
-			});
-			const verdict = await executionVerdict({
-				nonceUsed: true,
-				executedIn:
-					found === undefined
-						? { kind: 'unknown' }
-						: found === null
-							? { kind: 'none' }
-							: { kind: 'found', txHash: found },
-				// Nothing of this device's was sent.
-				ourOp: { kind: 'unknown' },
-				elapsedMs: 0,
-				limitMs: 0
-			});
-			if (phase.kind !== 'idle' || item?.safeTxHash !== spent.safeTxHash) return;
-			phase = { kind: 'ended', verdict, by };
-			if (verdict.kind === 'executedByOther') draft?.executed(verdict.txHash);
-			await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
-		} finally {
-			settling = null;
-		}
-	}
 	$effect(() => {
-		if (actorPreview?.kind !== 'spent' || !item || !actor) return;
-		const spent = item;
-		const by = actor.address;
+		if (!onMachine || drafting) return;
+		const now = verdict;
+		const flying = item?.executing === true && item.status !== 'done';
 		untrack(() => {
-			if (phase.kind === 'idle' && spent.status !== 'done') void settleSpent(spent, by);
+			const by = executedBy ?? actor?.address ?? '';
+			if (!now) {
+				if (flying && (phase.kind === 'idle' || phase.kind === 'busy')) {
+					phase = { kind: 'sent', txHash: null, by };
+				}
+				return;
+			}
+			if (now.kind === 'waiting') {
+				if (phase.kind !== 'sent') phase = { kind: 'sent', txHash: null, by };
+				return;
+			}
+			const mark = `${key}:${JSON.stringify(now)}`;
+			if (ended === mark) return;
+			// One this sheet did not see sent or followed: what ran is the list's to say.
+			const ours =
+				phase.kind === 'sent' ||
+				(phase.kind === 'busy' && phase.what === 'execute') ||
+				actionOf('execute')?.kind === 'working';
+			const spent = previewOf(actor)?.kind === 'spent';
+			if (!ours && !spent && !flying) return;
+			ended = mark;
+			switch (now.kind) {
+				case 'executed':
+					phase = { kind: 'sent', txHash: now.txHash, by };
+					if (item) {
+						// A rename: the record's new name is read from the chain now.
+						if (item.review.action?.kind === 'rename') {
+							multisig.send({ type: 'recheck_record', address: account.address });
+						}
+						onexecuted?.({ item, txHash: now.txHash, userOpHash: '' });
+					}
+					// A dApp's transaction: its site gets the transaction, now.
+					draft?.executed(now.txHash);
+					return;
+				case 'executedByOther':
+					phase = { kind: 'ended', verdict: now, by };
+					// Executed all the same: the site waiting for it gets its hash.
+					draft?.executed(now.txHash);
+					return;
+				case 'notSent':
+					phase = { kind: 'failed', reason: m.proposal.notSent };
+					return;
+				case 'timedOut':
+					phase = { kind: 'failed', reason: m.proposal.notLanded };
+					return;
+				default:
+					phase = { kind: 'ended', verdict: now, by };
+			}
 		});
 	});
 
@@ -984,8 +1107,44 @@
 	 * address on any of the multisig's networks says a Vela account, over the
 	 * kind kept for it (r7: evidence beats the label).
 	 */
+	/*
+	 * The shown multisig's: the machine reads how each one signs
+	 * (`read_signers`: code on the multisig's networks, Vela's passkey signer
+	 * configuration) when the sheet opens and as the members still to approve
+	 * change. A link's own source is read here (`signers.kindOf`).
+	 */
+	const signersKey = $derived(
+		onMachine && !drafting && item && missingOwners.length > 0
+			? `${key}:${missingOwners.join(',')}`
+			: ''
+	);
+	$effect(() => {
+		if (!signersKey) return;
+		proposalsHost.send({
+			type: 'read_signers',
+			chain_id: chainId,
+			safe_tx_hash: untrack(() => item?.safeTxHash ?? safeTxHash)
+		});
+	});
+	const machineSigners = $derived.by(() => {
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		return (
+			Object.entries(machine?.signers ?? {}).find(
+				([k]) => k.toLowerCase() === `${chainId}:${hash}`
+			)?.[1] ?? null
+		);
+	});
 	const kinds = $derived(
-		new Map(missingOwners.map((o) => [o, signers.kindOf(chainId, o, readItems, account.chainIds)]))
+		new Map<string, string | null>(
+			missingOwners.map((o) => [
+				o,
+				onMachine
+					? localOwners([o]).length > 0
+						? 'here'
+						: (machineSigners?.rows.find((r) => sameAddress(r.owner, o))?.kind ?? null)
+					: signers.kindOf(chainId, o, readItems, account.chainIds)
+			])
+		)
 	);
 	/**
 	 * Owners still to approve whose wallets are elsewhere: an outside wallet
@@ -1058,25 +1217,44 @@
 
 	async function onExternal() {
 		if (!item) return;
+		if (onMachine) {
+			// The machine's gate, then the outside member's wallet over a live
+			// session (`Notice::OutsideSign`); its verified answer goes through
+			// the machine's outbox.
+			const { error } = await act(`approve:${item.safeTxHash.toLowerCase()}`, {
+				type: 'approve_outside',
+				chain_id: chainId,
+				safe_tx_hash: item.safeTxHash
+			});
+			// The outside wallet's own refusal is its sheet's to say.
+			if (error && !cancelled(error)) phase = failedPhase(error);
+			return;
+		}
 		try {
 			await approveExternally(account, chainId, item.tx, outside);
 			await store.refresh(account, account.chainIds, { fresh: true });
 		} catch (error) {
-			// The outside wallet's own refusal is its sheet's to say.
 			if (!cancelled(error)) phase = failedPhase(error);
 		}
 	}
 
+	/** A voiding transaction at its number, proposed and approved at once by `rejecter`. */
 	async function onReject() {
 		if (!item || !rejecter) return;
 		phase = { kind: 'busy', what: 'reject' };
 		try {
-			await proposeCancel(account, item, rejecter);
-			await store.refresh(account, account.chainIds, { fresh: true });
+			await proposalsHost.propose(
+				account,
+				chainId,
+				{ kind: 'cancel', nonce: `0x${item.nonce.toString(16)}` },
+				{ review: false, as: rejecter.address }
+			);
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
-			phase = failedPhase(error);
+			phase = failedPhase(
+				error instanceof ProposeFailedError ? actionError(error.state, chainId) : error
+			);
 		}
 	}
 
@@ -1118,7 +1296,60 @@
 	const HISTORY_AUTO_MS = 4_000;
 	let autoTries = 0;
 	const doneKey = $derived(item?.status === 'done' ? item.safeTxHash : '');
+	/**
+	 * The shown multisig's story, as the machine tells it (`timelines`): how
+	 * it ended — executed by which transaction, or replaced at its number (by
+	 * its cancellation or not) — read from the chain's history on its refresh.
+	 */
+	const machineSteps = $derived.by((): MultisigTimelineStep[] | null => {
+		if (!onMachine) return null;
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		return (
+			Object.entries(machine?.timelines ?? {}).find(
+				([k]) => k.toLowerCase() === `${chainId}:${hash}`
+			)?.[1] ?? null
+		);
+	});
+	const machineFinished = $derived.by(() => {
+		const last = machineSteps?.at(-1);
+		if (last?.kind === 'executed') return { txHash: last.tx_hash };
+		if (last?.kind === 'replaced') return { txHash: null, byCancel: last.cancellation };
+		return null;
+	});
+	// A done one's sheet: the machine reads how it ran (its receipt's facts).
 	$effect(() => {
+		if (!onMachine || !doneKey) return;
+		proposalsHost.send({ type: 'timeline', chain_id: chainId, safe_tx_hash: doneKey });
+	});
+	$effect(() => {
+		if (!onMachine) return;
+		const key = doneKey;
+		void historyTry;
+		const found = machineFinished;
+		const unread = !!key && !found && (machine?.history_unreadable ?? []).includes(chainId);
+		finished = found;
+		unreadHistory = unread;
+		if (!unread) {
+			if (found) autoTries = 0;
+			return;
+		}
+		// Round 5: a node a few blocks behind cannot say yet — asked again by
+		// itself a few times (Retry stays on screen).
+		if (autoTries >= HISTORY_AUTO_TRIES) return;
+		const again = setTimeout(() => {
+			autoTries += 1;
+			void proposals.refresh();
+		}, HISTORY_AUTO_MS);
+		return () => clearTimeout(again);
+	});
+	/** The person's Retry on a history that could not be read. */
+	function retryHistory(): void {
+		historyTry += 1;
+		if (onMachine) void proposals.retry();
+	}
+	// A link's own source: its history read here.
+	$effect(() => {
+		if (onMachine) return;
 		const key = doneKey;
 		void historyTry;
 		finished = null;
@@ -1138,8 +1369,6 @@
 			if (!live) return;
 			if (hash === undefined) {
 				unreadHistory = true;
-				// Round 5: a node a few blocks behind cannot say yet — asked
-				// again by itself a few times (Retry stays on screen).
 				if (autoTries < HISTORY_AUTO_TRIES) {
 					autoTries += 1;
 					again = setTimeout(() => (historyTry += 1), HISTORY_AUTO_MS);
@@ -1168,21 +1397,59 @@
 	const executedTx = $derived(
 		phase.kind === 'sent' && phase.txHash ? phase.txHash : (finished?.txHash ?? null)
 	);
-	const frozenKey = $derived(executedTx && item ? `${item.safeTxHash}:${executedTx}` : '');
-	let frozen = $state<FrozenFacts | null>(null);
+	/** The machine's (`frozen`): from its receipt, else what this device recorded sending it. */
+	const machineFrozen = $derived.by((): FrozenFacts | null => {
+		if (!onMachine || !executedTx) return null;
+		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
+		const all = (machine?.frozen ?? {}) as Record<string, FrozenFacts>;
+		return Object.entries(all).find(([k]) => k.toLowerCase() === `${chainId}:${hash}`)?.[1] ?? null;
+	});
+	// Executed from this sheet: the machine reads its facts once it is done.
+	$effect(() => {
+		if (!onMachine || !executedTx || item?.status !== 'done' || doneKey) return;
+		proposalsHost.send({ type: 'timeline', chain_id: chainId, safe_tx_hash: item.safeTxHash });
+	});
+	const frozenKey = $derived(
+		!onMachine && executedTx && item ? `${item.safeTxHash}:${executedTx}` : ''
+	);
+	let sourceFrozen = $state<FrozenFacts | null>(null);
 	$effect(() => {
 		const key = frozenKey;
-		frozen = null;
+		sourceFrozen = null;
 		if (!key) return;
 		const [hash, tx] = key.split(':');
 		let live = true;
 		const address = untrack(() => account.address);
 		void frozenFacts(chainId, address, hash, tx).then((facts) => {
-			if (live) frozen = facts;
+			if (live) sourceFrozen = facts;
 		});
 		return () => {
 			live = false;
 		};
+	});
+	const frozen = $derived(onMachine ? machineFrozen : sourceFrozen);
+	/** Its story for the timeline (r4D-17): the machine's, or a link's read here. */
+	const steps = $derived.by((): MultisigTimelineStep[] => {
+		if (onMachine) return machineSteps ?? [];
+		if (!item || !executedTx) return [];
+		return timelineOf(item, executedTx, frozen).map((s): MultisigTimelineStep => {
+			switch (s.kind) {
+				case 'created':
+					return { kind: 'created', who: s.who, at_ms: s.atMs };
+				case 'approved':
+					return {
+						kind: 'approved',
+						who: s.who,
+						at_ms: s.atMs,
+						counted: s.counted,
+						by_executing: s.byExecuting,
+						unsent: false,
+						on_chain: false
+					};
+				case 'executed':
+					return { kind: 'executed', who: s.who, tx_hash: s.txHash, at_ms: s.atMs };
+			}
+		});
 	});
 	/**
 	 * Whom the list names: the members whose approvals counted when it ran;
@@ -1255,9 +1522,15 @@
 	});
 
 	/** Where what was signed here for it stands, while the mailbox lacks it. */
-	const kept = $derived(
-		item?.unsent ? outbox.stateOf(chainId, account.address, item.safeTxHash) : null
-	);
+	const kept = $derived.by(() => {
+		if (!item?.unsent) return null;
+		const prefix = `${chainId}:${account.address}:${item.safeTxHash}:`.toLowerCase();
+		return (
+			Object.entries(machine?.outbox ?? {}).find(([k]) =>
+				k.toLowerCase().startsWith(prefix)
+			)?.[1] ?? null
+		);
+	});
 	/** A second's tick while a resend is counted down. */
 	let clock = $state(Date.now());
 	$effect(() => {
@@ -1269,12 +1542,11 @@
 	async function sendAgain() {
 		if (!item) return;
 		resending = true;
-		try {
-			await outbox.sendAgain({ chainId, safe: account.address, hash: item.safeTxHash });
-			await store.refresh(account, account.chainIds);
-		} finally {
-			resending = false;
-		}
+		const was = kept;
+		proposalsHost.send({ type: 'send_again', chain_id: chainId, safe_tx_hash: item.safeTxHash });
+		// Until the machine says where it stands now (sent, or waiting again).
+		await proposalsHost.until(() => (kept !== was || !item?.unsent ? true : null), 15_000);
+		resending = false;
 	}
 
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -1297,6 +1569,12 @@
 	/** r4b-3: the network did not answer the last read (or the device is offline). */
 	const chainDown = $derived(store.unreadable.includes(chainId));
 	let retrying = $state(false);
+	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
+	function decline() {
+		if (prebuilt) proposalsHost.withdrawDraft();
+		else draft?.decline();
+	}
+
 	async function retryRead() {
 		retrying = true;
 		try {
@@ -1313,9 +1591,7 @@
 		{#if draftFailure}
 			<p class="warn" role="alert">{draftFailure}</p>
 			<div class="two">
-				<Button variant="secondary" shape="rounded" onclick={() => (prebuilt ?? draft)?.decline()}
-					>{m.external.decline}</Button
-				>
+				<Button variant="secondary" shape="rounded" onclick={decline}>{m.external.decline}</Button>
 				<Button variant="secondary" shape="rounded" onclick={() => void loadDraft()}
 					>{m.external.retry}</Button
 				>
@@ -1681,8 +1957,7 @@
 				<p class="quiet" role="status" data-testid="proposal-history-unread">
 					{fillTemplate(m.proposal.cantCheckUsed, { network: chainName(chainId) })}
 				</p>
-				<Button variant="secondary" shape="rounded" onclick={() => (historyTry += 1)}
-					>{m.service.retry}</Button
+				<Button variant="secondary" shape="rounded" onclick={retryHistory}>{m.service.retry}</Button
 				>
 			{:else if finished?.txHash}
 				<p class="quiet">
@@ -1737,12 +2012,7 @@
 		{/if}
 		{#if executedTx && (item.status === 'done' || phase.kind === 'sent')}
 			<!-- r4D-17: its story, from the facts this wallet holds. -->
-			<ProposalTimeline
-				{m}
-				{chainId}
-				steps={timelineOf(item, executedTx, frozen)}
-				label={(a) => names.label(a)}
-			/>
+			<ProposalTimeline {m} {chainId} {steps} label={(a) => names.label(a)} />
 		{/if}
 		{#if item.sameNonce.length > 0 && item.status !== 'done'}
 			<!-- r4b-6: proposals at one number — only one of them can run. -->
@@ -1816,11 +2086,7 @@
 			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
 			<div class="two" class:actions={wide} data-testid="proposal-actions">
 				<!-- r4D-13: a site's request is declined; the person's own proposal is withdrawn. -->
-				<Button
-					variant="secondary"
-					shape="rounded"
-					disabled={busy}
-					onclick={() => (prebuilt ?? draft)?.decline()}
+				<Button variant="secondary" shape="rounded" disabled={busy} onclick={decline}
 					>{prebuilt ? m.proposal.withdraw : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
@@ -1863,7 +2129,8 @@
 					shape="rounded"
 					onclick={() => {
 						phase = { kind: 'idle' };
-						historyTry += 1;
+						ended = null;
+						retryHistory();
 					}}>{m.service.retry}</Button
 				>
 			{/if}

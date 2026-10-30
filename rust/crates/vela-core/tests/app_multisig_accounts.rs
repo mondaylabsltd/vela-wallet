@@ -947,6 +947,13 @@ fn the_backup_is_checked_and_sent() {
             .to_ascii_lowercase(),
         vela_core::multisig::GENESIS_REGISTRY.to_ascii_lowercase()
     );
+    // The shell is told what it is for: the signing sheet, never an execution.
+    assert_eq!(
+        world.purposes,
+        vec![Some(vela_core::app::multisig_shell::SendPurpose::Record {
+            multisig: g.address.clone()
+        })]
+    );
 }
 
 /// A voiding transaction at nonce 0: a proposal any mailbox could hold.

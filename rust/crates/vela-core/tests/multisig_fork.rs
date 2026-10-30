@@ -474,7 +474,8 @@ fn create_two_of_three_propose_approve_twice_execute() {
         executor: executor.clone(),
     });
     settle(&mut ms, &mut shell);
-    let preview = ms.view().previews[&format!("100:{hash}")].clone();
+    let preview =
+        ms.view().previews[&format!("100:{hash}:{}", executor.to_ascii_lowercase())].clone();
     assert_eq!(preview["kind"], "priced", "{preview}");
     let before = balance_of(&shell, to);
     ms.dispatch(proposals::Event::Execute {

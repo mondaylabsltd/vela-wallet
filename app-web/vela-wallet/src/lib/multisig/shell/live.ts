@@ -183,14 +183,43 @@ function feeOf(fee: unknown): QuotedInBandFee | undefined {
 }
 
 /**
- * `from` sends `calls` as one user operation. With a fee (an execution): the
- * multisig path's own — the executor's passkey (its page handed the
- * operation), the coin checked before the passkey, one retry when the relay
- * was out of reach before anything was signed. Without one (the Ethereum
- * backup's record call): the signing sheet, as any first-party transaction.
+ * What the executor's trusted signing page is shown beside the operation
+ * (round 7, r7-1): the page reads what runs from the operation's bytes; this
+ * says what they do not carry — the transaction (the number it runs at; the
+ * core adds its safeTxHash there), the multisig, its name and how many
+ * approvals it needs — each drawn as the app's word, the hash checked
+ * against the bytes.
+ */
+export function executeRequest(purpose: Op<'send_calls'>['purpose']): {
+	method: 'vela_multisigExecute';
+	params: unknown;
+} {
+	if (purpose?.kind !== 'execute') return { method: 'vela_multisigExecute', params: {} };
+	return {
+		method: 'vela_multisigExecute',
+		params: {
+			tx: purpose.tx,
+			multisig: purpose.multisig,
+			name: purpose.name ?? null,
+			threshold: purpose.threshold
+		}
+	};
+}
+
+/**
+ * `from` sends `calls` as one user operation, by what it is for
+ * (`purpose`). An execution: the multisig path's own — ONE signature, the
+ * executor's own operation (r7-3), its page handed the operation and what it
+ * runs; the coin checked before the passkey; one retry when the relay was out
+ * of reach before anything was signed. The Ethereum backup's record call: the
+ * signing sheet, as any first-party transaction.
  */
 async function sendCalls(op: Op<'send_calls'>): Promise<MultisigShellResult> {
-	if (op.fee === null || op.fee === undefined) return firstParty(op);
+	// An older machine says no purpose: an execution is the one with a fee.
+	const record = op.purpose
+		? op.purpose.kind === 'record'
+		: op.fee === null || op.fee === undefined;
+	if (record) return firstParty(op);
 	const stored = findAccountByAddress(op.from);
 	if (!stored) {
 		return {
@@ -216,7 +245,7 @@ async function sendCalls(op: Op<'send_calls'>): Promise<MultisigShellResult> {
 				account: op.from,
 				keys,
 				credentials: keys.map((k) => ({ id: k.credentialId })),
-				request: { method: 'vela_multisigExecute', params: {}, origin: '', chainId: op.chain_id }
+				request: { ...executeRequest(op.purpose), origin: '', chainId: op.chain_id }
 			},
 			operation
 		);

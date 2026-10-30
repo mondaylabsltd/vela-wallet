@@ -212,6 +212,7 @@ fn as_vela_member(scene: Scene) -> (Value, &'static str, usize) {
         proposals::Event::Review {
             chain_id: CHAIN,
             safe_tx_hash: hash.clone(),
+            blind: false,
         },
     );
     let review = sut.view().reviews[&format!("{CHAIN}:{hash}")].clone();

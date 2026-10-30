@@ -3,31 +3,39 @@
 	 * r4D-17: an executed transaction's story, on its sheet — opened from the
 	 * home or from its Activity row: Created → Approved (each member, when;
 	 * counted when it ran) → Executed (who, the transaction, when). The steps
-	 * are the core of `timeline.ts`; this draws them.
+	 * are the proposals machine's (`timelines`); this draws them.
 	 */
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { formatDateTime } from '$lib/services/locale-format';
 	import { explorerTxURL } from '$lib/services/networks';
-	import type { TimelineStep } from '../core/timeline';
+	import type { MultisigTimelineStep } from '../generated/MultisigTimelineStep';
 	import type { MultisigMessages } from '../messages';
 
 	interface Props {
 		m: MultisigMessages;
 		chainId: number;
-		steps: TimelineStep[];
+		steps: MultisigTimelineStep[];
 		/** A member's name as this device knows it (else the short address). */
 		label: (address: string) => string;
 	}
 
 	let { m, chainId, steps, label }: Props = $props();
 
-	function line(step: TimelineStep): string {
+	/** The steps of an executed one's story (a waiting one's own are its sheet's to say). */
+	const drawn = $derived(
+		steps.filter(
+			(s): s is Extract<MultisigTimelineStep, { kind: 'created' | 'approved' | 'executed' }> =>
+				s.kind === 'created' || s.kind === 'approved' || s.kind === 'executed'
+		)
+	);
+
+	function line(step: (typeof drawn)[number]): string {
 		switch (step.kind) {
 			case 'created':
 				return fillTemplate(m.timeline.created, { name: label(step.who) });
 			case 'approved':
 				return fillTemplate(
-					step.byExecuting ? m.timeline.approvedByExecuting : m.timeline.approved,
+					step.by_executing ? m.timeline.approvedByExecuting : m.timeline.approved,
 					{
 						name: label(step.who)
 					}
@@ -52,7 +60,7 @@
 <section class="timeline" aria-label={m.timeline.heading} data-testid="proposal-timeline">
 	<h3>{m.timeline.heading}</h3>
 	<ol>
-		{#each steps as step, i (i)}
+		{#each drawn as step, i (i)}
 			<li class={step.kind} data-step={step.kind}>
 				<span class="dot" aria-hidden="true"></span>
 				<div class="body">
@@ -64,13 +72,13 @@
 							>
 						{/if}
 					</p>
-					{#if step.atMs !== null || step.kind === 'executed'}
+					{#if step.at_ms !== null || step.kind === 'executed'}
 						<p class="when">
-							{when(step.atMs)}
-							{#if step.kind === 'executed' && explorer(step.txHash)}
-								{#if step.atMs !== null}·{/if}
+							{when(step.at_ms)}
+							{#if step.kind === 'executed' && explorer(step.tx_hash)}
+								{#if step.at_ms !== null}·{/if}
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an external block explorer -->
-								<a href={explorer(step.txHash)} target="_blank" rel="noopener noreferrer"
+								<a href={explorer(step.tx_hash)} target="_blank" rel="noopener noreferrer"
 									>{m.proposal.explorer}</a
 								>
 							{/if}

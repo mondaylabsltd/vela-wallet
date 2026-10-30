@@ -42,7 +42,8 @@ use super::multisig_members::kept_member;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, Chain, GenesisAnswer,
     ImportAnswer, Io, LocalAccount, MemberInfo, MultisigAccount, MultisigEffect, MultisigOperation,
-    MultisigShellResult, Notice, OwnerProof, PasskeyPurpose, Service, ServiceFail, Shared,
+    MultisigShellResult, Notice, OwnerProof, PasskeyPurpose, SendPurpose, Service, ServiceFail,
+    Shared,
 };
 use super::multisig_signers::{self as signers, KindChoice, MemberKind, SignerFacts, SignerRead};
 use crate::multisig::{self, ExportedSafe, Genesis};
@@ -1239,7 +1240,7 @@ impl App for MultisigAccounts {
             Event::SaveToEthereum { address, from } => flow(model, move |io, st| async move {
                 let genesis = lock(&st).find(&address).map(|a| a.genesis.clone());
                 let Some(genesis) = genesis else { return };
-                let state = start_backup(&io, &genesis, &from).await;
+                let state = start_backup(&io, &address, &genesis, &from).await;
                 lock(&st).backup.insert(address.to_ascii_lowercase(), state);
             }),
             Event::PlanRename { address } => flow(model, move |io, st| async move {
@@ -2839,7 +2840,7 @@ async fn check_backup(io: &Io<Event>, address: &str) -> BackupState {
     }
 }
 
-async fn start_backup(io: &Io<Event>, genesis: &Genesis, from: &str) -> BackupState {
+async fn start_backup(io: &Io<Event>, address: &str, genesis: &Genesis, from: &str) -> BackupState {
     let Ok(call) = multisig::record_call(genesis) else {
         return BackupState::Failed;
     };
@@ -2849,6 +2850,9 @@ async fn start_backup(io: &Io<Event>, genesis: &Genesis, from: &str) -> BackupSt
             from: from.to_owned(),
             calls: vec![call],
             fee: None,
+            purpose: Some(SendPurpose::Record {
+                multisig: address.to_owned(),
+            }),
         })
         .await
     {

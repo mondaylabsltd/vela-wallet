@@ -219,14 +219,17 @@ describe('the multisig shell', () => {
 			[{ type: 'http', method: 'GET', url: 'x', body: null, timeout_ms: 1 }, 'http_unreachable'],
 			[{ type: 'rpc', chain_id: 1, method: 'm', params: [], bound_ms: null }, 'rpc_unanswered'],
 			[{ type: 'ask_risk', chain_id: 1, safe: 's', findings: [] }, 'risk_answered'],
-			[{ type: 'send_calls', chain_id: 1, from: 'f', calls: [], fee: null }, 'calls_failed'],
+			[
+				{ type: 'send_calls', chain_id: 1, from: 'f', calls: [], fee: null, purpose: null },
+				'calls_failed'
+			],
 			[{ type: 'quote_calls', chain_id: 1, from: 'f', calls: [] }, 'quote_failed'],
 			[{ type: 'peer_receive', room: 'r' }, 'peer_closed'],
 			[{ type: 'wallet_request', method: 'm', params: [] }, 'wallet_refused']
 		];
 		for (const [op, type] of cases) expect(operationFailure(op, new Error('x')).type).toBe(type);
 		const send = operationFailure(
-			{ type: 'send_calls', chain_id: 1, from: 'f', calls: [], fee: null },
+			{ type: 'send_calls', chain_id: 1, from: 'f', calls: [], fee: null, purpose: null },
 			new Error('x')
 		);
 		expect(send).toMatchObject({ maybe_sent: false });
