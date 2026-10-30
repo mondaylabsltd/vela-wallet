@@ -33,9 +33,23 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, callTitle, readableCalls, reviewedCalls } from '../core/call-review.svelte';
-	import { ProposalReview, REVIEW_FRESH_MS } from '../core/proposal-review.svelte';
-	import { anywayLabel, reviewBlocks, reviewTech } from '../core/review-blocks';
+	import {
+		CallReading,
+		callReviewBlocks,
+		callTitle,
+		readableCalls,
+		reviewedCalls
+	} from '../core/call-review.svelte';
+	import { ProposalReview } from '../core/proposal-review.svelte';
+	import {
+		anywayLabel,
+		partyAddresses,
+		recipientBadges,
+		recipientNames,
+		reviewBlocks,
+		reviewTech
+	} from '../core/review-blocks';
+	import { currency } from '$lib/settings/core/currency.svelte';
 	import BlockList from '$lib/signing/ui/BlockList.svelte';
 	import { resolvedFormatKeys } from '$lib/services/locale-format';
 	import {
@@ -71,6 +85,7 @@
 	import ProposalTimeline from './ProposalTimeline.svelte';
 	import { timelineOf } from '../core/timeline';
 	import {
+		ExecutionSpentError,
 		ExecutionUncheckedError,
 		ExecutionUnpricedError,
 		ExecutionWouldFailError,
@@ -78,9 +93,10 @@
 		stoppedBeforeSigning,
 		type ExecutionPreview
 	} from '../core/execute';
-	import { feeWords, whyText } from '../core/execution-words';
-	import { preflight, PREVIEW_FRESH_MS } from '../core/preflight.svelte';
+	import { feeCoin, feeWords, whyText } from '../core/execution-words';
+	import { preflight, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { signers } from '../core/signers.svelte';
+	import { defaultActor, lastActor } from '../core/actor';
 	import {
 		declinedRisk,
 		gateOf,
@@ -105,9 +121,16 @@
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
-	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
+	import {
+		executionVerdict,
+		memberDrift,
+		readMemberChanges,
+		sameAddress,
+		transfersOf
+	} from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { connectLink } from '../external/connect-link';
+	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
@@ -125,6 +148,7 @@
 		type ProposalItem
 	} from '../core/proposals.svelte';
 	import type { MultisigAccount } from '../core/store.svelte';
+	import { typedName } from '../core/typed-name';
 	import type { DappProposal } from '../core/ui.svelte';
 	import type { ReviewFirstRequest } from '../core/review-first.svelte';
 	import type { ProposalSource } from '../core/linked.svelte';
@@ -230,10 +254,22 @@
 			? (prebuilt?.chain.members ?? drafted?.chain.members ?? null)
 			: (store.chain(chainId)?.members ?? null)
 	);
+	// r5reg-14: the shown multisig's transaction, still waiting (or not read
+	// yet — its network not answering), is read faster while its sheet is
+	// open, and when the window comes back: another member's approval, or the
+	// network's return, is seen here within seconds.
+	const waitingHere = $derived(!source && !drafting && item?.status !== 'done');
+	$effect(() => {
+		if (waitingHere) return proposals.watch();
+	});
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
-	/** A member as a change names it: the name this device knows, and the short address. */
-	const who = (address: string) => memberWho(address, names.label(address));
+	/**
+	 * A member as a change names it: the name typed for them here (r5reg-16),
+	 * else the name this device knows, and the short address.
+	 */
+	const who = (address: string) =>
+		memberWho(address, typedName(account, address) ?? names.label(address));
 
 	let title = $state('');
 	let lines = $state<{ label: string; to: string; note: ProvenanceNote | null }[]>([]);
@@ -330,7 +366,7 @@
 	 */
 	const reviewKey = $derived(
 		item && members
-			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}`
+			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}:${item.status === 'done'}`
 			: ''
 	);
 	let proposalReview = $state<ProposalReview | null>(null);
@@ -347,9 +383,11 @@
 		const next = new ProposalReview(subject);
 		proposalReview = next;
 		void next.refresh();
-		const timer = setInterval(() => void next.refresh(), REVIEW_FRESH_MS);
+		// Its hashes and fields are read once for a finished one; nothing is re-checked.
+		const done = untrack(() => item?.status === 'done');
+		const stop = done ? undefined : next.keepFresh();
 		return () => {
-			clearInterval(timer);
+			stop?.();
 			next.dispose();
 			if (proposalReview === next) proposalReview = null;
 		};
@@ -362,9 +400,20 @@
 		network: chainName(chainId),
 		nativeSymbol: nativeSymbol(chainId),
 		preset: resolvedFormatKeys().number,
-		nameOf: (address: string) => names.label(address) ?? localName(address)
+		nameOf: (address: string) => names.label(address) ?? localName(address),
+		// r5reg-16: a member being added is named as typed when they were added.
+		memberName: (address: string) => typedName(account, address)
 	});
-	const checks = $derived(reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext));
+	/**
+	 * r5reg-15: the addresses the call's reading names already (its
+	 * "Recipient"): the review says each once — the call's row, wearing what
+	 * the review knows of it ("First time sending here").
+	 */
+	const drawnParties = $derived(
+		reading ? partyAddresses(callReviewBlocks(reading, signing, currency.view)) : []
+	);
+	const partyBadges = $derived(recipientBadges(fullReview, reviewContext));
+	const partyNames = $derived(recipientNames(fullReview, reviewContext));
 	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
 	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
 	const signRule = $derived(fullReview?.sign ?? null);
@@ -421,9 +470,12 @@
 		const inputs = previewInputs;
 		if (inputs.length === 0) return;
 		for (const input of inputs) void preflight.check(input);
+		// r5reg-14: asked every 5 s — a priced look still stands its 15 s
+		// (`check` keeps a fresh one); one that could not price or check it
+		// (an RPC outage) is taken again within 5 s of the network's return.
 		const timer = setInterval(() => {
 			for (const input of inputs) void preflight.check(input);
-		}, PREVIEW_FRESH_MS);
+		}, UNPRICED_FRESH_MS);
 		return () => clearInterval(timer);
 	});
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
@@ -439,14 +491,23 @@
 			return p?.kind === 'priced' && p.canPay;
 		}) ?? null
 	);
+	/**
+	 * r5reg-5: the person's pick; else one who can pay; else the member used
+	 * here last; else the first — among those who have not approved yet (or
+	 * can execute). With two or more, "As" shows who it is, drafting too.
+	 */
 	const actor = $derived<LocalOwner | null>(
-		candidates.find((o) => sameAddress(o.address, chosen)) ?? payer ?? candidates[0] ?? null
+		candidates.find((o) => sameAddress(o.address, chosen)) ??
+			payer ??
+			defaultActor(candidates, account.address) ??
+			null
 	);
 	const actorPreview = $derived(executors.length > 0 ? previewOf(actor) : null);
 	/** The executor shown cannot run it: it would fail, or it cannot pay the fee. */
 	const blocked = $derived(
 		actorPreview?.kind === 'refused' ||
 			actorPreview?.kind === 'fails' ||
+			actorPreview?.kind === 'spent' ||
 			(actorPreview?.kind === 'priced' && !actorPreview.canPay)
 	);
 	function recheck() {
@@ -480,6 +541,15 @@
 		/** r4-11: "Approve and execute" approved; only the execute part could not run. */
 		| { kind: 'partial'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
+	/**
+	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
+	 * fact. Nothing on it is a check of what running it WOULD do any more:
+	 * no simulation, guard or first-send line, and no look read again.
+	 */
+	const past = $derived(item?.status === 'done' || (phase.kind === 'sent' && !!phase.txHash));
+	const checks = $derived(
+		past ? [] : reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext, drawnParties)
+	);
 	let rejecting = $state(false);
 	let copied = $state(false);
 
@@ -525,13 +595,18 @@
 
 	/** {@link reasonOf}'s words alone — drawn from a preview too, so it logs nothing. */
 	function reasonText(error: unknown): string {
+		// r4b-15 / r4D-10: offline, whatever could not be reached is said as
+		// offline — one cause, one sentence — not as whichever read failed
+		// first (Approve's authority check said "couldn't check"). A definite
+		// answer, or the person's own passkey choice, is still said as itself.
+		if (offline() && !definite(error)) return m.proposal.reason.offline;
 		if (error instanceof ExecutorCannotPayError && actor) {
 			const symbol = nativeSymbol(chainId);
 			return fillTemplate(m.proposal.cannotPay, {
 				name: names.label(actor.address),
 				symbol,
-				fee: `${formatUnits(error.need, 18)} ${symbol}`,
-				balance: `${formatUnits(error.have, 18)} ${symbol}`
+				fee: feeCoin(error.need, symbol),
+				balance: feeCoin(error.have, symbol)
 			});
 		}
 		if (error instanceof ExecutionWouldFailError) {
@@ -609,6 +684,23 @@
 		return typeof navigator !== 'undefined' && navigator.onLine === false;
 	}
 
+	/** An outcome that is an answer, or the person's choice — not something out of reach. */
+	function definite(error: unknown): boolean {
+		return (
+			error instanceof ExecutorCannotPayError ||
+			error instanceof ExecutionWouldFailError ||
+			error instanceof NoOutsideSignerError ||
+			error instanceof SigningRefusedError ||
+			error instanceof SigningBlockedError ||
+			(error instanceof GenesisRefusedError && error.authority.kind !== 'unknown') ||
+			error instanceof PageApprovalError ||
+			error instanceof PasskeyError ||
+			error instanceof PasskeyCheckError ||
+			error instanceof MailboxRefusedError ||
+			cancelled(error)
+		);
+	}
+
 	/**
 	 * A dApp's transaction that the proposer's own approval makes ready (a
 	 * one-approval multisig, nothing ahead of it): proposed and executed in
@@ -620,16 +712,17 @@
 	/** The person confirmed the dApp's transaction: propose it, approved by this device's member. */
 	async function onPropose() {
 		// §3.6: the proposer's own transaction goes on to its passkey (the host closes this).
+		// r5reg-5: the member shown under "As" proposes it — never another, silently.
 		if (prebuilt) {
 			phase = { kind: 'busy', what: 'propose' };
-			prebuilt.confirm();
+			prebuilt.confirm(actor?.address ?? null);
 			return;
 		}
 		if (!draft || !item) return;
 		const thenExecute = executeNow;
 		phase = { kind: 'busy', what: 'propose' };
 		try {
-			await draft.propose();
+			await draft.propose(actor?.address ?? null);
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = failedPhase(error);
@@ -645,7 +738,9 @@
 		phase = { kind: 'busy', what: 'approve' };
 		try {
 			await approve(account, item, actor);
-			await store.refresh(account, account.chainIds);
+			if (candidates.length > 1) lastActor.note(account.address, actor.address);
+			// r5reg-14: read after the approval — never a read begun before it.
+			await store.refresh(account, account.chainIds, { fresh: true });
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = failedPhase(error);
@@ -687,13 +782,19 @@
 			const preview = await preflight.check(input, shown?.kind === 'priced' ? PREVIEW_FRESH_MS : 0);
 			result = await execute(account, item, actor, members, preview);
 		} catch (error) {
+			// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
+			if (error instanceof ExecutionSpentError) {
+				phase = { kind: 'idle' };
+				await settleSpent(executing, by);
+				return;
+			}
 			if (approving && stoppedBeforeSigning(error)) {
 				const reason =
 					error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
 				phase = { kind: 'busy', what: 'approve' };
 				try {
 					await approve(account, item, actor);
-					await store.refresh(account, account.chainIds);
+					await store.refresh(account, account.chainIds, { fresh: true });
 					phase = { kind: 'partial', reason };
 				} catch (again) {
 					phase = failedPhase(again);
@@ -703,6 +804,7 @@
 			phase = failedPhase(error);
 			return;
 		}
+		if (candidates.length > 1) lastActor.note(account.address, by);
 		// r4b-7: written down the moment the relay has it — a reload resumes
 		// watching it, and it is not offered again while it may land.
 		const flight = executions.start({
@@ -744,7 +846,7 @@
 		controller.abort();
 		watching = null;
 		if (verdict.kind !== 'waiting') executions.end(chainId, account.address, flight.safeTxHash);
-		await store.refresh(account, account.chainIds).catch(() => {});
+		await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
 		switch (verdict.kind) {
 			case 'executed':
 				if (sent) rememberExecution(chainId, account.address, flight.safeTxHash, sent);
@@ -785,6 +887,53 @@
 		});
 	});
 
+	/*
+	 * r5reg-21: the look found its number used on the chain — another member
+	 * executed it (or another transaction at its number ran) while this sheet
+	 * was open. Read what ran and say it the way a lost race is said — never
+	 * "it would fail" — and refresh the list, so the sheet becomes the
+	 * executed one.
+	 */
+	let settling: string | null = null;
+	async function settleSpent(spent: ProposalItem, by: string) {
+		if (settling === spent.safeTxHash) return;
+		settling = spent.safeTxHash;
+		try {
+			const found = await findExecution(account.address, chainId, spent.safeTxHash, {
+				sinceMs: spent.createdMs,
+				final: true,
+				nonce: spent.nonce
+			});
+			const verdict = await executionVerdict({
+				nonceUsed: true,
+				executedIn:
+					found === undefined
+						? { kind: 'unknown' }
+						: found === null
+							? { kind: 'none' }
+							: { kind: 'found', txHash: found },
+				// Nothing of this device's was sent.
+				ourOp: { kind: 'unknown' },
+				elapsedMs: 0,
+				limitMs: 0
+			});
+			if (phase.kind !== 'idle' || item?.safeTxHash !== spent.safeTxHash) return;
+			phase = { kind: 'ended', verdict, by };
+			if (verdict.kind === 'executedByOther') draft?.executed(verdict.txHash);
+			await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
+		} finally {
+			settling = null;
+		}
+	}
+	$effect(() => {
+		if (actorPreview?.kind !== 'spent' || !item || !actor) return;
+		const spent = item;
+		const by = actor.address;
+		untrack(() => {
+			if (phase.kind === 'idle' && spent.status !== 'done') void settleSpent(spent, by);
+		});
+	});
+
 	/** The words for how this device's execution ended (`ended`). */
 	function endedLine(verdict: ExecutionVerdict, nonce: bigint): string {
 		switch (verdict.kind) {
@@ -814,20 +963,33 @@
 	);
 	/** Enough members approved: nobody else's approval is needed (r4D-6). */
 	const enough = $derived(!!item && item.approved >= item.threshold);
+	/** The proposals read here: a passkey approval on any of them says a Vela account (r4a-9). */
+	const readItems = $derived([
+		...(store.chain(chainId)?.items ?? []),
+		...(sameAddress(proposals.followed, account.address) ? proposals.items : [])
+	]);
+	/** How each member still to approve signs (`signers.kindOf`). */
+	const kinds = $derived(
+		new Map(missingOwners.map((o) => [o, signers.kindOf(chainId, o, readItems)]))
+	);
 	/**
 	 * Owners still to approve whose wallets are elsewhere: an outside wallet
 	 * can sign for a plain account — a queued transaction too (its approval
 	 * waits like any other). Never for a smart account (ms-11, r4-9): code at
-	 * its address on this network, or a Vela account the index knows — its
-	 * key is a passkey, and it approves in Vela, from the link. Nothing is
-	 * offered once enough have approved.
+	 * its address on this network, a Vela account the index knows, one that
+	 * approved with its passkey or this device keeps as one (r4a-9) — its key
+	 * is a passkey, and it approves in Vela, from the link. One nothing says
+	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
+	 * it — never alone. Nothing is offered once enough have approved.
 	 */
 	const outside = $derived(
-		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'wallet')
+		enough
+			? []
+			: missingOwners.filter((o) => kinds.get(o) === 'wallet' || kinds.get(o) === 'unsure')
 	);
 	/** Vela members elsewhere still to approve: they approve in Vela, from the link. */
 	const elsewhere = $derived(
-		enough ? [] : missingOwners.filter((o) => signers.kindOf(chainId, o) === 'vela')
+		enough ? [] : missingOwners.filter((o) => kinds.get(o) === 'vela' || kinds.get(o) === 'unsure')
 	);
 
 	/**
@@ -844,14 +1006,14 @@
 					safeTxHash
 				})
 	);
-	/** Members still to approve who approve in Vela (not this device's, not outside wallets). */
+	/** Members still to approve who approve in Vela (not this device's, not surely outside wallets). */
 	const velaMissing = $derived(
 		!item
 			? []
 			: (members?.owners ?? []).filter(
 					(o) =>
 						localOwners([o]).length === 0 &&
-						!outside.some((x) => sameAddress(x, o)) &&
+						(!outside.some((x) => sameAddress(x, o)) || elsewhere.some((x) => sameAddress(x, o))) &&
 						!item.approvals.some((a) => a.counts && sameAddress(a.owner, o))
 				)
 	);
@@ -870,7 +1032,7 @@
 		if (!item) return;
 		try {
 			await approveExternally(account, chainId, item.tx, outside);
-			await store.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds, { fresh: true });
 		} catch (error) {
 			// The outside wallet's own refusal is its sheet's to say.
 			if (!cancelled(error)) phase = failedPhase(error);
@@ -882,7 +1044,7 @@
 		phase = { kind: 'busy', what: 'reject' };
 		try {
 			await proposeCancel(account, item, rejecter);
-			await store.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds, { fresh: true });
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
@@ -1160,7 +1322,11 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			<p class="title">{shownTitle || '…'}</p>
+			{#if !reading}
+				<!-- r5reg-15: a call read by the signing sheet's machines heads itself
+				     ("Send −0.05 USDC"): its verb is not said twice above it. -->
+				<p class="title">{shownTitle || '…'}</p>
+			{/if}
 			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
 				<!-- A transfer read by the signing sheet's machines names its own recipient (§3.6). -->
 				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
@@ -1202,7 +1368,7 @@
 											size="compact"
 											address={address ?? ''}
 										/>
-										<code class="change-address">{address}</code>
+										<code class="change-address">{eip55(address ?? '')}</code>
 									</span>
 								{/each}
 							</li>
@@ -1217,7 +1383,7 @@
 				</section>
 			{/if}
 			{#if reading}
-				<CallReview {reading} m={signing} />
+				<CallReview {reading} m={signing} badges={partyBadges} names={partyNames} />
 			{/if}
 			{#if lines.length > 0 && !reading}
 				<ul class="lines">
@@ -1369,12 +1535,13 @@
 							{:else if item.status !== 'done' && enough}
 								<!-- Enough approved: theirs is not needed, and nothing asks for it. -->
 								{m.proposal.notNeeded}
-							{:else if !drafting && outside.some((o) => sameAddress(o, owner)) && !busy}
+							{:else if !drafting && kinds.get(owner) === 'wallet' && !busy}
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
 							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
-								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9). -->
+								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
+								     one that may be either is offered the Vela way first (r4a-9). -->
 								{m.proposal.waiting} ·
 								<button
 									type="button"
@@ -1562,17 +1729,52 @@
 			</section>
 		{/if}
 
+		{#snippet actorChoice()}
+			<!-- r5reg-5: which of this device's members does it — never picked silently. -->
+			<fieldset class="actor" data-testid="actor-choice">
+				<legend>{m.proposal.as}</legend>
+				{#each candidates as owner (owner.address)}
+					<!-- An executor's coin here, and whether it covers the fee (r4-10). -->
+					{@const look = executors.length > 0 ? previewOf(owner) : null}
+					<label class:on={actor?.address === owner.address}>
+						<input
+							type="radio"
+							name="actor"
+							value={owner.address}
+							checked={actor?.address === owner.address}
+							onchange={() => (chosen = owner.address)}
+						/>
+						<span class="actor-name">{owner.name}</span>
+						{#if look?.kind === 'priced' && look.balance !== null}
+							<span class="actor-balance" data-testid="actor-balance"
+								>{formatUnits(look.balance, 18)}
+								{nativeSymbol(
+									chainId
+								)}{#if !look.canPay}{` · ${m.proposal.pickerCantPay}`}{/if}</span
+							>
+						{/if}
+					</label>
+				{/each}
+			</fieldset>
+		{/snippet}
+
 		{#if drafting}
 			<!-- The review of what the site asks: nothing is signed before this. -->
 			{#if phase.kind === 'failed'}
 				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
 			{/if}
-			<div class="two">
+			{#if candidates.length > 1 && item.review.action !== null && !readOnly && !signBlocked}
+				{@render actorChoice()}
+			{/if}
+			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
+			<div class="two" class:actions={wide} data-testid="proposal-actions">
+				<!-- r4D-13: a site's request is declined; the person's own proposal is withdrawn. -->
 				<Button
 					variant="secondary"
 					shape="rounded"
 					disabled={busy}
-					onclick={() => (prebuilt ?? draft)?.decline()}>{m.external.decline}</Button
+					onclick={() => (prebuilt ?? draft)?.decline()}
+					>{prebuilt ? m.proposal.withdraw : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
 					<Button
@@ -1632,31 +1834,7 @@
 			</div>
 		{:else if item.status !== 'done' && item.review.action !== null && !readOnly && !signBlocked}
 			{#if candidates.length > 1}
-				<fieldset class="actor">
-					<legend>{m.proposal.as}</legend>
-					{#each candidates as owner (owner.address)}
-						<!-- An executor's coin here, and whether it covers the fee (r4-10). -->
-						{@const look = executors.length > 0 ? previewOf(owner) : null}
-						<label class:on={actor?.address === owner.address}>
-							<input
-								type="radio"
-								name="actor"
-								value={owner.address}
-								checked={actor?.address === owner.address}
-								onchange={() => (chosen = owner.address)}
-							/>
-							<span class="actor-name">{owner.name}</span>
-							{#if look?.kind === 'priced' && look.balance !== null}
-								<span class="actor-balance" data-testid="actor-balance"
-									>{formatUnits(look.balance, 18)}
-									{nativeSymbol(
-										chainId
-									)}{#if !look.canPay}{` · ${m.proposal.pickerCantPay}`}{/if}</span
-								>
-							{/if}
-						</label>
-					{/each}
-				</fieldset>
+				{@render actorChoice()}
 			{/if}
 
 			{#if phase.kind === 'failed'}
@@ -1669,7 +1847,8 @@
 				</p>
 			{/if}
 
-			<div class="primary">
+			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
+			<div class="primary" class:actions={wide} data-testid="proposal-actions">
 				{#if executors.length > 0 && actor}
 					{@const approveFirst = !actorApproved && item.approved < item.threshold}
 					{#if actorPreview?.kind === 'refused'}
@@ -1682,6 +1861,9 @@
 						<p class="warn" role="alert" data-testid="execute-would-fail">
 							{fillTemplate(m.proposal.wouldFail, { reason: whyText(m, actorPreview.why) })}
 						</p>
+					{:else if actorPreview?.kind === 'spent'}
+						<!-- r5reg-21: its number was used meanwhile — what ran is being read. -->
+						<p class="quiet" role="status" data-testid="execute-spent">{m.proposal.doneNote}</p>
 					{:else if actorPreview?.kind === 'priced' && !actorPreview.canPay}
 						<!-- r4D-1: who cannot pay, and who here can — before the tap. -->
 						<p class="warn" role="alert" data-testid="execute-cant-pay">
@@ -1693,14 +1875,14 @@
 								: fillTemplate(m.proposal.cannotPay, {
 										name: names.label(actor.address),
 										symbol: nativeSymbol(chainId),
-										fee: `${formatUnits(actorPreview.fee.amount, 18)} ${nativeSymbol(chainId)}`,
-										balance: `${formatUnits(actorPreview.balance ?? 0n, 18)} ${nativeSymbol(chainId)}`
+										fee: feeCoin(actorPreview.fee.amount, nativeSymbol(chainId)),
+										balance: feeCoin(actorPreview.balance ?? 0n, nativeSymbol(chainId))
 									})}
 						</p>
 					{/if}
 					{#if blocked}
 						<!-- It cannot run by this executor: approving is the one thing left to do. -->
-						{#if approveFirst && canApproveOnly}
+						{#if approveFirst && canApproveOnly && actorPreview?.kind !== 'spent'}
 							<Button
 								variant={valueVariant}
 								shape="rounded"
@@ -2272,6 +2454,22 @@
 
 	.primary {
 		margin-block-start: var(--space-xl);
+	}
+
+	/* r4D-19: the desktop's dialog is capped (80% high, 520 wide) and a
+	   review is long: its actions sat below the fold. They ride the
+	   dialog's bottom edge while the review scrolls under them, and settle
+	   in their place at its end. */
+	.actions {
+		position: sticky;
+		/* The dialog's scroller keeps a little room under its content
+		   (Dialog's `.content`); the bar covers it, so nothing scrolls
+		   past beneath the actions. */
+		bottom: calc(var(--space-sm) * -1);
+		z-index: 1;
+		padding-block: var(--space-md) calc(var(--space-sm) * 2);
+		border-top: var(--border-hairline) solid var(--color-border-base);
+		background: var(--color-bg-raised);
 	}
 
 	.actor-balance {

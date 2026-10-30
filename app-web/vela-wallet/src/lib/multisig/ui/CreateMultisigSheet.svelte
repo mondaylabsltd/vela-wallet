@@ -35,6 +35,8 @@
 	import { pluralForm } from '$lib/i18n/plural';
 	import { loadAccounts } from '$lib/onboarding/core/storage';
 	import { spaceNetworksSync } from '$lib/services/networks';
+	import { loadTransactions } from '$lib/services/records';
+	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -42,7 +44,7 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
 	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
-	import { localName, shortenAddress } from '../core/display';
+	import { localName, ruleTitle, shortenAddress } from '../core/display';
 	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';
 	import { inviteLink } from '../core/invite';
 	import { sameAddress, validName } from '../core/kernel';
@@ -51,7 +53,8 @@
 		firstNetworkDefault,
 		heldChains,
 		lastUsedChains,
-		likelyNetworks
+		likelyNetworks,
+		recentChains
 	} from '../core/likely-networks';
 	import { localOwners } from '../core/owners';
 	import { memberProblem } from '../core/members';
@@ -89,10 +92,21 @@
 			() => {}
 		);
 	}
-	const hints = {
+	/** r5reg-19: the networks this device's own transactions were on, newest first. */
+	let recent = $state<number[]>([]);
+	void loadTransactions().then(
+		(records) => (recent = recentChains(records)),
+		() => {}
+	);
+	// r5reg-19: read as they come — the wallet's network now, then where this
+	// device was last used and holds funds (balances and records land after
+	// the sheet opens; Arc read under "More networks" when they had not yet).
+	const hints = $derived({
+		here: chainFilter.chainId === null ? [] : [chainFilter.chainId],
 		used: lastUsedChains(),
-		held: untrack(() => heldChains(balance.view.tokens))
-	};
+		recent,
+		held: heldChains(balance.view.tokens)
+	});
 	// A network that did not answer stays offered: nothing is deployed until
 	// the first transfer out, and nothing says it lacks them. The likely ones
 	// first (r4a-14).
@@ -127,6 +141,14 @@
 	// A network found without the Safe contracts is not the pick.
 	$effect(() => {
 		if (chainId !== null && !networks.some((n) => n.chainId === chainId)) chainId = null;
+	});
+	/** The person picked a network: what lands later never picks over them. */
+	let chose = false;
+	$effect(() => {
+		const likely = firstNetworkDefault(networks, hints);
+		untrack(() => {
+			if (!chose && chainId === null && likely !== null) chainId = likely;
+		});
 	});
 	let creatorChoice = $state<string | null>(null);
 	/** vis-19: the review's creator menu. */
@@ -309,11 +331,15 @@
 
 	/** The created multisig as the store holds it now (its sharing moves on its own). */
 	const kept = $derived(created ? (multisig.find(created) ?? null) : null);
+	/** r5reg-18: a multisig of one — no other members to send anything to. */
+	const solo = $derived(!!kept && kept.owners.length === 1);
 	const sharedState = $derived(
 		!kept
 			? null
 			: isShared(kept)
-				? m.create.shared
+				? solo
+					? m.create.sharedSolo
+					: m.create.shared
 				: refused
 					? fillTemplate(m.create.refused, { reason: refused })
 					: sharing
@@ -562,7 +588,7 @@
 					/></span
 				>
 				<p class="hero-name">{cleanName}</p>
-				<p class="hero-rule">{fillTemplate(m.panel.title, { m: threshold, n: owners.length })}</p>
+				<p class="hero-rule">{ruleTitle(m, { m: threshold, n: owners.length })}</p>
 				<p class="hero-address">{draft.address}</p>
 				<p class="hint">{m.create.sameEverywhere}</p>
 			</div>
@@ -594,7 +620,10 @@
 				{networks}
 				chosen={chainId}
 				disabled={busy}
-				onchoose={(id) => (chainId = id)}
+				onchoose={(id) => {
+					chose = true;
+					chainId = id;
+				}}
 			/>
 			{#if chainId === null && networks.length > 0}
 				<p class="hint flush" role="status">{m.create.networkNeeded}</p>
@@ -661,7 +690,9 @@
 					{sharedState}
 				</p>
 			{/if}
-			<p class="hint">{m.create.createdBody}</p>
+			<p class="hint" data-testid="created-body">
+				{solo ? m.create.createdBodySolo : m.create.createdBody}
+			</p>
 		</div>
 		<div class="nav two">
 			<Button variant="secondary" shape="rounded" onclick={copy}>
@@ -901,7 +932,10 @@
 		overflow-wrap: anywhere;
 	}
 
-	.typed > :global(:last-child) {
+	/* The Add button beside the name keeps its own width — never a field
+	   alone on its row: the address field, the last child of its own row,
+	   read half the sheet wide on a phone (r5reg-19). */
+	.typed > :global(:last-child:not(input)) {
 		flex: none;
 		width: auto;
 	}

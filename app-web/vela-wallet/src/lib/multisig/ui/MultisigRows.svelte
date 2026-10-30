@@ -14,9 +14,8 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
-	import { multisigName } from '../core/display';
+	import { multisigName, shortenAddress } from '../core/display';
 	import { localOwners } from '../core/owners';
 	import { membersAnywhere } from '../core/proposals.svelte';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';

@@ -110,6 +110,16 @@ export const WETH_WITHDRAWAL_TOPIC =
 export const NATIVE_TRANSFER_SENTINEL = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * The addresses a chain's OWN native-transfer log comes from (EIP-7708; Arc
+ * logs every native move from `0xffff…fffe`) — the core's
+ * `NATIVE_LOG_ADDRESSES` beside the traced sentinel above.
+ */
+const CHAIN_NATIVE_LOG_ADDRESSES = new Set([
+	'0xfffffffffffffffffffffffffffffffffffffffe',
+	ZERO_ADDRESS
+]);
 const ERROR_STRING_SELECTOR = '0x08c379a0'; // Error(string)
 const PANIC_SELECTOR = '0x4e487b71'; // Panic(uint256)
 
@@ -151,6 +161,13 @@ export function deriveAssetDeltas(logs: SimLog[], user: string): AssetDelta[] {
 	const u = user.toLowerCase();
 	// key: 'native' for the native coin, else the lowercased token address.
 	const acc = new Map<string, AssetDelta>();
+	// r5reg-1 (the core's `derive_deltas`): a traced answer reports every
+	// native move from the sentinel; a chain that logs its own (Arc) reports
+	// the same move again. With traced logs there, the chain's are the copy;
+	// without them (a receipt), the chain's are the record.
+	const traced = (logs ?? []).some(
+		(log) => (log?.address ?? '').toLowerCase() === NATIVE_TRANSFER_SENTINEL
+	);
 
 	for (const log of logs ?? []) {
 		const topics = log?.topics;
@@ -174,7 +191,9 @@ export function deriveAssetDeltas(logs: SimLog[], user: string): AssetDelta[] {
 		if (value === 0n) continue;
 
 		const addrLc = (log.address ?? '').toLowerCase();
-		const isNative = addrLc === NATIVE_TRANSFER_SENTINEL;
+		const chainNative = CHAIN_NATIVE_LOG_ADDRESSES.has(addrLc);
+		if (chainNative && traced) continue;
+		const isNative = addrLc === NATIVE_TRANSFER_SENTINEL || chainNative;
 		const key = isNative ? 'native' : addrLc;
 		if (!key) continue;
 

@@ -34,6 +34,14 @@ const seams = vi.hoisted(() => ({
 	saveTransactions: vi.fn()
 }));
 
+/** r5reg-3: what the pool says of the chains now. */
+const pool = vi.hoisted(() => ({ rateLimited: new Set<number>(), failed: new Set<number>() }));
+vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+	getRateLimitedChains: () => pool.rateLimited,
+	getFailedRpcChains: () => pool.failed
+}));
+
 /** The tracker's subscribers — the send lock's hold listens there (round 3). */
 const trackerListeners = vi.hoisted(() => new Set<() => void>());
 
@@ -607,6 +615,67 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		});
 	});
 
+	/**
+	 * r5reg-3: the reads before the passkey (Arc answering 429, the fallback
+	 * hosts failing) are said with their time and cause, bounded, and their
+	 * giving up is the network's — no passkey opens, nothing is blamed on it.
+	 */
+	it('a wait before the passkey is said, bounded, and the network’s — never the passkey’s', async () => {
+		const { PREPARE_LIMIT_MS } = await import('./prepare-bound');
+		const { signChallenge } = await import('$lib/signing/sign-challenge');
+		vi.mocked(signChallenge).mockClear();
+		vi.useFakeTimers();
+		try {
+			pool.rateLimited.add(100);
+			// The nonce read never answers: the passkey is never reached.
+			vi.mocked(sendBatchCalls).mockImplementationOnce(() => new Promise(() => {}));
+			const dispatched: SendEvent[] = [];
+			const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+				dispatch: (event) => dispatched.push(event)
+			});
+			const submitting = executor.execute(submit);
+			await vi.advanceTimersByTimeAsync(12_000);
+			expect(dispatched.at(-1)).toEqual({ type: 'submit_slow', elapsed_ms: 12_000, busy: true });
+			await vi.advanceTimersByTimeAsync(PREPARE_LIMIT_MS);
+			await expect(submitting).resolves.toEqual({
+				type: 'submit_failed',
+				failure: { type: 'chain_unreachable', busy: true }
+			});
+			expect(vi.mocked(signChallenge)).not.toHaveBeenCalled();
+		} finally {
+			pool.rateLimited.clear();
+			vi.useRealTimers();
+		}
+	});
+
+	it('a read that fails before the passkey is the network’s; any other error keeps its reading', async () => {
+		const { PoolFailedError } = await import('$lib/services/rpc-pool');
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new PoolFailedError('every endpoint failed', { maybeDelivered: false, rateLimited: false })
+		);
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'chain_unreachable', busy: false }
+		});
+		pool.failed.add(100);
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new Error('Could not fetch the account nonce — the network may be unstable.')
+		);
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'chain_unreachable', busy: false }
+		});
+		pool.failed.clear();
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(new Error('boom'));
+		await expect(executor.execute(submit)).resolves.toMatchObject({
+			type: 'submit_failed',
+			failure: { type: 'other' }
+		});
+	});
+
 	it('no clearance in time → zero POSTs, and the send fails as not sent', async () => {
 		vi.useFakeTimers();
 		try {
@@ -955,7 +1024,43 @@ describe('round 3: reliable sending', () => {
 			})
 		).resolves.toEqual({
 			type: 'risk_resolved',
-			risk: { is_contract: false, first_time: null, history_unread: true }
+			risk: {
+				is_contract: false,
+				first_time: null,
+				history_unread: true,
+				known_name: null,
+				own: false
+			}
+		});
+	});
+
+	it('tells the core the person’s own name for it, and that it is theirs (r4a-18)', async () => {
+		const { resolveRecipientRisk } = await import('$lib/services/recipient-risk');
+		vi.mocked(resolveRecipientRisk).mockResolvedValueOnce({
+			isContract: true,
+			firstInteraction: true,
+			historyUnread: false
+		});
+		const executor = createSendExecutor(
+			ports({
+				knownName: (address) => (address === ACCOUNT ? ' R5 Bob ' : null),
+				ownAddress: (address) => address === ACCOUNT
+			})
+		);
+		await expect(
+			executor.execute({
+				id: 1,
+				operation: { type: 'resolve_risk', chain_id: 100, address: ACCOUNT }
+			})
+		).resolves.toEqual({
+			type: 'risk_resolved',
+			risk: {
+				is_contract: true,
+				first_time: true,
+				history_unread: false,
+				known_name: 'R5 Bob',
+				own: true
+			}
 		});
 	});
 });

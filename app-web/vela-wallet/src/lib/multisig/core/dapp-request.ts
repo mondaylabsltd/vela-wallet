@@ -104,7 +104,9 @@ export interface HandOff {
 	propose(
 		address: string,
 		chainId: number,
-		calls: DappCall[]
+		calls: DappCall[],
+		/** The member of this device picked to propose it (r5reg-5). */
+		as?: string | null
 	): Promise<{ safeTxHash: string; nonce: string; fromBlock?: string }>;
 	/** Answer the site (the caller answers once). */
 	settle(answer: DappAnswer): void;
@@ -159,7 +161,7 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 		calls: h.calls,
 		origin: h.origin,
 		safeTxHash: null,
-		async propose() {
+		async propose(as) {
 			if (proposed) return proposed;
 			if (proposing) throw new Error('already proposing');
 			proposing = true;
@@ -170,7 +172,7 @@ export function openMultisigReview(h: HandOff): { closing(): DappAnswer } {
 				}
 				// The claim restarts the request's clock: the limit counts from here.
 				const claimedAt = now();
-				const { safeTxHash, nonce, fromBlock } = await h.propose(h.address, h.chainId, h.calls);
+				const { safeTxHash, nonce, fromBlock } = await h.propose(h.address, h.chainId, h.calls, as);
 				proposed = safeTxHash;
 				h.proposed(h.rid, safeTxHash);
 				if (h.method === 'wallet_sendCalls') h.answerBatch(safeTxHash, nonce, fromBlock);

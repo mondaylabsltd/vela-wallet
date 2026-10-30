@@ -36,8 +36,12 @@ export interface DappProposal {
 	 * first): it gets no hash from here on. The sheet says so.
 	 */
 	siteTold?: boolean;
-	/** The person confirmed the review: propose it (one passkey prompt). Resolves its safeTxHash. */
-	propose(): Promise<string>;
+	/**
+	 * The person confirmed the review: propose it (one passkey prompt) — `as`,
+	 * the member of this device they picked to propose it (r5reg-5). Resolves
+	 * its safeTxHash.
+	 */
+	propose(as?: string | null): Promise<string>;
 	/** Executed from this sheet: an `eth_sendTransaction`'s site gets the transaction's hash. */
 	executed(txHash: string): void;
 	/** Decline before it is proposed: the site is told the person rejected it. */
@@ -51,9 +55,10 @@ export type MultisigSheet =
 	/**
 	 * Add one by its address. `link`: the invite it came from (its networks,
 	 * its members' labels); `broken`: what a damaged invite held, said at
-	 * once (r4b-13).
+	 * once (r4b-13) — `fault: 'checksum'` when its address's letters were
+	 * changed on the way (r5reg-22).
 	 */
-	| { kind: 'add'; link?: AddLink; broken?: string }
+	| { kind: 'add'; link?: AddLink; broken?: string; fault?: 'checksum' | 'damaged' }
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	/**
 	 * ms-21: a link's transaction on a device with none of its multisig's

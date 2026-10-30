@@ -10,10 +10,22 @@ import type { ProposalItem } from './proposals.svelte';
 const seams = vi.hoisted(() => ({
 	/** r4b-11: the waiting list kept from an earlier page, by multisig. */
 	kept: {} as Record<string, unknown[]>,
-	accounts: [] as { address: string }[]
+	accounts: [] as { address: string }[],
+	/** r5reg-6: each ready one's executor look, by its hash. */
+	looks: {} as Record<string, { kind: string; canPay?: boolean }>,
+	followed: { address: null as string | null, items: [] as ProposalItem[] }
 }));
 vi.mock('./proposals.svelte', () => ({
-	proposals: { followed: null, items: [] },
+	proposals: {
+		get followed() {
+			return seams.followed.address;
+		},
+		get items() {
+			return seams.followed.items;
+		},
+		chain: () => ({ members: { owners: [], threshold: 1, deployed: true } })
+	},
+	executionInput: (_a: unknown, item: { safeTxHash: string }) => item.safeTxHash,
 	keptChains: (account: { address: string }) => {
 		const items = seams.kept[account.address.toLowerCase()];
 		return items ? { chains: [{ chainId: 100, items }], lists: new Map(), at: 1 } : null;
@@ -24,6 +36,13 @@ vi.mock('./proposals.svelte', () => ({
 // The core's CLDR rule, as English has it.
 vi.mock('$lib/core/client', () => ({
 	i18nPluralSuffix: (_l: string, n: number) => (n === 1 ? '_one' : '_other')
+}));
+vi.mock('./preflight.svelte', () => ({
+	preflight: { get: (hash: string) => seams.looks[hash] ?? null },
+	blockOf: (looks: ({ kind: string; canPay?: boolean } | null)[]) =>
+		looks.length > 0 && looks.every((l) => l?.kind === 'priced' && !l.canPay)
+			? { kind: 'nobodyPays' }
+			: null
 }));
 vi.mock('./service', () => ({ fetchAllProposals: async () => null }));
 vi.mock('./service-state.svelte', () => ({ serviceOutage: { blocked: () => false } }));
@@ -62,7 +81,7 @@ describe('what waits here (r4D-7)', () => {
 	it('counts one needing this device’s approval and one ready to execute', () => {
 		const w = waitingOf([
 			item({ nonce: 1n, canApprove: [ME], approved: 1 }),
-			item({ nonce: 0n, status: 'ready', approved: 2, canApprove: [ME] }),
+			item({ nonce: 0n, status: 'ready', approved: 2, canApprove: [ME], canExecute: [ME] }),
 			// Someone else's turn: nothing for this device.
 			item({ nonce: 2n, status: 'queued', approved: 0 }),
 			// Done, or voided: not waiting.
@@ -82,14 +101,55 @@ describe('what waits here (r4D-7)', () => {
 		const m = {
 			presence: {
 				needsYou: forms('{{count}} needs your approval', '{{count}} need your approval'),
-				ready: forms('{{count}} ready to execute', '{{count}} ready to execute')
+				ready: forms('{{count}} ready to execute', '{{count}} ready to execute'),
+				waitingPayer: forms(
+					'{{count}} waiting for a member who can pay',
+					'{{count}} waiting for a member who can pay'
+				)
 			}
 		} as unknown as MultisigMessages;
-		expect(waitingWords({ needsYou: 1, ready: 1, first: null }, m)).toBe(
-			'1 needs your approval · 1 ready to execute'
-		);
-		expect(waitingWords({ needsYou: 2, ready: 0, first: null }, m)).toBe('2 need your approval');
-		expect(waitingWords({ needsYou: 0, ready: 0, first: null }, m)).toBe('');
+		const w = (needsYou: number, ready: number, waitingPayer = 0) => ({
+			needsYou,
+			ready,
+			waitingPayer,
+			first: null
+		});
+		expect(waitingWords(w(1, 1), m)).toBe('1 needs your approval · 1 ready to execute');
+		expect(waitingWords(w(2, 0), m)).toBe('2 need your approval');
+		expect(waitingWords(w(0, 0), m)).toBe('');
+		expect(waitingWords(w(0, 0, 1), m)).toBe('1 waiting for a member who can pay');
+	});
+});
+
+/**
+ * r5reg-6: "ready to execute" counts only what someone here can run now; one
+ * nobody here can pay for (or with no member here) waits for a member who
+ * can — said as such, as its row says "Can't run now".
+ */
+describe('ready, as far as this device can run it (r5reg-6)', () => {
+	it('a ready one nobody here can pay for is not "ready to execute"', () => {
+		seams.accounts = [{ address: '0xAA' }];
+		const ready = (n: bigint, canExecute = [ME]) =>
+			item({ nonce: n, status: 'ready', approved: 2, canExecute });
+		const payable = ready(0n);
+		const unpaid = ready(1n);
+		const nobodyHere = ready(2n, []);
+		const unread = ready(3n);
+		seams.looks = {
+			[payable.safeTxHash]: { kind: 'priced', canPay: true },
+			[unpaid.safeTxHash]: { kind: 'priced', canPay: false }
+		};
+		seams.followed = { address: '0xAA', items: [payable, unpaid, nobodyHere, unread] };
+		const w = presence.of('0xaa');
+		// The one that can be paid, and the one whose look is still out.
+		expect(w?.ready).toBe(2);
+		expect(w?.waitingPayer).toBe(2);
+		seams.followed = { address: null, items: [] };
+	});
+
+	it('without looks, a ready one with a member here counts as ready', () => {
+		const w = waitingOf([item({ nonce: 0n, status: 'ready', approved: 2, canExecute: [ME] })]);
+		expect(w).toMatchObject({ ready: 1, waitingPayer: 0 });
 	});
 });
 

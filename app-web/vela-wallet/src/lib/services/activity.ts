@@ -217,7 +217,13 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
 		// the scan, on the networks of the space in front; a move re-reads the
 		// balances (`onNativeBalanceMoved`).
 		const watched = [...new Set([...chainIds.filter(inSpace), ...added])];
-		void watchNativeBalances(address, watched.length > 0 ? watched : space);
+		// r4a-17: an account holding nothing yet in a space without the main
+		// payment chains (the testnet space) may get its first coin on any of
+		// its networks — Arc sits past the first six — so each is read, one
+		// balance apiece; the receipt scan keeps to the six.
+		const nativeChains =
+			chainIds === space ? spaceNetworksSync().map((net) => net.chainId) : watched;
+		void watchNativeBalances(address, nativeChains.length > 0 ? nativeChains : space);
 		const incoming = await fetchIncomingTransfers(address, chainIds);
 		if (incoming.length === 0) return 0;
 		const index = buildTokenIndex(tokens);

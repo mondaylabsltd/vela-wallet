@@ -167,6 +167,20 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 waiting for a member who can pay"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -399,6 +413,20 @@
    },
    "expect": {
     "value": "1 ready to execute"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 waiting for a member who can pay"
    }
   },
   {
@@ -637,6 +665,20 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 waiting for a member who can pay"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -869,6 +911,20 @@
    },
    "expect": {
     "value": "3 ready to execute"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 waiting for a member who can pay"
    }
   },
   {
@@ -1107,6 +1163,20 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 waiting for a member who can pay"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1339,6 +1409,20 @@
    },
    "expect": {
     "value": "11 ready to execute"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 waiting for a member who can pay"
    }
   },
   {
@@ -1577,6 +1661,20 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 waiting for a member who can pay"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1812,6 +1910,20 @@
    }
   },
   {
+   "name": "en/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 waiting for a member who can pay"
+   }
+  },
+  {
    "name": "en/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2044,6 +2156,20 @@
    },
    "expect": {
     "value": "1000000 ready to execute"
+   }
+  },
+  {
+   "name": "en/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 waiting for a member who can pay"
    }
   },
   {
@@ -2295,6 +2421,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 笔在等能付网络费的成员"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2527,6 +2667,20 @@
    },
    "expect": {
     "value": "1 笔可执行"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 笔在等能付网络费的成员"
    }
   },
   {
@@ -2765,6 +2919,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 笔在等能付网络费的成员"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2997,6 +3165,20 @@
    },
    "expect": {
     "value": "3 笔可执行"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 笔在等能付网络费的成员"
    }
   },
   {
@@ -3235,6 +3417,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 笔在等能付网络费的成员"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3467,6 +3663,20 @@
    },
    "expect": {
     "value": "11 笔可执行"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 笔在等能付网络费的成员"
    }
   },
   {
@@ -3705,6 +3915,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 笔在等能付网络费的成员"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3940,6 +4164,20 @@
    }
   },
   {
+   "name": "zh/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 笔在等能付网络费的成员"
+   }
+  },
+  {
    "name": "zh/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4172,6 +4410,20 @@
    },
    "expect": {
     "value": "1000000 笔可执行"
+   }
+  },
+  {
+   "name": "zh/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 笔在等能付网络费的成员"
    }
   },
   {
@@ -4423,6 +4675,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆在等能付網路費的成員"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4655,6 +4921,20 @@
    },
    "expect": {
     "value": "1 筆可執行"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆在等能付網路費的成員"
    }
   },
   {
@@ -4893,6 +5173,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆在等能付網路費的成員"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5125,6 +5419,20 @@
    },
    "expect": {
     "value": "3 筆可執行"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆在等能付網路費的成員"
    }
   },
   {
@@ -5363,6 +5671,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆在等能付網路費的成員"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5595,6 +5917,20 @@
    },
    "expect": {
     "value": "11 筆可執行"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆在等能付網路費的成員"
    }
   },
   {
@@ -5833,6 +6169,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆在等能付網路費的成員"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6068,6 +6418,20 @@
    }
   },
   {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆在等能付網路費的成員"
+   }
+  },
+  {
    "name": "zh-TW/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6300,6 +6664,20 @@
    },
    "expect": {
     "value": "1000000 筆可執行"
+   }
+  },
+  {
+   "name": "zh-TW/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆在等能付網路費的成員"
    }
   },
   {
@@ -6551,6 +6929,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 筆在等能付網絡費的成員"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6783,6 +7175,20 @@
    },
    "expect": {
     "value": "1 筆可執行"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 筆在等能付網絡費的成員"
    }
   },
   {
@@ -7021,6 +7427,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 筆在等能付網絡費的成員"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7253,6 +7673,20 @@
    },
    "expect": {
     "value": "3 筆可執行"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 筆在等能付網絡費的成員"
    }
   },
   {
@@ -7491,6 +7925,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 筆在等能付網絡費的成員"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7723,6 +8171,20 @@
    },
    "expect": {
     "value": "11 筆可執行"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 筆在等能付網絡費的成員"
    }
   },
   {
@@ -7961,6 +8423,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 筆在等能付網絡費的成員"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8196,6 +8672,20 @@
    }
   },
   {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 筆在等能付網絡費的成員"
+   }
+  },
+  {
    "name": "zh-HK/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8428,6 +8918,20 @@
    },
    "expect": {
     "value": "1000000 筆可執行"
+   }
+  },
+  {
+   "name": "zh-HK/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 筆在等能付網絡費的成員"
    }
   },
   {
@@ -8679,6 +9183,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 件が支払えるメンバー待ち"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8911,6 +9429,20 @@
    },
    "expect": {
     "value": "1 件が実行可能"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 件が支払えるメンバー待ち"
    }
   },
   {
@@ -9149,6 +9681,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 件が支払えるメンバー待ち"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9381,6 +9927,20 @@
    },
    "expect": {
     "value": "3 件が実行可能"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 件が支払えるメンバー待ち"
    }
   },
   {
@@ -9619,6 +10179,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 件が支払えるメンバー待ち"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9851,6 +10425,20 @@
    },
    "expect": {
     "value": "11 件が実行可能"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 件が支払えるメンバー待ち"
    }
   },
   {
@@ -10089,6 +10677,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 件が支払えるメンバー待ち"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10324,6 +10926,20 @@
    }
   },
   {
+   "name": "ja/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 件が支払えるメンバー待ち"
+   }
+  },
+  {
    "name": "ja/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10556,6 +11172,20 @@
    },
    "expect": {
     "value": "1000000 件が実行可能"
+   }
+  },
+  {
+   "name": "ja/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 件が支払えるメンバー待ち"
    }
   },
   {
@@ -10807,6 +11437,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11039,6 +11683,20 @@
    },
    "expect": {
     "value": "1건 실행 가능"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1건이 수수료를 낼 수 있는 멤버를 기다리는 중"
    }
   },
   {
@@ -11277,6 +11935,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11509,6 +12181,20 @@
    },
    "expect": {
     "value": "3건 실행 가능"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3건이 수수료를 낼 수 있는 멤버를 기다리는 중"
    }
   },
   {
@@ -11747,6 +12433,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11979,6 +12679,20 @@
    },
    "expect": {
     "value": "11건 실행 가능"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11건이 수수료를 낼 수 있는 멤버를 기다리는 중"
    }
   },
   {
@@ -12217,6 +12931,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12452,6 +13180,20 @@
    }
   },
   {
+   "name": "ko/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101건이 수수료를 낼 수 있는 멤버를 기다리는 중"
+   }
+  },
+  {
    "name": "ko/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12684,6 +13426,20 @@
    },
    "expect": {
     "value": "1000000건 실행 가능"
+   }
+  },
+  {
+   "name": "ko/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000건이 수수료를 낼 수 있는 멤버를 기다리는 중"
    }
   },
   {
@@ -12935,6 +13691,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13167,6 +13937,20 @@
    },
    "expect": {
     "value": "1 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 giao dịch chờ một thành viên trả được phí"
    }
   },
   {
@@ -13405,6 +14189,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13637,6 +14435,20 @@
    },
    "expect": {
     "value": "3 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 giao dịch chờ một thành viên trả được phí"
    }
   },
   {
@@ -13875,6 +14687,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14107,6 +14933,20 @@
    },
    "expect": {
     "value": "11 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 giao dịch chờ một thành viên trả được phí"
    }
   },
   {
@@ -14345,6 +15185,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14580,6 +15434,20 @@
    }
   },
   {
+   "name": "vi/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 giao dịch chờ một thành viên trả được phí"
+   }
+  },
+  {
    "name": "vi/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14812,6 +15680,20 @@
    },
    "expect": {
     "value": "1000000 giao dịch sẵn sàng thực hiện"
+   }
+  },
+  {
+   "name": "vi/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 giao dịch chờ một thành viên trả được phí"
    }
   },
   {
@@ -15063,6 +15945,20 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15295,6 +16191,20 @@
    },
    "expect": {
     "value": "1 siap dieksekusi"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 menunggu anggota yang bisa membayar"
    }
   },
   {
@@ -15533,6 +16443,20 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15765,6 +16689,20 @@
    },
    "expect": {
     "value": "3 siap dieksekusi"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 menunggu anggota yang bisa membayar"
    }
   },
   {
@@ -16003,6 +16941,20 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16235,6 +17187,20 @@
    },
    "expect": {
     "value": "11 siap dieksekusi"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 menunggu anggota yang bisa membayar"
    }
   },
   {
@@ -16473,6 +17439,20 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16708,6 +17688,20 @@
    }
   },
   {
+   "name": "id/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 menunggu anggota yang bisa membayar"
+   }
+  },
+  {
    "name": "id/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16940,6 +17934,20 @@
    },
    "expect": {
     "value": "1000000 siap dieksekusi"
+   }
+  },
+  {
+   "name": "id/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 menunggu anggota yang bisa membayar"
    }
   },
   {
@@ -17191,6 +18199,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17423,6 +18445,20 @@
    },
    "expect": {
     "value": "1 işlem yürütülmeye hazır"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
    }
   },
   {
@@ -17661,6 +18697,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -17893,6 +18943,20 @@
    },
    "expect": {
     "value": "3 işlem yürütülmeye hazır"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
    }
   },
   {
@@ -18131,6 +19195,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18363,6 +19441,20 @@
    },
    "expect": {
     "value": "11 işlem yürütülmeye hazır"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
    }
   },
   {
@@ -18601,6 +19693,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -18836,6 +19942,20 @@
    }
   },
   {
+   "name": "tr/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
+   }
+  },
+  {
    "name": "tr/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -19068,6 +20188,20 @@
    },
    "expect": {
     "value": "1000000 işlem yürütülmeye hazır"
+   }
+  },
+  {
+   "name": "tr/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 işlem ücreti ödeyebilecek bir üyeyi bekliyor"
    }
   },
   {
@@ -19319,6 +20453,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -19551,6 +20699,20 @@
    },
    "expect": {
     "value": "1 lista para ejecutar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 espera a un miembro que pueda pagar"
    }
   },
   {
@@ -19789,6 +20951,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20021,6 +21197,20 @@
    },
    "expect": {
     "value": "3 listas para ejecutar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 esperan a un miembro que pueda pagar"
    }
   },
   {
@@ -20259,6 +21449,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20491,6 +21695,20 @@
    },
    "expect": {
     "value": "11 listas para ejecutar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 esperan a un miembro que pueda pagar"
    }
   },
   {
@@ -20729,6 +21947,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -20964,6 +22196,20 @@
    }
   },
   {
+   "name": "es-MX/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 esperan a un miembro que pueda pagar"
+   }
+  },
+  {
    "name": "es-MX/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -21196,6 +22442,20 @@
    },
    "expect": {
     "value": "1000000 listas para ejecutar"
+   }
+  },
+  {
+   "name": "es-MX/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 esperan a un miembro que pueda pagar"
    }
   },
   {
@@ -21447,6 +22707,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 aguardam um membro que possa pagar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -21679,6 +22953,20 @@
    },
    "expect": {
     "value": "1 pronta para executar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 aguarda um membro que possa pagar"
    }
   },
   {
@@ -21917,6 +23205,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 aguardam um membro que possa pagar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -22149,6 +23451,20 @@
    },
    "expect": {
     "value": "3 prontas para executar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 aguardam um membro que possa pagar"
    }
   },
   {
@@ -22387,6 +23703,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 aguardam um membro que possa pagar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -22619,6 +23949,20 @@
    },
    "expect": {
     "value": "11 prontas para executar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 aguardam um membro que possa pagar"
    }
   },
   {
@@ -22857,6 +24201,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 aguardam um membro que possa pagar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -23092,6 +24450,20 @@
    }
   },
   {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 aguardam um membro que possa pagar"
+   }
+  },
+  {
    "name": "pt-BR/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -23324,6 +24696,20 @@
    },
    "expect": {
     "value": "1000000 prontas para executar"
+   }
+  },
+  {
+   "name": "pt-BR/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 aguardam um membro que possa pagar"
    }
   },
   {
@@ -23575,6 +24961,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 attendent un membre qui peut payer"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -23807,6 +25207,20 @@
    },
    "expect": {
     "value": "1 prête à exécuter"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 attend un membre qui peut payer"
    }
   },
   {
@@ -24045,6 +25459,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 attendent un membre qui peut payer"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -24277,6 +25705,20 @@
    },
    "expect": {
     "value": "3 prêtes à exécuter"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 attendent un membre qui peut payer"
    }
   },
   {
@@ -24515,6 +25957,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 attendent un membre qui peut payer"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -24747,6 +26203,20 @@
    },
    "expect": {
     "value": "11 prêtes à exécuter"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 attendent un membre qui peut payer"
    }
   },
   {
@@ -24985,6 +26455,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 attendent un membre qui peut payer"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -25220,6 +26704,20 @@
    }
   },
   {
+   "name": "fr/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 attendent un membre qui peut payer"
+   }
+  },
+  {
    "name": "fr/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -25452,6 +26950,20 @@
    },
    "expect": {
     "value": "1000000 prêtes à exécuter"
+   }
+  },
+  {
+   "name": "fr/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 attendent un membre qui peut payer"
    }
   },
   {
@@ -25703,6 +27215,20 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -25935,6 +27461,20 @@
    },
    "expect": {
     "value": "1 bereit zum Ausführen"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 wartet auf ein Mitglied, das zahlen kann"
    }
   },
   {
@@ -26173,6 +27713,20 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -26405,6 +27959,20 @@
    },
    "expect": {
     "value": "3 bereit zum Ausführen"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 warten auf ein Mitglied, das zahlen kann"
    }
   },
   {
@@ -26643,6 +28211,20 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -26875,6 +28457,20 @@
    },
    "expect": {
     "value": "11 bereit zum Ausführen"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 warten auf ein Mitglied, das zahlen kann"
    }
   },
   {
@@ -27113,6 +28709,20 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -27348,6 +28958,20 @@
    }
   },
   {
+   "name": "de/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 warten auf ein Mitglied, das zahlen kann"
+   }
+  },
+  {
    "name": "de/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -27580,6 +29204,20 @@
    },
    "expect": {
     "value": "1000000 bereit zum Ausführen"
+   }
+  },
+  {
+   "name": "de/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 warten auf ein Mitglied, das zahlen kann"
    }
   },
   {
@@ -27831,6 +29469,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 ждут участника, который может заплатить"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -28063,6 +29715,20 @@
    },
    "expect": {
     "value": "1 готова к выполнению"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 ждёт участника, который может заплатить"
    }
   },
   {
@@ -28301,6 +29967,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 ждут участника, который может заплатить"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -28533,6 +30213,20 @@
    },
    "expect": {
     "value": "3 готовы к выполнению"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 ждут участника, который может заплатить"
    }
   },
   {
@@ -28771,6 +30465,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 ждут участника, который может заплатить"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -29003,6 +30711,20 @@
    },
    "expect": {
     "value": "11 готовы к выполнению"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 ждут участника, который может заплатить"
    }
   },
   {
@@ -29241,6 +30963,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 ждут участника, который может заплатить"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -29476,6 +31212,20 @@
    }
   },
   {
+   "name": "ru/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 ждут участника, который может заплатить"
+   }
+  },
+  {
    "name": "ru/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -29708,6 +31458,20 @@
    },
    "expect": {
     "value": "1000000 готовы к выполнению"
+   }
+  },
+  {
+   "name": "ru/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 ждут участника, который может заплатить"
    }
   },
   {
@@ -29959,6 +31723,20 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.waitingPayer/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 attendono un membro che possa pagare"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -30191,6 +31969,20 @@
    },
    "expect": {
     "value": "1 pronta da eseguire"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.waitingPayer/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 attende un membro che possa pagare"
    }
   },
   {
@@ -30429,6 +32221,20 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.waitingPayer/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 attendono un membro che possa pagare"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -30661,6 +32467,20 @@
    },
    "expect": {
     "value": "3 pronte da eseguire"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.waitingPayer/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 attendono un membro che possa pagare"
    }
   },
   {
@@ -30899,6 +32719,20 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.waitingPayer/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 attendono un membro che possa pagare"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -31131,6 +32965,20 @@
    },
    "expect": {
     "value": "11 pronte da eseguire"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.waitingPayer/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 attendono un membro che possa pagare"
    }
   },
   {
@@ -31369,6 +33217,20 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.waitingPayer/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 attendono un membro che possa pagare"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -31604,6 +33466,20 @@
    }
   },
   {
+   "name": "it/home.multisig.presence.waitingPayer/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 attendono un membro che possa pagare"
+   }
+  },
+  {
    "name": "it/home.switcherAccountCount/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -31836,6 +33712,20 @@
    },
    "expect": {
     "value": "1000000 pronte da eseguire"
+   }
+  },
+  {
+   "name": "it/home.multisig.presence.waitingPayer/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.multisig.presence.waitingPayer",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 attendono un membro che possa pagare"
    }
   },
   {

@@ -85,6 +85,12 @@ export interface SendShellPorts {
 	 */
 	knownName?(address: string): string | null;
 	/**
+	 * r4a-18: `address` is one of the person's own accounts on this device
+	 * (a Vela account, a multisig here), or a member of the multisig sending —
+	 * never a stranger, whatever its history. Absent: none (a harness).
+	 */
+	ownAddress?(address: string): boolean;
+	/**
 	 * Price an operation, and answer with the settled quote.
 	 *
 	 * `EstimateFee` used to be one call to `estimateTransactionFee` here, while

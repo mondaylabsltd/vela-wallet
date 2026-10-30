@@ -16,7 +16,10 @@ vi.stubGlobal('localStorage', {
 	removeItem: () => {}
 });
 vi.stubGlobal('window', { addEventListener: () => {} });
-vi.mock('$lib/services/public-key-index', () => ({ queryWalletName: async () => null }));
+vi.mock('$lib/services/public-key-index', () => ({
+	queryWalletName: async () => null,
+	lookupWalletName: async () => null
+}));
 vi.mock('./display', () => ({
 	localName: (a: string) => (a.toLowerCase() === MINE.toLowerCase() ? 'My account' : null),
 	shortenAddress: (a: string) => `${a.slice(0, 8)}…`
@@ -51,5 +54,33 @@ describe("members' names (r4D-5)", () => {
 		multisig.nameMembers(SAFE, { [BOB.toLowerCase()]: { name: 'Robert', kind: 'passkey' } });
 		expect(names.label(BOB)).toBe('Bob');
 		expect(names.kindOf(BOB)).toBe('wallet');
+	});
+});
+
+/**
+ * r5reg-16: a name the person types in Settings → Add member is their word
+ * now — it replaces what was kept (a link's label), is marked as typed, and
+ * is what the member-add review and its title show.
+ */
+describe('a name typed when a member is added (r5reg-16)', () => {
+	it('replaces what was kept, and is marked as typed', async () => {
+		const { typedName } = await import('./typed-name');
+		multisig.nameMembers(
+			SAFE,
+			{ [BOB]: { name: 'Bob from work', kind: 'passkey' } },
+			{ typed: true }
+		);
+		const account = multisig.find(SAFE);
+		expect(account?.members?.[BOB.toLowerCase()]).toEqual({
+			name: 'Bob from work',
+			kind: 'passkey',
+			typed: true
+		});
+		expect(typedName(account, BOB)).toBe('Bob from work');
+		// A link's label later never overwrites it.
+		multisig.nameMembers(SAFE, { [BOB]: { name: 'Robert', kind: 'wallet' } });
+		expect(typedName(multisig.find(SAFE), BOB)).toBe('Bob from work');
+		// Kept from a link only: no typed name.
+		expect(typedName(multisig.find(SAFE), MINE)).toBeNull();
 	});
 });

@@ -107,7 +107,11 @@
 		proposalOfRow,
 		waitingRows
 	} from '$lib/multisig/core/activity.svelte';
-	import { proposals as multisigProposals } from '$lib/multisig/core/proposals.svelte';
+	import {
+		membersAnywhere,
+		proposals as multisigProposals
+	} from '$lib/multisig/core/proposals.svelte';
+	import { multisigKnownName, ownOrMember } from '$lib/multisig/core/known';
 	import { readMembers } from '$lib/multisig/core/chain';
 	import { localOwners } from '$lib/multisig/core/owners';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
@@ -880,10 +884,19 @@
 						(row) => row.account.address.toLowerCase() === low
 					);
 					if (own) return own.account.name;
+					// r4a-18: a multisig here, or a member of the multisig sending.
+					const kept = multisigKnownName(address, sendingMultisig);
+					if (kept) return kept;
 					const contact = contactsView?.contacts.find((c) => c.address.toLowerCase() === low);
 					// Only a name the person gave: a resolved one is a service's word.
 					return contact?.name ?? null;
 				},
+				// r4a-18: one of the person's own accounts, or a member of the
+				// multisig sending — never told as a first transfer.
+				ownAddress: (address) =>
+					session.view.accounts.some(
+						(row) => row.account.address.toLowerCase() === address.toLowerCase()
+					) || ownOrMember(address, sendingMultisig ? membersAnywhere(sendingMultisig) : []),
 				// ONE source for holdings (spec 078): the asset list's, already in
 				// memory. `null` until it has settled a round for this account —
 				// the executor then walks the chains as it always has.
@@ -1469,6 +1482,7 @@
 								multisig: {
 									label: data.multisigMessages.proposal.approvals,
 									rule: data.multisigMessages.panel.title,
+									ruleSolo: data.multisigMessages.panel.titleSolo,
 									feeNote: data.multisigMessages.proposal.feeNote,
 									// r4C-10: with no member here, nobody here approves it.
 									confirm:
@@ -1945,9 +1959,22 @@
 			? waitingRows.group(data.multisigMessages, data.walletMessages.activity.toName)
 			: null
 	);
-	/** A tap on Activity: a waiting multisig transaction opens as one; anything else, its detail. */
+	/**
+	 * The multisig transaction a feed row is: its own id, or — a batch's rows
+	 * folded into one under their operation hash — the id of a record folded
+	 * there.
+	 */
+	function multisigOfRow(id: string | undefined): { chainId: number; safeTxHash: string } | null {
+		const own = proposalOfRow(id);
+		if (own !== null || !id) return own;
+		const folded = feed.view?.transactions.find(
+			(tx) => tx.user_op_hash === id && proposalOfRow(tx.id) !== null
+		);
+		return folded ? proposalOfRow(folded.id) : null;
+	}
+	/** A tap on Activity: a multisig transaction opens as one; anything else, its detail. */
 	function openActivity(row: { id?: string }) {
-		const proposal = proposalOfRow(row.id);
+		const proposal = multisigOfRow(row.id);
 		const missing = missingOfRow(row.id);
 		if (proposal) {
 			// The row's own tap goes on to the transaction detail: not for this one.
@@ -2169,6 +2196,21 @@
 			const token = visibleBalanceTokens(balance.view.tokens, chainFilter.chainId)[index];
 			selectedAssetId = token === undefined ? null : balanceTokenId(token);
 		}
+	}
+
+	/**
+	 * r4D-17 / r5reg-9: a multisig transaction's row on the History screen
+	 * opens the multisig's own sheet — its timeline, who executed it — as the
+	 * home's row does, never the plain detail with "Delete record" (an
+	 * execution on chain is no local record to delete). `true` when it did.
+	 */
+	function openedAsMultisig(to: string): boolean {
+		if (to !== 'tx-detail') return false;
+		const proposal = multisigOfRow(selectedTxId ?? undefined);
+		if (proposal === null) return false;
+		selectedTxId = null;
+		multisigUi.open({ kind: 'proposal', ...proposal });
+		return true;
 	}
 
 	/**
@@ -2745,6 +2787,7 @@
 		}}
 		onnavigate={(to, index) => {
 			noteTarget(to, index);
+			if (openedAsMultisig(to)) return;
 			// The picker opens through the core, as the scanner does.
 			if (to === 'contact-pick' && sendSession) {
 				sendSession.dispatch({ type: 'open_contact_picker', target: null });
@@ -2932,6 +2975,7 @@
 		}}
 		onnavigate={(to, index) => {
 			noteTarget(to, index);
+			if (openedAsMultisig(to)) return;
 			// The token sheet's two doors leave the assets flow for the
 			// token's own send form / code (RULING 3).
 			if (to === 'send-token') {

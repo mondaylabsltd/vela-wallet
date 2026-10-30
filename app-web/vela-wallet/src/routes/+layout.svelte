@@ -47,14 +47,15 @@
 
 	/**
 	 * The offline line's words. The layout has no corpus of its own (it is the
-	 * one route outside `[locale]`), so the sentence is the settings screen's
+	 * one route outside `[locale]`), so the sentence is the flow copy's
 	 * `offline` string, resolved by the page data when a locale page is up and
-	 * English otherwise.
+	 * English otherwise. r4b-15: it says "offline" — the one place that does;
+	 * the screens under it say what that means for them, not offline again.
 	 */
 	const offlineLabel = $derived(
 		(page.data as { flow?: Record<string, string> } | undefined)?.flow?.[
-			'onboarding.common.networkBody'
-		] ?? 'The request never arrived — check your network and try again.'
+			'onboarding.common.offline'
+		] ?? "You're offline. Vela updates again once you're back online."
 	);
 
 	/**

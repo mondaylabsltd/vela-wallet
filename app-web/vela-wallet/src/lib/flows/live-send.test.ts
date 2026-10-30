@@ -14,6 +14,7 @@ import type { SendView } from '$lib/core/generated/SendView';
 import { resolveMultisigMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
+import { chainName } from '$lib/services/networks';
 import { fill } from '$lib/wallet/messages';
 import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
 import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
@@ -350,7 +351,15 @@ describe('the form', () => {
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
 		const firstTime = liveSendForm(
 			formModel(),
-			inputs({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
+			inputs({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			})
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
@@ -375,7 +384,13 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipient?.note).toBe(m['send.recipientTokenContract']);
@@ -799,7 +814,13 @@ describe('the confirm screen', () => {
 			confirmModel(),
 			inputs({
 				...single,
-				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(first.recipientTag).toBe(m['componentsUi.signing.firstTimeTag']);
@@ -807,7 +828,13 @@ describe('the confirm screen', () => {
 			confirmModel(),
 			inputs({
 				...single,
-				recipient_risk: { is_contract: false, first_time: false, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: false,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(known.recipientTag).toBeUndefined();
@@ -818,7 +845,13 @@ describe('the confirm screen', () => {
 				...single,
 				split_mode: true,
 				recipients: [{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.5', name: null }],
-				recipient_risk: { is_contract: false, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(split.recipientTag).toBeUndefined();
@@ -837,7 +870,13 @@ describe('the confirm screen', () => {
 			inputs({
 				...single,
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true, history_unread: false }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
@@ -3326,6 +3365,22 @@ describe('a multisig send', () => {
 		expect(fee.tap).toBe('none');
 	});
 
+	it('r4D-13: a multisig of one needs its one member — never "Needs 1 of 1 members"', () => {
+		const solo: SendLiveInputs = {
+			...inputs({ multisig: { threshold: 1, owners: 1 }, selected_token: ETH, fee: QUOTE }),
+			multisig: {
+				label: words.proposal.approvals,
+				rule: words.panel.title,
+				ruleSolo: words.panel.titleSolo,
+				feeNote: words.proposal.feeNote,
+				confirm: words.send.propose
+			}
+		};
+		const value = liveSendForm(formModel(), solo).fee.value;
+		expect(value).toBe("Needs its only member's approval");
+		expect(value).not.toContain('1 of 1');
+	});
+
 	it('the confirm swaps the fee fact for the approvals and proposes', () => {
 		const confirm = liveSendConfirm(
 			confirmModel(),
@@ -3557,7 +3612,13 @@ describe('the send flow’s round-2 findings', () => {
 		const model = confirm({
 			risk_unfinished: true,
 			risk_history_unread: true,
-			recipient_risk: { is_contract: false, first_time: null, history_unread: true }
+			recipient_risk: {
+				is_contract: false,
+				first_time: null,
+				history_unread: true,
+				known_name: null,
+				own: false
+			}
 		});
 		expect(model.recipientTag).toBeUndefined();
 		expect(model.recipientCheck).toEqual({
@@ -3566,6 +3627,42 @@ describe('the send flow’s round-2 findings', () => {
 		});
 		// Answered: nothing to check again.
 		expect(confirm({}).recipientCheck).toBeUndefined();
+	});
+
+	it('r5reg-3: the wait before the passkey is said with its time and cause; its failure is the network’s', () => {
+		const network = chainName(ETH.chain_id);
+		expect(confirm({ sending: true, submit_slow: { seconds: 14, busy: true } }).held).toBe(
+			fill(m['send.submitSlowBusy'], { network, seconds: 14 })
+		);
+		expect(confirm({ sending: true, submit_slow: { seconds: 7, busy: false } }).held).toBe(
+			fill(m['send.submitSlow'], { network, seconds: 7 })
+		);
+		expect(m['send.submitSlowBusy']).toContain('{{seconds}}');
+		for (const [key, words] of [
+			['chain_busy', 'send.txErrorChainBusy'],
+			['chain_unreachable', 'send.txErrorChainUnreachable']
+		] as const) {
+			const model = confirm({ tx_status: 'error', tx_error: key });
+			expect(model.error).toEqual({
+				text: fill(m[words], { network }),
+				retry: m['send.txRetryBtn']
+			});
+			expect(model.error?.text).toContain(network);
+			expect(model.error?.text).not.toBe(m['componentsUi.signing.passkeyTimedOut']);
+		}
+	});
+
+	it('r5reg-3: a Max filled again from a newer quote says so before the confirm', () => {
+		const model = confirm({
+			confirm_amount: '0.156382',
+			max_moved: { from: '0.156387', to: '0.156382' }
+		});
+		expect(model.maxNote).toBe(
+			fill(m['send.maxMoved'], { from: '0.156387', to: '0.156382', symbol: 'ETH' })
+		);
+		expect(model.maxNote).toContain('0.156387');
+		expect(model.amount).toBe('0.156382');
+		expect(confirm({}).maxNote).toBeUndefined();
 	});
 
 	it('send-11: a passkey prompt that signed nothing says so — closed, or out of time', () => {
@@ -3590,8 +3687,15 @@ describe('the send flow’s round-2 findings', () => {
 		});
 		// A first transfer, known, is said as that.
 		expect(
-			confirm({ recipient_risk: { is_contract: false, first_time: true, history_unread: false } })
-				.recipientTag
+			confirm({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			}).recipientTag
 		).toBe(m['componentsUi.signing.firstTimeTag']);
 	});
 

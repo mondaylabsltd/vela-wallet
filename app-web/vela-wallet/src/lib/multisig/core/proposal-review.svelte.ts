@@ -30,6 +30,7 @@ import {
 	type SafeTx
 } from './kernel';
 import { multisig } from './store.svelte';
+import { names } from './names.svelte';
 import { bounded } from './bounded';
 
 /**
@@ -65,9 +66,11 @@ export interface ReviewSubject {
 }
 
 /**
- * The addresses the person knows — what a lookalike is measured against:
- * the contacts (saved and the ones sent to before), this device's accounts
- * and multisigs, the members.
+ * The addresses the person knows — what a lookalike is measured against —
+ * and whose each is (r4a-18): the contacts (saved and the ones sent to
+ * before), this device's own accounts and multisigs, the members by the name
+ * this device has for them. The core never calls one's own account or a
+ * member a stranger ("first time", "coins lost in a contract").
  */
 export function knownAddresses(members: string[]): KnownAddress[] {
 	const out: KnownAddress[] = [];
@@ -75,17 +78,69 @@ export function knownAddresses(members: string[]): KnownAddress[] {
 		out.push({ address: c.address, label: c.name ?? c.resolved_name ?? c.address });
 	}
 	for (const row of session.view.accounts ?? []) {
-		out.push({ address: row.account.address, label: row.account.name });
+		out.push({ address: row.account.address, label: row.account.name, kind: 'own' });
 	}
 	for (const a of multisig.accounts) {
-		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address });
+		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address, kind: 'own' });
 	}
-	for (const m of members) out.push({ address: m, label: m });
+	for (const m of members) out.push({ address: m, label: names.label(m), kind: 'member' });
 	return out;
+}
+
+/**
+ * r5reg-14: the reviews gathered lately, by exactly what they were of — the
+ * transaction, the Safe's members and nonce, the site. Approving took 4–6 s
+ * (r4: ~2 s) because the signing gate gathered the whole review again — the
+ * trace, the simulation, each recipient's history — seconds after the sheet
+ * had gathered the very same one. The gate takes the sheet's while it is
+ * fresh (`recentReview`); a moved nonce or other members is another key,
+ * and who else can act for the Safe is still read right before the passkey
+ * (`checkNow`).
+ */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a cache of reads, never drawn
+const recent = new Map<string, { at: number; input: ReviewInput }>();
+const RECENT_CAP = 16;
+
+function subjectKey(subject: ReviewSubject): string {
+	const { members } = subject;
+	const nonce = (members as { nonce?: bigint }).nonce;
+	return JSON.stringify([
+		subject.chainId,
+		subject.safe.toLowerCase(),
+		subject.tx,
+		members.deployed,
+		members.threshold,
+		members.owners.map((o) => o.toLowerCase()),
+		nonce === undefined ? null : nonce.toString(),
+		subject.origin ?? null
+	]);
+}
+
+/** The review of exactly `subject` gathered within `maxAgeMs`, or `null`. */
+export function recentReview(
+	subject: ReviewSubject,
+	maxAgeMs: number = REVIEW_FRESH_MS
+): ReviewInput | null {
+	const hit = recent.get(subjectKey(subject));
+	return hit && Date.now() - hit.at <= maxAgeMs ? hit.input : null;
+}
+
+/** Tests: nothing gathered lately. */
+export function forgetRecentReviews(): void {
+	recent.clear();
 }
 
 /** The core's reads, the chain's answers: everything `multisigReview` takes but `blind`. */
 export async function gatherReview(subject: ReviewSubject): Promise<ReviewInput> {
+	const input = await gatherNow(subject);
+	const key = subjectKey(subject);
+	recent.delete(key);
+	recent.set(key, { at: Date.now(), input });
+	while (recent.size > RECENT_CAP) recent.delete(recent.keys().next().value as string);
+	return input;
+}
+
+async function gatherNow(subject: ReviewSubject): Promise<ReviewInput> {
 	const { chainId, safe, tx, members } = subject;
 	const base: ReviewReadsInput = {
 		chainId,
@@ -178,32 +233,66 @@ export async function simEndedOf(
 
 /** How often a sheet reads its review again while it is open. */
 export const REVIEW_FRESH_MS = 30_000;
+/**
+ * r5reg-14: how soon a review that could not read the chain (its state or
+ * its simulation unreachable — an RPC outage) is read again. Recovery took
+ * 25–35 s: such a review waited out the 30 s round, "couldn't check" on
+ * screen long after the network was back.
+ */
+export const REVIEW_RETRY_MS = 5_000;
 
 /** One review on a sheet: gathered once it starts, read again on `refresh()`. */
 export class ProposalReview {
 	input = $state.raw<ReviewInput | null>(null);
 	sim = $state.raw<SimEnded | null>(null);
 	failed = $state(false);
+	/** The last gathering could not read the chain (the state or the simulation): read again soon. */
+	unread = $state(false);
 	#disposed = false;
 	#run = 0;
+	#busy = false;
 
 	constructor(readonly subject: ReviewSubject) {}
 
 	async refresh(): Promise<void> {
 		const run = ++this.#run;
 		this.failed = false;
+		this.#busy = true;
 		try {
 			const input = await gatherReview(this.subject);
 			if (this.#disposed || run !== this.#run) return;
 			this.input = input;
 			const out = reviewOf(input, false);
+			this.unread =
+				out.state.verdict.kind === 'unavailable' || out.simulation.kind === 'unreachable';
 			const sim = await simEndedOf(out, this.subject.chainId, this.subject.safe);
 			if (this.#disposed || run !== this.#run) return;
 			this.sim = sim;
 		} catch (error) {
 			console.warn('[multisig review]', error);
-			if (!this.#disposed && run === this.#run) this.failed = true;
+			if (!this.#disposed && run === this.#run) {
+				this.failed = true;
+				this.unread = true;
+			}
+		} finally {
+			if (run === this.#run) this.#busy = false;
 		}
+	}
+
+	/**
+	 * Read it again while its sheet is open: every {@link REVIEW_FRESH_MS},
+	 * and every {@link REVIEW_RETRY_MS} while the last read could not reach
+	 * the chain (r5reg-14). The returned function stops.
+	 */
+	keepFresh(): () => void {
+		const fresh = setInterval(() => void this.refresh(), REVIEW_FRESH_MS);
+		const retry = setInterval(() => {
+			if (this.unread && !this.#busy) void this.refresh();
+		}, REVIEW_RETRY_MS);
+		return () => {
+			clearInterval(fresh);
+			clearInterval(retry);
+		};
 	}
 
 	/** The core's review now, with the clear reading's `blind`. */

@@ -93,6 +93,16 @@ describe('a multisig contract call reads as the signing sheet reads it (cs-12)',
 		expect(callSource(reading.clear, m)).toBeNull();
 	});
 
+	it('r5reg-10: a plain coin send is titled in the reader’s words, never the record’s English "Send"', () => {
+		const reading = read({ to: SPENDER, value: '50000000000000000', data: '0x' });
+		expect(reading.clear.record_intent).not.toBeNull();
+		const zh = resolveSigningMessages('zh');
+		const title = callTitle(reading.clear, zh);
+		expect(title).toBe(zh.terms.intentSend);
+		expect(title).not.toBe(m.terms.intentSend);
+		expect(callTitle(reading.clear, m)).toBe(m.terms.intentSend);
+	});
+
 	it('says it is reading until the core has read it', () => {
 		const reading = read(BLIND);
 		const loading = [m.loading];

@@ -18,12 +18,11 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
 	import { recordHomeChain, recordWaiting, shareAgain } from '../core/accounts';
 	import { hasCode } from '../core/chain';
 	import { checkBackup, startBackup, type BackupState } from '../core/backup';
-	import { chainName } from '../core/display';
+	import { chainName, ruleTitle, shortenAddress } from '../core/display';
 	import { memberDrift, sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
 	import { localOwners } from '../core/owners';
@@ -284,7 +283,7 @@
 		<div class="set-head">
 			<h3>{m.settings.originalMembers}</h3>
 			<p class="rule">
-				{fillTemplate(m.panel.title, { m: original.threshold, n: original.owners.length })}
+				{ruleTitle(m, { m: original.threshold, n: original.owners.length })}
 			</p>
 		</div>
 		<p class="note">{m.settings.originalNote}</p>
@@ -295,7 +294,7 @@
 			<div class="set-head">
 				<h3>{fillTemplate(m.settings.currentOn, { network: chainName(c.chainId) })}</h3>
 				<p class="rule">
-					{fillTemplate(m.panel.title, { m: c.members.threshold, n: c.members.owners.length })}
+					{ruleTitle(m, { m: c.members.threshold, n: c.members.owners.length })}
 				</p>
 			</div>
 			{#if c.drift.same}

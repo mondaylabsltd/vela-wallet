@@ -29,6 +29,12 @@ export interface MultisigMessages {
 	};
 	panel: {
 		title: string;
+		/** r4D-13: the rule of a multisig of one — never "Needs 1 of 1 members". */
+		titleSolo: string;
+		/** r4D-13, r5reg-10: the header chip, as a requirement ("Needs 2 of 3", "需 3 位中的 2 位"). */
+		chip: string;
+		/** …and for a multisig of one. */
+		chipSolo: string;
 		members: string;
 		thisDevice: string;
 		readOnly: string;
@@ -122,6 +128,8 @@ export interface MultisigMessages {
 		copied: string;
 		share: string;
 		reject: string;
+		/** r4D-13: the person's own proposal, on its review before its passkey: withdrawn, not declined. */
+		withdraw: string;
 		rejectHint: string;
 		cancelPending: string;
 		executing: string;
@@ -302,6 +310,8 @@ export interface MultisigMessages {
 		notMember: string;
 		created: string;
 		createdBody: string;
+		/** r5reg-18: a multisig of one has no other members to send the link to. */
+		createdBodySolo: string;
 		done: string;
 		name: string;
 		namePlaceholder: string;
@@ -337,6 +347,8 @@ export interface MultisigMessages {
 		/** r4a-12: kept on this device, shared once the service is reachable. */
 		savedLater: string;
 		shared: string;
+		/** r5reg-18: …said for a multisig of one. */
+		sharedSolo: string;
 		/** The service refused the record (`{{reason}}`). */
 		refused: string;
 		copyInvite: string;
@@ -364,6 +376,8 @@ export interface MultisigMessages {
 	presence: {
 		needsYou: PluralCopy;
 		ready: PluralCopy;
+		/** r5reg-6: ready, but no member here can pay its fee. */
+		waitingPayer: PluralCopy;
 		ruleDiffers: string;
 		/** The switcher button's dot, in words. */
 		othersWaiting: string;
@@ -602,10 +616,14 @@ export interface MultisigMessages {
 		notMultisig: string;
 		/** Nothing says which network it is used on: the person picks one. */
 		chooseNetwork: string;
+		/** r4b-13: no record, and a network did not answer in time — not said as "none". */
+		unchecked: string;
 		/** r4b-13: the invite link is damaged. */
 		badLink: string;
 		/** r4b-13: an invite that does not read, said at once. */
 		badInvite: string;
+		/** r5reg-22: an invite whose address's letter case is not its checksum. */
+		badChecksum: string;
 		/** `{{networks}}`: where its invite says it is used. */
 		usedOn: string;
 		/** Its invite's network is not on this device (`{{network}}`). */
@@ -613,6 +631,8 @@ export interface MultisigMessages {
 		moreNetworks: string;
 		/** r4D-5: the members' labels an invite carries. */
 		invitedMembers: string;
+		/** r5reg-24: beside the invited member that is this device's own account. */
+		thatsYou: string;
 		kindPasskey: string;
 		kindWallet: string;
 		labelsNote: string;
@@ -725,6 +745,10 @@ export interface ReviewMessages {
 	lookalike: string;
 	/** `{{address}}` */
 	toContract: string;
+	/** r4a-18: an address the review reaches that is one of this device's own accounts. */
+	knownOwn: string;
+	/** r4a-18: an address the review reaches that is a member of the multisig. */
+	knownMember: string;
 	typedData: string;
 	techTitle: string;
 	hashesTitle: string;
@@ -831,6 +855,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	},
 	panel: {
 		title: '',
+		titleSolo: '',
+		chip: '',
+		chipSolo: '',
 		members: '',
 		thisDevice: '',
 		readOnly: '',
@@ -904,6 +931,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		copied: '',
 		share: '',
 		reject: '',
+		withdraw: '',
 		rejectHint: '',
 		cancelPending: '',
 		executing: '',
@@ -1033,6 +1061,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		notMember: '',
 		created: '',
 		createdBody: '',
+		createdBodySolo: '',
 		done: '',
 		name: '',
 		namePlaceholder: '',
@@ -1057,6 +1086,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		savedSharing: '',
 		savedLater: '',
 		shared: '',
+		sharedSolo: '',
 		refused: '',
 		copyInvite: '',
 		firstRunTitle: '',
@@ -1076,6 +1106,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 	presence: {
 		needsYou: { locale: '', forms: {} },
 		ready: { locale: '', forms: {} },
+		waitingPayer: { locale: '', forms: {} },
 		ruleDiffers: '',
 		othersWaiting: ''
 	},
@@ -1285,12 +1316,15 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		notMultisig: '',
 		chooseNetwork: '',
+		unchecked: '',
 		badLink: '',
 		badInvite: '',
+		badChecksum: '',
 		usedOn: '',
 		networkMissing: '',
 		moreNetworks: '',
 		invitedMembers: '',
+		thatsYou: '',
 		kindPasskey: '',
 		kindWallet: '',
 		labelsNote: ''
@@ -1419,6 +1453,8 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		callNumber: '',
 		lookalike: '',
 		toContract: '',
+		knownOwn: '',
+		knownMember: '',
 		typedData: '',
 		techTitle: '',
 		hashesTitle: '',

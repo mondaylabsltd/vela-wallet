@@ -619,6 +619,62 @@ fn probe_reads_what_moves_where_no_simulation_is_offered() {
     assert_eq!(r.state.verdict, StateVerdict::Unchanged);
 }
 
+/// r5reg-1: what moves in a batch of native sends, as a node that traces
+/// transfers AND logs native moves itself (Arc) answers — to an account and
+/// to a smart account (a Vela account's `SafeReceived` beside it), alone and
+/// together: each send once, never the traced log and the chain's log both.
+#[test]
+fn a_native_batch_simulated_where_the_chain_logs_it_too_counts_each_send_once() {
+    const SMART: &str = "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6";
+    const EOA: &str = "0x9181a394E0a993E9eDe4DddC96Ac0B2Fe5ee039e";
+    let transfer_topic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    let safe_received = "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+    let thousandth = U256::from(1_000_000_000_000_000u64);
+    let leg = |to: &str| {
+        let mut logs = vec![
+            json!({"address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                   "topics": [transfer_topic, w(SAFE), w(to)], "data": hex(&word(thousandth))}),
+            json!({"address": "0xfffffffffffffffffffffffffffffffffffffffe",
+                   "topics": [transfer_topic, w(SAFE), w(to)], "data": hex(&word(thousandth))}),
+        ];
+        if to == SMART {
+            logs.push(json!({"address": to.to_lowercase(),
+                             "topics": [safe_received, w(SAFE)], "data": hex(&word(thousandth))}));
+        }
+        json!({"status": "0x1", "returnData": "0x", "gasUsed": "0x5208", "logs": logs})
+    };
+    for legs in [
+        vec![SMART],
+        vec![EOA],
+        vec![SMART, SMART],
+        vec![EOA, EOA],
+        vec![SMART, EOA],
+    ] {
+        let transfers: Vec<crate::multisig::Transfer> = legs
+            .iter()
+            .map(|to| crate::multisig::Transfer {
+                token: None,
+                to: (*to).into(),
+                amount: "1000000000000000".into(),
+            })
+            .collect();
+        let t = crate::multisig::transfers_tx(&transfers, "0x0").unwrap();
+        let reply =
+            json!({"result": [{"calls": legs.iter().map(|to| leg(to)).collect::<Vec<_>>()}]});
+        let r = multisig_review(&ReviewInput {
+            reads: reads(t),
+            trace: Some(not_offered_answer()),
+            sim_reply: Some(reply.to_string()),
+            ..ReviewInput::default()
+        })
+        .unwrap();
+        assert_eq!(r.simulation_source, "simulate", "{legs:?}");
+        assert_eq!(r.simulation.deltas.len(), 1, "{legs:?}");
+        let want = format!("-{}", thousandth * U256::from(legs.len()));
+        assert_eq!(r.simulation.deltas[0].delta, want, "{legs:?}");
+    }
+}
+
 #[test]
 fn probe_inner_revert_is_a_danger_with_sign_anyway() {
     let t = tx("0x4444444444444444444444444444444444444444", "0x1", "0x", 0);
@@ -729,6 +785,7 @@ fn recipients_first_time_contract_and_lookalike() {
         known: vec![Known {
             address: friend.into(),
             label: "Alice".into(),
+            kind: KnownKind::Contact,
         }],
         sim_reply: Some(r#"{"unreachable":true}"#.into()),
         ..ReviewInput::default()
@@ -752,6 +809,113 @@ fn recipients_first_time_contract_and_lookalike() {
         .any(|c| matches!(c, Concern::ToContract { .. })));
     assert_eq!(r.tone, Tone::Danger);
     assert!(r.sign.anyway);
+    assert!(rc.known.is_none());
+    assert!(rc.first_time_cue && rc.contract_cue);
+}
+
+/// What the review says of one paid address with `facts`, known as `known`.
+fn paid_to(to: &str, is_contract: bool, first_time: bool, known: Vec<Known>) -> MultisigReview {
+    multisig_review(&ReviewInput {
+        reads: reads(tx(to, "0x1", "0x", 0)),
+        recipient_facts: vec![RecipientFacts {
+            address: checksum(a(to)),
+            is_contract: Some(is_contract),
+            first_time: Some(first_time),
+        }],
+        known,
+        sim_reply: Some(r#"{"unreachable":true}"#.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap()
+}
+
+fn says_first_time_or_contract(r: &MultisigReview) -> (bool, bool) {
+    (
+        r.concerns
+            .iter()
+            .any(|c| matches!(c, Concern::FirstTime { .. })),
+        r.concerns
+            .iter()
+            .any(|c| matches!(c, Concern::ToContract { .. })),
+    )
+}
+
+#[test]
+fn own_accounts_and_members_are_never_strangers() {
+    // r4a-18, r5reg-8: a Vela account of this device is a smart account the
+    // person controls — no "first time", no "coins lost in a contract".
+    let known = |kind| {
+        vec![Known {
+            address: B.to_lowercase(),
+            label: "Bob".into(),
+            kind,
+        }]
+    };
+    let own = paid_to(B, true, true, known(KnownKind::Own));
+    let rc = &own.recipients[0];
+    assert_eq!(rc.known.as_ref().unwrap().kind, KnownKind::Own);
+    assert_eq!(rc.known.as_ref().unwrap().label, "Bob");
+    assert!(!rc.first_time_cue && !rc.contract_cue);
+    assert_eq!(says_first_time_or_contract(&own), (false, false));
+    // A member of the multisig: the same.
+    let member = paid_to(B, true, true, known(KnownKind::Member));
+    assert!(!member.recipients[0].first_time_cue && !member.recipients[0].contract_cue);
+    assert_eq!(says_first_time_or_contract(&member), (false, false));
+    // A contact is still somebody else's: both are said.
+    let contact = paid_to(B, true, true, known(KnownKind::Contact));
+    assert_eq!(says_first_time_or_contract(&contact), (true, true));
+    // An unknown contract and an unknown plain account: said as before.
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, true, true, vec![])),
+        (true, true)
+    );
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, false, true, vec![])),
+        (true, false)
+    );
+    assert_eq!(
+        says_first_time_or_contract(&paid_to(B, false, false, vec![])),
+        (false, false)
+    );
+}
+
+#[test]
+fn the_closest_known_wins() {
+    let both = vec![
+        Known {
+            address: B.into(),
+            label: "Bob (contact)".into(),
+            kind: KnownKind::Contact,
+        },
+        Known {
+            address: B.to_uppercase().replace("0X", "0x"),
+            label: "Bob".into(),
+            kind: KnownKind::Own,
+        },
+    ];
+    let r = paid_to(B, true, true, both);
+    assert_eq!(r.recipients[0].known.as_ref().unwrap().label, "Bob");
+    assert_eq!(says_first_time_or_contract(&r), (false, false));
+}
+
+#[test]
+fn a_member_being_added_is_sent_nothing() {
+    // r5reg-16: nothing is sent to a new member — no "first time sending here".
+    let r = multisig_review(&ReviewInput {
+        reads: reads(tx(SAFE, "0x0", &add_owner(C, 1), 0)),
+        recipient_facts: vec![RecipientFacts {
+            address: checksum(a(C)),
+            is_contract: Some(true),
+            first_time: Some(true),
+        }],
+        sim_reply: Some(r#"{"unreachable":true}"#.into()),
+        ..ReviewInput::default()
+    })
+    .unwrap();
+    let rc = &r.recipients[0];
+    assert_eq!(rc.role, RecipientRole::Member);
+    assert!(!rc.first_time_cue && !rc.contract_cue);
+    assert_eq!(says_first_time_or_contract(&r), (false, false));
 }
 
 #[test]

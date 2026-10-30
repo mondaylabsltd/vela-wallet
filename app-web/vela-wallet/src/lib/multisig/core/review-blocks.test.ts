@@ -29,6 +29,9 @@ import {
 import {
 	anywayLabel,
 	hashRows,
+	partyAddresses,
+	recipientBadges,
+	recipientNames,
 	reviewBlocks,
 	reviewTech,
 	stateBlocks,
@@ -97,6 +100,26 @@ describe('the state-diff guard, said (§3.6)', () => {
 		});
 	});
 
+	it('a member being added: the name typed for them, never "first time sending here" (r5reg-16)', () => {
+		const input = vector('fork-add-owner-trace');
+		const preview = multisigReview(input);
+		const added = preview.recipients.find((r) => r.role === 'member');
+		expect(added).toBeDefined();
+		const review = multisigReview({
+			...input,
+			recipientFacts: [{ address: added!.address, isContract: true, firstTime: true }]
+		});
+		const blocks = reviewBlocks(review, simOf(review), {
+			...ctx,
+			nameOf: () => 'A local label',
+			memberName: (a) => (a.toLowerCase() === added!.address.toLowerCase() ? 'Typed name' : null)
+		});
+		const party = blocks.find((b) => b.kind === 'party' && b.label === m.review.roleMember);
+		expect(party).toMatchObject({ name: 'Typed name' });
+		expect(party && party.kind === 'party' && party.badge).toBeUndefined();
+		expect(review.concerns.some((c) => c.kind === 'firstTime')).toBe(false);
+	});
+
 	it('no source on the network: a caution, and only the reading stands', () => {
 		const input = vector('fork-transfer-probe-only');
 		const review = multisigReview({ ...input, probe: { error: { code: -32601, message: 'x' } } });
@@ -157,6 +180,79 @@ describe('what moves, who it reaches, the bytes (§3.6)', () => {
 		expect(warning && warning.kind === 'warning' && warning.text).toContain('Alice');
 		expect(review.sign.anyway).toBe(true);
 		expect(anywayLabel('approve', m.proposal.approve, review, m)).toBe(m.review.approveAnyway);
+	});
+
+	/**
+	 * r4a-18, r5reg-8: one's own Vela account and a member are smart accounts
+	 * the person controls or knows — never "first time sending here" nor
+	 * "coins sent to a contract are lost"; said as theirs. An unknown
+	 * contract and an unknown plain account are said as before.
+	 */
+	describe('who a transfer reaches (r4a-18, r5reg-8)', () => {
+		const BOB = '0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6';
+		const reviewTo = (isContract: boolean, known: ReviewInput['known']) =>
+			multisigReview({
+				...vector('fork-transfer-probe-only'),
+				tx: txOf(BOB, '0x1', '0x'),
+				recipientFacts: [{ address: BOB, isContract, firstTime: true }],
+				known
+			});
+		const partyOf = (review: MultisigReviewOut) => {
+			const blocks = reviewBlocks(review, simOf(review), ctx);
+			const party = blocks.find((b) => b.kind === 'party');
+			return { blocks, party: party?.kind === 'party' ? party : null };
+		};
+		const lost = (blocks: Block[]) =>
+			blocks.some(
+				(b) => b.kind === 'warning' && b.text === m.review.toContract.replace('{{address}}', BOB)
+			);
+
+		it('one of this device’s accounts: "Your account", by its name, nothing else', () => {
+			const review = reviewTo(true, [{ address: BOB, label: 'R5 Bob', kind: 'own' }]);
+			const { blocks, party } = partyOf(review);
+			expect(party?.name).toBe('R5 Bob');
+			expect(party?.badge).toEqual({ text: m.review.knownOwn, tone: 'neutral' });
+			expect(lost(blocks)).toBe(false);
+			expect(review.concerns.some((c) => c.kind === 'firstTime' || c.kind === 'toContract')).toBe(
+				false
+			);
+		});
+
+		it('a member: "Member", nothing else', () => {
+			const review = reviewTo(true, [{ address: BOB, label: 'Bob', kind: 'member' }]);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge).toEqual({ text: m.review.knownMember, tone: 'neutral' });
+			expect(lost(blocks)).toBe(false);
+		});
+
+		it('an unknown contract: first time and contract, and the coins-lost line', () => {
+			const review = reviewTo(true, []);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge?.text).toContain(signing.tagFirstTime);
+			expect(party?.badge?.text).toContain(signing.tagContract);
+			expect(lost(blocks)).toBe(true);
+		});
+
+		it('an unknown plain account: first time only', () => {
+			const review = reviewTo(false, []);
+			const { blocks, party } = partyOf(review);
+			expect(party?.badge?.text).toBe(signing.tagFirstTime);
+			expect(lost(blocks)).toBe(false);
+		});
+
+		/**
+		 * r4a-18 with r5reg-15: when the call's own row names the address (and
+		 * the review's row is left out), that row reads by the name the review
+		 * knows — "R5 Bob · Your account", never a bare address beside it.
+		 */
+		it('the call row wears the known name; an unknown address has none to wear', () => {
+			const own = reviewTo(true, [{ address: BOB, label: 'R5 Bob', kind: 'own' }]);
+			expect(recipientNames(own, ctx)).toEqual({ [BOB.toLowerCase()]: 'R5 Bob' });
+			expect(recipientNames(reviewTo(false, []), ctx)).toEqual({});
+			// This device's own name for it comes first.
+			const named = { ...ctx, nameOf: () => 'Bob (this device)' };
+			expect(recipientNames(own, named)[BOB.toLowerCase()]).toBe('Bob (this device)');
+		});
 	});
 
 	it('technical details: the ten SafeTx fields, the typed data as JSON, the three hashes', () => {
@@ -300,4 +396,37 @@ describe('parity: the same intent for a Vela account and a multisig (§3.6)', ()
 			expect(reviewTech(review, ctx).raw?.hex).toContain('SafeTx');
 		});
 	}
+});
+
+/**
+ * r5reg-15: a transfer's review named its recipient twice — the call's
+ * "Recipient 0xd9c7…" and the review's "To 0xd9c7…". Said once: the call's
+ * row, wearing what the review knows of it ("First time sending here").
+ */
+describe('who it reaches, said once (r5reg-15)', () => {
+	it('an ERC-20 transfer: the call names the recipient; the review adds its badge, not a second row', () => {
+		const reading = read(TRANSFER);
+		const call = callReviewBlocks(reading, signing, CURRENCY);
+		const drawn = partyAddresses(call);
+		expect(drawn).toContain(TO.toLowerCase());
+		const review = multisigReview({
+			chainId: CHAIN,
+			safe: MULTISIG,
+			tx: txOf(TRANSFER.to, '0x0', TRANSFER.data),
+			owners: ['0x1111111111111111111111111111111111111111'],
+			threshold: 1,
+			deployed: true,
+			simReply: '{"unreachable":true}',
+			blind: reading.clear.sign_anyway,
+			recipientFacts: [{ address: TO, isContract: false, firstTime: true }]
+		});
+		const named = (blocks: Block[]) =>
+			blocks.filter((b) => b.kind === 'party' && b.address?.toLowerCase() === TO.toLowerCase());
+		// Without the call's reading the review names it; with it, it does not.
+		expect(named(reviewBlocks(review, simOf(review), ctx))).toHaveLength(1);
+		expect(named(reviewBlocks(review, simOf(review), ctx, drawn))).toHaveLength(0);
+		// One row in all — and it still says it is the first time.
+		expect(named([...call, ...reviewBlocks(review, simOf(review), ctx, drawn)])).toHaveLength(1);
+		expect(recipientBadges(review, ctx)[TO.toLowerCase()]?.text).toBe(signing.tagFirstTime);
+	});
 });

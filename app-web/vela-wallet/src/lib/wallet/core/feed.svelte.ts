@@ -15,7 +15,8 @@ import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
-import { onNativeBalanceMoved } from '$lib/services/native-watch';
+import { balanceReadPlan } from '$lib/core/kernels';
+import { decimalToBase, onNativeBalanceMoved, setShownNative } from '$lib/services/native-watch';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -24,6 +25,37 @@ import {
 	setActivityFeedAccount,
 	subscribeActivityFeed
 } from './feed-resident';
+
+/** Whether the balances read a coin of `chainId`'s own (Tempo has none). */
+/** A memo, never drawn: no reactivity wanted. */
+const nativeChains: Record<number, boolean> = {};
+function readsNative(chainId: number): boolean {
+	let reads = nativeChains[chainId];
+	if (reads === undefined) {
+		try {
+			reads = balanceReadPlan(chainId, [], null, []).some((slot) => slot.kind === 'native');
+		} catch {
+			reads = false;
+		}
+		nativeChains[chainId] = reads;
+	}
+	return reads;
+}
+
+/**
+ * What the home shows of `address`'s coin on `chainId`, in base units — `0n`
+ * for no row — once a round has settled for that account; `undefined`
+ * otherwise (another account shown, nothing settled yet, no coin there).
+ */
+export function shownNative(address: string, chainId: number): bigint | undefined {
+	const view = balance.view;
+	if (view.address === null || view.address.toLowerCase() !== address.toLowerCase()) {
+		return undefined;
+	}
+	if (!balance.settledFor(view.address) || !readsNative(chainId)) return undefined;
+	const row = view.tokens.find((t) => t.chain_id === chainId && t.token_address === null);
+	return row ? decimalToBase(row.balance, row.decimals) : 0n;
+}
 
 class Feed {
 	view = $state<FeedView>(INITIAL_VIEW);
@@ -75,6 +107,10 @@ class Feed {
 					balance.refresh(true);
 				}
 			});
+			// r4a-17: the watch holds each reading against what the home shows,
+			// so a coin that landed before the watch's first reading, or whose
+			// re-read did not reach the network, is still asked for.
+			setShownNative((address, chainId) => shownNative(address, chainId));
 			this.view = activityFeedView();
 		})();
 		return this.#booted;

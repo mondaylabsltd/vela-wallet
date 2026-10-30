@@ -8,6 +8,8 @@
  * carry it.
  */
 import { SITE_ORIGIN } from '$lib/site';
+// The same EIP-55 as the core's, without the wasm: a link is read before it loads.
+import { eip55 } from '../external/eip55';
 
 /**
  * The origin a link made here is for: this page's own when it is a web page
@@ -99,14 +101,20 @@ export function brokenLinkText(hash: string): string {
 }
 
 const ADD_PREFIX = 'msa=';
+/** Founding members in the genesis's order, no addresses (links from before r6). */
 const MEMBERS = 'm=';
+/** r4D-5: every member the inviter knows, each by its address. */
+const ADDRESSED = 'a=';
 
 /**
- * What the inviter knows of a founding member: a label and its kind — a
- * Vela account (a passkey) or an outside wallet. Labels only: who may act
- * is the multisig's genesis and each chain's owners, never this.
+ * What the inviter knows of a member: a label and its kind — a Vela account
+ * (a passkey) or an outside wallet — and, in a link made since r6, its
+ * address. Labels only: who may act is the multisig's genesis and each
+ * chain's owners, never this.
  */
 export interface InvitedMember {
+	/** Its address (r4D-5, r5reg-24); absent in a link from before they rode along. */
+	address?: string;
 	name?: string;
 	kind?: 'passkey' | 'wallet';
 }
@@ -117,11 +125,23 @@ export interface AddLink {
 	/** Its networks, the one it was first used on first; empty in a link from before they rode along. */
 	chainIds: number[];
 	/**
-	 * One per founding member, in the genesis's order; `null` when the link
-	 * carries none (or none that reads — they are labels, dropped, never
-	 * guessed at).
+	 * Each member the inviter knows, by address — or, in a link from before
+	 * r6, one per founding member in the genesis's order (no address); `null`
+	 * when the link carries none (or none that reads — they are labels,
+	 * dropped, never guessed at).
 	 */
 	members: InvitedMember[] | null;
+}
+
+/**
+ * Whether `address` (`0x` + 40 hex) is written as an address is: all one
+ * case, or its EIP-55 checksum (r5reg-22). A link whose letters were
+ * changed on the way is refused, never read as another address quietly.
+ */
+export function checksumHolds(address: string): boolean {
+	const hex = address.slice(2);
+	if (hex === hex.toLowerCase() || hex === hex.toUpperCase()) return true;
+	return eip55(address) === address;
 }
 
 /** The longest member label a link carries, in characters (the core's name rule bounds it again). */
@@ -131,12 +151,22 @@ const KIND_CODE = { passkey: 'p', wallet: 'w' } as const;
 function memberCode(member: InvitedMember): string {
 	const kind = member.kind ? KIND_CODE[member.kind] : '-';
 	const name = (member.name ?? '').trim().slice(0, MEMBER_NAME_MAX);
-	return kind + encodeURIComponent(name);
+	const at = member.address ? member.address.slice(2).toLowerCase() : '';
+	return at + kind + encodeURIComponent(name);
 }
 
-function readMembers(raw: string): InvitedMember[] | null {
+/** `m=` (by the genesis's order) or, `addressed`, `a=` (each by its address). */
+function readMembers(raw: string, addressed: boolean): InvitedMember[] | null {
 	const out: InvitedMember[] = [];
-	for (const part of raw.split(',')) {
+	for (const whole of raw.split(',')) {
+		let part = whole;
+		const member: InvitedMember = {};
+		if (addressed) {
+			const hex = part.slice(0, 40);
+			if (!/^[0-9a-f]{40}$/.test(hex)) return null;
+			member.address = eip55(`0x${hex}`);
+			part = part.slice(40);
+		}
 		const kind = part[0];
 		if (kind !== 'p' && kind !== 'w' && kind !== '-') return null;
 		let name: string;
@@ -146,7 +176,6 @@ function readMembers(raw: string): InvitedMember[] | null {
 			return null;
 		}
 		if (name.length > MEMBER_NAME_MAX) return null;
-		const member: InvitedMember = {};
 		if (name) member.name = name;
 		if (kind === 'p') member.kind = 'passkey';
 		if (kind === 'w') member.kind = 'wallet';
@@ -157,13 +186,15 @@ function readMembers(raw: string): InvitedMember[] | null {
 
 /**
  * The link that adds a multisig (r4D-4):
- * `…/wallet#msa=<chainId>,<chainId>:<multisig>&m=<member>,<member>`. The
+ * `…/wallet#msa=<chainId>,<chainId>:<multisig>&a=<member>,<member>`. The
  * networks it is used on ride with it — Safe{Wallet}'s links name theirs —
  * so whoever opens it is never asked to guess one; and, when the inviter
- * knows them, each founding member's kind and label, in the genesis's
- * order: `p` a Vela account, `w` an outside wallet, `-` not known, then the
- * name, URI-encoded. All in the fragment: none of it reaches a server's logs
- * or a referrer.
+ * knows them, each member's address (40 hex, lowercase), its kind — `p` a
+ * Vela account, `w` an outside wallet, `-` not known — and its label,
+ * URI-encoded: the founding members and those added since (r4D-5), and the
+ * one who opens it is told which is them (r5reg-24). A member given without
+ * an address is written the old way (`m=`, in the genesis's order). All in
+ * the fragment: none of it reaches a server's logs or a referrer.
  */
 export function addLink(
 	origin: string,
@@ -176,17 +207,34 @@ export function addLink(
 	);
 	let body = `${ADD_PREFIX}${chains.length > 0 ? `${chains.join(',')}:` : ''}${multisig}`;
 	const members = extra.members ?? [];
-	if (members.some((m) => m.name?.trim() || m.kind)) {
-		body += `&${MEMBERS}${members.map(memberCode).join(',')}`;
+	const addressed = members.length > 0 && members.every((m) => !!m.address);
+	if (addressed) {
+		body += `&${ADDRESSED}${members.map(memberCode).join(',')}`;
+	} else if (members.some((m) => m.name?.trim() || m.kind)) {
+		body += `&${MEMBERS}${members.map((m) => memberCode({ ...m, address: undefined })).join(',')}`;
 	}
 	return `${origin}/${locale}/wallet#${body}`;
+}
+
+/**
+ * Why an invite does not read, or `null` when it does (or is no invite):
+ * `checksum` — its address's letters were changed on the way (r5reg-22);
+ * `damaged` — part of it is missing or wrong.
+ */
+export function addLinkFault(hash: string): 'checksum' | 'damaged' | null {
+	const body = linkBody(hash);
+	if (!body.startsWith(ADD_PREFIX) || parseAddLink(hash)) return null;
+	const head = body.slice(ADD_PREFIX.length).split('&')[0];
+	const address = head.slice(head.lastIndexOf(':') + 1);
+	return /^0x[0-9a-fA-F]{40}$/.test(address) && !checksumHolds(address) ? 'checksum' : 'damaged';
 }
 
 /**
  * The invite a location hash holds, or `null`. A link from before the
  * networks rode along (`#msa=<multisig>`) still reads, naming none: the
  * person is asked then. Members that do not read are dropped; the rest of
- * the link still opens.
+ * the link still opens. An address whose letter case is not its checksum
+ * does not read (r5reg-22): a link changed on the way is never opened.
  */
 export function parseAddLink(hash: string): AddLink | null {
 	const body = linkBody(hash);
@@ -194,7 +242,7 @@ export function parseAddLink(hash: string): AddLink | null {
 	const [head, ...rest] = body.slice(ADD_PREFIX.length).split('&');
 	const colon = head.lastIndexOf(':');
 	const address = colon === -1 ? head : head.slice(colon + 1);
-	if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
+	if (!/^0x[0-9a-fA-F]{40}$/.test(address) || !checksumHolds(address)) return null;
 	let chainIds: number[] = [];
 	if (colon !== -1) {
 		const ids = head.slice(0, colon).split(',');
@@ -202,7 +250,12 @@ export function parseAddLink(hash: string): AddLink | null {
 		chainIds = [...new Set(ids.map(Number))];
 		if (!chainIds.every(Number.isSafeInteger)) return null;
 	}
+	const addressed = rest.find((part) => part.startsWith(ADDRESSED));
 	const listed = rest.find((part) => part.startsWith(MEMBERS));
-	const members = listed ? readMembers(listed.slice(MEMBERS.length)) : null;
+	const members = addressed
+		? readMembers(addressed.slice(ADDRESSED.length), true)
+		: listed
+			? readMembers(listed.slice(MEMBERS.length), false)
+			: null;
 	return { multisig: address, chainIds, members };
 }

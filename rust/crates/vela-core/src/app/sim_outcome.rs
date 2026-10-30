@@ -553,7 +553,9 @@ fn sanitise(raw: &str) -> Option<String> {
 /// In and out of the same token nets to nothing — printing a pair of moves
 /// that cancel is how a swap looks like a theft. A log from one of the native
 /// sentinels ([`NATIVE_LOG_ADDRESSES`]; `traceTransfers` reports value moves
-/// from `0xeeee…`) is the native coin. Malformed logs contribute nothing,
+/// from `0xeeee…`) is the native coin — once: where the traced logs are
+/// there, a chain's own native log of the same move (Arc's `0xffff…fffe`) is
+/// its copy and is not counted again (r5reg-1). Malformed logs contribute nothing,
 /// silently: a simulation is untrusted input by definition. The arithmetic is
 /// exact over 256-bit values (the shells' own copies used big integers; the
 /// desktop's saturated at `i128`).
@@ -564,6 +566,16 @@ pub fn derive_deltas(logs: &[&Value], user: &str) -> Vec<TrustAssetDelta> {
     }
     // (key, received, sent) in first-seen order.
     let mut totals: Vec<(String, U256, U256)> = Vec::new();
+    // r5reg-1: a node that ran `traceTransfers` reports EVERY value move
+    // from `0xeeee…`; a chain that logs its own native moves (Arc's EIP-7708
+    // log from `0xffff…fffe`) reports the same move again in the same answer.
+    // Counted twice, a multisig's batch read −0.004 for −0.002. When the
+    // traced logs are there they are the record, and the chain's own native
+    // logs are the copy; without them (a receipt, a node with no trace) the
+    // chain's own logs are the only record and count.
+    let traced = logs
+        .iter()
+        .any(|log| log_address(log) == NATIVE_LOG_ADDRESSES[2]);
 
     for log in logs {
         let Some(topics) = log.get("topics").and_then(Value::as_array) else {
@@ -593,15 +605,15 @@ pub fn derive_deltas(logs: &[&Value], user: &str) -> Vec<TrustAssetDelta> {
         if value.is_zero() {
             continue;
         }
-        let address = log
-            .get("address")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_lowercase();
+        let address = log_address(log);
         if address.is_empty() {
             continue;
         }
-        let key = if NATIVE_LOG_ADDRESSES.contains(&address.as_str()) {
+        let native = NATIVE_LOG_ADDRESSES.contains(&address.as_str());
+        if native && traced && address != NATIVE_LOG_ADDRESSES[2] {
+            continue;
+        }
+        let key = if native {
             NATIVE_KEY.to_owned()
         } else {
             address
@@ -648,6 +660,14 @@ pub fn derive_deltas(logs: &[&Value], user: &str) -> Vec<TrustAssetDelta> {
 
 /// The totals' key for the native coin (never a lowercased address).
 const NATIVE_KEY: &str = "native";
+
+/// A log's emitting address, lowercased (`""` when it has none).
+fn log_address(log: &Value) -> String {
+    log.get("address")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_lowercase()
+}
 
 /// The address in a 32-byte topic's low 20 bytes, lowercased; `None` when the
 /// topic is too short or not hex.

@@ -16,7 +16,7 @@ describe('the review before the proposer signs (§3.6)', () => {
 		const asked = reviewFirst('0x1', 100, chain, item);
 		expect(reviewFirstHost.request?.item).toBe(item);
 		reviewFirstHost.request!.confirm();
-		await expect(asked).resolves.toBeUndefined();
+		await expect(asked).resolves.toBeNull();
 		expect(reviewFirstHost.request).toBeNull();
 		detach();
 	});

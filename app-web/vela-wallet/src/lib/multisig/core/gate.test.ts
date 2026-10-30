@@ -23,11 +23,17 @@ const seams = vi.hoisted(() => ({
 	checks: 0,
 	/** The review's rule for the transaction, as the chain stands now; `null`: unread. */
 	sign: { allowed: true, anyway: false } as { allowed: boolean; anyway: boolean } | null,
-	reviews: 0
+	reviews: 0,
+	/** r5reg-14: the review the sheet gathered moments ago, for the same subject. */
+	recent: null as object | null,
+	/** How long the network's check and the review's gathering take (fake time). */
+	checkMs: 0,
+	gatherMs: 0
 }));
 vi.mock('./recheck', () => ({
 	checkNow: async () => {
 		seams.checks += 1;
+		if (seams.checkMs) await new Promise((r) => setTimeout(r, seams.checkMs));
 		return seams.found;
 	},
 	findingsOn: () => seams.found ?? []
@@ -38,9 +44,11 @@ vi.mock('./chain', () => ({
 vi.mock('./proposal-review.svelte', () => ({
 	gatherReview: async () => {
 		seams.reviews += 1;
+		if (seams.gatherMs) await new Promise((r) => setTimeout(r, seams.gatherMs));
 		if (seams.sign === null) throw new Error('the chain did not answer');
 		return {};
 	},
+	recentReview: () => seams.recent,
 	reviewOf: () => ({ sign: seams.sign, state: { source: 'trace', verdict: { kind: 'declared' } } })
 }));
 
@@ -93,6 +101,9 @@ beforeEach(() => {
 	seams.checks = 0;
 	seams.sign = { allowed: true, anyway: false };
 	seams.reviews = 0;
+	seams.recent = null;
+	seams.checkMs = 0;
+	seams.gatherMs = 0;
 });
 
 /** Answers the next confirmation asked, once it is up. */
@@ -130,6 +141,34 @@ describe('before any signature (§3.5, §3.6)', () => {
 		expect(riskConfirmation.request).toBeNull();
 		expect(seams.checks).toBe(1);
 		expect(seams.reviews).toBe(1);
+	});
+
+	it('r5reg-14: takes the review the sheet gathered moments ago — the gate waits only for the check', async () => {
+		vi.useFakeTimers();
+		try {
+			// As on Arc: who else can act for it ~0.6 s; the whole review ~3 s.
+			seams.checkMs = 600;
+			seams.gatherMs = 3_000;
+			const timed = async () => {
+				const start = Date.now();
+				let done = false;
+				void authorizeSigning(account, 100, tx).then(() => (done = true));
+				while (!done) await vi.advanceTimersByTimeAsync(50);
+				return Date.now() - start;
+			};
+			// Nothing gathered lately: the gate gathers it (as before, ~3 s).
+			expect(await timed()).toBeGreaterThanOrEqual(3_000);
+			expect(seams.reviews).toBe(1);
+			// The sheet's own review, of these members at this nonce: taken.
+			seams.recent = {};
+			const reused = await timed();
+			expect(reused).toBeLessThanOrEqual(650);
+			expect(seams.reviews, 'not gathered twice').toBe(1);
+			// Who else can act for it is still read right before the passkey.
+			expect(seams.checks).toBe(2);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('reads the chain again before EVERY signature: a module added since is caught', async () => {

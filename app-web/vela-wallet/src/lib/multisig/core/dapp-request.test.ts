@@ -65,7 +65,7 @@ describe("a dApp's transaction from a multisig", () => {
 		expect(sheet().safeTxHash).toBeNull();
 		expect(sheet().origin).toBe('https://app.example');
 		await sheet().propose();
-		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL]);
+		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL], undefined);
 		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'following']);
 		// Proposed is not answered: the site waits for the execution.
 		expect(answers).toEqual([]);
@@ -192,7 +192,7 @@ describe("a dApp's transaction from a multisig", () => {
 		await sheet().propose();
 		// Every call in the one proposal; the site told its id and the number
 		// it took, never followed for an execution hash.
-		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL, SECOND]);
+		expect(propose).toHaveBeenCalledWith(SAFE, 100, [CALL, SECOND], undefined);
 		expect(events).toEqual(['review', 'passkey', 'proposed 0xab', 'batch 0xab 0x3 0x10']);
 		expect(answers).toEqual([]);
 		// Its site already has the id: an execution here answers nothing more.

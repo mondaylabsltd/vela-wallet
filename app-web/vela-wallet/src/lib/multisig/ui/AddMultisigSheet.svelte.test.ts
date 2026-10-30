@@ -82,6 +82,12 @@ vi.mock('../core/activity.svelte', () => ({
 	indexName: async () => null,
 	missingTitle: (_m: unknown, id: number) => `chain ${id}`
 }));
+// r5reg-24: Carol's account is on this device.
+const CAROL = vi.hoisted(() => '0xa1D99c2066BF6C4664981529FfB788c1bc5104F1');
+vi.mock('../core/display', () => ({
+	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`,
+	localName: (a: string) => (a.toLowerCase() === CAROL.toLowerCase() ? 'R5 Carol' : null)
+}));
 vi.mock('../core/store.svelte', () => ({
 	multisig: {
 		accounts: [],
@@ -104,6 +110,8 @@ const m = {
 		notMultisig: 'nm',
 		chooseNetwork: 'Choose its network:',
 		badInvite: 'This invite link is damaged',
+		badChecksum: "This invite's address doesn't match its checksum",
+		thatsYou: "That's you",
 		usedOn: 'Used on {{networks}}',
 		networkMissing: 'Missing {{network}}',
 		moreNetworks: 'More networks',
@@ -228,7 +236,7 @@ describe('an invite (r4D-4)', () => {
 			props: {
 				m,
 				prefill: '0x0131',
-				broken: true,
+				broken: 'damaged',
 				wide: true,
 				closeLabel: 'Close',
 				onclose: () => {},
@@ -240,6 +248,60 @@ describe('an invite (r4D-4)', () => {
 			'This invite link is damaged'
 		);
 		expect(calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('refuses an invite whose address letters were changed, in plain words (r5reg-22)', async () => {
+		const screen = render(AddMultisigSheet, {
+			props: {
+				m,
+				prefill: '5042002:0x710311c8d71cc405c5B7782BE1367eAFA3d78937',
+				broken: 'checksum',
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				onadded: () => {}
+			}
+		});
+		await tick();
+		expect(root().querySelector('[role="alert"]')?.textContent).toContain(
+			"This invite's address doesn't match its checksum"
+		);
+		expect(calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('tells the one who opens it which member is them (r5reg-24)', async () => {
+		const screen = render(AddMultisigSheet, {
+			props: {
+				m,
+				prefill: SAFE,
+				link: {
+					multisig: SAFE,
+					chainIds: [5042002],
+					members: [
+						{
+							address: '0xe331F2Ef7A6f4ED426529c8C10642b68084771A2',
+							name: 'Alice',
+							kind: 'passkey'
+						},
+						// Named "Carol" by the inviter; this device's own account.
+						{ address: CAROL, name: 'Carol' },
+						// Unnamed by the inviter, and not this device's: not listed.
+						{ address: '0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19' }
+					]
+				},
+				wide: true,
+				closeLabel: 'Close',
+				onclose: () => {},
+				onadded: () => {}
+			}
+		});
+		await settle();
+		const you = root().querySelectorAll('[data-testid="invite-you"]');
+		expect(you).toHaveLength(1);
+		expect(you[0].textContent).toContain('Carol');
+		expect(you[0].textContent).toContain("That's you");
 		await screen.unmount();
 	});
 });

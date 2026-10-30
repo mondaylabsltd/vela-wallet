@@ -37,6 +37,7 @@
 import { poolRpcCall } from '$lib/services/rpc-pool';
 import { counterfactualOn, deployedOn, type Finding } from './authority';
 import { hasCode } from './chain';
+import { bounded } from './bounded';
 import { creationGenesis, hasTransactionService } from './safe-service';
 import {
 	GENESIS_REGISTRY,
@@ -428,7 +429,13 @@ export type AddOutcome =
 			 * record still on its way names none at all). The person is asked;
 			 * it is not guessed.
 			 */
-			reason: 'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' | 'chooseNetwork';
+			/**
+			 * `unchecked` (r4b-13): the registry has no record, and a network
+			 * did not answer in time — whether a multisig is deployed there is
+			 * not known, so "no multisig" is not said.
+			 */
+			reason:
+				'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' | 'chooseNetwork' | 'unchecked';
 	  }
 	| AuthorityOutcome;
 
@@ -515,39 +522,52 @@ export async function findMultisig(
 	network?: number,
 	/**
 	 * r4b-13: how many times a record that is not there yet is asked for
-	 * again, 5 s apart (a multisig created moments ago). A link answers in a
-	 * few seconds: it asks once more.
+	 * again, and how far apart (a multisig created moments ago: its record
+	 * reaches the registry within about a second of its creation). An unknown
+	 * address is answered in a few seconds — "not found" says to try again in
+	 * a minute, so no longer wait is spent on it here.
 	 */
-	{ waits = 4, waitMs = 5000 }: { waits?: number; waitMs?: number } = {}
+	{ waits = 1, waitMs = 2000 }: { waits?: number; waitMs?: number } = {}
 ): Promise<AddOutcome> {
-	// What the address is on chain, read beside the registry (ms-16): the
-	// wait for a record on its way is only for an address with no code and no
-	// transactions anywhere — a multisig created moments ago.
+	// What the address is on chain, read beside the registry (ms-16), every
+	// network at once and each bounded (r4b-13): the wait for a record on its
+	// way is only for an address with no code and no transactions anywhere —
+	// a multisig created moments ago.
 	const onChain = Promise.all([
 		deployedChains(address, chainIds),
 		sentFrom(address, chainIds)
-	]).then(([deployed, sent]) => ({ deployed, sent }));
+	]).then(([code, sent]) => ({ deployed: code.deployed, unread: code.unread, sent }));
 	let answer;
 	try {
 		answer = await fetchGenesis(address);
 		if (!answer.found) {
+			// A multisig created moments ago: its record may still be on its
+			// way to the registry — asked again while the chains are read
+			// (r4b-13: the two waits overlap, never one after the other), and
+			// not at all once the chains show code there.
+			let stop = false;
+			const first = answer;
+			const again = (async () => {
+				let latest = first;
+				for (let wait = 0; !latest.found && wait < waits; wait += 1) {
+					await new Promise((r) => setTimeout(r, waitMs));
+					if (stop) break;
+					latest = await fetchGenesis(address);
+				}
+				return latest;
+			})();
 			const { deployed, sent } = await onChain;
+			if (deployed.length > 0) stop = true;
 			// Code that is no Safe (a token, any contract), or an account that
 			// sends its own transactions: no multisig, said at once.
 			if (deployed.length > 0 && !(await isSafe(deployed[0], address))) {
 				return { ok: false, reason: 'notMultisig' };
 			}
-			if (deployed.length === 0 && sent) return { ok: false, reason: 'notMultisig' };
-		}
-		// A multisig created moments ago: its record may still be on its way
-		// to the registry. Ask again for a little while before giving up.
-		for (
-			let wait = 0;
-			!answer.found && wait < waits && (await onChain).deployed.length === 0;
-			wait += 1
-		) {
-			await new Promise((r) => setTimeout(r, waitMs));
-			answer = await fetchGenesis(address);
+			if (deployed.length === 0 && sent) {
+				stop = true;
+				return { ok: false, reason: 'notMultisig' };
+			}
+			if (deployed.length === 0) answer = await again;
 		}
 	} catch {
 		return { ok: false, reason: 'unavailable' };
@@ -558,7 +578,10 @@ export async function findMultisig(
 		const deployed = (await onChain).deployed;
 		const served = await servedChains().catch(() => null);
 		const deployedOn = deployed.find((id) => served?.has(id)) ?? deployed[0] ?? null;
-		if (deployedOn === null) return { ok: false, reason: 'notFound' };
+		// r4b-13: a network that did not answer may hold it — not said as "none".
+		if (deployedOn === null) {
+			return { ok: false, reason: (await onChain).unread.length > 0 ? 'unchecked' : 'notFound' };
+		}
 		try {
 			const imported = await importGenesis({ chainId: deployedOn, safe: address });
 			if (imported.status === 'queued') await waitForTask(imported.taskId);
@@ -645,12 +668,23 @@ export function keepMultisig(found: MultisigAccount, findings: Finding[] = []): 
 }
 
 /** `address` has sent a transaction of its own on one of `chainIds`: an account, no undeployed Safe. */
+/**
+ * r4b-13: how long one network's read of an address is waited for, when
+ * looking a multisig up. Every network is read at once; one past this said
+ * nothing (never "no code there").
+ */
+export const LOOKUP_READ_MS = 4_000;
+
 async function sentFrom(address: string, chainIds: number[]): Promise<boolean> {
 	const counts = await Promise.all(
 		chainIds.map((id) =>
-			poolRpcCall('eth_getTransactionCount', [address, 'latest'], id)
-				.then((r) => (typeof r.result === 'string' ? BigInt(r.result) : 0n))
-				.catch(() => 0n)
+			bounded(
+				poolRpcCall('eth_getTransactionCount', [address, 'latest'], id)
+					.then((r) => (typeof r.result === 'string' ? BigInt(r.result) : 0n))
+					.catch(() => 0n),
+				0n,
+				LOOKUP_READ_MS
+			)
 		)
 	);
 	return counts.some((n) => n > 0n);
@@ -676,11 +710,24 @@ async function isSafe(chainId: number, address: string): Promise<boolean> {
 /** A Safe's `getThreshold()`. */
 const GET_THRESHOLD_CALL = '0xe75235b8';
 
-async function deployedChains(address: string, chainIds: number[]): Promise<number[]> {
+/** Where `address` has code, and the networks that did not say (r4b-13). */
+async function deployedChains(
+	address: string,
+	chainIds: number[]
+): Promise<{ deployed: number[]; unread: number[] }> {
 	const results = await Promise.all(
-		chainIds.map(async (id) => ((await hasCode(id, address).catch(() => false)) ? id : null))
+		chainIds.map((id) =>
+			bounded(
+				hasCode(id, address).catch(() => null),
+				null,
+				LOOKUP_READ_MS
+			).then((has) => ({ id, has }))
+		)
 	);
-	return results.filter((id): id is number => id !== null);
+	return {
+		deployed: results.filter((r) => r.has === true).map((r) => r.id),
+		unread: results.filter((r) => r.has === null).map((r) => r.id)
+	};
 }
 
 /** How many mailbox reads {@link proposalChains} has out at once. */
@@ -762,7 +809,7 @@ export async function discoverChains(
 	if (unseen.length === 0) return;
 	const space = `${key}:${[...unseen].sort((a, b) => a - b).join(',')}`;
 	if (lookedFor(space, now)) return;
-	const deployed = await deployedChains(account.address, unseen);
+	const { deployed } = await deployedChains(account.address, unseen);
 	rememberLookedFor(space, now);
 	const where = multisigNetworks({ deployed, kept: account.chainIds });
 	for (const id of where) {

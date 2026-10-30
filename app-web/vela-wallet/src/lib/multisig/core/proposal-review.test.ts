@@ -8,9 +8,23 @@ import { describe, expect, it, vi } from 'vitest';
 
 const never = <T>() => new Promise<T>(() => {});
 
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
-vi.mock('./store.svelte', () => ({ multisig: { accounts: [] } }));
+const OWN = '0x00000000000000000000000000000000000000a1';
+const SAFE_HERE = '0x00000000000000000000000000000000000000a2';
+const MEMBER = '0x00000000000000000000000000000000000000a3';
+const CONTACT = '0x00000000000000000000000000000000000000a4';
+
+vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
+	contactsBook: { view: { contacts: [{ address: CONTACT, name: 'Dana' }] } }
+}));
+vi.mock('$lib/session/core/session.svelte', () => ({
+	session: { view: { accounts: [{ account: { address: OWN, name: 'R5 Bob' } }] } }
+}));
+vi.mock('./store.svelte', () => ({
+	multisig: { accounts: [{ address: SAFE_HERE, genesis: { name: 'Team' } }] }
+}));
+vi.mock('./names.svelte', () => ({
+	names: { label: (a: string) => (a === MEMBER ? 'Carol' : `${a.slice(0, 6)}…`) }
+}));
 vi.mock('$lib/services/rpc-pool', () => ({ poolRpcCall: () => never() }));
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({ rpcSimulateReply: () => never() }));
 vi.mock('$lib/services/recipient-risk', () => ({ resolveRecipientRisk: () => never() }));
@@ -28,7 +42,23 @@ vi.mock('./kernel', () => ({
 	multisigReview: vi.fn()
 }));
 
-const { gatherReview, REVIEW_READ_MS } = await import('./proposal-review.svelte');
+const { gatherReview, knownAddresses, REVIEW_READ_MS } = await import('./proposal-review.svelte');
+
+/**
+ * r4a-18, r5reg-8: whose each address the person knows is, for the core —
+ * one's own accounts and multisigs here, the members by this device's name
+ * for them, the contacts — so it never calls one's own a stranger.
+ */
+describe('the addresses the person knows', () => {
+	it('says whose each is', () => {
+		expect(knownAddresses([MEMBER])).toEqual([
+			{ address: CONTACT, label: 'Dana' },
+			{ address: OWN, label: 'R5 Bob', kind: 'own' },
+			{ address: SAFE_HERE, label: 'Team', kind: 'own' },
+			{ address: MEMBER, label: 'Carol', kind: 'member' }
+		]);
+	});
+});
 
 describe("the review's reads, when the node never answers", () => {
 	it('end at the bound, each said as not answering', async () => {

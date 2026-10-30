@@ -1277,8 +1277,29 @@ for (let i = 1; i < PATHS.length; i++) {
 //   pageLimit}` ("… a tampered Vela screen can't trick you …" / "It can't
 //   protect you if this wallet itself is compromised: your passkeys sign for
 //   {{domain}} …"). 2095 − 1 + 2 = 2096 leaves, 108 branches.
-if (PATHS.length !== 2204) fail(`expected 2204 paths (2096 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2096) fail(`expected 2096 leaf paths, got ${leafSet.size}`);
+// r6a-g3 (2026-10-30, offline said once): + `onboarding.common.offline` (+1) —
+//   the root layout's one offline line, "You're offline…", where it said the
+//   generic "The request never arrived"; served with the flow chrome. 2203 + 1
+//   = 2204 paths, 2096 leaves, 108 branches. On demand: + `home.multisig.add.
+//   unchecked` (+1, an unknown address whose networks did not all answer in
+//   time — not said as "none"): 562 + 1 = 563. `home.multisig.service.
+//   {offline, offlineSince}` change value only (the layout says offline).
+// 2208 (round 6, send, 2026-10-30, r5reg-3): + `send.{submitSlowBusy,
+//   submitSlow}` (the reads before the passkey said with their time — the
+//   network's nodes busy, or not answering — never a bare spinner),
+//   `send.{txErrorChainBusy, txErrorChainUnreachable}` (those reads gave up:
+//   nothing signed or sent, the network's failure and never the passkey's)
+//   and `send.maxMoved` (a Max filled again from a newer quote says what it
+//   read and what it sends). +5 leaves, no new branch: 2100 leaves, 108
+//   branches.
+// Merged (round-6 fix-a integration, 2026-10-30): r6a-g3's 1 and send's 5
+//   compiled leaves together: 2203 + 1 + 5 = 2209 paths, 2101 leaves, 108
+//   branches.
+// Merged (round-6 integration, 2026-10-30): the page everywhere (− 1 + 2)
+//   and fix-a's 6 compiled leaves together: 2203 + 1 + 6 = 2210 paths, 2102
+//   leaves, 108 branches.
+if (PATHS.length !== 2210) fail(`expected 2210 paths (2102 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2102) fail(`expected 2102 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
@@ -1292,8 +1313,26 @@ if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.siz
 //   `outcomeNotSent` (each request named by what it was, r4C-12),
 //   `nameFromRecord` (a review's multisig name, r5reg-23). `relayNoToken`
 //   changes value only (plain words, no hosts: r4C-1). 562 + 17 = 579.
+// 568 (round 6, copy/visual, 2026-10-30): + `home.multisig.panel.{titleSolo,
+//   chip, chipSolo}` (the rule as a requirement — "Needs 2 of 3", never
+//   "Needs 1 of 1 members"), + `proposal.withdraw` (the person's own
+//   proposal is withdrawn, not declined), + `create.{createdBodySolo,
+//   sharedSolo}` (a multisig of one has no other members). The review's
+//   guard/handler words change value only (plain words, every locale).
+//   562 + 6 = 568.
 {
-  const pins = { multisig: 579 };
+  // 570 (r6a-g2, 2026-10-30, who-is-who): + `home.multisig.review.{knownOwn,
+  //   knownMember}` (an address the review reaches that is the person's own
+  //   account, or a member — r4a-18, r5reg-8), `add.badChecksum` (an invite
+  //   whose address's letter case was changed — r5reg-22), `add.thatsYou` (the
+  //   invited member that is this device's own account — r5reg-24) and
+  //   `presence.waitingPayer_{one,few,many,other}` (ready, but no member here
+  //   can pay — r5reg-6). 562 + 2 + 1 + 1 + 4 = 570.
+  // Merged (round-6 fix-a integration, 2026-10-30): copy/visual's 6, r6a-g3's
+  //   `add.unchecked` (1) and r6a-g2's 8 together: 562 + 6 + 1 + 8 = 577.
+  // Merged (round-6 integration, 2026-10-30): fix-b's 17 and fix-a's 15
+  //   together: 562 + 17 + 15 = 594.
+  const pins = { multisig: 594 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

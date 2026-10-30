@@ -15,7 +15,10 @@ vi.mock('../core/store.svelte', () => ({
 	isShared: () => true,
 	multisig: { find: () => null, accounts: [] }
 }));
-vi.mock('$lib/services/public-key-index', () => ({ queryWalletName: async () => null }));
+vi.mock('$lib/services/public-key-index', () => ({
+	queryWalletName: async () => null,
+	lookupWalletName: async () => null
+}));
 vi.mock('$lib/wallet/identicon', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));

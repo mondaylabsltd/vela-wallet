@@ -3,10 +3,26 @@
  * and pays for. Pure, so the sheet and the home say the same thing, and a
  * test can read every line.
  */
+import { feeAmountText } from '$lib/flows/fee-line';
 import { fillTemplate } from '$lib/i18n/fill';
 import type { MultisigMessages } from '../messages';
 import type { ExecutionBlock, ExecutionPreview } from './execute';
 import { formatUnits } from './units';
+
+/**
+ * r5reg-15: how many decimals a fee reads in — the wallet's own fee
+ * formatter (`feeAmountText`) at its budget for a fee paid in a token. An
+ * "≈" figure at six decimals ("0.035412 USDC") said more than anyone reads;
+ * the formatter still widens until a tiny fee's first digit shows, so no
+ * fee ever reads as "0".
+ */
+const FEE_DECIMALS = 4;
+
+/** A fee (or what pays it) in the chain's coin, 18 decimals: "0.0354 USDC". */
+export function feeCoin(amount: bigint, symbol: string): string {
+	const text = feeAmountText(Number(amount) / 1e18, FEE_DECIMALS);
+	return symbol ? `${text} ${symbol}` : text;
+}
 
 /** "the multisig holds 0.28 USDC, and this needs 0.5 USDC" / the network's reason. */
 export function whyText(m: MultisigMessages, why: ExecutionBlock): string {
@@ -40,7 +56,7 @@ export function feeWords(
 		label: (address: string) => string;
 	}
 ): FeeWords {
-	const coin = (v: bigint) => `${formatUnits(v, 18)} ${opts.symbol}`;
+	const coin = (v: bigint) => feeCoin(v, opts.symbol);
 	const fee = fillTemplate(m.proposal.feeLine, {
 		fee: coin(preview.fee.amount),
 		name: opts.label(opts.executor)

@@ -1065,6 +1065,12 @@ export interface SendConfirmModel {
 	amountUnit?: string;
 	/** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
 	subline: string;
+	/**
+	 * r5reg-3: the Max was filled again from a newer fee quote after the person
+	 * saw it (`SendView.max_moved`) — what it read, what is sent now, and why,
+	 * under the figure before anything is confirmed.
+	 */
+	maxNote?: string;
 	/** r4a-2: the coin is one nobody vouches for — its contract, and a lookalike's warning. */
 	provenance?: ProvenanceView;
 	/**

@@ -24,7 +24,7 @@ import type { Finding } from './refusal';
 import { checkNow, findingsOn } from './recheck';
 import { readMembers } from './chain';
 import { signingGateRule, type MultisigReviewOut, type SafeTx, type SignRule } from './kernel';
-import { gatherReview, reviewOf } from './proposal-review.svelte';
+import { gatherReview, recentReview, reviewOf } from './proposal-review.svelte';
 import type { MultisigAccount } from './store.svelte';
 
 export type SigningGate =
@@ -151,13 +151,10 @@ async function signRuleNow(
 ): Promise<{ sign: SignRule; review: MultisigReviewOut } | null> {
 	try {
 		const members = await readMembers(chainId, account.address, account.genesis);
-		const input = await gatherReview({
-			safe: account.address,
-			chainId,
-			tx,
-			members,
-			genesis: account.genesis
-		});
+		const subject = { safe: account.address, chainId, tx, members, genesis: account.genesis };
+		// r5reg-14: the review the sheet gathered moments ago, at these very
+		// members and nonce, is the one signed from — not gathered twice.
+		const input = recentReview(subject) ?? (await gatherReview(subject));
 		const review = reviewOf(input, false);
 		return { sign: review.sign, review };
 	} catch {

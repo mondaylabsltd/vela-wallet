@@ -16,4 +16,17 @@ first_time: boolean | null,
  * confirm says the history could not be checked, with a retry
  * ([`SendView::risk_history_unread`]).
  */
-history_unread: boolean, };
+history_unread: boolean, 
+/**
+ * The person's own name for the address, told by the shell with the
+ * check (r4a-18): one of their accounts on this device, a member of the
+ * multisig sending, or a contact they named. A split row with no name
+ * of its own is named by it, as the person's own word.
+ */
+known_name: string | null, 
+/**
+ * The address is one of the person's own accounts on this device, or a
+ * member of the multisig sending (r4a-18): never a stranger, so never
+ * told as a first transfer, whatever the history says.
+ */
+own: boolean, };

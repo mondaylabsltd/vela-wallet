@@ -268,7 +268,9 @@ const {
 	outbox,
 	readProposal,
 	markCancellations,
-	SLOW_REFRESH_MS
+	SLOW_REFRESH_MS,
+	POLL_MS,
+	OPEN_POLL_MS
 } = await import('./proposals.svelte');
 const { executions } = await import('./execution-watch.svelte');
 const { serviceOutage, RETRY_STEPS_MS } = await import('./service-state.svelte');
@@ -785,6 +787,44 @@ describe('proposals found on every chain', () => {
 		await proposals.refresh(account, [100]);
 		expect(reads()).toBe(start + 5);
 		proposals.follow(null, []);
+	});
+
+	/**
+	 * r5reg-14: an approval from another device was seen on an open sheet
+	 * after 11.2 s (the 12 s poll). While a sheet on a waiting transaction is
+	 * open the poll runs at OPEN_POLL_MS: what changed in the mailbox is seen
+	 * within that — then the pace goes back.
+	 */
+	it('an open sheet’s transaction: a change in the mailbox is seen within 4 s, not 12', async () => {
+		vi.useFakeTimers();
+		try {
+			mailbox.all = true;
+			mailbox.proposals = [stored(3)];
+			proposals.follow(account, [100]);
+			await proposals.refresh(account, [100]);
+			expect(proposals.pace).toBe(POLL_MS);
+			const stop = proposals.watch();
+			expect(proposals.pace).toBe(OPEN_POLL_MS);
+			// Another member's proposal (as an approval would) lands in the mailbox now.
+			mailbox.proposals = [stored(3), stored(4)];
+			const start = Date.now();
+			while (proposals.open.length < 2 && Date.now() - start < POLL_MS * 2)
+				await vi.advanceTimersByTimeAsync(250);
+			const seenAfter = Date.now() - start;
+			expect(seenAfter).toBeLessThanOrEqual(OPEN_POLL_MS);
+			// Released: the 12 s pace again.
+			stop();
+			expect(proposals.pace).toBe(POLL_MS);
+			// Without a sheet holding it, the same change waits for the 12 s round.
+			mailbox.proposals = [stored(3), stored(4), stored(5)];
+			const again = Date.now();
+			while (proposals.open.length < 3 && Date.now() - again < POLL_MS * 2)
+				await vi.advanceTimersByTimeAsync(250);
+			expect(Date.now() - again).toBeGreaterThan(OPEN_POLL_MS);
+		} finally {
+			proposals.follow(null, []);
+			vi.useRealTimers();
+		}
 	});
 
 	it('from a service without the list (404): asked network by network, as before', async () => {

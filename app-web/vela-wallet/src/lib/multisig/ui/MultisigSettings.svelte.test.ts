@@ -69,7 +69,14 @@ vi.mock('$lib/services/networks', () => ({
 	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null),
 	chainName: (id: number) => `Chain ${id}`
 }));
-vi.mock('../core/display', () => ({ chainName: (id: number) => `Chain ${id}` }));
+vi.mock('../core/display', () => ({
+	chainName: (id: number) => `Chain ${id}`,
+	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`,
+	ruleTitle: (m: MultisigMessages, r: { m: number; n: number }) =>
+		r.n === 1
+			? m.panel.titleSolo
+			: m.panel.title.replace('{{m}}', `${r.m}`).replace('{{n}}', `${r.n}`)
+}));
 vi.mock('../core/chain', () => ({ hasCode: async () => seams.deployed }));
 // A rename's signature passes the gate in `proposeRename` (stood in above).
 vi.mock('../core/gate.svelte', () => ({

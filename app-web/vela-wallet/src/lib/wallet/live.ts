@@ -27,7 +27,7 @@ import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { currencyFractionDigits, fiatSymbol, maskedAmount } from '$lib/core/client';
-import { formatRelativeTime } from '$lib/core/kernels';
+import { checksumAddress, formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
 	groupDigits,
@@ -1064,6 +1064,20 @@ export function changeFigure(change: FeedDappChange): string {
 }
 
 /**
+ * Whom a transfer went to or came from, short and in its EIP-55 case
+ * (r4D-19): a transfer read from the chain's logs names it lowercased, and
+ * one home read "To 0xd9c79C…" beside "From 0xd9c79c…" for one address.
+ * As given when the core cannot say (not an address, or not loaded).
+ */
+export function counterpartyText(address: string): string {
+	try {
+		return shortenAddress(checksumAddress(address));
+	} catch {
+		return shortenAddress(address);
+	}
+}
+
+/**
  * A row's second line (spec 093): the core's parts, in its order, each worded
  * here and joined " · ". Which parts there are — a status the tracker has not
  * closed, the site when the title named a protocol, the network, whom a
@@ -1083,9 +1097,9 @@ export function subtitleText(lines: readonly FeedLine[], m: RowMessages, now = D
 								? m.activity.unknown
 								: '';
 				case 'to':
-					return fill(m.activity.toName, { name: line.name ?? shortenAddress(line.address) });
+					return fill(m.activity.toName, { name: line.name ?? counterpartyText(line.address) });
 				case 'from':
-					return fill(m.activity.fromName, { name: line.name ?? shortenAddress(line.address) });
+					return fill(m.activity.fromName, { name: line.name ?? counterpartyText(line.address) });
 				case 'site':
 					return line.site;
 				case 'network':

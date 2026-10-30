@@ -87,6 +87,7 @@
       "waitedSeconds": "{{seconds}} segundos de espera",
       "networkTitle": "La conexión de red es inestable",
       "networkBody": "La solicitud nunca llegó — revisa tu red e inténtalo de nuevo.",
+      "offline": "No tienes conexión. Vela se actualiza de nuevo cuando vuelvas a estar en línea.",
       "serverTitle": "Servicio no disponible por el momento",
       "serverBody": "No se puede contactar al servicio de índice de Passkey — tanto crear como iniciar sesión lo necesitan.",
       "timeoutTitle": "Tiempo de espera agotado",

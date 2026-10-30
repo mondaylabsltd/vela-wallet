@@ -5,11 +5,10 @@
  * balance, activity or contacts are on screen.
  */
 import { resolve } from '$app/paths';
-import { fillTemplate } from '$lib/i18n/fill';
 import { identiconSvgForClient } from '$lib/wallet/identicon';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import type { MultisigMessages } from '../messages';
-import { multisigName } from './display';
+import { multisigName, ruleChipText, ruleTitle } from './display';
 import { sameAddress } from './kernel';
 import { presence } from './presence.svelte';
 import { proposals } from './proposals.svelte';
@@ -40,21 +39,18 @@ export function currentRules(
 	return rules.filter((r, i) => rules.findIndex((o) => o.m === r.m && o.n === r.n) === i);
 }
 
-/** The rule chip's words: "2 of 3", or that it differs by network. */
+/** The rule chip's words: "Needs 2 of 3", or that it differs by network. */
 export function ruleChip(
 	account: Pick<MultisigAccount, 'address' | 'owners' | 'threshold'>,
 	m: MultisigMessages
 ): { label: string; title: string } {
 	const rules = currentRules(account);
 	if (rules.length === 1) {
-		return {
-			label: fillTemplate(m.create.thresholdValue, rules[0]),
-			title: fillTemplate(m.panel.title, rules[0])
-		};
+		return { label: ruleChipText(m, rules[0]), title: ruleTitle(m, rules[0]) };
 	}
 	return {
 		label: m.presence.ruleDiffers,
-		title: rules.map((r) => fillTemplate(m.panel.title, r)).join(' · ')
+		title: rules.map((r) => ruleTitle(m, r)).join(' · ')
 	};
 }
 

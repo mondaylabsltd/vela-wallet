@@ -1,14 +1,22 @@
 /**
- * r4-9: how a member signs decides what the sheet offers them — an outside
- * wallet only for a plain account, never for a Vela (smart) account.
+ * r4-9, r4a-9: how a member signs decides what the sheet offers them — an
+ * outside wallet only for a plain account, never for a Vela (smart) account:
+ * not before the passkey index answers, not after it approved with its
+ * passkey, not for one this device keeps as a Vela account.
  */
 import { describe, expect, it, vi } from 'vitest';
+import type { ApprovalRow } from './proposals.svelte';
 
 const HERE = '0x00000000000000000000000000000000000000aa';
 const DEPLOYED = '0x00000000000000000000000000000000000000d1';
 const INDEXED = '0x00000000000000000000000000000000000000e1';
 const PLAIN = '0x00000000000000000000000000000000000000f1';
 const UNREAD = '0x00000000000000000000000000000000000000f2';
+/** Carol: a Vela account added by address, not deployed there, the index holding none. */
+const CAROL = '0x00000000000000000000000000000000000000c1';
+const KEPT_VELA = '0x00000000000000000000000000000000000000c2';
+const KEPT_WALLET = '0x00000000000000000000000000000000000000c3';
+const SIGNED_WALLET = '0x00000000000000000000000000000000000000c4';
 
 const index = vi.hoisted(() => ({ answered: new Set<string>() }));
 
@@ -20,21 +28,50 @@ vi.mock('./names.svelte', () => ({
 	names: {
 		isVela: (a: string) => a === INDEXED,
 		answered: (a: string) => index.answered.has(a)
-	}
+	},
+	keptMember: (a: string) =>
+		a === KEPT_VELA ? { kind: 'passkey' } : a === KEPT_WALLET ? { kind: 'wallet' } : {}
 }));
 vi.mock('./chain', () => ({
 	hasContractCode: async (_chain: number, a: string) => a === DEPLOYED
 }));
 
 vi.mock('$lib/services/public-key-index', () => ({
-	queryWalletName: async (a: string) => (a === INDEXED ? { name: 'Vela', publicKey: '0x04' } : null)
+	lookupWalletName: async (a: string) =>
+		a === INDEXED ? { name: 'Vela', publicKey: '0x04' } : null
 }));
 
-const { signers, plainAccounts } = await import('./signers.svelte');
+const { signers, plainAccounts, approvedWith } = await import('./signers.svelte');
+
+const passkey = (owner: string, counts = true): ApprovalRow => ({
+	owner,
+	counts,
+	createdMs: 0,
+	approval: {
+		owner,
+		ownerGenesis: {} as never,
+		signer: '0x',
+		authenticatorData: '0x',
+		clientDataFields: '',
+		r: '0x',
+		s: '0x'
+	}
+});
+const ecdsa = (owner: string): ApprovalRow => ({
+	owner,
+	counts: true,
+	createdMs: 0,
+	approval: { owner, signature: '0x' }
+});
 
 describe('who an outside wallet page may sign for (r4C-10)', () => {
 	it('only plain accounts: never this device’s, a deployed smart account, or a Vela account', async () => {
 		expect(await plainAccounts(1, [HERE, DEPLOYED, INDEXED, PLAIN])).toEqual([PLAIN]);
+	});
+
+	it('never one that approved with a passkey, or this device keeps as a Vela account (r4a-9)', async () => {
+		const items = [{ approvals: [passkey(CAROL)] }];
+		expect(await plainAccounts(1, [CAROL, KEPT_VELA, PLAIN], items)).toEqual([PLAIN]);
 	});
 });
 
@@ -52,15 +89,55 @@ describe('how a member signs', () => {
 		await vi.waitFor(() => expect(signers.kindOf(1, DEPLOYED)).toBe('vela'));
 	});
 
-	it('no code, and the index said it is no Vela account: a plain wallet', async () => {
-		index.answered.add(PLAIN);
-		signers.kindOf(1, PLAIN);
-		await vi.waitFor(() => expect(signers.kindOf(1, PLAIN)).toBe('wallet'));
-	});
-
-	it('no code, the index not answered yet: still unknown', async () => {
+	it('no code, the index not answered yet: still unknown — no outside wallet offered', async () => {
 		signers.kindOf(1, UNREAD);
 		await new Promise((r) => setTimeout(r, 0));
 		expect(signers.kindOf(1, UNREAD)).toBeNull();
+	});
+});
+
+/**
+ * r4a-9 / r4b-10 / r4D-6: Carol, a Vela member added by address — not set
+ * up on that network, the index holding no name for her — was offered
+ * "Approve with another wallet" before the index answered and after she
+ * approved with her passkey.
+ */
+describe('a Vela member added by address (r4a-9)', () => {
+	it('approved anything with her passkey: a Vela account, on every proposal', async () => {
+		index.answered.add(CAROL);
+		const items = [{ approvals: [passkey(CAROL)] }, { approvals: [] }];
+		expect(signers.kindOf(1, CAROL, items)).toBe('vela');
+		// Before the code read answers too.
+		expect(signers.kindOf(2, CAROL, items)).toBe('vela');
+	});
+
+	it('only a counted approval is evidence', () => {
+		expect(approvedWith([{ approvals: [passkey(CAROL, false)] }], CAROL)).toBeNull();
+		expect(approvedWith([{ approvals: [passkey(CAROL)] }], CAROL)).toBe('passkey');
+		expect(approvedWith([{ approvals: [ecdsa(SIGNED_WALLET)] }], SIGNED_WALLET)).toBe('wallet');
+	});
+
+	it('kept here as a Vela account (typed when added, or the invite’s word): a Vela account', () => {
+		expect(signers.kindOf(1, KEPT_VELA)).toBe('vela');
+	});
+
+	it('nothing says, no code, the index holds none: unsure — the Vela way first, never the outside one alone', async () => {
+		signers.kindOf(1, CAROL);
+		await vi.waitFor(() => expect(signers.kindOf(1, CAROL)).toBe('unsure'));
+	});
+
+	it('a wallet’s own signature, or kept as an outside wallet, with no code: a plain wallet', async () => {
+		index.answered.add(SIGNED_WALLET);
+		const items = [{ approvals: [ecdsa(SIGNED_WALLET)] }];
+		signers.kindOf(1, SIGNED_WALLET, items);
+		await vi.waitFor(() => expect(signers.kindOf(1, SIGNED_WALLET, items)).toBe('wallet'));
+		signers.kindOf(1, KEPT_WALLET);
+		await vi.waitFor(() => expect(signers.kindOf(1, KEPT_WALLET)).toBe('wallet'));
+	});
+
+	it('no code, the index answered none, nothing kept: unsure, as before it was "wallet"', async () => {
+		index.answered.add(PLAIN);
+		signers.kindOf(1, PLAIN);
+		await vi.waitFor(() => expect(signers.kindOf(1, PLAIN)).toBe('unsure'));
 	});
 });

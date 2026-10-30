@@ -87,6 +87,7 @@
       "waitedSeconds": "已等待 {{seconds}} 秒",
       "networkTitle": "网络连接不稳定",
       "networkBody": "请求没有送达，请检查网络后重试。",
+      "offline": "你已离线。恢复联网后，Vela 会重新更新。",
       "serverTitle": "服务暂时不可用",
       "serverBody": "通行密钥索引服务无法访问，创建和登录都需要它。",
       "timeoutTitle": "等待超时",

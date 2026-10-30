@@ -87,6 +87,7 @@
       "waitedSeconds": "Sudah menunggu {{seconds}} detik",
       "networkTitle": "Koneksi jaringan tidak stabil",
       "networkBody": "Permintaan tidak sampai — periksa jaringan Anda lalu coba lagi.",
+      "offline": "Anda sedang offline. Vela diperbarui lagi setelah Anda kembali online.",
       "serverTitle": "Layanan sementara tidak tersedia",
       "serverBody": "Layanan Indeks Passkey tidak dapat dijangkau — pembuatan dompet dan proses masuk sama-sama memerlukannya.",
       "timeoutTitle": "Waktu tunggu habis",

@@ -39,6 +39,7 @@ import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import { provenanceNote } from '$lib/services/token-provenance';
 import type { LocalTransaction } from '$lib/services/transactions-model';
+import { transactionOfRow } from '$lib/multisig/core/row-id';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
 import {
@@ -463,6 +464,14 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 	};
 }
 
+/** A multisig transaction's executed row (or a batch of them, folded). */
+function multisigRecord(item: FeedItem): boolean {
+	return (
+		transactionOfRow(item.id) !== null ||
+		(item.batch?.ids ?? []).some((id) => transactionOfRow(id) !== null)
+	);
+}
+
 /** One feed item as the A2 / DA2 detail. */
 export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailModel {
 	// Spec 093: a dApp's transaction or signature is described by the core.
@@ -604,7 +613,9 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// The transaction hash is the only honest target (spec 082 RJ16: the
 		// core never names an op hash as one); without it no control is drawn.
 		explorerUrl: item.tx_hash === null ? undefined : explorerTxURL(item.chain_id, item.tx_hash),
-		deleteLabel: m['history.deleteRecord'],
+		// r4D-17: a multisig's execution happened on chain for every member —
+		// it is no local record to delete (the multisig's sheet draws it).
+		...(multisigRecord(item) ? {} : { deleteLabel: m['history.deleteRecord'] }),
 		// RJ18: on a pending record the delete is quiet — the record is the
 		// trace that stops the same payment being sent twice. One nothing
 		// settles (087 F04) may have been sent too.

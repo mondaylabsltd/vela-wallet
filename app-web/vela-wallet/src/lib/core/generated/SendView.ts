@@ -7,6 +7,7 @@ import type { SendDuplicateRowView } from "./SendDuplicateRowView";
 import type { SendFeeCoin } from "./SendFeeCoin";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
+import type { SendMaxMoved } from "./SendMaxMoved";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
 import type { SendMultisigRef } from "./SendMultisigRef";
 import type { SendPasskeyNote } from "./SendPasskeyNote";
@@ -22,6 +23,7 @@ import type { SendRelayReport } from "./SendRelayReport";
 import type { SendRelayUnreachable } from "./SendRelayUnreachable";
 import type { SendSplitRowIssue } from "./SendSplitRowIssue";
 import type { SendStage } from "./SendStage";
+import type { SendSubmitSlow } from "./SendSubmitSlow";
 import type { SendToken } from "./SendToken";
 import type { SendTreasuryStatus } from "./SendTreasuryStatus";
 import type { SendTxErrorKey } from "./SendTxErrorKey";
@@ -313,6 +315,19 @@ risk_history_unread: boolean,
  * with a nonce read after that one.
  */
 queued_behind_tab: boolean, 
+/**
+ * r5reg-3: the submit's reads before the passkey are slow — said on the
+ * confirm with the time it has taken and the reason (the network's
+ * nodes busy, or not answering), never a bare spinner. `None` once the
+ * passkey sheet opens, the submit ends, or nothing is slow.
+ */
+submit_slow?: SendSubmitSlow | null, 
+/**
+ * r5reg-3: the Max on the field was filled again from a newer fee quote
+ * after the person saw it — what it read, and what it reads now (the
+ * amount sent). Said beside the amount until the Max is let go of.
+ */
+max_moved?: SendMaxMoved | null, 
 /**
  * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
  * account cannot sign here — drawn as `VenueBlock::key()` with its
