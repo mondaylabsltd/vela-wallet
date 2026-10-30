@@ -264,13 +264,14 @@ class RegistryBackupTest {
         assertEquals(listOf("Apple Passwords", "Security key", "Phone or tablet"), block.rows.map { it.holder })
         assertEquals(listOf(listOf("Cloud-synced"), listOf("Device-bound"), listOf("Cloud-synced")), block.rows.map { row -> row.pills.map { it.text } })
         assertEquals(listOf("Public key", "Transport"), block.rows.first().details.map { it.label })
-        // The copy's own explanation: what becomes public, that it costs a fee,
-        // and what a copy cannot do — never "only public keys".
+        // The copy's own explanation (the round-6 corpus,
+        // `settingsModals.backup.explain`): where the record is and why a copy
+        // helps, that it costs a fee, and what a copy cannot do.
         val explain = block.backupExplain!!
-        assertTrue(explain, explain.contains("is public"))
-        assertTrue(explain, explain.contains("credential ID and authenticator model"))
-        assertTrue(explain, explain.contains("pay its network fee"))
-        assertTrue(explain, explain.contains("can't move money or bring back a lost passkey"))
+        assertTrue(explain, explain.contains("public record on Gnosis"))
+        assertTrue(explain, explain.contains("A copy on Ethereum"))
+        assertTrue(explain, explain.contains("Ethereum network fee"))
+        assertTrue(explain, explain.contains("doesn't back up your passkeys and can't move funds"))
         assertEquals("abab…abab", block.rows.first().fingerprint)
         assertNull(block.note)
         assertEquals(RowTrailing.Chevron, block.backup!!.trailing)

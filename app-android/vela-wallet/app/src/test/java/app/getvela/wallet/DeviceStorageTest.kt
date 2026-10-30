@@ -51,12 +51,14 @@ class DeviceStorageTest {
     }
 
     @Test
-    fun `erase sweeps every erasable key, keeps the pending uploads, and says what is left`() = runBlocking<Unit> {
+    fun `erase sweeps every key of ours, the pending uploads too, and says what is left`() = runBlocking<Unit> {
         val s = store().apply { values["vela.pendingUploads"] = "[]"; values["vela.theme"] = "dark" }
         val left = DeviceStorage.erase(s)
         assertTrue(left.isEmpty())
-        // The core's rule: the accounts go too; only the upload ledger stays.
-        assertEquals(setOf("vela.pendingUploads"), s.values.keys)
+        // The core's rule since ob-2 (owner, 2026-10-28): erasing means
+        // everything — the outbox included; the confirmation names every
+        // wallet not yet synced (`SessionView.unsynced`) before it goes.
+        assertEquals(emptySet<String>(), s.values.keys)
         val stubborn = store().apply { refuseWrites = true }
         val leftovers = DeviceStorage.erase(stubborn)
         assertEquals(8, leftovers.size)
