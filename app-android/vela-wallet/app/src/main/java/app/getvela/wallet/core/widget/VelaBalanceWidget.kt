@@ -27,7 +27,10 @@ import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
+// Named apart from Compose's: a widget draws in the launcher's system face,
+// never the app's UI face whose contextual alternates turn "0x" into "0×"
+// (LiteralFaceTest's rule is about that face, and Glance has no feature setting).
+import androidx.glance.text.TextStyle as GlanceTextStyle
 import app.getvela.wallet.MainActivity
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.designsystem.tokens.VelaColorsDark
@@ -83,7 +86,7 @@ class VelaBalanceWidget : GlanceAppWidget() {
         ) {
             Text(
                 text = model?.label.orEmpty(),
-                style = TextStyle(color = subtle, fontSize = VelaTextSize.sm, fontWeight = FontWeight.Medium),
+                style = GlanceTextStyle(color = subtle, fontSize = VelaTextSize.sm, fontWeight = FontWeight.Medium),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.height(VelaSpacing.sm))
@@ -95,13 +98,13 @@ class VelaBalanceWidget : GlanceAppWidget() {
             ) {
                 Text(
                     text = model?.integer ?: "—",
-                    style = TextStyle(color = fg, fontSize = VelaTextSize.xl3, fontWeight = FontWeight.Medium),
+                    style = GlanceTextStyle(color = fg, fontSize = VelaTextSize.xl3, fontWeight = FontWeight.Medium),
                     maxLines = 1,
                 )
                 model?.decimals?.let {
                     Text(
                         text = it,
-                        style = TextStyle(color = muted, fontSize = VelaTextSize.xl, fontWeight = FontWeight.Medium),
+                        style = GlanceTextStyle(color = muted, fontSize = VelaTextSize.xl, fontWeight = FontWeight.Medium),
                         maxLines = 1,
                         modifier = GlanceModifier.padding(bottom = VelaSpacing.xs),
                     )
@@ -109,7 +112,7 @@ class VelaBalanceWidget : GlanceAppWidget() {
             }
             model?.footnote?.let {
                 Spacer(GlanceModifier.height(VelaSpacing.sm))
-                Text(text = it, style = TextStyle(color = muted, fontSize = VelaTextSize.sm), maxLines = 1)
+                Text(text = it, style = GlanceTextStyle(color = muted, fontSize = VelaTextSize.sm), maxLines = 1)
             }
         }
     }
