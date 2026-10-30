@@ -38,11 +38,14 @@ struct VelaButton: View {
     /// enough for the word to matter (the bug report's send, round v2).
     /// `nil` keeps the spinner alone in the label's place.
     var busyTitle: String? = nil
+    /// What the finger feels: a press — or, on the one button that moves
+    /// value or signs, the firmer `confirm`.
+    var haptic: VelaHaptic = .press
     let action: () -> Void
 
     var body: some View {
         Button {
-            Self.pressed(action)
+            Self.pressed(action, haptic: haptic)
         } label: {
             if loading, let busyTitle {
                 HStack(spacing: Tokens.Space.s8) {
@@ -69,8 +72,8 @@ struct VelaButton: View {
     /// press whose visible result is a system sheet several hundred ms away
     /// (the signing confirm's passkey prompt) needs an answer in the same
     /// instant the finger lands.
-    static func pressed(_ action: () -> Void) {
-        VelaHaptic.press.play()
+    static func pressed(_ action: () -> Void, haptic: VelaHaptic = .press) {
+        haptic.play()
         action()
     }
 
