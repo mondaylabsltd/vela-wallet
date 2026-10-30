@@ -39,7 +39,7 @@ const CACHE_TTL_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
 const PRIVACY_KEY: &str = "vela.balanceHidden";
 
 /// A cached total, if one is present and still inside the TTL.
-fn cached_usd(address: &str, now_ms: f64) -> Option<f64> {
+pub(crate) fn cached_usd(address: &str, now_ms: f64) -> Option<f64> {
     let entry = storage::read_value(CACHE_KEY).ok().flatten()?;
     let record = entry.get(address)?;
     let at = record.get("at").and_then(Value::as_f64)?;
@@ -143,7 +143,7 @@ fn restored_holdings(address: &str) -> Option<Event> {
     })
 }
 
-fn write_cached_usd(address: &str, usd: f64, now_ms: f64) {
+pub(crate) fn write_cached_usd(address: &str, usd: f64, now_ms: f64) {
     let mut map = match storage::read_value(CACHE_KEY) {
         Ok(Some(Value::Object(map))) => map,
         _ => serde_json::Map::new(),

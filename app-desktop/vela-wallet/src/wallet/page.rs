@@ -1032,6 +1032,9 @@ pub struct WalletPage {
     content_scroll: crate::ui::SmoothScroll,
     /// The third column's body, and which subject it last scrolled for.
     panel_scroll: crate::ui::SmoothScroll,
+    /// Phase 4: a scripted scroll over the panel's column, while one runs
+    /// (`VELA_PERF_SCROLL=1`, developer builds).
+    perf_scroll: Option<crate::perf::ScrollRun>,
     panel_scroll_subject: String,
     /// The landed simulation verdict the signing column last drew: whose it
     /// was (the request's id, or the drawn scenario) and what it said. One
@@ -1560,6 +1563,7 @@ impl WalletPage {
             page.pin_settings_page();
         }
         Self::land_pinned_keys(cx);
+        page.arm_perf_scroll(cx);
         // `VELA_FEEDBACK_STATE` on the live route too: the signed-in page, in
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
@@ -1569,6 +1573,37 @@ impl WalletPage {
             page.pin_feedback_state(&state);
         }
         page
+    }
+
+    /// `VELA_PERF_SCROLL=1` (developer builds, with `VELA_PERF=1`): a few
+    /// seconds after the window opens, History opens — the press of "All" —
+    /// and the panel scrolls itself end to end and back for
+    /// [`crate::perf::ScrollRun::LENGTH`], recording every frame. The harness
+    /// (`scripts/perf-run.sh`) seeds the 200 rows it scrolls.
+    fn arm_perf_scroll(&self, cx: &mut Context<Self>) {
+        if !crate::perf::enabled() || !crate::dev_env::flag!("VELA_PERF_SCROLL") {
+            return;
+        }
+        let after = crate::dev_env::var!("VELA_PERF_SCROLL_AFTER")
+            .and_then(|secs| secs.parse::<u64>().ok())
+            .unwrap_or(4);
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(after))
+                .await;
+            let _ = page.update(cx, |page, cx| {
+                page.enter_flow(FlowEntry::Activity, cx);
+                cx.notify();
+            });
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(800))
+                .await;
+            let _ = page.update(cx, |page, cx| {
+                page.perf_scroll = Some(crate::perf::ScrollRun::new());
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// `VELA_KEYS=asking3>3` (developer builds): the Account page's keys
@@ -1911,6 +1946,7 @@ impl WalletPage {
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll: crate::ui::SmoothScroll::new(),
+            perf_scroll: None,
             panel_scroll_subject: String::new(),
             verdict_seen: None,
             verdict_reveal: std::rc::Rc::default(),
@@ -4236,6 +4272,20 @@ impl WalletPage {
         let activity = self.activity_models(cx);
         let assets = self.asset_models(cx);
         self.keep_hero_clock(cx);
+        // Phase 4 (`VELA_PERF`): the frame a signed-in home first reaches the
+        // screen, and the frame its figure does — from the stored rows, or
+        // from the network when there were none.
+        let perf_marks = if crate::perf::enabled() && self.identity.is_some() {
+            let figure = !crate::network_space::balance_view(cx).balance_unknown;
+            [
+                crate::perf::paint_mark("home_painted"),
+                figure
+                    .then(|| crate::perf::paint_mark("home_figure"))
+                    .flatten(),
+            ]
+        } else {
+            [None, None]
+        };
 
         let pills = div()
             .relative()
@@ -4582,6 +4632,7 @@ impl WalletPage {
                     .child(column)
                     .children(crate::ui::vertical_scrollbar(theme, &self.content_scroll)),
             )
+            .children(perf_marks.into_iter().flatten())
     }
 
     // -- column 2 (contacts): header + group rail + sectioned list -----------
@@ -22405,8 +22456,16 @@ impl WalletPage {
 
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::frame_begin();
         for scroll in self.scrolls() {
             scroll.step(window);
+        }
+        // Phase 4 (`VELA_PERF_SCROLL`): the scripted scroll over the panel,
+        // after the column's own step so the run's offset is the frame's.
+        if let Some(run) = self.perf_scroll.as_mut()
+            && !run.step(&self.panel_scroll, window)
+        {
+            self.perf_scroll = None;
         }
         self.watch_field_blurs(window, cx);
         // N-D1: `VELA_A11Y_DUMP` (developer builds) — the last frame's tree.

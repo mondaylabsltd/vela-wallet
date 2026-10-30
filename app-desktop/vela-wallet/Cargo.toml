@@ -18,6 +18,11 @@ edition = "2024"
 # release build (11+, Info.plist.in) must not carry it, and a `dev-fixtures`
 # build is for macOS 14+.
 dev-fixtures = ["vela-core/dev-fixtures", "wry/mac-proxy"]
+# Phase 4 (native parity, performance): the launch / frame / core-dispatch
+# recorder (`src/perf.rs`) always on, without `VELA_PERF` — so the shipping
+# build's own optimisation can be measured with no developer switch compiled
+# in. Off by default; a store build never carries it.
+perf = []
 
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }

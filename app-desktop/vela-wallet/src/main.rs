@@ -38,6 +38,8 @@ mod panic_report;
 mod parallel_space;
 mod passkey_directory;
 mod passkey_icons;
+// Phase 4: the launch, frame and dispatch recorder (`VELA_PERF=1`).
+mod perf;
 mod raster;
 mod resident;
 mod sandbox_probe;
@@ -109,6 +111,7 @@ impl Root {
 
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        perf::frame_begin();
         let view = session::view(cx);
         let root: Div = div().size_full();
         let root = match view.allowed_route {
@@ -194,7 +197,7 @@ impl Render for Root {
         // The parallel space's marker, over whichever screen is up. It renders
         // whenever the space is active and never behind a build flag alone —
         // a test wallet must never wear the real one's face.
-        parallel_space::overlay(root, window)
+        parallel_space::overlay(root, window).children(perf::frame_probe())
     }
 }
 
@@ -380,6 +383,8 @@ fn open_window_with<V: gpui::Render + 'static>(
 }
 
 fn main() {
+    // Phase 4: the clock every launch mark is read against.
+    perf::start();
     // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
     // window. Installed before anything can spawn.
     panic_report::install();
@@ -472,6 +477,7 @@ fn main() {
     executor::trusted_signer::keep_fresh();
 
     app.run(|cx: &mut App| {
+        perf::mark("app_run");
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
         // The UI face, before any window: every page root names it, and a
@@ -506,6 +512,9 @@ fn main() {
         if crate::parallel_space::seed_wallets() > 0 {
             crate::diag::vlog!("parallel", "seeded the fixture wallets");
         }
+        // Phase 4: the perf harness's long history (`VELA_PERF_ACTIVITY`).
+        #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+        crate::dev_seed::seed_activity();
         // Which of Vela's networks the person's lists show, settled once
         // per device (owner decision 2026-10-29) before anything lists or
         // reads networks — never a network read and then hidden.
@@ -538,9 +547,13 @@ fn main() {
         cx.on_app_quit(|_| async {
             window_state::flush();
             tray::hide();
+            perf::report("quit");
         })
         .detach();
+        perf::mark("window_open_requested");
         open_main_window(cx);
+        perf::mark("window_opened");
+        perf::checkpoints(cx);
 
         // N-D3: the menu-bar extra's presses (Windows: the tray icon's) —
         // each the press of the control it names, in the window.

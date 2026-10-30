@@ -201,6 +201,7 @@ pub fn remove_browser_profile() -> std::io::Result<()> {
 }
 
 fn read_all() -> Result<Map<String, Value>> {
+    let _span = crate::perf::span("store", "read");
     let path = path()?;
     let raw = match fs::read_to_string(&path) {
         Ok(raw) => raw,
