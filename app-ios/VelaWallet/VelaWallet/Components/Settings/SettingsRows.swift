@@ -305,6 +305,16 @@ struct SettingsNetworkRow: View {
                     Text(row.meta)
                         .typeRole(Typography.monoSmall)
                         .foregroundStyle(theme.fgSubtle)
+                    // The pool's word on the person's own node: in the row's
+                    // own ink, no box (a line, not a card — the design
+                    // language's de-container rule).
+                    if let notice = row.notice {
+                        Text(notice.text)
+                            .typeRole(Typography.label)
+                            .foregroundStyle(notice.tone == .danger ? theme.errorBase : theme.warningBase)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("network-node-notice")
+                    }
                     if let move = row.move, let onMove {
                         Button { onMove(row.id) } label: {
                             Text(move)
@@ -621,6 +631,8 @@ struct NetworkSpaceHeading: View {
                 Text(model.hint)
                     .typeRole(Typography.label)
                     .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("networks-space-hint")
             }
             Spacer(minLength: Tokens.Space.s8)
             Button(action: onSwitch) {

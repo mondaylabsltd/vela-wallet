@@ -354,6 +354,19 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(["type": "dapp_add_approved", "now_iso": Self.nowISO]))
     }
 
+    /// dapp-13: "Add unverified network", after its explicit confirmation —
+    /// the core saves only where `can_add_unverified` held.
+    func dappAddApprovedUnverified() {
+        core.dispatch(CoreJSON.string(["type": "dapp_add_approved_unverified", "now_iso": Self.nowISO]))
+    }
+
+    /// "Only use my node" on a network's page (owner decision 2026-10-28).
+    /// Saved with the network's config; it binds the pool only while the RPC
+    /// is the person's own — the core's rule, not this shell's.
+    func onlyMineChanged(chainId: Int, on: Bool) {
+        core.dispatch(CoreJSON.string(["type": "only_mine_changed", "chain_id": chainId, "on": on]))
+    }
+
     /// The sheet closed, by any button — the core decides what that answers.
     func dappAddDeclined() {
         core.dispatch(CoreJSON.string(["type": "dapp_add_declined"]))

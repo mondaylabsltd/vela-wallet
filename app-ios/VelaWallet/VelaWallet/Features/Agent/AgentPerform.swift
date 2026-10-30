@@ -147,11 +147,15 @@ struct AgentPerform {
                 chainId: chainId, field: action["field"] as? String ?? "", url: text("url")
             )
         case "remove_network":
+            // A Vela network shown on the person's word leaves the list too
+            // (owner 2026-10-29; the core's rule allows `is_custom || optional`).
             let row = networks()["networks"].list.first {
-                $0["chain_id"].int == chainId && $0["is_custom"].bool
+                $0["chain_id"].int == chainId && ($0["is_custom"].bool || $0["optional"].bool)
             }
             graph.settings.deleteNetwork(id: row?["id"].string ?? "custom-\(chainId)")
             return Self.done
+        case "set_only_my_node":
+            graph.settings.onlyMineChanged(chainId: chainId, on: action["on"] as? Bool ?? false)
             return Self.done
         case "set_service_endpoint":
             setServiceEndpoint(field: action["field"] as? String ?? "", url: text("url"))

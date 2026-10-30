@@ -253,6 +253,13 @@ struct SettingsNetworkRowModel: Identifiable {
     var move: String?
     /// The space it is in, so the move knows where to.
     var testnet = false
+    /// A Vela network shown on the person's word (owner 2026-10-29): its bin
+    /// takes it out of the list and keeps its settings, and the question says
+    /// so. `nil` for a custom network, whose bin removes it.
+    var removeBody: String?
+    /// The pool's word on the person's own node (owner 2026-10-28): "using
+    /// public nodes for now" (warning), or "can't reach your node" (danger).
+    var notice: CalloutModel?
 }
 
 /// Spec 105: the space the network list shows, and the switch to the other.
@@ -294,6 +301,18 @@ struct NetworkDetailModel {
     let rpc: UrlFieldModel
     let explorer: UrlFieldModel
     var callout: CalloutModel?
+    /// "Only use my node" — offered only where the RPC is the person's own
+    /// (owner decision 2026-10-28); `nil` draws no switch.
+    var onlyMine: OnlyMineSwitchModel?
+    /// The pool's word on the person's node, beside the field.
+    var nodeCallout: CalloutModel?
+}
+
+/// One switch on a network's page: its title, what it does, and its state.
+struct OnlyMineSwitchModel {
+    let title: String
+    let detail: String
+    let on: Bool
 }
 
 struct CheckItemModel: Identifiable {

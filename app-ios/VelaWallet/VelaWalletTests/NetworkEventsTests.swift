@@ -137,12 +137,12 @@ struct NetworkEventsTests {
         let world = await world()
         world.settings.openEndpoints()
         await settle(world.settings) {
-            NetEndpointFieldWire.allCases.allSatisfy { field in
+            NetEndpointFieldWire.withoutMultisig.allSatisfy { field in
                 if case .unreachable = endpoint(world, field)?.health { return true }
                 return false
             }
         }
-        for field in NetEndpointFieldWire.allCases {
+        for field in NetEndpointFieldWire.withoutMultisig {
             guard case .unreachable = endpoint(world, field)?.health else {
                 Issue.record("\(field) was never probed: \(String(describing: endpoint(world, field)?.health))")
                 continue
@@ -180,6 +180,64 @@ struct NetworkEventsTests {
         #expect(overrides.contains { $0.contains("dkey=saved-key") }, "the key was dropped, not retired: \(overrides)")
         #expect(row(world, chainId: 1)?.rpcUrl.contains("saved-key") == true)
         #expect(row(world, chainId: 1)?.ownRpc == true, "the retired key's RPC is the person's own")
+    }
+
+    // MARK: - Shown networks and "Only use my node" (Phase 2, P2.1)
+
+    /// A Vela network out of the list is named by the core, shown again by
+    /// adding it, and taken out again by its bin — its settings kept (owner
+    /// decision 2026-10-29). Through the store's own methods, as the screen
+    /// sends them.
+    @Test func aVelaNetworkIsShownAgainAndTakenOutAgain() async {
+        let world = await world()
+        let hidden = world.settings.networkAdmin?.hiddenVelaChainIds ?? []
+        #expect(hidden.contains(988), "Stable is not among the networks out of the list: \(hidden)")
+        #expect(row(world, chainId: 988) == nil)
+
+        world.settings.addByChainId(988)
+        await settle(world.settings) { row(world, chainId: 988) != nil }
+        let shown = row(world, chainId: 988)
+        #expect(shown?.optIn == true, "a network shown on the person's word is not marked so")
+        #expect(shown?.isCustom == false)
+        #expect(world.settings.networkAdmin?.hiddenVelaChainIds.contains(988) == false)
+        // The row the screen draws: removable, and the question says what
+        // removing it means.
+        let drawn = shown.map { SettingsLive.row($0, loc: loc) }
+        #expect(drawn?.removable == true)
+        #expect(drawn?.removeBody == loc.t("settingsModals.network.hideBody"))
+
+        world.settings.deleteNetwork(id: shown?.id ?? "")
+        await settle(world.settings) { row(world, chainId: 988) == nil }
+        #expect(row(world, chainId: 988) == nil, "the bin left the network in the list")
+        #expect(world.settings.networkAdmin?.hiddenVelaChainIds.contains(988) == true)
+    }
+
+    /// "Only use my node": offered once the RPC is the person's own, sent as
+    /// `only_mine_changed`, saved with the network's config where the pool
+    /// reads it (`RpcEndpoints.ownNodeOnly`).
+    @Test func onlyUseMyNodeIsSavedWithTheNetwork() async {
+        let mine = "https://my-gnosis-node.example.org"
+        let world = await world(reported: { url in url == mine ? 100 : nil })
+        #expect(row(world, chainId: 100)?.ownRpc == false, "Vela's own endpoint is not the person's")
+        world.settings.expandNetwork(chainId: 100)
+        world.settings.editOverride(chainId: 100, field: .rpc, value: mine)
+        world.settings.blurOverride(chainId: 100)
+        await settle(world.settings) { row(world, chainId: 100)?.ownRpc == true }
+        #expect(row(world, chainId: 100)?.ownRpc == true)
+        let page = row(world, chainId: 100).map {
+            SettingsLive.detail($0, loc: loc, fallback: SettingsFixtures.build(.st9b, loc: loc).networkDetail)
+        }
+        #expect(page?.onlyMine?.on == false)
+        #expect(page?.onlyMine?.title == loc.t("settingsModals.network.onlyMine"))
+
+        world.settings.onlyMineChanged(chainId: 100, on: true)
+        await settle(world.settings) { RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf) }
+        #expect(RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf), "the switch was not saved")
+        #expect(row(world, chainId: 100)?.onlyMine == true)
+
+        world.settings.onlyMineChanged(chainId: 100, on: false)
+        await settle(world.settings) { !RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf) }
+        #expect(!RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf))
     }
 
     // MARK: - A network's own RPC and explorer

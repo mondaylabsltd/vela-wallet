@@ -62,7 +62,7 @@ struct SettingsParityTests {
     /// placeholders, not the drawing's four fixed URLs and latencies.
     @Test func theEndpointsPageIsTheCoresFields() throws {
         let model = live(try view())
-        #expect(model.endpoints.fields.map(\.id) == NetEndpointFieldWire.allCases.map(\.rawValue))
+        #expect(model.endpoints.fields.map(\.id) == NetEndpointFieldWire.withoutMultisig.map(\.rawValue))
         for field in model.endpoints.fields {
             #expect(field.placeholder?.hasPrefix("https://") == true, "\(field.id) has no default")
             #expect(field.badge?.label != "62ms", "\(field.id) wears the fixture's latency")

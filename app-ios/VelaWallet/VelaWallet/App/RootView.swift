@@ -1283,6 +1283,7 @@ struct RootView: View {
                         addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
                         onAddNetworkApprove: { settings.dappAddApproved() },
                         onAddNetworkRetry: { settings.dappAddRetried() },
+                        onAddNetworkApproveUnverified: { settings.dappAddApprovedUnverified() },
                         onAddNetworkDismiss: { settings.dappAddDeclined() },
                         visit: exploreVisit
                     )
@@ -3420,6 +3421,12 @@ struct RootView: View {
                     guard let chainId = settings.network(id: id)?.chainId else { return }
                     agent.person(["type": "remove_network", "chain_id": chainId])
                 },
+                onOnlyMine: { chainId, on in
+                    // The web's own way in: the switch is the network
+                    // machine's event, not an intent (an agent's
+                    // `set_only_my_node` reaches the same call).
+                    settings.onlyMineChanged(chainId: chainId, on: on)
+                },
                 onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
                 onSelectChain: { chainId in
@@ -3614,7 +3621,12 @@ struct RootView: View {
         // ready while the other is not.
         var model = base
         if let view = settings.networkAdmin, view.loaded {
-            model = SettingsLive.withNetworks(view, on: model, loc: loc, space: space.current)
+            model = SettingsLive.withNetworks(
+                view, on: model, loc: loc, space: space.current,
+                // The pool's word on the person's own nodes (owner decision
+                // 2026-10-28): read here, so a change re-draws the rows.
+                nodes: SettingsLive.OwnNodes(fallback: pool.fallbackChains, unreached: pool.ownNodeUnreachedChains)
+            )
             // 端点 offered a dead host as the person's passkey index with an
             // invented latency beside it (spec 081 FR-001): the same machine's
             // view, projected.

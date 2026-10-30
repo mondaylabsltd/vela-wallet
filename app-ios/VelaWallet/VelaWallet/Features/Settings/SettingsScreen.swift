@@ -808,6 +808,21 @@ private struct NetworkDetailBody: View {
             }
             field(detail.rpc)
             if let callout = detail.callout { SettingsCallout(callout: callout) }
+            // The pool's word on the person's node, beside the field it is
+            // about (owner decision 2026-10-28).
+            if let node = detail.nodeCallout { SettingsCallout(callout: node) }
+            // "Only use my node" — only where the RPC is the person's own.
+            if let only = detail.onlyMine {
+                SettingsSwitchRow(
+                    title: only.title,
+                    detail: only.detail,
+                    isOn: only.on,
+                    onChange: actions.isLive ? chainId.map { chainId in
+                        { on in actions.onOnlyMine(chainId, on) }
+                    } : nil
+                )
+                .accessibilityIdentifier("only-mine")
+            }
             field(detail.explorer)
         }
     }
@@ -990,8 +1005,11 @@ struct SettingsNetworkActions {
     /// commit — on Return or on leaving the field (spec 072).
     var onEditOverride: (Int, String, String) -> Void = { _, _, _ in }
     var onCommitOverride: (Int) -> Void = { _ in }
-    /// A custom network's bin, once the person has said yes.
+    /// A custom network's bin — or a Vela network's, which takes it out of the
+    /// list — once the person has said yes.
     var onRemoveNetwork: (String) -> Void = { _ in }
+    /// "Only use my node" switched, on that network's page.
+    var onOnlyMine: (Int, Bool) -> Void = { _, _ in }
     /// The wizard is opening — it starts empty.
     var onOpenAddNetwork: () -> Void = {}
     var onSearch: (String) -> Void = { _ in }
