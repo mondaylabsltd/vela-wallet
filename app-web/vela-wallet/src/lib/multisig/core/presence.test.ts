@@ -8,8 +8,8 @@ import type { MultisigMessages } from '../messages';
 import type { ProposalItem } from './proposals.svelte';
 
 const seams = vi.hoisted(() => ({
-	/** r4b-11: the waiting list kept from an earlier page, by multisig. */
-	kept: {} as Record<string, unknown[]>,
+	/** The proposals machine's word on the multisigs not shown, by lowercase address. */
+	machine: {} as Record<string, unknown>,
 	accounts: [] as { address: string }[],
 	/** r5reg-6: each ready one's executor look, by its hash. */
 	looks: {} as Record<string, { kind: string; canPay?: boolean }>,
@@ -25,13 +25,16 @@ vi.mock('./proposals.svelte', () => ({
 		},
 		chain: () => ({ members: { owners: [], threshold: 1, deployed: true } })
 	},
-	executionInput: (_a: unknown, item: { safeTxHash: string }) => item.safeTxHash,
-	keptChains: (account: { address: string }) => {
-		const items = seams.kept[account.address.toLowerCase()];
-		return items ? { chains: [{ chainId: 100, items }], lists: new Map(), at: 1 } : null;
-	},
-	readChain: async () => ({ items: [] }),
-	splitListed: () => ({ lists: new Map(), used: [], missing: [] })
+	executionInput: (_a: unknown, item: { safeTxHash: string }) => item.safeTxHash
+}));
+vi.mock('../shell/proposals-host.svelte', () => ({
+	proposalsHost: {
+		get view() {
+			return { presence: seams.machine };
+		},
+		othersTick: async () => {},
+		followOthers: () => () => {}
+	}
 }));
 // The core's CLDR rule, as English has it.
 vi.mock('$lib/core/client', () => ({
@@ -44,8 +47,6 @@ vi.mock('./preflight.svelte', () => ({
 			? { kind: 'nobodyPays' }
 			: null
 }));
-vi.mock('./service', () => ({ fetchAllProposals: async () => null }));
-vi.mock('./service-state.svelte', () => ({ serviceOutage: { blocked: () => false } }));
 vi.mock('./store.svelte', () => ({
 	multisig: {
 		get accounts() {
@@ -154,16 +155,31 @@ describe('ready, as far as this device can run it (r5reg-6)', () => {
 });
 
 /**
- * r4b-11 × r4D-7: a multisig not read yet on this page counts what its kept
- * waiting list says — the list its home shows at once — never a zero it did
- * not see, and nothing at all when none is kept.
+ * r4b-11 × r4D-7: a multisig not shown counts what the proposals machine
+ * says of it — read now and then, else its kept waiting list (the core's
+ * rule: `the_others_start_from_the_kept_list_then_are_read`) — and nothing at
+ * all, never a zero, before it says anything.
  */
-describe('a multisig not read yet on this page', () => {
-	it('counts its kept waiting list, the same one its home shows', () => {
+describe('a multisig not shown', () => {
+	it('counts what the machine read, in this module’s words', () => {
 		seams.accounts = [{ address: '0xBB' }, { address: '0xCC' }];
-		seams.kept = { '0xbb': [item({ nonce: 1n, canApprove: [ME], approved: 1 })] };
-		expect(presence.of('0xBB')).toMatchObject({ needsYou: 1, ready: 0 });
+		seams.machine = {
+			'0xbb': {
+				needs_you: 1,
+				ready: 0,
+				waiting_payer: 0,
+				first: { chain_id: 100, safe_tx_hash: '0x01' }
+			},
+			'0xcc': null
+		};
+		expect(presence.of('0xBB')).toEqual({
+			needsYou: 1,
+			ready: 0,
+			waitingPayer: 0,
+			first: { chainId: 100, safeTxHash: '0x01' }
+		});
 		expect(presence.of('0xCC')).toBeNull();
 		expect(presence.othersWaiting(null)).toBe(true);
+		expect(presence.othersWaiting('0xbb')).toBe(false);
 	});
 });

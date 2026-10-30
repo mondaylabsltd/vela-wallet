@@ -5,30 +5,24 @@
  * button when another account has something waiting.
  *
  * The shown multisig's counts are its followed proposals' (`proposals`,
- * re-read every 12 s). The others are read here, now and then — the
+ * re-read every 12 s). The others are the core's proposals machine's
+ * (`multisig_proposals`, through `shell/proposals-host.svelte.ts`): the
  * mailbox's cross-chain list, then each network it has proposals on through
- * this wallet's RPC (`readChain`, the same checks the shown one gets) — and
- * only while a page is shown. A count is what this device read; a multisig
- * not read yet on this page counts what the waiting list kept from an earlier
- * one says (r4b-11, the list its home shows at once), else has none — never
- * a zero it did not see.
+ * this wallet's RPC — the same checks the shown one gets — read only while a
+ * page is shown. A count is what this device read; a multisig not read yet
+ * on this page counts what the waiting list kept from an earlier one says
+ * (r4b-11, the list its home shows at once), else has none — never a zero it
+ * did not see.
  */
 import { fillTemplate } from '$lib/i18n/fill';
 import { pluralForm } from '$lib/i18n/plural';
 import type { MultisigMessages } from '../messages';
-import {
-	executionInput,
-	keptChains,
-	proposals,
-	readChain,
-	splitListed,
-	type ProposalItem
-} from './proposals.svelte';
+import { executionInput, proposals, type ProposalItem } from './proposals.svelte';
 import { blockOf, preflight } from './preflight.svelte';
-import { fetchAllProposals } from './service';
-import { serviceOutage } from './service-state.svelte';
 import { multisig, type MultisigAccount } from './store.svelte';
 import { sameAddress } from './kernel';
+import type { MultisigWaiting } from '../generated/MultisigWaiting';
+import { proposalsHost } from '../shell/proposals-host.svelte';
 
 export interface Waiting {
 	/** Open, short of approvals, and a member on this device has not approved. */
@@ -46,8 +40,6 @@ export interface Waiting {
 	/** The first of them, to open: the one needing an approval first, else the first ready. */
 	first: { chainId: number; safeTxHash: string } | null;
 }
-
-export const NOTHING_WAITING: Waiting = { needsYou: 0, ready: 0, waitingPayer: 0, first: null };
 
 /** Why a ready transaction cannot run here now (`blockOf`'s word), or `null`: it can, or not known yet. */
 export type ReadyBlock = 'fails' | 'nobodyPays' | null;
@@ -114,41 +106,31 @@ function readyBlock(account: MultisigAccount | undefined, item: ProposalItem): R
 	return block?.kind ?? null;
 }
 
-/** How often the multisigs not shown are read again while a page is up. */
-export const OTHERS_EVERY_MS = 60_000;
+/** The machine's word for one multisig, in this module's shape. */
+function fromMachine(w: MultisigWaiting): Waiting {
+	return {
+		needsYou: w.needs_you,
+		ready: w.ready,
+		waitingPayer: w.waiting_payer,
+		first: w.first ? { chainId: w.first.chain_id, safeTxHash: w.first.safe_tx_hash } : null
+	};
+}
 
 class Presence {
-	/** The multisigs not shown, as last read, by lowercase address. */
-	#others = $state<Record<string, Waiting>>({});
-	#reading: Promise<void> | null = null;
-
-	/** The kept list's counts, by lowercase address: read once a page, not reactive. */
-	#kept = new Map<string, Waiting | null>();
-
-	/** What waits on `address` here, or `null` when it was not read yet. */
+	/**
+	 * What waits on `address` here, or `null` when it was not read yet. The
+	 * shown multisig's is its followed proposals'; every other one's is the
+	 * proposals machine's (`presence`): read now and then, else what the
+	 * waiting list kept from an earlier page says (r4b-11) — never a zero it
+	 * did not see.
+	 */
 	of(address: string): Waiting | null {
 		if (sameAddress(proposals.followed, address)) {
 			const account = multisig.find(address);
 			return waitingOf(proposals.items, (item) => readyBlock(account, item));
 		}
-		const key = address.toLowerCase();
-		return this.#others[key] ?? this.#fromKept(key);
-	}
-
-	/** r4b-11: the list kept from an earlier page — the same one the home shows at once. */
-	#fromKept(key: string): Waiting | null {
-		if (this.#kept.has(key)) return this.#kept.get(key) ?? null;
-		const account = multisig.find(key);
-		if (!account) return null;
-		try {
-			const kept = keptChains(account);
-			const read = kept ? waitingOf(kept.chains.flatMap((c) => c.items)) : null;
-			this.#kept.set(key, read);
-			return read;
-		} catch {
-			// the core is not loaded yet: asked again on the next draw
-			return null;
-		}
+		const read = proposalsHost.view?.presence[address.toLowerCase()];
+		return read ? fromMachine(read) : null;
 	}
 
 	/** Whether a multisig other than `shown` (the address on screen) has something waiting. */
@@ -160,52 +142,18 @@ class Presence {
 		});
 	}
 
-	/** Read every multisig not shown again (one round at a time). Quiet on failure. */
+	/** Read every multisig not shown again (the machine's `others_tick`: one round at a time). */
 	refreshOthers(): Promise<void> {
-		if (this.#reading) return this.#reading;
-		this.#reading = (async () => {
-			if (serviceOutage.blocked()) return;
-			for (const account of multisig.accounts) {
-				if (sameAddress(proposals.followed, account.address)) continue;
-				const read = await readOther(account).catch(() => null);
-				if (read) this.#others = { ...this.#others, [account.address.toLowerCase()]: read };
-			}
-		})().finally(() => (this.#reading = null));
-		return this.#reading;
+		return proposalsHost.othersTick();
 	}
 
 	/**
-	 * Read the others now and every {@link OTHERS_EVERY_MS} while the page is
-	 * shown. Returns the stop.
+	 * Read the others now and every `OTHERS_EVERY_MS` while the page is
+	 * shown, and when it is shown again. Returns the stop.
 	 */
 	follow(): () => void {
-		const run = () => {
-			if (document.visibilityState === 'visible') void this.refreshOthers();
-		};
-		run();
-		const timer = setInterval(run, OTHERS_EVERY_MS);
-		document.addEventListener('visibilitychange', run);
-		return () => {
-			clearInterval(timer);
-			document.removeEventListener('visibilitychange', run);
-		};
+		return proposalsHost.followOthers();
 	}
-}
-
-/** One multisig not shown: its proposals on every network it has some on, read as the shown one's are. */
-async function readOther(account: MultisigAccount): Promise<Waiting | null> {
-	const all = await fetchAllProposals(account.address, { background: true });
-	// An older service has no cross-chain list: nothing is said rather than a guess.
-	if (!all) return null;
-	if (all.proposals.length === 0) return NOTHING_WAITING;
-	const split = splitListed(all.proposals, account.chainIds);
-	const items: ProposalItem[] = [];
-	for (const [chainId, listed] of split.lists) {
-		if (!split.used.includes(chainId)) continue;
-		const chain = await readChain(account, chainId, null, { background: true, listed });
-		items.push(...chain.items);
-	}
-	return waitingOf(items);
 }
 
 export const presence = new Presence();
