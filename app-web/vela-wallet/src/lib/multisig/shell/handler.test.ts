@@ -214,6 +214,57 @@ describe('the multisig shell', () => {
 		});
 	});
 
+	it('a node’s error code and a wallet’s 4001 reach the machine as the numbers they are', async () => {
+		// The generated types spell these `i64` codes `bigint`; the wire is JSON:
+		// what the core is handed back must be the number, never a string or a throw.
+		const resolved: string[] = [];
+		const operations: MultisigOperation[] = [
+			{ type: 'rpc', chain_id: 100, method: 'eth_call', params: [], bound_ms: null },
+			{ type: 'wallet_request', method: 'eth_sign', params: [] }
+		];
+		let next = 0;
+		const core = {
+			view: () => '{}',
+			dispatch: () =>
+				JSON.stringify({
+					view: {},
+					effects: operations.map((operation, i) => ({ id: i + 1, operation }))
+				}),
+			resolve_effect: (_id: bigint, result: string) => {
+				resolved.push(result);
+				next += 1;
+				return JSON.stringify({ view: {}, effects: [] });
+			},
+			free: () => {}
+		};
+		const shell = multisigShell(
+			deps({
+				rpc: async () => ({ error: { code: -32000, message: 'execution reverted' } }),
+				wallet: async () => {
+					throw { code: 4001, message: 'User rejected' };
+				}
+			})
+		);
+		const loop = createJsonWasmShell<unknown, unknown, MultisigEffect, MultisigShellResult>(core, {
+			onView: () => {},
+			execute: shell.execute,
+			toFailure: shell.toFailure,
+			onError: (error) => {
+				throw error;
+			}
+		});
+		loop.dispatch({});
+		await vi.waitFor(() => expect(next).toBe(2));
+		// Both answered (in whichever order their pipelines came back).
+		expect(resolved.map((r) => JSON.parse(r))).toEqual(
+			expect.arrayContaining([
+				{ type: 'rpc_error', code: -32000, message: 'execution reverted' },
+				{ type: 'wallet_refused', code: 4001, message: 'User rejected' }
+			])
+		);
+		loop.dispose();
+	});
+
 	it('answers every operation’s own failure when its pipeline threw', () => {
 		const cases: [MultisigOperation, MultisigShellResult['type']][] = [
 			[{ type: 'http', method: 'GET', url: 'x', body: null, timeout_ms: 1 }, 'http_unreachable'],

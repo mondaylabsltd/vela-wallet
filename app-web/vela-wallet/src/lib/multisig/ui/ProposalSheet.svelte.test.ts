@@ -14,7 +14,7 @@
  */
 import { tick } from 'svelte';
 import type { SigningMessages } from '$lib/signing/messages';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
@@ -30,7 +30,6 @@ const USDC = '0x00000000000000000000000000000000000000c0';
 
 const fake = vi.hoisted(() => ({
 	chain: null as any,
-	draft: null as any,
 	calls: [] as string[],
 	execution: null as any,
 	refused: false,
@@ -78,7 +77,13 @@ const fake = vi.hoisted(() => ({
 	/** The person's Retry on what the machine could not read. */
 	retried: 0,
 	/** The machine's draft, while a review-first sheet shows it (§3.6). */
-	machineDraft: null as any
+	machineDraft: null as any,
+	/** What "Propose and approve" on a dApp's draft comes to (the machine's `propose` state). */
+	confirmed: null as any,
+	/** Told when a dApp's draft is confirmed: the host's sheet then shows the proposal. */
+	onConfirm: null as null | (() => Promise<void>),
+	/** ms-21: a link's transaction read only, as the machine's `linked` reads (`linkedSource`). */
+	linkedSource: null as any
 }));
 
 /**
@@ -92,10 +97,12 @@ const view = vi.hoisted(() => ({
 	key: (hash: string) => `100:${hash.toLowerCase()}`
 }));
 vi.mock('../core/proposals.svelte', async () => {
-	const { machineSeam, machineLook } = await import('./proposal-sheet.testing.svelte');
-	const { timelineOf } = await import('../core/timeline');
+	const { machineSeam, machineLook, machineTimeline } =
+		await import('./proposal-sheet.testing.svelte');
+	/** The shown multisig's network, or a link's read only (ms-21). */
+	const chainNow = () => fake.chain ?? fake.linkedSource?.chain(100) ?? null;
 	const shownItem = () =>
-		(fake.chain?.items ?? []).find((i: any) => i.safeTxHash.toLowerCase() === HASH) ?? null;
+		(chainNow()?.items ?? []).find((i: any) => i.safeTxHash.toLowerCase() === HASH) ?? null;
 	const machineView = () => {
 		const item = shownItem();
 		const key = view.key(HASH);
@@ -103,7 +110,7 @@ vi.mock('../core/proposals.svelte', async () => {
 		for (const [owner, look] of Object.entries(fake.previews)) {
 			previews[`${key}:${owner.toLowerCase()}`] = machineLook(look);
 		}
-		const owners: string[] = fake.chain?.members.owners ?? [];
+		const owners: string[] = chainNow()?.members.owners ?? [];
 		const kindOf = (a: string) =>
 			a.toLowerCase() === ME
 				? 'here'
@@ -119,21 +126,7 @@ vi.mock('../core/proposals.svelte', async () => {
 			.map((owner) => ({ owner, kind: kindOf(owner) }));
 		const timelines: Record<string, unknown> = {};
 		if (item?.status === 'done' && typeof fake.executed === 'string') {
-			timelines[key] = timelineOf(item, fake.executed, fake.frozen).map((s: any) =>
-				s.kind === 'created'
-					? { kind: 'created', who: s.who, at_ms: s.atMs }
-					: s.kind === 'approved'
-						? {
-								kind: 'approved',
-								who: s.who,
-								at_ms: s.atMs,
-								counted: s.counted,
-								by_executing: s.byExecuting,
-								unsent: false,
-								on_chain: false
-							}
-						: { kind: 'executed', who: s.who, tx_hash: s.txHash, at_ms: s.atMs }
-			);
+			timelines[key] = machineTimeline(item, fake.executed, fake.frozen);
 		} else if (item?.status === 'done' && fake.executed === null) {
 			const cancel = item.cancelledBy;
 			timelines[key] = [
@@ -202,8 +195,7 @@ vi.mock('../core/proposals.svelte', async () => {
 			}
 		},
 		itemOf: (i: unknown) => i,
-		approveExternally: async () => void fake.calls.push('external'),
-		draftCalls: async () => fake.draft
+		linkedSource: () => fake.linkedSource
 	};
 });
 /**
@@ -290,9 +282,9 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 			}
 			return null;
 		},
-		async until(pick: (v: unknown) => unknown) {
+		async until(pick: (v: any) => unknown) {
 			for (let i = 0; i < 20; i += 1) {
-				const found = pick(null);
+				const found = pick({ actions: machineSeam.actions, items: fake.chain?.items ?? [] });
 				if (found !== null && found !== undefined) return found;
 				await new Promise((r) => setTimeout(r, 0));
 			}
@@ -303,7 +295,14 @@ vi.mock('../shell/proposals-host.svelte', async () => {
 			if (fake.approveError) throw new ProposeFailedError(stateOf(fake.approveError), 100);
 			return { safeTxHash: HASH };
 		},
-		confirmDraft: (as: string | null) => void fake.calls.push(`confirm:${as}`),
+		confirmDraft: (as: string | null) => {
+			fake.calls.push(`confirm:${as}`);
+			// A dApp's draft: proposed, then shown as the proposal it became.
+			if (fake.confirmed) {
+				settle('propose', fake.confirmed);
+				void fake.onConfirm?.();
+			}
+		},
 		withdrawDraft: () => void fake.calls.push('withdraw')
 	};
 	return { proposalsHost: host, ProposeFailedError };
@@ -436,21 +435,6 @@ vi.mock('../core/preflight.svelte', () => ({
 }));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
 vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
-// How each member signs: this device's, a Vela account the index knows, else a plain wallet.
-vi.mock('../core/signers.svelte', () => ({
-	signers: {
-		kindOf: (_chain: number, a: string) =>
-			a.toLowerCase() === ME
-				? 'here'
-				: fake.vela.includes(a)
-					? 'vela'
-					: fake.unsure.includes(a)
-						? 'unsure'
-						: fake.contract.includes(a)
-							? 'contract'
-							: 'wallet'
-	}
-}));
 vi.mock('../core/owners', () => ({
 	PasskeyCheckError: class extends Error {},
 	localOwners: (owners: string[]) =>
@@ -460,11 +444,6 @@ vi.mock('../core/owners', () => ({
 }));
 vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6), isVela: (a: string) => fake.vela.includes(a) }
-}));
-// A rename executed here reads the record's new name: not this sheet's test.
-vi.mock('../core/records', () => ({
-	findExecution: async (_safe: string, _chain: number, hash: string) =>
-		hash in fake.executedBy ? fake.executedBy[hash] : fake.executed
 }));
 vi.mock('../core/display', () => ({
 	actionRecipient: (a: any) => a?.to ?? null,
@@ -508,21 +487,6 @@ vi.mock('../core/kernel', () => {
 	};
 });
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('../core/executed', () => ({
-	factsOfExecution: (
-		approvers: string[],
-		executor: string,
-		approves: boolean,
-		threshold: number
-	) => ({
-		executor,
-		threshold,
-		approvers: approves ? [...approvers, executor] : approvers,
-		executorApproved: approves
-	}),
-	frozenFacts: async () => fake.frozen,
-	rememberExecution: (...args: any[]) => void fake.remembered.push(args)
-}));
 vi.mock('$lib/services/token-provenance', () => ({
 	provenanceNote: () => fake.tokenNote
 }));
@@ -532,6 +496,10 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
 }));
 
 const { default: ProposalSheet } = await import('./ProposalSheet.svelte');
+const { loadCore } = await import('$lib/core/client');
+
+// The links are the core's codec: loaded, as the wallet loads it before any sheet.
+beforeAll(() => loadCore());
 const { resetMachineSeam, sentLog } = await import('./proposal-sheet.testing.svelte');
 
 /** The events of `type` the sheet sent the machine. */
@@ -670,8 +638,10 @@ beforeEach(() => {
 	fake.chain = { chainId: 100, members, items: [item()], mailbox: true };
 	fake.retried = 0;
 	fake.machineDraft = null;
+	fake.confirmed = null;
+	fake.onConfirm = null;
+	fake.linkedSource = null;
 	resetMachineSeam();
-	fake.draft = { chain: { chainId: 100, members, items: [], mailbox: true }, item: item() };
 	reviewSeam.review = null;
 	reviewSeam.refreshed = 0;
 });
@@ -761,23 +731,37 @@ describe('one review, every signer, every action (§3.6)', () => {
 	});
 });
 
+/** A dApp's request as the machine holds it (`view.dapp[rid]`). */
+function held(over: Record<string, unknown> = {}) {
+	return {
+		id: 'r1',
+		method: 'eth_sendTransaction',
+		origin: 'https://app.example',
+		chain_id: 100,
+		safe: SAFE,
+		stage: 'reviewing',
+		calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
+		safe_tx_hash: null,
+		nonce: null,
+		tell_at: null,
+		told: false,
+		refusal: null,
+		answer: null,
+		...over
+	} as any;
+}
+
+/** Its sheet: the held request, the claim before the passkey (RB5). */
+function dappSheet(over: Record<string, unknown> = {}, claim = async () => true) {
+	return { rid: 'r1', held: held(over), claim, retry: () => {} };
+}
+
 describe("a dApp's transaction from a multisig (dapp-1)", () => {
 	it('is reviewed first: what the site asks, and nothing signed until Propose and approve', async () => {
-		const propose = vi.fn(async () => HASH);
-		const decline = vi.fn();
-		const draft = {
-			rid: 'r1',
-			address: SAFE,
-			chainId: 100,
-			method: 'eth_sendTransaction',
-			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
-			origin: 'https://app.example',
-			safeTxHash: null,
-			propose,
-			decline,
-			close: () => {}
-		};
-		const screen = show({ draft, safeTxHash: '' });
+		fake.machineDraft = draftOf(item(), [ME]);
+		fake.confirmed = { kind: 'done', safe_tx_hash: HASH, kept: false };
+		const claim = vi.fn(async () => true);
+		const screen = show({ dapp: dappSheet({}, claim), safeTxHash: '' });
 		await settle();
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('app.example asks for this transaction.');
@@ -790,14 +774,39 @@ describe("a dApp's transaction from a multisig (dapp-1)", () => {
 		// No approval, invite or withdrawal of a transaction that does not exist yet.
 		expect(buttons()).not.toContain('proposal.approve');
 		expect(buttons()).not.toContain('proposal.reject');
-		expect(propose).not.toHaveBeenCalled();
+		expect(fake.calls).toEqual([]);
 
 		press('send.propose');
 		await settle();
-		expect(propose).toHaveBeenCalledTimes(1);
+		// RB5: asked whether the request is still live, then the machine's draft confirmed.
+		expect(claim).toHaveBeenCalledTimes(1);
+		expect(fake.calls).toEqual([`confirm:${ME}`]);
 
 		press('external.decline');
-		expect(decline).toHaveBeenCalledTimes(1);
+		expect(machineSent('dapp_leave')).toEqual([{ type: 'dapp_leave', id: 'r1' }]);
+		await screen.unmount();
+	});
+
+	it('a page gone before the passkey: nothing is confirmed', async () => {
+		fake.machineDraft = draftOf(item(), [ME]);
+		const screen = show({ dapp: dappSheet({}, async () => false), safeTxHash: '' });
+		await settle();
+		press('send.propose');
+		await settle();
+		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
+	it('its review could not be drawn: why, with Decline and Retry', async () => {
+		resetMachineSeam();
+		const { machineSeam } = await import('./proposal-sheet.testing.svelte');
+		machineSeam.actions = { propose: { kind: 'mailboxUnreadable' } };
+		const retry = vi.fn();
+		const screen = show({ dapp: { ...dappSheet(), retry }, safeTxHash: '' });
+		await settle();
+		expect(document.body.textContent).toContain('proposal.mailboxDown');
+		press('external.retry');
+		expect(retry).toHaveBeenCalledTimes(1);
 		await screen.unmount();
 	});
 });
@@ -807,10 +816,7 @@ describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, 
 		const TX = `0x${'cd'.repeat(32)}`;
 		const one = { ...members, threshold: 1 };
 		const mine = [{ owner: ME, counts: true, approval: {}, createdMs: 1 }];
-		fake.draft = {
-			chain: { chainId: 100, members: one, items: [], mailbox: true },
-			item: item({ threshold: 1, canExecute: [local] })
-		};
+		fake.machineDraft = draftOf(item({ threshold: 1, canExecute: [local] }), [ME]);
 		fake.chain = {
 			chainId: 100,
 			members: one,
@@ -827,37 +833,27 @@ describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, 
 			]
 		};
 		fake.execution = { maybeSent: false, userOpHash: '0x01', waitForTxHash: async () => TX };
-		const executed = vi.fn();
-		const base = {
-			rid: 'r1',
-			address: SAFE,
-			chainId: 100,
-			method: 'eth_sendTransaction',
-			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
-			origin: 'https://app.example',
-			safeTxHash: null as string | null,
-			decline: () => {},
-			close: () => {},
-			executed
-		};
 		let screen: ReturnType<typeof show> | null = null;
-		const draft = {
-			...base,
-			// What the host does once it is in the mailbox: the sheet shows the proposal.
-			propose: async () => {
-				await screen?.rerender({ draft: { ...draft, safeTxHash: HASH }, safeTxHash: HASH });
-				return HASH;
-			}
+		const sheet = dappSheet();
+		// The machine proposed it; the host's sheet then shows the proposal it became.
+		fake.confirmed = { kind: 'done', safe_tx_hash: HASH, kept: false };
+		fake.onConfirm = async () => {
+			await screen?.rerender({
+				dapp: { ...sheet, held: { ...sheet.held, stage: 'waiting', safe_tx_hash: HASH } },
+				safeTxHash: HASH
+			});
 		};
-		screen = show({ draft, safeTxHash: '' });
+		screen = show({ dapp: sheet, safeTxHash: '' });
 		await settle();
 		// One door, worded for what it does: no wait for approvals nobody else gives.
 		expect(buttons()).toContain('proposal.approveAndExecute');
 		expect(buttons()).not.toContain('send.propose');
 		press('proposal.approveAndExecute');
 		await settle();
-		expect(fake.calls).toEqual(['execute']);
-		expect(executed).toHaveBeenCalledWith(TX);
+		await settle();
+		// Proposed, then executed: the machine answers the site with the transaction.
+		expect(fake.calls).toEqual([`confirm:${ME}`, 'execute']);
+		expect(machineSent('execute')).toHaveLength(1);
 		await screen.unmount();
 	});
 
@@ -871,24 +867,12 @@ describe("a dApp's eth_sendTransaction its proposer alone makes ready (round 3, 
 		];
 		const words2 = words();
 		words2.proposal.stillNeeded = 'needed {{missing}}';
-		const draft = {
-			rid: 'r1',
-			address: SAFE,
-			chainId: 100,
-			method: 'eth_sendTransaction',
-			calls: [{ to: TO, value: '0x0', data: '0x' }],
-			origin: 'https://app.example',
-			safeTxHash: HASH,
-			propose: async () => HASH,
-			decline: () => {},
-			close: () => {},
-			executed: () => {}
-		};
-		const screen = show({ draft, m: words2 });
+		const sheet = dappSheet({ stage: 'waiting', safe_tx_hash: HASH });
+		const screen = show({ dapp: sheet, m: words2 });
 		await settle();
 		expect(document.body.textContent).toContain('needed 1');
 		expect(document.body.textContent).toContain('proposal.siteWaits');
-		await screen.rerender({ draft: { ...draft, siteTold: true } });
+		await screen.rerender({ dapp: { ...sheet, held: { ...sheet.held, told: true } } });
 		await settle();
 		expect(document.body.textContent).toContain('proposal.siteTold');
 		expect(document.body.textContent).not.toContain('proposal.siteWaits');
@@ -1181,11 +1165,12 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 	});
 
 	it('is read from its own source, says no member is here, and offers the two ways on', async () => {
-		// The shown multisig's list has nothing: the sheet reads the link's source.
+		// The shown multisig's list has nothing: the sheet reads the machine's `linked`.
 		fake.chain = null;
+		fake.linkedSource = linked();
 		const onwatch = vi.fn();
 		const screen = show({
-			source: linked(),
+			preview: true,
 			watch: { added: false, onwatch },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1205,8 +1190,9 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 
 	it('kept here: said, and no second Watch', async () => {
 		fake.chain = null;
+		fake.linkedSource = linked();
 		const screen = show({
-			source: linked(),
+			preview: true,
 			watch: { added: true, onwatch: () => {} },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1216,11 +1202,11 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		await screen.unmount();
 	});
 
-	it('an outside approval re-reads the link’s source, not the shown multisig’s', async () => {
+	it('an outside approval is the machine’s, on the link’s transaction', async () => {
 		fake.chain = null;
-		const refresh = vi.fn(async () => {});
+		fake.linkedSource = linked();
 		const screen = show({
-			source: linked(refresh),
+			preview: true,
 			watch: { added: false, onwatch: () => {} },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1231,7 +1217,9 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		external.click();
 		await settle();
 		expect(fake.calls).toContain('external');
-		expect(refresh).toHaveBeenCalled();
+		expect(machineSent('approve_outside')).toEqual([
+			{ type: 'approve_outside', chain_id: 100, safe_tx_hash: HASH }
+		]);
 		await screen.unmount();
 	});
 });
@@ -1817,25 +1805,6 @@ describe('a transfer of an unverified token', () => {
 });
 
 describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)', () => {
-	it('a link’s own source is kept fresh while shown, and stops when closed', async () => {
-		const stop = vi.fn();
-		const watch = vi.fn(() => stop);
-		const screen = show({
-			source: {
-				loading: false,
-				unreadable: [],
-				chain: () => fake.chain,
-				refresh: async () => {},
-				watch
-			},
-			watch: { added: false, onwatch: () => {} }
-		});
-		await settle();
-		expect(watch).toHaveBeenCalledTimes(1);
-		await screen.unmount();
-		expect(stop).toHaveBeenCalledTimes(1);
-	});
-
 	it('never "3/2": the approvals counted up to the threshold', async () => {
 		fake.chain.items = [item({ approved: 3, threshold: 2, status: 'ready', canApprove: [] })];
 		const m = words();
@@ -2173,23 +2142,9 @@ describe('a dApp’s transaction on a device with no member (r4C-10)', () => {
 	it('says "Propose", never "Propose and approve": nobody here approves it', async () => {
 		const THIRD = '0x00000000000000000000000000000000000000cc';
 		const strangers = { owners: [OTHER, THIRD], threshold: 2, nonce: 0n, deployed: true };
-		fake.draft = {
-			chain: { chainId: 100, members: strangers, items: [], mailbox: true },
-			item: item({ canApprove: [], canExecute: [] })
-		};
-		const draft = {
-			rid: 'r1',
-			address: SAFE,
-			chainId: 100,
-			method: 'eth_sendTransaction',
-			calls: [{ to: TO, value: '0x0', data: '0x095ea7b3' }],
-			origin: 'https://app.example',
-			safeTxHash: null,
-			propose: async () => HASH,
-			decline: () => {},
-			close: () => {}
-		};
-		const screen = show({ draft, safeTxHash: '' });
+		fake.chain = { chainId: 100, members: strangers, items: [], mailbox: true };
+		fake.machineDraft = draftOf(item({ canApprove: [], canExecute: [] }), []);
+		const screen = show({ dapp: dappSheet(), safeTxHash: '' });
 		await settle();
 		expect(buttons()).toContain('send.proposeOnly');
 		expect(buttons()).not.toContain('send.propose');

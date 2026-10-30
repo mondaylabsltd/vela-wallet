@@ -43,7 +43,6 @@
 	import type { MultisigMessages } from '../messages';
 	import type { Finding } from '../core/refusal';
 	import { indexName, missingTitle } from '../core/activity.svelte';
-	import { keepLink } from '../core/kept-link';
 	import { sameAddress, type ExportedSafe } from '../core/kernel';
 	import { addLink, type AddLink, type InvitedMember } from '../core/link';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
@@ -202,7 +201,7 @@
 				chainIds: link.chainIds,
 				members: link.members ?? []
 			});
-			keepLink(new URL(again).hash);
+			multisig.send({ type: 'keep_link', hash: new URL(again).hash });
 		}
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Settings, resolved, with its query
 		void goto(`${resolve('/[locale]/settings', { locale })}?addNetwork=${chainId}`);

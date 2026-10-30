@@ -97,3 +97,65 @@ export function machineLook(look: unknown): unknown {
 		JSON.stringify(look, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))
 	) as unknown;
 }
+
+const known = (ms: number | undefined) => (typeof ms === 'number' && ms > 0 ? ms : null);
+const same = (a: string | null | undefined, b: string | null | undefined) =>
+	!!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+/**
+ * An executed proposal's story as the machine tells it (`timelines`; Rust:
+ * `created_each_approval_in_order_then_executed` and its neighbours in
+ * app_multisig_presence.rs): created, each approval in order with whether
+ * it counted, the executor's own step, then executed.
+ */
+export function machineTimeline(
+	item: {
+		proposer: string;
+		createdMs?: number;
+		approvals: { owner: string; counts: boolean; createdMs?: number }[];
+	},
+	txHash: string,
+	frozen: {
+		approvers: string[];
+		executor: string | null;
+		executorApproved: boolean;
+		atMs: number | null;
+	} | null
+): unknown[] {
+	const steps: unknown[] = [{ kind: 'created', who: item.proposer, at_ms: known(item.createdMs) }];
+	const given = [...item.approvals]
+		.filter((a) => a.counts || frozen?.approvers.some((o) => same(o, a.owner)))
+		.sort((a, b) => (known(a.createdMs) ?? Infinity) - (known(b.createdMs) ?? Infinity));
+	const approved = (who: string, at: number | null, counted: boolean | null, by: boolean) => ({
+		kind: 'approved',
+		who,
+		at_ms: at,
+		counted,
+		by_executing: by,
+		unsent: false,
+		on_chain: false
+	});
+	for (const a of given) {
+		const counted = frozen ? frozen.approvers.some((o) => same(o, a.owner)) : null;
+		steps.push(approved(a.owner, known(a.createdMs), counted, false));
+	}
+	for (const owner of frozen?.approvers ?? []) {
+		if (given.some((a) => same(a.owner, owner))) continue;
+		const executor = !!frozen?.executor && same(frozen.executor, owner);
+		steps.push(
+			approved(
+				owner,
+				executor ? (frozen?.atMs ?? null) : null,
+				true,
+				executor && !!frozen?.executorApproved
+			)
+		);
+	}
+	steps.push({
+		kind: 'executed',
+		who: frozen?.executor ?? null,
+		tx_hash: txHash,
+		at_ms: frozen?.atMs ?? null
+	});
+	return steps;
+}

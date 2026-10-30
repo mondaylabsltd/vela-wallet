@@ -34,7 +34,6 @@
 	import { sameAddress, type Action, type MemberRefusal, type MemberVerdict } from '../core/kernel';
 	import { proposeChange } from '../core/member-propose';
 	import { names } from '../core/names.svelte';
-	import { proposals } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import type { MultisigChangeGroup } from '../generated/MultisigChangeGroup';
@@ -53,9 +52,9 @@
 
 	const mm = $derived(m.members);
 
-	// The members machine is shown this multisig, and told what it reads.
+	// The members machine is shown this multisig, and told what it reads (the
+	// proposals waiting are the proposals machine's, fed by the one host).
 	$effect(() => machines.showMembers(account, multisig.accounts));
-	$effect(() => machines.membersWaiting(proposals.items));
 	$effect(() => machines.membersContacts(contactsBook.view?.contacts ?? []));
 
 	/** The machine's view, once it shows this multisig. */

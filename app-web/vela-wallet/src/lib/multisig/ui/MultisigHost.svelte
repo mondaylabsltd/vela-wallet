@@ -1,39 +1,32 @@
 <script lang="ts">
 	/**
 	 * The multisig side of the wallet page: boots the store, follows the
-	 * active multisig's proposals, answers the two links (`#ms=` opens a
-	 * transaction to approve, `#msa=` adds a multisig) and draws whichever
-	 * multisig sheet is open. The page stays the session's; this only adds.
+	 * active multisig's proposals, hands the two links (`#ms=` opens a
+	 * transaction to approve, `#msa=` adds a multisig) to the accounts
+	 * machine's one link flow and draws where it stands (`link`), and draws
+	 * whichever multisig sheet is open. The page stays the session's; this
+	 * only adds.
 	 *
 	 * ms-21: a `#ms=` link on a device with none of the multisig's members
 	 * adds nothing and switches nothing — its transaction is shown, read
-	 * only, and following it here is the person's tap.
+	 * only (the proposals machine's `linked`), and following it here is the
+	 * person's tap.
 	 */
 	import { replaceUrl } from '$lib/ui/history';
 	import { onMount, untrack } from 'svelte';
+	import type { MultisigLinkStand } from '../generated/MultisigLinkStand';
+	import type { MultisigNotice } from '../generated/MultisigNotice';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
-	import { openProposalLink } from '../core/linked.svelte';
-	import {
-		addLinkFault,
-		brokenLink,
-		brokenLinkText,
-		carriedLinkHash,
-		isMultisigLink,
-		parseAddLink,
-		parseProposalLink,
-		type AddLink,
-		type ProposalLink
-	} from '../core/link';
-	import { keepLink, takeKeptLink } from '../core/kept-link';
+	import { isMultisigLink, type AddLink } from '../core/link';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
-	import { hasNetwork, proposals } from '../core/proposals.svelte';
+	import { proposals } from '../core/proposals.svelte';
 	import { proposalsHost } from '../shell/proposals-host.svelte';
-	import { recordExecution, useRecordWords } from '../core/records';
+	import { useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
 	import { machines } from '../shell/machines.svelte';
@@ -82,11 +75,8 @@
 	let addPrefill = $state('');
 	/** r4b-13: what the link's own lookup found, said at once in the add sheet. */
 	let addFailure = $state<string | null>(null);
-	/**
-	 * ms-22: a link's transaction, waiting for its multisig to be added (the
-	 * service could not find it at once): opened once it is.
-	 */
-	let pendingLink: ProposalLink | null = null;
+	/** The person closed "Opening…": the link's transaction opens over nothing they do now. */
+	let leftLink = false;
 
 	/**
 	 * The outside wallet's sheet, fetched the first time an approval is asked
@@ -124,20 +114,15 @@
 		// record of an older registry's). The accounts machine's `tick` and
 		// `check_records`.
 		const stopRecords = machines.followRecords();
-		void resumeLink();
-		// r4b-9: a link opened before this device had an account opens now.
-		if (takeKept) {
-			// A link in the address is the one answered; the same link kept on
-			// the way here (Welcome keeps it, and carries it too) is spent with it.
-			const kept = takeKeptLink();
-			if (!isMultisigLink(location.hash)) {
-				if (kept) replaceUrl(location.pathname + location.search + kept);
-			} else if (kept && carriedLinkHash(kept) !== carriedLinkHash(location.hash)) keepLink(kept);
-		}
-		void answerLink();
-		const onhash = () => void answerLink();
+		// A link's transaction, opened by the accounts machine (`Notice::OpenProposal`).
+		machines.onproposal = openedProposal;
+		// r4b-9: a link opened before this device had an account opens now — a
+		// link in the address is the one answered, one kept on the way is kept.
+		void answerLink(takeKept);
+		const onhash = () => void answerLink(false);
 		window.addEventListener('hashchange', onhash);
 		return () => {
+			if (machines.onproposal === openedProposal) machines.onproposal = null;
 			detachRisk();
 			// §3.6: a review nobody can see any more is withdrawn — nothing is signed.
 			proposalsHost.withdrawDraft();
@@ -188,36 +173,114 @@
 		replaceUrl(location.pathname + location.search);
 	}
 
-	/** A link someone sent: a transaction to approve, or a multisig to add. */
-	async function answerLink() {
-		const broken = brokenLink(location.hash);
-		if (broken) {
-			// ms-22, r4b-13: a damaged link is said at once, not ignored. A broken
-			// invite shows what it held in the add sheet, with what is wrong
-			// with it already said.
-			const raw = brokenLinkText(location.hash);
-			// r5reg-22: an address whose letters were changed is said as such.
-			const fault = addLinkFault(location.hash) ?? 'damaged';
-			clearHash();
-			if (broken === 'add') multisigUi.open({ kind: 'add', broken: raw, fault });
-			else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
-			return;
+	/**
+	 * A link someone sent — a transaction to approve, a multisig to add, or
+	 * one damaged on the way — or (`takeKept`) the one kept while this device
+	 * had no account: the accounts machine's one flow reads it, finds the
+	 * multisig, keeps it only where a member is here, and says where it
+	 * stands (`link`, drawn below).
+	 */
+	async function answerLink(takeKept: boolean) {
+		const hash = location.hash;
+		const meant = isMultisigLink(hash);
+		if (!meant && !takeKept) return;
+		if (meant) clearHash();
+		leftLink = false;
+		await multisig.boot();
+		multisig.send({ type: 'open_link', hash: meant ? hash : '', take_kept: takeKept });
+	}
+
+	/** Where the link stands, drawn once each (the machine's `link`). */
+	let drawn: string | null = null;
+	$effect(() => {
+		const stand = machines.accounts?.view.link ?? null;
+		const key = stand ? JSON.stringify(stand) : null;
+		if (key === drawn) return;
+		drawn = key;
+		if (stand) untrack(() => drawLink(stand));
+	});
+
+	function drawLink(stand: MultisigLinkStand) {
+		switch (stand.kind) {
+			case 'broken':
+				// ms-22, r4b-13: a damaged link is said at once, not ignored. A broken
+				// invite shows what it held in the add sheet, with what is wrong with
+				// it already said (r5reg-22: an address whose letters were changed).
+				if (stand.link === 'add') {
+					multisigUi.open({ kind: 'add', broken: stand.text, fault: stand.fault ?? 'damaged' });
+				} else multisigUi.open({ kind: 'notice', text: m.proposal.badLink });
+				break;
+			case 'invite':
+				// r4D-4: its networks and its members' labels ride along; adding
+				// is still the person's tap (r4b-8).
+				multisigUi.open({ kind: 'add', link: stand.link });
+				break;
+			case 'missingNetwork':
+				// ms-22: said, with Add network; the multisig is not added for it.
+				// The machine opens the link again once the network is here.
+				multisigUi.open({ kind: 'missing', chainId: stand.link.chainId, link: stand.link });
+				break;
+			case 'opening':
+				// Reading the multisig may take a while (ms-16): said, never a blank wait.
+				multisigUi.open({ kind: 'notice', text: m.proposal.opening });
+				return;
+			case 'preview':
+				// ms-21: already kept here (to follow), or not.
+				watched = stand.kept;
+				break;
+			case 'failed': {
+				// ms-22: the person adds it themselves; its transaction opens then.
+				// r4b-13: what the lookup found is said at once, not looked up again.
+				// §3.5: who can act for it (refused, high risk, not checkable yet) is
+				// the add sheet's own lookup to say, with every reason — not a line.
+				const reason = stand.reason.kind;
+				addPrefill = stand.link.multisig;
+				addFailure =
+					reason === 'refused' ||
+					reason === 'highRisk' ||
+					reason === 'unverified' ||
+					reason === 'added' ||
+					reason === 'chooseNetwork'
+						? null
+						: m.add[reason];
+				multisigUi.open({ kind: 'add' });
+				break;
+			}
+			case 'member':
+			case 'kept':
+				break;
 		}
-		const proposal = parseProposalLink(location.hash);
-		const adding = parseAddLink(location.hash);
-		if (!proposal && !adding) return;
-		clearHash();
-		if (adding) {
-			// r4D-4: its networks and its members' labels ride along; adding
-			// is still the person's tap (r4b-8).
-			multisigUi.open({ kind: 'add', link: adding });
-			return;
-		}
-		if (!proposal) return;
-		await openProposal(proposal);
+		multisig.send({ type: 'close_link' });
 	}
 
 	/**
+	 * The machine opened a link's transaction: on its multisig, shown here
+	 * now (a member is here) — or, with none here, read only (ms-21), the
+	 * proposals machine reading it (`open_linked`). Not over whatever the
+	 * person turned to after closing "Opening…".
+	 */
+	function openedProposal(notice: Extract<MultisigNotice, { kind: 'open_proposal' }>) {
+		if (leftLink) return;
+		const chainId = notice.chain_id;
+		const safeTxHash = notice.safe_tx_hash;
+		if (notice.preview) {
+			const account = notice.preview as MultisigAccount;
+			proposalsHost.send({
+				type: 'open_linked',
+				chain_id: chainId,
+				safe_tx_hash: safeTxHash,
+				preview: $state.snapshot(account) as never
+			});
+			multisigUi.open({ kind: 'preview', chainId, safeTxHash, account });
+			return;
+		}
+		multisigUi.open({ kind: 'proposal', chainId, safeTxHash });
+		const fresh = multisig.find(notice.address);
+		if (fresh) void proposals.refresh(fresh, fresh.chainIds);
+	}
+
+	/**
+	 * r4D-5: what an invite says of the members	/**
 	 * r4D-5: what an invite says of the members, kept with the multisig on
 	 * this device — only for addresses that are its members (founding, or on
 	 * the invite's networks now), never over this device's own names. Labels
@@ -237,74 +300,6 @@
 		});
 	}
 
-	/** A proposal link's transaction (from the hash, or kept while its network was added). */
-	async function openProposal(proposal: ProposalLink) {
-		// ms-22: a network this device does not have (built in or added) is
-		// said, with Add network; the multisig is not added for it, nor the
-		// network taken into its list. The link opens again once it is added.
-		if (!hasNetwork(proposal.chainId)) {
-			multisigUi.open({ kind: 'missing', chainId: proposal.chainId, link: proposal });
-			return;
-		}
-		// Reading the multisig may take a while (ms-16): said, never a blank wait.
-		multisigUi.open({ kind: 'notice', text: m.proposal.opening });
-		const opening = await openProposalLink(proposal);
-		// Closed meanwhile: the person left it; nothing opens over what they do now.
-		const sheetNow = multisigUi.sheet;
-		if (sheetNow?.kind !== 'notice' || sheetNow.text !== m.proposal.opening) return;
-		if (opening.kind === 'failed') {
-			// ms-22: the person adds it themselves; its transaction opens then.
-			// r4b-13: what the lookup found is said at once, not looked up again.
-			// §3.5: who can act for it (refused, high risk, not checkable yet) is
-			// the add sheet's own lookup to say, with every reason — not a line.
-			addPrefill = proposal.multisig;
-			addFailure =
-				opening.reason === 'refused' ||
-				opening.reason === 'highRisk' ||
-				opening.reason === 'unverified'
-					? null
-					: m.add[opening.reason];
-			pendingLink = proposal;
-			multisigUi.open({ kind: 'add' });
-			return;
-		}
-		if (opening.kind === 'member') {
-			// A member is here: kept (if new) and shown, as a member's link always was.
-			const account = opening.added
-				? opening.account
-				: ((await multisig.keepFound(opening.account.address)) ?? opening.account);
-			openLinked(account.address, proposal);
-			return;
-		}
-		// ms-21: none is — the transaction alone. Nothing added, nothing switched.
-		watched = opening.added;
-		multisigUi.open({
-			kind: 'preview',
-			chainId: proposal.chainId,
-			safeTxHash: proposal.safeTxHash,
-			source: opening.source
-		});
-	}
-
-	/** A link whose network the person went to add: opened again once it is there. */
-	const PENDING_LINK_KEY = 'vela.multisigPendingLink';
-
-	async function resumeLink() {
-		let kept: ProposalLink | null;
-		try {
-			kept = JSON.parse(sessionStorage.getItem(PENDING_LINK_KEY) ?? 'null') as ProposalLink | null;
-		} catch {
-			kept = null;
-		}
-		if (!kept || !hasNetwork(kept.chainId) || parseProposalLink(location.hash)) return;
-		try {
-			sessionStorage.removeItem(PENDING_LINK_KEY);
-		} catch {
-			// best effort: it is opened now
-		}
-		await openProposal(kept);
-	}
-
 	/** The name the chain index gives a network this device lacks, for its sheet. */
 	let missingName = $state<string | null>(null);
 	$effect(() => {
@@ -320,15 +315,11 @@
 		};
 	});
 
-	/** Settings → Add network, the chain filled in (the wizard reads it in the chain index). */
-	function addNetwork(chainId: number, link: ProposalLink | undefined) {
-		if (link) {
-			try {
-				sessionStorage.setItem(PENDING_LINK_KEY, JSON.stringify(link));
-			} catch {
-				// not kept: the link is opened again by hand
-			}
-		}
+	/**
+	 * Settings → Add network, the chain filled in (the wizard reads it in the
+	 * chain index). A link's transaction opens once the network is here.
+	 */
+	function addNetwork(chainId: number) {
 		multisigUi.close();
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Settings, resolved, with its query
 		void goto(`${resolve('/[locale]/settings', { locale })}?addNetwork=${chainId}`);
@@ -340,28 +331,27 @@
 		watched = true;
 	}
 
-	/** The link's transaction, on its multisig (now on this device). */
-	function openLinked(address: string, proposal: ProposalLink) {
-		pendingLink = null;
-		const account = multisig.find(address);
-		if (!account) return;
-		multisig.activate(account.address);
-		multisig.useChain(account.address, proposal.chainId);
-		multisigUi.open({
-			kind: 'proposal',
-			chainId: proposal.chainId,
-			safeTxHash: proposal.safeTxHash
-		});
-		const fresh = multisig.find(account.address);
-		if (fresh) void proposals.refresh(fresh, fresh.chainIds);
-	}
-
 	const sheet = $derived(multisigUi.sheet);
 	const active = $derived(multisig.active);
 	/** The multisig a dApp's request is for: the one it was granted, shown or not. */
 	const dappAccount = $derived(
-		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.address) ?? null) : null
+		sheet?.kind === 'dapp' ? (multisig.find(sheet.request.held.safe) ?? null) : null
 	);
+
+	/**
+	 * The person closed a dApp request's sheet: the machine answers its site
+	 * as things stand (declined before it was proposed, else "proposed"), and
+	 * goes back to the multisig shown — it followed the one the site was
+	 * granted for the request.
+	 */
+	function closeDapp(rid: string) {
+		proposalsHost.send({ type: 'dapp_leave', id: rid });
+		multisigUi.closeDapp(rid);
+		const shown = multisig.active;
+		if (proposals.followed?.toLowerCase() !== (shown?.address.toLowerCase() ?? null)) {
+			proposals.follow(shown, shown?.chainIds ?? []);
+		}
+	}
 </script>
 
 {#if sheet?.kind === 'create'}
@@ -391,18 +381,15 @@
 			onclose={() => {
 				addPrefill = '';
 				addFailure = null;
-				pendingLink = null;
 				multisigUi.close();
 			}}
 			onadded={(address) => {
 				addPrefill = '';
 				addFailure = null;
 				keepInvited(address, invite);
-				// ms-22: added from a link's transaction: that transaction opens now.
-				const linked = pendingLink;
-				if (linked && linked.multisig.toLowerCase() === address.toLowerCase()) {
-					openLinked(address, linked);
-				} else multisigUi.close();
+				// ms-22: added from a link's transaction: the machine opens that
+				// transaction now (`openedProposal`), over this sheet.
+				if (multisigUi.sheet?.kind === 'add') multisigUi.close();
 			}}
 		/>
 	{/key}
@@ -420,23 +407,24 @@
 		onexecuted={() => onchanged?.()}
 	/>
 {:else if sheet?.kind === 'preview'}
-	<!-- ms-21: a link's transaction on a device with none of its members. -->
-	{@const linked = sheet.source.account}
+	<!-- ms-21: a link's transaction on a device with none of its members (the machine's `linked`). -->
+	{@const linked = sheet.account}
 	<ProposalSheet
 		{m}
 		{signing}
 		account={linked}
 		chainId={sheet.chainId}
 		safeTxHash={sheet.safeTxHash}
-		source={sheet.source}
+		preview
 		watch={{ added: watched, onwatch: () => watch(linked) }}
 		{locale}
 		{wide}
 		{closeLabel}
-		onclose={() => multisigUi.close()}
-		onexecuted={({ item, txHash, userOpHash }) => {
-			void recordExecution(linked.address, item, txHash, userOpHash).finally(() => onchanged?.());
+		onclose={() => {
+			proposalsHost.send({ type: 'close_linked' });
+			multisigUi.close();
 		}}
+		onexecuted={() => onchanged?.()}
 	/>
 {:else if sheet?.kind === 'dapp' && dappAccount}
 	<!-- A dApp's transaction: its review first, then the transaction it became.
@@ -446,13 +434,13 @@
 			{signing}
 			{m}
 			account={dappAccount}
-			chainId={sheet.request.chainId}
-			safeTxHash={sheet.request.safeTxHash ?? ''}
-			draft={sheet.request}
+			chainId={sheet.request.held.chain_id}
+			safeTxHash={sheet.request.held.safe_tx_hash ?? ''}
+			dapp={sheet.request}
 			{locale}
 			{wide}
 			{closeLabel}
-			onclose={() => sheet.request.close()}
+			onclose={() => closeDapp(sheet.request.rid)}
 			onexecuted={() => onchanged?.()}
 		/>
 	{/key}
@@ -462,7 +450,7 @@
 			{missingTitle(m, sheet.chainId, missingName)}
 		</p>
 		<p class="notice">{m.proposal.missingNetworkBody}</p>
-		<Button variant="primary" shape="rounded" onclick={() => addNetwork(sheet.chainId, sheet.link)}
+		<Button variant="primary" shape="rounded" onclick={() => addNetwork(sheet.chainId)}
 			>{m.proposal.addNetwork}</Button
 		>
 	</Sheet>
@@ -485,7 +473,16 @@
 		{/if}
 	</Sheet>
 {:else if sheet?.kind === 'notice'}
-	<Sheet title={m.proposal.title} {closeLabel} {wide} onclose={() => multisigUi.close()}>
+	<Sheet
+		title={m.proposal.title}
+		{closeLabel}
+		{wide}
+		onclose={() => {
+			// Closed while it opens: the link's transaction opens over nothing now.
+			if (sheet.text === m.proposal.opening) leftLink = true;
+			multisigUi.close();
+		}}
+	>
 		<p class="notice" role="alert">{sheet.text}</p>
 	</Sheet>
 {:else if sheet?.kind === 'invite' && active}

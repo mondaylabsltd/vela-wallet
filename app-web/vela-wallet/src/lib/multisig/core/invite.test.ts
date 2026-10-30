@@ -6,7 +6,9 @@
  * `an_invites_labels_land_only_on_members`,
  * `an_invites_labels_for_members_added_since_and_by_order`).
  */
+import '$lib/i18n/wasm-init.server';
 import { describe, expect, it, vi } from 'vitest';
+import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 
 const SAFE = '0x710311c8d71CC405c5B7782BE1367eAFA3d78937';
 const ALICE = '0xe331F2Ef7A6f4ED426529c8C10642b68084771A2';
@@ -27,7 +29,10 @@ vi.mock('./proposals.svelte', () => ({ membersAnywhere: () => [ALICE, CAROL, EVE
 vi.mock('./store.svelte', () => ({ multisig: {} }));
 
 const { invitedMembers, inviteLink } = await import('./invite');
-const { parseAddLink } = await import('./link');
+const parseAddLink = (hash: string) =>
+	JSON.parse(wasm.multisigLinkCall('parseAddLink', JSON.stringify({ hash }))) as {
+		members?: unknown[];
+	} | null;
 
 describe('the invite carries every member by address (r4D-5)', () => {
 	it('the founding members, then the one added in Settings with its typed name', () => {

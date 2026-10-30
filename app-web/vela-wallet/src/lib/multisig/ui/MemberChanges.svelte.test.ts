@@ -46,6 +46,7 @@ vi.mock('../core/store.svelte', () => ({
 	multisig: {
 		accounts: [],
 		attach: () => {},
+		find: (address: string) => ({ address }),
 		/** The members machine's notice, routed to the accounts machine. */
 		send: (event: {
 			type: string;
@@ -57,24 +58,55 @@ vi.mock('../core/store.svelte', () => ({
 		}
 	}
 }));
-vi.mock('../core/proposals.svelte', async () => {
-	const { MemberChangeRefusedError } = await import('../core/member-changes');
-	return {
-		proposals: {
-			get chains() {
-				return seams.chains;
-			},
-			get items() {
-				return seams.items;
-			}
+vi.mock('../core/proposals.svelte', () => ({
+	proposals: {
+		get chains() {
+			return seams.chains;
 		},
-		MailboxUnreadableError: class extends Error {},
-		proposeMemberChange: async (address: string, chainId: number, change: unknown) => {
-			if (chainId === seams.refuseOn) {
-				throw new MemberChangeRefusedError({ kind: 'changeWaiting' });
+		get items() {
+			return seams.items;
+		}
+	}
+}));
+// What the proposals machine says of a proposal that did not go, as words (`proposal-failure.ts`).
+vi.mock('../shell/proposal-failure', () => ({
+	memberRefusal: (reason: string) => {
+		try {
+			return JSON.parse(reason) as { kind: string };
+		} catch {
+			return null;
+		}
+	},
+	actionError: () => null
+}));
+// The plan row's proposal goes to the proposals machine as it is (its `draft`).
+vi.mock('../shell/proposals-host.svelte', () => {
+	class ProposeFailedError extends Error {
+		constructor(
+			readonly state: unknown,
+			readonly chainId: number
+		) {
+			super('not proposed');
+		}
+	}
+	return {
+		ProposeFailedError,
+		proposalsHost: {
+			detach: () => {},
+			propose: async (
+				account: { address: string },
+				chainId: number,
+				proposal: { change: unknown }
+			) => {
+				if (chainId === seams.refuseOn) {
+					throw new ProposeFailedError(
+						{ kind: 'refused', reason: JSON.stringify({ kind: 'changeWaiting' }) },
+						chainId
+					);
+				}
+				seams.proposed.push([account.address, chainId, proposal.change]);
+				return { safeTxHash: `0xhash${chainId}` };
 			}
-			seams.proposed.push([address, chainId, change]);
-			return { safeTxHash: `0xhash${chainId}` };
 		}
 	};
 });
@@ -177,7 +209,7 @@ function shown() {
 	const w = world();
 	asked = w.asked;
 	startMembers(w);
-	return render(MemberChanges, {
+	const screen = render(MemberChanges, {
 		props: {
 			m: words(),
 			account: {
@@ -191,6 +223,9 @@ function shown() {
 			cancelLabel: 'Cancel'
 		}
 	});
+	// What the proposals machine's view says waits, as the one host feeds it.
+	machines.membersWaiting(seams.items as never);
+	return screen;
 }
 
 const byText = (root: HTMLElement, text: string) =>
@@ -241,7 +276,7 @@ describe('changing the members (Settings)', () => {
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
 		expect(seams.proposed.map(([, chainId]) => chainId)).toEqual([ARC, BASE]);
-		expect(seams.proposed[0][2]).toEqual({ kind: 'remove', owner: A, threshold: undefined });
+		expect(seams.proposed[0][2]).toEqual({ kind: 'remove', owner: A, threshold: null });
 		// The new member's name and kind are kept only for Add and Replace.
 		expect(seams.named).toEqual([]);
 		// Two networks: no single proposal to jump to; the change shows as waiting.
@@ -379,7 +414,7 @@ describe('changing the members (Settings)', () => {
 		);
 		byText(screen.container, 'send.propose')?.click();
 		await vi.waitFor(() => expect(seams.proposed).toHaveLength(2));
-		expect(seams.proposed[0][2]).toEqual({ kind: 'add', owner: D, threshold: undefined });
+		expect(seams.proposed[0][2]).toEqual({ kind: 'add', owner: D, threshold: null });
 		expect(seams.named.at(-1)?.[1]).toEqual({ [D]: { name: 'Dana' } });
 	});
 

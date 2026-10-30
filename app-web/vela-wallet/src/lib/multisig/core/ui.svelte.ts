@@ -3,9 +3,9 @@
  * (`MultisigHost.svelte`) draws it, and the switcher, the home panel and the
  * wallet page's own doors open them.
  */
-import type { DappCall } from './proposals.svelte';
-import type { LinkedProposals } from './linked.svelte';
+import type { MultisigHeldRequest } from '../generated/MultisigHeldRequest';
 import type { AddLink, ProposalLink } from './link';
+import type { MultisigAccount } from './store.svelte';
 import type {
 	SigningBlockedError,
 	SigningRefusedError,
@@ -13,41 +13,22 @@ import type {
 } from './gate.svelte';
 
 /**
- * A dApp's transaction from a multisig, owned by the request it came with
- * (`DappRequestHost`): reviewed first, proposed only on the person's
- * "Propose and approve", and answered by the request — whichever way the
- * sheet is left.
+ * A dApp's request to a multisig, held by the proposals machine
+ * (`view.dapp[rid]`, `shell/dapp-requests.ts`): its review first (the
+ * machine's draft), proposed only on the person's "Propose and approve",
+ * and answered by the machine whichever way the sheet is left. The sheet
+ * draws `held` — kept as last seen once it is answered, so a sheet left on
+ * the proposal still says what the site was told.
  */
-export interface DappProposal {
+export interface DappRequestSheet {
 	/** The request it answers. */
 	rid: string;
-	address: string;
-	chainId: number;
-	/** `eth_sendTransaction` (one call) or `wallet_sendCalls` (a batch, one proposal). */
-	method: string;
-	/** The call, or the batch's every call: one transaction either way. */
-	calls: DappCall[];
-	/** The site, as the browser names it (never the page's own claim). */
-	origin: string;
-	/** Set once it is in the mailbox. */
-	safeTxHash: string | null;
-	/**
-	 * The site was told it is proposed and waiting (the request's limit came
-	 * first): it gets no hash from here on. The sheet says so.
-	 */
-	siteTold?: boolean;
-	/**
-	 * The person confirmed the review: propose it (one passkey prompt) — `as`,
-	 * the member of this device they picked to propose it (r5reg-5). Resolves
-	 * its safeTxHash.
-	 */
-	propose(as?: string | null): Promise<string>;
-	/** Executed from this sheet: an `eth_sendTransaction`'s site gets the transaction's hash. */
-	executed(txHash: string): void;
-	/** Decline before it is proposed: the site is told the person rejected it. */
-	decline(): void;
-	/** The sheet was closed (any way out): the request answers as things stand. */
-	close(): void;
+	/** The machine's held request, as last seen. */
+	held: MultisigHeldRequest;
+	/** RB5: is the request still live? Asked before the passkey; a gone page is withdrawn. */
+	claim(): Promise<boolean>;
+	/** Its review could not be drawn (the mailbox did not answer): asked again. */
+	retry(): void;
 }
 
 export type MultisigSheet =
@@ -62,9 +43,10 @@ export type MultisigSheet =
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	/**
 	 * ms-21: a link's transaction on a device with none of its multisig's
-	 * members — read from `source`, with nothing added and nothing switched.
+	 * members (`account`, kept nowhere) — read by the proposals machine
+	 * (`linked`), with nothing added and nothing switched.
 	 */
-	| { kind: 'preview'; chainId: number; safeTxHash: string; source: LinkedProposals }
+	| { kind: 'preview'; chainId: number; safeTxHash: string; account: MultisigAccount }
 	| { kind: 'invite' }
 	/** ms-22: what a link could not open, said (a damaged link). */
 	| { kind: 'notice'; text: string }
@@ -74,7 +56,7 @@ export type MultisigSheet =
 	 * it is added. `link`: the link that named it, opened again once it is.
 	 */
 	| { kind: 'missing'; chainId: number; link?: ProposalLink }
-	| { kind: 'dapp'; request: DappProposal }
+	| { kind: 'dapp'; request: DappRequestSheet }
 	/**
 	 * §3.5: a signature asked where this device signs nothing for it (its
 	 * genesis refused there, or who can act for it not read yet) by a flow
@@ -96,18 +78,11 @@ class MultisigUi {
 		this.sheet = null;
 	}
 
-	/** The dApp's transaction `rid` is in the mailbox now: its sheet shows it as one. */
-	proposed(rid: string, safeTxHash: string): void {
+	/** Where the machine's held request `rid` stands now: its sheet, if it is open, draws it. */
+	held(rid: string, held: MultisigHeldRequest): void {
 		const sheet = this.sheet;
 		if (sheet?.kind !== 'dapp' || sheet.request.rid !== rid) return;
-		this.sheet = { kind: 'dapp', request: { ...sheet.request, safeTxHash } };
-	}
-
-	/** The site of `rid` was told it is proposed: its sheet says so. */
-	told(rid: string): void {
-		const sheet = this.sheet;
-		if (sheet?.kind !== 'dapp' || sheet.request.rid !== rid) return;
-		this.sheet = { kind: 'dapp', request: { ...sheet.request, siteTold: true } };
+		this.sheet = { kind: 'dapp', request: { ...sheet.request, held } };
 	}
 
 	/** Close the dApp sheet of `rid`, if it is the one open. */

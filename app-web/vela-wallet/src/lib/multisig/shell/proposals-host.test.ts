@@ -36,13 +36,17 @@ vi.mock('../core/store.svelte', () => ({
 		useChain: (address: string, chainId: number) => seams.used.push([address, chainId]),
 		setFindingsOn: (address: string, chainId: number) => seams.findings.push([address, chainId]),
 		setRecordedName: () => {},
-		nameMembers: () => {}
+		nameMembers: () => {},
+		// The one host hands it the accounts machine and its records.
+		attach: () => {},
+		send: () => {}
 	}
 }));
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
 vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
 
 const { proposalsHost } = await import('./proposals-host.svelte');
+const { machines } = await import('./machines.svelte');
 
 function memoryStore(seed: Record<string, string> = {}) {
 	const map = new Map(Object.entries(seed));
@@ -165,7 +169,7 @@ describe('the proposals machine’s host', () => {
 		expect(http.some((u) => u.toLowerCase().includes(SHOWN.toLowerCase()))).toBe(false);
 	});
 
-	it('routes a multisig’s record to the store and executed rows to the activity', async () => {
+	it('the one host routes a multisig’s record to the store and executed rows to the activity', async () => {
 		const rows: unknown[] = [];
 		const recorded = vi.fn();
 		await proposalsHost.boot({
@@ -176,12 +180,12 @@ describe('the proposals machine’s host', () => {
 			saveRows: async (r) => void rows.push(...r)
 		});
 		proposalsHost.onrecorded = recorded;
-		await proposalsHost.route({
+		machines.route({
 			kind: 'account',
 			address: OTHER,
 			update: { kind: 'use_chain', chain_id: 8453 }
 		});
-		await proposalsHost.route({
+		machines.route({
 			kind: 'account',
 			address: OTHER,
 			update: { kind: 'findings_on', chain_id: 8453, findings: [] }

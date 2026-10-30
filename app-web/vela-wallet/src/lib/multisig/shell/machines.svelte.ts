@@ -7,19 +7,27 @@
  * space's, the service in use), and routes the `Notice`s one machine sends
  * to another. It decides nothing: what a fact means is the machines'.
  *
- * The accounts machine (`multisig_accounts`) is here now, handed to the
- * store's facade (`core/store.svelte.ts`) once it has read the store. The
- * members machine (`multisig_members`) is booted beside it: Settings shows a
+ * The accounts machine (`multisig_accounts`) is handed to the store's
+ * facade (`core/store.svelte.ts`) once it has read the store. The members
+ * machine (`multisig_members`) is booted beside it: Settings shows a
  * multisig through it ({@link MultisigMachines.showMembers}) and the facts it
  * reads — the proposals waiting, the contacts — are fed to it here. The
- * proposals machine plugs in the same way: one {@link MultisigMachine} each,
- * their notices routed by {@link MultisigMachines.route}.
+ * proposals machine (`multisig_proposals`) is booted here too and handed to
+ * `proposalsHost` (the screens' way to it), fed the multisigs on this device
+ * and the addresses the person knows. One {@link MultisigMachine} each, one
+ * boot, one set of facts, their notices routed by ONE
+ * {@link MultisigMachines.route}.
  *
  * perf-3: the transport a machine's rooms run on is `lazyPeerRooms` — the
  * PeerConnect client is fetched on the first room, never by a signed-in page.
  */
 import { untrack } from 'svelte';
-import { loadCore, MultisigAccountsCore, MultisigMembersCore } from '$lib/core/client';
+import {
+	loadCore,
+	MultisigAccountsCore,
+	MultisigMembersCore,
+	MultisigProposalsCore
+} from '$lib/core/client';
 import type { JsonWasmCore } from '$lib/core/json-shell';
 import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '$lib/onboarding/core/storage';
 import {
@@ -35,6 +43,7 @@ import {
 	multisig,
 	type MultisigAccount
 } from '../core/store.svelte';
+import type { Finding } from '../core/refusal';
 import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
 import type { MultisigAccountsView } from '../generated/MultisigAccountsView';
 import type { MultisigLocalAccount } from '../generated/MultisigLocalAccount';
@@ -42,12 +51,17 @@ import type { MultisigMemberContact } from '../generated/MultisigMemberContact';
 import type { MultisigMembersEvent } from '../generated/MultisigMembersEvent';
 import type { MultisigMembersView } from '../generated/MultisigMembersView';
 import type { MultisigNotice } from '../generated/MultisigNotice';
+import type { MultisigProposalsEvent } from '../generated/MultisigProposalsEvent';
+import type { MultisigProposalsView } from '../generated/MultisigProposalsView';
 import type { MultisigWaitingProposal } from '../generated/MultisigWaitingProposal';
 import type { MultisigShellDeps } from './handler';
 import { liveDeps } from './live';
 import { localAccounts } from './local-accounts';
 import { MultisigMachine } from './machine.svelte';
 import { lazyPeerRooms } from './peer-lazy';
+import { proposalsHost, type ProposalsHostOptions } from './proposals-host.svelte';
+import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
+import { session } from '$lib/session/core/session.svelte';
 
 /** How often a record that has not landed is asked about again while a page is open. */
 export const RECORD_RETRY_MS = 60_000;
@@ -105,21 +119,36 @@ export function contactsOf(
 		}));
 }
 
-export interface BootOptions {
-	/** The shell's pipelines (a test's simulated world); the app's by default. */
-	deps?: MultisigShellDeps;
-	/** The wasm, loaded (a test's `initSync`); `loadCore` by default. */
-	load?: () => Promise<void>;
+/**
+ * The addresses the person knows (r4a-18) — contacts, this device's own
+ * accounts and multisigs — for the review's look-alikes and first sends; the
+ * machine adds the members itself, by this device's names.
+ */
+function knownAddresses(): unknown[] {
+	const out: { address: string; label: string; kind?: 'own' }[] = [];
+	for (const c of contactsBook.view?.contacts ?? []) {
+		out.push({ address: c.address, label: c.name ?? c.resolved_name ?? c.address });
+	}
+	for (const row of session.view.accounts ?? []) {
+		out.push({ address: row.account.address, label: row.account.name, kind: 'own' });
+	}
+	for (const a of multisig.accounts) {
+		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address, kind: 'own' });
+	}
+	return out;
+}
+
+export interface BootOptions extends ProposalsHostOptions {
 	/** The accounts core (a test's); a fresh `MultisigAccountsCore` by default. */
 	accountsCore?: () => JsonWasmCore;
-	/** The facts the machines start from (a test's); the app's by default. */
-	facts?: () => {
-		serviceUrl: string;
-		accounts: MultisigLocalAccount[];
-		networks: number[];
-		space: number[];
-	};
 }
+
+type Facts = {
+	serviceUrl: string;
+	accounts: MultisigLocalAccount[];
+	networks: number[];
+	space: number[];
+};
 
 class MultisigMachines {
 	/** The accounts machine, once booted. */
@@ -133,7 +162,11 @@ class MultisigMachines {
 		contacts: null
 	};
 	#booted: Promise<void> | null = null;
-	#facts: NonNullable<BootOptions['facts']> = () => ({
+	/** The proposals machine, once booted (the screens reach it through `proposalsHost`). */
+	proposals = $state.raw<MultisigMachine<MultisigProposalsView, MultisigProposalsEvent> | null>(
+		null
+	);
+	#facts: () => Facts = () => ({
 		serviceUrl: genesisServiceURL(),
 		accounts: localAccounts(),
 		networks: chainIds(getAllNetworksSync()),
@@ -141,6 +174,10 @@ class MultisigMachines {
 	});
 	#stops: (() => void)[] = [];
 	#checkedRecords = false;
+	/** This boot: a machine of an earlier one (forgotten) routes nothing any more. */
+	#generation = 0;
+	/** A link's transaction the accounts machine opened (`MultisigHost` draws it). */
+	onproposal: ((notice: Extract<MultisigNotice, { kind: 'open_proposal' }>) => void) | null = null;
 
 	/** Idempotent: the first caller boots, every later one shares it. */
 	boot(options: BootOptions = {}): Promise<void> {
@@ -150,10 +187,11 @@ class MultisigMachines {
 
 	async #start(options: BootOptions): Promise<void> {
 		await (options.load ?? loadCore)();
-		if (options.facts) this.#facts = options.facts;
+		const given = options.facts;
+		if (given) this.#facts = () => ({ space: [], ...given() });
 		const deps: MultisigShellDeps = {
 			...(options.deps ?? liveDeps({ peer: lazyPeerRooms(() => {}), notice: () => {} })),
-			notice: (notice) => this.route(notice)
+			notice: this.#router()
 		};
 		const accounts = new MultisigMachine<MultisigAccountsView, MultisigAccountsEvent>(
 			options.accountsCore?.() ?? new MultisigAccountsCore(),
@@ -162,6 +200,7 @@ class MultisigMachines {
 		);
 		this.accounts = accounts;
 		this.startMembers(deps);
+		this.#startProposals(deps, options);
 		const facts = this.#facts();
 		accounts.dispatch({
 			type: 'start',
@@ -180,6 +219,53 @@ class MultisigMachines {
 		});
 		multisig.attach(accounts);
 		if (!options.facts) this.#follow();
+	}
+
+	/**
+	 * The proposals machine, over `deps`: started from the same facts, fed
+	 * every multisig on this device (what waits on each is its to read) and
+	 * the addresses the person knows (the review's look-alikes and first
+	 * sends), handed to `proposalsHost`.
+	 */
+	#startProposals(deps: MultisigShellDeps, options: BootOptions): void {
+		const machine = new MultisigMachine<MultisigProposalsView, MultisigProposalsEvent>(
+			options.core?.() ?? new MultisigProposalsCore(),
+			deps,
+			'proposals'
+		);
+		this.proposals = machine;
+		proposalsHost.attach(machine, options.saveRows, () => this.resetForTests());
+		const facts = this.#facts();
+		const app = !options.facts;
+		machine.dispatch({
+			type: 'start',
+			service_url: facts.serviceUrl,
+			accounts: facts.accounts,
+			networks: facts.networks,
+			known: app ? knownAddresses() : []
+		});
+		const multisigs = () => options.multisigs?.() ?? { accounts: multisig.accounts };
+		const others = () =>
+			machine.dispatch({
+				type: 'accounts',
+				accounts: $state.snapshot(multisigs().accounts) as never
+			});
+		others();
+		// The member changes waiting, as the members machine reads them: the
+		// proposals machine's own list of the multisig shown.
+		this.#stops.push(
+			machine.listen((view) => this.membersWaiting(view.items as unknown as WaitingItem[]))
+		);
+		const stop = $effect.root(() => {
+			$effect(others);
+			if (app) $effect(() => machine.dispatch({ type: 'known', known: knownAddresses() }));
+		});
+		this.#stops.push(stop);
+	}
+
+	/** An event for the proposals machine (none before it is booted). */
+	#proposals(event: MultisigProposalsEvent): void {
+		untrack(() => this.proposals?.dispatch(event));
 	}
 
 	/** The app's facts as they move: another tab, a network added, another service. */
@@ -205,6 +291,7 @@ class MultisigMachines {
 			const facts = this.#facts();
 			this.send({ type: 'networks', networks: facts.networks });
 			this.send({ type: 'space', chain_ids: facts.space });
+			this.#proposals({ type: 'networks', networks: facts.networks });
 		});
 		this.#stops.push(
 			() => window.removeEventListener('storage', onstorage),
@@ -214,7 +301,9 @@ class MultisigMachines {
 	}
 
 	#service(): void {
-		this.send({ type: 'service', url: this.#facts().serviceUrl });
+		const url = this.#facts().serviceUrl;
+		this.send({ type: 'service', url });
+		this.#proposals({ type: 'service', url });
 	}
 
 	/** An event for the accounts machine (held by the facade until it is loaded). */
@@ -227,6 +316,7 @@ class MultisigMachines {
 		const accounts = this.#facts().accounts;
 		this.send({ type: 'local_accounts', accounts });
 		this.#members({ type: 'local_accounts', local: accounts });
+		this.#proposals({ type: 'local_accounts', accounts });
 	}
 
 	/** The members machine, over `deps` (boot's; a test's simulated world). */
@@ -234,7 +324,7 @@ class MultisigMachines {
 		this.members?.dispose();
 		const machine: MembersMachine = new MultisigMachine(
 			core ?? new MultisigMembersCore(),
-			{ ...deps, notice: (notice) => this.route(notice) },
+			{ ...deps, notice: this.#router() },
 			'members'
 		);
 		this.#told = { show: null, waiting: null, contacts: null };
@@ -325,24 +415,49 @@ class MultisigMachines {
 		};
 	}
 
-	/** Where a machine's notice goes. */
+	/** {@link route}, for this boot's machines only. */
+	#router(): (notice: MultisigNotice) => void {
+		const generation = this.#generation;
+		return (notice) => {
+			if (generation === this.#generation) this.route(notice);
+		};
+	}
+
+	/**
+	 * Where every machine's notice goes — the one router: a link's
+	 * transaction to `MultisigHost` ({@link onproposal}); a multisig's record
+	 * to the accounts machine; executed rows to the activity, a mailbox that
+	 * took something to the list shown, an outside member's wallet to its
+	 * session — the proposals' words for them (`proposalsHost.route`).
+	 */
 	route(notice: MultisigNotice): void {
 		switch (notice.kind) {
-			case 'account':
-				this.send({ type: 'apply', address: notice.address, update: notice.update });
-				return;
-			case 'activity_rows':
-				// TODO(W8 proposals surface): the executed rows go to the activity once
-				// the proposals machine drives the web (`recordExecution` writes them now).
-				return;
-			case 'mailbox_took':
-				// TODO(W8 proposals surface): the shown multisig's list is read again
-				// by the proposals machine; `proposals.svelte.ts` reads its own now.
+			case 'account': {
+				// A multisig's record: the accounts machine applies it (the store's
+				// facade for the network it is used on, and what was found there).
+				const { address, update } = notice;
+				switch (update.kind) {
+					case 'use_chain':
+						multisig.useChain(address, update.chain_id);
+						return;
+					case 'findings_on':
+						multisig.setFindingsOn(address, update.chain_id, update.findings as Finding[]);
+						return;
+					default:
+						this.send({ type: 'apply', address, update });
+						return;
+				}
+			}
+			case 'open_proposal':
+				// A link's transaction (the accounts machine's link flow): drawn by `MultisigHost`.
+				this.onproposal?.(notice);
 				return;
 			case 'activated':
-				// TODO(W8 proposals surface): the proposals machine follows the multisig
-				// shown; `MultisigHost` follows `multisig.active` until then.
+				// The accounts machine's own: the store activates it; `MultisigHost`
+				// follows the multisig shown (`multisig.active`).
 				return;
+			default:
+				void proposalsHost.route(notice);
 		}
 	}
 
@@ -353,9 +468,13 @@ class MultisigMachines {
 		this.accounts = null;
 		this.members?.dispose();
 		this.members = null;
+		this.proposals?.dispose();
+		this.proposals = null;
+		proposalsHost.detach();
 		this.#told = { show: null, waiting: null, contacts: null };
 		this.#booted = null;
 		this.#checkedRecords = false;
+		this.#generation += 1;
 		multisig.attach(null);
 	}
 }

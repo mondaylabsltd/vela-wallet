@@ -12,10 +12,11 @@
 	 * now. There is one primary action, the next thing that moves it forward:
 	 * approve, approve and execute, or execute — each one passkey prompt.
 	 *
-	 * A dApp's transaction (`draft`) is drawn here before it exists: the same
-	 * reading, at the number it would take, with "Propose and approve" and
-	 * Decline — nothing is signed until the person has seen what the site
-	 * asks. Once proposed it is the transaction like any other.
+	 * A dApp's transaction (`dapp`, held by the machine) is drawn here before
+	 * it exists — the machine's draft: the same reading, at the number it
+	 * would take, with "Propose and approve" and Decline — nothing is signed
+	 * until the person has seen what the site asks. Once proposed it is the
+	 * transaction like any other; the machine answers its site.
 	 *
 	 * Everything it reads and does on the shown multisig is the core's
 	 * proposals machine's (`proposals.view`, events through `proposalsHost`):
@@ -24,8 +25,8 @@
 	 * this draws them, and words a failure as the corpus always has
 	 * (`shell/proposal-failure.ts`).
 	 *
-	 * A link's transaction on a device with none of its members (`source`,
-	 * `watch`, ms-21) is read from its own source, the multisig neither
+	 * A link's transaction on a device with none of its members (`preview`,
+	 * `watch`, ms-21) is the machine's too (`linked`), the multisig neither
 	 * added nor shown: following it here, or signing with a member's wallet,
 	 * are offered — each only on the person's tap.
 	 */
@@ -47,12 +48,7 @@
 		readableCalls,
 		reviewedCalls
 	} from '../core/call-review.svelte';
-	import {
-		ProposalReview,
-		REVIEW_FRESH_MS,
-		REVIEW_RETRY_MS,
-		simEndedOf
-	} from '../core/proposal-review.svelte';
+	import { REVIEW_FRESH_MS, REVIEW_RETRY_MS, simEndedOf } from '../core/proposal-review.svelte';
 	import type { SimEnded } from '$lib/signing/verdict';
 	import type { MultisigReviewOut } from '../core/kernel';
 	import {
@@ -88,11 +84,10 @@
 		tokenInfo
 	} from '../core/display';
 	import { GenesisRefusedError, type Finding } from '../core/refusal';
-	import { frozenFacts, type FrozenFacts } from '../core/executed';
+	import type { MultisigFrozenFacts as FrozenFacts } from '../generated/MultisigFrozenFacts';
 	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
 	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
 	import ProposalTimeline from './ProposalTimeline.svelte';
-	import { timelineOf } from '../core/timeline';
 	import {
 		ExecutionSpentError,
 		ExecutionUncheckedError,
@@ -114,10 +109,8 @@
 	import { checkOn } from '../core/recheck';
 	import { refusalText } from './findings';
 	import AuthorityNotice from './AuthorityNotice.svelte';
-	import { findExecution } from '../core/records';
 	import { ChainUnavailableError } from '../core/chain';
 	import { progressLine } from '../core/progress';
-	import { signers } from '../core/signers.svelte';
 	import { PREVIEW_CAP_MS, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
 	import {
@@ -137,18 +130,10 @@
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
-	import { proposalLink, shareOrigin } from '../core/link';
-	import { connectLink } from '../external/connect-link';
+	import { connectLink, proposalLink, shareOrigin } from '../core/link';
 	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
-	import {
-		approveExternally,
-		draftCalls,
-		itemOf,
-		proposals,
-		type ChainState,
-		type ProposalItem
-	} from '../core/proposals.svelte';
+	import { itemOf, linkedSource, proposals, type ProposalItem } from '../core/proposals.svelte';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import {
 		MailboxRefusedError,
@@ -156,9 +141,9 @@
 		NoOutsideSignerError
 	} from '../core/proposal-errors';
 	import { typedName } from '../core/typed-name';
-	import type { DappProposal } from '../core/ui.svelte';
+	import type { DappRequestSheet } from '../core/ui.svelte';
 	import type { DraftAsk } from '../shell/proposals-host.svelte';
-	import type { ProposalSource } from '../core/linked.svelte';
+	import type { ProposalSource } from '../core/proposals.svelte';
 	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -175,15 +160,15 @@
 		onclose: () => void;
 		/** It was executed from this device: the transaction is on chain. */
 		onexecuted?: (done: { item: ProposalItem; txHash: string; userOpHash: string }) => void;
-		/** A dApp's transaction: reviewed here before it is proposed (`DappRequestHost`). */
-		draft?: DappProposal | null;
+		/** A dApp's request, held by the machine: reviewed here before it is proposed. */
+		dapp?: DappRequestSheet | null;
 		/**
 		 * §3.6: the proposer's own transaction (a transfer, a rename, a member
 		 * change), built at its number and reviewed here before its passkey.
 		 */
 		prebuilt?: DraftAsk | null;
-		/** ms-21: where the transaction is read from when it is not the shown multisig's. */
-		source?: ProposalSource | null;
+		/** ms-21: a link's transaction on a device with none of its members (the machine's `linked`). */
+		preview?: boolean;
 		/**
 		 * ms-21: no member of it is on this device. `added`: it is kept here
 		 * (to follow); `onwatch` keeps it, on the person's tap.
@@ -202,38 +187,28 @@
 		closeLabel,
 		onclose,
 		onexecuted,
-		draft = null,
+		dapp = null,
 		prebuilt = null,
-		source = null,
+		preview = false,
 		watch = null
 	}: Props = $props();
 
-	/** The shown multisig's transactions, or the link's own source (ms-21). */
-	const store = $derived<ProposalSource>(source ?? proposals);
-	// r4b-4: a link's transaction is read again while it is shown, as the
-	// shown multisig's are — an execution elsewhere is seen here too.
-	$effect(() => source?.watch?.());
+	/**
+	 * The shown multisig's transactions, or a link's read only (ms-21) — both
+	 * the machine's. r4b-4: a link's is read again while it is open, as the
+	 * shown multisig's are (the machine's pace while `linked` is up).
+	 */
+	const store = $derived<ProposalSource>(
+		preview ? linkedSource(proposals.view?.linked ?? null) : proposals
+	);
 
-	/** A dApp's transaction not proposed yet: the review, before any passkey. */
-	const drafting = $derived((!!draft && !draft.safeTxHash) || !!prebuilt);
-	let drafted = $state<{ chain: ChainState; item: ProposalItem } | null>(null);
-	let draftFailure = $state<string | null>(null);
-
-	async function loadDraft() {
-		if (!draft) return;
-		draftFailure = null;
-		try {
-			drafted = await draftCalls(draft.address, chainId, draft.calls);
-		} catch (error) {
-			draftFailure = reasonOf(error);
-		}
-	}
+	/** A dApp's transaction not proposed yet, or the person's own (§3.6): the review, before any passkey. */
+	const drafting = $derived((!!dapp && !dapp.held.safe_tx_hash) || !!prebuilt);
 
 	/** This session's check of this network, once it has answered. */
 	let checked = $state<Finding[] | null>(null);
 
 	onMount(() => {
-		if (draft && !draft.safeTxHash) void loadDraft();
 		// §3.5: who can act for it on this network, read now (once a session)
 		// — so a refusal or a risk is said before anyone taps.
 		void checkOn(account, chainId).then((found) => {
@@ -251,41 +226,43 @@
 
 	/**
 	 * The proposals machine's view: the shown multisig's transactions, their
-	 * one review, each executor's look, where every action stands. A link's
-	 * own source and a dApp's draft are still read apart (`source`, `draft`).
+	 * one review, each executor's look, where every action stands — of the
+	 * shown multisig's, its draft (§3.6, a dApp's), or a link's (`linked`).
 	 */
 	const machine = $derived(proposals.view);
-	/** Drawn and reviewed by the machine: the shown multisig's, or its draft (§3.6). */
-	const onMachine = $derived(!source && !(draft && !draft.safeTxHash));
-	/** The machine's draft, while this sheet is its review (§3.6). */
-	const machineDraft = $derived(prebuilt ? (machine?.draft ?? null) : null);
+	/** The machine's draft, while this sheet is its review (§3.6, a dApp's request). */
+	const machineDraft = $derived(drafting ? (machine?.draft ?? null) : null);
+	/** Why the machine could not draw the draft (the mailbox did not answer), worded. */
+	const draftFailure = $derived.by(() => {
+		if (!drafting || machineDraft) return null;
+		const state = machine?.actions.propose;
+		if (!state || state.kind === 'working' || state.kind === 'done') return null;
+		const error = actionError(state, chainId);
+		return error ? reasonText(error) : null;
+	});
 	const machineDraftItem = $derived(machineDraft ? itemOf(machineDraft.item) : null);
 	/** Its key in the machine's maps (`<chainId>:<safeTxHash>`). */
 	const key = $derived(`${chainId}:${safeTxHash.toLowerCase()}`);
 
 	const item = $derived(
 		drafting
-			? (machineDraftItem ?? drafted?.item ?? null)
+			? machineDraftItem
 			: (store
 					.chain(chainId)
 					?.items.find((i) => i.safeTxHash.toLowerCase() === safeTxHash.toLowerCase()) ?? null)
 	);
 	const members = $derived(
-		drafting
-			? prebuilt
-				? (proposals.chain(chainId)?.members ?? null)
-				: (drafted?.chain.members ?? null)
-			: (store.chain(chainId)?.members ?? null)
+		drafting ? (proposals.chain(chainId)?.members ?? null) : (store.chain(chainId)?.members ?? null)
 	);
 	// r5reg-14: the shown multisig's transaction, still waiting (or not read
 	// yet — its network not answering), is read faster while its sheet is
 	// open, and when the window comes back: another member's approval, or the
 	// network's return, is seen here within seconds.
-	const waitingHere = $derived(!source && !drafting && item?.status !== 'done');
+	const waitingHere = $derived(!preview && !drafting && item?.status !== 'done');
 	$effect(() => {
 		if (waitingHere) return proposals.watch();
 	});
-	const site = $derived(draft ? hostLabel(draft.origin) : '');
+	const site = $derived(dapp ? hostLabel(dapp.held.origin) : '');
 
 	/**
 	 * A member as a change names it: the name typed for them here (r5reg-16),
@@ -400,7 +377,7 @@
 	 * REVIEW_FRESH_MS while it waits, and every REVIEW_RETRY_MS while the last
 	 * could not reach the chain. Its draft's comes with the draft.
 	 */
-	const askKey = $derived(onMachine && !prebuilt && reviewKey ? `${reviewKey}:${blind}` : '');
+	const askKey = $derived(!drafting && reviewKey ? `${reviewKey}:${blind}` : '');
 	$effect(() => {
 		if (!askKey) return;
 		const ask = () =>
@@ -424,8 +401,7 @@
 	});
 	/** The machine's review: absent while gathered, `null` when it could not be. */
 	const machineReview = $derived.by((): MultisigReviewOut | null | undefined => {
-		if (!onMachine) return undefined;
-		if (prebuilt) {
+		if (drafting) {
 			const d = machine?.draft;
 			return d && d.review !== null && d.review !== undefined
 				? (d.review as MultisigReviewOut)
@@ -458,47 +434,15 @@
 		};
 	});
 
-	/** A link's own source, or a dApp's draft: its review read here (`ProposalReview`). */
-	let proposalReview = $state<ProposalReview | null>(null);
-	$effect(() => {
-		if (!reviewKey || onMachine) return;
-		const subject = untrack(() => ({
-			safe: account.address,
-			chainId,
-			tx: item!.tx,
-			members: members!,
-			genesis: account.genesis,
-			origin: draft?.origin ?? null
-		}));
-		const next = new ProposalReview(subject);
-		proposalReview = next;
-		void next.refresh();
-		// Its hashes and fields are read once for a finished one; nothing is re-checked.
-		const done = untrack(() => item?.status === 'done');
-		const stop = done ? undefined : next.keepFresh();
-		return () => {
-			stop?.();
-			next.dispose();
-			if (proposalReview === next) proposalReview = null;
-		};
-	});
 	/** The core's review now, with the call's reading: blind (`sign_anyway`) or not. */
-	const fullReview = $derived(
-		onMachine ? (machineReview ?? null) : (proposalReview?.read(blind) ?? null)
-	);
+	const fullReview = $derived(machineReview ?? null);
 	/** Its simulation, as the signing sheet draws it. */
-	const reviewSim = $derived(onMachine ? machineSim : (proposalReview?.sim ?? null));
+	const reviewSim = $derived(machineSim);
 	/** The review could not be gathered at all. */
-	const reviewFailed = $derived(
-		onMachine ? machineReview === null : proposalReview?.failed === true
-	);
+	const reviewFailed = $derived(machineReview === null);
 	/** Read the review again now (the gate found it changed who controls the multisig). */
 	function reviewAgain(): void {
-		if (!onMachine) {
-			void proposalReview?.refresh();
-			return;
-		}
-		if (prebuilt || !item) return;
+		if (drafting || !item) return;
 		proposalsHost.send({
 			type: 'review',
 			chain_id: chainId,
@@ -575,9 +519,7 @@
 	 */
 	/** The executors the machine looks at for it (the shown multisig's, not a draft). */
 	const looked = $derived(
-		item && onMachine && !drafting && item.review.action !== null
-			? executors.map((o) => o.address)
-			: []
+		item && !drafting && item.review.action !== null ? executors.map((o) => o.address) : []
 	);
 	/** One executor's look, in the machine's `previews` (`<chainId>:<hash>:<executor>`). */
 	const lookKey = (executor: string) =>
@@ -660,11 +602,7 @@
 	 * here last; else the first — among those who have not approved yet (or
 	 * can execute). With two or more, "As" shows who it is, drafting too.
 	 */
-	const usedLast = $derived(
-		machineDraft?.defaultMember ??
-			machine?.last_actor ??
-			null
-	);
+	const usedLast = $derived(machineDraft?.defaultMember ?? machine?.last_actor ?? null);
 	const actor = $derived<LocalOwner | null>(
 		candidates.find((o) => sameAddress(o.address, chosen)) ??
 			payer ??
@@ -889,7 +827,7 @@
 	 * one go, so the site gets its transaction — not a wait for approvals
 	 * nobody else has to give.
 	 */
-	const executeNow = $derived(drafting && !prebuilt && !!item && item.canExecute.length > 0);
+	const executeNow = $derived(drafting && !!dapp && !!item && item.canExecute.length > 0);
 
 	/** Where one of this sheet's actions stands in the machine (`approve:<hash>`, `execute:<hash>`). */
 	const actionOf = (what: 'approve' | 'execute'): MultisigActionState | null => {
@@ -919,17 +857,31 @@
 			proposalsHost.confirmDraft(actor?.address ?? null);
 			return;
 		}
-		if (!draft || !item) return;
+		if (!dapp || !item) return;
 		const thenExecute = executeNow;
 		phase = { kind: 'busy', what: 'propose' };
-		try {
-			await draft.propose(actor?.address ?? null);
+		// RB5: a page that is gone gets nothing signed (its request is withdrawn).
+		if (!(await dapp.claim())) {
 			phase = { kind: 'idle' };
-		} catch (error) {
-			phase = failedPhase(error);
 			return;
 		}
+		proposalsHost.confirmDraft(actor?.address ?? null);
+		// Proposed (by a member here, or an outside member's wallet), or why not.
+		const state = await proposalsHost.until((view) => {
+			const now = view.actions.propose;
+			return now && now.kind !== 'working' && now.kind !== 'outsideAsked' ? now : null;
+		});
+		if (state?.kind !== 'done') {
+			phase = failedPhase(actionError(state ?? { kind: 'cancelled' }, chainId));
+			return;
+		}
+		phase = { kind: 'idle' };
 		// The proposal as the mailbox has it now: executed if it is ready.
+		const hash = state.safe_tx_hash.toLowerCase();
+		await proposalsHost.until(
+			(view) => (view.items.some((i) => i.safeTxHash.toLowerCase() === hash) ? true : null),
+			10_000
+		);
 		await tick();
 		if (thenExecute && item?.status === 'ready' && actor) await onExecute();
 	}
@@ -1013,7 +965,7 @@
 		return (found?.[1] as ExecutionVerdict | undefined) ?? null;
 	});
 	$effect(() => {
-		if (!onMachine || drafting) return;
+		if (drafting) return;
 		const now = verdict;
 		const flying = item?.executing === true && item.status !== 'done';
 		untrack(() => {
@@ -1048,13 +1000,9 @@
 						}
 						onexecuted?.({ item, txHash: now.txHash, userOpHash: '' });
 					}
-					// A dApp's transaction: its site gets the transaction, now.
-					draft?.executed(now.txHash);
 					return;
 				case 'executedByOther':
 					phase = { kind: 'ended', verdict: now, by };
-					// Executed all the same: the site waiting for it gets its hash.
-					draft?.executed(now.txHash);
 					return;
 				case 'notSent':
 					phase = { kind: 'failed', reason: m.proposal.notSent };
@@ -1097,11 +1045,6 @@
 	);
 	/** Enough members approved: nobody else's approval is needed (r4D-6). */
 	const enough = $derived(!!item && item.approved >= item.threshold);
-	/** The proposals read here: a passkey approval on any of them says a Vela account (r4a-9). */
-	const readItems = $derived([
-		...(store.chain(chainId)?.items ?? []),
-		...(sameAddress(proposals.followed, account.address) ? proposals.items : [])
-	]);
 	/**
 	 * How each member still to approve signs (`signers.kindOf`) — code at its
 	 * address on any of the multisig's networks says a Vela account, over the
@@ -1111,12 +1054,10 @@
 	 * The shown multisig's: the machine reads how each one signs
 	 * (`read_signers`: code on the multisig's networks, Vela's passkey signer
 	 * configuration) when the sheet opens and as the members still to approve
-	 * change. A link's own source is read here (`signers.kindOf`).
+	 * change — a link's read-only one's too.
 	 */
 	const signersKey = $derived(
-		onMachine && !drafting && item && missingOwners.length > 0
-			? `${key}:${missingOwners.join(',')}`
-			: ''
+		!drafting && item && missingOwners.length > 0 ? `${key}:${missingOwners.join(',')}` : ''
 	);
 	$effect(() => {
 		if (!signersKey) return;
@@ -1138,11 +1079,9 @@
 		new Map<string, string | null>(
 			missingOwners.map((o) => [
 				o,
-				onMachine
-					? localOwners([o]).length > 0
-						? 'here'
-						: (machineSigners?.rows.find((r) => sameAddress(r.owner, o))?.kind ?? null)
-					: signers.kindOf(chainId, o, readItems, account.chainIds)
+				localOwners([o]).length > 0
+					? 'here'
+					: (machineSigners?.rows.find((r) => sameAddress(r.owner, o))?.kind ?? null)
 			])
 		)
 	);
@@ -1217,25 +1156,16 @@
 
 	async function onExternal() {
 		if (!item) return;
-		if (onMachine) {
-			// The machine's gate, then the outside member's wallet over a live
-			// session (`Notice::OutsideSign`); its verified answer goes through
-			// the machine's outbox.
-			const { error } = await act(`approve:${item.safeTxHash.toLowerCase()}`, {
-				type: 'approve_outside',
-				chain_id: chainId,
-				safe_tx_hash: item.safeTxHash
-			});
-			// The outside wallet's own refusal is its sheet's to say.
-			if (error && !cancelled(error)) phase = failedPhase(error);
-			return;
-		}
-		try {
-			await approveExternally(account, chainId, item.tx, outside);
-			await store.refresh(account, account.chainIds, { fresh: true });
-		} catch (error) {
-			if (!cancelled(error)) phase = failedPhase(error);
-		}
+		// The machine's gate, then the outside member's wallet over a live
+		// session (`Notice::OutsideSign`); its verified answer goes through the
+		// machine's outbox (a link's read-only proposal too).
+		const { error } = await act(`approve:${item.safeTxHash.toLowerCase()}`, {
+			type: 'approve_outside',
+			chain_id: chainId,
+			safe_tx_hash: item.safeTxHash
+		});
+		// The outside wallet's own refusal is its sheet's to say.
+		if (error && !cancelled(error)) phase = failedPhase(error);
 	}
 
 	/** A voiding transaction at its number, proposed and approved at once by `rejecter`. */
@@ -1302,7 +1232,6 @@
 	 * its cancellation or not) — read from the chain's history on its refresh.
 	 */
 	const machineSteps = $derived.by((): MultisigTimelineStep[] | null => {
-		if (!onMachine) return null;
 		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
 		return (
 			Object.entries(machine?.timelines ?? {}).find(
@@ -1318,11 +1247,10 @@
 	});
 	// A done one's sheet: the machine reads how it ran (its receipt's facts).
 	$effect(() => {
-		if (!onMachine || !doneKey) return;
+		if (!doneKey) return;
 		proposalsHost.send({ type: 'timeline', chain_id: chainId, safe_tx_hash: doneKey });
 	});
 	$effect(() => {
-		if (!onMachine) return;
 		const key = doneKey;
 		void historyTry;
 		const found = machineFinished;
@@ -1345,50 +1273,8 @@
 	/** The person's Retry on a history that could not be read. */
 	function retryHistory(): void {
 		historyTry += 1;
-		if (onMachine) void proposals.retry();
+		void proposals.retry();
 	}
-	// A link's own source: its history read here.
-	$effect(() => {
-		if (onMachine) return;
-		const key = doneKey;
-		void historyTry;
-		finished = null;
-		unreadHistory = false;
-		if (!key) return;
-		let live = true;
-		const address = untrack(() => account.address);
-		const cancel = untrack(() => item?.cancelledBy ?? null);
-		// Bounded by when it was proposed, and final: its number is used.
-		const since = untrack(() => ({
-			sinceMs: item?.createdMs ?? 0,
-			final: true,
-			nonce: item?.nonce
-		}));
-		let again: ReturnType<typeof setTimeout> | undefined;
-		void findExecution(address, chainId, key, since).then(async (hash) => {
-			if (!live) return;
-			if (hash === undefined) {
-				unreadHistory = true;
-				if (autoTries < HISTORY_AUTO_TRIES) {
-					autoTries += 1;
-					again = setTimeout(() => (historyTry += 1), HISTORY_AUTO_MS);
-				}
-				return;
-			}
-			autoTries = 0;
-			if (hash !== null) {
-				finished = { txHash: hash };
-				return;
-			}
-			const byCancel = cancel ? !!(await findExecution(address, chainId, cancel, since)) : false;
-			if (live) finished = { txHash: null, byCancel };
-		});
-		return () => {
-			live = false;
-			clearTimeout(again);
-		};
-	});
-
 	/**
 	 * r4a-8: an executed transaction's facts as they were when it ran — whose
 	 * approvals counted, the threshold then, who sent it — read once its
@@ -1399,58 +1285,19 @@
 	);
 	/** The machine's (`frozen`): from its receipt, else what this device recorded sending it. */
 	const machineFrozen = $derived.by((): FrozenFacts | null => {
-		if (!onMachine || !executedTx) return null;
+		if (!executedTx) return null;
 		const hash = (item?.safeTxHash ?? safeTxHash).toLowerCase();
 		const all = (machine?.frozen ?? {}) as Record<string, FrozenFacts>;
 		return Object.entries(all).find(([k]) => k.toLowerCase() === `${chainId}:${hash}`)?.[1] ?? null;
 	});
 	// Executed from this sheet: the machine reads its facts once it is done.
 	$effect(() => {
-		if (!onMachine || !executedTx || item?.status !== 'done' || doneKey) return;
+		if (!executedTx || item?.status !== 'done' || doneKey) return;
 		proposalsHost.send({ type: 'timeline', chain_id: chainId, safe_tx_hash: item.safeTxHash });
 	});
-	const frozenKey = $derived(
-		!onMachine && executedTx && item ? `${item.safeTxHash}:${executedTx}` : ''
-	);
-	let sourceFrozen = $state<FrozenFacts | null>(null);
-	$effect(() => {
-		const key = frozenKey;
-		sourceFrozen = null;
-		if (!key) return;
-		const [hash, tx] = key.split(':');
-		let live = true;
-		const address = untrack(() => account.address);
-		void frozenFacts(chainId, address, hash, tx).then((facts) => {
-			if (live) sourceFrozen = facts;
-		});
-		return () => {
-			live = false;
-		};
-	});
-	const frozen = $derived(onMachine ? machineFrozen : sourceFrozen);
-	/** Its story for the timeline (r4D-17): the machine's, or a link's read here. */
-	const steps = $derived.by((): MultisigTimelineStep[] => {
-		if (onMachine) return machineSteps ?? [];
-		if (!item || !executedTx) return [];
-		return timelineOf(item, executedTx, frozen).map((s): MultisigTimelineStep => {
-			switch (s.kind) {
-				case 'created':
-					return { kind: 'created', who: s.who, at_ms: s.atMs };
-				case 'approved':
-					return {
-						kind: 'approved',
-						who: s.who,
-						at_ms: s.atMs,
-						counted: s.counted,
-						by_executing: s.byExecuting,
-						unsent: false,
-						on_chain: false
-					};
-				case 'executed':
-					return { kind: 'executed', who: s.who, tx_hash: s.txHash, at_ms: s.atMs };
-			}
-		});
-	});
+	const frozen = $derived(machineFrozen);
+	/** Its story for the timeline (r4D-17): the machine's. */
+	const steps = $derived<MultisigTimelineStep[]>(machineSteps ?? []);
 	/**
 	 * Whom the list names: the members whose approvals counted when it ran;
 	 * a finished one's verified approvals while those are not known (never a
@@ -1572,7 +1419,8 @@
 	/** Withdraw the person's own proposal on its review (§3.6), or decline a site's request. */
 	function decline() {
 		if (prebuilt) proposalsHost.withdrawDraft();
-		else draft?.decline();
+		// The machine answers its site: declined before it is proposed, else "proposed".
+		else if (dapp) proposalsHost.send({ type: 'dapp_leave', id: dapp.rid });
 	}
 
 	async function retryRead() {
@@ -1592,7 +1440,7 @@
 			<p class="warn" role="alert">{draftFailure}</p>
 			<div class="two">
 				<Button variant="secondary" shape="rounded" onclick={decline}>{m.external.decline}</Button>
-				<Button variant="secondary" shape="rounded" onclick={() => void loadDraft()}
+				<Button variant="secondary" shape="rounded" onclick={() => dapp?.retry()}
 					>{m.external.retry}</Button
 				>
 			</div>
@@ -1622,7 +1470,7 @@
 			</p>
 		{/if}
 	{:else}
-		{#if draft}
+		{#if dapp}
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
@@ -1993,7 +1841,7 @@
 							nonce: (blocking[0]?.nonce ?? store.chain(chainId)?.members.nonce ?? 0n).toString()
 						})}
 			</p>
-			{#if !source && blocking.some((b) => b.hash)}
+			{#if !preview && blocking.some((b) => b.hash)}
 				<div class="blocking">
 					{#each blocking as b (b.nonce)}
 						{#if b.hash}
@@ -2290,19 +2138,19 @@
 			</div>
 		{/if}
 
-		{#if draft && !drafting && item.status !== 'done'}
+		{#if dapp && !drafting && item.status !== 'done'}
 			<!-- A batch's site was given its id; a transaction's waits for its hash
 			     (until the request's limit, when it is told it was proposed). -->
-			{#if draft.method !== 'wallet_sendCalls' && !draft.siteTold && shownApproved < item.threshold}
+			{#if dapp.held.method !== 'wallet_sendCalls' && !dapp.held.told && shownApproved < item.threshold}
 				<p class="fine" role="status">
 					{fillTemplate(m.proposal.stillNeeded, { missing: item.threshold - shownApproved })}
 				</p>
 			{/if}
 			<p class="fine">
 				{fillTemplate(
-					draft.method === 'wallet_sendCalls'
+					dapp.held.method === 'wallet_sendCalls'
 						? m.proposal.siteFollows
-						: draft.siteTold
+						: dapp.held.told
 							? m.proposal.siteTold
 							: m.proposal.siteWaits,
 					{ host: site }

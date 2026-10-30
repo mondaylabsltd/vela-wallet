@@ -1,59 +1,41 @@
 /**
- * The app-wide host of the core's proposals machine (`multisig_proposals`,
- * `MultisigProposalsCore`) — one machine, over the one shell (`handler.ts`,
- * the app's pipelines from `live.ts`). Kept apart from the accounts host
- * (`machines.svelte.ts`) so it joins it as one more machine: the same boot
- * after `loadCore()`, the same facts, the same notice routing.
- *
- * It boots after `loadCore()`, feeds the machine the app's facts (this
- * device's Vela accounts as `MultisigLocalAccount`, its networks, the
- * service in use, the addresses the person knows, every multisig on this
- * device), drives the reads the machine paces (`others_tick` every
- * {@link OTHERS_EVERY_MS} while a page is visible, and when it is shown
- * again) and routes the `Notice`s it sends: a multisig's record to the
- * store, executed rows to the activity, a mailbox that took something to
- * whoever shows that multisig. It decides nothing.
+ * The proposals machine (`multisig_proposals`, `MultisigProposalsCore`) as
+ * the screens ask it: its view, its events, and the waits they make on it
+ * (`propose`, `until`, `settled`). It is booted, fed the app's facts and has
+ * its notices routed by the ONE host of the multisig machines
+ * (`machines.svelte.ts`) — {@link ProposalsHost.boot} is that host's boot;
+ * the notices that are the proposals' (executed rows to the activity, a
+ * mailbox that took something, an outside member's wallet) are worded here
+ * ({@link ProposalsHost.route}), the host calling it. It decides nothing.
  *
  * It drives the shown multisig's list (`follow`; `core/proposals.svelte.ts`
  * is its facade: the poll at the view's `pace_ms`, `watch`, `online`,
  * `refresh`) and every action on it — propose (`draft`, its review, then
- * `confirm_draft`), approve, preview, execute, send again — and what waits on
- * every multisig on this device (`presence`, `others_waiting`). The machine
- * owns the stored keys it reads (`vela.multisigOutbox`, `…Executing`,
- * `…Waiting`, the executions, the member used last).
- *
- * perf-3: the transport its rooms would run on is `lazyPeerRooms` — the
- * PeerConnect client is fetched on the first room, never by a signed-in page.
+ * `confirm_draft`), approve, preview, execute, send again — what waits on
+ * every multisig on this device (`presence`, `others_waiting`), a dApp's
+ * request (`dapp`) and a link's proposal (`linked`). The machine owns the
+ * stored keys it reads (`vela.multisigOutbox`, `…Executing`, `…Waiting`,
+ * the executions, the member used last).
  */
-import { loadCore, MultisigProposalsCore } from '$lib/core/client';
 import type { JsonWasmCore } from '$lib/core/json-shell';
-import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '$lib/onboarding/core/storage';
-import { getAllNetworksSync, subscribeNetworks } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
-import { session } from '$lib/session/core/session.svelte';
-import { genesisServiceURL } from '../core/service';
-import { multisig, type MultisigAccount } from '../core/store.svelte';
-import type { Finding } from '../core/refusal';
+import type { MultisigAccount } from '../core/store.svelte';
 import type { MultisigActionState } from '../generated/MultisigActionState';
 import type { MultisigNotice } from '../generated/MultisigNotice';
 import type { MultisigProposalKind } from '../generated/MultisigProposalKind';
 import type { MultisigProposalsEvent } from '../generated/MultisigProposalsEvent';
 import type { MultisigProposalsView } from '../generated/MultisigProposalsView';
-import type { MultisigLocalAccount } from '../generated/MultisigLocalAccount';
 import type { OutsideSessionRequest } from '../generated/OutsideSessionRequest';
 import { openOutsideSession } from '../external/signing.svelte';
 import type { MultisigShellDeps } from './handler';
-import { liveDeps } from './live';
-import { localAccounts } from './local-accounts';
-import { MultisigMachine } from './machine.svelte';
-import { lazyPeerRooms } from './peer-lazy';
+import type { MultisigMachine } from './machine.svelte';
 
 /** How often the multisigs not shown are read again while a page is up (the core's own pace). */
 export const OTHERS_EVERY_MS = 60_000;
 
 type ProposalsMachine = MultisigMachine<MultisigProposalsView, MultisigProposalsEvent>;
 
+/** What a test hands the one host for the proposals machine (`machines.boot`). */
 export interface ProposalsHostOptions {
 	/** The shell's pipelines (a test's simulated world); the app's by default. */
 	deps?: MultisigShellDeps;
@@ -61,15 +43,18 @@ export interface ProposalsHostOptions {
 	load?: () => Promise<void>;
 	/** The proposals core (a test's); a fresh `MultisigProposalsCore` by default. */
 	core?: () => JsonWasmCore;
-	/** The facts the machine starts from (a test's); the app's by default. */
-	facts?: () => { serviceUrl: string; accounts: MultisigLocalAccount[]; networks: number[] };
+	/** The facts the machines start from (a test's); the app's by default. */
+	facts?: () => {
+		serviceUrl: string;
+		accounts: import('../generated/MultisigLocalAccount').MultisigLocalAccount[];
+		networks: number[];
+		space?: number[];
+	};
 	/** Every multisig on this device (a test's); the store's by default. */
 	multisigs?: () => { accounts: MultisigAccount[] };
 	/** Where an executed row goes (a test's); the transaction store by default. */
 	saveRows?: (rows: LocalTransaction[]) => Promise<void>;
 }
-
-const chainIds = (networks: { chainId: number }[]) => networks.map((n) => n.chainId);
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
 	!!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -91,25 +76,6 @@ export class ProposeFailedError extends Error {
 		super(`not proposed: ${state.kind}`);
 		this.name = 'ProposeFailedError';
 	}
-}
-
-/**
- * The addresses the person knows (r4a-18) — contacts, this device's own
- * accounts and multisigs — for the review's look-alikes and first sends; the
- * machine adds the members itself, by this device's names.
- */
-function knownAddresses(): unknown[] {
-	const out: { address: string; label: string; kind?: 'own' }[] = [];
-	for (const c of contactsBook.view?.contacts ?? []) {
-		out.push({ address: c.address, label: c.name ?? c.resolved_name ?? c.address });
-	}
-	for (const row of session.view.accounts ?? []) {
-		out.push({ address: row.account.address, label: row.account.name, kind: 'own' });
-	}
-	for (const a of multisig.accounts) {
-		out.push({ address: a.address, label: a.genesis.name ?? a.label ?? a.address, kind: 'own' });
-	}
-	return out;
 }
 
 /**
@@ -167,89 +133,29 @@ class ProposalsHost {
 	onrecorded: (() => void) | null = null;
 	/** The proposal drafted for the person's review before its passkey (§3.6), or `null`. */
 	reviewing = $state.raw<DraftAsk | null>(null);
-	#booted: Promise<void> | null = null;
-	#options: ProposalsHostOptions = {};
-	#stops: (() => void)[] = [];
-
+	/** Where an executed row goes (a test's); the transaction store by default. */
+	#saveRows: ProposalsHostOptions['saveRows'] = undefined;
+	/** The one host's reset (tests), handed over with the machine. */
+	#reset: (() => void) | null = null;
 	/** The machine's view, or `null` before it booted. */
 	get view(): MultisigProposalsView | null {
 		return this.machine?.view ?? null;
 	}
 
-	/** Idempotent: the first caller boots, every later one shares it. */
+	/** The one host's boot (idempotent): every machine, this one among them. */
 	boot(options: ProposalsHostOptions = {}): Promise<void> {
-		this.#booted ??= this.#start(options);
-		return this.#booted;
+		return import('./machines.svelte').then(({ machines }) => machines.boot(options));
 	}
 
-	#facts() {
-		return (
-			this.#options.facts?.() ?? {
-				serviceUrl: genesisServiceURL(),
-				accounts: localAccounts(),
-				networks: chainIds(getAllNetworksSync())
-			}
-		);
-	}
-
-	async #start(options: ProposalsHostOptions): Promise<void> {
-		this.#options = options;
-		await (options.load ?? loadCore)();
-		const deps: MultisigShellDeps = {
-			...(options.deps ?? liveDeps({ peer: lazyPeerRooms(() => {}), notice: () => {} })),
-			notice: (notice) => this.route(notice)
-		};
-		const machine: ProposalsMachine = new MultisigMachine(
-			options.core?.() ?? new MultisigProposalsCore(),
-			deps,
-			'proposals'
-		);
+	/** The one host hands over the machine it booted (and how it is reset, for tests). */
+	attach(
+		machine: ProposalsMachine | null,
+		saveRows: ProposalsHostOptions['saveRows'],
+		reset: () => void
+	): void {
 		this.machine = machine;
-		const facts = this.#facts();
-		machine.dispatch({
-			type: 'start',
-			service_url: facts.serviceUrl,
-			accounts: facts.accounts,
-			networks: facts.networks,
-			known: options.facts ? [] : knownAddresses()
-		});
-		this.#others();
-		const stop = $effect.root(() => {
-			$effect(() => this.#others());
-			if (!options.facts) $effect(() => this.send({ type: 'known', known: knownAddresses() }));
-		});
-		this.#stops.push(stop);
-		if (!options.facts) this.#follow();
-	}
-
-	/** Every multisig on this device: what waits on each is the machine's to read. */
-	#others(): void {
-		const { accounts } = this.#options.multisigs?.() ?? { accounts: multisig.accounts };
-		this.send({ type: 'accounts', accounts: $state.snapshot(accounts) as never });
-	}
-
-	/** The app's facts as they move: another tab, a network added, another service. */
-	#follow(): void {
-		if (typeof window === 'undefined') return;
-		const onstorage = (event: StorageEvent) => {
-			if (event.key === null || event.key === STORAGE_KEYS.accounts) this.refreshLocal();
-			if (event.key === null || event.key === STORAGE_KEYS.serviceEndpoints) this.#service();
-		};
-		const onservice = () => this.#service();
-		window.addEventListener('storage', onstorage);
-		window.addEventListener(SERVICE_ENDPOINTS_CHANGED, onservice);
-		const stopNetworks = subscribeNetworks(() => {
-			this.send({ type: 'networks', networks: this.#facts().networks });
-		});
-		this.#stops.push(
-			() => window.removeEventListener('storage', onstorage),
-			() => window.removeEventListener(SERVICE_ENDPOINTS_CHANGED, onservice),
-			stopNetworks
-		);
-	}
-
-	#service(): void {
-		this.send({ type: 'service', url: this.#facts().serviceUrl });
+		this.#saveRows = saveRows;
+		this.#reset = reset;
 	}
 
 	/** An event for the machine (dropped before it booted: `boot` starts it from the facts). */
@@ -259,6 +165,8 @@ class ProposalsHost {
 
 	/** Follow `account`'s list (or none): the machine reads it now, then on every tick. */
 	async follow(account: MultisigAccount | null): Promise<void> {
+		// Following none boots nothing: there is nothing to stop following.
+		if (!account && !this.machine) return;
 		await this.boot();
 		this.send({ type: 'follow', account: account ? record(account) : null });
 	}
@@ -389,11 +297,6 @@ class ProposalsHost {
 		}
 	}
 
-	/** This device's Vela accounts, read again (one was added, or signed in). */
-	refreshLocal(): void {
-		this.send({ type: 'local_accounts', accounts: this.#facts().accounts });
-	}
-
 	/** Read every multisig not shown again (one round at a time: the machine's). */
 	async othersTick(): Promise<void> {
 		await this.boot();
@@ -420,28 +323,16 @@ class ProposalsHost {
 		};
 	}
 
-	/** Where the machine's notice goes. */
+	/** Where the proposals machine's notices go (the one host's router calls this). */
 	async route(notice: MultisigNotice): Promise<void> {
 		switch (notice.kind) {
-			case 'account': {
-				const { address, update } = notice;
-				switch (update.kind) {
-					case 'use_chain':
-						multisig.useChain(address, update.chain_id);
-						return;
-					case 'findings_on':
-						multisig.setFindingsOn(address, update.chain_id, update.findings as Finding[]);
-						return;
-					default:
-						// The accounts machine applies it (`machines.svelte.ts` routes the same).
-						multisig.send({ type: 'apply', address, update });
-						return;
-				}
-			}
+			case 'account':
+				// A multisig's record: the one host's to route (`machines.route`).
+				return;
 			case 'activity_rows': {
 				if (notice.rows.length === 0) return;
 				const save =
-					this.#options.saveRows ??
+					this.#saveRows ??
 					(async (rows: LocalTransaction[]) =>
 						(await import('$lib/services/records')).saveTransactions(rows));
 				await save(await activityRows(notice.rows));
@@ -454,7 +345,7 @@ class ProposalsHost {
 				if (same(this.view?.followed, notice.safe)) this.send({ type: 'refresh', fresh: true });
 				return;
 			case 'activated':
-				// The accounts machine's (`machines.svelte.ts`): the store activates it.
+				// The accounts machine's: the store activates it.
 				return;
 			case 'outside_sign': {
 				// An outside member's wallet signs it; its answer goes back to the machine.
@@ -470,18 +361,20 @@ class ProposalsHost {
 				return;
 			}
 			case 'open_proposal':
-				// A link's proposal (the accounts machine's): `MultisigHost` opens links.
+				// A link's proposal: the one host's (`machines.onproposal`).
 				return;
 		}
 	}
 
-	/** Tests: forget the machine, as a new document would. */
+	/** Tests: forget the machines, as a new document would (the one host's). */
 	resetForTests(): void {
-		for (const stop of this.#stops.splice(0)) stop();
-		this.machine?.dispose();
+		this.#reset?.();
+	}
+
+	/** The one host forgets the machine. */
+	detach(): void {
 		this.machine = null;
-		this.#booted = null;
-		this.#options = {};
+		this.#saveRows = undefined;
 		this.onmailbox = null;
 		this.onrecorded = null;
 		this.reviewing = null;
