@@ -34,6 +34,8 @@ pub mod ctap;
 #[cfg(feature = "dev-fixtures")]
 pub mod dev_fixtures;
 pub mod eip712;
+/// ENS nodes: a name's namehash and an address's reverse node (EIP-137).
+pub mod ens;
 pub mod error;
 pub mod i18n;
 mod i18n_catalogs;

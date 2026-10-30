@@ -52,7 +52,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::primitives::keccak256;
 use crate::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
 /// `resolver(bytes32)` on an ENS-compatible registry.
@@ -202,15 +201,9 @@ pub(crate) fn is_never_in_a_name(c: char) -> bool {
 /// EIP-137 namehash, as bare hex: `namehash("")` is 32 zero bytes, then the
 /// labels fold in right to left.
 fn namehash(name: &str) -> String {
-    let mut node = vec![0u8; 32];
-    if !name.is_empty() {
-        for label in name.split('.').rev() {
-            let mut combined = node;
-            combined.extend_from_slice(&keccak256(label.as_bytes()));
-            node = keccak256(&combined);
-        }
-    }
-    hex(&node)
+    crate::ens::ens_namehash(name)
+        .trim_start_matches("0x")
+        .to_owned()
 }
 
 fn hex(bytes: &[u8]) -> String {
