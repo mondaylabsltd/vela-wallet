@@ -15,8 +15,6 @@ import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
 const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
 
-vi.mock('./recheck', () => ({ checkNow: async () => [], findingsOn: () => [] }));
-
 const { gateOf } = await import('./gate.svelte');
 
 const risk = { from: 'chain', chainId: 100, risk: { kind: 'module', address: MODULE } } as const;

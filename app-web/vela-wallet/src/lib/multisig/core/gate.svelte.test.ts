@@ -5,12 +5,6 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./recheck', () => ({
-	checkOn: async () => [],
-	checkNow: async () => [],
-	findingsOn: () => []
-}));
-
 const { riskConfirmation } = await import('./gate.svelte');
 
 const finding = {

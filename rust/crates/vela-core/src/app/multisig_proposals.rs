@@ -845,6 +845,11 @@ pub struct ProposalsView {
     /// A multisig other than the followed one has something waiting (the
     /// dot on the switcher's button).
     pub others_waiting: bool,
+    /// Everyone who is a member of the followed multisig on some network
+    /// (`membersAnywhere`): its members now where it is deployed, its
+    /// original members wherever it is not. Who may sign on one network is
+    /// that network's alone; this only says whether any member is here.
+    pub members_anywhere: Vec<String>,
     /// Each open proposal's one word, per `<chainId>:<safeTxHash>`.
     pub standings: BTreeMap<String, super::multisig_presence::Standing>,
     /// What the waiting group says of the list.
@@ -1515,6 +1520,14 @@ impl App for MultisigProposals {
                 .and_then(|a| s.last_actor.get(&a.address.to_ascii_lowercase()).cloned()),
             presence: more.presence,
             others_waiting: more.others_waiting,
+            members_anywhere: s
+                .account
+                .as_ref()
+                .map(|a| {
+                    let chains: Vec<&ChainMembers> = s.chains.iter().map(|c| &c.members).collect();
+                    super::multisig_members::members_anywhere(&a.owners, &chains)
+                })
+                .unwrap_or_default(),
             standings: more.standings,
             waiting_note: more.waiting_note,
             timelines: more.timelines,

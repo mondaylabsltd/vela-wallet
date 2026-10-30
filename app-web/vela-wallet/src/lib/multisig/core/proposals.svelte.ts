@@ -18,7 +18,6 @@ import type { ChainMembers } from './chain';
 import { sameAddress, type Approval, type Review, type SafeTx } from './kernel';
 import { localOwners, type LocalOwner } from './owners';
 import { multisig, type MultisigAccount } from './store.svelte';
-import { networkForChainId } from '$lib/services/networks';
 import {
 	MailboxRefusedError,
 	MailboxUnreadableError,
@@ -122,15 +121,10 @@ export interface MissingChain {
 	count: number;
 }
 
-/** Whether this device has the network (built in, or one the person added). */
-export function hasNetwork(chainId: number): boolean {
-	return networkForChainId(chainId) !== null;
-}
-
 /** A refresh still out after this long: the person is told the list may be stale (the core's). */
-export const SLOW_REFRESH_MS = 8_000;
+const SLOW_REFRESH_MS = 8_000;
 /** The poll's pace before the machine has said its own (`pace_ms`). */
-export const POLL_MS = 12_000;
+const POLL_MS = 12_000;
 
 /** One proposal as the machine reads it, in the shapes the screens draw. */
 export function itemOf(i: MultisigProposalItem): ProposalItem {
@@ -476,25 +470,13 @@ class Proposals {
 export const proposals = new Proposals();
 
 /**
- * Everyone who is a member of `account` on some network: on each network it
- * is deployed on, its members there now (as read for the multisig shown),
- * and its original members wherever it is not — or for one not shown, whose
- * networks are not read here. Who may sign on a given network is that
- * network's alone (`readProposal`); this only says whether any member is.
+ * Everyone who is a member of `account` on some network — the machine's word
+ * for the multisig it follows (`members_anywhere`); one not followed has no
+ * network read here, so its members are its original ones.
  */
 export function membersAnywhere(account: Pick<MultisigAccount, 'address' | 'owners'>): string[] {
 	if (!sameAddress(proposals.followed, account.address)) return account.owners;
-	const deployed = proposals.chains.filter((c) => c.members.deployed);
-	const undeployed = deployed.length < proposals.chains.length || deployed.length === 0;
-	return unique([
-		...deployed.flatMap((c) => c.members.owners),
-		...(undeployed ? account.owners : [])
-	]);
-}
-
-/** Each once, in order (addresses by their case: one network's list has one case). */
-function unique<T>(values: T[]): T[] {
-	return values.filter((v, i) => values.indexOf(v) === i);
+	return proposals.view?.members_anywhere ?? account.owners;
 }
 
 // -- actions --------------------------------------------------------------------------
@@ -555,4 +537,3 @@ export function proposeRename(
 ): Promise<{ safeTxHash: string }> {
 	return proposeThrough(address, chainId, { kind: 'rename', name });
 }
-

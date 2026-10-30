@@ -106,7 +106,6 @@
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
-	import { checkOn } from '../core/recheck';
 	import { refusalText } from './findings';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import { ChainUnavailableError } from '../core/chain';
@@ -203,16 +202,15 @@
 	/** A dApp's transaction not proposed yet, or the person's own (§3.6): the review, before any passkey. */
 	const drafting = $derived((!!dapp && !dapp.held.safe_tx_hash) || !!prebuilt);
 
-	/** This session's check of this network, once it has answered. */
-	let checked = $state<Finding[] | null>(null);
-
-	onMount(() => {
-		// §3.5: who can act for it on this network, read now (once a session)
-		// — so a refusal or a risk is said before anyone taps.
-		void checkOn(account, chainId).then((found) => {
-			if (found) checked = found;
-		});
-	});
+	/**
+	 * §3.5: who can act for it on this network — the accounts machine's
+	 * verdict (`check_on`: read once a session, also a network it is not used
+	 * on yet), so a refusal or a risk is said before anyone taps. Never a
+	 * chain read of the sheet's own.
+	 */
+	onMount(() => multisig.checkOn(account.address, chainId));
+	const networkVerdict = $derived(multisig.verdictOn(account.address, chainId));
+	const checked = $derived<Finding[] | null>(networkVerdict.checked ? networkVerdict.findings : null);
 
 	/**
 	 * Whether this device signs here: not at all where its genesis is
@@ -1667,7 +1665,7 @@
 								<button type="button" class="external" onclick={onExternal}
 									>{m.external.signWithWallet}</button
 								>
-							{:else if !drafting && (elsewhere.some((o) => sameAddress(o, owner)) || either.some((o) => sameAddress(o, owner)))}
+							{:else if !drafting && (elsewhere.some( (o) => sameAddress(o, owner) ) || either.some( (o) => sameAddress(o, owner) ))}
 								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
 								     one nothing says yet is offered the Vela way first (r4a-9)
 								     and its own wallet's beside it (r7), worded as either (r7-8). -->

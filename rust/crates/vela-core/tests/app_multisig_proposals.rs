@@ -1633,3 +1633,22 @@ fn a_linked_previews_proposal_is_reviewed() {
         "this Review's, not the link's own: {review}"
     );
 }
+
+/// W9 (`membersAnywhere`): the followed multisig's members anywhere — its
+/// original members while it is deployed nowhere, then the members a network
+/// it is deployed on has now (a member added there counts).
+#[test]
+fn the_members_anywhere_are_the_machine_s() {
+    let (mut world, mut sut, account) = setup(&[0]);
+    let has = |v: &[String], who: &str| v.iter().any(|x| x.eq_ignore_ascii_case(who));
+    let before = sut.view().members_anywhere;
+    assert_eq!(before.len(), 3, "{before:?}");
+    let mut owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    owners.push(B.to_owned());
+    let refs: Vec<&str> = owners.iter().map(String::as_str).collect();
+    world.deploy(100, &account.address, DeployedSafe::clean(&refs, 2));
+    run(&mut sut, &mut world, Event::Refresh { fresh: true });
+    let after = sut.view().members_anywhere;
+    assert!(has(&after, B), "{after:?}");
+    assert_eq!(after.len(), 4);
+}
