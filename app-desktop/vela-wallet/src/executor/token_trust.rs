@@ -576,15 +576,15 @@ fn perform(operation: &TrustOperation) -> TrustShellResult {
         },
 
         TrustOperation::ReadCustomTokens => TrustShellResult::CustomTokens {
-            // `Some(vec![])` is "there are none"; `None` would be "the read
-            // failed", which fails the admission closed. A read that returned
-            // nothing is the first of those.
-            tokens: Some(
-                custom_tokens::read()
+            // `Some(vec![])` is "there are none"; `None` is "the read
+            // failed", which fails the admission closed (WIRE-AUDIT A17) —
+            // it used to answer `Some` whatever the store said.
+            tokens: custom_tokens::try_read().map(|tokens| {
+                tokens
                     .iter()
                     .map(custom_tokens::StoredToken::to_trust)
-                    .collect(),
-            ),
+                    .collect()
+            }),
         },
 
         TrustOperation::WriteCustomToken { token } => TrustShellResult::TokenWritten {

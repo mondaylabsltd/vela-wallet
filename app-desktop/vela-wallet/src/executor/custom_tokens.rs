@@ -62,9 +62,10 @@ pub fn own_network_name(chain_id: u32) -> Option<String> {
         for item in items {
             if item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id))
                 && let Some(name) = item.get("displayName").and_then(Value::as_str)
-                    && !name.trim().is_empty() {
-                        return Some(name.to_owned());
-                    }
+                && !name.trim().is_empty()
+            {
+                return Some(name.to_owned());
+            }
         }
     }
     None
@@ -96,13 +97,26 @@ pub fn explorer_base(chain_id: u32) -> Option<String> {
 /// Every stored token, in the order it was written.
 #[must_use]
 pub fn read() -> Vec<StoredToken> {
-    let Ok(Some(Value::Array(items))) = storage::read_value(TOKENS_KEY) else {
-        return Vec::new();
+    try_read().unwrap_or_default()
+}
+
+/// Every stored token — or `None` when the store could not be read (an I/O
+/// failure, or something that is not a list under the key): "the read
+/// failed", which `token_trust` treats as fail-closed (WIRE-AUDIT A17),
+/// distinct from "there are none" (a key never written).
+#[must_use]
+pub fn try_read() -> Option<Vec<StoredToken>> {
+    let items = match storage::read_value(TOKENS_KEY) {
+        Ok(None) => return Some(Vec::new()),
+        Ok(Some(Value::Array(items))) => items,
+        Ok(Some(_)) | Err(_) => return None,
     };
-    items
-        .into_iter()
-        .filter_map(|item| serde_json::from_value::<StoredToken>(item).ok())
-        .collect()
+    Some(
+        items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value::<StoredToken>(item).ok())
+            .collect(),
+    )
 }
 
 fn write(tokens: &[StoredToken]) -> bool {
@@ -121,7 +135,11 @@ fn write(tokens: &[StoredToken]) -> bool {
 /// same contract twice is a person correcting themselves — or an admission
 /// re-running — and not two tokens (`token_trust` invariant ⑧).
 pub fn save(token: StoredToken) -> bool {
-    let mut tokens = read();
+    // A list that could not be read is not rewritten as this one token: that
+    // would erase every other token the person added.
+    let Some(mut tokens) = try_read() else {
+        return false;
+    };
     tokens.retain(|existing| existing.id != token.id);
     tokens.push(token);
     write(&tokens)
@@ -335,5 +353,31 @@ mod tests {
         assert!(token.to_mtok().is_none());
         // The trust vocabulary takes a u32, so it keeps the value it was given.
         assert_eq!(token.to_trust().decimals, 300);
+    }
+
+    /// WIRE-AUDIT A17: a list that cannot be read is "the read failed"
+    /// (fail-closed for an admission), never "there are none" — and a save
+    /// over it does not rewrite the store as one token.
+    #[test]
+    fn an_unreadable_list_is_a_failed_read_and_is_never_overwritten() {
+        storage::tests::with_temp_state("custom-tokens-unreadable", || {
+            assert_eq!(try_read().map(|t| t.len()), Some(0), "never written");
+            if storage::write_value(TOKENS_KEY, serde_json::json!({"not": "a list"})).is_err() {
+                unreachable!("could not seed");
+            }
+            assert!(try_read().is_none());
+            assert!(read().is_empty());
+            let token = StoredToken {
+                id: "100_0xabc".to_owned(),
+                chain_id: 100,
+                contract_address: "0xabc".to_owned(),
+                symbol: "ABC".to_owned(),
+                name: "ABC".to_owned(),
+                decimals: 18,
+                network_name: "Gnosis".to_owned(),
+            };
+            assert!(!save(token), "a save over an unreadable list");
+            assert!(try_read().is_none(), "the store was rewritten");
+        });
     }
 }

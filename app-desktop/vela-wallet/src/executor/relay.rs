@@ -512,21 +512,13 @@ fn read_in_band_quotes(chain_id: u32, safe: &str, key: String) -> Option<Vec<Fee
         return None;
     }
     let rows = body.get("result").and_then(Value::as_array)?;
-    let quotes: Vec<FeeAssetQuote> = rows.iter().filter_map(parse_quote_row).collect();
-    // No native USD price: keep the payable native row, drop every stablecoin
-    // whose amount could not be converted safely.
-    let native_unpriced = quotes
-        .iter()
-        .find(|quote| quote.asset == FeeAssetKind::Native)
-        .is_some_and(|native| native.usd_price.is_none());
-    let usable: Vec<FeeAssetQuote> = if native_unpriced {
-        quotes
-            .into_iter()
-            .filter(|quote| quote.asset == FeeAssetKind::Native)
-            .collect()
-    } else {
-        quotes
-    };
+    // Every row the relay published, UNFILTERED (WIRE-AUDIT A20, the web's
+    // `toWireQuote`): which rows the picker may offer — a stablecoin whose
+    // amount cannot be converted with the native coin unpriced, a balance
+    // that cannot pay — is the core's rule (`picker_rows`, and the
+    // native-price floor `fee.rs` adds), and a second filter here would hide
+    // rows the core is entitled to reason about.
+    let usable: Vec<FeeAssetQuote> = rows.iter().filter_map(parse_quote_row).collect();
     if usable.is_empty() {
         return None;
     }
@@ -1392,9 +1384,19 @@ mod tests {
         let priced = with_native_floor_price(vec![quote_row("native", Some("119"))], Some(120.25));
         assert_eq!(priced[0].native_usd_floor_price, None, "the relay's wins");
         let zero = with_native_floor_price(vec![quote_row("native", Some("0"))], Some(120.25));
-        assert_eq!(zero[0].native_usd_floor_price.as_deref(), Some("120.25000000"));
+        assert_eq!(
+            zero[0].native_usd_floor_price.as_deref(),
+            Some("120.25000000")
+        );
 
-        for bad in [None, Some(0.0), Some(-3.0), Some(f64::NAN), Some(f64::INFINITY), Some(1e21)] {
+        for bad in [
+            None,
+            Some(0.0),
+            Some(-3.0),
+            Some(f64::NAN),
+            Some(f64::INFINITY),
+            Some(1e21),
+        ] {
             let rows = with_native_floor_price(vec![quote_row("native", None)], bad);
             assert_eq!(rows[0].native_usd_floor_price, None, "{bad:?} is no price");
         }

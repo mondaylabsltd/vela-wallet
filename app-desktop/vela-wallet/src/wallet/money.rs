@@ -99,8 +99,15 @@ fn recovery_chain(view: &SendView) -> Option<u32> {
 
 /// One bounded read of the chain's head: an error body is no answer.
 fn head_answers(chain_id: u32) -> bool {
-    crate::executor::pool::call_within(chain_id, "eth_blockNumber", serde_json::json!([]), RECOVERY_READ)
-        .is_ok_and(|body| body.get("error").is_none() && body.get("result").is_some_and(serde_json::Value::is_string))
+    crate::executor::pool::call_within(
+        chain_id,
+        "eth_blockNumber",
+        serde_json::json!([]),
+        RECOVERY_READ,
+    )
+    .is_ok_and(|body| {
+        body.get("error").is_none() && body.get("result").is_some_and(serde_json::Value::is_string)
+    })
 }
 
 /// How often the ceremony channel and the signing flag are polled while a
@@ -1588,6 +1595,10 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
         return Some(match error {
             NetWizardErrorKind::NotFound { .. } => SendAddNetworkOutcome::NotFound,
             NetWizardErrorKind::AlreadyAdded { .. } if saved => SendAddNetworkOutcome::Added,
+            // A check that could not be made is not a refusal (WIRE-AUDIT
+            // A13, the web's `unverified`): the add did not happen, and
+            // nothing is said against the network (invariant ③).
+            NetWizardErrorKind::CheckFailed { .. } => SendAddNetworkOutcome::Error,
             _ => SendAddNetworkOutcome::NotCompatible {
                 detail: crate::flows::live::AddNetworkStop::of(wizard)
                     .and_then(|stop| stop.to_detail()),
@@ -1629,7 +1640,11 @@ mod tests {
             assert_eq!(recovery_chain(&view), Some(5_042_002));
         }
         view.tx_error = Some(SendTxErrorKey::Generic);
-        assert_eq!(recovery_chain(&view), None, "another error is kept as it is");
+        assert_eq!(
+            recovery_chain(&view),
+            None,
+            "another error is kept as it is"
+        );
         view.tx_error = Some(SendTxErrorKey::ChainUnreachable);
         view.tx_status = SendTxStatus::Idle;
         assert_eq!(recovery_chain(&view), None, "the line is down");

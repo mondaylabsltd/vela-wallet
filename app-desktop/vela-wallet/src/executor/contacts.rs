@@ -166,14 +166,55 @@ where
     S: for<'de> Deserialize<'de>,
     T: From<S>,
 {
-    let Ok(Some(Value::Array(items))) = storage::read_value(key) else {
-        return Vec::new();
-    };
-    items
-        .into_iter()
-        .filter_map(|item| serde_json::from_value::<S>(item).ok())
-        .map(T::from)
-        .collect()
+    try_read_list::<S, T>(key).unwrap_or_default()
+}
+
+/// One stored list, or `None` when the store could not be read at all — not
+/// "the book is empty" (WIRE-AUDIT A15, `store_unreadable`). A key never
+/// written is an empty list; a key holding something that is not a list is
+/// unreadable, so a re-read keeps the book the core holds rather than wipe it.
+fn try_read_list<S, T>(key: &str) -> Option<Vec<T>>
+where
+    S: for<'de> Deserialize<'de>,
+    T: From<S>,
+{
+    match storage::read_value(key) {
+        Ok(None) => Some(Vec::new()),
+        Ok(Some(Value::Array(items))) => Some(
+            items
+                .into_iter()
+                .filter_map(|item| serde_json::from_value::<S>(item).ok())
+                .map(T::from)
+                .collect(),
+        ),
+        Ok(Some(_)) | Err(_) => None,
+    }
+}
+
+/// The whole book as `ReadStore` answers it — or `StoreUnreadable`.
+fn read_store() -> ContactShellResult {
+    let contacts = try_read_list::<StoredContact, Contact>(storage::KEY_CONTACTS);
+    let groups = try_read_list::<StoredGroup, ContactGroup>(storage::KEY_CONTACT_GROUPS);
+    let tombstones = try_read_tombstones();
+    match (contacts, tombstones, groups) {
+        (Some(contacts), Some(tombstones), Some(groups)) => ContactShellResult::StoreLoaded {
+            contacts,
+            tombstones,
+            groups,
+        },
+        _ => ContactShellResult::StoreUnreadable,
+    }
+}
+
+/// A write's acknowledgement: `Written`, or `WriteFailed` when the storage
+/// refused it (WIRE-AUDIT A16) — the ledger in memory keeps the change, and
+/// the view says it is not kept on this device.
+fn written(ok: bool) -> ContactShellResult {
+    if ok {
+        ContactShellResult::Written
+    } else {
+        ContactShellResult::WriteFailed
+    }
 }
 
 /// The name the person gave `address` in their address book (vis-24), read
@@ -190,32 +231,37 @@ pub fn contact_name(address: &str) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-fn write_list<T, S: Serialize>(key: &str, items: &[T], to_stored: impl Fn(&T) -> S) {
+fn write_list<T, S: Serialize>(key: &str, items: &[T], to_stored: impl Fn(&T) -> S) -> bool {
     let encoded = Value::Array(
         items
             .iter()
             .map(|item| serde_json::to_value(to_stored(item)).unwrap_or(Value::Null))
             .collect(),
     );
-    let _ = storage::write_value(key, encoded);
+    storage::write_value(key, encoded).is_ok()
 }
 
 /// `address → epoch ms`. An object, not a list — see the module note.
-fn read_tombstones() -> Vec<ContactTombstone> {
-    let Ok(Some(Value::Object(map))) = storage::read_value(storage::KEY_CONTACTS_DISMISSED) else {
-        return Vec::new();
+/// `None` when the store could not be read, or holds something else there.
+fn try_read_tombstones() -> Option<Vec<ContactTombstone>> {
+    let map = match storage::read_value(storage::KEY_CONTACTS_DISMISSED) {
+        Ok(None) => return Some(Vec::new()),
+        Ok(Some(Value::Object(map))) => map,
+        Ok(Some(_)) | Err(_) => return None,
     };
-    map.into_iter()
-        .filter_map(|(address, at)| {
-            at.as_f64().map(|dismissed_at_ms| ContactTombstone {
-                address: address.to_lowercase(),
-                dismissed_at_ms,
+    Some(
+        map.into_iter()
+            .filter_map(|(address, at)| {
+                at.as_f64().map(|dismissed_at_ms| ContactTombstone {
+                    address: address.to_lowercase(),
+                    dismissed_at_ms,
+                })
             })
-        })
-        .collect()
+            .collect(),
+    )
 }
 
-fn write_tombstones(tombstones: &[ContactTombstone]) {
+fn write_tombstones(tombstones: &[ContactTombstone]) -> bool {
     let mut map = Map::new();
     for tombstone in tombstones {
         map.insert(
@@ -224,7 +270,7 @@ fn write_tombstones(tombstones: &[ContactTombstone]) {
                 .map_or(Value::Null, Value::Number),
         );
     }
-    let _ = storage::write_value(storage::KEY_CONTACTS_DISMISSED, Value::Object(map));
+    storage::write_value(storage::KEY_CONTACTS_DISMISSED, Value::Object(map)).is_ok()
 }
 
 /// `vela.transactionHistory` — the shared local store, spelled once per reader.
@@ -237,13 +283,19 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// (it needs amounts, status and day keys); this needs four fields, and reading
 /// them here rather than borrowing that mapper keeps each machine's vocabulary
 /// its own.
-fn read_send_history() -> Vec<ContactHistoryTx> {
-    let Ok(Some(Value::Array(rows))) = storage::read_value(TX_KEY) else {
-        // A storage failure yields NO suggestions, which is the core's own
-        // reading of `loadTransactions().catch(() => [])` — an empty book, not
-        // a broken one.
-        return Vec::new();
+fn read_send_history() -> Option<Vec<ContactHistoryTx>> {
+    let rows = match storage::read_value(TX_KEY) {
+        // Nothing sent yet: a true "no history".
+        Ok(None) => return Some(Vec::new()),
+        Ok(Some(Value::Array(rows))) => rows,
+        // The store could not be read (WIRE-AUDIT A14): `history_failed`,
+        // which the core reads as no suggestions — never as "never sent".
+        Ok(Some(_)) | Err(_) => return None,
     };
+    Some(read_history_rows(&rows))
+}
+
+fn read_history_rows(rows: &[Value]) -> Vec<ContactHistoryTx> {
     rows.iter()
         .map(|row| ContactHistoryTx {
             // Absent means a record older than the field. The core reads that
@@ -296,28 +348,21 @@ impl Machine for Contacts {
 
     fn perform(operation: &ContactOperation) -> Answer<ContactShellResult, Self::Event> {
         match operation {
-            ContactOperation::ReadStore => Answer::Now(ContactShellResult::StoreLoaded {
-                contacts: read_list::<StoredContact, Contact>(storage::KEY_CONTACTS),
-                tombstones: read_tombstones(),
-                groups: read_list::<StoredGroup, ContactGroup>(storage::KEY_CONTACT_GROUPS),
-            }),
+            ContactOperation::ReadStore => Answer::Now(read_store()),
 
-            ContactOperation::WriteContacts { contacts } => {
-                write_list(storage::KEY_CONTACTS, contacts, |c: &Contact| {
-                    StoredContact::from(c)
-                });
-                Answer::Now(ContactShellResult::Written)
-            }
+            ContactOperation::WriteContacts { contacts } => Answer::Now(written(write_list(
+                storage::KEY_CONTACTS,
+                contacts,
+                |c: &Contact| StoredContact::from(c),
+            ))),
             ContactOperation::WriteDismissed { tombstones } => {
-                write_tombstones(tombstones);
-                Answer::Now(ContactShellResult::Written)
+                Answer::Now(written(write_tombstones(tombstones)))
             }
-            ContactOperation::WriteGroups { groups } => {
-                write_list(storage::KEY_CONTACT_GROUPS, groups, |g: &ContactGroup| {
-                    StoredGroup::from(g)
-                });
-                Answer::Now(ContactShellResult::Written)
-            }
+            ContactOperation::WriteGroups { groups } => Answer::Now(written(write_list(
+                storage::KEY_CONTACT_GROUPS,
+                groups,
+                |g: &ContactGroup| StoredGroup::from(g),
+            ))),
 
             // Live since 031. The marker this replaced said "there is no local
             // transaction store yet" — which stopped being true the moment the
@@ -331,8 +376,9 @@ impl Machine for Contacts {
             // trust signal) and its risk half counts prior interaction more
             // widely. Filtering here would answer one of those questions on the
             // core's behalf and get the other wrong.
-            ContactOperation::LoadSendHistory => Answer::Now(ContactShellResult::HistoryLoaded {
-                txs: read_send_history(),
+            ContactOperation::LoadSendHistory => Answer::Now(match read_send_history() {
+                Some(txs) => ContactShellResult::HistoryLoaded { txs },
+                None => ContactShellResult::HistoryFailed,
             }),
 
             // Live since 031: the waterfall in `executor::identity`, shared with
@@ -431,7 +477,7 @@ mod tests {
                 unreachable!("could not seed");
             }
 
-            let history = read_send_history();
+            let history = read_send_history().unwrap_or_else(|| unreachable!("a readable history"));
             assert_eq!(history.len(), 5, "every row, not a filtered subset");
             assert_eq!(history[0].kind, Some(ContactTxKind::Send));
             assert_eq!(history[0].to.as_deref(), Some("0xAbC"));
@@ -447,11 +493,26 @@ mod tests {
             assert_eq!(history[3].kind, None);
             assert_eq!(history[4].to_name, None, "a blank name is not a name");
 
-            // An unreadable store yields no suggestions, not a broken book.
+            // An unreadable store is `history_failed` (WIRE-AUDIT A14) — no
+            // suggestions, and never read as "never sent".
+            // An empty list is a true empty history.
+            if storage::write_value(TX_KEY, serde_json::json!([])).is_err() {
+                unreachable!("could not seed");
+            }
+            assert_eq!(read_send_history(), Some(Vec::new()));
             if storage::write_value(TX_KEY, serde_json::json!("nonsense")).is_err() {
                 unreachable!("could not seed");
             }
-            assert!(read_send_history().is_empty());
+            assert_eq!(read_send_history(), None);
+            assert!(matches!(
+                Contacts::perform(&ContactOperation::LoadSendHistory),
+                Answer::Now(ContactShellResult::HistoryFailed)
+            ));
+            // A book that cannot be read is `store_unreadable` (A15), not empty.
+            if storage::write_value(storage::KEY_CONTACTS, serde_json::json!({"x": 1})).is_err() {
+                unreachable!("could not seed");
+            }
+            assert!(matches!(read_store(), ContactShellResult::StoreUnreadable));
         });
     }
 
@@ -507,7 +568,7 @@ mod tests {
                 raw.get("0xabc").and_then(Value::as_f64),
                 Some(1_756_000_000_000.0)
             );
-            assert_eq!(read_tombstones().len(), 1);
+            assert_eq!(try_read_tombstones().map(|t| t.len()), Some(1));
         });
     }
 
