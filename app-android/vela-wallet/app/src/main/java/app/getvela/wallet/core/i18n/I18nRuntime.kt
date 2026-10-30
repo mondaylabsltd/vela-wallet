@@ -22,6 +22,12 @@ class I18nRuntime(
      * a test's or a board's runtime speaks only for itself.
      */
     private val onLanguage: (String) -> Unit = {},
+    /**
+     * An on-demand namespace's catalog for a language (`assets/i18n/<name>/<tag>.json`,
+     * [I18nCatalogs]), or null where there is none. Read only once a screen
+     * that draws the namespace asks for it ([include]).
+     */
+    private val readOnDemand: (namespace: String, tag: String) -> ByteArray? = { _, _ -> null },
     private val readCatalog: (tag: String) -> ByteArray,
 ) : VelaStrings {
 
@@ -30,28 +36,74 @@ class I18nRuntime(
     private val _state = MutableStateFlow(State(ready = false, language = FALLBACK, direction = "ltr"))
     val state: StateFlow<State> = _state
 
-    data class State(val ready: Boolean, val language: String, val direction: String)
+    /**
+     * [namespaces]: the on-demand namespaces resident now — a screen that
+     * draws one reads it here, so it redraws once its words are in.
+     */
+    data class State(
+        val ready: Boolean,
+        val language: String,
+        val direction: String,
+        val namespaces: Set<String> = emptySet(),
+    )
+
+    /** The on-demand namespaces asked for so far; they stay resident across language changes. */
+    private val included = linkedSetOf<String>()
 
     /** Blocking engine construction — call off the main thread. */
+    @Synchronized
     fun initialize(localeTag: String) {
-        engine = I18n(readCatalog(FALLBACK))
+        engine = I18n(catalog(FALLBACK))
         applyLocale(localeTag)
         onLanguage(engine.language())
-        _state.value = State(ready = true, language = engine.language(), direction = engine.dir())
+        publish()
     }
 
     /** Switches the active language (no-op when already active). */
+    @Synchronized
     fun setLocale(tag: String) {
         check(::engine.isInitialized) { "I18nRuntime.setLocale before initialize" }
         if (tag == _state.value.language && _state.value.ready) return
         applyLocale(tag)
         onLanguage(engine.language())
-        _state.value = State(ready = true, language = engine.language(), direction = engine.dir())
+        publish()
     }
+
+    /**
+     * Loads an on-demand namespace ([I18nCatalogs.ON_DEMAND]) into the
+     * fallback and the active catalog, for a screen that draws it — the web's
+     * `catalogBytes` merge, done when it is first needed instead of at build
+     * time. Blocking file + FFI work (call off the main thread); a no-op when
+     * it is already resident. Before [initialize] it is only remembered, and
+     * the first catalog loads with it.
+     */
+    @Synchronized
+    fun include(namespace: String) {
+        if (!included.add(namespace)) return
+        if (!::engine.isInitialized) return
+        val active = engine.language()
+        engine.loadCatalog(FALLBACK, catalog(FALLBACK))
+        if (active != FALLBACK) engine.loadCatalog(active, catalog(active))
+        engine.changeLanguage(active)
+        publish()
+    }
+
+    private fun publish() {
+        _state.value = State(
+            ready = true,
+            language = engine.language(),
+            direction = engine.dir(),
+            namespaces = included.toSet(),
+        )
+    }
+
+    /** The language's main catalog with every included namespace deep-merged in ([I18nCatalogs.merged]). */
+    private fun catalog(tag: String): ByteArray =
+        I18nCatalogs.merged(readCatalog(tag), included.mapNotNull { readOnDemand(it, tag) })
 
     private fun applyLocale(tag: String) {
         if (tag != FALLBACK) {
-            engine.loadCatalog(tag, readCatalog(tag))
+            engine.loadCatalog(tag, catalog(tag))
         }
         engine.changeLanguage(tag)
     }

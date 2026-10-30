@@ -56,6 +56,7 @@ import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
 import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nRuntime
+import app.getvela.wallet.core.i18n.I18nCatalogs
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
@@ -97,7 +98,16 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(private val app: Application) {
 
-    val i18nRuntime = I18nRuntime(onLanguage = { AppLanguage.tag = it }) { tag ->
+    val i18nRuntime = I18nRuntime(
+        onLanguage = { AppLanguage.tag = it },
+        // P2.6: an on-demand namespace (`assets/i18n/<name>/<tag>.json`), read
+        // only when a screen that draws it asks (I18nRuntime.include).
+        readOnDemand = { namespace, tag ->
+            runCatching {
+                app.assets.open(I18nCatalogs.assetPath(tag, namespace)).use { it.readBytes() }
+            }.getOrNull()
+        },
+    ) { tag ->
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
