@@ -9,6 +9,10 @@
 	 * first. Which multisig (its name only if the core derives its address
 	 * from the genesis that carries it), the network, the number, and the
 	 * hashes a hardware wallet shows — each one copyable, to match.
+	 *
+	 * r5reg-23: the same review for Vela's request on a paired page and for a
+	 * link's transaction: its number as Vela writes it ("#7"), and its name
+	 * when the registry's genesis carries it, said to be its record's.
 	 */
 	import { onDestroy } from 'svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -71,6 +75,7 @@
 	});
 	const action = $derived(review?.action ?? null);
 	const nonce = $derived(BigInt(tx.nonce));
+	const numbered = (n: bigint) => fillTemplate(m.action.numberValue, { nonce: n.toString() });
 	const name = $derived.by(() => {
 		const n = genesis?.name;
 		try {
@@ -146,7 +151,11 @@
 		<div>
 			<dt>{w.multisigLabel}</dt>
 			<dd>
-				{#if name}<span class="name" data-testid="review-name">{name}</span>{/if}
+				{#if name}
+					<!-- r5reg-23: its name, as the members gave it — a claim; the address is who it is. -->
+					<span class="name" data-testid="review-name" translate="no">{name}</span>
+					<span class="sub" data-testid="review-name-source">{w.nameFromRecord}</span>
+				{/if}
 				<span class="mono" data-testid="review-safe">{eip55(safe)}</span>
 			</dd>
 		</div>
@@ -170,9 +179,10 @@
 		<div>
 			<dt>{m.action.number}</dt>
 			<dd data-testid="review-nonce">
-				{nonce.toString()}
+				<!-- r5reg-23: numbered as Vela numbers it, "#7". -->
+				{numbered(nonce)}
 				{#if chainNonce !== null && nonce > chainNonce}
-					<span class="sub">{fillTemplate(w.queuedTx, { nonce: chainNonce.toString() })}</span>
+					<span class="sub">{fillTemplate(w.queuedTx, { nonce: numbered(chainNonce) })}</span>
 				{/if}
 			</dd>
 		</div>

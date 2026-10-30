@@ -8,12 +8,14 @@
  * said as that, with Retry — not "Waiting for the wallet page…". r4C-3: a
  * wallet silent for a while is said to be waiting, with Cancel and Ask
  * again. r4C-11: a refusal in words. r4C-2: an approval that reaches the
- * mailbox from the link alone ends the request here too.
+ * mailbox from the link alone ends the request here too. r5reg-11: a wallet
+ * answer that arrives once the request is gone throws nothing.
  */
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { CallError } from '$lib/walletpair/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 const OWNER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
@@ -217,6 +219,33 @@ describe('the outside-wallet sheet', () => {
 		);
 		expect(button('external.retry')).toBeDefined();
 		await screen.unmount();
+	});
+
+	it('r5reg-11: "Use another wallet", the request gone, then the wallet fails: nothing uncaught', async () => {
+		const pending: ((e: unknown) => void)[] = [];
+		fake.sign = () => new Promise((_, reject) => pending.push(reject));
+		const uncaught: unknown[] = [];
+		const onRejection = (event: PromiseRejectionEvent) => {
+			uncaught.push(event.reason);
+			event.preventDefault();
+		};
+		window.addEventListener('unhandledrejection', onRejection);
+		try {
+			const { screen } = open();
+			await vi.waitFor(() => expect(button('external.useAnother')).toBeDefined());
+			button('external.useAnother')!.click();
+			await vi.waitFor(() => expect(pending).toHaveLength(2));
+			// The host's request is answered and gone (closed, or approved from the
+			// link) while the fresh room's wallet call is still out…
+			await screen.rerender({ request: null as never });
+			// …and fails late: the relay never answered.
+			pending[1](new CallError({ code: 4900, message: 'Disconnected' }));
+			await new Promise((r) => setTimeout(r, 50));
+			expect(uncaught.map(String)).toEqual([]);
+			await screen.unmount();
+		} finally {
+			window.removeEventListener('unhandledrejection', onRejection);
+		}
 	});
 
 	it('r4C-2: an approval that reaches the mailbox from the link alone ends the request', async () => {

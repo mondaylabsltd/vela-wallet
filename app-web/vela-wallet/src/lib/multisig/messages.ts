@@ -503,6 +503,31 @@ export interface MultisigMessages {
 		outsideLinkTitle: string;
 		outsideLinkHint: string;
 		mailboxNoEthSign: string;
+		/** r5reg-7: signed, on a page still paired with Vela. */
+		signedPaired: string;
+		/** r4C-14: the approvals already meet the threshold. */
+		enoughApprovals: string;
+		/** r5reg-13: `{{fee}}`, `{{balance}}` — the wallet holds less than the fee. */
+		executeNeedsGas: string;
+		/** r5reg-13: `{{symbol}}` — the wallet holds none of the coin that pays. */
+		executeNoGas: string;
+		/** r5reg-12: the mailbox's refusals, in plain words. */
+		refusedSetupUnchecked: string;
+		refusedSetup: string;
+		refusedSignature: string;
+		refusedFull: string;
+		refusedTransaction: string;
+		refusedOther: string;
+		/** r5reg-12: a refused approval or rejection is kept, and sent again. */
+		keptSigned: string;
+		/** r4C-12: a request row — `{{number}}` ("#7"), `{{what}}`, `{{to}}`. */
+		rowApprove: string;
+		rowApproveTo: string;
+		rowExecute: string;
+		rowReject: string;
+		outcomeNotSent: string;
+		/** r5reg-23: under the multisig's name in a review. */
+		nameFromRecord: string;
 	};
 	import: {
 		or: string;
@@ -1184,7 +1209,24 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		linkLater: '',
 		outsideLinkTitle: '',
 		outsideLinkHint: '',
-		mailboxNoEthSign: ''
+		mailboxNoEthSign: '',
+		signedPaired: '',
+		enoughApprovals: '',
+		executeNeedsGas: '',
+		executeNoGas: '',
+		refusedSetupUnchecked: '',
+		refusedSetup: '',
+		refusedSignature: '',
+		refusedFull: '',
+		refusedTransaction: '',
+		refusedOther: '',
+		keptSigned: '',
+		rowApprove: '',
+		rowApproveTo: '',
+		rowExecute: '',
+		rowReject: '',
+		outcomeNotSent: '',
+		nameFromRecord: ''
 	},
 	import: {
 		or: '',

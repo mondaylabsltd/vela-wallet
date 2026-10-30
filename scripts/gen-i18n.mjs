@@ -1282,8 +1282,18 @@ if (leafSet.size !== 2096) fail(`expected 2096 leaf paths, got ${leafSet.size}`)
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
+// 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
+//   `home.multisig.external` words — `signedPaired` (signed, the pairing kept
+//   open: one message, r5reg-7), `enoughApprovals` (nothing to sign, r4C-14),
+//   `executeNeedsGas`/`executeNoGas` (a wallet that can't pay its fee,
+//   r5reg-13), `refused{SetupUnchecked,Setup,Signature,Full,Transaction,Other}`
+//   and `keptSigned` (the mailbox's refusals in plain words, what was signed
+//   kept, r5reg-12), `row{Approve,ApproveTo,Execute,Reject}` and
+//   `outcomeNotSent` (each request named by what it was, r4C-12),
+//   `nameFromRecord` (a review's multisig name, r5reg-23). `relayNoToken`
+//   changes value only (plain words, no hosts: r4C-1). 562 + 17 = 579.
 {
-  const pins = { multisig: 562 };
+  const pins = { multisig: 579 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

@@ -33,7 +33,15 @@ const world = vi.hoisted(() => ({
 	/** Not deployed yet: deployed by an execution from here, from the registry's genesis. */
 	deployed: true,
 	/** The core's verdict on the code read right before a deploy. */
-	authority: { kind: 'verified', owners: [], threshold: 2 } as unknown
+	authority: { kind: 'verified', owners: [], threshold: 2 } as unknown,
+	/** Refusals the mailbox answers with, in turn, before it takes one. */
+	refuse: [] as unknown[],
+	/** Every submission, refused or taken, and whether it carried the setup. */
+	tried: [] as { signature: string; genesis: boolean }[],
+	/** The wallet's coin, as `eth_getBalance` answers. */
+	balance: '0x0',
+	/** The multisig's next number on the chain. */
+	nonce: 3n
 }));
 vi.mock('../core/judge', () => ({ judgeOn: async () => world.findings }));
 vi.mock('../core/authority', () => ({ counterfactualFacts: async () => ({ codes: {} }) }));
@@ -41,7 +49,8 @@ vi.mock('../core/kernel', async (original) => ({
 	...(await original<typeof import('../core/kernel')>()),
 	// The registry's genesis stands for this multisig (the core's derivation is its own test's).
 	genesisAddress: () => SAFE_ADDRESS,
-	counterfactualAuthority: () => world.authority
+	counterfactualAuthority: () => world.authority,
+	namedGenesis: (g: unknown) => g
 }));
 
 vi.mock('../core/service', () => {
@@ -57,7 +66,9 @@ vi.mock('../core/service', () => {
 		fetchGenesis: async () =>
 			world.deployed ? { found: false } : { found: true, genesis: { name: 'Fixture' } },
 		fetchProposals: async () => ({ members: {}, proposals: world.proposals }),
-		submitApproval: async (req: (typeof world.submitted)[number]) => {
+		submitApproval: async (req: (typeof world.submitted)[number] & { genesis?: unknown }) => {
+			world.tried.push({ signature: req.approval.signature, genesis: 'genesis' in req });
+			if (world.refuse.length > 0) return { ok: false, refusal: world.refuse.shift() };
 			if (world.typedOnly && /(1f|20)$/.test(req.approval.signature)) {
 				return {
 					ok: false,
@@ -79,7 +90,7 @@ vi.mock('../core/chain', () => ({
 		deployed: world.deployed,
 		owners: world.owners,
 		threshold: 2,
-		nonce: 3n
+		nonce: world.nonce
 	})
 }));
 vi.mock('./onchain', async (original) => ({
@@ -92,7 +103,9 @@ vi.mock('$lib/services/rpc-pool', () => ({
 			? { result: { status: '0x1' } }
 			: method === 'eth_gasPrice'
 				? { result: '0x3b9aca00' }
-				: { result: '0x5208' }
+				: method === 'eth_getBalance'
+					? { result: world.balance }
+					: { result: '0x5208' }
 }));
 
 const kernel = await import('../core/kernel');
@@ -200,6 +213,11 @@ beforeEach(() => {
 	world.findings = [];
 	world.deployed = true;
 	world.authority = { kind: 'verified', owners: [], threshold: 2 };
+	world.refuse = [];
+	world.tried = [];
+	world.balance = '0x0';
+	world.nonce = 3n;
+	storage.clear();
 	world.proposals = [
 		stored([{ owner: A.address, signature: A.sign(bytesOf(HASH())), createdMs: 1 }])
 	];
@@ -408,5 +426,116 @@ describe("the mailbox's refusal, in one line", () => {
 		expect(shortRefusal({ kind: 'full' })).toBe('full');
 		expect(refusedForm({ kind: 'approval', error: { kind: 'notAnEip712Signature' } })).toBe(true);
 		expect(refusedForm({ kind: 'approval', error: { kind: 'badSignature' } })).toBe(false);
+	});
+});
+
+describe('a refusal never loses what was signed (r5reg-12)', () => {
+	const unchecked = {
+		kind: 'genesis',
+		detail: 'the proxy code of factory 0x4e1D… on chain 5042002 could not be read'
+	};
+
+	it('said by kind, never its raw text; kept, and sent again with nothing signed twice', async () => {
+		const { refusalKind } = await import('./outside.svelte');
+		expect(refusalKind(unchecked)).toBe('setupUnchecked');
+		expect(refusalKind({ kind: 'genesis', detail: 'the genesis derives 0x1 on chain 1' })).toBe(
+			'setup'
+		);
+		expect(refusalKind({ kind: 'approval', error: { kind: 'badSignature' } })).toBe('signature');
+		expect(refusalKind({ kind: 'tooManyProposals', limit: 50 })).toBe('full');
+		expect(refusalKind({ kind: 'transaction', detail: 'delegatecall' })).toBe('transaction');
+		expect(refusalKind({ kind: 'error', status: 404, error: 'unknown Safe' })).toBe('other');
+
+		world.refuse = [{ kind: 'full' }];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		const wallet = walletOf(B);
+		await tx.approve(wallet, B.address);
+		expect(tx.step).toMatchObject({ kind: 'failed', refused: 'full', unsent: true });
+		expect(storage.get('vela.connect.unsent.v1')).toContain(B.address);
+		const signed = world.tried[0].signature;
+		await tx.sendAgain();
+		expect(tx.step).toEqual({ kind: 'approved', form: 'typedData' });
+		expect(world.submitted.map((r) => r.approval.signature)).toEqual([signed]);
+		expect(
+			wallet.request.mock.calls.filter(([r]) => r.method === 'eth_signTypedData_v4')
+		).toHaveLength(1);
+		expect(storage.get('vela.connect.unsent.v1')).toBeUndefined();
+	});
+
+	it('a rejection refused is kept too, and a reload sends it again on its own', async () => {
+		world.refuse = [{ kind: 'error', status: 503, error: null }];
+		const first = new OutsideTransaction(link());
+		await first.refresh();
+		await first.reject(walletOf(B), B.address);
+		expect(first.step).toMatchObject({ kind: 'failed', what: 'reject', unsent: true });
+		// The page reloaded: the same link, a new page.
+		const again = new OutsideTransaction(link());
+		await again.refresh();
+		await vi.waitFor(() => expect(again.step).toEqual({ kind: 'rejected' }));
+		expect(world.submitted).toHaveLength(1);
+		expect(world.submitted[0].safeTx.to.toLowerCase()).toBe(SAFE.toLowerCase());
+	});
+
+	it("refused for the multisig's setup alone: sent once more without it", async () => {
+		world.deployed = false;
+		world.refuse = [unchecked];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.view!.genesis).not.toBeNull();
+		await tx.approve(walletOf(B), B.address);
+		expect(world.tried.map((t) => t.genesis)).toEqual([true, false]);
+		expect(tx.step).toEqual({ kind: 'approved', form: 'typedData' });
+	});
+
+	it('kept for a transaction whose number is used since: dropped, nothing to send', async () => {
+		world.refuse = [{ kind: 'full' }];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		await tx.approve(walletOf(B), B.address);
+		expect(storage.get('vela.connect.unsent.v1')).toBeDefined();
+		world.nonce = 4n;
+		const used = new OutsideTransaction(link());
+		await used.refresh();
+		expect(used.view!.item.status).toBe('done');
+		expect(storage.get('vela.connect.unsent.v1')).toBeUndefined();
+		expect(used.step).toEqual({ kind: 'idle' });
+		expect(world.submitted).toHaveLength(0);
+	});
+});
+
+describe('enough approvals, and paying for an execution (r4C-14, r5reg-13)', () => {
+	it('approvals that meet the threshold: nothing to sign, executing is left', async () => {
+		world.owners = [A.address, B.address, STRANGER.address];
+		world.proposals = [
+			stored([
+				{ owner: A.address, signature: A.sign(bytesOf(HASH())), createdMs: 1 },
+				{ owner: STRANGER.address, signature: STRANGER.sign(bytesOf(HASH())), createdMs: 2 }
+			])
+		];
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(tx.view!.item.approved).toBe(2);
+		expect(tx.enough).toBe(true);
+		expect(tx.canApprove(B.address)).toBe(false);
+		expect(tx.canExecute(B.address)).toBe(true);
+	});
+
+	it("reads the wallet's coin, which pays the fee", async () => {
+		world.balance = '0x2386f26fc10000';
+		const tx = new OutsideTransaction(link());
+		await tx.refresh();
+		expect(await tx.balance(B.address)).toBe(10_000_000_000_000_000n);
+	});
+});
+
+describe("Vela's request, counted before it is signed (r4C-14)", () => {
+	it('read from the mailbox and the chain; not there yet: null', async () => {
+		const { readTransaction } = await import('./outside.svelte');
+		const read = await readTransaction(link());
+		expect(read?.view?.item.approved).toBe(1);
+		expect(read?.enough).toBe(false);
+		world.proposals = [];
+		expect(await readTransaction(link())).toBeNull();
 	});
 });

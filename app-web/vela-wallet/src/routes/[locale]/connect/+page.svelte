@@ -21,9 +21,18 @@
 	 * r4C-2 / r4C-9: a link that names the transaction (`ms=`) lets the owner
 	 * approve, execute or reject it from here alone (`OutsideTransaction`):
 	 * read from the mailbox, checked by the core, signed in the wallet.
+	 *
+	 * Round 6: a new link opened in this tab is read at once (r5reg-2); one
+	 * transaction card at a time, and none for a transaction the pairing has
+	 * handled or whose number is used (r5reg-7); one message for where the page
+	 * stands — "Signed ✓" on a paired page says to keep it open, never also to
+	 * close it; nothing to sign once the approvals are enough (r4C-14); Execute
+	 * is not the main action for a wallet that cannot pay its fee (r5reg-13);
+	 * the mailbox's refusals in plain words, what was signed kept and sent
+	 * again (r5reg-12); each request named by what it was (r4C-12).
 	 */
 	import { replaceUrl } from '$lib/ui/history';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import BrandMark from '$lib/ui/BrandMark.svelte';
 	import { loadCore } from '$lib/core/client';
@@ -39,15 +48,29 @@
 	import { problemText, walletProblem } from '$lib/multisig/external/errors';
 	import {
 		OutsideTransaction,
+		readTransaction,
+		verifiedGenesis,
 		type ExecutionFee,
-		type OutsideStep
+		type OutsideStep,
+		type RefusalKind
 	} from '$lib/multisig/external/outside.svelte';
 	import type { RelayStatus } from '$lib/multisig/external/relay';
 	import TxReview from '$lib/multisig/external/TxReview.svelte';
 	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
 	import { findingLines } from '$lib/multisig/ui/findings';
-	import { explorerTxUrl, formatUnits } from '$lib/multisig/core/display';
-	import { safeTxHashes, verifyEcdsaApproval } from '$lib/multisig/core/kernel';
+	import {
+		actionRecipient,
+		actionTitle,
+		explorerTxUrl,
+		formatUnits
+	} from '$lib/multisig/core/display';
+	import {
+		reviewTx,
+		safeTxHashes,
+		verifyEcdsaApproval,
+		type Genesis,
+		type SafeTx
+	} from '$lib/multisig/core/kernel';
 	import { fillTemplate } from '$lib/i18n/fill';
 
 	let { data } = $props();
@@ -58,6 +81,8 @@
 	const STILL_WAITING_MS = 20_000;
 	/** r4C-4: Vela's side absent this long is said, not waited on in silence. */
 	const VELA_ABSENT_MS = 10_000;
+	/** r5reg-7: the link's transaction read again this often while it is shown, so its count is now's. */
+	const REREAD_MS = 30_000;
 
 	let providers = $state<ProviderDetail[]>([]);
 	let discovered = $state(false);
@@ -78,30 +103,81 @@
 	let outside = $state<OutsideTransaction | null>(null);
 	let now = $state(Date.now());
 
+	/** The core, loaded once: it reads every request before the wallet sees it. */
+	let core: Promise<unknown> = Promise.resolve();
+
 	onMount(() => {
 		const timer = setInterval(() => (now = Date.now()), 1000);
+		// r5reg-7: the link's transaction, read again while it is shown and idle.
+		const reread = setInterval(() => {
+			if (outside && step.kind === 'idle' && document.visibilityState === 'visible') {
+				void outside.refresh();
+			}
+		}, REREAD_MS);
+		// r5reg-2: a new link opened in this tab — same page, another fragment.
+		const opened = () => openLink(location.hash);
+		window.addEventListener('hashchange', opened);
 		void boot();
-		return () => clearInterval(timer);
+		return () => {
+			clearInterval(timer);
+			clearInterval(reread);
+			window.removeEventListener('hashchange', opened);
+			outside?.dispose();
+		};
 	});
 
-	async function boot() {
-		// The invite is a bearer credential until paired: out of the address bar
-		// and history. The members and the transaction stay, so a reload still has them.
-		const read = readConnectHash(location.hash);
-		invite = read.invite;
-		invited = !!invite;
+	/**
+	 * What a link names, taken in: its members, the room's invite (out of the
+	 * address bar and history — a bearer credential until paired; the members
+	 * and the transaction stay, so a reload still has them), and its
+	 * transaction, read afresh — never the one an earlier link named.
+	 * Returns the invite, if it has one.
+	 */
+	function readLink(hash: string): string | null {
+		const read = readConnectHash(hash);
+		if (!read.invite && !read.tx) return null;
 		members = read.members;
-		if (invite) {
+		if (read.invite) {
+			invited = true;
 			link = location.href;
 			replaceUrl(connectLink(location.pathname, null, members, read.tx));
 		}
-		// The core reads every request before the wallet sees it.
-		const core = loadCore().then(() => (coreReady = true));
+		const same =
+			!!outside &&
+			!!read.tx &&
+			outside.link.chainId === read.tx.chainId &&
+			outside.link.multisig === read.tx.multisig &&
+			outside.link.safeTxHash === read.tx.safeTxHash;
+		if (same) {
+			// The same transaction opened again: read now, as it stands.
+			if (step.kind === 'idle') void core.then(() => outside?.refresh());
+			return read.invite;
+		}
+		outside?.dispose();
+		rejecting = false;
+		riskAsk = null;
+		fee = undefined;
+		coin = undefined;
+		outside = null;
 		if (read.tx) {
 			const tx = new OutsideTransaction(read.tx);
 			outside = tx;
 			void core.then(() => tx.refresh());
 		}
+		return read.invite;
+	}
+
+	/** r5reg-2: another link in the same tab: its transaction and its room, now. */
+	function openLink(hash: string) {
+		const fresh = readLink(hash);
+		if (!fresh) return;
+		if (bridge) bridge.join(fresh, members);
+		else invite = fresh;
+	}
+
+	async function boot() {
+		core = loadCore().then(() => (coreReady = true));
+		invite = readLink(location.hash);
 		providers = await discoverProviders();
 		discovered = true;
 		await core.catch(() => {});
@@ -197,10 +273,17 @@
 	const memberList = $derived(members.map((a) => shortenAddress(eip55(a))).join(', '));
 	/** A request handed to the wallet and not answered. */
 	const inWallet = $derived(activity.find((a) => a.stage === 'wallet' && !a.outcome) ?? null);
-	/** The latest answered signature: "Signed ✓". */
-	const lastSigned = $derived(
-		activity.find((a) => a.method === 'eth_signTypedData_v4' && a.outcome === 'done') ?? null
-	);
+	/**
+	 * The latest request answered, if it was a signature: "Signed ✓" — said
+	 * once (r5reg-7): with "keep this page open" while paired, else with
+	 * "you can close this page".
+	 */
+	const lastSigned = $derived.by(() => {
+		const last = activity.find((a) => a.outcome && a.method !== 'wallet_switchEthereumChain');
+		return last?.method === 'eth_signTypedData_v4' && last.outcome === 'done' ? last : null;
+	});
+	/** Paired with Vela: a session it approved is here. */
+	const paired = $derived(live.length > 0);
 	/** r4C-15: a live session whose Vela side left while something was asked. */
 	const velaGone = $derived(live.some((s) => s.state !== 'connected') && (!!request || !!inWallet));
 	/** r4C-4: a session on the relay whose Vela side has not been there for a while. */
@@ -258,7 +341,7 @@
 			status.why === 'refused'
 				? m.relayRefused
 				: status.why === 'noToken'
-					? fillTemplate(m.relayNoToken, { detail: status.detail })
+					? m.relayNoToken
 					: status.detail;
 		if (status.kind === 'failed') return fillTemplate(m.relayFailed, { reason });
 		if (status.at === null) return fillTemplate(m.relayUnreachable, { reason });
@@ -343,21 +426,262 @@
 	}
 
 	let fee = $state<ExecutionFee | null | undefined>(undefined);
+	/** r5reg-13: what the wallet holds of the network's coin, which pays an execution's fee. */
+	let coin = $state<bigint | null | undefined>(undefined);
 	$effect(() => {
 		const tx = outside;
 		const who = account;
 		if (!tx || !who || !view || !tx.canExecute(who)) {
 			fee = undefined;
+			coin = undefined;
 			return;
 		}
 		let alive = true;
-		void tx.fee(who).then((f) => {
-			if (alive) fee = f;
+		void Promise.all([tx.fee(who), tx.balance(who)]).then(([f, b]) => {
+			if (!alive) return;
+			fee = f;
+			coin = b;
 		});
 		return () => {
 			alive = false;
 		};
 	});
+	/**
+	 * r5reg-13: the wallet cannot pay for executing it — less than the fee, or
+	 * nothing at all when the fee could not be worked out. Unknown is not "can't".
+	 */
+	const cannotPay = $derived(
+		coin !== undefined && coin !== null && fee !== undefined && (fee ? coin < fee.wei : coin === 0n)
+	);
+	const coinOf = (wei: bigint) =>
+		view ? `${formatUnits(wei.toString(), 18)} ${nativeSymbol(view.chainId)}` : '';
+
+	/** Waiting on the wallet, the chain or the mailbox for the link's transaction. */
+	const outsideBusy = $derived(
+		step.kind === 'switching' ||
+			step.kind === 'wallet' ||
+			step.kind === 'mining' ||
+			step.kind === 'sending'
+	);
+	/** r5reg-7: the link's transaction was asked for, and answered, through the pairing. */
+	const handledPaired = $derived(
+		!!view &&
+			coreReady &&
+			activity.some(
+				(a) =>
+					a.outcome &&
+					a.safeTx &&
+					hashesOf(a)?.safeTxHash.toLowerCase() === view.item.safeTxHash.toLowerCase()
+			)
+	);
+	/**
+	 * r5reg-7: one transaction card. The link's is not shown while Vela's
+	 * request is (unless the owner is acting on it from here), nor on a paired
+	 * page once the pairing handled it or its number is used: it would only be
+	 * a stale copy beside the current one.
+	 */
+	const showOutside = $derived(
+		!!outside &&
+			!liveSame &&
+			(outsideBusy ||
+				(!request &&
+					!(inWallet && inWallet.method !== 'wallet_switchEthereumChain') &&
+					!(paired && step.kind === 'idle' && (handledPaired || view?.item.status === 'done'))))
+	);
+	// A request answered through the pairing moves the link's transaction on: read it again.
+	let answered = 0;
+	$effect(() => {
+		const done = activity.filter((a) => a.outcome === 'done').length;
+		if (done > answered && outside && step.kind === 'idle') void outside.refresh();
+		answered = done;
+	});
+
+	/**
+	 * r4C-14: Vela's request, counted as the mailbox and the chain hold it now.
+	 * Its approvals already enough: nothing to sign — the Sign button is not
+	 * offered (Decline is), whatever Vela still thinks.
+	 */
+	let counted = $state<{ hash: string; tx: OutsideTransaction | null } | null>(null);
+	$effect(() => {
+		const entry = request?.entry;
+		const st = entry?.safeTx;
+		const hash = entry && coreReady ? hashesOf(entry)?.safeTxHash.toLowerCase() : undefined;
+		if (!st || !hash || untrack(() => counted?.hash) === hash) return;
+		counted = { hash, tx: null };
+		void readTransaction({ chainId: st.chainId, multisig: st.safe.toLowerCase(), safeTxHash: hash })
+			.then((tx) => {
+				if (untrack(() => counted?.hash) === hash) counted = { hash, tx };
+			})
+			.catch(() => {});
+	});
+	const requestEnough = $derived.by(() => {
+		const entry = request?.entry;
+		const tx = counted?.tx;
+		if (!entry || !tx || hashesOf(entry)?.safeTxHash.toLowerCase() !== counted?.hash) return false;
+		return tx.enough && !tx.hasApproved(entry.account);
+	});
+
+	/**
+	 * r5reg-23: Vela's request names its multisig as the link's review does —
+	 * the registry's genesis, only if the core derives the address from it.
+	 */
+	let requestGenesis = $state<{ safe: string; genesis: Genesis | null } | null>(null);
+	$effect(() => {
+		const safe = request?.entry.safeTx?.safe.toLowerCase();
+		if (!safe || requestGenesis?.safe === safe) return;
+		let alive = true;
+		void verifiedGenesis(safe).then((genesis) => {
+			if (alive) requestGenesis = { safe, genesis };
+		});
+		return () => {
+			alive = false;
+		};
+	});
+
+	/**
+	 * r4C-12: what each request was, by its number — "Approve #7 · Send 0.02
+	 * USDC to 0x…", "Reject #8", "Execute #7" — read by the core from what was
+	 * asked. Worked out once per request (a token's symbol is read once).
+	 */
+	let labels = $state<Record<string, string>>({});
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping (which rows are asked for), never drawn
+	const labelling = new Set<string>();
+	$effect(() => {
+		if (!coreReady) return;
+		for (const a of activity) {
+			if (labelling.has(a.id)) continue;
+			labelling.add(a.id);
+			void labelOf(a).then((label) => {
+				if (label) labels = { ...labels, [a.id]: label };
+			});
+		}
+	});
+
+	const numbered = (nonce: bigint) =>
+		fillTemplate(all.action.numberValue, { nonce: nonce.toString() });
+
+	async function labelOf(a: ActivityEntry): Promise<string | null> {
+		try {
+			if (a.method === 'eth_signTypedData_v4' && a.safeTx) {
+				return await txLabel(a.safeTx.chainId, a.safeTx.safe, a.safeTx.tx);
+			}
+			if (a.method === 'eth_sendTransaction' && a.send) {
+				const tx = executed(a.send);
+				if (tx) return fillTemplate(m.rowExecute, { number: numbered(BigInt(tx.nonce)) });
+			}
+		} catch {
+			// the generic words stand
+		}
+		return null;
+	}
+
+	/** "Approve #7 · Send 0.02 USDC to 0x…", or "Reject #8" for a cancellation. */
+	async function txLabel(chainId: number, safe: string, tx: SafeTx): Promise<string> {
+		const action = reviewTx(chainId, safe, tx).action;
+		const nonce = BigInt(tx.nonce);
+		if (action?.kind === 'cancel') return fillTemplate(m.rowReject, { number: numbered(nonce) });
+		const what = await actionTitle(all, chainId, action, nonce);
+		const to = actionRecipient(action);
+		return to
+			? fillTemplate(m.rowApproveTo, {
+					number: numbered(nonce),
+					what,
+					to: shortenAddress(eip55(to))
+				})
+			: fillTemplate(m.rowApprove, { number: numbered(nonce), what });
+	}
+
+	/**
+	 * The SafeTx an `execTransaction` sent to a multisig runs, when it is one
+	 * this page has seen (asked to approve, or the link's): its call is matched
+	 * field by field — `execTransaction` carries no number.
+	 */
+	function executed(send: { to: string; data: string }): SafeTx | null {
+		const data = send.data.toLowerCase();
+		if (!data.startsWith('0x6a761202')) return null;
+		const word = (i: number) => BigInt(`0x${data.slice(10 + i * 64, 10 + (i + 1) * 64) || '0'}`);
+		const known: { safe: string; tx: SafeTx }[] = [
+			...activity.flatMap((x) => (x.safeTx ? [{ safe: x.safeTx.safe, tx: x.safeTx.tx }] : [])),
+			...(view ? [{ safe: view.safe, tx: view.tx }] : [])
+		];
+		return (
+			known.find(
+				({ safe, tx }) =>
+					safe.toLowerCase() === send.to.toLowerCase() &&
+					BigInt(tx.to) === word(0) &&
+					BigInt(tx.value) === word(1) &&
+					BigInt(tx.operation) === word(3) &&
+					BigInt(tx.safeTxGas) === word(4) &&
+					BigInt(tx.baseGas) === word(5) &&
+					BigInt(tx.gasPrice) === word(6) &&
+					BigInt(tx.gasToken) === word(7) &&
+					BigInt(tx.refundReceiver) === word(8)
+			)?.tx ?? null
+		);
+	}
+
+	/**
+	 * r4C-12: what was done from here on the link's transaction, a row beside
+	 * Vela's requests, with how it ended.
+	 */
+	let mine = $state<Row[]>([]);
+	let mineLabel = $state('');
+	$effect(() => {
+		const v = view;
+		if (!v || !coreReady) return;
+		let alive = true;
+		void txLabel(v.chainId, v.safe, v.tx)
+			.then((label) => {
+				if (alive) mineLabel = label;
+			})
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+	});
+	let logged: OutsideStep | null = null;
+	$effect(() => {
+		const s = step;
+		const v = view;
+		if (s === logged || !v) return;
+		logged = s;
+		const number = numbered(v.item.nonce);
+		const row = (label: string, outcome: string, bad = false) => {
+			const at = Date.now();
+			const before = untrack(() => mine);
+			mine = [{ id: `here-${at}-${before.length}`, at, label, outcome, bad }, ...before];
+		};
+		const label =
+			s.kind === 'executed' || (s.kind === 'failed' && s.what === 'execute')
+				? fillTemplate(m.rowExecute, { number })
+				: s.kind === 'rejected' || (s.kind === 'failed' && s.what === 'reject')
+					? fillTemplate(m.rowReject, { number })
+					: untrack(() => mineLabel) || number;
+		if (s.kind === 'approved' || s.kind === 'rejected') row(label, m.outcomeDone);
+		else if (s.kind === 'executed') row(label, m.outcomeSent);
+		else if (s.kind === 'failed') row(label, s.unsent ? m.outcomeNotSent : m.outcomeFailed, true);
+	});
+
+	interface Row {
+		id: string;
+		at: number;
+		label: string;
+		outcome: string;
+		bad: boolean;
+	}
+	/** Every row, newest first: Vela's requests and what was done from here. */
+	const rows = $derived<Row[]>(
+		[
+			...activity.map((a) => ({
+				id: a.id,
+				at: a.at,
+				label: labels[a.id] ?? describe(a.method),
+				outcome: outcomeOf(a),
+				bad: a.outcome === 'failed'
+			})),
+			...mine
+		].sort((x, y) => y.at - x.at)
+	);
 
 	let rejecting = $state(false);
 	/**
@@ -374,6 +698,24 @@
 		const run = riskAsk;
 		riskAsk = null;
 		if (yes && run) await run();
+	}
+
+	/** r5reg-12: the mailbox's refusal in plain words, never its raw text. */
+	function refusedText(kind: RefusalKind): string {
+		switch (kind) {
+			case 'setupUnchecked':
+				return m.refusedSetupUnchecked;
+			case 'setup':
+				return m.refusedSetup;
+			case 'signature':
+				return m.refusedSignature;
+			case 'full':
+				return m.refusedFull;
+			case 'transaction':
+				return m.refusedTransaction;
+			default:
+				return m.refusedOther;
+		}
 	}
 
 	function stepFailure(s: Extract<OutsideStep, { kind: 'failed' }>): string {
@@ -396,9 +738,7 @@
 				: fillTemplate(all.authority.deployUnverified, { network });
 		}
 		if (s.reason.startsWith('reverted')) return m.reverted;
-		if (s.reason.startsWith('refused')) {
-			return fillTemplate(m.mailboxRefused, { reason: s.reason.replace(/^refused: /, '') });
-		}
+		if (s.refused) return refusedText(s.refused);
 		return fillTemplate(m.walletFailed, { wallet: walletName, reason: s.reason });
 	}
 </script>
@@ -494,12 +834,18 @@
 						safe={entry.safeTx.safe}
 						tx={entry.safeTx.tx}
 						{hashes}
+						genesis={requestGenesis?.safe === entry.safeTx.safe.toLowerCase()
+							? requestGenesis.genesis
+							: null}
 					/>
 				{:else if entry.method === 'eth_signTypedData_v4'}
 					<p class="error" role="alert">{m.notSafeTx}</p>
 				{:else if entry.send}
 					<p class="lead">{m.sendTx}</p>
 					<p class="mono">{entry.send.to}</p>
+				{/if}
+				{#if requestEnough}
+					<p class="muted" data-testid="connect-request-enough">{m.enoughApprovals}</p>
 				{/if}
 				{#if entry.stage === 'fallback' && hashes}
 					<!-- r4C-16: no typed data in this wallet: the hash itself, on a tap. -->
@@ -512,7 +858,7 @@
 					<Button variant="secondary" shape="rounded" onclick={() => request.answer(false)}
 						>{m.decline}</Button
 					>
-					{#if entry.method !== 'eth_signTypedData_v4' || (entry.safeTx && hashes)}
+					{#if !requestEnough && (entry.method !== 'eth_signTypedData_v4' || (entry.safeTx && hashes))}
 						<Button
 							variant="value"
 							shape="rounded"
@@ -546,7 +892,8 @@
 					</p>
 				{/if}
 			</section>
-		{:else if lastSigned && !activity.some((a) => !a.outcome)}
+		{:else if lastSigned && !paired && !activity.some((a) => !a.outcome)}
+			<!-- r5reg-7: no pairing left to keep open: done, and the page may close. -->
 			<section class="card done" data-testid="connect-signed">
 				<p class="lead">
 					{m.signedClose}
@@ -567,12 +914,22 @@
 			<p class="waiting" role="status" data-testid="connect-vela-gone">
 				<span class="spinner" aria-hidden="true"></span>{m.velaOffline}
 			</p>
-		{:else if live.length > 0 && !request && !inWallet}
+		{:else if paired && !request && !inWallet}
 			<section class="card">
 				{#if wrongAccount}
 					{@render who()}
 				{:else}
-					<p class="lead" data-testid="connect-connected">{m.keepOpen}</p>
+					{#if lastSigned}
+						<!-- r5reg-7: one state, one message — signed, and the pairing stays open. -->
+						<p class="lead" data-testid="connect-signed">{m.signedPaired}</p>
+						<p class="muted">
+							{lastSigned.form === 'ethSign' ? m.signedHashForm : m.signedTypedForm}
+							{#if !signatureChecks(lastSigned)}{m.badSignature}{/if}
+						</p>
+					{/if}
+					<p class={lastSigned ? 'muted' : 'lead'} data-testid="connect-connected">
+						{m.keepOpen}
+					</p>
 					{#if account}
 						<p class="who">
 							<span class="mono">{shortenAddress(eip55(account))}</span>
@@ -594,19 +951,19 @@
 			<p class="muted">{m.noSession}</p>
 		{/if}
 
-		{#if outside && !liveSame}
+		{#if outside && showOutside}
 			{@render fromHere(outside)}
 		{/if}
 
-		{#if activity.length > 0}
+		{#if rows.length > 0}
 			<section class="card">
 				<h2>{m.requests}</h2>
 				<ul class="activity" data-testid="connect-activity">
-					{#each activity as a (a.id)}
+					{#each rows as row (row.id)}
 						<li>
-							<span>{describe(a.method)}</span>
-							<span class="outcome" class:bad={a.outcome === 'failed'}>{outcomeOf(a)}</span>
-							<time class="muted">{at(a.at)}</time>
+							<span>{row.label}</span>
+							<span class="outcome" class:bad={row.bad}>{row.outcome}</span>
+							<time class="muted">{at(row.at)}</time>
 						</li>
 					{/each}
 				</ul>
@@ -730,7 +1087,12 @@
 			{/if}
 			{#if step.kind === 'approved'}
 				<p class="lead ok" data-testid="outside-approved">
-					{m.approvedClose}
+					{#if paired}
+						<!-- r5reg-7: the pairing stays open: not "you can close this page" too. -->
+						<Icon icon={UTILITY_ICONS.check} size="md" />{all.proposal.approved}
+					{:else}
+						{m.approvedClose}
+					{/if}
 				</p>
 				<p class="muted">
 					{step.form === 'ethSign'
@@ -800,6 +1162,10 @@
 			{:else}
 				{#if step.kind === 'failed'}
 					<p class="error" role="alert" data-testid="outside-failed">{stepFailure(step)}</p>
+					{#if step.unsent && step.refused}
+						<!-- r5reg-12: refused, and still kept: nothing is signed twice. -->
+						<p class="muted" data-testid="outside-kept">{m.keptSigned}</p>
+					{/if}
 				{/if}
 				{#if step.kind === 'failed' && step.unsent}
 					<Button variant="value" shape="rounded" onclick={() => tx.sendAgain()}
@@ -850,28 +1216,44 @@
 						<p class="muted" data-testid="outside-already">
 							{fillTemplate(m.alreadyApproved, { account: shortenAddress(eip55(account)) })}
 						</p>
+					{:else if tx.enough && tx.open}
+						<!-- r4C-14: the approvals are enough: nothing to sign, only executing is left. -->
+						<p class="muted" data-testid="outside-enough">{m.enoughApprovals}</p>
 					{/if}
 					{#if tx.canExecute(account)}
 						<!-- r4C-9: the owner's own wallet executes it, and pays: said first. -->
-						<p class="muted" data-testid="outside-fee">
-							{fee
-								? fillTemplate(m.executeFee, {
-										fee: `${formatUnits(fee.wei.toString(), 18)} ${nativeSymbol(view.chainId)}`,
-										account: shortenAddress(eip55(account))
-									})
-								: m.executeFeeUnknown}
-							{#if fee && fee.count > 1}{fillTemplate(m.executeSteps, {
-									network: chainName(view.chainId)
-								})}{/if}
-						</p>
+						{#if cannotPay}
+							<!-- r5reg-13: a wallet that can't pay is told what it needs; Execute steps back. -->
+							<p class="error" role="alert" data-testid="outside-cannot-pay">
+								{fee
+									? fillTemplate(m.executeNeedsGas, {
+											fee: coinOf(fee.wei),
+											balance: coinOf(coin ?? 0n)
+										})
+									: fillTemplate(m.executeNoGas, { symbol: nativeSymbol(view.chainId) })}
+							</p>
+						{:else}
+							<p class="muted" data-testid="outside-fee">
+								{fee
+									? fillTemplate(m.executeFee, {
+											fee: coinOf(fee.wei),
+											account: shortenAddress(eip55(account))
+										})
+									: m.executeFeeUnknown}
+								{#if fee && fee.count > 1}{fillTemplate(m.executeSteps, {
+										network: chainName(view.chainId)
+									})}{/if}
+							</p>
+						{/if}
 						<Button
-							variant="value"
+							variant={cannotPay ? 'secondary' : 'value'}
 							shape="rounded"
+							disabled={cannotPay}
 							onclick={() => act(() => tx.execute(chosen!.provider, account))}
 							>{fillTemplate(m.executeWith, { wallet: walletName })}</Button
 						>
 					{/if}
-					{#if tx.canApprove(account) && !tx.canExecute(account)}
+					{#if tx.canApprove(account) && (!tx.canExecute(account) || cannotPay)}
 						<Button
 							variant="value"
 							shape="rounded"

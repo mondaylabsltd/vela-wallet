@@ -218,3 +218,36 @@ describe('a connection refused by the relay', () => {
 		expect(watched.relay.status).toEqual({ kind: 'up' });
 	});
 });
+
+describe('back online (r4C-15)', () => {
+	it('a connection waiting out its backoff tries the relay at once; a left one never', () => {
+		const win = new EventTarget();
+		const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+		vi.stubGlobal('window', win);
+		vi.stubGlobal('document', doc);
+		const watched = connectRoom({ relay: 'ws://127.0.0.1:8792' } as never);
+		const connection = vendored.last!.connection as unknown as EventTarget & {
+			state: string;
+			reason?: string;
+			reconnectNow: () => void;
+		};
+		let nudged = 0;
+		connection.reconnectNow = () => void (nudged += 1);
+		expect(watched).toBe(connection);
+		win.dispatchEvent(new Event('online'));
+		expect(nudged).toBe(1);
+		// The page in front again: the same.
+		doc.dispatchEvent(new Event('visibilitychange'));
+		expect(nudged).toBe(2);
+		// In the background, nothing: it is tried when it is looked at.
+		doc.visibilityState = 'hidden';
+		doc.dispatchEvent(new Event('visibilitychange'));
+		expect(nudged).toBe(2);
+		// Left on purpose: never brought back.
+		doc.visibilityState = 'visible';
+		connection.reason = 'left';
+		connection.dispatchEvent(new Event('state'));
+		win.dispatchEvent(new Event('online'));
+		expect(nudged).toBe(2);
+	});
+});

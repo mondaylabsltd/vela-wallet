@@ -295,6 +295,21 @@ describe('a request from Vela, on this page', () => {
 		expect(bridge.request).toBeUndefined();
 	});
 
+	it('r4C-15: Vela asking again for the same transaction withdraws what it asked before', async () => {
+		const { bridge, approve } = open();
+		// Asked before Vela went offline: nobody waits on it once Vela asks again.
+		const stale = approve({ method: 'eth_signTypedData_v4', params: [MEMBER, 'safe-tx'] });
+		await vi.waitFor(() => expect(bridge.request).toBeDefined());
+		const first = bridge.request!.entry;
+		const again = approve({ method: 'eth_signTypedData_v4', params: [MEMBER, 'safe-tx'] });
+		expect(await stale).toBe(false);
+		expect(first).toMatchObject({ stage: 'answered', outcome: 'withdrawn' });
+		// The one shown is the new ask, never the stale one first.
+		await vi.waitFor(() => expect(bridge.request?.entry).not.toBe(first));
+		bridge.request!.answer(true);
+		expect(await again).toBe(true);
+	});
+
 	it('withdrawn once in the wallet (walletpair_cancel): said, whatever the wallet answers', async () => {
 		const { bridge, approve, perform, connection } = open();
 		const asked = approve({ method: 'eth_signTypedData_v4', params: [MEMBER, 'safe-tx'] });
