@@ -48,13 +48,19 @@ Memory as Android vitals reads it (PSS), after the journeys:
 ## Regenerate the baseline profile
 
 After a change to startup or to a journey's screens (needs API 33+, or a
-rooted device below that; emulators are fine):
+rooted device below that; emulators are fine), on ONE device:
 
 ```sh
-export ANDROID_SERIAL=emulator-5554   # the plugin honours it — check `adb devices` first
-./gradlew :app:generateBaselineProfile -PvelaSkipRustBuild
-git add app/src/main/generated/baselineProfiles
+ANDROID_SERIAL=emulator-5554 scripts/generate-baseline-profile.sh
+git add app/src/main/generated/baselineProfiles/baseline-prof.txt
 ```
+
+The script also writes startup-prof.txt (the launch journey's classes, for
+DEX layout). It is not checked in: AGP applies a startup profile only to an
+R8-optimized build, and this app's release keeps optimization disabled (see
+the Phase 4 results for what turning R8 on would take).
+The plugin's own generateBaselineProfile task does the same, but on every
+attached device.
 
 ## Budgets (Phase 4)
 
