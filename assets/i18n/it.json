@@ -1874,6 +1874,14 @@
    "find": "Trova",
    "commandPalette": "Tavolozza comandi"
   },
+  "appUpdate": {
+   "title": "Aggiornamento disponibile",
+   "install": "Installa",
+   "later": "Più tardi"
+  },
+  "dropOverlay": {
+   "title": "Trascina qui un indirizzo, un link di pagamento o un'immagine QR"
+  },
   "browserStatus": {
    "title": "Stato della scheda",
    "page": {
@@ -2052,6 +2060,11 @@
    "attestation": "Attestazione",
    "userVerified": "Verifica a ogni uso",
    "signsHere": "Connessa"
+  },
+  "appearance": {
+   "menuBar": "Mostra nella barra dei menu",
+   "trayIcon": "Mostra nell'area di notifica",
+   "statusItemHint": "Il tuo totale e Invia e Ricevi rapidi, dalle ultime cifre caricate: non viene scaricato nulla in più."
   }
  },
  "contacts": {

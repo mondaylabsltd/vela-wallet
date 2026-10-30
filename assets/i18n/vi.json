@@ -1869,6 +1869,14 @@
    "find": "Tìm",
    "commandPalette": "Bảng lệnh"
   },
+  "appUpdate": {
+   "title": "Có bản cập nhật",
+   "install": "Cài đặt",
+   "later": "Để sau"
+  },
+  "dropOverlay": {
+   "title": "Thả địa chỉ, liên kết thanh toán hoặc ảnh QR vào đây"
+  },
   "browserStatus": {
    "title": "Trạng thái tab",
    "page": {
@@ -2047,6 +2055,11 @@
    "attestation": "Chứng thực",
    "userVerified": "Cần xác minh khi dùng",
    "signsHere": "Đang đăng nhập"
+  },
+  "appearance": {
+   "menuBar": "Hiển thị trên thanh menu",
+   "trayIcon": "Hiển thị trong khay hệ thống",
+   "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì."
   }
  },
  "contacts": {

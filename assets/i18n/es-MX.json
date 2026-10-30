@@ -1874,6 +1874,14 @@
    "find": "Buscar",
    "commandPalette": "Paleta de comandos"
   },
+  "appUpdate": {
+   "title": "Actualización disponible",
+   "install": "Instalar",
+   "later": "Más tarde"
+  },
+  "dropOverlay": {
+   "title": "Suelta una dirección, un enlace de pago o una imagen QR"
+  },
   "browserStatus": {
    "title": "Estado de la pestaña",
    "page": {
@@ -2052,6 +2060,11 @@
    "attestation": "Atestación",
    "userVerified": "Verificación al usarla",
    "signsHere": "Conectada"
+  },
+  "appearance": {
+   "menuBar": "Mostrar en la barra de menús",
+   "trayIcon": "Mostrar en la bandeja del sistema",
+   "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más."
   }
  },
  "contacts": {

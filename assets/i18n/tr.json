@@ -1869,6 +1869,14 @@
    "find": "Bul",
    "commandPalette": "Komut Paleti"
   },
+  "appUpdate": {
+   "title": "Güncelleme var",
+   "install": "Yükle",
+   "later": "Sonra"
+  },
+  "dropOverlay": {
+   "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
+  },
   "browserStatus": {
    "title": "Sekme durumu",
    "page": {
@@ -2047,6 +2055,11 @@
    "attestation": "Doğrulama beyanı",
    "userVerified": "Kullanırken doğrulama gerekir",
    "signsHere": "Oturum açık"
+  },
+  "appearance": {
+   "menuBar": "Menü çubuğunda göster",
+   "trayIcon": "Sistem tepsisinde göster",
+   "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez."
   }
  },
  "contacts": {

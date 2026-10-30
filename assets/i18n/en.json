@@ -1869,6 +1869,14 @@
    "find": "Find",
    "commandPalette": "Command Palette"
   },
+  "appUpdate": {
+   "title": "Update available",
+   "install": "Install",
+   "later": "Later"
+  },
+  "dropOverlay": {
+   "title": "Drop an address, payment link or QR image"
+  },
   "browserStatus": {
    "title": "Tab status",
    "page": {
@@ -2047,6 +2055,11 @@
    "attestation": "Attestation",
    "userVerified": "Verify to use",
    "signsHere": "Signed in"
+  },
+  "appearance": {
+   "menuBar": "Show in menu bar",
+   "trayIcon": "Show in system tray",
+   "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched."
   }
  },
  "contacts": {

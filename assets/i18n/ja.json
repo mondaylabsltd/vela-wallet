@@ -1869,6 +1869,14 @@
    "find": "検索",
    "commandPalette": "コマンドパレット"
   },
+  "appUpdate": {
+   "title": "アップデートがあります",
+   "install": "インストール",
+   "later": "後で"
+  },
+  "dropOverlay": {
+   "title": "アドレス、支払いリンク、QR画像をドロップ"
+  },
   "browserStatus": {
    "title": "タブの状態",
    "page": {
@@ -2047,6 +2055,11 @@
    "attestation": "アテステーション",
    "userVerified": "使用時に本人確認",
    "signsHere": "ログイン中"
+  },
+  "appearance": {
+   "menuBar": "メニューバーに表示",
+   "trayIcon": "システムトレイに表示",
+   "statusItemHint": "合計額と「送る」「受け取る」へのショートカット。最後に読み込んだ数値を使い、追加の通信はしません。"
   }
  },
  "contacts": {

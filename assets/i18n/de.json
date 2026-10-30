@@ -1869,6 +1869,14 @@
    "find": "Suchen",
    "commandPalette": "Befehlspalette"
   },
+  "appUpdate": {
+   "title": "Update verfügbar",
+   "install": "Installieren",
+   "later": "Später"
+  },
+  "dropOverlay": {
+   "title": "Adresse, Zahlungslink oder QR-Bild hier ablegen"
+  },
   "browserStatus": {
    "title": "Tab-Status",
    "page": {
@@ -2047,6 +2055,11 @@
    "attestation": "Attestierung",
    "userVerified": "Bestätigung bei Nutzung",
    "signsHere": "Angemeldet"
+  },
+  "appearance": {
+   "menuBar": "In der Menüleiste anzeigen",
+   "trayIcon": "Im Infobereich anzeigen",
+   "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen."
   }
  },
  "contacts": {
