@@ -558,6 +558,9 @@ export interface MultisigMessages {
 		imported: string;
 		already: string;
 		notDeployed: string;
+		/** r7: the step that asks each member's kind before the Safes are imported. */
+		kindsTitle: string;
+		kindsBody: string;
 	};
 	settings: {
 		backupTitle: string;
@@ -788,6 +791,12 @@ export interface MemberMessages {
 	kind: string;
 	kindVela: string;
 	kindWallet: string;
+	/** r7: evidence says a Vela account (code, the passkey index, this device): no choice. */
+	kindKnown: string;
+	/** r7: no code anywhere and no index record — "Other wallet" pre-filled, the person confirms. */
+	kindLikely: string;
+	/** r7: the wallet can't tell — the person is asked; left unsaid, both ways are offered. */
+	kindAsk: string;
 	newAccount: string;
 	/** `{{name}}` */
 	replaceIntro: string;
@@ -1274,7 +1283,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		importing: '',
 		imported: '',
 		already: '',
-		notDeployed: ''
+		notDeployed: '',
+		kindsTitle: '',
+		kindsBody: ''
 	},
 	settings: {
 		backupTitle: '',
@@ -1385,6 +1396,9 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		kind: '',
 		kindVela: '',
 		kindWallet: '',
+		kindKnown: '',
+		kindLikely: '',
+		kindAsk: '',
 		newAccount: '',
 		replaceIntro: '',
 		removeIntro: '',

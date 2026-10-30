@@ -57,11 +57,14 @@
 		recentChains
 	} from '../core/likely-networks';
 	import { localOwners } from '../core/owners';
+	import { kindChoice, type MemberKind } from '../core/member-kind';
 	import { memberProblem } from '../core/members';
-	import { names } from '../core/names.svelte';
+	import { keptMember, names } from '../core/names.svelte';
 	import { safeContractsOn } from '../core/chain';
+	import { signers } from '../core/signers.svelte';
 	import { isShared, multisig, type MemberInfo } from '../core/store.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
+	import MemberKindChoice from './MemberKindChoice.svelte';
 	import NetworkChoice from './NetworkChoice.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -124,6 +127,8 @@
 	);
 	/** What the person said of each member added by address, contact or name (r4D-5). */
 	let info = $state<Record<string, MemberInfo>>({});
+	/** r7: the kind the person picked for a member, by lowercase address. */
+	let kinds = $state<Record<string, MemberKind>>({});
 	let typed = $state('');
 	let typedName = $state('');
 	let typedError = $state<string | null>(null);
@@ -202,6 +207,22 @@
 			return null;
 		}
 	});
+
+	/**
+	 * r7: a member's kind — Vela's finding (code at the address on any network
+	 * it may be used on, the index, an account here), else the person's word
+	 * (here, or kept on this device), else "Other wallet" pre-filled when no
+	 * Vela account is found, else asked. The same address on every network.
+	 */
+	function kindOf(address: string) {
+		return kindChoice(
+			signers.evidence(
+				networks.map((n) => n.chainId),
+				address
+			),
+			kinds[address.toLowerCase()] ?? keptMember(address).kind
+		);
+	}
 
 	/** A member's label here: this device's account name, what the person typed, else the index's. */
 	function label(address: string): string {
@@ -292,7 +313,7 @@
 		return Object.fromEntries(
 			owners.map((o) => {
 				const own = localName(o);
-				const kind = own ? 'passkey' : names.kindOf(o);
+				const kind = own ? 'passkey' : (kindOf(o).kind ?? undefined);
 				const said = info[o.toLowerCase()]?.name;
 				return [o, { ...(said ? { name: said } : {}), ...(kind ? { kind } : {}) }];
 			})
@@ -527,6 +548,17 @@
 						>
 							<Icon icon={UTILITY_ICONS['x']} size="sm" />
 						</button>
+						{#if !localName(o)}
+							<!-- r7: how they approve, declared — Vela's finding where it has one. -->
+							<div class="member-kind">
+								<MemberKindChoice
+									{m}
+									choice={kindOf(o)}
+									name={label(o)}
+									onpick={(k) => (kinds = { ...kinds, [o.toLowerCase()]: k })}
+								/>
+							</div>
+						{/if}
 					</li>
 				{/each}
 			</ol>
@@ -942,10 +974,17 @@
 
 	.owners li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-md);
 		padding-block: var(--space-sm);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	/* r7: the kind on its own line, under the member's name (past the ordinal). */
+	.member-kind {
+		flex-basis: 100%;
+		padding-inline-start: calc(var(--icon-lg) + var(--space-md));
 	}
 
 	.ordinal {

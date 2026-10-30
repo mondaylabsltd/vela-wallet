@@ -574,7 +574,9 @@
         "importing": "Importation…",
         "imported": "Importé",
         "already": "Déjà ajouté",
-        "notDeployed": "Déployé sur aucun de ses réseaux, et le fichier ne contient pas sa configuration."
+        "notDeployed": "Déployé sur aucun de ses réseaux, et le fichier ne contient pas sa configuration.",
+        "kindsTitle": "Comment chaque membre approuve-t-il ?",
+        "kindsBody": "Un compte Vela approuve dans Vela avec sa clé d'accès ; un autre portefeuille signe avec ce portefeuille. Vela remplit ce qu'il peut savoir. Cela décide seulement de ce que Vela leur propose — qui peut approuver est fixé par le Safe."
       },
       "settings": {
         "backupTitle": "Sauvegarder sa configuration sur Ethereum",
@@ -629,6 +631,9 @@
         "kind": "Type de membre",
         "kindVela": "Compte Vela (clé d'accès)",
         "kindWallet": "Autre portefeuille",
+        "kindKnown": "Vela a trouvé un compte Vela à cette adresse. Il approuve dans Vela, avec sa clé d'accès.",
+        "kindLikely": "Aucun compte Vela trouvé à cette adresse — sans doute un autre portefeuille. Changez-le s'il utilise Vela.",
+        "kindAsk": "Vela ne peut pas le savoir d'après l'adresse. Choisissez — ou laissez vide, et les deux façons d'approuver lui seront proposées.",
         "newAccount": "Son nouveau compte",
         "replaceIntro": "Mettez le nouveau compte de {{name}} à sa place, par exemple après une clé d'accès perdue. Les autres membres l'approuvent ; rien d'autre ne change.",
         "removeIntro": "{{name}} ne pourra plus approuver de transactions ni déplacer de fonds.",

@@ -6,6 +6,7 @@
  */
 import { createRawSnippet, tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import BottomSheet from './BottomSheet.svelte';
@@ -122,6 +123,35 @@ describe('BottomSheet — one sheet, every skin', () => {
 			await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
 			await view.screen.unmount();
 		});
+	}
+});
+
+describe('BottomSheet — the title row stands on the content’s column (r7)', () => {
+	// The page hand-off's prompt is the one raised skin that draws its title:
+	// its title row once had no gutter, the title flush with the sheet's edge.
+	afterEach(() => page.viewport(414, 896));
+	for (const [layout, width] of [
+		['phone', 430],
+		['card', 1440]
+	] as const) {
+		for (const variant of ['wallet', 'signing', 'prompt'] as const) {
+			it(`${variant} (${layout}): the title starts where the content does`, async () => {
+				await page.viewport(width, 900);
+				const view = await drawn({ variant, html: '<p class="first">Body</p>' });
+				const title = view.sheet.querySelector<HTMLElement>('.head h2')!;
+				const first = view.content.querySelector<HTMLElement>('.first')!;
+				const sheetLeft = view.sheet.getBoundingClientRect().left;
+				const titleLeft = title.getBoundingClientRect().left;
+				expect(titleLeft - sheetLeft).toBeGreaterThan(0);
+				expect(Math.abs(titleLeft - first.getBoundingClientRect().left)).toBeLessThan(1);
+				// The ✕ stays inside the sheet, on the gutter.
+				const close = view.sheet.querySelector<HTMLElement>('.close')!;
+				expect(close.getBoundingClientRect().right).toBeLessThanOrEqual(
+					view.sheet.getBoundingClientRect().right + 0.5
+				);
+				await view.screen.unmount();
+			});
+		}
 	}
 });
 

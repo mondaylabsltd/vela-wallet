@@ -17,6 +17,12 @@ const CAROL = '0x00000000000000000000000000000000000000c1';
 const KEPT_VELA = '0x00000000000000000000000000000000000000c2';
 const KEPT_WALLET = '0x00000000000000000000000000000000000000c3';
 const SIGNED_WALLET = '0x00000000000000000000000000000000000000c4';
+/** r7: deployed on network 2 only, kept here as an outside wallet. */
+const KEPT_WALLET_DEPLOYED = '0x00000000000000000000000000000000000000c5';
+/** r7: no code on network 1; network 3 never answers. */
+const UNREACHABLE = '0x00000000000000000000000000000000000000c6';
+/** r7: no code anywhere, the index answered none. */
+const FRESH = '0x00000000000000000000000000000000000000c7';
 
 const index = vi.hoisted(() => ({ answered: new Set<string>() }));
 
@@ -30,10 +36,17 @@ vi.mock('./names.svelte', () => ({
 		answered: (a: string) => index.answered.has(a)
 	},
 	keptMember: (a: string) =>
-		a === KEPT_VELA ? { kind: 'passkey' } : a === KEPT_WALLET ? { kind: 'wallet' } : {}
+		a === KEPT_VELA
+			? { kind: 'passkey' }
+			: a === KEPT_WALLET || a === KEPT_WALLET_DEPLOYED
+				? { kind: 'wallet' }
+				: {}
 }));
 vi.mock('./chain', () => ({
-	hasContractCode: async (_chain: number, a: string) => a === DEPLOYED
+	hasContractCode: async (chain: number, a: string) => {
+		if (a === UNREACHABLE && chain === 3) throw new Error('down');
+		return a === DEPLOYED || (a === KEPT_WALLET_DEPLOYED && chain === 2);
+	}
 }));
 
 vi.mock('$lib/services/public-key-index', () => ({
@@ -139,5 +152,53 @@ describe('a Vela member added by address (r4a-9)', () => {
 		index.answered.add(PLAIN);
 		signers.kindOf(1, PLAIN);
 		await vi.waitFor(() => expect(signers.kindOf(1, PLAIN)).toBe('unsure'));
+	});
+});
+
+/**
+ * r7: a member's kind is declared, then verified. The add screens pre-fill
+ * it from what the wallet can tell (`evidence`), and evidence beats the
+ * label wherever it is read (`kindOf`).
+ */
+describe('what the wallet can tell of a member being added (r7)', () => {
+	it('an account here, or one the passkey index holds: a Vela account', () => {
+		expect(signers.evidence([1], HERE)).toBe('vela');
+		expect(signers.evidence([1], INDEXED)).toBe('vela');
+	});
+
+	it('code at its address on any of the networks: a Vela account', async () => {
+		signers.evidence([1, 2], KEPT_WALLET_DEPLOYED);
+		await vi.waitFor(() => expect(signers.evidence([1, 2], KEPT_WALLET_DEPLOYED)).toBe('vela'));
+	});
+
+	it('no code anywhere and the index holds none: likely an outside wallet', async () => {
+		expect(signers.evidence([1, 2], FRESH), 'read first, never guessed').toBeNull();
+		index.answered.add(FRESH);
+		await vi.waitFor(() => expect(signers.evidence([1, 2], FRESH)).toBe('wallet'));
+	});
+
+	it('a network that does not answer, or an index that has not: it can’t tell — asked', async () => {
+		index.answered.add(UNREACHABLE);
+		signers.evidence([1, 3], UNREACHABLE);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(signers.evidence([1, 3], UNREACHABLE)).toBeNull();
+		// No networks to look on is no answer either.
+		expect(signers.evidence([], FRESH)).toBeNull();
+	});
+});
+
+describe('evidence beats the label (r7)', () => {
+	it('kept as an outside wallet, but code on another of its networks: a Vela account', async () => {
+		index.answered.add(KEPT_WALLET_DEPLOYED);
+		signers.kindOf(1, KEPT_WALLET_DEPLOYED, [], [1, 2]);
+		await vi.waitFor(() =>
+			expect(signers.kindOf(1, KEPT_WALLET_DEPLOYED, [], [1, 2])).toBe('vela')
+		);
+		// Without its other networks, the label is all there is.
+		expect(signers.kindOf(1, KEPT_WALLET_DEPLOYED)).toBe('wallet');
+	});
+
+	it('kept as an outside wallet, but it approved with its passkey: a Vela account', () => {
+		expect(signers.kindOf(1, KEPT_WALLET, [{ approvals: [passkey(KEPT_WALLET)] }])).toBe('vela');
 	});
 });

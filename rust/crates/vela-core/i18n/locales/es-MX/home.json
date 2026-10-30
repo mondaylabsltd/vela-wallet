@@ -574,7 +574,9 @@
         "importing": "Importando…",
         "imported": "Importado",
         "already": "Ya agregado",
-        "notDeployed": "No está desplegado en ninguna de sus redes y el archivo no incluye su configuración."
+        "notDeployed": "No está desplegado en ninguna de sus redes y el archivo no incluye su configuración.",
+        "kindsTitle": "¿Cómo aprueba cada miembro?",
+        "kindsBody": "Una cuenta Vela aprueba en Vela con su llave de acceso; otra billetera firma con esa billetera. Vela completa lo que puede saber. Esto solo decide lo que Vela les ofrece: quién puede aprobar lo define la Safe."
       },
       "settings": {
         "backupTitle": "Respaldar su configuración en Ethereum",
@@ -629,6 +631,9 @@
         "kind": "Tipo de miembro",
         "kindVela": "Cuenta Vela (llave de acceso)",
         "kindWallet": "Otra billetera",
+        "kindKnown": "Vela encontró una cuenta Vela en esta dirección. Aprueba en Vela, con su llave de acceso.",
+        "kindLikely": "No se encontró ninguna cuenta Vela en esta dirección: probablemente es otra billetera. Cámbialo si usa Vela.",
+        "kindAsk": "Vela no puede saberlo por la dirección. Elige una opción, o déjalo así y se le ofrecerán ambas formas de aprobar.",
         "newAccount": "Su cuenta nueva",
         "replaceIntro": "Pon la cuenta nueva de {{name}} en su lugar, por ejemplo tras perder una llave de acceso. Los demás miembros lo aprueban; nada más cambia.",
         "removeIntro": "{{name}} ya no podrá aprobar transacciones ni mover fondos.",

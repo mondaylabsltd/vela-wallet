@@ -968,9 +968,13 @@
 		...(store.chain(chainId)?.items ?? []),
 		...(sameAddress(proposals.followed, account.address) ? proposals.items : [])
 	]);
-	/** How each member still to approve signs (`signers.kindOf`). */
+	/**
+	 * How each member still to approve signs (`signers.kindOf`) — code at its
+	 * address on any of the multisig's networks says a Vela account, over the
+	 * kind kept for it (r7: evidence beats the label).
+	 */
 	const kinds = $derived(
-		new Map(missingOwners.map((o) => [o, signers.kindOf(chainId, o, readItems)]))
+		new Map(missingOwners.map((o) => [o, signers.kindOf(chainId, o, readItems, account.chainIds)]))
 	);
 	/**
 	 * Owners still to approve whose wallets are elsewhere: an outside wallet
@@ -980,7 +984,9 @@
 	 * approved with its passkey or this device keeps as one (r4a-9) — its key
 	 * is a passkey, and it approves in Vela, from the link. One nothing says
 	 * (`unsure`) is offered the Vela way first and the outside wallet's beside
-	 * it — never alone. Nothing is offered once enough have approved.
+	 * it — never alone: its row's "Send link", then "Approve with another
+	 * wallet" (r7, restored beside it). Nothing is offered once enough have
+	 * approved.
 	 */
 	const outside = $derived(
 		enough
@@ -1541,14 +1547,19 @@
 								>
 							{:else if !drafting && elsewhere.some((o) => sameAddress(o, owner))}
 								<!-- A Vela member elsewhere approves in Vela, from the link (r4-9);
-								     one that may be either is offered the Vela way first (r4a-9). -->
+								     one that may be either is offered the Vela way first (r4a-9)
+								     and its own wallet's beside it (r7). -->
 								{m.proposal.waiting} ·
 								<button
 									type="button"
 									class="external"
 									title={fillTemplate(m.proposal.approvesInVela, { names: names.label(owner) })}
 									onclick={canShare ? shareLink : copyLink}>{m.proposal.sendLink}</button
-								>
+								>{#if kinds.get(owner) === 'unsure' && !busy}
+									·
+									<button type="button" class="external" onclick={onExternal}
+										>{m.external.signWithWallet}</button
+									>{/if}
 							{:else if item.status !== 'done'}
 								{m.proposal.waiting}
 							{/if}

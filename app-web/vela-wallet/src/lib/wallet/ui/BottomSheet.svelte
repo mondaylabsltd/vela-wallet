@@ -1138,6 +1138,15 @@
 		padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom, 0%));
 	}
 
+	/* Their gutter is the content's, not the sheet's: a title row drawn on one
+	   of them (the page hand-off's prompt) stands on the same column, its ✕
+	   reaching into the gutter as the wallet skin's does — phone and card. */
+	.menu .head,
+	.signing .head,
+	.prompt .head {
+		padding-inline: var(--layout-screenPaddingX);
+	}
+
 	/* A foot outside the scroll (the signing sheet's confirm): the gutter and
 	   the bottom space are ITS, and the body ends where its content does — so
 	   a sheet that fits is drawn exactly as when the foot was the last thing

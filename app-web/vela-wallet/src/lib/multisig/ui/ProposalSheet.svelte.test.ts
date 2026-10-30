@@ -1874,20 +1874,31 @@ describe('how each missing member approves (r4-9, r4D-6)', () => {
 		await screen.unmount();
 	});
 
-	it('one nothing says how they sign (r4a-9): the Vela way first, the outside wallet only beside it', async () => {
+	it('one nothing says how they sign (r4a-9, r7): the Vela way first, the outside wallet beside it', async () => {
 		fake.unsure = [OTHER];
 		fake.chain.items = [item()];
 		const screen = show();
 		await settle();
-		// Their row offers the Vela link, never "Sign with another wallet".
-		expect(buttons()).not.toContain('external.signWithWallet');
-		expect(buttons()).toContain('proposal.sendLink');
+		// r7: their row offers "Send link" first AND "Approve with another
+		// wallet" beside it — both paths, the Vela one first, never one alone.
+		const row = [...document.querySelectorAll('section.approvals li')].find((li) =>
+			li.textContent?.includes('proposal.sendLink')
+		);
+		if (!row) throw new Error('no row offers the Vela link');
+		const controls = [...row.querySelectorAll('.state button')].map((b) => b.textContent?.trim());
+		expect(controls).toEqual(['proposal.sendLink', 'external.signWithWallet']);
 		const vela = document.querySelector('[data-testid="approves-in-vela"]');
 		const outside = document.querySelector('[data-testid="outside-invite"]');
 		expect(vela).not.toBeNull();
 		// The outside wallet's link is still there, after the Vela one.
 		expect(outside).not.toBeNull();
 		expect(vela!.compareDocumentPosition(outside!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		// The row's live pairing is the outside wallet's own way (r7).
+		[...row.querySelectorAll('button')]
+			.find((b) => b.textContent?.trim() === 'external.signWithWallet')
+			?.click();
+		await settle();
+		expect(fake.calls).toContain('external');
 		await screen.unmount();
 	});
 

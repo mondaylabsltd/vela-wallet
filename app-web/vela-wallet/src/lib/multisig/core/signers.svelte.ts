@@ -19,6 +19,12 @@
  *   is offered first, the outside wallet's beside it — never as the only one.
  *
  * `null` while that is still being read: nothing is offered on a guess.
+ *
+ * r7: the kind kept here is a label the person (or an invite) declared —
+ * it steers what is offered, never authority, and evidence beats it: a
+ * passkey approval, the index, or code at the address on any of the
+ * multisig's networks make a member kept as an outside wallet a Vela
+ * account. `evidence` is what the add screens pre-fill that choice from.
  */
 import { lookupWalletName } from '$lib/services/public-key-index';
 import { hasContractCode } from './chain';
@@ -28,6 +34,15 @@ import { localOwners } from './owners';
 import type { ApprovalRow } from './proposals.svelte';
 
 export type SignerKind = 'here' | 'vela' | 'wallet' | 'unsure';
+
+/**
+ * What the wallet can tell of a member being added, before anyone's word
+ * (r7): `vela` — an account here, the passkey index holds it, or code at its
+ * address on one of the networks; `wallet` — likely an outside wallet: no
+ * code on any of them and the index answered it holds none (the person
+ * confirms); `null` — it can't tell (yet), and the person is asked.
+ */
+export type KindEvidence = 'vela' | 'wallet' | null;
 
 /** A code read that failed is asked again after this long, not on every redraw. */
 const RETRY_MS = 10_000;
@@ -61,16 +76,19 @@ class SignerKinds {
 	kindOf(
 		chainId: number,
 		address: string,
-		items: readonly { approvals: readonly ApprovalRow[] }[] = []
+		items: readonly { approvals: readonly ApprovalRow[] }[] = [],
+		alsoOn: readonly number[] = []
 	): SignerKind | null {
 		if (localOwners([address]).length > 0) return 'here';
 		const approved = approvedWith(items, address);
 		if (approved === 'passkey' || names.isVela(address)) return 'vela';
 		const kept = keptMember(address).kind;
-		const key = `${chainId}:${address.toLowerCase()}`;
-		const code = this.#code[key];
-		if (code === undefined) this.#ask(chainId, address, key);
+		const code = this.#read(chainId, address);
 		if (code) return 'vela';
+		// r7: code at its address on another of the multisig's networks — a
+		// smart account there, whatever is kept (only an answer counts: a
+		// network that does not answer holds nothing up here).
+		if (alsoOn.some((id) => id !== chainId && this.#read(id, address) === true)) return 'vela';
 		// The person's (or an invite's) word that it is a Vela account: it is
 		// never offered to an outside wallet, whatever is read meanwhile.
 		if (kept === 'passkey') return 'vela';
@@ -80,6 +98,27 @@ class SignerKinds {
 		// The index has not answered (or could not): no verdict yet.
 		if (!names.answered(address)) return null;
 		return 'unsure';
+	}
+
+	/**
+	 * r7: what the wallet can tell of `address` across `chainIds` (the
+	 * multisig's networks) — the add screens' pre-fill of its kind, never
+	 * authority (`KindEvidence`).
+	 */
+	evidence(chainIds: readonly number[], address: string): KindEvidence {
+		if (localOwners([address]).length > 0 || names.isVela(address)) return 'vela';
+		const codes = chainIds.map((id) => this.#read(id, address));
+		if (codes.some((c) => c === true)) return 'vela';
+		if (chainIds.length === 0 || codes.some((c) => c === undefined)) return null;
+		return names.answered(address) ? 'wallet' : null;
+	}
+
+	/** The code read of `address` on `chainId`: asked the first time, `undefined` until it answers. */
+	#read(chainId: number, address: string): boolean | undefined {
+		const key = `${chainId}:${address.toLowerCase()}`;
+		const code = this.#code[key];
+		if (code === undefined) this.#ask(chainId, address, key);
+		return code;
 	}
 
 	#ask(chainId: number, address: string, key: string): void {

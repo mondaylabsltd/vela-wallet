@@ -123,7 +123,12 @@ vi.mock('../core/owners', () => ({
 			.filter((o) => o.toLowerCase() === ME)
 			.map((address) => ({ address, name: 'Mine', account: { address } }))
 }));
-vi.mock('../core/names.svelte', () => ({ names: { label: (a: string) => a.slice(0, 6) } }));
+vi.mock('../core/names.svelte', () => ({
+	names: { label: (a: string) => a.slice(0, 6) },
+	keptMember: () => ({})
+}));
+// r7: Add member pre-fills a member's kind from what the wallet can tell — nothing, here.
+vi.mock('../core/signers.svelte', () => ({ signers: { evidence: () => null } }));
 vi.mock('../core/store.svelte', () => ({
 	isShared: () => seams.shared,
 	multisig: { find: () => null, remove: () => {} }

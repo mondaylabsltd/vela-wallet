@@ -421,10 +421,11 @@ test('an outside owner signs with their own wallet, through the connect page', a
 	await proposeSend(page, '0.5', 'e1-propose');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible();
 
-	// r6a-g2 (round 6): a typed address nothing says how it signs is `unsure`
-	// — the Vela link first, and the outside member's own link beside it
-	// (r4C-13), never "Approve with another wallet" alone on its row. The
-	// outside owner signs from that link, on the connect page alone.
+	// r7: a typed plain key is pre-filled "Other wallet" (no code, no index
+	// record) and kept so; one nothing says is `unsure` (r6a-g2) — the Vela
+	// link first, "Approve with another wallet" beside it. Either way the
+	// outside member's own link is offered (r4C-13), and the outside owner
+	// signs from that link, on the connect page alone.
 	const thrownB = await signFromOutsideLink(browser, page, EOA_ONE, 'e3-outside-link');
 	await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 90_000 });
 	await shot(page, 'e5-approved');
@@ -558,6 +559,12 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 		await expect(page.getByText('Public treasury')).toBeVisible();
 		await expect(page.getByText('EOA vault')).toBeVisible();
 		await shot(page, 'i1-pick');
+		// r7: each member's kind is asked first — plain keys: "Other wallet"
+		// pre-filled once the index answers, else asked. Taken as it stands.
+		await page.getByRole('button', { name: 'Next' }).click();
+		await expect(page.getByText('How does each member approve?')).toBeVisible();
+		await expect(page.getByTestId('member-kind')).toHaveCount(3);
+		await shot(page, 'i1-kinds');
 		await page.getByRole('button', { name: 'Import 2' }).click();
 		await expect(page.getByText('Imported', { exact: true })).toHaveCount(2, { timeout: 90_000 });
 		await shot(page, 'i2-imported');
@@ -588,8 +595,9 @@ test('import from Safe{Wallet}: Safes owned by outside wallets, proposed, signed
 	const thrownOne = await signElsewhere(browser, page, EOA_ONE, 'i5-signed-one');
 	await expect(page.getByText('1/2 approved').first()).toBeVisible({ timeout: 60_000 });
 
-	// The second owner: nothing says how it signs (r6a-g2, `unsure`), so its
-	// row offers the Vela link and the outside member's own link beside it.
+	// The second owner: kept as another wallet (r7, pre-filled on import) or,
+	// where the index did not answer, `unsure` (r6a-g2) — either way the
+	// outside member's own link is offered, and it signs from it.
 	const thrownTwo = await signFromOutsideLink(browser, page, EOA_TWO, 'i6-signed-two');
 	await expect(page.getByText('2/2 approved').first()).toBeVisible({ timeout: 60_000 });
 
