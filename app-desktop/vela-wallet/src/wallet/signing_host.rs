@@ -625,6 +625,11 @@ impl SigningHost {
         cx: &mut Context<Self>,
     ) {
         use vela_core::app::sim_outcome::SimOutcome;
+        self.sim.ask = Some(SimAsk {
+            chain_id,
+            wallet: wallet.clone(),
+            calls: calls.clone(),
+        });
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
@@ -643,9 +648,10 @@ impl SigningHost {
             let SimOutcome::Deltas { deltas } = outcome else {
                 // A revert moves nothing, and a node that could not check says
                 // nothing about what moves. NOT "nothing moves" — the notice is
-                // the sentence for each.
+                // the sentence for each; and the core says whether it is the
+                // network's, to be asked again (`recheck`).
                 host.update(cx, |host, cx| {
-                    host.verdict_landed(SimVerdict::noticed(notice), cx);
+                    host.verdict_landed(SimVerdict::of_unchecked(outcome), cx);
                 })
                 .ok();
                 return;
@@ -680,6 +686,8 @@ impl SigningHost {
                         judgments: judged.judgments,
                         notice,
                         no_change: judged.no_change_key,
+                        // A node that checked is never asked again.
+                        recheck: false,
                     },
                     cx,
                 );
@@ -693,6 +701,25 @@ impl SigningHost {
     /// in the same step — the signing machine is told it is there, when it
     /// was told the simulation was out ([`Simulation::land`]). The confirm
     /// stops waiting on the core's word, never on this column's.
+    /// The person's "Check again" under a verdict the core says is the
+    /// network's (dapp-15): the same question, asked again; the last verdict
+    /// stays, marked as being checked again, until the new one lands.
+    pub fn sim_again(&mut self, cx: &mut Context<Self>) {
+        let request_id = self.request_id.clone();
+        let Some((ask, event)) = self.sim.again(&request_id) else {
+            return;
+        };
+        self.dispatch_sign(event, cx);
+        self.simulate(ask.chain_id, ask.wallet, ask.calls, cx);
+        cx.notify();
+    }
+
+    /// "Check again" as the sheet offers it: `Some(checking)`, or `None`.
+    #[must_use]
+    pub fn sim_recheck_offer(&self) -> Option<bool> {
+        self.sim.recheck_offer(&self.view)
+    }
+
     fn verdict_landed(&mut self, verdict: SimVerdict, cx: &mut Context<Self>) {
         let request_id = self.request_id.clone();
         if let Some(event) = self.sim.land(verdict, &request_id) {
@@ -1483,6 +1510,10 @@ pub(crate) struct SimVerdict {
     /// The core's line for a check under which nothing of the person's
     /// moves (`TrustSimView.no_change_key`).
     pub no_change: Option<String>,
+    /// The core says the answer is about the network, not the request — no
+    /// node answered (`SimVerdict.recheck`, dapp-15) — so it may be asked
+    /// again: the sheet offers "Check again".
+    pub recheck: bool,
 }
 
 impl SimVerdict {
@@ -1493,6 +1524,25 @@ impl SimVerdict {
             ..Self::default()
         }
     }
+
+    /// An answer with no balances to judge, as the core reads `outcome`:
+    /// its notice, and whether it may be asked again (`recheck`).
+    pub(crate) fn of_unchecked(outcome: vela_core::app::sim_outcome::SimOutcome) -> Self {
+        let recheck = vela_core::app::sim_outcome::verdict_of(outcome.clone()).recheck;
+        Self {
+            recheck,
+            ..Self::noticed(vela_core::app::sim_outcome::notice(&outcome))
+        }
+    }
+}
+
+/// What a simulation asked the chain, kept so the person's "Check again"
+/// asks the same question (dapp-15).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SimAsk {
+    pub chain_id: u32,
+    pub wallet: String,
+    pub calls: Vec<FeeCall>,
 }
 
 /// The wallet's own simulation of the request on the sheet, as its column
@@ -1530,6 +1580,14 @@ pub struct Simulation {
     /// [`Self::judgments`] happens to be empty — empty is also what a
     /// judgment that never came looks like.
     pub no_change: Option<String>,
+    /// The verdict on the sheet is about the network, not the request (the
+    /// core's `recheck`): it may be asked again.
+    pub recheck: bool,
+    /// Asked again and not back yet: the last verdict stays, marked as being
+    /// checked again, until the new one lands.
+    pub rechecking: bool,
+    /// What was asked, for the person's "Check again".
+    pub(crate) ask: Option<SimAsk>,
     /// The signing machine was told this simulation is out (`SimStarted`),
     /// so it is told when its verdict is on the sheet (`SimSettled`).
     announced: bool,
@@ -1574,10 +1632,52 @@ impl Simulation {
         self.judgments = verdict.judgments;
         self.notice = verdict.notice;
         self.no_change = verdict.no_change;
+        self.recheck = verdict.recheck;
+        self.rechecking = false;
         self.stage = crate::signing::live::SimStage::Landed;
         self.announced.then(|| SignEvent::SimSettled {
             id: request_id.to_owned(),
         })
+    }
+
+    /// "Check again" on the sheet (dapp-15): `Some(checking)` while it is
+    /// offered — `checking` while the new answer is out — and `None` where
+    /// the verdict on the sheet is not the network's (the core's
+    /// `recheck`), there is no verdict on this sheet, or the core still
+    /// holds the confirm or says its wait ran out (the line the person reads
+    /// is the core's step's then).
+    #[must_use]
+    pub(crate) fn recheck_offer(&self, sign: &vela_core::app::sign_request::SignView) -> Option<bool> {
+        if !self.announced || self.ask.is_none() {
+            return None;
+        }
+        if self.rechecking {
+            return Some(true);
+        }
+        (self.stage == crate::signing::live::SimStage::Landed
+            && self.recheck
+            && !sign.sim_checking
+            && sign.sim_waited_out_key.is_none())
+        .then_some(false)
+    }
+
+    /// Ask again: the verdict stays on the sheet, marked as being checked
+    /// again, and the signing machine hears the simulation is out once more
+    /// (`SimStarted`) — a second run holds the confirm for its own wait, so
+    /// nobody signs over a verdict about to change. `None` when there is
+    /// nothing to ask again.
+    pub(crate) fn again(&mut self, request_id: &str) -> Option<(SimAsk, SignEvent)> {
+        let ask = self.ask.clone()?;
+        if !self.recheck || self.rechecking || !self.announced {
+            return None;
+        }
+        self.rechecking = true;
+        Some((
+            ask,
+            SignEvent::SimStarted {
+                id: request_id.to_owned(),
+            },
+        ))
     }
 }
 
@@ -3747,6 +3847,7 @@ mod sim_wait_tests {
             }],
             notice: None,
             no_change: None,
+            recheck: false,
         }
     }
 
@@ -3945,6 +4046,54 @@ mod sim_wait_tests {
         );
         assert!(!SimPlan::Unaskable.sent() && !SimPlan::None.sent());
         assert!(SimPlan::Awaited.sent() && SimPlan::Unseen.sent());
+    }
+
+    /// dapp-15: a could-not-check because no node answered is the
+    /// network's, by the core's `recheck` — "Check again" is offered, and
+    /// pressed it asks the same question again: the machine hears the
+    /// simulation is out once more (the confirm waits for the new verdict),
+    /// the last verdict stays marked as being checked, and the new one lands
+    /// as any other. A node that answered "not offered", a revert, or a
+    /// checked answer is never asked again: it would say the same.
+    #[test]
+    fn a_node_nobody_reached_is_checked_again_and_an_answer_is_not() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        let calls = sign_executor::calls_of(&sheet.request.method, &sheet.request.params_json)
+            .unwrap_or_default();
+        sheet.sim.ask = Some(SimAsk {
+            chain_id: 1,
+            wallet: ME.to_owned(),
+            calls,
+        });
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None, "out");
+        sheet.lands(SimVerdict::of_unchecked(SimOutcome::Unreachable));
+        assert!(sheet.sim.recheck);
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), Some(false));
+
+        let id = sheet.request.id.clone();
+        let (ask, event) = sheet.sim.again(&id).expect("asked again");
+        assert_eq!(ask.chain_id, 1);
+        assert!(matches!(event, SignEvent::SimStarted { .. }));
+        sheet.dispatch(event);
+        assert!(sheet.sign.view().sim_checking, "the confirm waits again");
+        assert_eq!(
+            sheet.sim.recheck_offer(&sheet.sign.view()),
+            Some(true),
+            "the last verdict, being checked again"
+        );
+        assert!(sheet.sim.again(&id).is_none(), "once at a time");
+        sheet.lands(a_send());
+        assert!(!sheet.sim.recheck && !sheet.sim.rechecking);
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None);
+        assert!(!sheet.sign.view().sim_checking);
+
+        for answer in [SimOutcome::NotOffered, SimOutcome::Reverts { reason: None }] {
+            let verdict = SimVerdict::of_unchecked(answer);
+            assert!(!verdict.recheck);
+            sheet.lands(verdict);
+            assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None);
+            assert!(sheet.sim.again(&id).is_none());
+        }
     }
 
     /// What the machine is told as a request opens, and in what order: the

@@ -19043,9 +19043,14 @@ impl WalletPage {
         // its words, and whether they are said now. A pinned answer's
         // (`VELA_SIM`) is held the same way.
         let mut held_note: Option<Option<(SharedString, bool)>> = pinned_note.map(Some);
+        // dapp-15: "Check again" under a verdict the core says is the
+        // network's — `Some(checking)` while offered.
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut sim_recheck: Option<bool> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
+            sim_recheck = host.sim_recheck_offer();
             let fee = host.fee_view();
             // Where the executor will sign, from the same context it reads
             // (`SignContext::follow_venue`).
@@ -19644,6 +19649,32 @@ impl WalletPage {
                     item,
                     signing_components::verdict_room(theme, &mut self.icons, inner, Some(laid_out)),
                 ));
+                // dapp-15: no node answered — the core's `recheck` — so the
+                // person may ask again; while asked, the verdict above stays
+                // and the button says it is checking.
+                if let Some(checking) = sim_recheck {
+                    let label = self.loc.t(if checking {
+                        "componentsUi.signing.simRechecking"
+                    } else {
+                        "componentsUi.signing.simRecheck"
+                    });
+                    let button = crate::flows::components::ghost_button(theme, label)
+                        .id("signing-sim-recheck");
+                    column = column.child(div().flex().child(if checking {
+                        button.opacity(theme::OPACITY_DISABLED)
+                    } else {
+                        button
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                #[cfg(not(target_os = "linux"))]
+                                if let Some(host) = this.signing_host.clone() {
+                                    host.update(cx, |host, cx| host.sim_again(cx));
+                                }
+                                #[cfg(target_os = "linux")]
+                                let _ = (this, cx);
+                            }))
+                    }));
+                }
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
             {
