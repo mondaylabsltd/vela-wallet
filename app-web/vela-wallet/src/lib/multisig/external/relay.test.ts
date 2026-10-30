@@ -1,3 +1,4 @@
+import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** The vendored client, as far as the token goes: what `connect` was given, and its events. */
@@ -16,17 +17,18 @@ vi.mock('$lib/vendor/peerconnect/index.js', () => ({
 }));
 
 const {
-	BACKOFF_MS,
 	DEFAULT_RELAY,
 	TOKEN_ENDPOINT,
 	TRIAL_ENDPOINT,
-	UNREACHABLE_AFTER_MS,
 	connectRoom,
 	forgetRelayToken,
-	needsToken,
+	relaySchedule,
 	relayToken,
 	relayUrl
 } = await import('./relay');
+
+// The core's schedule (its rules' own cases are in rust/…/tests/app_multisig_outside_relay.rs).
+const { backoffMs: BACKOFF_MS, unreachableAfterMs: UNREACHABLE_AFTER_MS } = relaySchedule();
 
 const YEAR = () => Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
 
@@ -66,11 +68,8 @@ const ok =
 	() =>
 		new Response(JSON.stringify({ token, expires_at, relay_url: DEFAULT_RELAY }));
 
-describe('which relay asks for a token', () => {
-	it('is only the public one: a profile’s own relay gets none', () => {
-		expect(needsToken(DEFAULT_RELAY)).toBe(true);
-		expect(needsToken(`${DEFAULT_RELAY}/`)).toBe(true);
-		expect(needsToken('ws://127.0.0.1:8792')).toBe(false);
+describe('which relay rooms go through', () => {
+	it('is the public one unless a profile names its own', () => {
 		expect(relayUrl()).toBe(DEFAULT_RELAY);
 		storage.setItem('vela.peerconnectRelay', 'ws://127.0.0.1:8792');
 		expect(relayUrl()).toBe('ws://127.0.0.1:8792');
