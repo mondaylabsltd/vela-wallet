@@ -414,6 +414,9 @@ enum class SendTxErrorKey {
 
     @SerialName("proposal_offline") ProposalOffline,
 
+    /** A multisig's proposal this shell cannot make yet (`SendProposeFailure::NotSupported`): nothing was proposed. */
+    @SerialName("proposal_not_supported") ProposalNotSupported,
+
     /** r5reg-3: the reads before the passkey did not get through — the chain's nodes were busy. */
     @SerialName("chain_busy") ChainBusy,
 
@@ -497,6 +500,8 @@ data class SendRecipientRisk(
 enum class SendProposeFailure {
     @SerialName("mailbox_down") MailboxDown,
     @SerialName("offline") Offline,
+    /** This shell cannot propose a multisig's transaction yet — said as that, never as the mailbox. */
+    @SerialName("not_supported") NotSupported,
 }
 
 /** One transfer the review showed (`ReviewedTransfer`): base units, `token` `null` for the native coin. */

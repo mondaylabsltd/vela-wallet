@@ -7,6 +7,7 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.RelayRejection
+import uniffi.vela_core_uniffi.userOpNonceUsedDetail
 import uniffi.vela_core_uniffi.WalletKeyRecord
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.UserOpDraft
@@ -546,6 +547,11 @@ class UserOpSpine(
                     // its hash is never this request's; nothing of this one
                     // went out.
                     is RelayRejection.NonceHeld -> Failure.PreviousPending
+                    // send-15: the core's reading of a bare AA25 — another
+                    // transaction of the account spent the nonce first. Refused,
+                    // as the relay's sentence was before; the Android lane words
+                    // it as "went first" (`SendSubmitFailure.NonceUsed`).
+                    RelayRejection.NonceUsed -> Failure.Rejected(userOpNonceUsedDetail())
                 },
             )
         }

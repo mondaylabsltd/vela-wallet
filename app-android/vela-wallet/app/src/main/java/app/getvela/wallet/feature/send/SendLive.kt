@@ -1472,7 +1472,8 @@ object SendLive {
             // nothing was sent, calmly (the web's `nonce_used`).
             SendTxErrorKey.NonceUsed -> s.t(I18nKeys.Flows.WENT_FIRST)
             // A proposal's own words (web-only multisig); here the plain line.
-            SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline,
+            SendTxErrorKey.ProposalNotSupported -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
             // r5reg-3: the network's failure, by its name — never the passkey's.
             SendTxErrorKey.ChainBusy, SendTxErrorKey.ChainUnreachable -> s.t(
                 if (view.tx_error == SendTxErrorKey.ChainBusy) I18nKeys.Flows.TX_ERROR_CHAIN_BUSY else I18nKeys.Flows.TX_ERROR_CHAIN_UNREACHABLE,

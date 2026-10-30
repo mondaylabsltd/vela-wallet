@@ -3677,6 +3677,12 @@ describe('the send flow’s round-2 findings', () => {
 		}
 	});
 
+	it('a proposal a shell cannot make yet is said as that, with no retry', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'proposal_not_supported' });
+		expect(model.error).toEqual({ text: m['send.txErrorProposalNotSupported'] });
+		expect(model.error?.text).not.toBe(m['send.txErrorGeneric']);
+	});
+
 	it('r5reg-3: a Max filled again from a newer quote says so before the confirm', () => {
 		const model = confirm({
 			confirm_amount: '0.156382',
