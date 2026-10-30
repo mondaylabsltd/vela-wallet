@@ -409,6 +409,26 @@ struct SigningPlanTests {
         return String(decoding: try! JSONSerialization.data(withJSONObject: record), as: UTF8.self)
     }
 
+    /// R7 (owner 2026-10-30): the page everywhere — the wallet's own send, a
+    /// site's transaction and a message all go to the account's page; an
+    /// in-Vela account signs in Vela; a method no venue signs has no route.
+    @Test func theRouteIsThePageEverywhere() throws {
+        let onPage = record([
+            "signing_domain": "getvela.app",
+            "signing_venue": ["type": "page", "url": "https://sign.getvela.app/"],
+        ])
+        for method in ["", "eth_sendTransaction", "wallet_sendCalls", "personal_sign", "eth_signTypedData_v4"] {
+            #expect(SigningRouteWire.of(accountJson: onPage, method: method) == .page(url: "https://sign.getvela.app/"),
+                    "\(method.isEmpty ? "the wallet's own send" : method) did not go to the page")
+        }
+        #expect(SigningRouteWire.of(accountJson: onPage, method: "eth_sign") == nil)
+
+        let inVela = record(["signing_domain": "getvela.app", "signing_venue": ["type": "in_vela"]])
+        #expect(SigningRouteWire.of(accountJson: inVela, method: "") == .inVela)
+        #expect(SigningRouteWire.of(accountJson: inVela, method: "personal_sign") == .inVela)
+        #expect(SigningRouteWire.of(accountJson: "not json", method: "") == nil)
+    }
+
     /// A new record: its key, its domain and its venue, as written.
     @Test func aNewRecordIsReadAsWritten() throws {
         let plan = try #require(SigningPlanWire.of(accountJson: record([
