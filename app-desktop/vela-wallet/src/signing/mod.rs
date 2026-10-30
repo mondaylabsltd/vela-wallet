@@ -234,6 +234,10 @@ pub struct SigningStrings {
     /// (`specs/081-audit-product-gaps/pending-corpus/descriptor-provenance.json`);
     /// until then `t` echoes it, as it does any missing key.
     pub warn_descriptor_fetched: SharedString,
+    /// The certain decode's words (cs-1…cs-14, `componentsUi.signing.certain.*`):
+    /// where a reading came from, the contract on the card's face, and what
+    /// a description said against the bytes. Templates, by key.
+    pub certain: std::collections::BTreeMap<&'static str, String>,
     /// Spec 096 F5: the call signs an order whose amounts live off chain (a
     /// CoW pre-signature) — the core's `terms_off_chain`.
     pub warn_order_terms: SharedString,
@@ -335,6 +339,42 @@ pub struct SigningStrings {
     pub tech_param: String,
     pub tech_raw_units: String,
     pub sent_to_token_contract: SharedString,
+}
+
+/// The certain decode's corpus keys under `componentsUi.signing.certain.` —
+/// the web's `CERTAIN_KEYS` that this shell draws (P2.3).
+pub const CERTAIN_KEYS: [&str; 19] = [
+    "readByVela",
+    "readByVelaSignature",
+    "describedBuiltIn",
+    "describedBuiltInPlain",
+    "describedFetched",
+    "describedFetchedPlain",
+    "shapeOnly",
+    "selectorName",
+    "sourceBuiltIn",
+    "sourceFetched",
+    "sourceSelectorDb",
+    "sourceShape",
+    "sourceList",
+    "contractNamed",
+    "contractUnnamed",
+    "contractNoCode",
+    "contradiction",
+    "elsewhere",
+    "dustMinimum",
+];
+
+impl SigningStrings {
+    /// One certain-decode template, its `{{…}}` filled.
+    #[must_use]
+    pub fn certain_words(&self, key: &str, vars: &[(&str, &str)]) -> SharedString {
+        let mut text = self.certain.get(key).cloned().unwrap_or_default();
+        for (name, value) in vars {
+            text = text.replace(&format!("{{{{{name}}}}}"), value);
+        }
+        text.into()
+    }
 }
 
 impl SigningStrings {
@@ -510,6 +550,10 @@ impl SigningStrings {
             warn_verified_abi: s("verifiedAbiWarning"),
             warn_partial: s("partialWarning"),
             warn_descriptor_fetched: s("descriptorFetchedWarning"),
+            certain: CERTAIN_KEYS
+                .iter()
+                .map(|key| (*key, raw(&format!("certain.{key}"))))
+                .collect(),
             warn_order_terms: s("warnOrderTerms"),
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),

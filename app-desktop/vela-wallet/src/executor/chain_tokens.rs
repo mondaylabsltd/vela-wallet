@@ -254,7 +254,7 @@ pub(crate) fn data_base() -> String {
     url
 }
 
-fn read_data_base() -> String {
+pub(crate) fn read_data_base() -> String {
     storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
         .flatten()

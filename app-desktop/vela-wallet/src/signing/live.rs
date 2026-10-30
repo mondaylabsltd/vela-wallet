@@ -477,7 +477,9 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
-        ClearSurface::BlindTransaction => blind_tx_blocks(clear.native_value.as_ref(), facts, s),
+        ClearSurface::BlindTransaction => {
+            blind_tx_blocks(clear.native_value.as_ref(), clear.no_code, facts, s)
+        }
         // Spec 082 G14 (RC1): empty calldata is a send whatever the
         // recipient; the core decided it and scaled the amount.
         ClearSurface::PlainSend => clear
@@ -2287,6 +2289,7 @@ fn blind_typed_blocks(typed: &ClearBlindTyped, s: &SigningStrings) -> Vec<Block>
 /// be a second authority on "how much" (recorded as a gap in phase 26).
 fn blind_tx_blocks(
     native: Option<&ClearNativeValue>,
+    no_code: bool,
     facts: &RequestFacts,
     s: &SigningStrings,
 ) -> Vec<Block> {
@@ -2308,6 +2311,15 @@ fn blind_tx_blocks(
         out.push(Block::Rows(vec![coin_row(native, facts, s)]));
     }
     if let Some(to) = facts.to.as_ref() {
+        // cs-13: nothing lives at the target on this chain — said on the
+        // face, in the danger tone, where the unverified party would stand.
+        if no_code {
+            out.push(Block::Sentence {
+                text: s.certain_words("contractNoCode", &[("address", &short_address(to))]),
+                tone: Tone::Danger,
+            });
+            return out;
+        }
         out.push(Block::Party {
             label: s.label_interacting.clone(),
             name: s.tag_unverified.clone(),
@@ -2352,6 +2364,7 @@ fn result_blocks(
         text: SharedString::from(result.intent.clone()),
         tone: tone_of(result.risk),
     }];
+    out.extend(certain_blocks(result, &descriptor_host(), s));
     out.extend(warnings(result, s));
     // Spec 096 F4: the coin the call sends leads the rows, in a batch call's
     // own words, when the reading does not say it itself.
@@ -2370,6 +2383,115 @@ fn result_blocks(
         .collect();
     if !rows.is_empty() {
         out.push(Block::Rows(rows));
+    }
+    out
+}
+
+/// The host a fetched description came from — the person's descriptor
+/// service (`ethereumDataURL`), as the web's `descriptorHostOf` reads it.
+fn descriptor_host() -> String {
+    url::Url::parse(&crate::executor::chain_tokens::read_data_base())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn short_address(address: &str) -> String {
+    if address.len() <= 12 {
+        return address.to_owned();
+    }
+    format!("{}…{}", &address[..6], &address[address.len() - 4..])
+}
+
+/// The certain decode's lines under the intent (P2.3, cs-1…cs-14; the web's
+/// `provenanceBlock`, `contractBlock` and `certainLines`), all from the
+/// core's `ClearReading`: where the reading came from — Vela's own reading
+/// of the bytes, or whose description it is, which is not a guarantee — the
+/// contract on the card's face with who named it (or that nobody did, or
+/// that no code lives there), and what a description said against the
+/// bytes, an output paid to a stranger, a dust minimum.
+pub(crate) fn certain_blocks(
+    result: &ClearSignResult,
+    host: &str,
+    s: &SigningStrings,
+) -> Vec<Block> {
+    use vela_core::app::clear_signing::{ClearLineSource, ClearSignType};
+    let reading = &result.reading;
+    let owner = reading.descriptor_owner.as_deref();
+    let mut out = Vec::new();
+    let source = |text: SharedString| Block::Sentence {
+        text,
+        tone: Tone::Neutral,
+    };
+    out.push(match reading.source {
+        ClearLineSource::Vela => source(s.certain_words(
+            if result.sign_type == ClearSignType::Signature {
+                "readByVelaSignature"
+            } else {
+                "readByVela"
+            },
+            &[],
+        )),
+        ClearLineSource::BuiltIn => source(match owner {
+            Some(owner) => s.certain_words("describedBuiltIn", &[("owner", owner)]),
+            None => s.certain_words("describedBuiltInPlain", &[]),
+        }),
+        ClearLineSource::Fetched => source(match owner {
+            Some(owner) => s.certain_words("describedFetched", &[("owner", owner), ("host", host)]),
+            None => s.certain_words("describedFetchedPlain", &[("host", host)]),
+        }),
+        ClearLineSource::Shape => {
+            source(s.certain_words("shapeOnly", &[("intent", &result.intent)]))
+        }
+        // A name anyone can register is a caution in itself (cs-7).
+        ClearLineSource::SelectorDb => Block::Warning {
+            tone: Tone::Caution,
+            text: s.certain_words(
+                "selectorName",
+                &[("name", reading.selector_name.as_deref().unwrap_or_default())],
+            ),
+        },
+    });
+    if let Some(address) = result.contract_address.as_deref() {
+        let short = short_address(address);
+        // A reading that decoded has code behind it: "no code here" is the
+        // blind rung's to say (`blind_tx_blocks`).
+        out.push(if let Some(name) = result.contract_name.as_deref() {
+            let named_by = match reading.contract_named_by {
+                Some(ClearLineSource::Fetched) => {
+                    s.certain_words("sourceFetched", &[("host", host)])
+                }
+                Some(ClearLineSource::SelectorDb) => s.certain_words("sourceSelectorDb", &[]),
+                Some(ClearLineSource::Shape) => s.certain_words("sourceShape", &[]),
+                Some(ClearLineSource::BuiltIn | ClearLineSource::Vela) | None => {
+                    s.certain_words("sourceList", &[])
+                }
+            };
+            source(s.certain_words(
+                "contractNamed",
+                &[("address", &short), ("name", name), ("source", &named_by)],
+            ))
+        } else {
+            source(s.certain_words("contractUnnamed", &[("address", &short)]))
+        });
+    }
+    for words in &reading.contradictions {
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.certain_words("contradiction", &[("words", words)]),
+        });
+    }
+    if reading.goes_elsewhere {
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.certain_words("elsewhere", &[]),
+        });
+    }
+    if reading.dust_minimum {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.certain_words("dustMinimum", &[]),
+        });
     }
     out
 }
@@ -2420,13 +2542,14 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
             text: s.warn_partial.clone(),
         });
     }
-    if result.provenance == ClearProvenance::Fetched {
+    if result.provenance == ClearProvenance::Fetched
+        && result.reading.source != vela_core::app::clear_signing::ClearLineSource::Fetched
+    {
         // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
         // from a base URL the person can edit — and nothing signed the
-        // answer. The other values say nothing here: built in and pinned are
-        // what "verified" means, a token-standard shape is the standard doing
-        // its job, the 4-byte database has its own line above, and a
-        // deployment claims nothing to doubt.
+        // answer. Said here unless the reading's own provenance line
+        // (`certain_blocks`, cs-14: "via ERC-7730 · host · unauthenticated")
+        // already says it, so it is said once.
         out.push(Block::Warning {
             tone: Tone::Caution,
             text: s.warn_descriptor_fetched.clone(),
@@ -4894,6 +5017,58 @@ mod tests {
     /// An incomplete decode said "no ERC-7730 descriptor for this contract",
     /// which is the opposite of what happened, and a fetched descriptor said
     /// nothing at all about never having been authenticated.
+    /// P2.3 (cs-1…cs-14): the certain decode under the intent — where the
+    /// reading came from, the contract on the face with who named it, and
+    /// what a description said against the bytes.
+    #[test]
+    fn the_certain_decode_says_where_a_reading_came_from() {
+        use vela_core::app::clear_signing::ClearLineSource;
+        let s = strings();
+        let mut result = result(vec![field("To", "0xbbb")]);
+        result.contract_address = Some("0x1111111111111111111111111111111111111111".to_owned());
+        result.contract_name = Some("Router".to_owned());
+        result.reading.source = ClearLineSource::Fetched;
+        result.reading.descriptor_owner = Some("Uniswap".to_owned());
+        result.reading.contract_named_by = Some(ClearLineSource::Fetched);
+        result.reading.contradictions = vec!["Swap".to_owned()];
+        result.reading.goes_elsewhere = true;
+        result.reading.dust_minimum = true;
+        let said = certain_blocks(&result, "data.example", &s);
+        let texts: Vec<String> = said
+            .iter()
+            .map(|block| match block {
+                Block::Sentence { text, tone } | Block::Warning { text, tone } => {
+                    format!("{tone:?} {text}")
+                }
+                _ => "another".to_owned(),
+            })
+            .collect();
+        assert!(
+            texts[0].contains("Uniswap") && texts[0].contains("data.example"),
+            "{texts:?}"
+        );
+        assert!(
+            texts[1].contains("0x1111…1111") && texts[1].contains("Router"),
+            "{texts:?}"
+        );
+        assert!(
+            texts[2].starts_with("Danger") && texts[2].contains("Swap"),
+            "{texts:?}"
+        );
+        assert!(texts[3].starts_with("Danger"), "{texts:?}");
+        assert!(texts[4].starts_with("Caution"), "{texts:?}");
+        assert_eq!(texts.len(), 5);
+        // A name from the public database is a caution in itself (cs-7).
+        result.reading = Default::default();
+        result.reading.source = ClearLineSource::SelectorDb;
+        result.reading.selector_name = Some("transfer(address,uint256)".to_owned());
+        result.contract_address = None;
+        let said = certain_blocks(&result, "", &s);
+        assert!(
+            matches!(&said[0], Block::Warning { tone: Tone::Caution, text } if text.contains("transfer("))
+        );
+    }
+
     #[test]
     fn an_incomplete_decode_and_a_fetched_one_say_what_they_are() {
         let s = strings();
