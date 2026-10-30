@@ -233,6 +233,27 @@ class IdentityWaterfallTest {
         assertEquals("0x0000000000000000000000000000000000000000000000000000000000000000", IdentityResolver.namehash(""))
         assertEquals("0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae", IdentityResolver.namehash("eth"))
         assertEquals("0xde9b09fd7c5f901e23a3f19fecc54828e9c848539801e86591bd9801b019f84f", IdentityResolver.namehash("foo.eth"))
+        // ADDR_REVERSE_NODE, as ENS publishes it.
+        assertEquals("0x91d1777781884d03a6757a803996e38de2a42967fb37eeaca72729271025a9e2", IdentityResolver.namehash("addr.reverse"))
+    }
+
+    /** Phase 4: namehash reuses the nodes of proper suffixes it has seen; the answers must not change. */
+    @Test
+    fun `namehash from a remembered suffix is the full fold`() {
+        fun fold(name: String): String {
+            var node = ByteArray(32)
+            for (label in name.split('.').asReversed()) {
+                node = uniffi.vela_core_uniffi.keccak256(node + uniffi.vela_core_uniffi.keccak256(label.toByteArray(Charsets.UTF_8)))
+            }
+            return "0x" + node.joinToString("") { "%02x".format(it) }
+        }
+        val names = listOf(
+            "a.b.c.vela-test", "z.c.vela-test", "c.vela-test", "y.b.c.vela-test", "vela-test",
+            "d8da6bf26964af9d7eed9e03e53415d37aa96045.addr.reverse",
+            "88cca0eedbf2c4426110bbfc998f048689266894.addr.reverse",
+        )
+        // Twice: the first pass fills the suffixes, the second reads them.
+        repeat(2) { for (name in names) assertEquals(name, fold(name), IdentityResolver.namehash(name)) }
     }
 
     @Test

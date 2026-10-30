@@ -79,6 +79,21 @@ class I18nOnDemandTest {
         assertEquals(multisigValue("ja"), strings.t(sample))
     }
 
+    /** Phase 4: plain lookups are remembered per catalog state, never across a change of it. */
+    @Test
+    fun aRememberedWordFollowsALanguageChange() {
+        val strings = runtime().apply { initialize("en") }
+        val key = "home.totalBalance"
+        val english = strings.t(key)
+        assertEquals(english, strings.t(key))
+        strings.setLocale("de")
+        val german = strings.t(key)
+        assertNotEquals(english, german)
+        assertEquals(german, strings.t(key))
+        strings.setLocale("en")
+        assertEquals(english, strings.t(key))
+    }
+
     @Test
     fun aNamespaceAskedForBeforeTheEngineIsBuiltLoadsWithIt() {
         val strings = runtime()
