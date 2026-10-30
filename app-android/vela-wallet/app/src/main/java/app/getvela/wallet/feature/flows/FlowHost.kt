@@ -221,6 +221,7 @@ private fun FlowHostContent(
                     model = base.model,
                     onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
                     onSelectAll = { send?.onSelectAll?.invoke() },
+                    onAddNetwork = { chainId -> send?.onAddNetwork?.invoke(chainId) },
                     onCta = {
                         val cta = send?.onPickCta
                         when {
@@ -290,6 +291,9 @@ private fun FlowHostContent(
                     model = base.model,
                     onCta = { send?.onReceiptCta?.invoke() ?: onNavigate(FlowStep.Done) },
                     onExplorer = { send?.onExplorer?.invoke() },
+                    // send-5: the never-sent receipt's Send again — drawn on the
+                    // gallery's board too, where it does nothing.
+                    onRetry = { send?.onSendAgain?.invoke() },
                 )
             }
         }
@@ -526,6 +530,10 @@ class SendCallbacks(
     val onRelayReport: () -> Unit = {},
     /** send-18: the confirm's "Check again" on the recipient's unfinished check. */
     val onRecipientCheckRetry: () -> Unit = {},
+    /** send-5: the never-sent receipt's "Send again" (`send_again`). */
+    val onSendAgain: () -> Unit = {},
+    /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`). */
+    val onAddNetwork: (Int) -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

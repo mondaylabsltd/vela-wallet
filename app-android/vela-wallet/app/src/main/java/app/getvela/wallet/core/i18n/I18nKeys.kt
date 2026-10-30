@@ -897,6 +897,25 @@ object I18nKeys {
         const val RISK_UNFINISHED = "send.riskUnfinished"
         const val RISK_HISTORY_UNREAD = "send.riskHistoryUnread"
         const val RISK_RETRY = "send.riskRetry"
+        // P2.2 send rounds 3-6 (the web's `live-send.ts`): the recipient's check
+        // still out, the slow reads before the passkey, another sender ahead, a
+        // Max that moved, the passkey that signed nothing, the recipient's
+        // cautions, the never-sent receipt and its way on, the lock's add.
+        const val RISK_CHECKING = "send.riskChecking"
+        const val SUBMIT_SLOW = "send.submitSlow"
+        const val SUBMIT_SLOW_BUSY = "send.submitSlowBusy"
+        const val QUEUED_BEHIND_TAB = "send.queuedBehindTab"
+        const val MAX_MOVED = "send.maxMoved"
+        const val PASSKEY_TIMED_OUT = "componentsUi.signing.passkeyTimedOut"
+        const val PASSKEY_CLOSED = "componentsUi.signing.passkeyClosed"
+        const val RECIPIENT_CHECKSUM = "send.recipientChecksum"
+        const val RECIPIENT_ZERO_ADDRESS = "send.recipientZeroAddress"
+        const val RECIPIENT_SELF = "send.recipientSelf"
+        const val RECEIPT_NOT_SENT = "componentsTx.receipt.statusNotSent"
+        const val RECEIPT_NOT_SENT_BODY = "componentsTx.receipt.notSentBody"
+        const val TX_SEND_AGAIN = "send.txSendAgain"
+        const val TX_REVIEW_AGAIN = "send.txReviewAgain"
+        const val LOCK_ADD_NETWORK = "send.lock.addNetwork"
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
         const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
         const val WARN_NEED_GAS = "send.warnNeedGas"
