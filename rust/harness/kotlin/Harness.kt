@@ -376,9 +376,32 @@ fun canonicalTag(t: String): String {
 var i18nAssetDirPath: String = ""
 val i18nAssets = mutableMapOf<String, ByteArray>()
 
+/**
+ * The on-demand namespaces (gen-i18n's `ON_DEMAND`, `assets/i18n/<name>/<lng>.json`),
+ * deep-merged into the main catalog as the apps merge them for the screens that
+ * draw them — as verify-web.mjs does — so the corpus's every key is replayed,
+ * wherever it loads from.
+ */
+val I18N_ON_DEMAND = listOf("multisig")
+
+fun deepMerge(a: JSONObject, b: JSONObject): JSONObject {
+    for (k in b.keys()) {
+        val v = b.get(k)
+        val existing = a.opt(k)
+        a.put(k, if (v is JSONObject && existing is JSONObject) deepMerge(existing, v) else v)
+    }
+    return a
+}
+
 fun i18nAsset(lng: String): ByteArray? = i18nAssets.getOrPut(lng) {
     val f = File("$i18nAssetDirPath/$lng.json")
-    if (f.exists()) f.readBytes() else return null
+    if (!f.exists()) return null
+    var doc = JSONObject(f.readText())
+    for (name in I18N_ON_DEMAND) {
+        val extra = File("$i18nAssetDirPath/$name/$lng.json")
+        if (extra.exists()) doc = deepMerge(doc, JSONObject(extra.readText()))
+    }
+    doc.toString().toByteArray(Charsets.UTF_8)
 }
 
 fun i18nEngine(lng: String, active: String? = null, legacyPlurals: Boolean = false): I18n {

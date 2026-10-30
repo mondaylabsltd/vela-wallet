@@ -465,13 +465,44 @@ let i18nLocales = ["en", "zh", "zh-TW", "zh-HK", "ja", "ko", "vi", "id", "tr",
 var i18nAssetDir: String { "\(vectorsPath)/../../../../../assets/i18n" }
 var i18nAssets: [String: Data] = [:]
 
+/// The on-demand namespaces (gen-i18n's `ON_DEMAND`, `assets/i18n/<name>/<lng>.json`),
+/// deep-merged into the main catalog as the apps merge them for the screens that
+/// draw them — as verify-web.mjs does — so the corpus's every key is replayed,
+/// wherever it loads from.
+let i18nOnDemand = ["multisig"]
+
+func deepMerge(_ a: [String: Any], _ b: [String: Any]) -> [String: Any] {
+    var out = a
+    for (k, v) in b {
+        if let vd = v as? [String: Any], let ed = out[k] as? [String: Any] {
+            out[k] = deepMerge(ed, vd)
+        } else {
+            out[k] = v
+        }
+    }
+    return out
+}
+
 func i18nAsset(_ lng: String) -> Data? {
     if let cached = i18nAssets[lng] { return cached }
     guard let d = try? Data(contentsOf: URL(fileURLWithPath: "\(i18nAssetDir)/\(lng).json")) else {
         return nil
     }
-    i18nAssets[lng] = d
-    return d
+    var merged = d
+    if var doc = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+        var extended = false
+        for name in i18nOnDemand {
+            let path = "\(i18nAssetDir)/\(name)/\(lng).json"
+            if let extra = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let extraDoc = (try? JSONSerialization.jsonObject(with: extra)) as? [String: Any] {
+                doc = deepMerge(doc, extraDoc)
+                extended = true
+            }
+        }
+        if extended, let out = try? JSONSerialization.data(withJSONObject: doc) { merged = out }
+    }
+    i18nAssets[lng] = merged
+    return merged
 }
 
 func i18nEngine(lng: String, active: String? = nil, legacyPlurals: Bool = false) throws -> I18n {
@@ -962,5 +993,223 @@ do {
 } catch {
     FileHandle.standardError.write(
         "smoke-swift: golden multi-key Safe threw — \(error)\n".data(using: .utf8)!)
+    exit(1)
+}
+
+// ---------------------------------------------------------------------------
+// F0.2 native parity — vectors/native-parity/exports.json: the web's exports
+// the native apps take over, each case's expectation the SHIPPED wasm's answer
+// (verify-web.mjs). Here every case goes through the Swift bindings.
+// ---------------------------------------------------------------------------
+
+/// JSON text as the corpus records it: parsed, `""` kept, absent as null.
+func parityJson(_ text: String?) throws -> Any {
+    guard let text else { return NSNull() }
+    if text.isEmpty { return "" }
+    return try parsed(text) ?? NSNull()
+}
+
+func orNull(_ value: String?) -> Any { value.map { $0 as Any } ?? NSNull() }
+
+/// A float the corpus wrote as a whole JSON number compares as that number.
+func whole(_ d: Double) -> Any { d.truncatingRemainder(dividingBy: 1) == 0 ? Int64(d) as Any : d as Any }
+
+func bareHex(_ data: Data) -> String { String(hex(data).dropFirst(2)) }
+
+func u64(_ input: [String: Any], _ key: String) throws -> UInt64 {
+    guard let n = input[key] as? NSNumber, let v = UInt64(exactly: n.doubleValue) else {
+        throw BadInput(detail: "missing u64 input `\(key)`")
+    }
+    return v
+}
+
+func walletKeys(_ input: [String: Any]) throws -> [WalletKeyRecord] {
+    guard let keys = input["keys"] as? [[String: Any]] else { throw BadInput(detail: "missing keys") }
+    return try keys.map {
+        WalletKeyRecord(credentialId: try str($0, "credential_id"), publicKeyHex: try str($0, "public_key_hex"))
+    }
+}
+
+func refusalCode(_ r: TrustedSignerRefusal) -> String {
+    switch r {
+    case .declined: return "declined"
+    case .pageRefused: return "refused"
+    case .wrongChallenge: return "wrong_challenge"
+    case .foreignKey: return "foreign_key"
+    case .badSignature: return "bad_signature"
+    case .notVerified: return "not_verified"
+    case .wrongToken: return "wrong_token"
+    case .malformed: return "malformed"
+    }
+}
+
+func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
+    switch fn {
+    case "signing_route":
+        return try parityJson(signingRoute(accountJson: try str(i, "account_json"), method: try str(i, "method")))
+    case "signing_venue_block":
+        return try parityJson(signingVenueBlock(domain: try str(i, "domain"), venueJson: try str(i, "venue_json")))
+    case "multisig_approval_route":
+        return try parityJson(multisigApprovalRoute(accountJson: try str(i, "account_json")))
+    // Already native: `trusted_signer_request` (typed input, no draft for a message).
+    case "trusted_signer_signature_request":
+        let input = TrustedSignerInput(
+            method: try str(i, "method"), paramsJson: try str(i, "params_json"), origin: try str(i, "origin"),
+            originSeenByBrowser: try bool(i, "origin_seen_by_browser"), chainId: try u32(i, "chain_id"),
+            chainName: try optStr(i, "chain_name"), nativeSymbol: try optStr(i, "native_symbol"),
+            account: try str(i, "account"), accountName: try optStr(i, "account_name"),
+            credentialIdsHex: try strList(i, "credential_ids_hex"), keyRouteJson: try optStr(i, "key_route_json"),
+            calls: [])
+        return try parityJson(try trustedSignerRequest(input: input, draft: nil))
+    case "trusted_signer_signature_accept":
+        switch trustedSignerSignatureAccept(
+            requestJson: try str(i, "request_json"), resultJson: try str(i, "result_json"),
+            keys: try walletKeys(i), digest: try data(i, "digest_hex"))
+        {
+        case let .accepted(credentialIdHex, assertion):
+            let id = credentialIdHex.hasPrefix("0x") ? String(credentialIdHex.dropFirst(2)) : credentialIdHex
+            return ["accepted": [
+                "credential_id_hex": id.lowercased(),
+                "signature_der_hex": bareHex(assertion.signatureDer),
+                "authenticator_data_hex": bareHex(assertion.authenticatorData),
+                "client_data_json_hex": bareHex(assertion.clientDataJson),
+            ] as [String: Any]]
+        case let .refused(refusal):
+            return ["refused": refusalCode(refusal)]
+        }
+    case "trusted_signer_approval_request":
+        let input = TrustedSignerApprovalInput(
+            chainId: try u64(i, "chain_id"), chainName: try optStr(i, "chain_name"),
+            nativeSymbol: try optStr(i, "native_symbol"), multisig: try str(i, "multisig"),
+            multisigName: try optStr(i, "multisig_name"), txJson: try str(i, "tx_json"),
+            member: try str(i, "member"), memberName: try optStr(i, "member_name"),
+            credentialIdsHex: try strList(i, "credential_ids_hex"), keyRouteJson: try optStr(i, "key_route_json"))
+        return try parityJson(try trustedSignerApprovalRequest(input: input))
+    case "trusted_signer_approval_accept":
+        switch trustedSignerApprovalAccept(
+            resultJson: try str(i, "result_json"), chainId: try u64(i, "chain_id"), member: try str(i, "member"),
+            safeTxHash: try str(i, "safe_tx_hash"), keys: try walletKeys(i))
+        {
+        case let .accepted(approvalJson): return ["accepted": try parityJson(approvalJson)]
+        case let .refused(refusal): return ["refused": refusalCode(refusal)]
+        }
+    case "sign_error_words":
+        return orNull(signErrorWords(kind: try str(i, "kind"), detail: try optStr(i, "detail")))
+    case "sign_not_confirmed_detail":
+        return signNotConfirmedDetail(userOpHash: try str(i, "user_op_hash"))
+    case "sign_answered":
+        return orNull(signAnswered(payloadJson: try str(i, "payload_json")))
+    case "sign_request_ttl_ms":
+        return whole(signRequestTtlMs())
+    case "intent_agent_reads":
+        return try parityJson(intentAgentReads(worldJson: try str(i, "world_json"), operation: try optStr(i, "operation")))
+    case "intent_advice":
+        return try parityJson(intentAdvice(inputJson: try str(i, "input_json")))
+    case "intent_advice_standing":
+        return try parityJson(intentAdviceStanding(inputJson: try str(i, "input_json")))
+    case "rpc_own_only_pool":
+        return try parityJson(rpcOwnOnlyPool(seedsJson: try str(i, "seeds_json"), ownOnly: try bool(i, "own_only")))
+    case "rpc_hedge_after_ms":
+        return Int64(rpcHedgeAfterMs())
+    case "rpc_is_hedged_read":
+        return rpcIsHedgedRead(kind: try str(i, "kind"), method: try str(i, "method"))
+    case "rpc_early_verdict":
+        return try parityJson(rpcEarlyVerdict(
+            kind: try str(i, "kind"), method: try str(i, "method"), url: try str(i, "url"),
+            outcomeJson: try str(i, "outcome_json")))
+    case "rpc_read_timeout_ms":
+        return Int64(rpcReadTimeoutMs())
+    case "rpc_cooldown_ms":
+        return whole(rpcCooldownMs(consecutiveFailures: try u32(i, "consecutive_failures")))
+    case "min_gas_price_wei":
+        return minGasPriceWei(chainId: try u32(i, "chain_id"))
+    case "fee_quote_deadline_ms":
+        return Int64(feeQuoteDeadlineMs())
+    // Already native: the web's `typicalInclusionSeconds` is this, 0 for none.
+    case "typical_inclusion_seconds":
+        return Int64(networkTypicalInclusionS(chainId: try u32(i, "chain_id")) ?? 0)
+    // Already native: the draft's steps (user_op_floors → user_op_apply_estimate → the inner floor).
+    case "user_op_gas_limits":
+        let floors = userOpFloors(
+            chainId: try u32(i, "chain_id"), deployed: try bool(i, "deployed"), subCalls: try u32(i, "sub_calls"))
+        let draft = UserOpDraft(
+            sender: "0x1111111111111111111111111111111111111111", nonce: "0", initCode: Data(), callData: Data(),
+            verificationGasLimit: "0", callGasLimit: "0", preVerificationGas: "0", maxFeePerGas: "0",
+            maxPriorityFeePerGas: "0", paymasterAndData: Data(), signature: Data())
+        let applied = try userOpApplyEstimate(
+            draft: draft, verificationGasLimit: try str(i, "verification_gas_limit"),
+            callGasLimit: try str(i, "call_gas_limit"), preVerificationGas: try str(i, "pre_verification_gas"),
+            settlementGas: try optStr(i, "settlement_gas"), floors: floors)
+        // The corpus's gas figures fit a UInt64; the core's are u128 decimal strings.
+        guard let call = UInt64(applied.callGasLimit) else { throw BadInput(detail: "call gas") }
+        let floor = try optStr(i, "inner_floor").flatMap { UInt64($0) } ?? 0
+        return [
+            "verificationGasLimit": applied.verificationGasLimit,
+            "callGasLimit": String(max(call, floor)),
+            "preVerificationGas": applied.preVerificationGas,
+        ]
+    case "dapp_rpc_classify":
+        return try parityJson(dappRpcClassify(method: try str(i, "method")))
+    case "dapp_rpc_capabilities":
+        return try parityJson(dappRpcCapabilities(
+            paramsJson: try str(i, "params_json"), grantedJson: try str(i, "granted_json"),
+            chainsJson: try str(i, "chains_json")))
+    case "dapp_rpc_calls_status":
+        return try parityJson(dappRpcCallsStatus(
+            id: try str(i, "id"), chainId: try u32(i, "chain_id"), receiptJson: try optStr(i, "receipt_json"),
+            relayStatusJson: try optStr(i, "relay_status_json")))
+    case "token_provenance":
+        return try parityJson(tokenProvenance(
+            chainId: try u32(i, "chain_id"), token: try str(i, "token"), symbol: try str(i, "symbol"),
+            nativeSymbol: try str(i, "native_symbol")))
+    case "site_start_chain":
+        guard let ids = i["space_chain_ids"] as? [NSNumber] else { throw BadInput(detail: "space_chain_ids") }
+        let last = (i["last_used"] as? NSNumber).map { UInt32(truncating: $0) }
+        return Int64(siteStartChain(spaceChainIds: ids.map { UInt32(truncating: $0) }, lastUsed: last))
+    case "resolved_name_step":
+        return try parityJson(resolvedNameStep(
+            chainId: try u32(i, "chain_id"), registry: try str(i, "registry"), name: try str(i, "name"),
+            answersJson: try str(i, "answers_json")))
+    case "currency_fraction_digits":
+        return Int64(currencyFractionDigits(code: try str(i, "code")))
+    default: throw NoDispatch(fn: fn)
+    }
+}
+
+do {
+    let path = (vectorsPath as NSString).appendingPathComponent("native-parity/exports.json")
+    guard let raw = fileManager.contents(atPath: path),
+          let doc = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
+          let cases = doc["cases"] as? [[String: Any]]
+    else {
+        FileHandle.standardError.write("smoke-swift: cannot read \(path)\n".data(using: .utf8)!)
+        exit(1)
+    }
+    var parityFailures: [String] = []
+    var exports = Set<String>()
+    for c in cases {
+        let name = c["name"] as? String ?? "?"
+        let fn = c["fn"] as? String ?? "?"
+        exports.insert(fn)
+        let want = (c["expect"] as? [String: Any])?["value"]
+        do {
+            let got = try runParity(fn, c["input"] as? [String: Any] ?? [:])
+            if !jsonEquals(want, got) {
+                parityFailures.append("\(name) — wasm \(String(describing: want)), swift \(got)")
+            }
+        } catch {
+            parityFailures.append("\(name) — threw \(error)")
+        }
+    }
+    if !parityFailures.isEmpty {
+        let report = parityFailures.joined(separator: "\n  ")
+        FileHandle.standardError.write(
+            "smoke-swift: \(parityFailures.count) of \(cases.count) native-parity cases FAILED:\n  \(report)\n"
+                .data(using: .utf8)!)
+        exit(1)
+    }
+    print("smoke-swift: \(cases.count) native-parity cases agree with the wasm (\(exports.count) exports)")
+} catch {
+    FileHandle.standardError.write("smoke-swift: native parity threw — \(error)\n".data(using: .utf8)!)
     exit(1)
 }
