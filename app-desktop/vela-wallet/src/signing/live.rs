@@ -1779,7 +1779,13 @@ fn grant_all_editor(
     s: &SigningStrings,
 ) -> (Block, Vec<GuardEditorMode>) {
     let picked = editor.choice.as_ref();
-    let state = |on: bool| if on { ChipState::Selected } else { ChipState::Idle };
+    let state = |on: bool| {
+        if on {
+            ChipState::Selected
+        } else {
+            ChipState::Idle
+        }
+    };
     let granted = matches!(picked, Some(GuardChoice::Grant));
     let revoked = matches!(picked, Some(GuardChoice::Revoke));
     (
@@ -3704,9 +3710,14 @@ mod tests {
     fn plain(call: serde_json::Value) -> (Vec<Block>, SharedString) {
         let s = strings();
         let params = serde_json::json!([call]).to_string();
-        let event =
-            crate::wallet::signing_host::clear_kickoff("eth_sendTransaction", &params, 100, None)
-                .unwrap_or_else(|| unreachable!("a transaction starts the ladder"));
+        let event = crate::wallet::signing_host::clear_kickoff(
+            "eth_sendTransaction",
+            &params,
+            100,
+            None,
+            None,
+        )
+        .unwrap_or_else(|| unreachable!("a transaction starts the ladder"));
         let mut host =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
         let _ = host.dispatch(event);
@@ -4167,7 +4178,13 @@ mod tests {
         guard.detected = detected.clone();
         let (block, modes) = guard_editor(&guard, &s).unwrap_or_else(|| unreachable!("a card"));
         assert_eq!(modes, vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]);
-        let Block::Allowance { value, chips, custom, .. } = &block else {
+        let Block::Allowance {
+            value,
+            chips,
+            custom,
+            ..
+        } = &block
+        else {
             unreachable!("an allowance card");
         };
         assert_eq!(value.as_ref(), "—", "nothing until a deliberate tap");
@@ -4179,7 +4196,10 @@ mod tests {
             editor.choice = Some(GuardChoice::Grant);
         }
         let (block, _) = guard_editor(&picked, &s).unwrap_or_else(|| unreachable!("a card"));
-        let Block::Allowance { value, value_tone, .. } = block else {
+        let Block::Allowance {
+            value, value_tone, ..
+        } = block
+        else {
             unreachable!("an allowance card");
         };
         assert_eq!(value, s.chip_grant_all);
@@ -4203,7 +4223,10 @@ mod tests {
             all_settled: true,
         });
         let legs = guard_leg_editors(&batch, &s);
-        assert_eq!(legs[0].modes, vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]);
+        assert_eq!(
+            legs[0].modes,
+            vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]
+        );
     }
 
     #[test]

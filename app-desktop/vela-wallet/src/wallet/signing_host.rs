@@ -96,6 +96,22 @@ pub(crate) fn fee_balance_changes(
         .collect()
 }
 
+/// What the column's close tells the core, now that it is told (spec 079,
+/// the web's `signingCloseEvent`): after the approval — the request failed
+/// or is on its way, its answer already handled — the plain close
+/// (`DismissTapped`), which ends nothing; before it, the close the core reads
+/// by where the request stands (`SwipeDismissed`: a refusal, or the funding
+/// card's cancel), so a request that must still be answered always is.
+fn close_event(view: &SignView) -> SignEvent {
+    use vela_core::app::sign_request::SignSwipeAction;
+    match view.swipe_action {
+        SignSwipeAction::Dismiss => SignEvent::DismissTapped,
+        SignSwipeAction::Reject | SignSwipeAction::FundingCancel | SignSwipeAction::None => {
+            SignEvent::SwipeDismissed
+        }
+    }
+}
+
 /// Where a request stands, as far as closing its column goes (083): the
 /// core's view, where its signature is, and whether a close already waits.
 fn close_facts_of(
@@ -499,6 +515,10 @@ impl SigningHost {
             // — an empty origin is no origin, which is what the SIWE binding
             // check treats as unbindable rather than as a match.
             Some(request.origin.clone()).filter(|origin| !origin.is_empty()),
+            // WIRE-AUDIT A11: who signs (the typed data's own `from`, the
+            // transaction's sender), and the cs-13 probe of whether anything
+            // lives at the target before a name or descriptor is applied.
+            Some(wallet),
         );
         if let Some(event) = clear {
             self.dispatch_clear(event, cx);
@@ -842,7 +862,7 @@ impl SigningHost {
             }
             ClosePlan::Now => {
                 self.phone_stop = None;
-                self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+                self.dispatch_sign(close_event(&self.view), cx);
             }
         }
     }
@@ -1227,7 +1247,7 @@ impl SigningHost {
         {
             self.close_after_cancel = false;
             self.phone_stop = None;
-            self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+            self.dispatch_sign(close_event(&self.view), cx);
         }
     }
 
@@ -1860,9 +1880,12 @@ pub fn clear_kickoff(
     params_json: &str,
     chain_id: u32,
     origin: Option<String>,
+    from: Option<&str>,
 ) -> Option<ClearEvent> {
     use vela_core::app::clear_signing::ClearSignMethod;
     let locale = clear_locale();
+    // cs-13: the target is probed for code exactly when this shell says who
+    // signs — the live sheet; the table tests pass `None` and stay offline.
     match method {
         // 089 S1: a batch goes over whole — the core reads EVERY call, so the
         // sheet can never describe call 1 while signing them all.
@@ -1870,8 +1893,8 @@ pub fn clear_kickoff(
             params_json: params_json.to_owned(),
             chain_id,
             locale,
-            from: None,
-            probe_code: false,
+            from: from.map(str::to_owned),
+            probe_code: from.is_some(),
         }),
         "eth_sendTransaction" => {
             let call = first_call(method, params_json);
@@ -1881,8 +1904,8 @@ pub fn clear_kickoff(
                 value: call.and_then(|c| c.2),
                 chain_id,
                 locale,
-                from: None,
-                probe_code: false,
+                from: from.map(str::to_owned),
+                probe_code: from.is_some(),
             })
         }
         "eth_signTypedData_v4"
@@ -1892,7 +1915,7 @@ pub fn clear_kickoff(
             typed_data_json: typed_data_of(method, params_json),
             chain_id,
             locale,
-            from: None,
+            from: from.map(str::to_owned),
         }),
         "personal_sign" | "eth_sign" => Some(ClearEvent::MessagePresented {
             method: if method == "eth_sign" {
@@ -2604,7 +2627,7 @@ mod tests {
         assert_eq!(submitted[0].to, SIGNED, "what the executor signs");
 
         let Some(ClearEvent::ResolveTransaction { to, data, .. }) =
-            clear_kickoff("eth_sendTransaction", &params, 1, None)
+            clear_kickoff("eth_sendTransaction", &params, 1, None, None)
         else {
             unreachable!("a transaction starts the decode")
         };
@@ -2689,6 +2712,7 @@ mod kickoff_tests {
             params,
             1,
             Some("https://app.uniswap.org".into()),
+            None,
         ) {
             Some(ClearEvent::MessagePresented {
                 method,
@@ -2710,7 +2734,7 @@ mod kickoff_tests {
     fn a_batch_is_handed_to_the_decoder_whole() {
         let params =
             r#"[{"calls":[{"to":"0x1","value":"0x1"},{"to":"0x2","value":"0xde0b6b3a7640000"}]}]"#;
-        match clear_kickoff("wallet_sendCalls", params, 100, None) {
+        match clear_kickoff("wallet_sendCalls", params, 100, None, None) {
             Some(ClearEvent::ResolveBatch {
                 params_json,
                 chain_id,
@@ -2727,7 +2751,7 @@ mod kickoff_tests {
     /// hard warning — never the calm message view.
     #[test]
     fn eth_sign_is_not_the_calm_view() {
-        match clear_kickoff("eth_sign", r#"["0xabc","0xdead"]"#, 1, None) {
+        match clear_kickoff("eth_sign", r#"["0xabc","0xdead"]"#, 1, None, None) {
             Some(ClearEvent::MessagePresented { method, .. }) => {
                 assert_eq!(method, ClearSignMethod::EthSign);
             }
@@ -2740,14 +2764,14 @@ mod kickoff_tests {
     #[test]
     fn the_other_rungs_are_unchanged() {
         assert!(matches!(
-            clear_kickoff("eth_sendTransaction", "[]", 100, None),
+            clear_kickoff("eth_sendTransaction", "[]", 100, None, None),
             Some(ClearEvent::ResolveTransaction { .. })
         ));
         assert!(matches!(
-            clear_kickoff("eth_signTypedData_v4", "[]", 1, None),
+            clear_kickoff("eth_signTypedData_v4", "[]", 1, None, None),
             Some(ClearEvent::ResolveTypedData { .. })
         ));
-        assert!(clear_kickoff("eth_chainId", "[]", 1, None).is_none());
+        assert!(clear_kickoff("eth_chainId", "[]", 1, None, None).is_none());
     }
 
     /// Spec 097 E (S3): every rung is read in the person's locale and this
@@ -2770,9 +2794,9 @@ mod kickoff_tests {
             "the presets the rest of the app writes with"
         );
         let locales = [
-            clear_kickoff("wallet_sendCalls", "[]", 56, None),
-            clear_kickoff("eth_sendTransaction", "[]", 56, None),
-            clear_kickoff("eth_signTypedData_v4", "[]", 56, None),
+            clear_kickoff("wallet_sendCalls", "[]", 56, None, None),
+            clear_kickoff("eth_sendTransaction", "[]", 56, None, None),
+            clear_kickoff("eth_signTypedData_v4", "[]", 56, None, None),
         ]
         .map(|event| match event {
             Some(
@@ -2881,7 +2905,7 @@ mod kickoff_tests {
     #[test]
     fn only_strings_survive_the_params_list() {
         let mixed = r#"["0x48656c6c6f",{"junk":1},"0xabc"]"#;
-        match clear_kickoff("personal_sign", mixed, 1, None) {
+        match clear_kickoff("personal_sign", mixed, 1, None, None) {
             Some(ClearEvent::MessagePresented { params, .. }) => {
                 assert_eq!(params, vec!["0x48656c6c6f", "0xabc"]);
             }
@@ -2889,7 +2913,7 @@ mod kickoff_tests {
         }
         // Not a list at all: no params, still a message — the core's own
         // refusal is better than a shell that declines to open the sheet.
-        match clear_kickoff("personal_sign", "{}", 1, None) {
+        match clear_kickoff("personal_sign", "{}", 1, None, None) {
             Some(ClearEvent::MessagePresented { params, .. }) => assert!(params.is_empty()),
             other => unreachable!("a message, not {other:?}"),
         }
@@ -3549,6 +3573,7 @@ mod sim_wait_tests {
                 &request.params_json,
                 request.chain_id,
                 Some(request.origin.clone()),
+                None,
             )
             .unwrap_or_else(|| unreachable!("{method} has a rung"));
             let fetches = clear.dispatch(kickoff);
@@ -4070,5 +4095,24 @@ mod sim_wait_tests {
             SIM_CHECKING_KEY,
             "componentsUi.signing.confirmBlock.simChecking"
         );
+    }
+
+    /// WIRE-AUDIT §2 (`DismissTapped`): after the approval the column's close
+    /// is the plain dismiss — the request is answered or on its way; before
+    /// it, the core reads the close by where the request stands.
+    #[test]
+    fn the_close_after_the_approval_is_a_plain_dismiss() {
+        use vela_core::app::sign_request::SignSwipeAction;
+        let mut view = CoreHost::<SignRequest>::new().view();
+        view.swipe_action = SignSwipeAction::Dismiss;
+        assert!(matches!(close_event(&view), SignEvent::DismissTapped));
+        for before in [
+            SignSwipeAction::Reject,
+            SignSwipeAction::FundingCancel,
+            SignSwipeAction::None,
+        ] {
+            view.swipe_action = before;
+            assert!(matches!(close_event(&view), SignEvent::SwipeDismissed));
+        }
     }
 }
