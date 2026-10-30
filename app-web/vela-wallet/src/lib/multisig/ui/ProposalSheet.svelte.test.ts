@@ -14,7 +14,7 @@
  */
 import { tick } from 'svelte';
 import type { SigningMessages } from '$lib/signing/messages';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
@@ -81,7 +81,9 @@ const fake = vi.hoisted(() => ({
 	/** What "Propose and approve" on a dApp's draft comes to (the machine's `propose` state). */
 	confirmed: null as any,
 	/** Told when a dApp's draft is confirmed: the host's sheet then shows the proposal. */
-	onConfirm: null as null | (() => Promise<void>)
+	onConfirm: null as null | (() => Promise<void>),
+	/** ms-21: a link's transaction read only, as the machine's `linked` reads (`linkedSource`). */
+	linkedSource: null as any
 }));
 
 /**
@@ -95,10 +97,12 @@ const view = vi.hoisted(() => ({
 	key: (hash: string) => `100:${hash.toLowerCase()}`
 }));
 vi.mock('../core/proposals.svelte', async () => {
-	const { machineSeam, machineLook } = await import('./proposal-sheet.testing.svelte');
-	const { timelineOf } = await import('../core/timeline');
+	const { machineSeam, machineLook, machineTimeline } =
+		await import('./proposal-sheet.testing.svelte');
+	/** The shown multisig's network, or a link's read only (ms-21). */
+	const chainNow = () => fake.chain ?? fake.linkedSource?.chain(100) ?? null;
 	const shownItem = () =>
-		(fake.chain?.items ?? []).find((i: any) => i.safeTxHash.toLowerCase() === HASH) ?? null;
+		(chainNow()?.items ?? []).find((i: any) => i.safeTxHash.toLowerCase() === HASH) ?? null;
 	const machineView = () => {
 		const item = shownItem();
 		const key = view.key(HASH);
@@ -106,7 +110,7 @@ vi.mock('../core/proposals.svelte', async () => {
 		for (const [owner, look] of Object.entries(fake.previews)) {
 			previews[`${key}:${owner.toLowerCase()}`] = machineLook(look);
 		}
-		const owners: string[] = fake.chain?.members.owners ?? [];
+		const owners: string[] = chainNow()?.members.owners ?? [];
 		const kindOf = (a: string) =>
 			a.toLowerCase() === ME
 				? 'here'
@@ -122,21 +126,7 @@ vi.mock('../core/proposals.svelte', async () => {
 			.map((owner) => ({ owner, kind: kindOf(owner) }));
 		const timelines: Record<string, unknown> = {};
 		if (item?.status === 'done' && typeof fake.executed === 'string') {
-			timelines[key] = timelineOf(item, fake.executed, fake.frozen).map((s: any) =>
-				s.kind === 'created'
-					? { kind: 'created', who: s.who, at_ms: s.atMs }
-					: s.kind === 'approved'
-						? {
-								kind: 'approved',
-								who: s.who,
-								at_ms: s.atMs,
-								counted: s.counted,
-								by_executing: s.byExecuting,
-								unsent: false,
-								on_chain: false
-							}
-						: { kind: 'executed', who: s.who, tx_hash: s.txHash, at_ms: s.atMs }
-			);
+			timelines[key] = machineTimeline(item, fake.executed, fake.frozen);
 		} else if (item?.status === 'done' && fake.executed === null) {
 			const cancel = item.cancelledBy;
 			timelines[key] = [
@@ -205,7 +195,7 @@ vi.mock('../core/proposals.svelte', async () => {
 			}
 		},
 		itemOf: (i: unknown) => i,
-		approveExternally: async () => void fake.calls.push('external')
+		linkedSource: () => fake.linkedSource
 	};
 });
 /**
@@ -445,21 +435,6 @@ vi.mock('../core/preflight.svelte', () => ({
 }));
 vi.mock('../core/chain', () => ({ ChainUnavailableError: class extends Error {} }));
 vi.mock('../core/service', () => ({ ServiceUnavailableError: class extends Error {} }));
-// How each member signs: this device's, a Vela account the index knows, else a plain wallet.
-vi.mock('../core/signers.svelte', () => ({
-	signers: {
-		kindOf: (_chain: number, a: string) =>
-			a.toLowerCase() === ME
-				? 'here'
-				: fake.vela.includes(a)
-					? 'vela'
-					: fake.unsure.includes(a)
-						? 'unsure'
-						: fake.contract.includes(a)
-							? 'contract'
-							: 'wallet'
-	}
-}));
 vi.mock('../core/owners', () => ({
 	PasskeyCheckError: class extends Error {},
 	localOwners: (owners: string[]) =>
@@ -469,11 +444,6 @@ vi.mock('../core/owners', () => ({
 }));
 vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6), isVela: (a: string) => fake.vela.includes(a) }
-}));
-// A rename executed here reads the record's new name: not this sheet's test.
-vi.mock('../core/records', () => ({
-	findExecution: async (_safe: string, _chain: number, hash: string) =>
-		hash in fake.executedBy ? fake.executedBy[hash] : fake.executed
 }));
 vi.mock('../core/display', () => ({
 	actionRecipient: (a: any) => a?.to ?? null,
@@ -517,21 +487,6 @@ vi.mock('../core/kernel', () => {
 	};
 });
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('../core/executed', () => ({
-	factsOfExecution: (
-		approvers: string[],
-		executor: string,
-		approves: boolean,
-		threshold: number
-	) => ({
-		executor,
-		threshold,
-		approvers: approves ? [...approvers, executor] : approvers,
-		executorApproved: approves
-	}),
-	frozenFacts: async () => fake.frozen,
-	rememberExecution: (...args: any[]) => void fake.remembered.push(args)
-}));
 vi.mock('$lib/services/token-provenance', () => ({
 	provenanceNote: () => fake.tokenNote
 }));
@@ -541,6 +496,10 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
 }));
 
 const { default: ProposalSheet } = await import('./ProposalSheet.svelte');
+const { loadCore } = await import('$lib/core/client');
+
+// The links are the core's codec: loaded, as the wallet loads it before any sheet.
+beforeAll(() => loadCore());
 const { resetMachineSeam, sentLog } = await import('./proposal-sheet.testing.svelte');
 
 /** The events of `type` the sheet sent the machine. */
@@ -681,6 +640,7 @@ beforeEach(() => {
 	fake.machineDraft = null;
 	fake.confirmed = null;
 	fake.onConfirm = null;
+	fake.linkedSource = null;
 	resetMachineSeam();
 	reviewSeam.review = null;
 	reviewSeam.refreshed = 0;
@@ -1205,11 +1165,12 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 	});
 
 	it('is read from its own source, says no member is here, and offers the two ways on', async () => {
-		// The shown multisig's list has nothing: the sheet reads the link's source.
+		// The shown multisig's list has nothing: the sheet reads the machine's `linked`.
 		fake.chain = null;
+		fake.linkedSource = linked();
 		const onwatch = vi.fn();
 		const screen = show({
-			source: linked(),
+			preview: true,
 			watch: { added: false, onwatch },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1229,8 +1190,9 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 
 	it('kept here: said, and no second Watch', async () => {
 		fake.chain = null;
+		fake.linkedSource = linked();
 		const screen = show({
-			source: linked(),
+			preview: true,
 			watch: { added: true, onwatch: () => {} },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1240,11 +1202,11 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		await screen.unmount();
 	});
 
-	it('an outside approval re-reads the link’s source, not the shown multisig’s', async () => {
+	it('an outside approval is the machine’s, on the link’s transaction', async () => {
 		fake.chain = null;
-		const refresh = vi.fn(async () => {});
+		fake.linkedSource = linked();
 		const screen = show({
-			source: linked(refresh),
+			preview: true,
 			watch: { added: false, onwatch: () => {} },
 			account: { ...account, owners: strangers.owners }
 		});
@@ -1255,7 +1217,9 @@ describe('a link’s transaction on a device with no member (ms-21)', () => {
 		external.click();
 		await settle();
 		expect(fake.calls).toContain('external');
-		expect(refresh).toHaveBeenCalled();
+		expect(machineSent('approve_outside')).toEqual([
+			{ type: 'approve_outside', chain_id: 100, safe_tx_hash: HASH }
+		]);
 		await screen.unmount();
 	});
 });
@@ -1841,25 +1805,6 @@ describe('a transfer of an unverified token', () => {
 });
 
 describe('what the sheet says of where it stands (r4b-4, r4b-6, r4b-17, r4a-16)', () => {
-	it('a link’s own source is kept fresh while shown, and stops when closed', async () => {
-		const stop = vi.fn();
-		const watch = vi.fn(() => stop);
-		const screen = show({
-			source: {
-				loading: false,
-				unreadable: [],
-				chain: () => fake.chain,
-				refresh: async () => {},
-				watch
-			},
-			watch: { added: false, onwatch: () => {} }
-		});
-		await settle();
-		expect(watch).toHaveBeenCalledTimes(1);
-		await screen.unmount();
-		expect(stop).toHaveBeenCalledTimes(1);
-	});
-
 	it('never "3/2": the approvals counted up to the threshold', async () => {
 		fake.chain.items = [item({ approved: 3, threshold: 2, status: 'ready', canApprove: [] })];
 		const m = words();

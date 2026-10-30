@@ -141,6 +141,8 @@ class MultisigMachines {
 	});
 	#stops: (() => void)[] = [];
 	#checkedRecords = false;
+	/** A link's transaction the accounts machine opened (`MultisigHost` draws it). */
+	onproposal: ((notice: Extract<MultisigNotice, { kind: 'open_proposal' }>) => void) | null = null;
 
 	/** Idempotent: the first caller boots, every later one shares it. */
 	boot(options: BootOptions = {}): Promise<void> {
@@ -342,6 +344,10 @@ class MultisigMachines {
 			case 'activated':
 				// TODO(W8 proposals surface): the proposals machine follows the multisig
 				// shown; `MultisigHost` follows `multisig.active` until then.
+				return;
+			case 'open_proposal':
+				// A link's transaction (the accounts machine's link flow): drawn by `MultisigHost`.
+				this.onproposal?.(notice);
 				return;
 		}
 	}

@@ -59,7 +59,7 @@
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
 	import { track, type AnalyticsEventProps } from '$lib/analytics';
 	import { analyticsMethod } from '$lib/analytics/methods';
-	import { carriedLinkHash } from '$lib/multisig/core/link';
+	import { carriedLinkHash } from '$lib/multisig/core/kept-link';
 
 	let { data }: PageProps = $props();
 

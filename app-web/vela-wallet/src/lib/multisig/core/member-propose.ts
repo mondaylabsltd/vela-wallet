@@ -2,18 +2,15 @@
  * Proposing a member change on one network — the ONE way the members panel
  * (`MemberChanges.svelte`) proposes: a row of the members machine's plan
  * (`PlanNetwork`), its `proposal` (always a `member_change`) on its
- * `chain_id`, as it is.
- *
- * W8 (proposals surface): this goes into the proposals machine's
- * `{ type: 'draft', chain_id, proposal }`, which builds the transaction again
- * against that chain at propose time. Until it drives the web, the web's
- * `proposeMemberChange` does (one passkey, approved at once). What came of it
- * is said in {@link ProposeOutcome}, whichever proposes.
+ * `chain_id`, as it is, to the proposals machine (`draft`, which builds the
+ * transaction again against that chain at propose time, its review, then
+ * one passkey). What came of it is said in {@link ProposeOutcome}.
  */
 import type { MultisigProposalKind } from '../generated/MultisigProposalKind';
-import type { MemberChangeRequest, MemberRefusal } from './kernel';
-import { MemberChangeRefusedError } from './member-changes';
-import { MailboxUnreadableError, proposeMemberChange } from './proposals.svelte';
+import type { MemberRefusal } from './kernel';
+import { multisig } from './store.svelte';
+import { proposalsHost, ProposeFailedError } from '../shell/proposals-host.svelte';
+import { actionError, memberRefusal } from '../shell/proposal-failure';
 
 export type ProposeOutcome =
 	| { ok: true; safeTxHash: string }
@@ -30,36 +27,41 @@ export type ProposeOutcome =
 			message?: string;
 	  };
 
-/** The proposal's change as the web's proposer takes it (no threshold: the network's). */
-function request(proposal: MultisigProposalKind): MemberChangeRequest | null {
-	if (proposal.kind !== 'member_change') return null;
-	const c = proposal.change;
-	switch (c.kind) {
-		case 'add':
-		case 'remove':
-			return { kind: c.kind, owner: c.owner, threshold: c.threshold ?? undefined };
-		case 'replace':
-			return { kind: 'replace', oldOwner: c.oldOwner, newOwner: c.newOwner };
-		case 'threshold':
-			return { kind: 'threshold', threshold: c.threshold };
-	}
-}
-
 export async function proposeChange(
 	address: string,
 	chainId: number,
 	proposal: MultisigProposalKind
 ): Promise<ProposeOutcome> {
-	const change = request(proposal);
-	if (!change) return { ok: false, message: `not a member change: ${proposal.kind}` };
+	if (proposal.kind !== 'member_change') {
+		return { ok: false, message: `not a member change: ${proposal.kind}` };
+	}
+	const account = multisig.find(address);
+	if (!account) return { ok: false, message: 'not a multisig on this device' };
 	try {
-		const { safeTxHash } = await proposeMemberChange(address, chainId, change);
+		const { safeTxHash } = await proposalsHost.propose(account, chainId, proposal);
 		return { ok: true, safeTxHash };
 	} catch (error) {
-		const name = error instanceof DOMException ? error.name : '';
-		if (name === 'NotAllowedError' || name === 'AbortError') return { ok: false, declined: true };
-		if (error instanceof MemberChangeRefusedError) return { ok: false, refusal: error.refusal };
-		if (error instanceof MailboxUnreadableError) return { ok: false, mailboxDown: true };
-		return { ok: false, message: error instanceof Error ? error.message : String(error) };
+		if (!(error instanceof ProposeFailedError)) {
+			return { ok: false, message: error instanceof Error ? error.message : String(error) };
+		}
+		const state = error.state;
+		switch (state.kind) {
+			case 'cancelled':
+			case 'riskDeclined':
+				return { ok: false, declined: true };
+			case 'mailboxUnreadable':
+				return { ok: false, mailboxDown: true };
+			case 'refused': {
+				const refusal = memberRefusal(state.reason);
+				return refusal
+					? { ok: false, refusal: refusal as MemberRefusal }
+					: { ok: false, message: state.reason };
+			}
+			default: {
+				// Anything else, in the error's own words (as the sheet reads it).
+				const said = actionError(state, chainId);
+				return { ok: false, message: said instanceof Error ? said.message : state.kind };
+			}
+		}
 	}
 }

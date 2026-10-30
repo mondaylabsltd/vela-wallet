@@ -3,9 +3,9 @@
  * (`MultisigHost.svelte`) draws it, and the switcher, the home panel and the
  * wallet page's own doors open them.
  */
-import type { LinkedProposals } from './linked.svelte';
 import type { MultisigHeldRequest } from '../generated/MultisigHeldRequest';
 import type { AddLink, ProposalLink } from './link';
+import type { MultisigAccount } from './store.svelte';
 import type {
 	SigningBlockedError,
 	SigningRefusedError,
@@ -43,9 +43,10 @@ export type MultisigSheet =
 	| { kind: 'proposal'; chainId: number; safeTxHash: string }
 	/**
 	 * ms-21: a link's transaction on a device with none of its multisig's
-	 * members — read from `source`, with nothing added and nothing switched.
+	 * members (`account`, kept nowhere) — read by the proposals machine
+	 * (`linked`), with nothing added and nothing switched.
 	 */
-	| { kind: 'preview'; chainId: number; safeTxHash: string; source: LinkedProposals }
+	| { kind: 'preview'; chainId: number; safeTxHash: string; account: MultisigAccount }
 	| { kind: 'invite' }
 	/** ms-22: what a link could not open, said (a damaged link). */
 	| { kind: 'notice'; text: string }

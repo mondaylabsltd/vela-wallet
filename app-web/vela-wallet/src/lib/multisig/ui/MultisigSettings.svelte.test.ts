@@ -132,6 +132,17 @@ vi.mock('../core/store.svelte', () => ({
 	}
 }));
 vi.mock('../shell/local-accounts', () => ({ localAccounts: () => [] }));
+// What the proposals machine says of a proposal that did not go, as words (`proposal-failure.ts`).
+vi.mock('../shell/proposal-failure', () => ({
+	memberRefusal: (reason: string) => {
+		try {
+			return JSON.parse(reason) as { kind: string };
+		} catch {
+			return null;
+		}
+	},
+	actionError: () => null
+}));
 vi.mock('$lib/wallet/identicon', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));

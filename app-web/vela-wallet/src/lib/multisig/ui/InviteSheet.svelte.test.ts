@@ -3,7 +3,7 @@
  * its address, as every artwork does (founder call, 2026-09-05).
  */
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
@@ -24,6 +24,10 @@ vi.mock('$lib/wallet/identicon', () => ({
 }));
 
 const { default: InviteSheet } = await import('./InviteSheet.svelte');
+const { loadCore } = await import('$lib/core/client');
+
+// The invite is the core's codec: loaded, as the wallet loads it before any sheet.
+beforeAll(() => loadCore());
 
 function words(): MultisigMessages {
 	const out: Record<string, Record<string, string>> = {};

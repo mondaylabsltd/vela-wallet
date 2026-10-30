@@ -21,10 +21,8 @@
  * (`SigningUncheckedError`).
  */
 import type { Finding } from './refusal';
-import { checkNow, findingsOn } from './recheck';
-import { readMembers } from './chain';
-import { signingGateRule, type MultisigReviewOut, type SafeTx, type SignRule } from './kernel';
-import { gatherReview, recentReview, reviewOf } from './proposal-review.svelte';
+import { findingsOn } from './recheck';
+import { signingGateRule, type MultisigReviewOut, type SignRule } from './kernel';
 import type { MultisigAccount } from './store.svelte';
 
 export type SigningGate =
@@ -138,59 +136,6 @@ class RiskConfirmation {
 }
 
 export const riskConfirmation = new RiskConfirmation();
-
-/**
- * The review's sign rule for `tx` as the chain stands now: its members read
- * again, the execution's state diff read again — the part of the review a
- * signature depends on. `null`: the chain did not answer (nothing is signed).
- */
-async function signRuleNow(
-	account: MultisigAccount,
-	chainId: number,
-	tx: SafeTx
-): Promise<{ sign: SignRule; review: MultisigReviewOut } | null> {
-	try {
-		const members = await readMembers(chainId, account.address, account.genesis);
-		const subject = { safe: account.address, chainId, tx, members, genesis: account.genesis };
-		// r5reg-14: the review the sheet gathered moments ago, at these very
-		// members and nonce, is the one signed from — not gathered twice.
-		const input = recentReview(subject) ?? (await gatherReview(subject));
-		const review = reviewOf(input, false);
-		return { sign: review.sign, review };
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Before any signature for `account` on `chainId` over `tx`: throws
- * `SigningRefusedError` (read-only there), `SigningBlockedError` (Vela does
- * not sign this transaction), `SigningUncheckedError` (not known yet), or —
- * the person declined the risk — an `AbortError`, read by every caller as a
- * cancel. Resolves when signing may go on.
- */
-export async function authorizeSigning(
-	account: MultisigAccount,
-	chainId: number,
-	tx: SafeTx
-): Promise<void> {
-	const [found, rule] = await Promise.all([
-		checkNow(account, chainId),
-		signRuleNow(account, chainId, tx)
-	]);
-	if (found === null || rule === null) throw new SigningUncheckedError(chainId);
-	const gate = signingGateRule({ chainId, findings: found, sign: rule.sign });
-	if (gate.kind === 'open') return;
-	if (gate.kind === 'unchecked') throw new SigningUncheckedError(chainId);
-	if (gate.kind === 'refused') throw new SigningRefusedError(chainId, gate.findings as Finding[]);
-	if (gate.kind === 'blocked') throw new SigningBlockedError(chainId, rule.review);
-	const signs = await riskConfirmation.ask({
-		chainId,
-		safe: account.address,
-		findings: gate.findings as Finding[]
-	});
-	if (!signs) throw riskDeclinedError();
-}
 
 /** What the gate throws when the person chose "Don't sign" (an `AbortError`, so a cancel). */
 const RISK_DECLINED = 'The person did not sign for the risk';
