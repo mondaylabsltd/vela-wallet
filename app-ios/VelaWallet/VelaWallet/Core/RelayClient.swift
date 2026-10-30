@@ -668,6 +668,35 @@ final class RelayClient {
         return UInt64(hex.dropFirst(2), radix: 16)
     }
 
+    /// `getNonce(address,uint192)` — the EntryPoint's nonce read (ERC-4337).
+    static let getNonceSelector = "35567e1a"
+
+    /// The calldata for `getNonce(sender, 0)`, or `nil` when `sender` is not
+    /// an address (nothing worth asking about).
+    nonisolated static func getNonceCalldata(sender: String) -> String? {
+        var hex = sender.lowercased()
+        if hex.hasPrefix("0x") { hex.removeFirst(2) }
+        guard hex.count == 40, hex.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return "0x" + getNonceSelector + String(repeating: "0", count: 24) + hex
+            + String(repeating: "0", count: 64)
+    }
+
+    /// The account's EntryPoint nonce at the head (round 3, send-5): the head
+    /// first, then `getNonce(sender, 0)` AT that block, so a nonce seen spent
+    /// is spent at or below the head it names. Both as they came; a pool that
+    /// reached nobody, or a node without that block, is no answer — both
+    /// `nil`. What a figure means is the core's.
+    func accountNonce(chainId: Int, entryPoint: String, sender: String) async -> (nonce: String?, head: UInt64?) {
+        guard let data = Self.getNonceCalldata(sender: sender) else { return (nil, nil) }
+        guard let head = await headBlock(chainId: chainId) else { return (nil, nil) }
+        guard let nonce = await chainCall(
+            chainId: chainId,
+            method: "eth_call",
+            params: [["to": entryPoint, "data": data], "0x" + String(head, radix: 16)]
+        ) as? String else { return (nil, nil) }
+        return (nonce, head)
+    }
+
     /// `eth_getUserOperationReceipt`: unreachable, not yet, or landed with its
     /// logs.
     func userOpReceipt(chainId: Int, userOpHash: String) async -> ReceiptAnswer {

@@ -163,6 +163,13 @@ final class SettingsStore {
     /// blob as it now reads — the logos' endpoint follows it (`Marks.adopt`).
     var onEndpointsWritten: (_ endpoints: [String: Any]) -> Void = { _ in }
 
+    /// Set by the app: the networks where this device last saw a holding,
+    /// the shown-networks settle's balance evidence (`HeldTokens`).
+    var heldChainIds: () -> [Int] {
+        get { executor.heldChainIds }
+        set { executor.heldChainIds = newValue }
+    }
+
     /// Boot the default-speed machine. App-wide and idempotent, like the
     /// currency: the send form's folded control shows THIS, not a hardcoded
     /// tier, so it has to be read before anybody opens Settings.

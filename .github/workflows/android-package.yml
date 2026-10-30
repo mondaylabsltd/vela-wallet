@@ -104,6 +104,10 @@ jobs:
       - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleRelease :app:bundleRelease -PvelaUnsignedRelease --console=plain
+      # Native parity F0.5: no parallel-space keyset or harness launch input in a release package.
+      - name: The release package carries no developer door
+        working-directory: app-android/vela-wallet
+        run: bash scripts/check-release-apk.sh
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The app says which commit it is
         working-directory: app-android/vela-wallet

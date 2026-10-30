@@ -45,9 +45,15 @@ final class SessionController {
             bridge: core,
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] json in
-                guard let decoded = try? CoreJSON.decode(SessionView.self, from: json) else { return }
+                guard let decoded = try? CoreJSON.decode(SessionView.self, from: json) else {
+                    // A view this build cannot read: said, never a silent
+                    // spinner on the last one.
+                    print("[vela-wallet] session view did not decode")
+                    return
+                }
                 self?.view = decoded
                 self?.viewJson = CoreJSON.string(json)
+                self?.scheduleSync(decoded)
             },
             onFault: { error in
                 print("[vela-wallet] session fault: \(error)")
@@ -112,6 +118,45 @@ final class SessionController {
     func setRegistryURL(_ url: String) async {
         let normalized = RegistryClient.normalize(url)
         await store.saveRegistryURL(normalized == RegistryClient.defaultURL ? nil : normalized)
+    }
+
+    // MARK: - The outbox, tried again (ob-2)
+
+    /// Ask the core to try the outbox again — a wallet saved here whose
+    /// registration has not landed. A round already running is the core's to
+    /// refuse, so this may be called freely (a retry button, the app coming
+    /// back to the foreground).
+    func syncPending() { driver.dispatch(Self.event("sync_pending")) }
+
+    /// The widening wait between automatic rounds — the web's, so every
+    /// client asks the registry at the same pace.
+    static let syncRetryMs: [UInt64] = [15_000, 30_000, 60_000, 120_000, 300_000]
+
+    /// How many automatic rounds ran since the last time nothing was owed.
+    @ObservationIgnored private(set) var syncRounds = 0
+    @ObservationIgnored private var syncTimer: Task<Void, Never>?
+
+    /// Keep asking while the core says a wallet is still owed and it can
+    /// finish it on its own (`retrying`), on a widening timer; stop once none
+    /// is. The round may end without a new view, so the timer re-arms itself
+    /// from the view as it then stands.
+    private func scheduleSync(_ view: SessionView) {
+        guard view.retryingUnsynced else {
+            syncTimer?.cancel()
+            syncTimer = nil
+            syncRounds = 0
+            return
+        }
+        guard syncTimer == nil else { return }
+        let delay = Self.syncRetryMs[min(syncRounds, Self.syncRetryMs.count - 1)]
+        syncTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay * 1_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.syncTimer = nil
+            self.syncRounds += 1
+            self.syncPending()
+            self.scheduleSync(self.view)
+        }
     }
 
     private static func event(_ type: String) -> String {

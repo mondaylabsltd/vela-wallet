@@ -60,6 +60,9 @@ struct VelaStore {
         static let customNetworks = "vela.customNetworks"
         static let networkConfig = "vela.networkConfig"
         static let rpcProviders = "vela.rpcProviders"
+        /// Which of Vela's networks the person's lists show — the core's
+        /// `shown_networks::KEY`, `{ version, shown }`, settled once per device.
+        static let shownNetworks = "vela.shownNetworks"
 
         /// Written by BOTH `network_admin` and `AccountStore` — reach it only
         /// through `AccountStore`, never directly (data-model §5). Two
@@ -147,7 +150,11 @@ struct VelaStore {
         json(key) as? [[String: Any]] ?? []
     }
 
-    func writeList(_ key: String, _ value: [[String: Any]]) {
+    /// `false` when nothing was written (a value that cannot be serialized —
+    /// see `write`): a caller with a failure variant says so rather than
+    /// reporting a write that did not happen.
+    @discardableResult
+    func writeList(_ key: String, _ value: [[String: Any]]) -> Bool {
         write(key, value)
     }
 
@@ -158,9 +165,24 @@ struct VelaStore {
         json(key) as? [String: Any] ?? [:]
     }
 
-    func writeObject(_ key: String, _ value: [String: Any]) {
+    @discardableResult
+    func writeObject(_ key: String, _ value: [String: Any]) -> Bool {
         write(key, value)
     }
+
+    /// The key holds something, and it is not the JSON `container` names
+    /// (a list or an object) — a different thing from absent, which reads as
+    /// empty. A reader that would otherwise take a damaged shelf for an empty
+    /// one (and write the empty one back over it) asks this first.
+    func isUnreadable(_ key: String, expecting container: Container) -> Bool {
+        guard defaults.object(forKey: key) != nil else { return false }
+        switch container {
+        case .list: return !(json(key) is [Any])
+        case .object: return !(json(key) is [String: Any])
+        }
+    }
+
+    enum Container { case list, object }
 
     // MARK: - Bare strings
 
@@ -236,11 +258,13 @@ struct VelaStore {
     /// shelf three other clients read. Keeping yesterday's good bytes is the
     /// better failure: the core's ledger is authoritative in memory, so the
     /// person's session is unaffected and the next successful write repairs it.
-    private func write(_ key: String, _ value: Any) {
+    @discardableResult
+    private func write(_ key: String, _ value: Any) -> Bool {
         guard JSONSerialization.isValidJSONObject(value),
               let data = try? JSONSerialization.data(withJSONObject: value),
               let text = String(data: data, encoding: .utf8)
-        else { return }
+        else { return false }
         defaults.set(text, forKey: key)
+        return true
     }
 }

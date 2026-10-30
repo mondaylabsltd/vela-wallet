@@ -2,8 +2,8 @@
 //  ClearExecutor.swift
 //  VelaWallet
 //
-//  The `clear_signing` machine's five arms: a descriptor, a selector lookup,
-//  a routed `eth_call`, a clock and a timer.
+//  The `clear_signing` machine's six arms: a descriptor, a selector lookup,
+//  a routed `eth_call`, a routed `eth_getCode`, a clock and a timer.
 //
 //  Ported from `app-android/.../feature/signing/core/ClearExecutor.kt` (spec
 //  044 T030), which is the desktop's `executor/clear_signing.rs`.
@@ -26,7 +26,7 @@ import Foundation
 @MainActor
 final class ClearExecutor {
 
-    static let operations = ["http_get", "rpc_eth_call", "selector_db_lookup", "timer", "now"]
+    static let operations = ["http_get", "rpc_eth_call", "rpc_get_code", "selector_db_lookup", "timer", "now"]
 
     /// The chain-data base the settings machine names. A blank base answers
     /// "no descriptor", which is a rung, not a failure.
@@ -83,6 +83,35 @@ final class ClearExecutor {
                 "rpc_error": reverted,
             ])
 
+        // cs-13: whether anything lives at the target on this chain. The
+        // answer stays raw — "0x" means no code, and what that means for a
+        // name or a descriptor is the core's ruling. Answered as the `code`
+        // probe's `rpc_answer`, the shape the core reads it in.
+        case "rpc_get_code":
+            let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            let address = operation["address"] as? String ?? ""
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_getCode", params: [address, "latest"]
+            )
+            var result: Any = NSNull()
+            var answeredError = false
+            switch outcome {
+            case .ok(let body):
+                if let hex = body as? String { result = hex }
+            case .rpcError:
+                answeredError = true
+            default:
+                break
+            }
+            return CoreJSON.string([
+                "type": "rpc_answer",
+                "probe": "code",
+                "chain_id": chainId,
+                "to": address,
+                "result": result,
+                "rpc_error": answeredError,
+            ])
+
         case "selector_db_lookup":
             let selector = operation["selector"] as? String ?? ""
             return CoreJSON.string([
@@ -119,6 +148,16 @@ final class ClearExecutor {
                 "probe": operation["probe"] as? String ?? "",
                 "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
                 "to": operation["to"] as? String ?? "",
+                "result": NSNull(),
+                "rpc_error": false,
+            ])
+        case "rpc_get_code":
+            // Unreachable: the core's "unknown", which names as it did before.
+            return CoreJSON.string([
+                "type": "rpc_answer",
+                "probe": "code",
+                "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+                "to": operation["address"] as? String ?? "",
                 "result": NSNull(),
                 "rpc_error": false,
             ])

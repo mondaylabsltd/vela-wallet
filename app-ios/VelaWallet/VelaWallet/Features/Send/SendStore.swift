@@ -440,6 +440,11 @@ final class SendStore {
     func dismissRelayUnreachable() { dispatch(["type": "dismiss_relay_unreachable"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
 
+    /// Round 3: the recipient check could not read the account's history (or
+    /// did not finish) — "Check again" asks it once more. The core ignores it
+    /// when there is nothing to re-check. Drawn by Phase 2's confirm line.
+    func retryRiskCheck() { dispatch(["type": "retry_risk_check"]) }
+
     // MARK: - The TRACKER's verdict, back to the send machine (spec 056)
     //
     // The receipt screen and the tracker are two machines watching one

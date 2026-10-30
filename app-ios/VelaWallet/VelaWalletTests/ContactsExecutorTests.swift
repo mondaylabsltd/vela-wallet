@@ -13,6 +13,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -108,15 +109,30 @@ struct ContactsExecutorTests {
         #expect((reply["tombstones"] as? [Any])?.isEmpty == true)
     }
 
-    /// Corrupt bytes must not make the screen permanently unopenable — and,
-    /// more sharply, must not be reported as a failure: a machine that receives
-    /// a failed store read stays unloaded forever and drops every write after.
-    @Test func corruptBytesReadEmptyRatherThanFailing() async {
+    /// Corrupt bytes are UNREADABLE, not an empty book (web set-1): the core
+    /// reads `store_unreadable` as no book yet on the first read — the screen
+    /// still opens — and keeps the book it holds on a re-read, where "empty"
+    /// would have it write the book away. (Before round 3 the core had no such
+    /// answer and a failed read stranded it unloaded; it no longer does.)
+    @Test func corruptBytesReadUnreadableAndTheCoreStillOpens() async throws {
         let (store, defaults) = freshStore()
         defaults.set("{not json at all", forKey: VelaStore.Key.contacts)
         let reply = await answer(ContactsExecutor(store: store), ["type": "read_store"])
-        #expect(type(of: reply) == "store_loaded")
-        #expect((reply["contacts"] as? [Any])?.isEmpty == true)
+        #expect(type(of: reply) == "store_unreadable")
+
+        // The REAL core, on that answer: loaded, with nothing in it.
+        let core = ContactsCore()
+        let first = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "account_switched", "my_address": "0x88cca07a5d3e0b1eb5f7c0f2b1f3f4a5b6c76894",
+        ])))
+        let read = (first["effects"] as? [[String: Any]] ?? []).first {
+            ($0["operation"] as? [String: Any])?["type"] as? String == "read_store"
+        }
+        let id = try #require((read?["id"] as? NSNumber)?.uint64Value)
+        let next = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: CoreJSON.string(reply)))
+        let view = try CoreJSON.decode(ContactsViewWire.self, from: next["view"] as? [String: Any] ?? [:])
+        #expect(view.loaded, "a damaged shelf must not strand the book unloaded")
+        #expect(view.contacts.isEmpty)
     }
 
     /// The stored blob is an OBJECT keyed by address; the wire is a LIST.
