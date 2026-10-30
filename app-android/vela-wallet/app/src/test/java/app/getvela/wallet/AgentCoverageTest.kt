@@ -147,6 +147,8 @@ class AgentCoverageTest {
             "preferences.revealDebugMode" to Place.None(DEBUG),
             "preferences.setDebugMode" to Place.None(DEBUG),
             "relay.probeTreasury" to Place.Machine(READ),
+            // F6 / F27: a scanned request's network, added through the network machine's own add.
+            "send.addNetworkTapped" to Place.Step("add_network"),
             "send.appendSplit" to Place.Step("prepare_batch_transfer"),
             "send.back" to Place.Step("cancel_transfer"),
             "send.batchApply" to Place.Step("prepare_batch_transfer"),
@@ -189,6 +191,8 @@ class AgentCoverageTest {
             "send.scanned" to Place.None(CODE),
             "send.seedSplit" to Place.Step("prepare_batch_transfer"),
             "send.selectAllValuable" to Place.Later(SWEEP),
+            // send-5: back to the review of a payment proven never sent; the next confirm is the intent.
+            "send.sendAgain" to Place.View(RETRY),
             "send.selectToken" to Place.Step("prepare_transfer"),
             "send.setAmount" to Place.Step("prepare_transfer"),
             "send.setRecipient" to Place.Step("prepare_transfer"),

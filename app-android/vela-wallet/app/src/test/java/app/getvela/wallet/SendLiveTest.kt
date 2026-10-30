@@ -627,6 +627,9 @@ class SendLiveTest {
         )
         val wentFirst = refused(I18nKeys.Flows.SIGN_WENT_FIRST)
         assertEquals(ReceiptStage.Failed, wentFirst.stage)
+        // Refused before any block (send-5): nothing was sent — "Not sent", as the web says it.
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), wentFirst.title)
+        assertNull("nothing was sent, so no hash", wentFirst.hash)
         assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_WENT_FIRST)), wentFirst.captions)
         assertFalse("never the fee sentence for a used nonce", wentFirst.captions.contains(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)))
         assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_REFUSED)), refused(I18nKeys.Flows.SIGN_REFUSED).captions)
@@ -805,8 +808,10 @@ class SendLiveTest {
         val never = maybe.copy(receipt = maybe.receipt!!.copy(status = SendReceiptStatus.NotSent))
         val n = SendLive.receipt(drawn, never, c)
         assertEquals(ReceiptStage.Failed, n.stage)
-        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), n.title)
-        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_ERROR_GENERIC)), n.captions)
+        // send-5: provably not sent is "Not sent", never "Failed" — nothing left the account.
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), n.title)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT_BODY)), n.captions)
+        assertNull("the core did not offer it", n.retry)
         assertNull(n.hash)
         assertNull(n.viewOnExplorer)
     }
@@ -1670,12 +1675,15 @@ class SendLiveTest {
         val notice = SendLive.pick(drawn.model, locked, ctx()).notice!!
         assertEquals("Network not supported — This payment request is on a network Vela doesn't support yet (chain 48900).", notice.text)
 
-        // An attempt to add it that the network machine refused: its reason, in the core's words.
+        // An attempt to add it that the network machine refused: its reason, in the
+        // core's words, under "Add this network" (the web's `SendLock`) — the
+        // notice keeps saying what the request is.
         val reason = strings.t("settingsModals.addNetwork.noP256Hint")
         val refused = SendLive.pick(drawn.model, locked.copy(add_network_msg = app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible(reason)), ctx()).notice!!
-        assertEquals(reason, refused.text)
+        assertEquals(notice.text, refused.text)
+        assertEquals(reason, refused.add?.failed)
         // …and the three the send machine words itself.
-        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.text
+        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.add!!.failed
         assertEquals("We couldn't find that network.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotFound))
         assertEquals("That network isn't compatible with Vela smart accounts yet.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible()))
         assertEquals("Couldn't add the network. Please try again.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetAddError))
@@ -1683,6 +1691,7 @@ class SendLiveTest {
         // A token the request names and the wallet cannot recognise.
         val token = SendLive.pick(drawn.model, locked.copy(lock_error = app.getvela.wallet.feature.send.core.SendLockError.Token), ctx()).notice!!
         assertEquals("Unknown token — We couldn't recognize the token in this payment request on this network.", token.text)
+        assertNull("a token nobody can describe has nothing to add", token.add)
 
         // No lock: the notice is whatever it was (none, on an ordinary Send).
         assertNull(SendLive.pick(drawn.model, SendView(stage = SendStage.SelectToken), ctx()).notice)

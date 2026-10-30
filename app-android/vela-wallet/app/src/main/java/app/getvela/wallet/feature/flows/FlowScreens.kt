@@ -1138,6 +1138,8 @@ fun SendPickBody(
     onSelect: (Int) -> Unit = {},
     onSelectAll: () -> Unit = {},
     onCta: () -> Unit = {},
+    /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`), with the chain it names. */
+    onAddNetwork: (Int) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
@@ -1169,6 +1171,29 @@ fun SendPickBody(
         model.notice?.let {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             NoticeBanner(text = it.text, mark = it.mark)
+            // The lock's one way on (the web's `SendLock`): the button, busy
+            // while the core adds the network, and the line an add that did
+            // not happen is said on — its room kept, so its arrival moves nothing.
+            it.add?.let { add ->
+                Spacer(modifier = Modifier.height(VelaSpacing.md))
+                VelaSecondaryButton(
+                    text = add.label,
+                    onClick = { if (!add.busy) onAddNetwork(add.chainId) },
+                    loading = add.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = add.failed ?: " ",
+                    color = colors.errorBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = VelaSpacing.sm),
+                )
+            }
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         shown.forEachIndexed { position, entry ->
@@ -1944,6 +1969,18 @@ fun SendConfirmBody(
                 // currency is the person's: its line kept.
                 modifier = Modifier.withheldFigure(model.sublineWithheld, colors.borderBase),
             )
+            // r5reg-3: a Max filled again from a newer quote, said before the confirm.
+            model.maxNote?.let { note ->
+                Text(
+                    text = note,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = VelaSpacing.sm),
+                )
+            }
         }
         Column(
             modifier = Modifier
@@ -2283,7 +2320,13 @@ fun SendReceiptBody(
             Spacer(modifier = Modifier.height(VelaSpacing.md))
         }
         val retry = model.retry
-        if (retry != null && onRetry != null) {
+        if (retry != null && onRetry != null && !model.retryAccent) {
+            // send-5: nothing left the account — the way on, above the way
+            // out; neither moves value, so neither wears the accent.
+            FlowCta(label = retry, onClick = onRetry, accent = false, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+            FlowCta(label = model.cta, onClick = onCta, accent = model.ctaAccent, modifier = Modifier.fillMaxWidth())
+        } else if (retry != null && onRetry != null) {
             // Spec 096 F8: Done answers the page; Try again goes back to review.
             Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), modifier = Modifier.fillMaxWidth()) {
                 FlowCta(label = model.cta, onClick = onCta, accent = false, modifier = Modifier.weight(1f))
