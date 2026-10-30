@@ -295,9 +295,21 @@ class SigningDepthTest {
     }
 
     @Test
-    fun `an opinion from an agent the wallet does not let in is refused by the core`() {
-        val args = JSONObject().put("review_digest", "0x" + "ab".repeat(32)).put("verdict", "caution").put("summary", "hm").toString()
-        val answer = SigningAdvice.accept("{}", "0x" + "ab".repeat(32), null, args)
-        assertTrue("$answer", answer is SigningAdvice.Answer.Refused)
+    fun `the agent core's card input draws the card, and one that does not read draws none`() {
+        val advice = SigningDepthBoards.accepted()
+        val json = JSONObject()
+            .put("advice", JSONObject(app.getvela.wallet.core.crux.Wire.json.encodeToString(SigningAdvice.Accepted.serializer(), advice)))
+            .put("standing", "fee_changed")
+            .put("fee_when_given", JSONObject().put("amount", "0.0012").put("symbol", "XDAI"))
+            .toString()
+        val card = SigningAdvice.cardOf(json, en)!!
+        assertTrue("greyed: given at another fee", card.stale)
+        assertEquals(en.t("componentsUi.signing.agentAdvice.feeChanged"), card.staleLine)
+        assertEquals(en.t("componentsUi.signing.agentAdvice.feeWhenGiven", mapOf("fee" to "0.0012 XDAI")), card.feeLine)
+        assertEquals(advice.summary, card.summary)
+        val current = SigningAdvice.cardOf(JSONObject(json).put("standing", "current").toString(), en)!!
+        assertFalse(current.stale)
+        assertNull("no opinion on this request, no card", SigningAdvice.cardOf(null, en))
+        assertNull("never a card drawn on a guess", SigningAdvice.cardOf("{\"standing\":\"current\"}", en))
     }
 }

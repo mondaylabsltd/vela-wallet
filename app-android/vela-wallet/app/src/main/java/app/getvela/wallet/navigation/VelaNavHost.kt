@@ -1081,21 +1081,14 @@ fun VelaNavHost(
                     // dapp-15: "Check again", and a check out again.
                     val simAgain by controller.simAgainOffered.collectAsStateWithLifecycle()
                     val simRechecking by controller.simRechecking.collectAsStateWithLifecycle()
-                    // Spec 103: the agent's opinion, read against the review on screen now.
-                    val heldAdvice by controller.advice.collectAsStateWithLifecycle()
-                    val adviceCard = remember(heldAdvice, signJson, strings) {
-                        heldAdvice?.let { held ->
-                            val review = controller.review()
-                            app.getvela.wallet.feature.signing.SigningAdvice.card(
-                                held,
-                                app.getvela.wallet.feature.signing.SigningAdvice.standing(
-                                    held,
-                                    app.getvela.wallet.feature.signing.SigningAdvice.digestOf(review),
-                                    app.getvela.wallet.feature.signing.SigningAdvice.reviewFee(review),
-                                ),
-                                strings,
-                            )
-                        }
+                    // Spec 103: the agent's opinion, as the phone agent (the core's) holds
+                    // it for this request — read again when it says so, and whenever the
+                    // sheet redraws: a request changed, or a fee moved past the opinion's
+                    // band, greys the card (the core's standing, never this screen's).
+                    val agentStore = application.container.agent
+                    val adviceHeard by agentStore.adviceHeard.collectAsStateWithLifecycle()
+                    val adviceCard = remember(adviceHeard, signJson, feeJson, clearJson, guardJson, signSim, strings) {
+                        app.getvela.wallet.feature.signing.SigningAdvice.cardOf(agentStore.advice(), strings)
                     }
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(

@@ -203,6 +203,32 @@ class AgentStore(
         _link.value = core.link()
         _approvals.value = requests(core.approvals())
         _activity.value = calls(core.activity())
+        // Spec 103: the advisor's opinion may have changed — the sheet's card reads it again.
+        _adviceHeard.value += 1
+    }
+
+    private val _adviceHeard = MutableStateFlow(0L)
+
+    /**
+     * Bumped on every `changed()`: the signing sheet's card reads [advice]
+     * again then, and whenever the sheet itself redraws (its request, its fee).
+     */
+    val adviceHeard: StateFlow<Long> = _adviceHeard
+
+    /**
+     * Spec 103: the agent's opinion for the dApp request on the signing sheet
+     * now, as its card draws it (`AgentCore.advice`: `{advice, standing,
+     * fee_when_given}`) — `null` with the agent off, no request on the sheet,
+     * or no opinion on this one. The standing is the core's against the sheet
+     * NOW: the request it was given on, and the fee in the sheet's facts
+     * (`AgentShell.signing`'s `sheet`). From the main thread: the core asks
+     * this app's views there, answered in place.
+     */
+    fun advice(): String? {
+        if (!_config.value.enabled) return null
+        return runCatching { core.advice() }
+            .onFailure { VelaLog.failure("agent", "the advisor's card could not be read", it) }
+            .getOrNull()
     }
 
     /** The person answered the agent's request. */
