@@ -364,6 +364,20 @@ class SendController(
         answered = { chainId -> chainAnswered(chainId) },
     )
 
+    /**
+     * What this send journey was last told of the fee card's coin; [open] forgets it.
+     *
+     * Declared BEFORE `init`: the collectors `init` launches run on the
+     * scope's own threads and may reach [tellFeeToken] before a property
+     * declared below `init` is assigned — a `synchronized` on null, which
+     * crashed a cold start on a loaded device (native parity Phase 3,
+     * emulator-found: NullPointerException at tellFeeToken).
+     */
+    private val feeTokenWord = FeeTokenWord()
+
+    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
+    private var openEvent = 0L
+
     init {
         sendHost.start()
         speedControl.start()
@@ -457,12 +471,6 @@ class SendController(
     private fun tellFeeFailed() = synchronized(feeFailedWord) {
         feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
     }
-
-    /** What this send journey was last told of the fee card's coin; [open] forgets it. */
-    private val feeTokenWord = FeeTokenWord()
-
-    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
-    private var openEvent = 0L
 
     /**
      * `FeeTokenChanged` under the core's bridge rule ([FeeTokenWord]): the
