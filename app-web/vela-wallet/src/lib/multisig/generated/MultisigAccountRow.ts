@@ -32,4 +32,8 @@ checked_on: number[],
 /**
  * Networks being read now.
  */
-checking_on: number[], };
+checking_on: number[], 
+/**
+ * r4D-8: its invite was handed on from this device ([`Event::InviteShared`]).
+ */
+invite_shared: boolean, };

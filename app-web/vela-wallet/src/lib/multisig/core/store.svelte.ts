@@ -379,6 +379,14 @@ class MultisigStore {
 		this.send({ type: 'name_members', address, members: known, typed });
 	}
 
+	/**
+	 * r4D-8: its invite was handed on from this device (the link copied or
+	 * shared, the code shown) — its first steps say so (`row.invite_shared`).
+	 */
+	inviteShared(address: string): void {
+		this.send({ type: 'invite_shared', address });
+	}
+
 	/** r4D-8: show (or, `false`, stop showing) its first steps on the home. */
 	setFirstRun(address: string, on: boolean): void {
 		this.send({ type: 'set_first_run', address, on });

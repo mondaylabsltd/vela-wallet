@@ -66,6 +66,9 @@ pub const ETHEREUM: u64 = 1;
 /// r7-9: where the create sheet's draft is kept until it is created or
 /// discarded (leaving the sheet loses nothing).
 pub const CREATE_DRAFT_KEY: &str = "vela.multisigCreateDraft";
+/// r4D-8: the multisigs whose invite was handed on from this device (its
+/// link copied or shared, its code shown) — lowercase addresses, a JSON array.
+pub const INVITE_SHARED_KEY: &str = "vela.multisigInviteShared";
 const GET_THRESHOLD_CALL: &str = "0xe75235b8";
 const IS_RECORDED: &str = "0xba340d1c";
 
@@ -260,6 +263,12 @@ pub enum Event {
     SetFirstRun {
         address: String,
         on: bool,
+    },
+    /// r4D-8: its invite was handed on from here (the link copied or
+    /// shared, the code shown): its first steps say so
+    /// ([`AccountRow::invite_shared`]). Kept on this device.
+    InviteShared {
+        address: String,
     },
     /// A change another machine made (its notice, routed by the shell).
     Apply {
@@ -579,6 +588,8 @@ pub struct AccountRow {
     /// Networks being read now.
     #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
     pub checking_on: Vec<u64>,
+    /// r4D-8: its invite was handed on from this device ([`Event::InviteShared`]).
+    pub invite_shared: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -639,6 +650,8 @@ pub struct State {
     checking: BTreeSet<String>,
     /// r7-9: the create sheet's draft, kept in the store.
     kept_draft: Option<CreateDraft>,
+    /// r4D-8: the multisigs whose invite was handed on from here (lowercase).
+    invite_shared: BTreeSet<String>,
     salt: Option<String>,
     draft: Option<(Vec<String>, u64, String)>,
     found: Option<(MultisigAccount, Vec<Value>)>,
@@ -1444,13 +1457,20 @@ impl App for MultisigAccounts {
                 activate(&io, &st, address).await;
             }),
             Event::Remove { address } => flow(model, move |io, st| async move {
-                let was_active = {
+                let (was_active, invited) = {
                     let mut s = lock(&st);
                     let active = s.active.clone();
                     s.remove(&address);
-                    active.is_some() && s.active.is_none()
+                    let invited = s
+                        .invite_shared
+                        .remove(&address.to_ascii_lowercase())
+                        .then(|| serde_json::to_string(&s.invite_shared).unwrap_or_default());
+                    (active.is_some() && s.active.is_none(), invited)
                 };
                 save(&io, &st).await;
+                if let Some(json) = invited {
+                    io.store(INVITE_SHARED_KEY, Some(json)).await;
+                }
                 if was_active {
                     activate(&io, &st, None).await;
                 }
@@ -1469,6 +1489,20 @@ impl App for MultisigAccounts {
                     return render();
                 }
                 flow(model, |io, st| async move { save(&io, &st).await })
+            }
+            Event::InviteShared { address } => {
+                let json = {
+                    let mut s = lock(&model.state);
+                    if s.find(&address).is_none()
+                        || !s.invite_shared.insert(address.to_ascii_lowercase())
+                    {
+                        return render();
+                    }
+                    serde_json::to_string(&s.invite_shared).unwrap_or_default()
+                };
+                flow(model, move |io, _| async move {
+                    io.store(INVITE_SHARED_KEY, Some(json)).await;
+                })
             }
             Event::SetFirstRun { address, on } => {
                 lock(&model.state).set_first_run(&address, on);
@@ -1532,6 +1566,7 @@ impl App for MultisigAccounts {
                     AccountRow {
                         checked_on: session(&mut s.verdicts.keys()),
                         checking_on: session(&mut s.checking.iter()),
+                        invite_shared: s.invite_shared.contains(&a.address.to_ascii_lowercase()),
                         name: a
                             .genesis
                             .name
@@ -1627,6 +1662,7 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
             keys::DISCOVERED,
             keys::DEPLOYED,
             CREATE_DRAFT_KEY,
+            INVITE_SHARED_KEY,
         ])
         .await;
     let get = |k: &str| loaded.get(k).cloned().flatten();
@@ -1644,6 +1680,12 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
         s.kept_draft = get(CREATE_DRAFT_KEY)
             .and_then(|r| serde_json::from_str::<CreateDraft>(&r).ok())
             .filter(|d| !d.is_blank());
+        s.invite_shared = get(INVITE_SHARED_KEY)
+            .and_then(|r| serde_json::from_str::<BTreeSet<String>>(&r).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|a| a.to_ascii_lowercase())
+            .collect();
         // The kinds the person picked in it are their word again.
         if let Some(d) = s.kept_draft.clone() {
             for (address, info) in &d.members {

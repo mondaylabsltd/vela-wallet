@@ -17,6 +17,7 @@ use support::DomainDriver;
 use vela_core::app::multisig_accounts::{
     AddOutcome, BackupState, CreateChoice, CreateDraft, EnsAnswer, Event, ImportOutcome,
     InvitedMember, KindAsk, MultisigAccounts, Phase, RenameBlocked, CREATE_DRAFT_KEY,
+    INVITE_SHARED_KEY,
 };
 use vela_core::app::multisig_shell::{keys, AccountUpdate, MemberInfo, Notice};
 use vela_core::app::multisig_signers::{KindNote, MemberKind};
@@ -1972,4 +1973,48 @@ fn a_created_multisig_keeps_the_kinds_picked() {
     let known = &sut.view().known_members;
     assert_eq!(known[EVE].kind.as_deref(), Some("wallet"));
     assert_eq!(known[B].name.as_deref(), Some("Bob"));
+}
+
+/// r4D-8: its invite handed on from here is kept (through a reload), said on
+/// its row, and forgotten with it.
+#[test]
+fn an_invite_handed_on_is_kept_with_the_multisig() {
+    let g = genesis(&[A], 1, "0x62");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    assert!(!sut.view().accounts[0].invite_shared);
+    let shared = || Event::InviteShared {
+        address: g.address.to_ascii_uppercase().replace("0X", "0x"),
+    };
+    run(&mut sut, &mut world, shared());
+    assert!(sut.view().accounts[0].invite_shared);
+    let sut2 = started(&mut world, vec![100]);
+    assert!(
+        sut2.view().accounts[0].invite_shared,
+        "kept through a reload"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::InviteShared {
+            address: B.to_owned(),
+        },
+    );
+    assert_eq!(
+        world.store[INVITE_SHARED_KEY],
+        json!([g.address.to_ascii_lowercase()]).to_string(),
+        "only a multisig here"
+    );
+    run(
+        &mut sut,
+        &mut world,
+        Event::Remove {
+            address: g.address.clone(),
+        },
+    );
+    assert_eq!(world.store[INVITE_SHARED_KEY], "[]");
 }

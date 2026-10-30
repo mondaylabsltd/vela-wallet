@@ -53,9 +53,15 @@
 	let copied = $state<'address' | 'link' | null>(null);
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
+	// r4D-8: the code is on screen — the invite is handed on from here.
+	$effect(() => {
+		if (qr) multisig.inviteShared(account.address);
+	});
+
 	async function copy(what: 'address' | 'link') {
 		try {
 			await navigator.clipboard.writeText(what === 'address' ? account.address : link);
+			multisig.inviteShared(account.address);
 			copied = what;
 			setTimeout(() => (copied = null), 1600);
 		} catch {
@@ -66,6 +72,7 @@
 	function share() {
 		navigator
 			.share({ title: multisigName(shown, m), text: m.invite.shareText, url: link })
+			.then(() => multisig.inviteShared(account.address))
 			.catch(() => {});
 	}
 </script>
