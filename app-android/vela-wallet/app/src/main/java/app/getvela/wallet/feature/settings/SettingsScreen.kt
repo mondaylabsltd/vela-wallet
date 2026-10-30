@@ -2030,7 +2030,8 @@ internal fun AccountsSheetBody(
             ) {
                 Text(
                     text = row.name,
-                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    // A selected state is neutral ink, never the accent (web `.name.active`).
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -2064,7 +2065,7 @@ internal fun AccountsSheetBody(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
