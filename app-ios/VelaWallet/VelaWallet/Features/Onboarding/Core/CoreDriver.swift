@@ -143,6 +143,14 @@ final class CoreDriver {
     /// 200-row feed again to learn that one name was not found was most of
     /// what a launch spent on the main thread (native parity Phase 4).
     private func applyText(_ text: String) throws {
+        // Each answer's Foundation objects go when it has been applied. The
+        // main queue drains its pool once per run-loop pass, and a launch's
+        // hundreds of answers in one pass held every parsed view at once
+        // (native parity Phase 4).
+        try autoreleasepool { try applyTextInPool(text) }
+    }
+
+    private func applyTextInPool(_ text: String) throws {
         guard skipsUnchangedView, let split = ViewBytes.split(text, ignoring: ignoredViewKeys) else {
             lastViewBytes = nil
             apply(try CoreJSON.object(text))

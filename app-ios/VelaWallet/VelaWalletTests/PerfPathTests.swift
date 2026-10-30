@@ -108,6 +108,76 @@ struct PerfPathTests {
         #expect(heard == 4)
     }
 
+    // MARK: - RecipientIdentity, the feed's turn
+
+    /// Who is being looked up right now, by the calls in flight.
+    @MainActor
+    final class Inflight {
+        private var open: [String: Int] = [:]
+        private(set) var peak = 0
+        private(set) var calls = 0
+        private(set) var seen: Set<String> = []
+
+        func answer(_ params: [Any]) async -> RpcOutcome {
+            calls += 1
+            // Whose lookup this call is part of: the task's own mark.
+            let who = Inflight.who
+            seen.insert(who)
+            open[who, default: 0] += 1
+            peak = max(peak, open.count)
+            try? await Task.sleep(nanoseconds: 3_000_000)
+            open[who]! -= 1
+            if open[who] == 0 { open[who] = nil }
+            return .failed(rateLimited: false)
+        }
+
+        static let addresses = (1...24).map { "0x" + String(format: "%040x", 0xabc000 + $0) }
+        @TaskLocal nonisolated static var who = ""
+    }
+
+    private func identity(_ inflight: Inflight) -> RecipientIdentity {
+        let defaults = UserDefaults(suiteName: "perf-identity-\(UUID().uuidString)")!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        return RecipientIdentity(
+            store: store, pool: RpcPool(store: store, accounts: accounts, offline: true), accounts: accounts,
+            chainCall: { _, _, params in await inflight.answer(params) }
+        )
+    }
+
+    /// The feed's 24 counterparties are looked up four at a time, and every
+    /// one of them is looked up.
+    @Test func theFeedsLookupsTakeTurns() async {
+        let inflight = Inflight()
+        let identity = identity(inflight)
+        await withTaskGroup(of: Void.self) { group in
+            for address in Inflight.addresses {
+                group.addTask { @MainActor in
+                    await Inflight.$who.withValue(address) { _ = await identity.resolve(address, queued: true) }
+                }
+            }
+        }
+        #expect(inflight.calls > 0)
+        #expect(inflight.peak <= RecipientIdentity.concurrentLookups,
+                "\(inflight.peak) addresses were looked up at once")
+        // Every address was asked about: none was dropped while it waited.
+        #expect(inflight.seen == Set(Inflight.addresses))
+    }
+
+    /// A lookup somebody is waiting on is not queued behind the feed's.
+    @Test func aLookupSomebodyWaitsOnDoesNotQueue() async {
+        let inflight = Inflight()
+        let identity = identity(inflight)
+        await withTaskGroup(of: Void.self) { group in
+            for address in Inflight.addresses {
+                group.addTask { @MainActor in
+                    await Inflight.$who.withValue(address) { _ = await identity.resolve(address) }
+                }
+            }
+        }
+        #expect(inflight.peak > RecipientIdentity.concurrentLookups)
+    }
+
     // MARK: - Loc
 
     @Test func theMemoAnswersTheEnginesWordsAndHearsALanguageChange() {

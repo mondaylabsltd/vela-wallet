@@ -332,7 +332,8 @@ final class ActivityExecutor {
             else { continue }
             return name
         }
-        return await identity?.resolve(addr)?.name
+        // A row's name is background work: it waits its turn (`queued`).
+        return await identity?.resolve(addr, queued: true)?.name
     }
 
     // MARK: - Formatting the stored string
