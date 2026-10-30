@@ -70,6 +70,9 @@ pub mod login;
 pub mod manage_tokens;
 pub mod method_words;
 pub mod money;
+pub mod multisig_accounts;
+/// The multisig machines (F0.4): one shell vocabulary, four machines.
+pub mod multisig_shell;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
