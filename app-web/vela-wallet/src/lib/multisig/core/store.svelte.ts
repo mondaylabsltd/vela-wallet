@@ -190,7 +190,17 @@ class MultisigStore {
 		const view = this.view;
 		if (!view) return this.#snapshot.accounts;
 		if (this.#read?.view !== view) {
-			this.#read = { view, accounts: view.accounts.map((row) => row.account as MultisigAccount) };
+			// A multisig the view did not change stays the same object: every view
+			// is a fresh parse, and a sheet holding one must not see it replaced
+			// (and redraw) each time the machine says anything.
+			const was = new Map((this.#read?.accounts ?? []).map((a) => [JSON.stringify(a), a] as const));
+			this.#read = {
+				view,
+				accounts: view.accounts.map((row) => {
+					const account = row.account as MultisigAccount;
+					return was.get(JSON.stringify(account)) ?? account;
+				})
+			};
 		}
 		return this.#read.accounts;
 	}
