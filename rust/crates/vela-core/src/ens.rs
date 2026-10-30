@@ -67,7 +67,10 @@ mod tests {
             node,
             ens_namehash("d8da6bf26964af9d7eed9e03e53415d37aa96045.addr.reverse")
         );
-        assert_eq!(ens_reverse_node(&checksummed.to_lowercase()).expect("lower"), node);
+        assert_eq!(
+            ens_reverse_node(&checksummed.to_lowercase()).expect("lower"),
+            node
+        );
         assert!(ens_reverse_node("0x1234").is_err());
     }
 }

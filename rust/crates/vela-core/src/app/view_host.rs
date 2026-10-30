@@ -145,7 +145,11 @@ impl ViewHost {
         ViewAnswer {
             view: if send_view { self.view.as_ref() } else { None },
             view_version: Some(self.version),
-            volatile: if send_volatile { self.volatile.as_ref() } else { None },
+            volatile: if send_volatile {
+                self.volatile.as_ref()
+            } else {
+                None
+            },
         }
     }
 }
@@ -170,7 +174,10 @@ mod tests {
         let mut host = ViewHost::new(false, &["pending"]);
         let view = json!({ "a": 1, "pending": { "c1": ["x"] } });
         for _ in 0..3 {
-            assert_eq!(sent(&mut host, view.clone()), (Some(view.clone()), None, None));
+            assert_eq!(
+                sent(&mut host, view.clone()),
+                (Some(view.clone()), None, None)
+            );
         }
     }
 
@@ -178,11 +185,20 @@ mod tests {
     fn an_unchanged_view_is_sent_once() {
         let mut host = ViewHost::new(false, &[]);
         host.skip_unchanged_views(false);
-        assert_eq!(sent(&mut host, json!({ "a": 1 })), (Some(json!({ "a": 1 })), Some(1), None));
+        assert_eq!(
+            sent(&mut host, json!({ "a": 1 })),
+            (Some(json!({ "a": 1 })), Some(1), None)
+        );
         assert_eq!(sent(&mut host, json!({ "a": 1 })), (None, Some(1), None));
-        assert_eq!(sent(&mut host, json!({ "a": 2 })), (Some(json!({ "a": 2 })), Some(2), None));
+        assert_eq!(
+            sent(&mut host, json!({ "a": 2 })),
+            (Some(json!({ "a": 2 })), Some(2), None)
+        );
         // Back to what it was is a change too: the shell holds { a: 2 }.
-        assert_eq!(sent(&mut host, json!({ "a": 1 })), (Some(json!({ "a": 1 })), Some(3), None));
+        assert_eq!(
+            sent(&mut host, json!({ "a": 1 })),
+            (Some(json!({ "a": 1 })), Some(3), None)
+        );
     }
 
     #[test]
@@ -192,7 +208,10 @@ mod tests {
         let _ = sent(&mut host, json!({ "a": 1 }));
         host.skip_unchanged_views(false);
         assert!(host.needs_view(false));
-        assert_eq!(sent(&mut host, json!({ "a": 1 })).0, Some(json!({ "a": 1 })));
+        assert_eq!(
+            sent(&mut host, json!({ "a": 1 })).0,
+            Some(json!({ "a": 1 }))
+        );
     }
 
     #[test]
@@ -213,19 +232,32 @@ mod tests {
         let view = |pending: Value| json!({ "a": 1, "pending": pending });
         let mut quiet = ViewHost::new(false, &["pending"]);
         quiet.skip_unchanged_views(false);
-        assert_eq!(sent(&mut quiet, view(json!({}))), (Some(json!({ "a": 1 })), Some(1), None));
-        assert_eq!(sent(&mut quiet, view(json!({ "c1": ["x"] }))), (None, Some(1), None));
+        assert_eq!(
+            sent(&mut quiet, view(json!({}))),
+            (Some(json!({ "a": 1 })), Some(1), None)
+        );
+        assert_eq!(
+            sent(&mut quiet, view(json!({ "c1": ["x"] }))),
+            (None, Some(1), None)
+        );
 
         let mut hedging = ViewHost::new(false, &["pending"]);
         hedging.skip_unchanged_views(true);
         assert_eq!(
             sent(&mut hedging, view(json!({}))),
-            (Some(json!({ "a": 1 })), Some(1), Some(json!({ "pending": {} })))
+            (
+                Some(json!({ "a": 1 })),
+                Some(1),
+                Some(json!({ "pending": {} }))
+            )
         );
         assert_eq!(
             sent(&mut hedging, view(json!({ "c1": ["x"] }))),
             (None, Some(1), Some(json!({ "pending": { "c1": ["x"] } })))
         );
-        assert_eq!(sent(&mut hedging, view(json!({ "c1": ["x"] }))), (None, Some(1), None));
+        assert_eq!(
+            sent(&mut hedging, view(json!({ "c1": ["x"] }))),
+            (None, Some(1), None)
+        );
     }
 }

@@ -3802,9 +3802,13 @@ fn every_change_renders() {
         shown_is_current(&sut, &step);
     }
 
-    sut.dispatch(Event::DeleteRequested { id: "s1".to_owned() });
+    sut.dispatch(Event::DeleteRequested {
+        id: "s1".to_owned(),
+    });
     shown_is_current(&sut, "delete requested");
-    sut.resolve(Res::DeleteCommitted { id: "s1".to_owned() });
+    sut.resolve(Res::DeleteCommitted {
+        id: "s1".to_owned(),
+    });
     shown_is_current(&sut, "delete committed");
 
     // A receipt lands: re-read, celebrate, the toast expires.
@@ -3886,8 +3890,15 @@ fn names_render_in_batches() {
         }
     }
     assert_eq!(rendered_at, vec![1, 3, 7, 10]);
-    assert_eq!(sut.rendered_view(), Some(&sut.view()), "the last batch shows");
-    assert!(items(&sut).iter().all(|item| item.alias.is_some()), "every row named");
+    assert_eq!(
+        sut.rendered_view(),
+        Some(&sut.view()),
+        "the last batch shows"
+    );
+    assert!(
+        items(&sut).iter().all(|item| item.alias.is_some()),
+        "every row named"
+    );
 }
 
 /// The batch's last answer closes it even when it named nobody, and a
@@ -3944,6 +3955,9 @@ fn a_batch_closes_on_its_last_answer_and_on_the_next_read() {
     sut.dispatch(Event::FocusTick);
     sut.resolve(loaded(&sut, ten_strangers()[..6].to_vec(), T0 + 2_000.0));
     assert_eq!(sut.rendered_view(), Some(&sut.view()), "the read shows Di");
-    let named = items(&sut).iter().filter(|item| item.alias.is_some()).count();
+    let named = items(&sut)
+        .iter()
+        .filter(|item| item.alias.is_some())
+        .count();
     assert_eq!(named, 4);
 }

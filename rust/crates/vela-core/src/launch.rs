@@ -100,7 +100,10 @@ mod tests {
 
     #[test]
     fn the_week_is_the_week_every_shell_shipped() {
-        assert_eq!(LAUNCH_ANIMATION_REPLAY_AFTER_MS.to_bits(), 604_800_000_f64.to_bits());
+        assert_eq!(
+            LAUNCH_ANIMATION_REPLAY_AFTER_MS.to_bits(),
+            604_800_000_f64.to_bits()
+        );
         assert_eq!(LAUNCH_ANIMATION_STORAGE_KEY, "vela.launch.played");
     }
 
