@@ -533,7 +533,9 @@ struct KeyValueRow: View {
 /// A setting that is a switch — About's debug mode (spec 091): the title,
 /// what it does in one line under it, and the platform's own switch, over the
 /// hairline the key/value rows around it draw. The switch is iOS's idiom; its
-/// tint is the accent.
+/// tint is the neutral ink — a selected state, not a value-moving action
+/// (docs/DESIGN-LANGUAGE.md: accent only where money moves or a signature is
+/// made; the web's switch is the same ink).
 struct SettingsSwitchRow: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -567,7 +569,7 @@ struct SettingsSwitchRow: View {
                     }
                 ))
                 .labelsHidden()
-                .tint(theme.accentBase)
+                .tint(theme.fgBase)
                 .accessibilityLabel(title)
             }
             .frame(minHeight: 52)
@@ -639,7 +641,9 @@ struct NetworkSpaceHeading: View {
                 Text(model.switchLabel)
                     .typeRole(Typography.label)
                     .fontWeight(.semibold)
-                    .foregroundStyle(theme.infoBase)
+                    // The web's switch reads in the page's own ink: it is a
+                    // way to another list, not a link out.
+                    .foregroundStyle(theme.fgBase)
                     .multilineTextAlignment(.trailing)
             }
             .buttonStyle(.plain)

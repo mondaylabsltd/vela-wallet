@@ -1006,7 +1006,7 @@ enum SettingsLive {
             name: network.displayName,
             meta: chainMeta(loc, network.chainId),
             // A custom network wears its tag, not a latency (the web's row).
-            badge: network.isCustom ? nil : badge(network.rpcHealth),
+            badge: network.isCustom ? nil : badge(network.rpcHealth, loc: loc),
             tag: network.isCustom ? loc.t(I18nKeys.SettingsUi.networkCustom) : nil,
             // Owner decision 2026-10-29: a Vela network shown on the person's
             // word can be taken out of the list again; its settings stay.
@@ -1066,11 +1066,11 @@ enum SettingsLive {
         // set-6: a refusal is never drawn beside a green latency pill. What the
         // field holds was NOT saved — the pill says so, and the callout why.
         let refused = StatusPillModel(tone: .error, label: loc.t("settingsModals.health.httpsRequired"))
-        let rpcBadge = network.rpcUrlRefused ? refused : badge(network.rpcHealth)
-        var rpc = field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth,
+        let rpcBadge = network.rpcUrlRefused ? refused : badge(network.rpcHealth, loc: loc)
+        var rpc = field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth, loc: loc,
                         tone: network.rpcChainMismatch == nil && !network.rpcUrlRefused ? nil : .error)
         rpc.badge = rpcBadge
-        var explorer = field(fallback.explorer, value: network.explorerUrl, health: network.explorerHealth,
+        var explorer = field(fallback.explorer, value: network.explorerUrl, health: network.explorerHealth, loc: loc,
                              tone: network.explorerUrlRefused ? .error : nil)
         if network.explorerUrlRefused { explorer.badge = refused }
         let refusal = network.rpcUrlRefused || network.explorerUrlRefused
@@ -1115,7 +1115,11 @@ enum SettingsLive {
     /// The health pill. `nil` while nothing has been measured — an unmeasured
     /// endpoint is not a healthy one, and drawing a green pill before the probe
     /// answers is the screen making a claim the core has not.
-    static func badge(_ health: NetProbeHealthWire?) -> StatusPillModel? {
+    ///
+    /// A failed probe says "Offline" in the reader's language where one is
+    /// given (the web's `probePill`); the bare dash is only for a caller
+    /// with no language.
+    static func badge(_ health: NetProbeHealthWire?, loc: Loc? = nil) -> StatusPillModel? {
         switch health {
         case .none:
             return nil
@@ -1127,7 +1131,7 @@ enum SettingsLive {
             let value = ms >= 1000 ? String(format: "%.1fs", latencyMs / 1000) : "\(ms)ms"
             return StatusPillModel(tone: tone, label: value)
         case .error:
-            return StatusPillModel(tone: .error, label: "—")
+            return StatusPillModel(tone: .error, label: loc.map { $0.t(I18nKeys.SettingsUi.networkOffline) } ?? "—")
         }
     }
 
@@ -1156,6 +1160,7 @@ enum SettingsLive {
         _ fallback: UrlFieldModel,
         value: String,
         health: NetProbeHealthWire?,
+        loc: Loc? = nil,
         tone: SettingsTone? = nil
     ) -> UrlFieldModel {
         UrlFieldModel(
@@ -1164,7 +1169,7 @@ enum SettingsLive {
             value: value,
             placeholder: fallback.placeholder,
             hint: fallback.hint,
-            badge: badge(health),
+            badge: badge(health, loc: loc),
             tone: tone,
             action: fallback.action
         )

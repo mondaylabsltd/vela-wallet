@@ -135,6 +135,10 @@ struct NetworksParityP2Tests {
         #expect(page.callout?.tone == .danger)
         #expect(page.callout?.text.hasPrefix("Not saved — use an https:// address") == true)
 
+        // A probe that failed says Offline, in the reader's words (the web's probePill).
+        #expect(SettingsLive.row(network(health: .error), loc: en).badge?.label == "Offline")
+        #expect(SettingsLive.row(network(health: .error), loc: zh).badge?.label == "离线")
+
         let explorer = SettingsLive.detail(network(explorerRefused: true), loc: en, fallback: fallbackDetail)
         #expect(explorer.explorer.badge?.label == "HTTPS required")
         #expect(explorer.rpc.badge?.tone != .error)
