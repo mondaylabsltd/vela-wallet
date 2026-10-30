@@ -115,6 +115,24 @@ pub enum Mode {
     Request,
 }
 
+/// Why a `/pay` link was refused — the first rule it broke, in the order the
+/// link is read. The shell words each from the corpus, so a person is told
+/// what is wrong with the link they were sent rather than only that it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum PayRefusal {
+    /// `to` is missing or is not a 0x address.
+    Recipient,
+    /// `chain` is missing or is not a chain id.
+    Network,
+    /// `token` is present and is not a 0x address.
+    Token,
+    /// `amount` is not a plain decimal this token can hold — scientific,
+    /// hex, comma, signed, or finer than its decimals.
+    Amount,
+}
+
 /// A validated `/pay` request — every field already normalized, the base-unit
 /// amount already computed from the SAME conversion the builder uses.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -211,7 +229,7 @@ enum Gate {
 enum PayParse {
     #[default]
     NotOpened,
-    Invalid,
+    Invalid(PayRefusal),
     Valid(PayRequest),
 }
 
@@ -272,6 +290,9 @@ pub struct PaymentRequestView {
     // /pay
     pub pay_valid: Option<bool>,
     pub pay: Option<PayRequest>,
+    /// Why the link was refused — present exactly when `pay_valid` is
+    /// `Some(false)`.
+    pub pay_refusal: Option<PayRefusal>,
 }
 
 // ---------------------------------------------------------------------------
@@ -420,10 +441,10 @@ impl App for PaymentRequest {
             model.recipient.clone()
         };
 
-        let (pay_valid, pay) = match &model.pay {
-            PayParse::NotOpened => (None, None),
-            PayParse::Invalid => (Some(false), None),
-            PayParse::Valid(request) => (Some(true), Some(request.clone())),
+        let (pay_valid, pay, pay_refusal) = match &model.pay {
+            PayParse::NotOpened => (None, None, None),
+            PayParse::Invalid(refusal) => (Some(false), None, Some(*refusal)),
+            PayParse::Valid(request) => (Some(true), Some(request.clone()), None),
         };
 
         PaymentRequestView {
@@ -444,6 +465,7 @@ impl App for PaymentRequest {
             has_amount: has_positive_amount(&model.amount),
             pay_valid,
             pay,
+            pay_refusal,
         }
     }
 }
@@ -637,16 +659,16 @@ fn validate_pay_query(
 ) -> PayParse {
     let recipient = to.unwrap_or_default().trim().to_owned();
     if !is_hex_address(&recipient) {
-        return PayParse::Invalid;
+        return PayParse::Invalid(PayRefusal::Recipient);
     }
 
     let chain = chain.unwrap_or_default();
     let chain = chain.trim();
     if chain.is_empty() || !chain.bytes().all(|b| b.is_ascii_digit()) {
-        return PayParse::Invalid;
+        return PayParse::Invalid(PayRefusal::Network);
     }
     let Ok(chain_id) = chain.parse::<u32>() else {
-        return PayParse::Invalid;
+        return PayParse::Invalid(PayRefusal::Network);
     };
 
     // `parseInt(dec ?? '18') || 18`: unparseable OR zero falls back to 18 —
@@ -660,11 +682,18 @@ fn validate_pay_query(
         .unwrap_or(18);
 
     let token_address = Some(token.unwrap_or_default().trim().to_owned()).filter(|t| !t.is_empty());
+    // A token that is not an address names no contract: refused here, where
+    // the link is read, rather than handed to Send to look up on chain. A
+    // well-formed address with no token behind it on that chain is Send's to
+    // find (`SendLockError::Token`).
+    if token_address.as_deref().is_some_and(|t| !is_hex_address(t)) {
+        return PayParse::Invalid(PayRefusal::Token);
+    }
 
     let amount = Some(amount.unwrap_or_default().trim().to_owned()).filter(|a| !a.is_empty());
     if let Some(a) = &amount {
         if !is_strict_amount(a, decimals) {
-            return PayParse::Invalid;
+            return PayParse::Invalid(PayRefusal::Amount);
         }
     }
     let amount_base = amount.as_deref().map(|a| to_base_units(a, decimals));
