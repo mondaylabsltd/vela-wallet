@@ -302,13 +302,19 @@ fn settled_result(
         &shown,
         crate::executor::now_ms(),
     );
-    let limited =if failed.iter().all(|chain| internal.contains(chain)) {
+    let limited = if failed.iter().all(|chain| internal.contains(chain)) {
         // Nothing left the app: the pool has no verdict to give, and asking
         // it would be one more call into what just failed.
         Vec::new()
     } else {
         pool::rate_limited_chains()
     };
+    // Owner decision 2026-10-28 (WIRE-AUDIT A8): the failed chains read
+    // through the person's own node alone, and the chains public nodes served
+    // because theirs is not answering — the pool's lists, as the web's
+    // `getOwnNodeUnreachedChains` / `getFallbackChains`.
+    let own = pool::own_node_chains();
+    let own_node_chain_ids = failed_own_node(&failed, &own.own_node_unreached);
     BalanceShellResult::FetchSettled {
         address: address.to_owned(),
         pull,
@@ -334,10 +340,20 @@ fn settled_result(
         // token list did not (PR 3 note 4): "can't load its token list",
         // and no RPC fix offered for an endpoint that is working.
         registry_chain_ids: registry,
-        own_node_chain_ids: vec![],
-        fallback_chain_ids: vec![],
+        own_node_chain_ids,
+        fallback_chain_ids: own.fallback,
         now_ms: crate::executor::now_ms(),
     }
+}
+
+/// The failed chains that were read through the person's own node alone —
+/// `failed.filter((id) => getOwnNodeUnreachedChains().includes(id))`.
+fn failed_own_node(failed: &[u32], own_node_unreached: &[u32]) -> Vec<u32> {
+    failed
+        .iter()
+        .copied()
+        .filter(|chain| own_node_unreached.contains(chain))
+        .collect()
 }
 
 impl Machine for BalanceDashboard {
@@ -1139,5 +1155,14 @@ mod tests {
                 Some("0")
             );
         });
+    }
+
+    /// WIRE-AUDIT A8: of the chains that failed, the ones read through the
+    /// person's own node alone — never a chain that answered.
+    #[test]
+    fn own_node_rows_are_the_failed_chains_read_through_the_own_node() {
+        assert_eq!(failed_own_node(&[1, 100, 137], &[100, 8453]), vec![100]);
+        assert!(failed_own_node(&[], &[100]).is_empty());
+        assert!(failed_own_node(&[1], &[]).is_empty());
     }
 }

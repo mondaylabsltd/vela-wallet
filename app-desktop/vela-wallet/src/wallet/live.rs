@@ -718,14 +718,26 @@ pub fn balance_detail(
             None => per_chain.push((token.chain_id, usd)),
         }
     }
+    // Owner decision 2026-10-28: a network read through public nodes because
+    // the person's own is not answering is listed as such — its figure is
+    // real, and where it came from is said (`fallback_status_key`).
+    for &chain_id in &view.fallback_chain_ids {
+        if !per_chain.iter().any(|(id, _)| *id == chain_id) {
+            per_chain.push((chain_id, 0.0));
+        }
+    }
     per_chain.retain(|(id, _)| !pending.iter().any(|row| row.chain_id == *id));
     per_chain.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let public_nodes = s.detail_status(&view.fallback_status_key);
     let done = per_chain
         .into_iter()
         .map(|(chain_id, usd)| DetailChain {
             chain_id,
             name: name(chain_id),
-            status: None,
+            status: view
+                .fallback_chain_ids
+                .contains(&chain_id)
+                .then(|| (public_nodes.clone(), false)),
             // Withheld while the display currency is not committed: the row
             // keeps its place and its side, with no figure in it yet.
             amount: Some(if view.hidden {
@@ -742,6 +754,8 @@ pub fn balance_detail(
         _ if view.hidden => {
             crate::wallet::fill(&s.detail_total, "amount", crate::wallet::fixtures::MASK)
         }
+        // home-11: nothing held could be priced — there is no total to state.
+        _ if view.unpriced_only => s.detail_all_unpriced.to_string(),
         // The sheet's own line over the networks: withheld with its figure
         // while the currency is on its way, its line kept.
         Some(usd) => money.sentence(&s.detail_total, "amount", usd, locale),
