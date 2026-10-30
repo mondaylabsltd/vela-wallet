@@ -3975,7 +3975,8 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // A multisig's proposal: the desktop never makes one (multisig
         // accounts are web-only), so these are never set here.
         vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
-        | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
+        | vela_core::app::send::SendTxErrorKey::ProposalOffline
+        | vela_core::app::send::SendTxErrorKey::ProposalNotSupported => s.tx_error_generic.clone(),
         // r5reg-3: the reads before the passkey did not get through — the
         // network's failure, by its name, never the passkey's.
         vela_core::app::send::SendTxErrorKey::ChainBusy => {

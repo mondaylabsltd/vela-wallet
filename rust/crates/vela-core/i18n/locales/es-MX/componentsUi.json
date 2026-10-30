@@ -558,7 +558,28 @@
       "fullScreen": "Activar o desactivar pantalla completa",
       "window": "Ventana",
       "minimize": "Minimizar",
-      "closeWindow": "Cerrar ventana"
+      "closeWindow": "Cerrar ventana",
+      "find": "Buscar",
+      "commandPalette": "Paleta de comandos"
+    },
+    "appUpdate": {
+      "title": "Actualización disponible",
+      "install": "Instalar",
+      "later": "Más tarde"
+    },
+    "dropOverlay": {
+      "title": "Suelta una dirección, un enlace de pago o una imagen QR"
+    },
+    "shortcuts": {
+      "send": "Enviar con {{app}}",
+      "receive": "Recibir con {{app}}",
+      "scan": "Escanear con {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Por ahora, los enlaces de multisig se abren en la billetera web."
+    },
+    "widget": {
+      "balanceDescription": "Tu saldo de un vistazo, según la última vez que Vela lo actualizó."
     },
     "browserStatus": {
       "title": "Estado de la pestaña",

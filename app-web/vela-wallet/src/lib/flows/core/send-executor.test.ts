@@ -610,18 +610,24 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
 			dispatch: () => {}
 		});
-		for (const words of [
-			'Transaction nonce mismatch. Please try again.',
-			'AA25 invalid account nonce'
-		]) {
-			vi.mocked(sendBatchCalls).mockRejectedValueOnce(
-				new UserOpNotSentError({ other: words }, words)
-			);
-			await expect(executor.execute(submit)).resolves.toEqual({
-				type: 'submit_failed',
-				failure: { type: 'nonce_used' }
-			});
-		}
+		// The core reads the relay's AA25 (`RelayRejection::NonceUsed`); the
+		// executor only says what it read.
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError('nonce_used', 'Transaction nonce mismatch. Please try again.')
+		);
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'nonce_used' }
+		});
+		// The relay's words are never read here again: a refusal the core left
+		// as `other` stays the relay's.
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError({ other: 'AA25 invalid account nonce' }, 'AA25 invalid account nonce')
+		);
+		await expect(executor.execute(submit)).resolves.toMatchObject({
+			type: 'submit_failed',
+			failure: { type: 'other' }
+		});
 	});
 
 	/** send-11: a prompt that ran out of time is told apart from one closed. */

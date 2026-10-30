@@ -541,6 +541,7 @@
   "submitSlow": "In attesa di una risposta da {{network}}: {{seconds}} s finora. Non è ancora stato firmato nulla.",
   "txErrorChainBusy": "I nodi di {{network}} sono sovraccarichi e non hanno risposto in tempo, quindi non è stato firmato né inviato nulla. Riprova tra poco.",
   "txErrorChainUnreachable": "Impossibile raggiungere {{network}}, quindi non è stato firmato né inviato nulla. Riprova tra poco.",
+  "txErrorProposalNotSupported": "Questa app non può ancora proporre transazioni multisig, quindi non è stato firmato né proposto nulla.",
   "maxMoved": "Il massimo ora è {{to}} {{symbol}} (prima {{from}}): la commissione di rete è stata ricalcolata, quindi è cambiato l’importo tenuto da parte per pagarla.",
   "txReviewAgain": "Rivedi",
   "txSendAgain": "Invia di nuovo",
@@ -1869,7 +1870,28 @@
    "fullScreen": "Attiva/disattiva tutto schermo",
    "window": "Finestra",
    "minimize": "Contrai",
-   "closeWindow": "Chiudi finestra"
+   "closeWindow": "Chiudi finestra",
+   "find": "Trova",
+   "commandPalette": "Tavolozza comandi"
+  },
+  "appUpdate": {
+   "title": "Aggiornamento disponibile",
+   "install": "Installa",
+   "later": "Più tardi"
+  },
+  "dropOverlay": {
+   "title": "Trascina qui un indirizzo, un link di pagamento o un'immagine QR"
+  },
+  "shortcuts": {
+   "send": "Invia con {{app}}",
+   "receive": "Ricevi con {{app}}",
+   "scan": "Scansiona con {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Per ora i link multisig si aprono nel wallet web."
+  },
+  "widget": {
+   "balanceDescription": "Il tuo saldo a colpo d'occhio, all'ultimo aggiornamento di Vela."
   },
   "browserStatus": {
    "title": "Stato della scheda",
@@ -2049,6 +2071,11 @@
    "attestation": "Attestazione",
    "userVerified": "Verifica a ogni uso",
    "signsHere": "Connessa"
+  },
+  "appearance": {
+   "menuBar": "Mostra nella barra dei menu",
+   "trayIcon": "Mostra nell'area di notifica",
+   "statusItemHint": "Il tuo totale e Invia e Ricevi rapidi, dalle ultime cifre caricate: non viene scaricato nulla in più."
   }
  },
  "contacts": {

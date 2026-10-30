@@ -309,6 +309,52 @@ fn run(func: &str, i: &Value) -> Value {
             s(i, "answers_json"),
         )),
         "currency_fraction_digits" => json!(rules::currency_fraction_digits(s(i, "code"))),
+
+        // --- core asks 1 ---
+        "classify_relay_rejection" => match crate::classify_relay_rejection(s(i, "message")) {
+            crate::RelayRejection::RelayerUnavailable => json!("relayer_unavailable"),
+            crate::RelayRejection::BundlerUnderfunded => json!("bundler_underfunded"),
+            crate::RelayRejection::NonceUsed => json!("nonce_used"),
+            crate::RelayRejection::NonceHeld { user_op_hash } => {
+                json!({ "nonce_held": { "user_op_hash": user_op_hash } })
+            }
+            crate::RelayRejection::Other { message } => json!({ "other": message }),
+        },
+        "is_localhost_http" => json!(rules::is_localhost_http(s(i, "url"))),
+        "passkey_ceremony_end" => {
+            use signing::PasskeyCeremonyEnd as E;
+            json!(match signing::passkey_ceremony_end(
+                s(i, "kind"),
+                i["elapsed_ms"].as_f64().expect("elapsed_ms")
+            ) {
+                E::Cancelled => "cancelled",
+                E::TimedOut => "timed_out",
+                E::NotSupported => "not_supported",
+                E::NotDiscoverable => "not_discoverable",
+                E::Other => "other",
+            })
+        }
+        "passkey_sign_timeout_ms" => json!(signing::passkey_sign_timeout_ms()),
+        "rpc_node_standing" => json!(rules::rpc_node_standing(
+            s(i, "view_json"),
+            u32_of(i, "chain_id")
+        )),
+        "sim_outcome" => {
+            let record = crate::sim_outcome(s(i, "user"), s(i, "reply_json"));
+            json!({
+                "kind": record.kind,
+                "deltas": json_text(&record.deltas_json),
+                "revert_reason": record.revert_reason,
+                "notice_risk": record.notice_risk,
+                "notice_key": record.notice_key,
+                "no_change_key": record.no_change_key,
+                "recheck": record.recheck,
+            })
+        }
+        "builtin_network_display_name" => {
+            json!(rules::builtin_network_display_name(u32_of(i, "chain_id")))
+        }
+        "builtin_network_ids" => json!(rules::builtin_network_ids()),
         other => panic!("no uniffi arm for `{other}` — add it to native_parity_tests.rs"),
     }
 }
@@ -405,6 +451,14 @@ parity!(
     site_start_chain,
     resolved_name_step,
     currency_fraction_digits,
+    classify_relay_rejection,
+    is_localhost_http,
+    passkey_ceremony_end,
+    passkey_sign_timeout_ms,
+    rpc_node_standing,
+    sim_outcome,
+    builtin_network_display_name,
+    builtin_network_ids,
 );
 
 /// The refusals the corpus does not reach by a page's answer: input a shell

@@ -29,6 +29,59 @@ pub fn rpc_own_only_pool(seeds_json: String, own_only: bool) -> String {
     serde_json::json!({ "endpoints": endpoints, "own_only": own_only }).to_string()
 }
 
+/// Where `chain_id`'s reads stand in the pool's view (`view_json`, the
+/// `RpcPoolView` the read path's machine hands back) —
+/// `rpc_pool::node_standing`: `"pooled"` (nothing to say), `"own_only"`
+/// ("Only use my node", answering), `"own_node_unreached"` ("Can't reach
+/// your node for …": nothing went to another node), or `"falling_back"`
+/// (their node is not answering; public nodes serve the reads for now).
+/// `""` for a view the core cannot read. One reading of the view's
+/// `own_only_chains`, `own_node_unreached_chains` and `fallback_chains` for
+/// a network's row, the balance breakdown and the one-time notice.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn rpc_node_standing(view_json: String, chain_id: u32) -> String {
+    serde_json::from_str::<rpc_pool::RpcPoolView>(&view_json)
+        .ok()
+        .and_then(|view| serde_json::to_value(rpc_pool::node_standing(&view, chain_id)).ok())
+        .and_then(|standing| standing.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The HTTPS exception for an address a person types into Settings — a
+/// network's RPC or explorer, a service endpoint: plain `http://` to this
+/// computer (`localhost`, `127.0.0.1`, `[::1]`, any port), anchored on the
+/// whole host (`http://127.0.0.1.evil.com` is not) —
+/// `network_admin::is_localhost_http`.
+#[uniffi::export]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn is_localhost_http(url: String) -> bool {
+    vela_core::app::network_admin::is_localhost_http(&url)
+}
+
+/// A built-in network's name as the wallet writes it ("Ethereum", "Gnosis")
+/// — `network_admin::builtin_display_name` — or `None` for a chain Vela does
+/// not ship (a network someone added is named by its own record). No core
+/// instance needed to look one up.
+#[uniffi::export]
+#[must_use]
+pub fn builtin_network_display_name(chain_id: u32) -> Option<String> {
+    vela_core::app::network_admin::builtin_display_name(chain_id).map(str::to_owned)
+}
+
+/// Every network Vela ships, by chain id, in the order every list of
+/// networks shows them (`network_admin::BUILTIN_CHAINS`).
+#[uniffi::export]
+#[must_use]
+pub fn builtin_network_ids() -> Vec<u32> {
+    vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .map(|chain| chain.chain_id)
+        .collect()
+}
+
 /// How long a read waits on one endpoint before the shell also asks the one
 /// the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS`.
 #[uniffi::export]

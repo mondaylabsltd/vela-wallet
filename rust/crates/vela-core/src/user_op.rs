@@ -1929,6 +1929,14 @@ pub enum RelayRejection {
     NonceHeld {
         user_op_hash: String,
     },
+    /// The nonce this operation signed was spent already: another
+    /// transaction of the account landed first (send-15) — the relay's bare
+    /// `AA25` / "invalid account nonce", read by [`is_nonce_spent`]. Nothing
+    /// was sent, and this operation can never go out as signed: a shell says
+    /// "another transaction went first" and signs anew
+    /// (`SendSubmitFailure::NonceUsed`); a dApp hears [`NONCE_USED_DETAIL`].
+    /// Unlike [`Self::NonceHeld`] there is no other operation to wait for.
+    NonceUsed,
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -1937,6 +1945,37 @@ pub enum RelayRejection {
 /// operations ([`RelayRejection::NonceHeld`]) tells its page — for the
 /// developer; the screen has its own words (083).
 pub const PREVIOUS_PENDING_DETAIL: &str = "Another transaction from this account was still pending, so this one was not sent. Try again once it has confirmed.";
+
+/// What a request whose nonce another transaction of the account already
+/// spent ([`RelayRejection::NonceUsed`]) tells its page — for the developer;
+/// the screen has its own words (`componentsUi.signing.wentFirst`).
+pub const NONCE_USED_DETAIL: &str = "Another transaction from this account went first and used this nonce, so this one was not sent. Review it again to send it.";
+
+/// The relay saying the operation's nonce was spent already: the bundler's
+/// `AA25 invalid account nonce`, the core's own sentence for it
+/// ([`relay_error_message`]: "Transaction nonce mismatch"), or a node's
+/// "nonce too low". Wording-tolerant, as [`is_bundler_underfunded`] is — the
+/// relay has reworded its refusals before. One reading for every shell (the
+/// web's `isNonceSpent` was its own copy).
+#[must_use]
+pub fn is_nonce_spent(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    if lower.contains("nonce mismatch")
+        || lower.contains("invalid account nonce")
+        || lower.contains("nonce too low")
+    {
+        return true;
+    }
+    // `AA25` as a word of its own, never inside a longer token (`AA250`,
+    // `0xaa25…`).
+    let bytes = lower.as_bytes();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    lower.match_indices("aa25").any(|(at, _)| {
+        let before = at.checked_sub(1).map(|i| bytes[i]);
+        let after = bytes.get(at + 4).copied();
+        !before.is_some_and(word) && !after.is_some_and(word)
+    })
+}
 
 /// The relay's sentence, classified the way `classifySubmit` does.
 #[must_use]
@@ -1949,6 +1988,9 @@ pub fn classify_relay_rejection(message: &str) -> RelayRejection {
     }
     if is_bundler_underfunded(message) {
         return RelayRejection::BundlerUnderfunded;
+    }
+    if is_nonce_spent(message) {
+        return RelayRejection::NonceUsed;
     }
     RelayRejection::Other(message.to_owned())
 }
@@ -2316,10 +2358,27 @@ mod submit_spine_tests {
             classify_relay_rejection("dedicated bundler gas account is short"),
             RelayRejection::BundlerUnderfunded
         );
-        assert!(matches!(
-            classify_relay_rejection("AA25 invalid account nonce"),
-            RelayRejection::Other(_)
-        ));
+        // send-15: a spent nonce is its own rejection — in the bundler's
+        // words, in the core's own sentence for them, or a node's.
+        for spent in [
+            "AA25 invalid account nonce",
+            "Transaction nonce mismatch. Please try again.",
+            "nonce too low",
+            "UserOperation failed: aa25",
+        ] {
+            assert_eq!(
+                classify_relay_rejection(spent),
+                RelayRejection::NonceUsed,
+                "{spent}"
+            );
+        }
+        // Never inside a longer token, never another AA code.
+        for other in ["AA250 something", "0xaa25ff", "AA21 didn't pay prefund"] {
+            assert!(
+                matches!(classify_relay_rejection(other), RelayRejection::Other(_)),
+                "{other}"
+            );
+        }
         assert_eq!(
             relay_error_message(r#"{"message":"AA25 invalid account nonce"}"#),
             "Transaction nonce mismatch. Please try again."

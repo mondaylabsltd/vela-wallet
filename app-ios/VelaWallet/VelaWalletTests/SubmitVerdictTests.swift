@@ -66,14 +66,15 @@ struct SubmitVerdictTests {
     }
 
     /// A refusal no earlier attempt could have caused is NotSent, in the
-    /// core's class — the sentence is `relay_error_message`'s, not the jargon.
+    /// core's class — never the relay's jargon.
     @Test func aRefusalIsNotSentInTheCoresClass() async {
         let port = ScriptedRelayPort()
         port.detailed["eth_sendUserOperation"] = [
             answer(.rpcError(code: -32521, message: "AA25 invalid account nonce"), delivered: false),
         ]
         let verdict = await client(port).sendUserOp(chainId: 100, opJson: "{}", localHash: local)
-        #expect(verdict == .notSent(rejection: .other(message: "Transaction nonce mismatch. Please try again.")))
+        // send-15: a bare AA25 is the nonce another transaction spent.
+        #expect(verdict == .notSent(rejection: .nonceUsed))
     }
 
     /// The marker names the op already pending for this nonce. When it is

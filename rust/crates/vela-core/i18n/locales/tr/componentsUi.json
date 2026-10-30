@@ -558,7 +558,28 @@
       "fullScreen": "Tam Ekranı Aç/Kapat",
       "window": "Pencere",
       "minimize": "Küçült",
-      "closeWindow": "Pencereyi Kapat"
+      "closeWindow": "Pencereyi Kapat",
+      "find": "Bul",
+      "commandPalette": "Komut Paleti"
+    },
+    "appUpdate": {
+      "title": "Güncelleme var",
+      "install": "Yükle",
+      "later": "Sonra"
+    },
+    "dropOverlay": {
+      "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
+    },
+    "shortcuts": {
+      "send": "{{app}} ile gönder",
+      "receive": "{{app}} ile al",
+      "scan": "{{app}} ile tara"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Multisig bağlantıları şimdilik web cüzdanında açılır."
+    },
+    "widget": {
+      "balanceDescription": "Bakiyeniz bir bakışta, Vela'nın son güncellediği haliyle."
     },
     "browserStatus": {
       "title": "Sekme durumu",

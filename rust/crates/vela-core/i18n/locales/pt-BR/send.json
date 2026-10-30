@@ -189,6 +189,7 @@
     "submitSlow": "Aguardando resposta da {{network}} — {{seconds}} s até agora. Nada foi assinado ainda.",
     "txErrorChainBusy": "Os nós da {{network}} estão sobrecarregados e não responderam a tempo, então nada foi assinado nem enviado. Tente de novo em instantes.",
     "txErrorChainUnreachable": "Não foi possível conectar à {{network}}, então nada foi assinado nem enviado. Tente de novo em instantes.",
+    "txErrorProposalNotSupported": "Este app ainda não pode propor transações multisig, então nada foi assinado nem proposto.",
     "maxMoved": "O máximo agora é {{to}} {{symbol}} (antes {{from}}): a taxa de rede foi recalculada, então o valor reservado para ela mudou.",
     "txReviewAgain": "Revisar de novo",
     "txSendAgain": "Enviar de novo",

@@ -1895,7 +1895,15 @@ pub enum SendTxErrorKey {
     /// The page did not pass its check and was not opened
     /// (`componentsUi.signing.integrity.couldNotCheck`): nothing was signed.
     PageNotOpened,
+    /// A multisig's proposal on a shell that cannot make one yet
+    /// ([`SendProposeFailure::NotSupported`]): nothing was signed or
+    /// proposed — said as that (`send.txErrorProposalNotSupported`), never as
+    /// a mailbox that could not be read.
+    ProposalNotSupported,
 }
+
+/// The corpus key of [`SendTxErrorKey::ProposalNotSupported`]'s line.
+pub const PROPOSAL_NOT_SUPPORTED_KEY: &str = "send.txErrorProposalNotSupported";
 
 /// Why a multisig's proposal was not made, as the shell knows it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1906,6 +1914,11 @@ pub enum SendProposeFailure {
     MailboxDown,
     /// The device is offline.
     Offline,
+    /// This shell cannot propose a multisig's transaction yet: nothing was
+    /// signed or proposed. Said as that, never as a mailbox that could not
+    /// be read — the honest answer for a shell whose `ProposeSafeTx` has no
+    /// executor.
+    NotSupported,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -6377,6 +6390,7 @@ fn accept_proposed(
             model.tx_error = Some(match reason {
                 Some(SendProposeFailure::MailboxDown) => SendTxErrorKey::ProposalMailboxDown,
                 Some(SendProposeFailure::Offline) => SendTxErrorKey::ProposalOffline,
+                Some(SendProposeFailure::NotSupported) => SendTxErrorKey::ProposalNotSupported,
                 None => SendTxErrorKey::Generic,
             });
             fire(

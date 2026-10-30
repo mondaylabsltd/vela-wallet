@@ -41,10 +41,14 @@ pub trait AgentShell: Send + Sync {
     /// The page the person is on: `wallet`, `contacts`, `explore`,
     /// `settings`, or `welcome` while nobody is in.
     fn page(&self) -> String;
-    /// The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+    /// The dApp signing request on its sheet (`SignRequestView` JSON), if any
+    /// — with, optionally, a `sheet` member: what the sheet reads beside it
+    /// (`agent_review::SheetFacts`: `fee` the `FeeView`, `clear`, `guard`,
+    /// `simulation`), which the review and the advisor's fee binding read.
     fn signing(&self) -> Option<String>;
-    /// What the agent's screens show changed: its link, its requests. Read
-    /// them again (on the main thread).
+    /// What the agent's screens show changed: its link, its requests, the
+    /// advisor's opinion ([`AgentCore::advice`]). Read them again (on the
+    /// main thread).
     fn changed(&self);
     /// The send open now, if any.
     fn send_open(&self) -> Option<AgentSendOpen>;
@@ -231,6 +235,25 @@ impl AgentCore {
     /// `"signed"`.
     pub fn ceremony(&self, event: String) {
         self.agent.ceremony(&event);
+    }
+
+    /// The agent's opinion (spec 103, `vela_advise`) for the dApp request on
+    /// the signing sheet now, as its card draws it — JSON
+    /// `{advice, standing, fee_when_given}`: `advice` as the core accepted it
+    /// (`verdict` looks_fine/caution/danger/unsure, `summary`, `points`,
+    /// `source_hosts`, `review_digest`, `fee`), `standing` `current`,
+    /// `earlier_version` or `fee_changed` (greyed but for `current`, the
+    /// stale line `componentsUi.signing.agentAdvice.stale` /
+    /// `…feeChanged`), `fee_when_given` `{amount, symbol}` or `null`
+    /// (`…feeWhenGiven`). `None` with no request on the sheet or no opinion
+    /// on this one. Read it again on [`AgentShell::changed`] and whenever the
+    /// sheet redraws; it changes nothing else of the sheet. The fee it binds
+    /// to is the request's `sheet.fee` in [`AgentShell::signing`]'s JSON
+    /// (`agent_review::SheetFacts`), when the shell hands one over. Calls the
+    /// shell's `signing`, `views`, `send_open` and `account` on this thread.
+    #[must_use]
+    pub fn advice(&self) -> Option<String> {
+        self.agent.advice()
     }
 
     /// The open send's operation on its review (an `Operation`'s JSON),

@@ -189,6 +189,7 @@
     "submitSlow": "Esperando respuesta de {{network}}: {{seconds}} s hasta ahora. Todavía no se firmó nada.",
     "txErrorChainBusy": "Los nodos de {{network}} están saturados y no respondieron a tiempo, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
     "txErrorChainUnreachable": "No se pudo conectar con {{network}}, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
+    "txErrorProposalNotSupported": "Esta app todavía no puede proponer transacciones de multisig, así que no se firmó ni se propuso nada.",
     "maxMoved": "El máximo ahora es {{to}} {{symbol}} (antes {{from}}): se volvió a cotizar la comisión de red y cambió lo que se reserva para ella.",
     "txReviewAgain": "Revisar de nuevo",
     "txSendAgain": "Enviar de nuevo",

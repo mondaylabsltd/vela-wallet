@@ -1463,6 +1463,45 @@ pub fn own_only_pool(seeds: Vec<RpcEndpointSeed>, own_only: bool) -> (Vec<RpcEnd
     (own, true)
 }
 
+/// Where one chain's reads stand, as the view says it — the one reading of
+/// [`RpcPoolView::own_only_chains`], [`RpcPoolView::own_node_unreached_chains`]
+/// and [`RpcPoolView::fallback_chains`] for a network's row in Settings, the
+/// balance breakdown and the one-time notice, so no shell orders the three
+/// lists its own way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NodeStanding {
+    /// The usual pool: the person's node first when they set one, and it is
+    /// answering — or none of theirs is set. Nothing to say.
+    Pooled,
+    /// "Only use my node": the person's node and nobody else, answering.
+    OwnOnly,
+    /// "Only use my node", and their node cannot be read now: nothing went
+    /// to another node — "Can't reach your node for …", with the way to fix
+    /// it.
+    OwnNodeUnreached,
+    /// Their node is not answering and public nodes serve the reads for now
+    /// (owner decision 2026-10-28): read, but said.
+    FallingBack,
+}
+
+/// Where `chain_id`'s reads stand in `view` ([`NodeStanding`]). The person's
+/// own-only chain that cannot be read comes first: it is never also falling
+/// back, since nobody else is asked there.
+#[must_use]
+pub fn node_standing(view: &RpcPoolView, chain_id: u32) -> NodeStanding {
+    if view.own_node_unreached_chains.contains(&chain_id) {
+        NodeStanding::OwnNodeUnreached
+    } else if view.own_only_chains.contains(&chain_id) {
+        NodeStanding::OwnOnly
+    } else if view.fallback_chains.contains(&chain_id) {
+        NodeStanding::FallingBack
+    } else {
+        NodeStanding::Pooled
+    }
+}
+
 /// The chains whose pool asks the person's node alone, ascending.
 fn own_only_chains(model: &Model) -> impl Iterator<Item = u32> + '_ {
     model

@@ -538,6 +538,7 @@
   "submitSlow": "Waiting for {{network}} to answer — {{seconds}} s so far. Nothing is signed yet.",
   "txErrorChainBusy": "{{network}}'s nodes are busy and didn't answer in time, so nothing was signed or sent. Try again in a moment.",
   "txErrorChainUnreachable": "Couldn't reach {{network}}, so nothing was signed or sent. Try again in a moment.",
+  "txErrorProposalNotSupported": "This app can't propose multisig transactions yet, so nothing was signed or proposed.",
   "maxMoved": "Max is now {{to}} {{symbol}} (it was {{from}}): the network fee was quoted again, so the amount kept back for it changed.",
   "txReviewAgain": "Review again",
   "txSendAgain": "Send again",
@@ -1864,7 +1865,28 @@
    "fullScreen": "Toggle Full Screen",
    "window": "Window",
    "minimize": "Minimize",
-   "closeWindow": "Close Window"
+   "closeWindow": "Close Window",
+   "find": "Find",
+   "commandPalette": "Command Palette"
+  },
+  "appUpdate": {
+   "title": "Update available",
+   "install": "Install",
+   "later": "Later"
+  },
+  "dropOverlay": {
+   "title": "Drop an address, payment link or QR image"
+  },
+  "shortcuts": {
+   "send": "Send with {{app}}",
+   "receive": "Receive with {{app}}",
+   "scan": "Scan with {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Multisig links open in the web wallet for now."
+  },
+  "widget": {
+   "balanceDescription": "Your balance at a glance, as of the last time Vela updated it."
   },
   "browserStatus": {
    "title": "Tab status",
@@ -2044,6 +2066,11 @@
    "attestation": "Attestation",
    "userVerified": "Verify to use",
    "signsHere": "Signed in"
+  },
+  "appearance": {
+   "menuBar": "Show in menu bar",
+   "trayIcon": "Show in system tray",
+   "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched."
   }
  },
  "contacts": {

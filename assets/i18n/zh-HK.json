@@ -538,6 +538,7 @@
   "submitSlow": "正在等待 {{network}} 回應，已過 {{seconds}} 秒。尚未簽署任何內容。",
   "txErrorChainBusy": "{{network}} 的節點繁忙，未能及時回應，因此沒有簽署或發送任何內容。請稍後再試。",
   "txErrorChainUnreachable": "無法連接 {{network}}，因此沒有簽署或發送任何內容。請稍後再試。",
+  "txErrorProposalNotSupported": "此應用程式暫時未能發起多簽提案，因此沒有簽署或發起任何內容。",
   "maxMoved": "最大金額現在是 {{to}} {{symbol}}（原為 {{from}}）：網絡手續費重新報價，為手續費預留的金額隨之變化。",
   "txReviewAgain": "重新確認",
   "txSendAgain": "重新發送",
@@ -1864,7 +1865,28 @@
    "fullScreen": "切換全螢幕",
    "window": "視窗",
    "minimize": "最小化",
-   "closeWindow": "關閉視窗"
+   "closeWindow": "關閉視窗",
+   "find": "尋找",
+   "commandPalette": "命令面板"
+  },
+  "appUpdate": {
+   "title": "有可用更新",
+   "install": "安裝",
+   "later": "稍後"
+  },
+  "dropOverlay": {
+   "title": "拖放地址、付款連結或 QR 圖片"
+  },
+  "shortcuts": {
+   "send": "用{{app}}發送",
+   "receive": "用{{app}}收款",
+   "scan": "用{{app}}掃描"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "多簽連結目前會在網頁版錢包中開啟。"
+  },
+  "widget": {
+   "balanceDescription": "一眼看到結餘，以 Vela 最近一次更新為準。"
   },
   "browserStatus": {
    "title": "分頁狀態",
@@ -2044,6 +2066,11 @@
    "attestation": "認證聲明",
    "userVerified": "使用時需驗證",
    "signsHere": "目前登入"
+  },
+  "appearance": {
+   "menuBar": "在選單列中顯示",
+   "trayIcon": "在系統匣中顯示",
+   "statusItemHint": "總額及快速發送、收款，取自最近一次載入的資料，不會另外連網。"
   }
  },
  "contacts": {

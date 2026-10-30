@@ -558,7 +558,28 @@
       "fullScreen": "フルスクリーンを切り替え",
       "window": "ウインドウ",
       "minimize": "しまう",
-      "closeWindow": "ウインドウを閉じる"
+      "closeWindow": "ウインドウを閉じる",
+      "find": "検索",
+      "commandPalette": "コマンドパレット"
+    },
+    "appUpdate": {
+      "title": "アップデートがあります",
+      "install": "インストール",
+      "later": "後で"
+    },
+    "dropOverlay": {
+      "title": "アドレス、支払いリンク、QR画像をドロップ"
+    },
+    "shortcuts": {
+      "send": "{{app}}で送る",
+      "receive": "{{app}}で受け取る",
+      "scan": "{{app}}でスキャン"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "マルチシグのリンクは、現在はウェブ版ウォレットで開きます。"
+    },
+    "widget": {
+      "balanceDescription": "残高をひと目で。Vela が最後に更新した時点の金額です。"
     },
     "browserStatus": {
       "title": "タブの状態",

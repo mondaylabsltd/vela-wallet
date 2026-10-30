@@ -186,6 +186,7 @@
     "submitSlow": "{{network}}의 응답을 기다리는 중 — 지금까지 {{seconds}}초. 아직 아무것도 서명하지 않았습니다.",
     "txErrorChainBusy": "{{network}} 노드가 혼잡해 제때 응답하지 않아 아무것도 서명하거나 보내지 않았습니다. 잠시 후 다시 시도하세요.",
     "txErrorChainUnreachable": "{{network}}에 연결할 수 없어 아무것도 서명하거나 보내지 않았습니다. 잠시 후 다시 시도하세요.",
+    "txErrorProposalNotSupported": "이 앱에서는 아직 멀티시그 거래를 제안할 수 없어 아무것도 서명하거나 제안하지 않았습니다.",
     "maxMoved": "최대 금액이 {{to}} {{symbol}}(으)로 바뀌었습니다(이전 {{from}}). 네트워크 수수료를 다시 산정해 수수료용으로 남겨 두는 금액이 달라졌습니다.",
     "txReviewAgain": "다시 검토",
     "txSendAgain": "다시 보내기",

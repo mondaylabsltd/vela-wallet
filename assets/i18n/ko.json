@@ -538,6 +538,7 @@
   "submitSlow": "{{network}}의 응답을 기다리는 중 — 지금까지 {{seconds}}초. 아직 아무것도 서명하지 않았습니다.",
   "txErrorChainBusy": "{{network}} 노드가 혼잡해 제때 응답하지 않아 아무것도 서명하거나 보내지 않았습니다. 잠시 후 다시 시도하세요.",
   "txErrorChainUnreachable": "{{network}}에 연결할 수 없어 아무것도 서명하거나 보내지 않았습니다. 잠시 후 다시 시도하세요.",
+  "txErrorProposalNotSupported": "이 앱에서는 아직 멀티시그 거래를 제안할 수 없어 아무것도 서명하거나 제안하지 않았습니다.",
   "maxMoved": "최대 금액이 {{to}} {{symbol}}(으)로 바뀌었습니다(이전 {{from}}). 네트워크 수수료를 다시 산정해 수수료용으로 남겨 두는 금액이 달라졌습니다.",
   "txReviewAgain": "다시 검토",
   "txSendAgain": "다시 보내기",
@@ -1864,7 +1865,28 @@
    "fullScreen": "전체 화면 전환",
    "window": "윈도우",
    "minimize": "최소화",
-   "closeWindow": "윈도우 닫기"
+   "closeWindow": "윈도우 닫기",
+   "find": "찾기",
+   "commandPalette": "명령 팔레트"
+  },
+  "appUpdate": {
+   "title": "업데이트 가능",
+   "install": "설치",
+   "later": "나중에"
+  },
+  "dropOverlay": {
+   "title": "주소, 결제 링크 또는 QR 이미지를 놓으세요"
+  },
+  "shortcuts": {
+   "send": "{{app}}에서 보내기",
+   "receive": "{{app}}에서 받기",
+   "scan": "{{app}}에서 스캔"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "멀티시그 링크는 당분간 웹 지갑에서 열립니다."
+  },
+  "widget": {
+   "balanceDescription": "잔액을 한눈에. Vela가 마지막으로 업데이트한 시점 기준입니다."
   },
   "browserStatus": {
    "title": "탭 상태",
@@ -2044,6 +2066,11 @@
    "attestation": "증명",
    "userVerified": "사용 시 인증 필요",
    "signsHere": "로그인 중"
+  },
+  "appearance": {
+   "menuBar": "메뉴 막대에 표시",
+   "trayIcon": "시스템 트레이에 표시",
+   "statusItemHint": "총액과 빠른 보내기·받기. 마지막으로 불러온 수치를 쓰며 따로 가져오지 않습니다."
   }
  },
  "contacts": {

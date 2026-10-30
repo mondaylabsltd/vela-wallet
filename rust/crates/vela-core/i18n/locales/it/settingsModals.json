@@ -125,6 +125,11 @@
       "attestation": "Attestazione",
       "userVerified": "Verifica a ogni uso",
       "signsHere": "Connessa"
+    },
+    "appearance": {
+      "menuBar": "Mostra nella barra dei menu",
+      "trayIcon": "Mostra nell'area di notifica",
+      "statusItemHint": "Il tuo totale e Invia e Ricevi rapidi, dalle ultime cifre caricate: non viene scaricato nulla in più."
     }
   }
 }

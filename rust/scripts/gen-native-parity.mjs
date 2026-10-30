@@ -316,6 +316,64 @@ for (const code of ['USD', 'EUR', 'JPY', 'KRW', 'IDR', 'VND', 'KWD', 'BHD', 'CNY
   add(`currency_fraction_digits/${code || 'empty'}`, 'currency_fraction_digits', { code });
 }
 
+// --- core asks 1 (the native lanes' requests) ------------------------------------------
+// The relay's sentence, read once for every shell — a spent nonce among it (send-15).
+for (const [label, message] of [
+  ['relayer_unavailable', 'The gas relayer is unavailable right now.'],
+  ['underfunded', 'dedicated bundler gas account is short. Deposit to: 0x1111111111111111111111111111111111111111 required: 1'],
+  ['aa25', 'AA25 invalid account nonce'],
+  ['nonce_mismatch', 'Transaction nonce mismatch. Please try again.'],
+  ['nonce_too_low', 'nonce too low'],
+  ['aa250_is_not_aa25', 'AA250 something'],
+  ['other', 'Transaction reverted during simulation. Check recipient address and amount.'],
+]) add(`classify_relay_rejection/${label}`, 'classify_relay_rejection', { message });
+// Plain http only to this computer, anchored on the whole host.
+for (const [label, url] of [
+  ['localhost_port_path', 'http://localhost:3000/api'],
+  ['loopback_v4', 'http://127.0.0.1:8080'],
+  ['loopback_v6', 'http://[::1]:8545/'],
+  ['https_localhost', 'https://localhost'],
+  ['suffix_attack', 'http://127.0.0.1.evil.com'],
+  ['bad_port', 'http://localhost:abc'],
+]) add(`is_localhost_http/${label}`, 'is_localhost_http', { url });
+// A passkey prompt's end: a cancel at the deadline is a timeout (send-11).
+for (const [label, kind, elapsed] of [
+  ['cancelled_early', 'cancelled', 3000],
+  ['cancelled_at_deadline', 'cancelled', 118000],
+  ['cancelled_just_before', 'cancelled', 117999],
+  ['failure_late', 'other', 130000],
+  ['not_supported', 'not_supported', 0],
+  ['unknown_kind', 'shrug', 130000],
+]) add(`passkey_ceremony_end/${label}`, 'passkey_ceremony_end', { kind, elapsed_ms: elapsed });
+add('passkey_sign_timeout_ms', 'passkey_sign_timeout_ms', {});
+// Where a chain's reads stand in the pool's view (own node, fallback).
+const poolView = {
+  failed_chains: [1],
+  rate_limited_chains: [],
+  banned: [],
+  unreached_chains: [],
+  fallback_chains: [100],
+  own_only_chains: [1, 10],
+  own_node_unreached_chains: [1],
+  pending_urls: {},
+};
+for (const [label, chain] of [['own_node_unreached', 1], ['own_only', 10], ['falling_back', 100], ['pooled', 8453]]) {
+  add(`rpc_node_standing/${label}`, 'rpc_node_standing', { view_json: S(poolView), chain_id: chain });
+}
+add('rpc_node_standing/unreadable', 'rpc_node_standing', { view_json: '{', chain_id: 1 });
+// A simulation's outcome, "Check again" with it (dapp-15).
+const simUser = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+for (const [label, reply] of [
+  ['unreachable', { unreachable: true }],
+  ['not_offered', { error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } }],
+  ['nothing_moves', { result: [{ calls: [{ status: '0x1', logs: [] }] }] }],
+]) add(`sim_outcome/${label}`, 'sim_outcome', { user: simUser, reply_json: S(reply) });
+// A built-in network's name, without a core instance (the Android lane's ask).
+for (const chain of [1, 100, 8453, 5042002, 999999]) {
+  add(`builtin_network_display_name/${chain}`, 'builtin_network_display_name', { chain_id: chain });
+}
+add('builtin_network_ids', 'builtin_network_ids', {});
+
 // --- run through the shipped wasm ------------------------------------------------------
 const out = cases.map((c) => ({ ...c, expect: { value: D[c.fn](c.input) } }));
 const accepted = out.filter((c) => c.name.endsWith('/accepted'));
