@@ -916,6 +916,14 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		expect(detail.deleteQuiet).toBe(true);
 	});
 
+	it('r4D-17: a multisig execution draws no "Delete record" — it happened on chain', () => {
+		const hash = `0x${'ab'.repeat(32)}`;
+		const executed = liveTxDetail(item(`multisig:5042002:${hash}:0`, { direction: 'out' }), ctx);
+		expect(executed.deleteLabel).toBeUndefined();
+		// Anything else keeps its delete.
+		expect(liveTxDetail(item('a'), ctx).deleteLabel).toBe(fm['history.deleteRecord']);
+	});
+
 	it('a settled one still reads Confirmed', () => {
 		expect(liveTxDetail(item('a'), ctx).status?.text).toBe(
 			fm['componentsTx.receipt.statusConfirmed']

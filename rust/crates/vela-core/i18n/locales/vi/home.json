@@ -359,6 +359,7 @@
         "unsupported": "Phiên bản Safe này chưa được hỗ trợ.",
         "notMultisig": "Địa chỉ này không phải đa chữ ký mà Vela đọc được.",
         "chooseNetwork": "Chưa rõ multisig này được dùng trên mạng nào. Hãy chọn mạng, rồi nhấn Thêm.",
+        "unchecked": "Chưa có bản ghi cho địa chỉ này và một số mạng không phản hồi kịp — nên Vela chưa thể biết đây có phải ví đa chữ ký không. Hãy thử lại.",
         "badInvite": "Liên kết mời này bị hỏng — thiếu một phần hoặc đã bị thay đổi trên đường. Hãy xin lại liên kết hoặc nhập địa chỉ multisig.",
         "usedOn": "Dùng trên {{networks}}",
         "networkMissing": "Nó được dùng trên {{network}}, mạng mà thiết bị này chưa có. Hãy thêm mạng; lời mời sẽ mở lại trong ví khi mạng đã có.",
@@ -577,8 +578,8 @@
         "customNote": "Đang dùng dịch vụ đa chữ ký tùy chỉnh ({{host}})",
         "unreachableNote": "Không kết nối được dịch vụ đa chữ ký — không tải được các giao dịch đang chờ; đang thử lại.",
         "retry": "Thử lại",
-        "offline": "Bạn đang ngoại tuyến — đang hiển thị dữ liệu đã tải trước đó.",
-        "offlineSince": "Bạn đang ngoại tuyến — đang hiển thị dữ liệu đã tải lúc {{time}}.",
+        "offline": "Đang hiển thị dữ liệu đã tải trước đó.",
+        "offlineSince": "Đang hiển thị dữ liệu đã tải lúc {{time}}.",
         "chainUnreachable": "Không kết nối được {{network}} — hiện không thể kiểm tra các giao dịch đang chờ."
       },
       "members": {

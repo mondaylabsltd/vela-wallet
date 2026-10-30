@@ -87,6 +87,7 @@
       "waitedSeconds": "已等待 {{seconds}} 秒",
       "networkTitle": "網路連線不穩定",
       "networkBody": "請求沒有送達，請檢查網路後再試一次。",
+      "offline": "你已離線。恢復連線後，Vela 會重新更新。",
       "serverTitle": "服務暫時無法使用",
       "serverBody": "無法連上通行密鑰索引服務，建立與登入都需要它。",
       "timeoutTitle": "等待逾時",

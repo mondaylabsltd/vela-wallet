@@ -23,7 +23,12 @@ import { multisig, type MultisigAccount } from './store.svelte';
 export interface ProposalSource {
 	loading: boolean;
 	chain(chainId: number): ChainState | undefined;
-	refresh(account: MultisigAccount, chainIds: number[]): Promise<void>;
+	/** `fresh`: a read begun after this call (never one already under way). */
+	refresh(
+		account: MultisigAccount,
+		chainIds: number[],
+		options?: { fresh?: boolean }
+	): Promise<void>;
 	/** r4b-3: networks whose members could not be read on the last refresh. */
 	unreadable: number[];
 	/**
@@ -34,8 +39,12 @@ export interface ProposalSource {
 	watch?(): () => void;
 }
 
-/** How often a linked transaction is read again while its sheet is open (as `proposals`). */
-export const LINKED_POLL_MS = 12_000;
+/**
+ * How often a linked transaction is read again while its sheet is open — the
+ * pace `proposals` keeps while a sheet is open on one of its own
+ * (r5reg-14, `OPEN_POLL_MS`).
+ */
+export const LINKED_POLL_MS = 4_000;
 
 /**
  * One chain of a multisig the wallet is not showing, read on demand — the
@@ -80,7 +89,7 @@ export class LinkedProposals implements ProposalSource {
 		}
 	}
 
-	/** r4b-4: read again every {@link LINKED_POLL_MS} while shown, and when the tab comes back. */
+	/** r4b-4: read again every {@link LINKED_POLL_MS} while shown, and when the tab or window comes back. */
 	watch(): () => void {
 		const timer = setInterval(() => {
 			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
@@ -93,12 +102,15 @@ export class LinkedProposals implements ProposalSource {
 		if (typeof document !== 'undefined') {
 			document.addEventListener('visibilitychange', onVisible);
 			window.addEventListener('online', onOnline);
+			// r5reg-14: the window comes back (another app, another window): read now.
+			window.addEventListener('focus', onOnline);
 		}
 		return () => {
 			clearInterval(timer);
 			if (typeof document !== 'undefined') {
 				document.removeEventListener('visibilitychange', onVisible);
 				window.removeEventListener('online', onOnline);
+				window.removeEventListener('focus', onOnline);
 			}
 		};
 	}
@@ -123,6 +135,7 @@ export type LinkOpening =
 				| 'unavailable'
 				| 'unsupported'
 				| 'notMultisig'
+				| 'unchecked'
 				| 'refused'
 				| 'unverified'
 				| 'highRisk';

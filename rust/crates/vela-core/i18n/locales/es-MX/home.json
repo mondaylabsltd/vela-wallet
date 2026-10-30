@@ -363,6 +363,7 @@
         "unsupported": "Esta versión de Safe aún no es compatible.",
         "notMultisig": "Esta dirección no es una multifirma que Vela pueda leer.",
         "chooseNetwork": "Aún no se sabe en qué red se usa este multisig. Elige su red y luego toca Agregar.",
+        "unchecked": "Aún no hay registro de esta dirección y algunas redes no respondieron a tiempo, así que Vela no puede decir si es una multifirma. Inténtalo de nuevo.",
         "badInvite": "Este enlace de invitación está dañado: falta una parte o se modificó en el camino. Pide el enlace de nuevo o escribe la dirección del multisig.",
         "usedOn": "Se usa en {{networks}}",
         "networkMissing": "Se usa en {{network}}, que este dispositivo aún no tiene. Agrega la red; la invitación se abrirá de nuevo en tu billetera cuando esté.",
@@ -581,8 +582,8 @@
         "customNote": "Usando un servicio multifirma propio ({{host}})",
         "unreachableNote": "El servicio multifirma no está accesible: no se pueden cargar las transacciones pendientes; se reintentará.",
         "retry": "Reintentar",
-        "offline": "No tienes conexión; se muestra lo que se cargó antes.",
-        "offlineSince": "No tienes conexión; se muestra lo que se cargó a las {{time}}.",
+        "offline": "Se muestra lo que se cargó antes.",
+        "offlineSince": "Se muestra lo que se cargó a las {{time}}.",
         "chainUnreachable": "No se puede conectar con {{network}}: ahora no se pueden comprobar sus transacciones pendientes."
       },
       "members": {

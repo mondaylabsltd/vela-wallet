@@ -363,6 +363,7 @@
         "unsupported": "Esta versão do Safe ainda não é compatível.",
         "notMultisig": "Este endereço não é uma multisig que a Vela consiga ler.",
         "chooseNetwork": "Ainda não se sabe em qual rede este multisig é usado. Escolha a rede e toque em Adicionar.",
+        "unchecked": "Ainda não há registro deste endereço, e algumas redes não responderam a tempo — então a Vela não consegue dizer se é uma multisig. Tente de novo.",
         "badInvite": "Este link de convite está danificado — falta uma parte ou ele foi alterado no caminho. Peça o link de novo ou digite o endereço do multisig.",
         "usedOn": "Usado na {{networks}}",
         "networkMissing": "Ele é usado na {{network}}, que este dispositivo ainda não tem. Adicione a rede; o convite abre de novo na sua carteira quando ela estiver aqui.",
@@ -581,8 +582,8 @@
         "customNote": "Usando um serviço multisig próprio ({{host}})",
         "unreachableNote": "Serviço multisig inacessível — não é possível carregar as transações pendentes; tentando de novo.",
         "retry": "Tentar de novo",
-        "offline": "Você está offline — mostrando o que foi carregado antes.",
-        "offlineSince": "Você está offline — mostrando o que foi carregado às {{time}}.",
+        "offline": "Mostrando o que foi carregado antes.",
+        "offlineSince": "Mostrando o que foi carregado às {{time}}.",
         "chainUnreachable": "Não foi possível acessar {{network}} — não dá para verificar as transações pendentes agora."
       },
       "members": {

@@ -403,6 +403,12 @@ export const SLOW_REFRESH_MS = 8_000;
 /** The poll's pace while the multisig is shown. */
 export const POLL_MS = 12_000;
 /**
+ * r5reg-14: the pace while a sheet on one of its waiting transactions is
+ * open (`watch`) — another member's approval is seen there within about
+ * five seconds, not at the next 12 s round.
+ */
+export const OPEN_POLL_MS = 4_000;
+/**
  * r4D-18 (round 5): on a network with nothing waiting — no open proposal in
  * the mailbox's list or here, nothing of this device's in flight — the chain
  * is read every this many polls (a minute), not every poll: nothing there can
@@ -569,6 +575,8 @@ class Proposals {
 	#shown = $state<string | null>(null);
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#inflight: Promise<void> | null = null;
+	/** A read asked for while another was under way: it runs next. */
+	#queued: Promise<void> | null = null;
 	/** The poll's rounds since the last read the person or the page asked for. */
 	#ticks = 0;
 	/** The last list the mailbox gave, per chain: kept while it cannot be read. */
@@ -580,6 +588,9 @@ class Proposals {
 	#online: (() => void) | null = null;
 	#offline: (() => void) | null = null;
 	#visible: (() => void) | null = null;
+	/** Open sheets holding the faster pace (`watch`). */
+	#held = 0;
+	#pace = POLL_MS;
 
 	/** The multisig followed (`null`: none). */
 	get followed(): string | null {
@@ -639,10 +650,54 @@ class Proposals {
 			};
 			document.addEventListener('visibilitychange', this.#visible);
 		}
+		this.#poll();
+	}
+
+	/** The poll, at the pace it is held at now. */
+	#poll(): void {
+		if (this.#timer) clearInterval(this.#timer);
+		this.#timer = null;
+		const account = this.#account;
+		if (!account) return;
+		const chainIds = this.#chainIds;
+		this.#pace = this.#held > 0 ? OPEN_POLL_MS : POLL_MS;
 		this.#timer = setInterval(() => {
 			if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
 			void this.refresh(account, chainIds, { tick: true });
-		}, POLL_MS);
+		}, this.#pace);
+	}
+
+	/**
+	 * r5reg-14: keep it fresh while a sheet on one of its waiting
+	 * transactions is open — the poll at {@link OPEN_POLL_MS}, a read at once
+	 * when the list is older than that, and one whenever the window gets the
+	 * focus back. The returned function lets go (the pace returns to
+	 * {@link POLL_MS} once no sheet holds it).
+	 */
+	watch(): () => void {
+		this.#held += 1;
+		if (this.#pace !== OPEN_POLL_MS) this.#poll();
+		const account = this.#account;
+		if (account && (this.readAt === null || Date.now() - this.readAt > OPEN_POLL_MS)) {
+			void this.refresh(account, this.#chainIds);
+		}
+		const onFocus = () => {
+			if (this.#account) void this.refresh(this.#account, this.#chainIds);
+		};
+		if (typeof window !== 'undefined') window.addEventListener('focus', onFocus);
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this.#held -= 1;
+			if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus);
+			if (this.#held === 0 && this.#pace !== POLL_MS) this.#poll();
+		};
+	}
+
+	/** Tests: the poll's pace now. */
+	get pace(): number {
+		return this.#pace;
 	}
 
 	/**
@@ -685,14 +740,26 @@ class Proposals {
 	/**
 	 * Re-read every chain the multisig is used on. One refresh at a time.
 	 * `tick`: the poll's own round — a quiet network's chain is read only
-	 * every {@link QUIET_POLLS}th.
+	 * every {@link QUIET_POLLS}th. `fresh`: a read begun after this call —
+	 * one under way is waited out, then another made.
 	 */
 	refresh(
 		account: MultisigAccount,
 		chainIds: number[],
-		{ tick = false }: { tick?: boolean } = {}
+		{ tick = false, fresh = false }: { tick?: boolean; fresh?: boolean } = {}
 	): Promise<void> {
-		if (this.#inflight) return this.#inflight;
+		if (this.#inflight) {
+			if (!fresh) return this.#inflight;
+			// r5reg-14: a read after what this device just did (an approval)
+			// is never answered by one begun before it — it runs once the one
+			// under way ends (one queued, however many ask).
+			const next = () => {
+				this.#queued = null;
+				return this.refresh(account, chainIds);
+			};
+			this.#queued ??= this.#inflight.then(next, next);
+			return this.#queued;
+		}
 		const round = tick ? (this.#ticks += 1) : (this.#ticks = 0);
 		// Another service (Settings): the lists the last one gave are not its.
 		const source = genesisServiceURL();

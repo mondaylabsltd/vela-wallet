@@ -589,6 +589,8 @@ export interface MultisigMessages {
 		notMultisig: string;
 		/** Nothing says which network it is used on: the person picks one. */
 		chooseNetwork: string;
+		/** r4b-13: no record, and a network did not answer in time — not said as "none". */
+		unchecked: string;
 		/** r4b-13: the invite link is damaged. */
 		badLink: string;
 		/** r4b-13: an invite that does not read, said at once. */
@@ -1261,6 +1263,7 @@ export const MULTISIG_SHAPE: MultisigMessages = {
 		unsupported: '',
 		notMultisig: '',
 		chooseNetwork: '',
+		unchecked: '',
 		badLink: '',
 		badInvite: '',
 		usedOn: '',

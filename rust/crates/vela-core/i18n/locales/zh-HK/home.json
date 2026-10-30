@@ -359,6 +359,7 @@
         "unsupported": "暫不支援這個版本的 Safe。",
         "notMultisig": "這個地址不是 Vela 能辨識的多簽帳戶。",
         "chooseNetwork": "暫時未能得知此多簽用於哪個網絡。請選擇網絡，然後點按新增。",
+        "unchecked": "這個地址暫無記錄，且部分網絡沒有及時回應，因此 Vela 無法判斷它是不是多簽帳戶。請再試一次。",
         "badInvite": "這個邀請連結已損壞——部分內容遺失或在傳送途中被更改。請重新索取連結，或輸入多簽地址。",
         "usedOn": "用於 {{networks}}",
         "networkMissing": "它用於 {{network}}，此裝置尚未有這個網絡。新增網絡後，邀請會在錢包中重新開啟。",
@@ -577,8 +578,8 @@
         "customNote": "現正使用自訂多簽服務（{{host}}）",
         "unreachableNote": "無法連接多簽服務——待批准交易無法載入，正在重試。",
         "retry": "重試",
-        "offline": "你已離線，顯示的是之前載入的內容。",
-        "offlineSince": "你已離線，顯示的是 {{time}} 載入的內容。",
+        "offline": "顯示的是之前載入的內容。",
+        "offlineSince": "顯示的是 {{time}} 載入的內容。",
         "chainUnreachable": "無法連接 {{network}}，暫時無法檢查等待中的交易。"
       },
       "members": {

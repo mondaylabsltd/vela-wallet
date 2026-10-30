@@ -359,6 +359,7 @@
         "unsupported": "Bu Safe sürümü henüz desteklenmiyor.",
         "notMultisig": "Bu adres Vela’nın okuyabildiği bir çoklu imza değil.",
         "chooseNetwork": "Bu multisig'in hangi ağda kullanıldığı henüz belli değil. Ağını seçin, sonra Ekle'ye dokunun.",
+        "unchecked": "Bu adres için henüz kayıt yok ve bazı ağlar zamanında yanıt vermedi; bu yüzden Vela bunun bir çoklu imza olup olmadığını söyleyemiyor. Tekrar dene.",
         "badInvite": "Bu davet bağlantısı bozuk — bir kısmı eksik ya da yolda değişmiş. Bağlantıyı yeniden isteyin veya multisig'in adresini girin.",
         "usedOn": "Kullanıldığı ağ: {{networks}}",
         "networkMissing": "{{network}} üzerinde kullanılıyor ve bu cihazda o ağ henüz yok. Ağı ekleyin; ağ geldiğinde davet cüzdanınızda yeniden açılır.",
@@ -577,8 +578,8 @@
         "customNote": "Özel bir çoklu imza hizmeti kullanılıyor ({{host}})",
         "unreachableNote": "Çoklu imza hizmetine ulaşılamıyor — bekleyen işlemler yüklenemiyor; yeniden denenecek.",
         "retry": "Tekrar dene",
-        "offline": "Çevrimdışısın — daha önce yüklenenler gösteriliyor.",
-        "offlineSince": "Çevrimdışısın — {{time}} saatinde yüklenenler gösteriliyor.",
+        "offline": "Daha önce yüklenenler gösteriliyor.",
+        "offlineSince": "{{time}} saatinde yüklenenler gösteriliyor.",
         "chainUnreachable": "{{network}} ağına ulaşılamıyor — bekleyen işlemleri şu anda kontrol edilemiyor."
       },
       "members": {

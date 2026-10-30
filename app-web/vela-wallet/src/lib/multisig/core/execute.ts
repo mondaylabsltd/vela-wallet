@@ -35,7 +35,7 @@ import { PoolFailedError, poolRpcCall } from '$lib/services/rpc-pool';
 import { signChallenge } from '$lib/signing/sign-challenge';
 import { counterfactualFacts } from './authority';
 import { GenesisRefusedError } from './refusal';
-import { hasCode, type ChainMembers } from './chain';
+import { hasCode, readNonce, type ChainMembers } from './chain';
 import { tokenInfo } from './display';
 import { quoteExecutionFee, type ExecutionQuote } from './execution-fee';
 import {
@@ -178,6 +178,12 @@ export type ExecutionPreview =
 	 * again before the passkey.
 	 */
 	| { kind: 'unchecked' }
+	/**
+	 * r5reg-21: its number is used on the chain now — another member executed
+	 * it (or another transaction at its number ran) while it was open. Never
+	 * a failure: what ran is read and said, not "it would fail".
+	 */
+	| { kind: 'spent' }
 	| {
 			kind: 'priced';
 			/** The calls priced — exactly the ones signed. */
@@ -209,6 +215,8 @@ export interface PreviewReads {
 	/** One call's gas on its own, or `null` when unmeasured. */
 	gasOf: (chainId: number, from: string, call: Call) => Promise<bigint | null>;
 	token: (chainId: number, token: string | null) => Promise<{ symbol: string; decimals: number }>;
+	/** The multisig's nonce now, or `null` when unreadable. */
+	nonceOf: (chainId: number, multisig: string) => Promise<bigint | null>;
 }
 
 /** What a transaction spends from the multisig, per coin (`token: null` — the chain's). */
@@ -332,7 +340,12 @@ const LIVE_READS: PreviewReads = {
 	balanceOf: (chainId, token, holder) => bounded(readBalance(chainId, token, holder), null),
 	callRefusal: (chainId, multisig, tx) => bounded(readCallRefusal(chainId, multisig, tx), null),
 	gasOf: (chainId, from, call) => bounded(readGas(chainId, from, call), null),
-	token: tokenInfo
+	token: tokenInfo,
+	nonceOf: (chainId, multisig) =>
+		bounded(
+			readNonce(chainId, multisig).catch(() => null),
+			null
+		)
 };
 
 /**
@@ -353,6 +366,16 @@ export async function previewExecution(
 	input: ExecutionInput,
 	reads: PreviewReads = LIVE_READS
 ): Promise<ExecutionPreview> {
+	const preview = await look(input, reads);
+	if (preview.kind !== 'fails') return preview;
+	// r5reg-21: a look that fails may only be late — another member executed
+	// it a moment ago, and running it again reverts (or the coin it sent is
+	// gone). Its number used on the chain is said as that, never as "would fail".
+	const nonce = await reads.nonceOf(input.chainId, input.multisig).catch(() => null);
+	return nonce !== null && nonce > BigInt(input.tx.nonce) ? { kind: 'spent' } : preview;
+}
+
+async function look(input: ExecutionInput, reads: PreviewReads): Promise<ExecutionPreview> {
 	for (const need of spendingOf(input.action ?? null)) {
 		const have = await reads.balanceOf(input.chainId, need.token, input.multisig);
 		if (have === null || have >= need.amount) continue;
@@ -477,6 +500,14 @@ export class ExecutionUncheckedError extends Error {
 	}
 }
 
+/** r5reg-21: its number is used on the chain now — nothing to execute; what ran is read. */
+export class ExecutionSpentError extends Error {
+	constructor() {
+		super('its number is used on the chain');
+		this.name = 'ExecutionSpentError';
+	}
+}
+
 /** Whether `error` stopped the execution before its passkey: nothing was signed or sent. */
 export function stoppedBeforeSigning(error: unknown): boolean {
 	return (
@@ -575,6 +606,7 @@ export function throwIfStopped(
 	if (preview.kind === 'fails') throw new ExecutionWouldFailError(preview.why);
 	if (preview.kind === 'unpriced') throw new ExecutionUnpricedError();
 	if (preview.kind === 'unchecked') throw new ExecutionUncheckedError();
+	if (preview.kind === 'spent') throw new ExecutionSpentError();
 	if (!preview.canPay && preview.balance !== null) {
 		throw new ExecutorCannotPayError(preview.fee.amount, preview.balance);
 	}

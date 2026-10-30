@@ -125,6 +125,7 @@ const {
 	ExecutionWouldFailError,
 	ExecutionUnpricedError,
 	ExecutionUncheckedError,
+	ExecutionSpentError,
 	bounded,
 	throwIfStopped,
 	relayRefused,
@@ -144,7 +145,7 @@ const input = (over: Partial<Input> = {}) =>
 		multisig: SAFE,
 		genesis: {},
 		members: { owners: [EXECUTOR, ALICE, BOB], threshold: 2, deployed: true, nonce: 0n },
-		tx: { to: RECIPIENT, value: '0x0', data: '0x', operation: 0 },
+		tx: { to: RECIPIENT, value: '0x0', data: '0x', operation: 0, nonce: '0' },
 		approvals: [],
 		executor: { address: EXECUTOR },
 		...over
@@ -163,6 +164,7 @@ function reads(over: Partial<Reads> = {}): Reads {
 		callRefusal: async () => null,
 		gasOf: async () => 221_000n,
 		token: async () => ({ symbol: 'USDC', decimals: 18 }),
+		nonceOf: async () => 0n,
 		...over
 	};
 }
@@ -286,6 +288,36 @@ describe('an execution looked at before its passkey (r4-5)', () => {
 			})
 		);
 		expect(preview).toEqual({ kind: 'fails', why: { kind: 'reverts', reason: null } });
+	});
+
+	it('r5reg-21: a revert after its number was used is "spent" — another member ran it — never "would fail"', async () => {
+		const nonceOf = vi.fn(async () => 1n);
+		const reverts = reads({
+			quote: async () => ({ kind: 'reverts', reason: 'GS026' }),
+			nonceOf
+		});
+		expect(await previewExecution(input(), reverts)).toEqual({ kind: 'spent' });
+		// The coin it sent is gone too: still what ran, not "the multisig holds less".
+		expect(
+			await previewExecution(
+				input({ action: { kind: 'transfer', token: null, to: BOB, amount: USDC.toString() } }),
+				reads({ balanceOf: async () => 0n, nonceOf })
+			)
+		).toEqual({ kind: 'spent' });
+		// Its number still open: a failure is a failure.
+		expect(await previewExecution(input(), { ...reverts, nonceOf: async () => 0n })).toMatchObject({
+			kind: 'fails'
+		});
+		// The nonce unreadable: the failure stands (nothing is claimed).
+		expect(
+			await previewExecution(input(), { ...reverts, nonceOf: async () => null })
+		).toMatchObject({ kind: 'fails' });
+		// A look that runs never reads the nonce.
+		nonceOf.mockClear();
+		await previewExecution(input(), reads({ nonceOf }));
+		expect(nonceOf).not.toHaveBeenCalled();
+		// And Execute stops before any passkey, on its own error.
+		expect(() => throwIfStopped({ kind: 'spent' })).toThrow(ExecutionSpentError);
 	});
 
 	it('no price: unpriced, never a guess', async () => {

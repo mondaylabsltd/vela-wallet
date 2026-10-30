@@ -87,6 +87,7 @@
       "waitedSeconds": "Aguardando há {{seconds}} segundos",
       "networkTitle": "A conexão de rede está instável",
       "networkBody": "A solicitação não chegou — verifique sua rede e tente de novo.",
+      "offline": "Você está offline. A Vela volta a atualizar quando você ficar online de novo.",
       "serverTitle": "Serviço temporariamente indisponível",
       "serverBody": "O serviço de Índice de Passkey está inacessível — tanto a criação quanto o login dependem dele.",
       "timeoutTitle": "Tempo de espera esgotado",

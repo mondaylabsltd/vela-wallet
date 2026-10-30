@@ -87,6 +87,7 @@
       "waitedSeconds": "{{seconds}} saniyedir bekleniyor",
       "networkTitle": "Ağ bağlantısı kararsız",
       "networkBody": "İstek yerine ulaşmadı — ağınızı kontrol edip tekrar deneyin.",
+      "offline": "Çevrimdışısınız. Yeniden çevrimiçi olduğunuzda Vela güncellenmeye devam eder.",
       "serverTitle": "Servis geçici olarak kullanılamıyor",
       "serverBody": "Passkey Dizini servisine ulaşılamıyor — hem cüzdan oluşturma hem giriş için gereklidir.",
       "timeoutTitle": "Bekleme zaman aşımına uğradı",

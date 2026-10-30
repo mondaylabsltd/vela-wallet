@@ -1269,8 +1269,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   rest of `home.multisig`, so the compiled pin stays 2202 and the on-demand
 //   pin goes 527 + 35 = 562. Trusted's `settings.venue.webApprovals` (1
 //   leaf) stays compiled: 2202 + 1 = 2203 paths, 2095 leaves, 108 branches.
-if (PATHS.length !== 2203) fail(`expected 2203 paths (2095 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2095) fail(`expected 2095 leaf paths, got ${leafSet.size}`);
+// r6a-g3 (2026-10-30, offline said once): + `onboarding.common.offline` (+1) —
+//   the root layout's one offline line, "You're offline…", where it said the
+//   generic "The request never arrived"; served with the flow chrome. 2203 + 1
+//   = 2204 paths, 2096 leaves, 108 branches. On demand: + `home.multisig.add.
+//   unchecked` (+1, an unknown address whose networks did not all answer in
+//   time — not said as "none"): 562 + 1 = 563. `home.multisig.service.
+//   {offline, offlineSince}` change value only (the layout says offline).
+if (PATHS.length !== 2204) fail(`expected 2204 paths (2096 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2096) fail(`expected 2096 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
@@ -1282,7 +1289,9 @@ if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.siz
 //   guard/handler words change value only (plain words, every locale).
 //   562 + 6 = 568.
 {
-  const pins = { multisig: 568 };
+// Merged (round-6 fix-a integration, 2026-10-30): copy/visual's 6 and
+//   r6a-g3's `add.unchecked` (1) together: 562 + 6 + 1 = 569.
+  const pins = { multisig: 569 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

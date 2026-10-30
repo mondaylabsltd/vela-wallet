@@ -359,6 +359,7 @@
         "unsupported": "Diese Safe-Version wird noch nicht unterstützt.",
         "notMultisig": "Diese Adresse ist kein Multisig, das Vela lesen kann.",
         "chooseNetwork": "Noch ist unklar, in welchem Netzwerk dieses Multisig verwendet wird. Wählen Sie sein Netzwerk und tippen Sie dann auf „Hinzufügen“.",
+        "unchecked": "Zu dieser Adresse gibt es noch keinen Eintrag, und einige Netzwerke haben nicht rechtzeitig geantwortet – daher kann Vela nicht sagen, ob es ein Multisig ist. Versuche es erneut.",
         "badInvite": "Dieser Einladungslink ist beschädigt – ein Teil fehlt oder wurde unterwegs verändert. Bitten Sie erneut um den Link oder geben Sie die Adresse des Multisigs ein.",
         "usedOn": "Verwendet auf {{networks}}",
         "networkMissing": "Es wird auf {{network}} verwendet, das dieses Gerät noch nicht hat. Fügen Sie das Netzwerk hinzu; die Einladung öffnet sich danach erneut in Ihrer Wallet.",
@@ -577,8 +578,8 @@
         "customNote": "Eigener Multisig-Dienst in Verwendung ({{host}})",
         "unreachableNote": "Multisig-Dienst nicht erreichbar – wartende Transaktionen können nicht geladen werden; neuer Versuch folgt.",
         "retry": "Erneut versuchen",
-        "offline": "Du bist offline – angezeigt wird, was zuvor geladen wurde.",
-        "offlineSince": "Du bist offline – angezeigt wird, was um {{time}} geladen wurde.",
+        "offline": "Angezeigt wird, was zuvor geladen wurde.",
+        "offlineSince": "Angezeigt wird, was um {{time}} geladen wurde.",
         "chainUnreachable": "{{network}} ist nicht erreichbar – wartende Transaktionen können gerade nicht geprüft werden."
       },
       "members": {

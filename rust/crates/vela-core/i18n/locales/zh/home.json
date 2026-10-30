@@ -359,6 +359,7 @@
         "unsupported": "暂不支持这个版本的 Safe。",
         "notMultisig": "这个地址不是 Vela 能识别的多签账户。",
         "chooseNetwork": "暂时无法得知此多签用于哪个网络。请选择网络，再点击添加。",
+        "unchecked": "这个地址暂无记录，且部分网络没有及时响应，因此 Vela 无法判断它是不是多签账户。请重试。",
         "badInvite": "这个邀请链接已损坏——有一部分缺失或在传递中被改动。请重新索取链接，或输入多签地址。",
         "usedOn": "用于 {{networks}}",
         "networkMissing": "它用于 {{network}}，本设备还没有这个网络。添加网络后，邀请会在钱包中重新打开。",
@@ -577,8 +578,8 @@
         "customNote": "正在使用自定义多签服务（{{host}}）",
         "unreachableNote": "多签服务无法连接——待批准交易无法加载，正在重试。",
         "retry": "重试",
-        "offline": "你已离线，显示的是之前加载的内容。",
-        "offlineSince": "你已离线，显示的是 {{time}} 加载的内容。",
+        "offline": "显示的是之前加载的内容。",
+        "offlineSince": "显示的是 {{time}} 加载的内容。",
         "chainUnreachable": "无法连接 {{network}}，暂时无法检查等待中的交易。"
       },
       "members": {

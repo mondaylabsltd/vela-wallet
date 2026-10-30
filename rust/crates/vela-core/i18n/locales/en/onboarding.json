@@ -87,6 +87,7 @@
       "waitedSeconds": "Waited {{seconds}} seconds",
       "networkTitle": "Network connection is unstable",
       "networkBody": "The request never arrived — check your network and try again.",
+      "offline": "You're offline. Vela updates again once you're back online.",
       "serverTitle": "Service temporarily unavailable",
       "serverBody": "The passkey index service is unreachable — both creating and signing in need it.",
       "timeoutTitle": "Timed out waiting",

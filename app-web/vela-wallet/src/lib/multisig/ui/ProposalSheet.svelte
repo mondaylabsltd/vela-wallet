@@ -40,7 +40,7 @@
 		readableCalls,
 		reviewedCalls
 	} from '../core/call-review.svelte';
-	import { ProposalReview, REVIEW_FRESH_MS } from '../core/proposal-review.svelte';
+	import { ProposalReview } from '../core/proposal-review.svelte';
 	import {
 		anywayLabel,
 		partyAddresses,
@@ -84,6 +84,7 @@
 	import ProposalTimeline from './ProposalTimeline.svelte';
 	import { timelineOf } from '../core/timeline';
 	import {
+		ExecutionSpentError,
 		ExecutionUncheckedError,
 		ExecutionUnpricedError,
 		ExecutionWouldFailError,
@@ -92,7 +93,7 @@
 		type ExecutionPreview
 	} from '../core/execute';
 	import { feeCoin, feeWords, whyText } from '../core/execution-words';
-	import { preflight, PREVIEW_FRESH_MS } from '../core/preflight.svelte';
+	import { preflight, PREVIEW_FRESH_MS, UNPRICED_FRESH_MS } from '../core/preflight.svelte';
 	import { signers } from '../core/signers.svelte';
 	import {
 		declinedRisk,
@@ -117,7 +118,13 @@
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
 	import type { ExecutionVerdict } from '../core/kernel';
-	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
+	import {
+		executionVerdict,
+		memberDrift,
+		readMemberChanges,
+		sameAddress,
+		transfersOf
+	} from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { connectLink } from '../external/connect-link';
 	import { eip55 } from '../external/eip55';
@@ -243,6 +250,14 @@
 			? (prebuilt?.chain.members ?? drafted?.chain.members ?? null)
 			: (store.chain(chainId)?.members ?? null)
 	);
+	// r5reg-14: the shown multisig's transaction, still waiting (or not read
+	// yet — its network not answering), is read faster while its sheet is
+	// open, and when the window comes back: another member's approval, or the
+	// network's return, is seen here within seconds.
+	const waitingHere = $derived(!source && !drafting && item?.status !== 'done');
+	$effect(() => {
+		if (waitingHere) return proposals.watch();
+	});
 	const site = $derived(draft ? hostLabel(draft.origin) : '');
 
 	/** A member as a change names it: the name this device knows, and the short address. */
@@ -343,7 +358,7 @@
 	 */
 	const reviewKey = $derived(
 		item && members
-			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}`
+			? `${chainId}:${item.safeTxHash}:${members.deployed}:${members.threshold}:${members.owners.join(',')}:${item.status === 'done'}`
 			: ''
 	);
 	let proposalReview = $state<ProposalReview | null>(null);
@@ -360,9 +375,11 @@
 		const next = new ProposalReview(subject);
 		proposalReview = next;
 		void next.refresh();
-		const timer = setInterval(() => void next.refresh(), REVIEW_FRESH_MS);
+		// Its hashes and fields are read once for a finished one; nothing is re-checked.
+		const done = untrack(() => item?.status === 'done');
+		const stop = done ? undefined : next.keepFresh();
 		return () => {
-			clearInterval(timer);
+			stop?.();
 			next.dispose();
 			if (proposalReview === next) proposalReview = null;
 		};
@@ -386,9 +403,6 @@
 		reading ? partyAddresses(callReviewBlocks(reading, signing, currency.view)) : []
 	);
 	const partyBadges = $derived(recipientBadges(fullReview, reviewContext));
-	const checks = $derived(
-		reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext, drawnParties)
-	);
 	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
 	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
 	const signRule = $derived(fullReview?.sign ?? null);
@@ -445,9 +459,12 @@
 		const inputs = previewInputs;
 		if (inputs.length === 0) return;
 		for (const input of inputs) void preflight.check(input);
+		// r5reg-14: asked every 5 s — a priced look still stands its 15 s
+		// (`check` keeps a fresh one); one that could not price or check it
+		// (an RPC outage) is taken again within 5 s of the network's return.
 		const timer = setInterval(() => {
 			for (const input of inputs) void preflight.check(input);
-		}, PREVIEW_FRESH_MS);
+		}, UNPRICED_FRESH_MS);
 		return () => clearInterval(timer);
 	});
 	function previewOf(owner: LocalOwner | null): ExecutionPreview | null {
@@ -471,6 +488,7 @@
 	const blocked = $derived(
 		actorPreview?.kind === 'refused' ||
 			actorPreview?.kind === 'fails' ||
+			actorPreview?.kind === 'spent' ||
 			(actorPreview?.kind === 'priced' && !actorPreview.canPay)
 	);
 	function recheck() {
@@ -504,6 +522,15 @@
 		/** r4-11: "Approve and execute" approved; only the execute part could not run. */
 		| { kind: 'partial'; reason: string };
 	let phase = $state<Phase>({ kind: 'idle' });
+	/**
+	 * r5reg-20: executed (here, or anywhere: its number is used) — a past
+	 * fact. Nothing on it is a check of what running it WOULD do any more:
+	 * no simulation, guard or first-send line, and no look read again.
+	 */
+	const past = $derived(item?.status === 'done' || (phase.kind === 'sent' && !!phase.txHash));
+	const checks = $derived(
+		past ? [] : reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext, drawnParties)
+	);
 	let rejecting = $state(false);
 	let copied = $state(false);
 
@@ -549,6 +576,11 @@
 
 	/** {@link reasonOf}'s words alone — drawn from a preview too, so it logs nothing. */
 	function reasonText(error: unknown): string {
+		// r4b-15 / r4D-10: offline, whatever could not be reached is said as
+		// offline — one cause, one sentence — not as whichever read failed
+		// first (Approve's authority check said "couldn't check"). A definite
+		// answer, or the person's own passkey choice, is still said as itself.
+		if (offline() && !definite(error)) return m.proposal.reason.offline;
 		if (error instanceof ExecutorCannotPayError && actor) {
 			const symbol = nativeSymbol(chainId);
 			return fillTemplate(m.proposal.cannotPay, {
@@ -631,6 +663,23 @@
 		return typeof navigator !== 'undefined' && navigator.onLine === false;
 	}
 
+	/** An outcome that is an answer, or the person's choice — not something out of reach. */
+	function definite(error: unknown): boolean {
+		return (
+			error instanceof ExecutorCannotPayError ||
+			error instanceof ExecutionWouldFailError ||
+			error instanceof NoOutsideSignerError ||
+			error instanceof SigningRefusedError ||
+			error instanceof SigningBlockedError ||
+			(error instanceof GenesisRefusedError && error.authority.kind !== 'unknown') ||
+			error instanceof PageApprovalError ||
+			error instanceof PasskeyError ||
+			error instanceof PasskeyCheckError ||
+			error instanceof MailboxRefusedError ||
+			cancelled(error)
+		);
+	}
+
 	/**
 	 * A dApp's transaction that the proposer's own approval makes ready (a
 	 * one-approval multisig, nothing ahead of it): proposed and executed in
@@ -667,7 +716,8 @@
 		phase = { kind: 'busy', what: 'approve' };
 		try {
 			await approve(account, item, actor);
-			await store.refresh(account, account.chainIds);
+			// r5reg-14: read after the approval — never a read begun before it.
+			await store.refresh(account, account.chainIds, { fresh: true });
 			phase = { kind: 'idle' };
 		} catch (error) {
 			phase = failedPhase(error);
@@ -709,13 +759,19 @@
 			const preview = await preflight.check(input, shown?.kind === 'priced' ? PREVIEW_FRESH_MS : 0);
 			result = await execute(account, item, actor, members, preview);
 		} catch (error) {
+			// r5reg-21: its number was used meanwhile — what ran is said, not a failure.
+			if (error instanceof ExecutionSpentError) {
+				phase = { kind: 'idle' };
+				await settleSpent(executing, by);
+				return;
+			}
 			if (approving && stoppedBeforeSigning(error)) {
 				const reason =
 					error instanceof ExecutionWouldFailError ? whyText(m, error.why) : reasonOf(error);
 				phase = { kind: 'busy', what: 'approve' };
 				try {
 					await approve(account, item, actor);
-					await store.refresh(account, account.chainIds);
+					await store.refresh(account, account.chainIds, { fresh: true });
 					phase = { kind: 'partial', reason };
 				} catch (again) {
 					phase = failedPhase(again);
@@ -766,7 +822,7 @@
 		controller.abort();
 		watching = null;
 		if (verdict.kind !== 'waiting') executions.end(chainId, account.address, flight.safeTxHash);
-		await store.refresh(account, account.chainIds).catch(() => {});
+		await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
 		switch (verdict.kind) {
 			case 'executed':
 				if (sent) rememberExecution(chainId, account.address, flight.safeTxHash, sent);
@@ -804,6 +860,53 @@
 			if (!item || phase.kind !== 'idle' || item.status === 'done') return;
 			const flight = executions.get(chainId, account.address, item.safeTxHash);
 			if (flight) void follow(flight, item, () => null);
+		});
+	});
+
+	/*
+	 * r5reg-21: the look found its number used on the chain — another member
+	 * executed it (or another transaction at its number ran) while this sheet
+	 * was open. Read what ran and say it the way a lost race is said — never
+	 * "it would fail" — and refresh the list, so the sheet becomes the
+	 * executed one.
+	 */
+	let settling: string | null = null;
+	async function settleSpent(spent: ProposalItem, by: string) {
+		if (settling === spent.safeTxHash) return;
+		settling = spent.safeTxHash;
+		try {
+			const found = await findExecution(account.address, chainId, spent.safeTxHash, {
+				sinceMs: spent.createdMs,
+				final: true,
+				nonce: spent.nonce
+			});
+			const verdict = await executionVerdict({
+				nonceUsed: true,
+				executedIn:
+					found === undefined
+						? { kind: 'unknown' }
+						: found === null
+							? { kind: 'none' }
+							: { kind: 'found', txHash: found },
+				// Nothing of this device's was sent.
+				ourOp: { kind: 'unknown' },
+				elapsedMs: 0,
+				limitMs: 0
+			});
+			if (phase.kind !== 'idle' || item?.safeTxHash !== spent.safeTxHash) return;
+			phase = { kind: 'ended', verdict, by };
+			if (verdict.kind === 'executedByOther') draft?.executed(verdict.txHash);
+			await store.refresh(account, account.chainIds, { fresh: true }).catch(() => {});
+		} finally {
+			settling = null;
+		}
+	}
+	$effect(() => {
+		if (actorPreview?.kind !== 'spent' || !item || !actor) return;
+		const spent = item;
+		const by = actor.address;
+		untrack(() => {
+			if (phase.kind === 'idle' && spent.status !== 'done') void settleSpent(spent, by);
 		});
 	});
 
@@ -892,7 +995,7 @@
 		if (!item) return;
 		try {
 			await approveExternally(account, chainId, item.tx, outside);
-			await store.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds, { fresh: true });
 		} catch (error) {
 			// The outside wallet's own refusal is its sheet's to say.
 			if (!cancelled(error)) phase = failedPhase(error);
@@ -904,7 +1007,7 @@
 		phase = { kind: 'busy', what: 'reject' };
 		try {
 			await proposeCancel(account, item, rejecter);
-			await store.refresh(account, account.chainIds);
+			await store.refresh(account, account.chainIds, { fresh: true });
 			rejecting = false;
 			phase = { kind: 'idle' };
 		} catch (error) {
@@ -1712,6 +1815,9 @@
 						<p class="warn" role="alert" data-testid="execute-would-fail">
 							{fillTemplate(m.proposal.wouldFail, { reason: whyText(m, actorPreview.why) })}
 						</p>
+					{:else if actorPreview?.kind === 'spent'}
+						<!-- r5reg-21: its number was used meanwhile — what ran is being read. -->
+						<p class="quiet" role="status" data-testid="execute-spent">{m.proposal.doneNote}</p>
 					{:else if actorPreview?.kind === 'priced' && !actorPreview.canPay}
 						<!-- r4D-1: who cannot pay, and who here can — before the tap. -->
 						<p class="warn" role="alert" data-testid="execute-cant-pay">
@@ -1730,7 +1836,7 @@
 					{/if}
 					{#if blocked}
 						<!-- It cannot run by this executor: approving is the one thing left to do. -->
-						{#if approveFirst && canApproveOnly}
+						{#if approveFirst && canApproveOnly && actorPreview?.kind !== 'spent'}
 							<Button
 								variant={valueVariant}
 								shape="rounded"

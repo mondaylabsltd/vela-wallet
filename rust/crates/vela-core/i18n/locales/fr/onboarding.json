@@ -87,6 +87,7 @@
       "waitedSeconds": "{{seconds}} secondes d'attente",
       "networkTitle": "Connexion réseau instable",
       "networkBody": "La requête n'est pas arrivée — vérifiez votre réseau, puis réessayez.",
+      "offline": "Vous êtes hors ligne. Vela se met à jour dès que vous êtes de nouveau en ligne.",
       "serverTitle": "Service temporairement indisponible",
       "serverBody": "Le service d'index des clés d'accès est injoignable — la création comme la connexion en ont besoin.",
       "timeoutTitle": "Délai d'attente dépassé",

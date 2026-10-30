@@ -87,6 +87,7 @@
       "waitedSeconds": "In attesa da {{seconds}} secondi",
       "networkTitle": "Connessione di rete instabile",
       "networkBody": "La richiesta non è mai arrivata — controlla la rete e riprova.",
+      "offline": "Sei offline. Vela si aggiorna di nuovo quando torni online.",
       "serverTitle": "Servizio temporaneamente non disponibile",
       "serverBody": "Il servizio Indice passkey non è raggiungibile — serve sia per creare il wallet sia per accedere.",
       "timeoutTitle": "Attesa scaduta",

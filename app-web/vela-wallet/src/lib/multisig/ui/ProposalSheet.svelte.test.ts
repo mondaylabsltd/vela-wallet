@@ -68,7 +68,9 @@ const fake = vi.hoisted(() => ({
 	/** The look each execute was handed. */
 	executedWith: [] as any[],
 	/** What execute throws before its passkey (r4-11). */
-	executeThrows: null as any
+	executeThrows: null as any,
+	/** Sheets holding the shown multisig's faster poll (r5reg-14). */
+	held: 0
 }));
 
 vi.mock('../core/proposals.svelte', () => ({
@@ -79,6 +81,11 @@ vi.mock('../core/proposals.svelte', () => ({
 		},
 		chain: () => fake.chain,
 		refresh: async () => {},
+		// r5reg-14: the faster pace an open sheet on a waiting transaction holds.
+		watch: () => {
+			fake.held += 1;
+			return () => void (fake.held -= 1);
+		},
 		get chains() {
 			return fake.chains;
 		},
@@ -198,6 +205,9 @@ vi.mock('../core/proposal-review.svelte', () => ({
 		read() {
 			return reviewSeam.review ?? REVIEW;
 		}
+		keepFresh() {
+			return () => {};
+		}
 		dispose() {}
 	}
 }));
@@ -216,7 +226,9 @@ vi.mock('../core/execute', () => {
 	}
 	class ExecutionUnpricedError extends Error {}
 	class ExecutionUncheckedError extends Error {}
+	class ExecutionSpentError extends Error {}
 	return {
+		ExecutionSpentError,
 		ExecutorCannotPayError,
 		ExecutionWouldFailError,
 		ExecutionUnpricedError,
@@ -231,6 +243,7 @@ vi.mock('../core/execute', () => {
 });
 vi.mock('../core/preflight.svelte', () => ({
 	PREVIEW_FRESH_MS: 15_000,
+	UNPRICED_FRESH_MS: 5_000,
 	preflight: {
 		get: (input: any) => fake.previews[input.executor.address] ?? null,
 		check: async (input: any) => fake.previews[input.executor.address] ?? { kind: 'unpriced' }
@@ -298,6 +311,13 @@ vi.mock('../core/kernel', () => {
 	return {
 		sameAddress: same,
 		transfersOf: () => [],
+		// The core's rule for a number used with nothing of this device's sent (multisig_watch.rs).
+		executionVerdict: async (facts: any) =>
+			facts.executedIn.kind === 'found'
+				? { kind: 'executedByOther', txHash: facts.executedIn.txHash, paid: false }
+				: facts.executedIn.kind === 'none'
+					? { kind: 'replaced', paid: false }
+					: { kind: 'unknown' },
 		readMemberChanges: () => fake.memberReading,
 		memberDrift: (was: { owners: string[] }, is: { owners: string[] }) => ({
 			same:
@@ -429,6 +449,7 @@ const settle = async () => {
 
 beforeEach(() => {
 	fake.calls = [];
+	fake.held = 0;
 	fake.refused = false;
 	fake.vela = [];
 	fake.executed = undefined;
@@ -850,6 +871,28 @@ describe('a transaction whose number is used (ms-9, ms-10)', () => {
 		expect(text).not.toContain('proposal.waiting');
 		expect(text).not.toContain('proposal.cancelPending');
 		expect(text).not.toContain('proposal.noExpiry');
+		await screen.unmount();
+	});
+
+	it('r5reg-20: executed reads as a past fact — no check of what running it would do', async () => {
+		const pending = show();
+		await settle();
+		// Waiting: the review's checks are there (the guard's verdict, what moves).
+		expect(document.querySelector('[data-testid="review-checks"]')?.textContent?.trim()).not.toBe(
+			''
+		);
+		await pending.unmount();
+		fake.chain.items = [done()];
+		fake.executed = `0x${'ee'.repeat(32)}`;
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="review-checks"]')?.textContent?.trim()).toBe('');
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.executed');
+		expect(text).not.toContain('proposal.feeChecking');
+		expect(text).not.toContain('proposal.wouldFail');
+		// The hashes it was approved over are still there: facts, not checks.
+		expect(text).toContain('review.hashesTitle');
 		await screen.unmount();
 	});
 
@@ -1284,6 +1327,37 @@ describe('an execution in flight (r4b-1, r4b-7)', () => {
 		await screen.unmount();
 	});
 
+	it('r5reg-14: open on a waiting transaction, it holds the faster poll — and lets go', async () => {
+		fake.chain.items = [ready()];
+		const screen = show();
+		await settle();
+		expect(fake.held).toBe(1);
+		await screen.unmount();
+		expect(fake.held).toBe(0);
+		// An executed one is read no faster.
+		fake.chain.items = [{ ...ready(), status: 'done', canExecute: [] }];
+		const done = show();
+		await settle();
+		expect(fake.held).toBe(0);
+		await done.unmount();
+	});
+
+	it('r5reg-21: run by another member while open — said as that, never "would fail"', async () => {
+		fake.chain.items = [ready()];
+		fake.previews = { [ME]: { kind: 'spent' } };
+		fake.executed = `0x${'77'.repeat(32)}`;
+		const screen = show();
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.lostRace');
+		expect(text).not.toContain('proposal.wouldFail');
+		expect(document.querySelector('[data-testid="execute-would-fail"]')).toBeNull();
+		expect(buttons()).not.toContain('proposal.execute');
+		expect(buttons()).not.toContain('proposal.approve');
+		expect(fake.calls).toEqual([]);
+		await screen.unmount();
+	});
+
 	it('replaced by another transaction at its number: said with the number', async () => {
 		fake.chain.items = [ready()];
 		fake.execution = {
@@ -1384,6 +1458,28 @@ describe('why it did not go, in the corpus’ words (r4b-12)', () => {
 		expect(text).toContain(words);
 		expect(text).not.toContain('Unexpected token');
 		expect(text).not.toContain('User cancelled the operation');
+		fake.approveError = null;
+		await screen.unmount();
+	});
+
+	it('r4b-15 / r4D-10: Approve offline says offline — not the check that could not run', async () => {
+		const { SigningUncheckedError } = await import('../core/gate.svelte');
+		const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+		fake.approveError = new SigningUncheckedError(100);
+		const screen = show();
+		await settle();
+		press('proposal.approve');
+		await settle();
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('proposal.reason.offline');
+		expect(text).not.toContain('authority.signUnchecked');
+		// The person's own choice is still said as itself.
+		const { PasskeyError } = await import('$lib/onboarding/core/passkey');
+		fake.approveError = new PasskeyError('cancelled', 'closed', false);
+		press('proposal.approve');
+		await settle();
+		expect(document.body.textContent ?? '').toContain('proposal.reason.passkeyClosed');
+		online.mockRestore();
 		fake.approveError = null;
 		await screen.unmount();
 	});

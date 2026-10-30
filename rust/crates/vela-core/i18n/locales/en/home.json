@@ -359,6 +359,7 @@
         "unsupported": "This Safe's version isn't supported yet.",
         "notMultisig": "This address isn't a multisig Vela can read.",
         "chooseNetwork": "Nothing says which network this multisig is used on yet. Choose its network, then tap Add.",
+        "unchecked": "No record of this address yet, and some networks didn't answer in time — so Vela can't say whether it's a multisig. Try again.",
         "badInvite": "This invite link is damaged — part of it is missing or was changed on the way. Ask for the link again, or enter the multisig's address.",
         "usedOn": "Used on {{networks}}",
         "networkMissing": "It's used on {{network}}, which this device doesn't have yet. Add the network; the invite opens again in your wallet once it's there.",
@@ -577,8 +578,8 @@
         "customNote": "Using a custom multisig service ({{host}})",
         "unreachableNote": "Multisig service unreachable — waiting transactions can't be loaded; retrying.",
         "retry": "Retry",
-        "offline": "You're offline — showing what was loaded before.",
-        "offlineSince": "You're offline — showing what was loaded at {{time}}.",
+        "offline": "Showing what was loaded before.",
+        "offlineSince": "Showing what was loaded at {{time}}.",
         "chainUnreachable": "Can't reach {{network}} — its waiting transactions can't be checked right now."
       },
       "members": {
