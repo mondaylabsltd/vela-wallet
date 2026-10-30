@@ -331,9 +331,9 @@ sealed class SendSubmitFailure {
 
     /**
      * Round 7 (r7-2, r7-7): the account's trusted signing page did not sign,
-     * and not because the person declined there — [failure] says why. Declared
-     * so the wire decodes; this shell's page failures are told in its own
-     * words (the trusted signer's sheet), never sent as this.
+     * and not because the person declined there — [failure] says why. Sent
+     * by the send executor whenever the page did not sign (R7, the page
+     * everywhere); the core sets `tx_error` to its `page_*` key.
      */
     @Serializable
     @SerialName("page_failed")
