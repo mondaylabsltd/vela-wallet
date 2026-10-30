@@ -1,15 +1,15 @@
 /**
- * Asking an outside owner's wallet for an approval, from anywhere a multisig
- * needs one (a proposal's approvals, the send flow's confirm). The request
- * is drawn by `ExternalSignSheet` (mounted by the multisig host); the caller
- * awaits the approval, already checked by the core, or a cancel.
+ * Asking an outside owner's wallet, from anywhere a multisig needs it (a
+ * proposal's approvals, the send flow's confirm, the proposals machine's
+ * `Notice::OutsideSign`). The request is drawn by `ExternalSignSheet`
+ * (mounted by the multisig host), which runs the core's session machine
+ * (`shell/outside-session.svelte.ts`); the caller awaits how the ask ended —
+ * an approval already verified by the core, a transaction sent, or a cancel.
  */
-import {
-	safeTxTypedData,
-	verifyEcdsaApproval,
-	type EcdsaApproval,
-	type SafeTx
-} from '../core/kernel';
+import type { EcdsaApproval, SafeTx } from '../core/kernel';
+import type { OutsideSendTx } from '../generated/OutsideSendTx';
+import type { OutsideSessionOutcome } from '../generated/OutsideSessionOutcome';
+import type { OutsideSessionRequest } from '../generated/OutsideSessionRequest';
 
 export interface ExternalRequest {
 	chainId: number;
@@ -18,52 +18,65 @@ export interface ExternalRequest {
 	safeTxHash: string;
 	/** Who may sign: the owners that have not approved and are not on this device. */
 	owners: string[];
-	resolve(approval: EcdsaApproval): void;
+	/** Send this transaction instead of signing (`null`: an approval). */
+	send?: OutsideSendTx | null;
+	/** How the ask ended, as the session machine says it. */
+	settle(outcome: OutsideSessionOutcome): void;
+	/** The sheet could not be shown at all. */
 	reject(error: unknown): void;
 }
 
 class ExternalSigning {
-	request = $state<ExternalRequest | null>(null);
+	/** Raw: kept as the very object `open` made, so it is told apart by identity. */
+	request = $state.raw<ExternalRequest | null>(null);
+
+	/**
+	 * Ask the wallet that holds one of `request.owners`: settles with the
+	 * approval (verified by the core), the transaction's hash, or
+	 * `cancelled` when the person closes the sheet (or another ask
+	 * supersedes this one).
+	 */
+	open(request: OutsideSessionRequest): Promise<OutsideSessionOutcome> {
+		this.request?.settle({ kind: 'cancelled' });
+		return new Promise<OutsideSessionOutcome>((resolve, reject) => {
+			const mine: ExternalRequest = {
+				chainId: request.chainId,
+				safe: request.safe,
+				tx: request.tx as SafeTx,
+				safeTxHash: request.safeTxHash,
+				owners: request.owners,
+				send: request.send,
+				settle: (outcome) => {
+					if (this.request === mine) this.request = null;
+					resolve(outcome);
+				},
+				reject: (error) => {
+					if (this.request === mine) this.request = null;
+					reject(error);
+				}
+			};
+			this.request = mine;
+		});
+	}
 
 	/**
 	 * An approval of `tx` by one of `owners`, from the wallet that holds it.
 	 * Rejects with an `AbortError` when the person cancels.
 	 */
-	approve(input: Omit<ExternalRequest, 'resolve' | 'reject'>): Promise<EcdsaApproval> {
-		this.request?.reject(new DOMException('Superseded', 'AbortError'));
-		return new Promise<EcdsaApproval>((resolve, reject) => {
-			this.request = {
-				...input,
-				resolve: (a) => {
-					this.request = null;
-					resolve(a);
-				},
-				reject: (e) => {
-					this.request = null;
-					reject(e);
-				}
-			};
-		});
+	async approve(input: Omit<OutsideSessionRequest, 'send'>): Promise<EcdsaApproval> {
+		const outcome = await this.open({ ...input, send: null });
+		if (outcome.kind === 'approved') return outcome.approval as EcdsaApproval;
+		throw new DOMException('Cancelled', 'AbortError');
 	}
 }
 
 export const externalSigning = new ExternalSigning();
 
-/** The typed data the wallet is asked to sign for a request. */
-export function typedDataOf(r: Pick<ExternalRequest, 'chainId' | 'safe' | 'tx'>) {
-	return safeTxTypedData(r.chainId, r.safe, r.tx);
-}
-
-/** A wallet's answer, as the Safe will read it, or `null` if it is not an owner's for this hash. */
-export function checked(
-	safeTxHash: string,
-	owners: string[],
-	answer: { owner: string; signature: string }
-): EcdsaApproval | null {
-	try {
-		const approval = verifyEcdsaApproval(safeTxHash, answer);
-		return owners.some((o) => o.toLowerCase() === approval.owner.toLowerCase()) ? approval : null;
-	} catch {
-		return null;
-	}
+/**
+ * The one entry for asking an outside owner's wallet (the proposals
+ * machine's `Notice::OutsideSign { request }`): the sheet shown, settled
+ * with what the machine's `OutsideAnswered` carries back.
+ */
+export function openOutsideSession(request: OutsideSessionRequest): Promise<OutsideSessionOutcome> {
+	return externalSigning.open(request);
 }

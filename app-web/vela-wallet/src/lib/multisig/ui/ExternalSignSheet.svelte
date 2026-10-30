@@ -6,6 +6,12 @@
 	 * the SafeTx in their wallet. The answer is checked by the core before it
 	 * counts. A wallet paired before only needs the page reopened.
 	 *
+	 * The core's session machine (`multisig_outside::session`,
+	 * `OutsideSessionHost`) runs the ask — the room or the pairing, the
+	 * connection, the owner among the wallet's accounts, the network, the
+	 * signature verified, the mailbox looked at — and this sheet draws its view
+	 * and says it in the corpus' words.
+	 *
 	 * The wallet is asked for a SafeTx — typed data that says nothing a person
 	 * can read about a call to another contract. So a call is drawn here
 	 * first, as the signing sheet reads it (cs-12): this sheet is all the
@@ -30,23 +36,21 @@
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { CallError } from '$lib/walletpair/client';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
 	import { CallReading, readableCalls } from '../core/call-review.svelte';
 	import { memberChanges } from '../core/display';
-	import { isEcdsaApproval, reviewTx, sameAddress } from '../core/kernel';
-	import { fetchProposals } from '../core/service';
-	import {
-		ExternalWallet,
-		WalletDeclinedError,
-		WalletOtherChainError
-	} from '../external/session.svelte';
-	import { checked, typedDataOf, type ExternalRequest } from '../external/signing.svelte';
-	import { problemText, walletProblem } from '../external/errors';
+	import { reviewTx } from '../core/kernel';
+	import type { ExternalRequest } from '../external/signing.svelte';
+	import { problemText } from '../external/errors';
 	import { eip55 } from '../external/eip55';
-	import type { RelayStatus } from '../external/relay';
-	import { shareOrigin } from '../core/link';
+	import type { OutsideSessionFailure } from '../generated/OutsideSessionFailure';
+	import type { RelayStatus } from '../generated/RelayStatus';
+	import {
+		connectPage,
+		MAILBOX_EVERY_MS,
+		OutsideSessionHost
+	} from '../shell/outside-session.svelte';
 	import CallReview from './CallReview.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -74,29 +78,24 @@
 
 	/** r4C-3: a wallet still silent after this long is said to be waiting, maybe in another window. */
 	const STILL_WAITING_MS = 20_000;
-	/** r4C-2: how often the mailbox is looked at for an approval made from the link alone. */
-	const MAILBOX_EVERY_MS = 8_000;
 
-	let wallet = $state<ExternalWallet | null>(null);
-	let failure = $state<string | null>(null);
+	let session = $state<OutsideSessionHost | null>(null);
 	let copied = $state(false);
-	let controller = new AbortController();
 	let now = $state(Date.now());
 
-	const page = $derived(
-		typeof location === 'undefined' ? '' : `${shareOrigin(location.origin)}/${locale}/connect`
-	);
-	const tx = $derived({
-		chainId: request.chainId,
-		multisig: request.safe,
-		safeTxHash: request.safeTxHash
-	});
+	const wallet = $derived(session?.view ?? null);
+	/**
+	 * The page's link, once there is a room to open it to: a new room's
+	 * invite is in it (the room opens a moment after the sheet), a pairing
+	 * kept before needs none. Never a link without the room it names.
+	 */
+	const link = $derived(session && wallet && (wallet.resumed || wallet.invite) ? session.link : '');
 
 	// r4C-6: the code is always there — a paired room's link reopens the page.
 	const qr = $derived.by(() => {
-		if (!wallet) return null;
+		if (!link) return null;
 		try {
-			return encodeQr(wallet.link);
+			return encodeQr(link);
 		} catch {
 			return null;
 		}
@@ -157,8 +156,38 @@
 		!!wallet &&
 			wallet.phase === 'confirming' &&
 			!wallet.away &&
+			!wallet.failure &&
 			now - wallet.since > STILL_WAITING_MS
 	);
+
+	/** Why the ask ended without an answer, said with what to do (r4C-11, ms-12, ms-26). */
+	function failureText(f: OutsideSessionFailure): string {
+		const chain = chainName(request.chainId);
+		switch (f.kind) {
+			case 'connectDeclined':
+				return w.connectDeclined;
+			case 'walletDeclined':
+				return w.walletDeclined;
+			case 'otherChain':
+				return fillTemplate(w.otherChain, { chain });
+			case 'badSignature':
+			case 'noAnswer':
+				return w.badSignature;
+			case 'stoppedWaiting':
+				return w.stoppedWaiting;
+			case 'noRoom':
+				return problemText({ kind: 'unknown', reason: f.reason }, w, fillTemplate, walletLabel, '');
+			case 'wallet':
+				return problemText(
+					f.problem,
+					w,
+					fillTemplate,
+					walletLabel,
+					f.problem.kind === 'unknown' ? '' : chain
+				);
+		}
+	}
+	const failure = $derived(wallet?.failure ? failureText(wallet.failure) : null);
 
 	/** The call this SafeTx makes, when it is one to another contract (the core's reading). */
 	let reading = $state<CallReading | null>(null);
@@ -180,138 +209,66 @@
 		}
 		// The connect page opens where the owner's wallet is: the wallet's web
 		// address, never this extension's own.
-		wallet = ExternalWallet.for(request.owners, page, tx);
-		void run();
+		const host = new OutsideSessionHost(
+			{
+				chainId: request.chainId,
+				safe: request.safe,
+				tx: request.tx,
+				safeTxHash: request.safeTxHash,
+				owners: request.owners,
+				send: request.send ?? null
+			},
+			connectPage(locale)
+		);
+		session = host;
 		const clock = setInterval(() => (now = Date.now()), 1000);
-		const mailbox = setInterval(() => void fromMailbox(), MAILBOX_EVERY_MS);
+		// r4C-2: an approval made from the link alone ends this request too.
+		const mailbox = setInterval(() => host.dispatch({ type: 'mailbox_tick' }), MAILBOX_EVERY_MS);
 		return () => {
 			clearInterval(clock);
 			clearInterval(mailbox);
-			controller.abort();
-			wallet?.leave();
+			host.dispose();
 			reading?.dispose();
 		};
 	});
 
-	/** One run per ask: a later Try again makes the earlier one's failure moot. */
-	let runs = 0;
-
-	async function run() {
-		const current = wallet;
-		if (!current) return;
-		const mine = ++runs;
-		const signal = controller.signal;
-		failure = null;
-		try {
-			const answer = await current.signTypedData(
-				request.chainId,
-				request.owners,
-				typedDataOf(request),
-				signal
-			);
-			const approval = checked(request.safeTxHash, request.owners, answer);
-			if (!approval) {
-				if (mine === runs) failure = w.badSignature;
-				return;
-			}
-			// A valid approval is welcome from any run, even one asked again since.
-			finish(current, approval);
-		} catch (error) {
-			if (mine !== runs || current !== wallet) return;
-			if (error instanceof DOMException && error.name === 'AbortError') return;
-			// ms-12: a connection declined on the page is said as that, not as a
-			// signature the wallet refused.
-			const connecting = current.phase === 'waiting' || current.phase === 'connecting';
-			failure =
-				error instanceof WalletDeclinedError
-					? connecting
-						? w.connectDeclined
-						: w.walletDeclined
-					: error instanceof WalletOtherChainError
-						? fillTemplate(w.otherChain, { chain: chainName(request.chainId) })
-						: error instanceof CallError
-							? problemText(
-									walletProblem(error),
-									w,
-									fillTemplate,
-									walletLabel,
-									chainName(request.chainId)
-								)
-							: problemText(
-									{ kind: 'unknown', reason: String((error as Error).message) },
-									w,
-									fillTemplate,
-									walletLabel,
-									''
-								);
-		}
-	}
-
-	let finished = false;
-	function finish(current: ExternalWallet, approval: Parameters<ExternalRequest['resolve']>[0]) {
-		if (finished) return;
-		finished = true;
-		current.to('done');
-		controller.abort();
-		current.leave();
-		request.resolve(approval);
-	}
-
-	/**
-	 * r4C-2: the owner approved from the link alone (the page handed it to the
-	 * mailbox): checked here as any answer, it ends this request.
-	 */
-	async function fromMailbox() {
-		if (!wallet || finished) return;
-		try {
-			const answer = await fetchProposals(request.chainId, request.safe, { background: true });
-			const p = answer?.proposals.find(
-				(x) => x.safeTxHash.toLowerCase() === request.safeTxHash.toLowerCase()
-			);
-			for (const a of p?.approvals ?? []) {
-				if (!isEcdsaApproval(a) || !request.owners.some((o) => sameAddress(o, a.owner))) continue;
-				const approval = checked(request.safeTxHash, request.owners, a);
-				if (approval && wallet) return finish(wallet, approval);
-			}
-		} catch {
-			// the mailbox away: the live path carries on
-		}
-	}
+	/** The ask ended (approved and verified, sent, or closed): the caller is told, once. */
+	let settled = false;
+	const outcome = $derived(wallet?.outcome ?? null);
+	$effect(() => {
+		const done = outcome;
+		if (!done || settled) return;
+		settled = true;
+		untrack(() => request.settle(done));
+	});
 
 	/** Cancel the wallet's ask and make it again (r4C-3). */
 	function retry() {
-		controller.abort();
-		controller = new AbortController();
-		void run();
+		session?.dispatch({ type: 'ask_again' });
 	}
 
 	/** Stop waiting on the wallet: the page is told (`walletpair_cancel`); the sheet stays. */
 	function stopWaiting() {
-		controller.abort();
-		controller = new AbortController();
-		failure = w.stoppedWaiting;
+		session?.dispatch({ type: 'stop_waiting' });
 	}
 
 	/** r4C-6: a new room — another wallet, or the same one in another browser. */
 	function anotherWallet(unpair: boolean) {
-		controller.abort();
-		controller = new AbortController();
-		if (unpair) wallet?.end();
-		else wallet?.leave();
-		wallet = ExternalWallet.fresh(request.owners, page, tx);
-		void run();
+		session?.dispatch({ type: 'another_wallet', unpair });
 	}
 
 	function close() {
-		controller.abort();
-		wallet?.leave();
-		request.reject(new DOMException('Cancelled', 'AbortError'));
+		session?.dispatch({ type: 'close' });
+		if (!settled) {
+			settled = true;
+			request.settle({ kind: 'cancelled' });
+		}
 	}
 
 	async function copy() {
-		if (!wallet) return;
+		if (!link) return;
 		try {
-			await navigator.clipboard.writeText(wallet.link);
+			await navigator.clipboard.writeText(link);
 			copied = true;
 			setTimeout(() => (copied = false), 1600);
 		} catch {
@@ -349,7 +306,9 @@
 				<path d={qr.path} class="qr-fg" />
 			</svg>
 		{/if}
-		<code class="link" data-testid="external-link">{wallet.link}</code>
+		{#if link}
+			<code class="link" data-testid="external-link">{link}</code>
+		{/if}
 		<p class="fine">{w.linkLater}</p>
 		<Button variant="secondary" shape="rounded" onclick={copy}>
 			<span class="label"
@@ -371,7 +330,7 @@
 				<span class="dot" class:busy={wallet.phase !== 'wrongAccount'}></span>{status}
 			</p>
 			{#if relayTrouble && wallet.phase === 'waiting'}
-				<Button variant="secondary" shape="rounded" onclick={() => wallet?.retryRelay()}
+				<Button variant="secondary" shape="rounded" onclick={() => session?.retryRelay()}
 					>{w.retry}</Button
 				>
 			{/if}
