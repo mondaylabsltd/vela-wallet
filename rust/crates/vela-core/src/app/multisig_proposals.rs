@@ -51,6 +51,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::multisig_gather;
 use super::multisig_shell::{
     self as shell, keys, local_owners, lock, same_address, AccountUpdate, ApprovalRoute, Chain,
     ChainMembers, Io, LocalAccount, MultisigAccount, MultisigEffect, MultisigOperation,
@@ -58,7 +59,7 @@ use super::multisig_shell::{
     StoredApproval, Submission, SubmitAnswer,
 };
 use crate::multisig::{self, Action, Approval, Call, SafeTx};
-use crate::multisig_review::{self, Known, ReadsInput, RecipientFacts, ReviewInput};
+use crate::multisig_review::{self, Known, ReviewInput};
 use crate::multisig_watch::{
     self, ExecutedIn, ExecutionFacts, ExecutionVerdict, OurOp, OurReceipt,
 };
@@ -1681,20 +1682,6 @@ async fn refresh_once(io: &Io<Event>, st: &Shared<State>, tick: bool) {
 // The review's reads (`gatherReview`)
 // ---------------------------------------------------------------------------
 
-/// An RPC answer as the review takes it: `{result}`, `{error}`, `{unreachable: true}`.
-async fn envelope(io: &Io<Event>, chain_id: u64, method: &str, params: Value) -> Value {
-    match io
-        .rpc_within(chain_id, method, params, Some(REVIEW_READ_MS))
-        .await
-    {
-        Ok(result) => json!({ "result": result }),
-        Err(shell::RpcFail::Error { code, message }) => {
-            json!({ "error": { "code": code, "message": message } })
-        }
-        Err(shell::RpcFail::Unanswered(_)) => json!({ "unreachable": true }),
-    }
-}
-
 fn subject_key(
     chain_id: u64,
     safe: &str,
@@ -1719,6 +1706,8 @@ fn subject_key(
     .to_string()
 }
 
+/// The one review's reads ([`multisig_gather::gather_review`], the very reads
+/// the connect page makes for an outside owner), kept a moment for the gate.
 async fn gather_review(
     io: &Io<Event>,
     st: &Shared<State>,
@@ -1728,103 +1717,25 @@ async fn gather_review(
     members: &ChainMembers,
     origin: Option<String>,
 ) -> ReviewInput {
-    let mut base = ReadsInput {
+    let subject = multisig_gather::ReviewSubject {
         chain_id,
         safe: account.address.clone(),
-        tx: Some(tx.clone()),
-        owners: members.owners.clone(),
-        threshold: members.threshold,
-        deployed: members.deployed,
+        tx: tx.clone(),
+        members: members.clone(),
         genesis: Some(account.genesis.clone()),
-        ..ReadsInput::default()
-    };
-    let mut reads = multisig_review::review_reads(&base).unwrap_or_default();
-    if !reads.need_code.is_empty() {
-        let codes = future::join_all(reads.need_code.iter().map(|a| async move {
-            let e = envelope(io, chain_id, "eth_getCode", json!([a, "latest"])).await;
-            (
-                a.clone(),
-                e.get("result").and_then(Value::as_str).map(str::to_owned),
-            )
-        }))
-        .await;
-        base.codes = codes.into_iter().collect();
-        reads = multisig_review::review_reads(&base).unwrap_or_default();
-    }
-    let simulate = async {
-        if reads.sim_calls.is_empty() {
-            return None;
-        }
-        match io
-            .ask(MultisigOperation::Simulate {
-                chain_id,
-                from: account.address.clone(),
-                calls: reads.sim_calls.clone(),
+        known: lock(st).known.clone(),
+        member_names: account
+            .members
+            .as_ref()
+            .map(|ms| {
+                ms.iter()
+                    .filter_map(|(a, i)| Some((a.to_ascii_lowercase(), i.name.clone()?)))
+                    .collect()
             })
-            .await
-        {
-            MultisigShellResult::Simulated { reply } => reply,
-            _ => None,
-        }
-    };
-    let state = async {
-        let trace = match &reads.trace {
-            Some(r) => Some(envelope(io, chain_id, &r.method, r.params.clone()).await),
-            None => None,
-        };
-        let probe = match &reads.probe {
-            Some(r) => Some(envelope(io, chain_id, &r.method, r.params.clone()).await),
-            None => None,
-        };
-        (trace, probe)
-    };
-    let facts = future::join_all(reads.recipients.iter().map(|address| async move {
-        match io
-            .ask(MultisigOperation::RecipientRisk {
-                chain_id,
-                address: address.clone(),
-            })
-            .await
-        {
-            MultisigShellResult::RecipientFacts {
-                is_contract,
-                first_time,
-            } => RecipientFacts {
-                address: address.clone(),
-                is_contract,
-                first_time,
-            },
-            _ => RecipientFacts {
-                address: address.clone(),
-                is_contract: None,
-                first_time: None,
-            },
-        }
-    }));
-    let ((trace, probe), sim_reply, recipient_facts) = futures::join!(state, simulate, facts);
-    let mut known = lock(st).known.clone();
-    for m in &members.owners {
-        known.push(Known {
-            address: m.clone(),
-            label: account
-                .members
-                .as_ref()
-                .and_then(|ms| ms.get(&m.to_ascii_lowercase()))
-                .and_then(|i| i.name.clone())
-                .unwrap_or_else(|| m.clone()),
-            kind: multisig_review::KnownKind::Member,
-        });
-    }
-    let input = ReviewInput {
-        reads: base,
-        sim_reply,
-        trace,
-        probe,
-        recipient_facts,
-        known,
-        blind: false,
+            .unwrap_or_default(),
         origin: origin.clone(),
     };
+    let input = multisig_gather::gather_review(io, &subject).await;
     let key = subject_key(chain_id, &account.address, tx, members, origin.as_deref());
     let now = io.now().await;
     let mut s = lock(st);
@@ -1872,12 +1783,10 @@ async fn authorize_signing(
             Some(i) => i,
             None => gather_review(io, st, account, chain_id, tx, &members, None).await,
         };
-        multisig_review::multisig_review(&input)
-            .ok()
-            .map(|r| r.sign)
+        Some(multisig_gather::review_of(&input))
     };
-    let (found, sign) = futures::join!(found, rule);
-    let (Some(found), Some(sign)) = (found, sign) else {
+    let (found, review) = futures::join!(found, rule);
+    let (Some(found), Some(review)) = (found, review) else {
         return Err(Stop::State(ActionState::SigningUnchecked));
     };
     io.notice(Notice::Account {
@@ -1888,11 +1797,7 @@ async fn authorize_signing(
         },
     })
     .await;
-    match multisig_review::signing_gate(&multisig_review::GateInput {
-        chain_id,
-        findings: Some(found),
-        sign: Some(sign),
-    }) {
+    match multisig_gather::decide(chain_id, &account.address, tx, Some(found), review.as_ref()) {
         multisig_review::Gate::Open => Ok(()),
         multisig_review::Gate::Unchecked => Err(Stop::State(ActionState::SigningUnchecked)),
         multisig_review::Gate::Refused { findings } => {

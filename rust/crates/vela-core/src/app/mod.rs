@@ -71,6 +71,8 @@ pub mod manage_tokens;
 pub mod method_words;
 pub mod money;
 pub mod multisig_accounts;
+/// The one review's reads and the one gate, shared by every multisig signer (§3.5, §3.6).
+pub mod multisig_gather;
 pub mod multisig_members;
 /// An owner whose wallet is not Vela: the connect page and Vela's live session (§11.2, §11.3).
 pub mod multisig_outside;
