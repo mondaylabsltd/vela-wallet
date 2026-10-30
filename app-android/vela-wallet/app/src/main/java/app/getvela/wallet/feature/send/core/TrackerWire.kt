@@ -327,6 +327,21 @@ sealed class TrackOperation {
     @Serializable
     @SerialName("tx_receipt")
     data class TxReceipt(val chain_id: Int, val tx_hash: String, val user_op_hash: String) : TrackOperation()
+
+    /**
+     * Round 3 (send-5): after a relay error the chain is asked — the head
+     * first, then `EntryPoint.getNonce(sender, 0)` AT that block, so a nonce
+     * seen spent is spent by a known block. Answered
+     * [TrackShellResult.NonceRead]; what the figure means is the core's.
+     */
+    @Serializable
+    @SerialName("read_nonce")
+    data class ReadNonce(
+        val chain_id: Int,
+        val entry_point: String,
+        val sender: String,
+        val user_op_hash: String,
+    ) : TrackOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -436,6 +451,20 @@ sealed class TrackShellResult {
         val user_op_hash: String,
         val now_ms: Double,
         val receipt_json: String? = null,
+    ) : TrackShellResult()
+
+    /**
+     * [TrackOperation.ReadNonce]'s answer: `nonce` the `eth_call`'s hex result
+     * as it came, `head_block` the block it was read at. Both `null` when the
+     * pool got no answer — nothing is known then.
+     */
+    @Serializable
+    @SerialName("nonce_read")
+    data class NonceRead(
+        val user_op_hash: String,
+        val now_ms: Double,
+        val nonce: String? = null,
+        val head_block: Long? = null,
     ) : TrackShellResult()
 }
 
