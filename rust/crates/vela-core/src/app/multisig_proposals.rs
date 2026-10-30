@@ -427,11 +427,10 @@ pub enum ProposalKind {
     },
     /// Rename the record (a transaction of the multisig's own).
     Rename { name: String },
-    /// A change of members or rule, built against the chain's members now.
-    MemberChange {
-        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
-        change: multisig::MemberChange,
-    },
+    /// A change of members or rule, built against the chain's members now
+    /// (the members machine's [`super::multisig_members::PlanNetwork::proposal`]
+    /// is this, per network).
+    MemberChange { change: multisig::MemberChange },
     /// A dApp's calls, as one transaction.
     Calls {
         #[cfg_attr(feature = "bindings", ts(type = "unknown[]"))]
@@ -2509,7 +2508,63 @@ fn execution_input(
 pub struct Planned {
     pub calls: Vec<Call>,
     pub deploys_multisig: bool,
+    /// Approving members whose Vela account this execution deploys (their
+    /// passkey approval is checked through it).
     pub activates: Vec<String>,
+    /// The members whose given approvals it carries (the executor's own is
+    /// never one).
+    pub carries: Vec<String>,
+    /// The executor approves by sending it (`msg.sender`), one approval
+    /// besides `carries`.
+    pub executor_approves: bool,
+}
+
+/// Which approvals an execution carries (`carriedApprovals`, r4-7, r7-3):
+/// only the approvals the threshold needs — those needing nothing deployed
+/// first (`ready`: a plain account's, or a Vela account with code there) —
+/// and the executor (an owner) approves as `msg.sender` only when those that
+/// need nothing deployed fall short, never in place of one given. `others`:
+/// the approvals besides the executor's own, each with whether it is ready.
+/// Returns the chosen approvals (with their readiness) and whether the
+/// executor approves.
+pub fn carried_approvals<T: Clone>(
+    threshold: u64,
+    executor_is_owner: bool,
+    others: Vec<(T, bool)>,
+) -> (Vec<(T, bool)>, bool) {
+    let ready_count = others.iter().filter(|(_, r)| *r).count() as u64;
+    let executor_approves = executor_is_owner && ready_count < threshold;
+    let needed = threshold.saturating_sub(u64::from(executor_approves));
+    let mut chosen = others;
+    // Ready first, the given order kept within each (a stable sort).
+    chosen.sort_by_key(|(_, r)| !*r);
+    chosen.truncate(usize::try_from(needed).unwrap_or(usize::MAX));
+    (chosen, executor_approves)
+}
+
+/// About how much of `fee` is the one-time setup (`look`'s `setup.amount`):
+/// each deployment call's `eth_estimateGas` (`gas`), less the 21,000 each
+/// carries alone (inside the one operation they do not), as a share of the
+/// quote's `total_gas`, never more than the fee. `None` (unmeasured) with no
+/// deployment, a quote without its gas, an executor whose own first
+/// deployment rides in its initCode (unmeasured here), or a gas read that
+/// did not answer.
+pub fn setup_share(
+    fee: u128,
+    total_gas: u128,
+    executor_deployed: bool,
+    gas: &[Option<u128>],
+) -> Option<u128> {
+    use alloy_primitives::U256;
+    if gas.is_empty() || total_gas == 0 || !executor_deployed {
+        return None;
+    }
+    let mut setup_gas = U256::ZERO;
+    for g in gas {
+        setup_gas += U256::from(g.as_ref()?.saturating_sub(21_000));
+    }
+    let share = U256::from(fee) * setup_gas / U256::from(total_gas);
+    Some(u128::try_from(share).unwrap_or(u128::MAX).min(fee))
 }
 
 enum PlanFail {
@@ -2538,10 +2593,11 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         }
     }))
     .await;
-    let needed = input.members.threshold.saturating_sub(u64::from(owner));
-    let mut chosen: Vec<(Approval, bool)> = others.into_iter().zip(ready).collect();
-    chosen.sort_by_key(|(_, r)| !*r);
-    chosen.truncate(usize::try_from(needed).unwrap_or(usize::MAX));
+    let (chosen, executor_approves) = carried_approvals(
+        input.members.threshold,
+        owner,
+        others.into_iter().zip(ready).collect(),
+    );
     let mut deploy_owners = Vec::new();
     let mut activates = Vec::new();
     for (a, ready) in &chosen {
@@ -2561,8 +2617,8 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         deploy_multisig: deploy_multisig.clone(),
         deploy_owners,
         tx: input.item.tx.clone(),
-        approvals: chosen.into_iter().map(|(a, _)| a).collect(),
-        executor: owner.then(|| input.executor.address.clone()),
+        approvals: chosen.iter().map(|(a, _)| a.clone()).collect(),
+        executor: executor_approves.then(|| input.executor.address.clone()),
         deploy_facts,
     })
     .map_err(|_| PlanFail::Other)?;
@@ -2570,6 +2626,8 @@ async fn plan_execution(io: &Io<Event>, input: &ExecutionInput) -> Result<Planne
         calls,
         deploys_multisig: deploy_multisig.is_some(),
         activates,
+        carries: chosen.iter().map(|(a, _)| a.owner().to_owned()).collect(),
+        executor_approves,
     })
 }
 
@@ -2609,6 +2667,8 @@ pub enum Preview {
         balance: Option<u128>,
         can_pay: bool,
         executor_deployed: bool,
+        /// About how much of the fee is the one-time setup ([`setup_share`]).
+        setup_amount: Option<u128>,
     },
 }
 
@@ -2626,16 +2686,21 @@ impl Preview {
                 balance,
                 can_pay,
                 executor_deployed,
+                setup_amount,
             } => json!({
                 "kind": "priced",
                 "calls": planned.calls,
                 "fee": fee,
                 "balance": balance.map(|b| b.to_string()),
                 "canPay": can_pay,
+                "carries": planned.carries,
+                "executorApproves": planned.executor_approves,
                 "setup": {
                     "multisig": planned.deploys_multisig,
                     "members": planned.activates,
                     "executor": !executor_deployed,
+                    // Decimal, as `balance`; `null` when unmeasured.
+                    "amount": setup_amount.map(|a| a.to_string()),
                 },
             }),
         }
@@ -2825,16 +2890,60 @@ async fn look(io: &Io<Event>, input: &ExecutionInput) -> Preview {
         (Some(b), Some(a)) if is_native => b >= a,
         _ => true,
     };
+    let executor_deployed = quote
+        .get("executorDeployed")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let total_gas = quote
+        .get("totalGas")
+        .and_then(|g| {
+            g.as_str()
+                .and_then(shell::quantity)
+                .or_else(|| g.as_u64().map(u128::from))
+        })
+        .unwrap_or(0);
+    // The deployments: every call before execTransaction, each measured on
+    // its own — only when a share could be said at all.
+    let deployments = &planned.calls[..planned.calls.len().saturating_sub(1)];
+    let setup_amount = match amount {
+        Some(fee) if !deployments.is_empty() && total_gas > 0 && executor_deployed => {
+            let gas = future::join_all(
+                deployments
+                    .iter()
+                    .map(|c| gas_of(io, input.chain_id, &executor, c)),
+            )
+            .await;
+            setup_share(fee, total_gas, executor_deployed, &gas)
+        }
+        _ => None,
+    };
     Preview::Priced {
         planned,
         fee,
         balance,
         can_pay,
-        executor_deployed: quote
-            .get("executorDeployed")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
+        executor_deployed,
+        setup_amount,
     }
+}
+
+/// One call's gas on its own (`readGas`): `eth_estimateGas` from `from`,
+/// bounded; `None` when unmeasured.
+async fn gas_of(io: &Io<Event>, chain_id: u64, from: &str, call: &Call) -> Option<u128> {
+    let answer = io
+        .rpc_within(
+            chain_id,
+            "eth_estimateGas",
+            json!([{ "from": from, "to": call.to, "value": call.value, "data": call.data }]),
+            Some(REVIEW_READ_MS),
+        )
+        .await
+        .ok()?;
+    let raw = answer.as_str()?;
+    if !raw.starts_with("0x") || raw.len() < 3 {
+        return None;
+    }
+    shell::quantity(raw)
 }
 
 async fn execute(

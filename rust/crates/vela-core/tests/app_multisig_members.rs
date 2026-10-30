@@ -23,6 +23,7 @@ use vela_core::app::multisig_members::{
     MemberKind, MemberPlan, MemberProblem, MemberRule, MultisigMembers, NetworkMembers,
     NetworkState, PlanNetwork, Recovery, RuleChip, WaitingProposal, WaitingStatus,
 };
+use vela_core::app::multisig_proposals::ProposalKind;
 use vela_core::app::multisig_shell::{
     AccountUpdate, ChainMembers, MemberInfo, MultisigAccount, MultisigOperation as Op,
     MultisigShellResult as Res, Notice,
@@ -41,6 +42,15 @@ const ARC: u64 = 5_042_002;
 const BASE: u64 = 8453;
 const GNOSIS: u64 = 100;
 const OPTIMISM: u64 = 10;
+
+/// The member change a network's proposal carries (always a member change).
+fn change_of(n: &PlanNetwork) -> Option<MemberChange> {
+    match &n.proposal {
+        None => None,
+        Some(ProposalKind::MemberChange { change }) => Some(change.clone()),
+        Some(other) => panic!("not a member change: {other:?}"),
+    }
+}
 
 fn account_of(g: &multisig::MultisigGenesis) -> MultisigAccount {
     serde_json::from_value(stored_row(g, &[], true)).unwrap()
@@ -193,8 +203,8 @@ fn each_networks_change_is_built_against_that_networks_own_list() {
     let read = multisig::review(ARC, &account.address, tx).unwrap();
     assert!(matches!(read.action, Some(Action::RemoveOwner { .. })));
     // What the proposals machine is handed, per network: the change itself.
-    assert_eq!(arc.propose, Some(change.clone()));
-    assert_eq!(base.propose, Some(change));
+    assert_eq!(change_of(&arc), Some(change.clone()));
+    assert_eq!(change_of(&base), Some(change));
     assert!(sut.view().can_propose);
 }
 
@@ -226,7 +236,11 @@ fn a_network_refuses_in_its_own_terms_and_proposes_only_where_it_can() {
         refusal_of(&on(&plan, BASE)),
         MemberRefusal::NotMember { .. }
     ));
-    assert_eq!(on(&plan, BASE).propose, None, "nothing to propose there");
+    assert_eq!(
+        change_of(&on(&plan, BASE)),
+        None,
+        "nothing to propose there"
+    );
     let plan = draft(
         &mut sut,
         &mut world,
@@ -441,7 +455,7 @@ fn removes_a_member_with_one_proposal_per_deployed_network_none_where_it_is_not(
     let requests: Vec<(u64, MemberChange)> = plan
         .networks
         .iter()
-        .filter_map(|n| n.propose.clone().map(|c| (n.chain_id, c)))
+        .filter_map(|n| change_of(n).map(|c| (n.chain_id, c)))
         .collect();
     let remove_a = MemberChange::Remove {
         owner: A.to_owned(),
@@ -539,7 +553,7 @@ fn replaces_a_member_the_new_account_shown_in_full_and_its_name_kept_here() {
     let plan = plan_of(&sut);
     assert_eq!(plan.ready, vec![ARC, BASE]);
     assert_eq!(
-        on(&plan, BASE).propose,
+        change_of(&on(&plan, BASE)),
         Some(MemberChange::Replace {
             old_owner: C.to_owned(),
             new_owner: D.to_owned()
@@ -663,7 +677,7 @@ fn adds_a_member_picked_from_the_contacts_its_address_shown_its_name_and_kind_ke
     assert!(view.entry.suggestions.is_empty(), "picked: no more offers");
     assert_eq!(rules_of(&on(&plan_of(&sut), ARC)), ((2, 3), (2, 4)));
     assert_eq!(
-        on(&plan_of(&sut), ARC).propose,
+        change_of(&on(&plan_of(&sut), ARC)),
         Some(MemberChange::Add {
             owner: D.to_owned(),
             threshold: None
@@ -1576,5 +1590,92 @@ fn member_problems_are_said_in_the_webs_words() {
     assert_eq!(
         member_problem(D, &[D.to_owned()]),
         Some(MemberProblem::Duplicate)
+    );
+}
+
+// =====================================================================================
+// One name for the change: the members view's per-network proposal is the
+// proposals machine's `Draft`, dispatched as it is.
+// =====================================================================================
+
+#[test]
+fn a_networks_proposal_is_dispatched_as_it_is_into_the_proposals_machines_draft() {
+    use vela_core::app::multisig_proposals::{self as proposals, MultisigProposals};
+    let here = fixture(0);
+    let g = genesis(&[&here.address, B, C], 2, "0x0d");
+    let mut world = World {
+        locals: vec![here.clone()],
+        ..World::default()
+    };
+    world.deploy(
+        GNOSIS,
+        &g.address,
+        DeployedSafe::clean(&[&here.address, B, C], 2),
+    );
+    let mut account = account_of(&g);
+    account.chain_ids = vec![GNOSIS];
+    let mut members = shown(&mut world, &account, &[GNOSIS]);
+    let change = MemberChange::Add {
+        owner: D.to_owned(),
+        threshold: Some(2),
+    };
+    run(
+        &mut members,
+        &mut world,
+        Event::Draft {
+            change: Some(change.clone()),
+        },
+    );
+    let network = on(&plan_of(&members), GNOSIS);
+    // The shell's whole job: `{ type: "draft", chain_id, proposal }`, both
+    // fields taken from the row as they are.
+    let wire = serde_json::to_value(&network).unwrap();
+    let draft: proposals::Event = serde_json::from_value(json!({
+        "type": "draft",
+        "chain_id": wire["chain_id"],
+        "proposal": wire["proposal"],
+    }))
+    .unwrap();
+    assert!(matches!(
+        &draft,
+        proposals::Event::Draft {
+            chain_id: GNOSIS,
+            proposal: ProposalKind::MemberChange { change: c }
+        } if *c == change
+    ));
+
+    let mut sut: DomainDriver<MultisigProposals> = DomainDriver::new();
+    sut.dispatch(proposals::Event::Start {
+        service_url: world.service_url.clone(),
+        accounts: world.locals.clone(),
+        networks: vec![GNOSIS],
+        known: Vec::new(),
+    });
+    settle_reads_first(&mut sut, &mut world, 5_000);
+    sut.dispatch(proposals::Event::Follow {
+        account: Some(account.clone()),
+    });
+    settle_reads_first(&mut sut, &mut world, 5_000);
+    sut.dispatch(draft);
+    settle_reads_first(&mut sut, &mut world, 5_000);
+    let shown = sut
+        .view()
+        .draft
+        .expect("the draft the members view asked for");
+    assert!(
+        matches!(
+            &shown.item.review.action,
+            Some(Action::AddOwner { owner, .. }) if owner.eq_ignore_ascii_case(D)
+        ),
+        "{:?}",
+        shown.item.review.action
+    );
+    // The transaction the proposals machine built is the one the members view showed.
+    let MemberVerdict::Ready { tx, .. } = &network.verdict else {
+        unreachable!()
+    };
+    assert_eq!(
+        shown.item.tx.data.to_ascii_lowercase(),
+        tx.data.to_ascii_lowercase()
     );
 }

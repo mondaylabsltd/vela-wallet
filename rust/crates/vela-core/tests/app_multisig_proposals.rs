@@ -756,3 +756,206 @@ fn an_execution_that_would_fail_stops_before_the_passkey() {
     assert!(world.sent.is_empty());
     assert_eq!(world.passkeys.len(), passkeys);
 }
+
+// -- the execution preview's price: carries, executorApproves, the setup share ----------
+
+/// 0.05 of the chain's coin.
+const FEE: u128 = 50_000_000_000_000_000;
+
+fn quoted(executor_deployed: bool) -> vela_core::app::multisig_shell::MultisigShellResult {
+    vela_core::app::multisig_shell::MultisigShellResult::Quoted {
+        quote: json!({
+            "kind": "quoted",
+            "fee": {"token": null, "amount": format!("0x{FEE:x}")},
+            "totalGas": "0x7a120",
+            "executorDeployed": executor_deployed,
+        }),
+    }
+}
+
+/// Proposed by fixture 0, approved by fixture 1: the preview fixture 0 executes from.
+fn approved_twice(world: &mut World, sut: &mut Sut) -> String {
+    let hash = hash_of(&propose(sut, world, transfer("1"), None));
+    run(
+        sut,
+        world,
+        Event::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            owner: fixture(1).address,
+        },
+    );
+    hash
+}
+
+fn preview_of(sut: &mut Sut, world: &mut World, hash: &str, executor: &str) -> Value {
+    run(
+        sut,
+        world,
+        Event::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            executor: executor.to_owned(),
+        },
+    );
+    sut.view().previews[&format!("100:{hash}")].clone()
+}
+
+/// execute.test.ts "is priced at the relay's quote, with the one-time
+/// setup's share measured": the multisig and Bob's account deployed by it,
+/// two deployments of 221k each less the 21k each carries alone — 400k of
+/// the quote's 500k.
+#[test]
+fn the_preview_measures_the_one_time_setups_share_of_the_fee() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    world.quote_answer = Some(quoted(true));
+    world.estimate_gas = Some(221_000);
+    let executor = fixture(0).address;
+    world
+        .balances
+        .insert((100, executor.to_ascii_lowercase()), FEE / 5);
+    let preview = preview_of(&mut sut, &mut world, &hash, &executor);
+    assert_eq!(preview["kind"], "priced", "{preview}");
+    assert_eq!(
+        preview["setup"],
+        json!({
+            "multisig": true,
+            "members": [fixture(1).address],
+            "executor": false,
+            "amount": (FEE * 4 / 5).to_string(),
+        })
+    );
+    // r7-3: one short of the threshold with nothing deployed, the executor
+    // approves by sending it; the approval given is carried.
+    assert_eq!(preview["carries"], json!([fixture(1).address]));
+    assert_eq!(preview["executorApproves"], true);
+    assert_eq!(preview["balance"], (FEE / 5).to_string());
+    assert_eq!(preview["canPay"], false, "holds 0.01 for a 0.05 fee");
+    let gas_reads = world
+        .rpc_log
+        .iter()
+        .filter(|(_, m, _)| m == "eth_estimateGas")
+        .count();
+    assert_eq!(gas_reads, 2, "each deployment measured on its own");
+}
+
+/// "says no setup share when the executor's own account is deployed by it too".
+#[test]
+fn no_setup_share_when_the_executors_own_account_is_deployed_by_it_too() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    world.quote_answer = Some(quoted(false));
+    world.estimate_gas = Some(221_000);
+    let preview = preview_of(&mut sut, &mut world, &hash, &fixture(0).address);
+    assert_eq!(preview["setup"]["executor"], true);
+    assert_eq!(preview["setup"]["amount"], Value::Null);
+    assert!(
+        !world.rpc_log.iter().any(|(_, m, _)| m == "eth_estimateGas"),
+        "nothing measured when no share is said"
+    );
+}
+
+/// A deployment whose gas could not be measured: no share, never a part.
+#[test]
+fn an_unmeasured_deployment_says_no_setup_share() {
+    let (mut world, mut sut, _) = setup(&[0, 1]);
+    let hash = approved_twice(&mut world, &mut sut);
+    world.quote_answer = Some(quoted(true));
+    world.estimate_gas = None;
+    let preview = preview_of(&mut sut, &mut world, &hash, &fixture(0).address);
+    assert_eq!(preview["kind"], "priced", "{preview}");
+    assert_eq!(preview["setup"]["amount"], Value::Null);
+}
+
+/// "the look says what it carries" (r7-3): approvals that meet the
+/// threshold, from accounts already there, are all carried; the executor
+/// only sends it — and its execTransaction carries no `msg.sender` approval.
+#[test]
+fn the_look_says_what_it_carries_and_the_executor_only_sends_it() {
+    let (mut world, mut sut, _) = setup(&[0, 1, 2]);
+    let hash = approved_twice(&mut world, &mut sut);
+    for i in [0, 1] {
+        world.codes.insert(
+            (100, fixture(i).address.to_ascii_lowercase()),
+            "0x6080".to_owned(),
+        );
+    }
+    world.quote_answer = Some(quoted(true));
+    world.estimate_gas = Some(300_000);
+    let preview = preview_of(&mut sut, &mut world, &hash, &fixture(2).address);
+    assert_eq!(preview["kind"], "priced", "{preview}");
+    assert_eq!(
+        preview["carries"],
+        json!([fixture(0).address, fixture(1).address])
+    );
+    assert_eq!(preview["executorApproves"], false);
+    assert_eq!(preview["setup"]["members"], json!([]));
+    // One deployment (the multisig) of 300k: 279k of 500k.
+    assert_eq!(
+        preview["setup"]["amount"],
+        (FEE * 279_000 / 500_000).to_string()
+    );
+}
+
+/// The pure rules behind it, replayed from `tests/vectors/multisig/execution.json`.
+#[test]
+fn the_execution_vectors_hold() {
+    use vela_core::app::multisig_proposals::{carried_approvals, setup_share};
+    let path = format!(
+        "{}/tests/vectors/multisig/execution.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let carried = v["carried"].as_array().unwrap();
+    assert!(carried.len() >= 6);
+    for case in carried {
+        let name = case["name"].as_str().unwrap();
+        let others: Vec<(String, bool)> = case["others"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| {
+                (
+                    o["owner"].as_str().unwrap().to_owned(),
+                    o["ready"].as_bool().unwrap(),
+                )
+            })
+            .collect();
+        let (chosen, approves) = carried_approvals(
+            case["threshold"].as_u64().unwrap(),
+            case["executorIsOwner"].as_bool().unwrap(),
+            others,
+        );
+        let carries: Vec<String> = chosen.into_iter().map(|(o, _)| o).collect();
+        assert_eq!(json!(carries), case["expect"]["carries"], "{name}");
+        assert_eq!(
+            json!(approves),
+            case["expect"]["executorApproves"],
+            "{name}"
+        );
+    }
+    let shares = v["setupShare"].as_array().unwrap();
+    assert!(shares.len() >= 6);
+    let n = |v: &Value| v.as_str().unwrap().parse::<u128>().unwrap();
+    for case in shares {
+        let name = case["name"].as_str().unwrap();
+        let gas: Vec<Option<u128>> = case["gas"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| g.as_str().map(|s| s.parse().unwrap()))
+            .collect();
+        let got = setup_share(
+            n(&case["fee"]),
+            n(&case["totalGas"]),
+            case["executorDeployed"].as_bool().unwrap(),
+            &gas,
+        );
+        assert_eq!(
+            got.map(|a| a.to_string()).map_or(Value::Null, Value::from),
+            case["expect"],
+            "{name}"
+        );
+    }
+}

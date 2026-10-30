@@ -265,9 +265,12 @@
        ]
       }
      },
-     "propose": {
-      "kind": "remove",
-      "owner": "0x2222222222222222222222222222222222222222"
+     "proposal": {
+      "kind": "member_change",
+      "change": {
+       "kind": "remove",
+       "owner": "0x2222222222222222222222222222222222222222"
+      }
      }
     },
     {
@@ -355,7 +358,7 @@
        "kind": "notMember"
       }
      },
-     "propose": null
+     "proposal": null
     }
    ]
   }
