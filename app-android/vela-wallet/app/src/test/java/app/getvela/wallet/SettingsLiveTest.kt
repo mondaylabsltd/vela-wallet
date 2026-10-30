@@ -19,12 +19,9 @@ import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetEndpointView
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetProbeHealth
-import app.getvela.wallet.feature.settings.core.NetProviderId
-import app.getvela.wallet.feature.settings.core.NetProviderView
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetChainMismatch
-import app.getvela.wallet.feature.settings.core.NetProviderTestView
 import app.getvela.wallet.feature.settings.CalloutTone
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.wallet.WalletLive
@@ -235,70 +232,16 @@ class SettingsLiveTest {
         assertEquals(strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM), rows[1].tag)
     }
 
-    @Test
-    fun aProviderKeyFieldCarriesItsProviderId() {
-        val view = NetView(
-            loaded = true,
-            providers = listOf(
-                NetProviderView(
-                    provider = NetProviderId.Alchemy,
-                    key = "secret",
-                    has_key = true,
-                ),
-            ),
-        )
-        val model = SettingsLive.withNetworks(base(), view, strings)
-        val card = model.rpcProviders.providers.single()
-
-        assertEquals(NetProviderId.Alchemy.name, card.field.id)
-        assertEquals("secret", card.field.value)
-        assertEquals("Alchemy", card.name)
-    }
-
     /**
-     * A provider card says what the core knows about THAT provider: whether a
-     * key is set, and what its test found. The fixture drew Alchemy connected
-     * with "supports 12" and Ankr unkeyed with "supports 8" on every device.
+     * The RPC providers are retired in the core (`retire_provider_keys`):
+     * their keys became the networks' own RPCs. A live Settings offers no
+     * providers page and draws no provider card.
      */
     @Test
-    fun aProviderCardShowsItsKeyAndItsOwnTestCount() {
-        val view = NetView(
-            loaded = true,
-            providers = listOf(
-                NetProviderView(NetProviderId.Alchemy, key = "", has_key = false),
-                NetProviderView(
-                    NetProviderId.Drpc,
-                    key = "k",
-                    has_key = true,
-                    test = NetProviderTestView(done = true, ok_count = 3, total = 5),
-                ),
-                NetProviderView(
-                    NetProviderId.Ankr,
-                    key = "k",
-                    has_key = true,
-                    test = NetProviderTestView(done = false, ok_count = 1, total = 5),
-                ),
-            ),
-        )
-        val cards = SettingsLive.withNetworks(base(), view, strings).rpcProviders.providers
-
-        val notSet = strings.t(I18nKeys.SettingsUi.PROVIDER_NOT_SET)
-        assertEquals(SettingsTone.Neutral, cards[0].badge.tone)
-        assertEquals(notSet, cards[0].badge.label)
-        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY), cards[0].action)
-        assertNull("no test ran, so no count", cards[0].support)
-        // The link goes to the provider's own site — it used to open its label ("https://Get key →").
-        assertEquals("https://dashboard.alchemy.com/", cards[0].linkUrl)
-
-        assertEquals(SettingsTone.Ok, cards[1].badge.tone)
-        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_CHECK_KEY), cards[1].action)
-        assertNull("a keyed provider offers no get-key link", cards[1].link)
-        assertEquals(
-            strings.t(I18nKeys.SettingsUi.PROVIDER_SUPPORTS, mapOf("count" to "3", "total" to "5")),
-            cards[1].support,
-        )
-
-        assertNull("a test still running has no count yet", cards[2].support)
+    fun theRetiredProvidersPageIsNotOffered() {
+        val model = SettingsLive.withNetworks(base(), NetView(loaded = true), strings)
+        assertTrue(model.rpcProviders.providers.isEmpty())
+        assertTrue(model.sections.flatMap { it.rows }.none { it.id == "rpc-providers" })
     }
 
     /**

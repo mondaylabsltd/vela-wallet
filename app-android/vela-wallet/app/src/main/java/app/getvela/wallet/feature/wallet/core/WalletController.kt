@@ -32,6 +32,7 @@ import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.settings.core.NetEndpointField
@@ -683,6 +684,31 @@ class WalletController(
      */
     val holdingsRound: StateFlow<HoldingsRound?> = _holdingsRound
 
+    /**
+     * A settled round's networks with something held (spam is not money),
+     * added to [KeyValueStore.Keys.HELD_CHAIN_IDS] — the evidence the
+     * one-time settling of the shown networks reads (`shown_networks::settle`:
+     * never hide a network that holds the person's money, as far as the
+     * device knows). Written once a round has settled even when empty, so the
+     * settling knows the holdings were read.
+     */
+    private fun noteHeldChains(view: BalanceView) {
+        val held = (view.tokens + view.unpriced_tokens)
+            .filter { !it.spam && it.balance.any { c -> c in '1'..'9' } }
+            .map { it.chain_id.toLong() }
+        scope.launch {
+            runCatching {
+                val before = store.read(KeyValueStore.Keys.HELD_CHAIN_IDS)
+                    ?.let { raw -> runCatching { org.json.JSONArray(raw) }.getOrNull() }
+                    ?.let { array -> (0 until array.length()).mapNotNull { array.opt(it) as? Number }.map { it.toLong() } }
+                val union = ((before ?: emptyList()) + held).distinct().sorted()
+                if (before == null || union.size != before.size) {
+                    store.write(KeyValueStore.Keys.HELD_CHAIN_IDS, org.json.JSONArray(union).toString())
+                }
+            }
+        }
+    }
+
     /** The asset list's holdings, as Send reads them. */
     val holdings: HoldingsFeed = object : HoldingsFeed {
         override val view: StateFlow<BalanceView> = balances
@@ -700,6 +726,7 @@ class WalletController(
                     _holdingsRound.value?.let { it.atMs == stamp && it.address.equals(address, ignoreCase = true) } != true
                 ) {
                     _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = inSpace(view, spaceChains(networks.value)))
+                    noteHeldChains(view)
                 }
             }
         }

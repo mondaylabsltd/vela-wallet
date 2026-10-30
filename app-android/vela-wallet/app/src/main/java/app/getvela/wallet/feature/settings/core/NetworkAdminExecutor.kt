@@ -47,6 +47,14 @@ class NetworkAdminExecutor(
      * container can wire it after this executor exists.
      */
     private val dappAddSettled: () -> ((tab: String, id: String, outcome: app.getvela.wallet.feature.browser.core.DappAddOutcome) -> Unit)? = { null },
+    /**
+     * The core's one-time settling of `vela.shownNetworks`
+     * (`shown_networks_settle`): the stored bytes (`""`: none) and the
+     * evidence JSON, answered as a `NetShownSettled`. A seam for tests.
+     */
+    private val settleShown: (stored: String, evidenceJson: String) -> String = { stored, evidence ->
+        uniffi.vela_core_uniffi.shownNetworksSettle(stored, evidence)
+    },
 ) {
 
     @Suppress("LongMethod")
@@ -54,12 +62,20 @@ class NetworkAdminExecutor(
 
         // -- storage: live -----------------------------------------------------
 
-        is NetOperation.ReadStore -> NetShellResult.StoreLoaded(
-            custom_networks = decodeCustomNetworks(store.read(KeyValueStore.Keys.CUSTOM_NETWORKS)),
-            network_configs = decodeNetworkConfigs(store.read(KeyValueStore.Keys.NETWORK_CONFIG)),
-            endpoints = decodeStoredEndpoints(store.read(KeyValueStore.Keys.SERVICE_ENDPOINTS)),
-            provider_keys = decodeProviderKeys(store.read(KeyValueStore.Keys.RPC_PROVIDERS)),
-        )
+        is NetOperation.ReadStore -> {
+            val custom = decodeCustomNetworks(store.read(KeyValueStore.Keys.CUSTOM_NETWORKS))
+            val configs = decodeNetworkConfigs(store.read(KeyValueStore.Keys.NETWORK_CONFIG))
+            NetShellResult.StoreLoaded(
+                custom_networks = custom,
+                network_configs = configs,
+                endpoints = decodeStoredEndpoints(store.read(KeyValueStore.Keys.SERVICE_ENDPOINTS)),
+                provider_keys = decodeProviderKeys(store.read(KeyValueStore.Keys.RPC_PROVIDERS)),
+                // The device's shown Vela networks, settled (once, by the
+                // core) before the ledger reads them: never a list drawn
+                // before it. Absent: every network is shown.
+                shown_networks = shownNetworks(custom, configs),
+            )
+        }
 
         is NetOperation.WriteCustomNetworks -> {
             store.write(
@@ -97,18 +113,30 @@ class NetworkAdminExecutor(
             NetShellResult.Written
         }
 
-        // A cleared key is REMOVED, not stored as "" — the core's invariant ⑦,
-        // and the difference between "no key configured" and "a key that is the
-        // empty string" is the difference between falling back to the public
-        // endpoint and failing every request.
-        is NetOperation.WriteRpcProviders -> {
+        // The provider keys are retired (the core's `retire_provider_keys`):
+        // the networks they served get that URL as their own RPC, and the keys
+        // go ONLY once that write is on disk. Not best effort — what really
+        // happened is the answer, so a failure keeps the keys and the next
+        // load computes the same again. Nothing here logs: the keys ride
+        // inside those URLs.
+        is NetOperation.RetireProviderKeys -> {
+            val configsWritten = operation.configs?.let { configs ->
+                store.write(
+                    KeyValueStore.Keys.NETWORK_CONFIG,
+                    JSONArray().apply { configs.forEach { put(encodeNetworkConfig(it)) } }.toString(),
+                )
+            } ?: true
+            val keysRemoved = configsWritten && store.remove(KeyValueStore.Keys.RPC_PROVIDERS)
+            NetShellResult.ProviderKeysRetired(configs_written = configsWritten, keys_removed = keysRemoved)
+        }
+
+        // A Vela network shown again or taken out of the lists. The lists the
+        // person sees follow the network machine's rows, which the core has
+        // already redrawn; this is the record a relaunch reads.
+        is NetOperation.WriteShownNetworks -> {
             store.write(
-                KeyValueStore.Keys.RPC_PROVIDERS,
-                JSONObject().apply {
-                    operation.keys.alchemy?.let { put("alchemy", it) }
-                    operation.keys.drpc?.let { put("drpc", it) }
-                    operation.keys.ankr?.let { put("ankr", it) }
-                }.toString(),
+                KeyValueStore.Keys.SHOWN_NETWORKS,
+                app.getvela.wallet.core.crux.Wire.json.encodeToString(NetShownNetworks.serializer(), operation.record),
             )
             NetShellResult.Written
         }
@@ -254,8 +282,10 @@ class NetworkAdminExecutor(
         is NetOperation.WriteCustomNetworks,
         is NetOperation.WriteNetworkConfigs,
         is NetOperation.WriteServiceEndpoints,
-        is NetOperation.WriteRpcProviders,
+        is NetOperation.WriteShownNetworks,
         -> NetShellResult.Written
+        // Nothing is known to have been written: the keys stay, the next load retries.
+        is NetOperation.RetireProviderKeys -> NetShellResult.ProviderKeysRetired(configs_written = false, keys_removed = false)
         is NetOperation.StartSearchDebounce -> NetShellResult.DebounceElapsed
         is NetOperation.FetchSearchIndex -> NetShellResult.SearchIndex()
         is NetOperation.FetchChainInfo -> NetShellResult.ChainInfo(operation.chain_id, null)
@@ -321,6 +351,9 @@ class NetworkAdminExecutor(
                 rpc_url = record.string("rpcURL"),
                 explorer_url = record.string("explorerURL"),
                 bundler_url = record.string("bundlerURL"),
+                // "Only use my node" (2026-10-28): `onlyMine`, beside the
+                // network's settings — the web's and desktop's bytes.
+                only_mine = record.optBoolean("onlyMine", false),
             )
         }
 
@@ -329,7 +362,62 @@ class NetworkAdminExecutor(
         put("rpcURL", config.rpc_url)
         put("explorerURL", config.explorer_url)
         put("bundlerURL", config.bundler_url)
+        // Only when on, as the web writes it: an absent flag reads as off.
+        if (config.only_mine) put("onlyMine", true)
     }
+
+    /**
+     * The device's `vela.shownNetworks`: the stored record, else — ONCE — the
+     * one the core settles from what this device holds (`shown_networks::settle`),
+     * stored before it is used. The evidence is read as it is; what counts is
+     * the core's.
+     *
+     * Settled only once a balance round has been read
+     * ([KeyValueStore.Keys.HELD_CHAIN_IDS] present): a settling that could not
+     * see the person's holdings might hide a network that holds their money,
+     * and the core never re-decides a stored record. Until then nothing is
+     * hidden (absent = every network shown), and the next load settles.
+     */
+    private suspend fun shownNetworks(custom: List<NetCustomNetwork>, configs: List<NetNetworkConfig>): NetShownNetworks? {
+        val wire = app.getvela.wallet.core.crux.Wire.json
+        val stored = runCatching { store.read(KeyValueStore.Keys.SHOWN_NETWORKS) }.getOrNull()
+        if (!stored.isNullOrBlank()) {
+            return runCatching { wire.decodeFromString(NetShownNetworks.serializer(), stored) }.getOrNull()
+        }
+        val held = runCatching { store.read(KeyValueStore.Keys.HELD_CHAIN_IDS) }.getOrNull()
+            ?.let { raw -> runCatching { JSONArray(raw) }.getOrNull() }
+            ?: return null
+        val evidence = NetUseEvidence(
+            balance_chain_ids = held.longs(),
+            activity_chain_ids = chainIdsOf(store.read(KeyValueStore.Keys.TRANSACTIONS)),
+            multisig_chain_ids = emptyList(),
+            chosen_chain_ids = chainIdsOf(store.read(KeyValueStore.Keys.CUSTOM_TOKENS)),
+            overrides = configs,
+            added_chain_ids = custom.map { it.chain_id },
+        )
+        val settled = runCatching {
+            wire.decodeFromString(
+                NetShownSettled.serializer(),
+                settleShown("", wire.encodeToString(NetUseEvidence.serializer(), evidence)),
+            )
+        }.getOrNull() ?: return null
+        if (settled.write) {
+            // Best effort: the record still holds for this session, and the
+            // next load settles again on the same evidence.
+            val written = runCatching {
+                store.write(KeyValueStore.Keys.SHOWN_NETWORKS, wire.encodeToString(NetShownNetworks.serializer(), settled.record))
+            }.getOrDefault(false)
+            VelaLog.event("net.shown", "settled", "shown" to settled.record.shown.size, "written" to written)
+        }
+        return settled.record
+    }
+
+    /** The `chainId` of every record in a stored array (activity, custom tokens); unreadable: none. */
+    private fun chainIdsOf(raw: String?): List<Long> =
+        objects(raw).mapNotNull { record -> record.optLong("chainId", 0).takeIf { it > 0 } }.distinct()
+
+    private fun JSONArray.longs(): List<Long> =
+        (0 until length()).mapNotNull { (opt(it) as? Number)?.toLong()?.takeIf { id -> id > 0 } }
 
     /** Absent fields stay absent: the core applies the defaults, not this. */
     private fun decodeStoredEndpoints(raw: String?): NetStoredEndpoints {
