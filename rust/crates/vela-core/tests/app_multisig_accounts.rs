@@ -1128,7 +1128,7 @@ fn sharing_again_says_why_a_passkey_failed() {
     world.service_down = true;
     run(&mut sut, &mut world, share());
     assert_eq!(sut.view().share_again[&key], Phase::Failed);
-    assert!(sut.view().share_again_failure.get(&key).is_none());
+    assert!(!sut.view().share_again_failure.contains_key(&key));
 }
 
 /// A new draft is a fresh sheet at once: what the sheet asked right after
@@ -1486,11 +1486,13 @@ fn an_import_is_vetted_as_an_address_added_is() {
 #[test]
 fn sharing_without_a_proof_is_asked_once_a_session() {
     let g = genesis(&[A], 1, "0x3c");
-    let mut world = World::default();
-    world.import_status = (
-        200,
-        json!({"status": "resolved", "reason": "notDeployed", "recordCall": {}}),
-    );
+    let mut world = World {
+        import_status: (
+            200,
+            json!({"status": "resolved", "reason": "notDeployed", "recordCall": {}}),
+        ),
+        ..World::default()
+    };
     world.store.insert(
         keys::ACCOUNTS.to_owned(),
         json!([stored_row(&g, &[100], false)]).to_string(),
