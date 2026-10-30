@@ -1761,6 +1761,15 @@ pub enum Event {
     DismissRelayUnreachable,
     /// The error panel's retry — back to idle.
     RetryAfterError,
+    /// Round 6: the form's network answered a bounded read again after a
+    /// submit failed as the network's ([`SendTxErrorKey::ChainUnreachable`] /
+    /// [`SendTxErrorKey::ChainBusy`]) — the confirm opens by itself, without
+    /// the person's "Try again". Only that failure, on that network: any other
+    /// error (or another network's answer) is kept as it is. The shell asks
+    /// only while that line is up, and asks the fee again with it.
+    ChainAnswered {
+        chain_id: u32,
+    },
     /// Every operation in flight on this device, as the tracker last said
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
     /// tracker render). While the account has one on the form's chain, the
@@ -3107,6 +3116,21 @@ impl Send {
                 model.tx_error = None;
                 render()
             }
+            Event::ChainAnswered { chain_id } => {
+                let networks = matches!(
+                    model.tx_error,
+                    Some(SendTxErrorKey::ChainUnreachable | SendTxErrorKey::ChainBusy)
+                );
+                if model.tx != SendTxStatus::Error
+                    || !networks
+                    || form_chain(model) != Some(chain_id)
+                {
+                    return Command::done();
+                }
+                model.tx = SendTxStatus::Idle;
+                model.tx_error = None;
+                render()
+            }
             Event::InFlightOps { ops } => {
                 if model.in_flight == ops {
                     return Command::done();
@@ -3439,11 +3463,10 @@ fn payees(model: &Model) -> Vec<SendPayee> {
                     .or(checked.and_then(|risk| risk.known_name.as_deref()))
                     .map(str::trim)
                     .filter(|name| !name.is_empty());
-                let own = model
-                    .account
-                    .as_ref()
-                    .is_some_and(|account| account.address.trim().eq_ignore_ascii_case(address))
-                    || checked.is_some_and(|risk| risk.own);
+                let own =
+                    model.account.as_ref().is_some_and(|account| {
+                        account.address.trim().eq_ignore_ascii_case(address)
+                    }) || checked.is_some_and(|risk| risk.own);
                 SendPayee {
                     address: address.to_owned(),
                     name: name.map(str::to_owned),

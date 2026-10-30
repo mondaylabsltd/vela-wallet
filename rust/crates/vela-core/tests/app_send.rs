@@ -5268,6 +5268,42 @@ fn a_timeout_before_the_passkey_opened_is_not_the_passkeys() {
     assert_eq!(view.tx_error, Some(SendTxErrorKey::ChainUnreachable));
 }
 
+/// Round 6: after the network's failure, the confirm opens by itself once the
+/// form's network answers again — no "Try again" needed. Another network's
+/// answer, or any other error, changes nothing.
+#[test]
+fn the_confirm_opens_again_when_the_network_answers() {
+    for busy in [false, true] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::ChainUnreachable { busy },
+        });
+        assert!(!sut.view().can_confirm);
+        // Another network answering is not this one.
+        sut.dispatch(Event::ChainAnswered { chain_id: 8453 });
+        assert_eq!(sut.view().tx_status, SendTxStatus::Error);
+        assert!(!sut.view().can_confirm);
+        sut.dispatch(Event::ChainAnswered { chain_id: 1 });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+        assert_eq!(view.tx_error, None);
+        assert!(view.can_confirm, "open again, by itself");
+    }
+
+    // A failure that is not the network's stays until the person's own retry.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::NonceUsed,
+    });
+    sut.dispatch(Event::ChainAnswered { chain_id: 1 });
+    assert_eq!(sut.view().tx_error, Some(SendTxErrorKey::NonceUsed));
+    assert!(!sut.view().can_confirm);
+}
+
 /// send-15: the nonce this send signed was spent by another transaction of
 /// the account (another tab's): nothing was sent — said calmly, by its own
 /// key, and "Try again" opens the confirm to sign anew.
@@ -5614,7 +5650,10 @@ fn a_split_names_own_accounts_and_never_tells_them_first() {
     assert!(!view.risk_unfinished);
     assert_eq!(view.payees[0].name.as_deref(), Some("R5 Bob"));
     assert_eq!(view.payees[0].name_source, Some(SendNameSource::Own));
-    assert!(!view.payees[0].first_time, "one's own account is never a first transfer");
+    assert!(
+        !view.payees[0].first_time,
+        "one's own account is never a first transfer"
+    );
     assert_eq!(view.payees[1].name, None);
     assert!(view.payees[1].first_time);
 }

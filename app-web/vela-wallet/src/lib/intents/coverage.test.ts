@@ -69,6 +69,8 @@ const DISPATCHED: Record<string, Place> = {
 	'sendSession.add_network_tapped': { view: 'goes to add a network (add_network)' },
 	'sendSession.retry_after_bootstrap': { view: 'the review’s own retry' },
 	'sendSession.retry_after_error': { view: 'the review’s own retry' },
+	// Round 6: the network answered again after the send failed as its.
+	'sendSession.chain_answered': { machine: 'the network answering again' },
 	// send-5: back to the review from a receipt proven never sent.
 	'sendSession.send_again': { view: 'the review’s own retry' },
 	// Round 3: the recipient's check asked again on the review.

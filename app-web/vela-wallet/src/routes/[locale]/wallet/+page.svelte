@@ -150,6 +150,7 @@
 	import { toSendToken } from '$lib/flows/core/send-types';
 	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
 	import { liveSendLock } from '$lib/flows/live-send-lock';
+	import { watchChainRecovery } from '$lib/flows/core/chain-recovery';
 	import SendLock from '$lib/flows/ui/SendLock.svelte';
 	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
 	import { toApiToken } from '$lib/wallet/core/balance-executor';
@@ -1287,6 +1288,28 @@
 		if (view.multi_selected_ids.length === 0 && !view.multi_select_mode) {
 			sendSession?.dispatch({ type: 'set_multi_network', chain_id: null });
 		}
+	});
+
+	/**
+	 * Round 6: a submit that failed as the network's leaves Confirm & Send shut
+	 * with the network's words. While that line is up, the network is asked
+	 * (bounded reads, and at once on "online"); its first answer opens the
+	 * confirm (`chain_answered`, the core's rule) and the fee is asked again —
+	 * no "Try again" needed. The line stays until the network itself answers.
+	 */
+	const recoveryChain = $derived.by(() => {
+		const view = sendView;
+		if (!view || view.tx_status !== 'error') return null;
+		if (view.tx_error !== 'chain_unreachable' && view.tx_error !== 'chain_busy') return null;
+		return formChainOf(view);
+	});
+	$effect(() => {
+		const chainId = recoveryChain;
+		if (chainId === null) return;
+		return watchChainRecovery(chainId, (answered) => {
+			sendSession?.dispatch({ type: 'chain_answered', chain_id: answered });
+			feeQuote.requote();
+		});
 	});
 
 	/** The live inputs the send overlays read, or `undefined` while none is open. */
