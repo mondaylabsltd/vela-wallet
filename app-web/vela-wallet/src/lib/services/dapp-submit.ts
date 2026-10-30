@@ -42,6 +42,7 @@ import {
 	keySetOf,
 	signerAddressFor,
 	type BeforePost,
+	type OperationToSign,
 	type QuotedInBandFee,
 	type SignFn,
 	type SubmitResult,
@@ -174,7 +175,8 @@ function challengeSigner(
 	stored: SignerAccount | undefined,
 	credentials: { id: string }[],
 	safeAddress: string,
-	chainId: number
+	chainId: number,
+	hooks?: DAppSubmitHooks
 ): ChallengeSigner {
 	return {
 		account: safeAddress,
@@ -185,7 +187,11 @@ function challengeSigner(
 			params: request.params,
 			origin: request.origin ?? '',
 			chainId
-		}
+		},
+		// While the trusted page has the request, the asker is told it is still
+		// being answered (spec 082 RB5's claim, renewed): the request lives as
+		// long as the page is open.
+		keepAlive: hooks ? () => hooks.claim('sign') : undefined
 	};
 }
 
@@ -330,7 +336,7 @@ async function signSafeMessage(
 		signChallenge,
 		hooks,
 		false
-	)(safeHash, challengeSigner(request, stored, credentials, safeAddress, chainId));
+	)(safeHash, challengeSigner(request, stored, credentials, safeAddress, chainId, hooks));
 	// The authenticator signed the hash that was asked for, and nothing else
 	// (spec 028 Phase 8).
 	assertChallengeSigned(fromHex(stripHexPrefix(assertion.clientDataJSONHex)), safeHash);
@@ -490,7 +496,14 @@ export async function handleSendTransaction(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
-	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
+	const signer = challengeSigner(
+		request,
+		stored,
+		credentials,
+		safeAddress,
+		effectiveChainId,
+		hooks
+	);
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	const txResult = await sendOneCall(
@@ -599,8 +612,9 @@ async function answerFor(
  * challenge, with the identity-provider compatibility check.
  */
 function txSigner(signer: ChallengeSigner) {
-	return async (challenge: Uint8Array) => {
-		const assertion = await signChallenge(challenge, signer);
+	return async (challenge: Uint8Array, operation?: OperationToSign) => {
+		// The assembled operation rides along for the trusted page (R7).
+		const assertion = await signChallenge(challenge, signer, operation);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {
@@ -845,7 +859,14 @@ export async function handleSendCalls(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
-	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
+	const signer = challengeSigner(
+		request,
+		stored,
+		credentials,
+		safeAddress,
+		effectiveChainId,
+		hooks
+	);
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	// Single call → use existing send logic

@@ -59,6 +59,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { adviceStanding, openReview, sheetBeside } from '$lib/agent/advice.svelte';
 	import { adviceCard } from '$lib/agent/advisor';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -877,6 +878,22 @@
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);
 		}}
+	/>
+{/if}
+
+<!--
+	The page, everywhere (owner, 2026-10-30): an account that reviews and signs
+	on its trusted page is handed there from this sheet — the hand-off card,
+	over it (a bottom sheet, so it stacks above the signing sheet on every
+	width).
+-->
+{#if messages.handoff !== undefined}
+	<PageHandoffSheet
+		m={messages.handoff}
+		locale={typeof document === 'undefined' ? 'en' : document.documentElement.lang || 'en'}
+		wide={false}
+		closeLabel={messages.close}
+		kind="signature"
 	/>
 {/if}
 

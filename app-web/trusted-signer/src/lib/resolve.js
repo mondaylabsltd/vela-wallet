@@ -340,8 +340,9 @@ window.VelaCS = window.VelaCS || {};
         icon: (known && known.icon) || null,
         // Only a channel the browser itself vouches for (postMessage
         // messaging) proves who is asking. Everything else is the requester's
-        // own word, and has to be shown as such.
-        originVerified: ctx.originVerified === true,
+        // own word, and has to be shown as such — a site a wallet relays
+        // included (`relayedSite`).
+        originVerified: ctx.originVerified === true && ctx.siteRelayed !== true,
         // No site at all: the wallet's own send. The card then names no
         // requester (the apps' `first_party`), rather than a generic
         // "Wallet" line that says nothing a person can check.
@@ -1490,14 +1491,18 @@ window.VelaCS = window.VelaCS || {};
    *
    * The URL channel can say yes when its answer address is exactly the
    * wallet's. postMessage answers whoever opened this page — any site can —
-   * so it says yes for ONE request only: a multisig member's approval
-   * (`vela_multisigApprove`), and only when the browser reports the opener as
-   * Vela's web wallet (`isWebWallet`). The web wallet is where multisigs live
-   * and it cannot receive `velawallet://`; the browser's own `event.origin`
-   * names the window the answer goes to, which is a stronger fact than any
-   * callback address. Every other signature over postMessage stays refused,
-   * whoever opened the page. The loopback socket is retired (the published
-   * page's `default-src 'none'` cannot open it).
+   * so it says yes only when the browser reports the opener as one of Vela's
+   * own wallets, by its EXACT origin: the web wallet (`isWebWallet`) or the
+   * published Chrome extension (`isExtension`). Neither can receive
+   * `velawallet://`; the browser's own `event.origin` names the window the
+   * answer goes to, which is a stronger fact than any callback address. And
+   * only for what a wallet signs (`SIGNED_THERE`): a transaction, a batch, a
+   * message, a multisig member's approval (owner, 2026-10-30: the page is
+   * usable everywhere — until then, only the approval, and only for the web
+   * wallet). Every signature over postMessage from any other opener stays
+   * refused, a `getvela.app` subdomain included; `eth_sign` is refused
+   * whoever asks. The loopback socket is retired (the published page's
+   * `default-src 'none'` cannot open it).
    *
    * ONE rule, used everywhere the answer's destination matters: a signature
    * is refused without it (`resolve`), so is every key ceremony on the URL
@@ -1512,8 +1517,13 @@ window.VelaCS = window.VelaCS || {};
   function answersToWallet(ctx) {
     if (!ctx) return false;
     if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
-    return ctx.channel === 'post' && ctx.method === MULTISIG_APPROVE && ctx.originVerified === true &&
-      isWebWallet(ctx.requester);
+    return ctx.channel === 'post' && ctx.originVerified === true &&
+      SIGNED_THERE.indexOf(ctx.method) >= 0 && walletOpener(ctx.requester);
+  }
+
+  /** The opener the browser reports is one of Vela's own wallets. */
+  function walletOpener(origin) {
+    return isWebWallet(origin) || isExtension(origin);
   }
 
   /**
@@ -1527,6 +1537,57 @@ window.VelaCS = window.VelaCS || {};
    */
   var WEB_WALLETS = ['https://wallet.getvela.app', 'https://getvela.app'];
   var MULTISIG_APPROVE = 'vela_multisigApprove';
+
+  /**
+   * The published Chrome extension, by its exact origin. The id is the one
+   * the extension's manifest `key` derives (`extension/manifest.json`; the
+   * development and the GitHub-release packages carry that key). The Chrome
+   * Web Store assigns its own id to the store package, which carries no key:
+   * it joins this list once the store has assigned it — until then a store
+   * install reviews and signs in Vela (`docs/store-submission`).
+   */
+  var EXTENSIONS = ['chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl'];
+
+  /** What a wallet hands this page to sign over postMessage. */
+  var SIGNED_THERE = [
+    'eth_sendTransaction',
+    'wallet_sendCalls',
+    'personal_sign',
+    'eth_signTypedData_v4',
+    'eth_signTypedData_v3',
+    'eth_signTypedData',
+    MULTISIG_APPROVE,
+  ];
+
+  /**
+   * The extension, by the origin the BROWSER reports for the window that
+   * opened this page: its published id, exactly. A page served from this
+   * machine's loopback — a developer's — also answers any unpacked
+   * extension (whose id is derived from its folder): such a page can only
+   * use the loopback's own passkeys, never `getvela.app`'s.
+   */
+  function isExtension(origin) {
+    if (typeof origin !== 'string') return false;
+    if (EXTENSIONS.indexOf(origin) >= 0) return true;
+    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    return LOOPBACK_HOST.test(here) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
+  }
+
+  /**
+   * The site in a request a wallet relays (the opener is Vela's web wallet or
+   * extension, and the site is not the opener itself) is the wallet's word:
+   * the browser vouched for who opened this page, not for the site the
+   * wallet says asked it. A tampered wallet is what this page is for, so its
+   * word is drawn as a claim (`warn.claimedOrigin`).
+   */
+  function relayedSite(requested, ctx) {
+    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester)) return false;
+    var origin = requested && typeof requested.origin === 'string' ? requested.origin : '';
+    if (!origin) return false;
+    var parsed = null;
+    try { parsed = new URL(origin); } catch (e) { return true; }
+    return parsed.origin !== ctx.requester;
+  }
 
   function isWebWallet(origin) {
     if (typeof origin !== 'string') return false;
@@ -2217,6 +2278,7 @@ window.VelaCS = window.VelaCS || {};
     // requester's word for it, the intent's own method.
     ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
+    ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
@@ -2283,7 +2345,8 @@ window.VelaCS = window.VelaCS || {};
 
     if (!view.dapp.originVerified && view.dapp.origin) {
       // About the requester line, so drawn under it (`near`), not as a banner.
-      view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin', near: 'requester' });
+      // A site a wallet relays is the WALLET's word, not the site's own.
+      view.warnings.push({ tone: 'caution', key: ctx.siteRelayed ? 'warn.relayedOrigin' : 'warn.claimedOrigin', near: 'requester' });
     }
 
     return finishSigning(view, ctx);
@@ -2294,6 +2357,7 @@ window.VelaCS = window.VelaCS || {};
   ns.resolve.walletRequester = walletRequester;
   ns.resolve.keyRoute = keyRoute;
   ns.resolve.answersToWallet = answersToWallet;
+  ns.resolve.EXTENSIONS = EXTENSIONS.slice();
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };

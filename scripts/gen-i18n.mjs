@@ -1269,8 +1269,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   rest of `home.multisig`, so the compiled pin stays 2202 and the on-demand
 //   pin goes 527 + 35 = 562. Trusted's `settings.venue.webApprovals` (1
 //   leaf) stays compiled: 2202 + 1 = 2203 paths, 2095 leaves, 108 branches.
-if (PATHS.length !== 2203) fail(`expected 2203 paths (2095 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2095) fail(`expected 2095 leaf paths, got ${leafSet.size}`);
+// 2204 (round 6, the page everywhere, 2026-10-30): the owner made the signing
+//   page usable on the web and in the extension for every signature, so
+//   `settings.venue.webApprovals` ("on the web, a page signs your multisig
+//   approvals; the rest in Vela") is gone, and How you sign says what a page
+//   protects against and what it does not: + `settings.venue.{pageProtects,
+//   pageLimit}` ("… a tampered Vela screen can't trick you …" / "It can't
+//   protect you if this wallet itself is compromised: your passkeys sign for
+//   {{domain}} …"). 2095 − 1 + 2 = 2096 leaves, 108 branches.
+if (PATHS.length !== 2204) fail(`expected 2204 paths (2096 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2096) fail(`expected 2096 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

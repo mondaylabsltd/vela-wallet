@@ -995,12 +995,12 @@
 	 * Spec 102: where the active account reviews and signs, from the SESSION's
 	 * record (the core's reader migrated it), never the raw store.
 	 *
-	 * 2026-10-29: a choice on the web too. The web still opens no page for a
-	 * transaction or a message (P2-11: those sign in Vela, `SigningPlan::on_web`)
-	 * — but a multisig member's approval goes to the page the account chose
-	 * (`multisigApprovalRoute`, the owner's Bybit lesson), so the rows are an
-	 * app's (R1 alone decides which can be picked) and the screen says what a
-	 * page does here (`settings.venue.webApprovals`). The web saves no signing
+	 * A real choice on the web and in the extension (owner, 2026-10-30: the
+	 * page, everywhere): every transaction, batch, message and multisig
+	 * approval of the account goes where it says (`signingRoute`), so the rows
+	 * are an app's (R1 alone decides which can be picked), and the screen says
+	 * what a page protects against and what it does not
+	 * (`settings.venue.pageProtects` / `pageLimit`). The web saves no signing
 	 * pages of its own: the official page, and the account's own.
 	 */
 	const activeAccount = $derived(view.accounts[view.active_index]?.account);
@@ -1011,7 +1011,7 @@
 			{
 				domain,
 				choices: signingVenueChoices(domain, activeAccount.signing_venue, []),
-				webApprovals: true
+				honest: true
 			},
 			m
 		);

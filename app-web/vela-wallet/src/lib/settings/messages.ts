@@ -222,10 +222,12 @@ export interface SettingsMessages {
 		 */
 		blocked: Record<VenueBlockKey, string>;
 		/**
-		 * 2026-10-29: the web's one hand-off — a page venue reviews and signs
-		 * the account's multisig approvals there; everything else stays in Vela.
+		 * What a signing page protects against (a tampered app interface) and
+		 * what it does not (a fully compromised wallet on the same passkey
+		 * domain, `{{domain}}`) — owner, 2026-10-30.
 		 */
-		webApprovals?: string;
+		pageProtects?: string;
+		pageLimit?: string;
 	};
 	/**
 	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.

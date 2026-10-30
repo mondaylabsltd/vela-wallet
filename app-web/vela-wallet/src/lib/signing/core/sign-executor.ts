@@ -42,7 +42,7 @@
  */
 
 import { PasskeyError } from '$lib/onboarding/core/passkey';
-import { VenueBlockedError } from '$lib/signing/sign-challenge';
+import { PageDeclinedError, VenueBlockedError } from '$lib/signing/sign-challenge';
 import {
 	attemptSilentSponsorship,
 	checkBundlerFunding,
@@ -609,6 +609,10 @@ export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wal
 		if (error instanceof WriteAheadTimeoutError) {
 			return { type: 'failed', message: userOpNotSentDetail(), refused: false, signer: null };
 		}
+		// Spec 102 (2026-10-30): the person declined on the account's trusted
+		// signing page, or closed it unsigned. The page is the venue, so that is
+		// their answer: the core answers the site 4001 and clears the sheet.
+		if (error instanceof PageDeclinedError) return { type: 'page_declined' };
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			// Never an error, never a response, never a durable 'rejected' (⑧) —
 			// but the sheet says whether the prompt ran out of time (signer-11).

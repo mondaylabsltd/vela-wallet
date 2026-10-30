@@ -54,7 +54,12 @@ import {
 } from '$lib/core/kernels';
 import { spaceNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
 import { PasskeyError } from '$lib/onboarding/core/passkey';
-import { cancelChallenge, signChallenge, VenueBlockedError } from '$lib/signing/sign-challenge';
+import {
+	cancelChallenge,
+	PageDeclinedError,
+	signChallenge,
+	VenueBlockedError
+} from '$lib/signing/sign-challenge';
 import { addCustomNetworkByChainId } from '$lib/services/add-network.svelte';
 import { parseBundlerUnderfunded, probeTreasury } from '$lib/services/bundler-service';
 import { hapticError, hapticSuccess } from '$lib/services/platform';
@@ -63,6 +68,7 @@ import { resolveRecipientRisk } from '$lib/services/recipient-risk';
 import {
 	keySetOf,
 	sendBatchCalls,
+	type OperationToSign,
 	type SignFn,
 	UserOpNotSentError,
 	UserOpRevertedError,
@@ -556,11 +562,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 						// The wallet's own send: no method, no site (contract §1).
 						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
 					};
-					const signFn: SignFn = async (challenge: Uint8Array) => {
+					const signFn: SignFn = async (challenge: Uint8Array, toSign?: OperationToSign) => {
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
-						const assertion = await signChallenge(challenge, signer);
+						// The operation rides along: an account that reviews and signs on
+						// its trusted page is handed it there (R7).
+						const assertion = await signChallenge(challenge, signer, toSign);
 						const compat = verifySafeWebAuthn(assertion);
 						if (!compat.ok) {
 							throw new Error(
@@ -876,6 +884,9 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			// The confirm says which (send-11): closed, or out of time.
 			return error.timedOut ? { type: 'passkey_timed_out' } : { type: 'passkey_cancelled' };
 		}
+		// Declined on the trusted signing page, or closed unsigned (R7): as a
+		// passkey closed — the confirm stays, for another try.
+		if (error instanceof PageDeclinedError) return { type: 'passkey_cancelled' };
 		// Spec 102 (P2b-W1): this account cannot sign on the web — nothing was
 		// signed or sent. The core says why on the confirm screen, in the
 		// person's language (`SendView.tx_venue_block`), from the block itself.

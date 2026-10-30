@@ -19,7 +19,6 @@ import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
-import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import { BOARD_CHECK_TIME } from './board-check';
 import { integrityLineModel, signingPagesModel, venueModel } from './venue';
 import type {
@@ -1213,12 +1212,12 @@ interface VenueAccount {
 	/** `signingVenueChoices(domain, venue, SAVED_PAGES)` — an app's rows. */
 	choices: VenueChoice[];
 	/**
-	 * The web's reading (P2-09, D-16): `signingVenueChoices(domain, venue, [],
-	 * 'web')` — the web saves no pages, and every page row is disabled with
-	 * its reason — and the web plan's venue and block
-	 * (`signingPlan(record, 'web')`).
+	 * The web's and the extension's reading (2026-10-30, the page everywhere):
+	 * the apps' rows for the same account, `signingVenueChoices(domain, venue,
+	 * [])` — the web saves no pages of its own, so the official page and the
+	 * account's own — every reachable row a choice.
 	 */
-	web: { choices: VenueChoice[]; plan: Pick<SigningPlan, 'venue' | 'blocked'> };
+	web: { choices: VenueChoice[] };
 }
 
 /**
@@ -1286,12 +1285,9 @@ export const VENUE_ACCOUNTS: Record<'app' | 'own', VenueAccount> = {
 					name: '',
 					domain: 'getvela.app',
 					official: true,
-					active: true,
-					blocked: { type: 'not_on_web' }
+					active: true
 				}
-			],
-			// P2-11: a page venue on `getvela.app` signs in Vela on the web.
-			plan: { venue: { type: 'in_vela' }, blocked: null }
+			]
 		}
 	},
 	own: {
@@ -1365,12 +1361,9 @@ export const VENUE_ACCOUNTS: Record<'app' | 'own', VenueAccount> = {
 					name: '',
 					domain: 'sign.example.com',
 					official: false,
-					active: true,
-					blocked: { type: 'not_on_web' }
+					active: true
 				}
-			],
-			// A custom-domain account signs nowhere on the web, and the plan says why.
-			plan: { venue: { type: 'page', url: OWN_PAGE }, blocked: { type: 'not_on_web' } }
+			]
 		}
 	}
 };
@@ -1420,13 +1413,14 @@ function venue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
 	);
 }
 
-/** The web's reading of the same account: read-only, page rows disabled (P2-09, D-16). */
+/**
+ * The web's and the extension's reading of the same account (2026-10-30, the
+ * page everywhere): a real choice, and what a signing page protects against
+ * and what it does not.
+ */
 export function webVenue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
 	const account = VENUE_ACCOUNTS[which];
-	return venueModel(
-		{ domain: account.domain, choices: account.web.choices, web: account.web.plan },
-		m
-	);
+	return venueModel({ domain: account.domain, choices: account.web.choices, honest: true }, m);
 }
 
 function signingPages(m: SettingsMessages, refused: boolean): SigningPagesModel {

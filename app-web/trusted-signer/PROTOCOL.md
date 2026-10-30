@@ -38,15 +38,18 @@ USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
 
 | 请求方 | 签名方 | 通道 | 来源可验证 | 一个会话几个请求 |
 | --- | --- | --- | --- | --- |
-| 同浏览器的网页钱包 / dApp | 本页 | `window.postMessage`（7.1）—— **签名一律拒签**（规格 102 R7） | ✅ 浏览器背书 | 多个 |
+| 同浏览器的网页钱包、Chrome 扩展（**2026-10-30 起现行**） | 本页 | `window.postMessage`（7.1）—— 只答 Vela 自己的钱包：浏览器报告的打开者 origin **恰好是** `https://wallet.getvela.app`、`https://getvela.app` 或 `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl`（第 12.3 节）；其他打开者的签名一律拒签（规格 102 R7） | ✅ 浏览器背书 | 多个 |
 | Android / iOS / 桌面 App（**现行**） | 本页 | URL 片段 + `velawallet://sign-result`（7.2 + 下文） | ❌ 自述；一次性 token 证明「是打开本页的那个 App」 | 一个 |
 | ~~同机 App~~ | ~~本页~~ | ~~回环 WebSocket（7.4）~~ | **2026-09-24 让给自定义 scheme**；代码留给测试 | |
 | ~~任何一端，跨设备~~ | ~~另一台设备上的本页~~ | ~~隧道（7.5）~~ | **已撤回 2026-09-23** | |
 | ~~原生 App，跨设备~~ | ~~附近的 Chrome~~ | ~~BLE GATT（1–4）~~ | **已撤回 2026-09-23** | |
 
-三端都走 URL 片段 + 自定义 scheme（上表第二行）。网页钱包那一行（postMessage）的代码
-还在，但 075 起网页钱包不用签名页，只剩测试在用。扩展端口那一行在 2026-09-23 随扩展
-形态一起撤回（7.3）。
+三个 App 走 URL 片段 + 自定义 scheme（上表第二行）。**网页钱包与 Chrome 扩展走 postMessage**
+（上表第一行）：2026-10-29 先只为多签成员的批准，**2026-10-30 起创始人定下签名页在网页上处处可用** ——
+账户的「签名方式」选了签名页，网页钱包与扩展里的每一笔交易、批量、钱包自己的发送、`personal_sign`、
+`eth_signTypedData_v4` 与多签批准都交到这一页（vela-core `signing_venue::signing_route`，第 13 节）。
+扩展端口那一行在 2026-09-23 随扩展形态一起撤回（7.3）—— 现在的扩展是钱包本身（`app-web/vela-wallet/extension`），
+它用 `window.open` 打开本页，和网页钱包一样走 postMessage。
 
 ### 自定义 scheme 回传 —— 已实现（2026-09-24）
 
@@ -455,9 +458,9 @@ dApp `window.open` 打开 `https://sign.getvela.app/sign.html?ch=post`，然后�
 **意图不要放在 URL 里**：先开空页面再 post，既没有长度上限，又能拿到浏览器填的
 `event.origin`。两边都必须核对对方 origin —— 参考 `samples/dapp-sim.js`。
 
-**签名意图在这条通道上一律拒签**（规格 102 R7，见第 0 节「答复只交给钱包」）：
-答复回给打开者，而任何网站都能打开本页。打开者只收到 `{vela:'error', code:'refused'}`。
-钥匙仪式照旧按第 10.2 节。
+**签名意图在这条通道上只答 Vela 自己的钱包**（规格 102 R7，第 12.3 节；2026-10-30 起不只多签批准）：
+答复回给打开者，而任何网站都能打开本页 —— 所以打开者 origin（浏览器填的 `event.origin`）必须**恰好是**
+网页钱包或已发布扩展的 origin，否则打开者只收到 `{vela:'error', code:'refused'}`。钥匙仪式照旧按第 10.2 节。
 
 **一个会话多个请求**（第 11 节）：第一条 intent 必须来自 `window.opener`，之后只听这个窗口、
 这个 origin；答完一个继续等下一个，直到对方发 `{vela:'bye'}`、关窗或空闲 5 分钟。
@@ -747,6 +750,8 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
 
 ## 12. 多签成员的批准（`vela_multisigApprove`，2026-10-29）
 
+> 2026-10-30 起，第 12.3 节的通道与答复规则是**每一种签名**的（第 13 节）；本节其余部分只讲多签批准自己的请求与核对。
+
 创始人的 Bybit 教训：**签名人必须能在一个独立于钱包 App 代码的界面上审阅并签名。**
 多签住在网页钱包里。成员账户的「签名方式」选了签名页时，批准（发起并批准、批准、执行前执行者
 自己的批准、拒绝 = 批准一笔取消交易）不再弹钱包自己的 passkey，而是交给这一页。
@@ -817,12 +822,23 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
 （`result` 与交易签名相同：`credentialId`、`signature`、`authenticatorData`、`clientDataJSON`）或
 `{vela:'error', id, code}`。
 
-**答复只交给网页钱包**（`resolve.answersToWallet`，R7 的扩展）：postMessage 通道上，只有
-`vela_multisigApprove`、且浏览器报告的打开者 origin（`event.origin`，不是请求方的说法）**恰好是**
-`https://wallet.getvela.app` 或 `https://getvela.app` 时才算交给钱包；`*.getvela.app` 的其他子域不算。
-本页自己在本机回环上时（开发者自己的页面，只能用回环自己的 passkey），回环上的钱包也算。其余一律拒签 ——
-postMessage 上的其他任何签名仍然拒签，哪怕打开者就是网页钱包；`lib/intake.js` 在发出那一刻再按同一规则查一次，
-不合格的只收到 `refused`。
+**答复只交给 Vela 自己的钱包**（`resolve.answersToWallet`，R7 的扩展）：postMessage 通道上，只有浏览器报告的
+打开者 origin（`event.origin`，不是请求方的说法）**恰好是**下面之一，且请求是钱包会交来签的那几种
+（`eth_sendTransaction`、`wallet_sendCalls`、`personal_sign`、`eth_signTypedData_v4` / `_v3` / `eth_signTypedData`、
+`vela_multisigApprove`）时，才算交给钱包：
+
+| 打开者 origin | 是谁 |
+| --- | --- |
+| `https://wallet.getvela.app`、`https://getvela.app` | 网页钱包 |
+| `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` | 已发布的 Chrome 扩展：`extension/manifest.json` 的 `key` 推出的 id（开发包与 GitHub 发布包都带这个 key）。Chrome 应用商店给商店包分配自己的 id（商店包不带 key），**分配后才加进来**；在那之前商店安装的扩展签名页拒签（答 `refused`），钱包那边照样说「签名页没有签」 |
+
+`*.getvela.app` 的其他子域不算，别的扩展 id 不算，`eth_sign` 谁来都拒。本页自己在本机回环上时（开发者自己的页面，
+只能用回环自己的 passkey），回环上的钱包、以及任何未打包扩展（`chrome-extension://<32 位 a–p>`）也算。其余一律拒签；
+`lib/intake.js` 在发出那一刻再按同一规则查一次，不合格的只收到 `refused`。
+
+**钱包转来的站点是钱包的说法**（2026-10-30）：打开者是钱包、请求里的 `origin` 却是别的站点时（扩展转来的 dApp 请求），
+浏览器背书的是「谁打开了本页」，不是「哪个站点发起的」。卡片照旧写站点的主机，但不当作已核实，挂一条
+「是哪个网站发起的，是钱包的说法」（`warn.relayedOrigin`）—— 本页存在的意义就是不信任可能被篡改的钱包界面。
 
 ### 12.4 钱包怎么验（vela-core `trusted_signer::approval::accept`）
 
@@ -848,3 +864,58 @@ P-256 签名在那把钥匙下成立；再组装成 `PasskeyApproval`，并按�
   `wallet.getvela.app` 要 → 卡上有多签名（标 App 提供）和三个哈希，点按后答复回到钱包，签的正是批准字节；
   哈希不符 → 拒、不弹 passkey；网页钱包要别的签名 → 仍拒。
 
+## 13. 签名页处处可用：网页钱包与 Chrome 扩展（2026-10-30）
+
+创始人 2026-10-30 定下：账户的「签名方式」选了签名页，**网页钱包与 Chrome 扩展**也把签名交到这一页，和三个 App
+一样 —— 取代 2026-09-23「网页版不支持可信签名器」及 2026-10-29「只为多签批准」（规格 102 plan P2-11 / D-16）。
+
+### 13.1 谁去哪里：核心的一条规则
+
+vela-core `signing_venue::signing_route(plan, kind)`（wasm `signingRoute(record, method)`）：每个 shell 都只问它。
+
+| 账户的签名计划 | 交易 / 批量 / 钱包自己的发送 / `personal_sign` / typed data / 多签批准 | 钥匙仪式 |
+| --- | --- | --- |
+| 被挡（自建域名账户、本机不知道它的页） | `blocked`，带核心的理由 | 同左 |
+| 签名方式 = 在 Vela 里 | `in_vela`：Vela 自己的界面与 passkey | `getvela.app` 账户在 App 里 |
+| 签名方式 = 签名页（官方页，或自建域名账户自己的页） | `page`：那一页 | 自建域名账户在它的页上（R3） |
+
+`eth_sign` 和不认识的方法没有 kind（`SignatureKind::of_method` 为 `None`）：签名方式是签名页时网页钱包直接拒，
+绝不在 Vela 里替人签。
+
+### 13.2 网页钱包与扩展怎么交
+
+1. 核对页面（R6，和多签批准同一段代码 `app-web/vela-wallet/src/lib/signing/page-handoff.svelte.ts`）：取 `index.json`，
+   核心选版本（`BUILD_ALLOWED` 里 index 列出的第一个），按浏览器导航的 `Accept` 取那一个 URL、算 sha256，核心裁决；
+   不通过就不打开，卡上写核心的那一行。
+2. 交接卡（规格 102 D4）盖在签名界面上：确认方式、哪一页、完整性那一行、「继续到签名页」。点按打开
+   `…/b/<hash>/sign?ch=post&lang=…`（`CheckedPage::post_launch`），页面说 `ready` 后发
+   `{vela:'intent', id, intent, context}` —— 请求是**核心造的**（wasm `trustedSignerSignatureRequest` →
+   `trusted_signer::request`：方法、参数、组装好的整笔操作与费用腿下标、账户、钥匙路线）。
+3. 只听自己打开的那个窗口、页面自己的 origin。答复 `{vela:'result', id, result}` 只按核心的方式接受
+   （wasm `trustedSignerSignatureAccept` → `trusted_signer::accept_signature`）：核心从**它自己造的请求**算出摘要
+   （交易 = 那笔操作的 SafeOp 哈希；消息 = EIP-191 / EIP-712 哈希包进账户自己域下的 `SafeMessage`），这串字节必须
+   就是钱包接下来要签进签名里的字节，否则 `wrong_challenge`；再要求 user-verified 的 `webauthn.get`、Safe 验证器
+   的 client-data 规则、账户自己的钥匙、P-256 签名成立。页面说它签了什么，一个字都不读。
+4. 结果：签了 → 照原样继续（交易去 relay，消息组成 EIP-1271 签名）；人在页上拒绝或关掉页 →
+   dApp 收到 **4001**（核心的 `SignSubmitOutcome::PageDeclined`；钱包自己的发送则当作关掉 passkey，确认界面留着重试）；
+   页面按自己的规则拒 / 答复验不过 / 页面 30 秒不说 ready / 核对不过 → 界面上一句「签名页没有签」，什么都没签；
+   请求在扩展里过期或站点离开 → 按规格 082（4900，由 worker 答）。
+
+### 13.3 扩展：请求在页面打开期间一直活着
+
+扩展的请求窗口 / 侧边栏就是钱包本身，交接一样。页面打开期间钱包每分钟再 `claim('sign')` 一次；worker 的
+`claimVerdict` 让一次 `sign` 认领续上前一次 `sign` 认领（五分钟从最后一次认领算，`deadlineOf` 本来就这么算），
+content.js 收到 `claimed` 就把页面那边的期限往后推。认领被拒（站点离开、时限已过）→ 关掉签名页，什么都不签。
+一个窗口一个钱包（`one-surface.js`）不受影响：签名页不是钱包页。
+
+### 13.4 测试
+
+- `bun samples/answer-test.mjs` 的 R、G、H 段：规则本身（网页钱包、已发布扩展的 origin 被答，子域、别的扩展 id、
+  不被浏览器背书的、`eth_sign` 都拒；转来的站点是钱包的说法）；网页钱包要一条消息 → 签了、答回去；子域 → 拒；
+  **一个真的未打包扩展**带着已发布的 manifest key（所以就是已发布的 id）打开发布出去的那一页 → `personal_sign`、
+  `eth_signTypedData_v4`、`eth_sendTransaction` 都签了、答回扩展；另一个 key 的扩展 → 拒、不弹 passkey。
+- 钱包一侧：`src/lib/signing/sign-challenge.test.ts`（每一种签名交到页、核心接受的答复、错的字节 / 错的钥匙 /
+  页面字节不对 / 别的窗口与 origin 都被拒、页上拒绝与关页、请求没了就关页）、`e2e/extension-signing-page.e2e.ts`
+  （扩展 + 本机 TLS 上的 `dist/`：签名方式在设置里选签名页，dApp 的 `personal_sign` 与 typed data 在页上签、关页 → 4001）。
+- 核心：`signing_venue` 的 R7 测试、`tests/trusted_signer.rs`（`digest_of`、`accept_signature`）、
+  `tests/app_sign_request.rs`（`PageDeclined` → 4001）、`tests/signing_venue_102b.rs` 第 7 节。

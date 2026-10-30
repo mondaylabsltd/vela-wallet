@@ -46,7 +46,7 @@
 	import ProposalSheet from './ProposalSheet.svelte';
 	import RiskConfirmSheet from './RiskConfirmSheet.svelte';
 	import { reviewFirstHost } from '../core/review-first.svelte';
-	import PageHandoffSheet from './PageHandoffSheet.svelte';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {
@@ -525,9 +525,19 @@
 	{/key}
 {/if}
 
-<!-- 2026-10-29: a member approving on its trusted signing page — the hand-off card. -->
+<!--
+	2026-10-29: a member approving on its trusted signing page — the hand-off card;
+	and an executor's own operation on its page where no signing host is mounted.
+-->
 {#if m.handoff !== undefined}
-	<PageHandoffSheet m={m.handoff} {locale} {wide} {closeLabel} />
+	<PageHandoffSheet
+		m={m.handoff}
+		{locale}
+		{wide}
+		{closeLabel}
+		kind="approval"
+		standIn="signature"
+	/>
 {/if}
 
 <!-- An outside owner's wallet, asked from any sheet or from the send flow: on top of them. -->

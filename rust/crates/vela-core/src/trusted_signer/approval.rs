@@ -21,18 +21,18 @@
 //!   service and the chain take, checked the chain's way
 //!   ([`crate::multisig::verify_approval`]). Nothing the page says about what
 //!   it signed is read: the bytes are the wallet's.
-//! - [`approval_route`] — where a member's approval goes, as the web wallet
-//!   (where multisigs live) carries it out: its own passkey prompt, the page,
+//! - [`approval_route`] — where a member's approval goes: the one rule for
+//!   every signature ([`crate::signing_venue::signing_route`]) for
+//!   [`SignatureKind::MultisigApproval`] — its own passkey prompt, the page,
 //!   or nowhere and why.
 //!
 //! Pure: no I/O, no clock.
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::{RequestInput, TrustedSignerError};
 use crate::multisig::{self, PasskeyApproval, SafeTx};
-use crate::signing_venue::{KeyRoute, SigningPlan, SigningVenue, VenueBlock};
+use crate::signing_venue::{KeyRoute, SignatureKind, SigningPlan, SigningRoute};
 use crate::user_op::WalletKey;
 
 /// The page's method for a member's approval.
@@ -155,48 +155,21 @@ pub fn accept(
     Ok(approval)
 }
 
-/// Where a multisig member's approval goes on the web wallet. Its JSON is
-/// `{type: 'in_vela' | 'page' | 'blocked', url?, block?}`, mirrored by hand in
-/// the web's `kernels.ts` (`ApprovalRoute`), the one shell that asks.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ApprovalRoute {
-    /// The member's own passkey prompt, in Vela.
-    InVela,
-    /// The member's trusted signing page, at its base address.
-    Page { url: String },
-    /// Nothing on this device can approve for the member, and why.
-    Blocked { block: VenueBlock },
-}
+/// Where a multisig member's approval goes — a [`SigningRoute`]. Its JSON is
+/// `{type: 'in_vela' | 'page' | 'blocked', url?, block?}`, mirrored by the
+/// web's generated `SigningRoute`.
+pub type ApprovalRoute = SigningRoute;
 
-/// Where a member's approval goes on the web, from the member's signing plan
-/// AS AN APP WOULD FOLLOW IT ([`crate::app::Account::signing_plan`], not
-/// [`SigningPlan::on_web`]).
-///
-/// The web opens no page for a transaction or a message (owner, 2026-09-23 —
-/// unchanged): those stay in Vela. A multisig approval is the exception, and
-/// the reason for it: multisigs live on the web, the approval is what moves a
-/// multisig's money, and a member who chose to review and sign on a page must
-/// be able to do exactly that for it — independently of the wallet's code
-/// (the owner's Bybit lesson). So the venue the person chose is honoured:
-///
-/// - a page venue (already checked against R1 by the account's reader) → the
-///   page; for a custom-domain account, its own page is the only place its
-///   keys answer at all;
-/// - Vela's sheet → the member's own passkey prompt, as before;
-/// - a plan that is blocked (a custom-domain account whose page is unknown
-///   here) → blocked, with the plan's reason.
+/// Where a member's approval goes, from the member's signing plan — the one
+/// rule every signature follows ([`crate::signing_venue::signing_route`],
+/// owner 2026-10-30), for [`SignatureKind::MultisigApproval`]: a member who
+/// chose to review and sign on a page approves there, independently of the
+/// wallet's code (the owner's Bybit lesson); one in Vela approves with its
+/// own passkey prompt; a blocked plan (a custom-domain account whose page is
+/// unknown here) is blocked, with the plan's reason.
 #[must_use]
 pub fn approval_route(plan: &SigningPlan) -> ApprovalRoute {
-    if let Some(block) = &plan.blocked {
-        return ApprovalRoute::Blocked {
-            block: block.clone(),
-        };
-    }
-    match &plan.venue {
-        SigningVenue::InVela => ApprovalRoute::InVela,
-        SigningVenue::Page { url } => ApprovalRoute::Page { url: url.clone() },
-    }
+    crate::signing_venue::signing_route(plan, SignatureKind::MultisigApproval)
 }
 
 /// [`approval_route`] for a stored account record (JSON) — `None` for a
@@ -414,6 +387,7 @@ mod tests {
 
     #[test]
     fn the_route_follows_the_chosen_venue_and_never_a_blocked_one() {
+        use crate::signing_venue::{SigningVenue, VenueBlock};
         let plan = |venue: SigningVenue, blocked: Option<VenueBlock>| SigningPlan {
             domain: "getvela.app".into(),
             venue,
@@ -431,15 +405,12 @@ mod tests {
                 url: "https://sign.getvela.app/".into()
             }
         );
+        let block = VenueBlock::AppCannotReach {
+            domain: "sign.example.com".into(),
+        };
         assert_eq!(
-            approval_route(&plan(SigningVenue::InVela, Some(VenueBlock::NotOnWeb))),
-            ApprovalRoute::Blocked {
-                block: VenueBlock::NotOnWeb
-            }
+            approval_route(&plan(SigningVenue::InVela, Some(block.clone()))),
+            ApprovalRoute::Blocked { block }
         );
-        // The web's own plan would say "in Vela" for the official page; the
-        // approval's route does not read that plan.
-        let web = plan(SigningVenue::official(), None).on_web();
-        assert_eq!(web.venue, SigningVenue::InVela);
     }
 }

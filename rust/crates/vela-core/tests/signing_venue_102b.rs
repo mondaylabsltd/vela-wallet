@@ -30,8 +30,8 @@ use vela_core::app::signing_pages::{
 };
 use vela_core::app::Account;
 use vela_core::signing_venue::{
-    trusted_versions, venue_choices_on_web, KeyLabel, SigningPage, SigningPlan, SigningVenue,
-    VenueBlock, APP_DOMAIN,
+    signing_route, trusted_versions, venue_choices, KeyLabel, SignatureKind, SigningPage,
+    SigningRoute, SigningVenue, VenueBlock, APP_DOMAIN,
 };
 use vela_core::trusted_signer::integrity::{CheckFailure, NoVersion, Verdict};
 use vela_core::trusted_signer::launch::{
@@ -674,26 +674,28 @@ fn the_page_is_opened_in_the_apps_language() {
 }
 
 // ---------------------------------------------------------------------------
-// 7 · The web opens no page
+// 7 · The page, everywhere (owner, 2026-10-30)
 // ---------------------------------------------------------------------------
 
+/// The web and the extension draw an app's rows: R1 alone decides which can
+/// be picked — there is no web-only reason any more.
 #[test]
-fn the_web_shows_page_rows_disabled_with_its_reason() {
+fn every_surface_draws_the_same_rows() {
     let saved = [SigningPage::new(OWN, "Mine")];
-    let rows = venue_choices_on_web(APP_DOMAIN, &SigningVenue::official(), &saved);
+    let rows = venue_choices(APP_DOMAIN, &SigningVenue::official(), &saved);
     let blocked: Vec<Option<VenueBlock>> = rows.iter().map(|row| row.blocked.clone()).collect();
     assert_eq!(
         blocked,
         [
             None,
-            Some(VenueBlock::NotOnWeb),
-            // R1's reason wins where both hold.
+            None,
             Some(VenueBlock::PageOnOtherDomain {
                 page_domain: "sign.example.com".to_owned(),
                 domain: APP_DOMAIN.to_owned(),
             }),
         ]
     );
+    // Retired, but still on the wire for shells built before.
     assert_eq!(VenueBlock::NotOnWeb.key(), "settings.venue.blockedWeb");
     assert_eq!(
         serde_json::to_value(VenueBlock::NotOnWeb).unwrap_or_default(),
@@ -701,29 +703,58 @@ fn the_web_shows_page_rows_disabled_with_its_reason() {
     );
 }
 
-/// A `getvela.app` account whose venue is a page signs in Vela on the web; a
-/// custom-domain account cannot sign there, and its plan says why.
+/// A `getvela.app` account whose venue is the official page reviews and signs
+/// every transaction, batch, message and multisig approval there — on the web
+/// too; a custom-domain account on its own page.
 #[test]
-fn the_webs_plan() {
+fn every_kind_goes_where_the_account_chose() {
+    let kinds = [
+        SignatureKind::UserOperation,
+        SignatureKind::Batch,
+        SignatureKind::PersonalSign,
+        SignatureKind::TypedData,
+        SignatureKind::MultisigApproval,
+    ];
     let official = read(&fixture("official-page-account.json")).signing_plan();
-    assert_eq!(official.venue, SigningVenue::official());
-    let web = official.clone().on_web();
-    assert_eq!(web.venue, SigningVenue::InVela);
-    assert_eq!(web.blocked, None);
-    assert_eq!(web.key, official.key, "the same key, signed natively");
-
     let custom = read(&fixture("custom-origin-account.json")).signing_plan();
     assert_eq!(custom.blocked, None);
-    let web = custom.clone().on_web();
-    assert_eq!(web.blocked, Some(VenueBlock::NotOnWeb));
-    assert_eq!(web.venue, custom.venue);
+    for kind in kinds {
+        assert_eq!(
+            signing_route(&official, kind),
+            SigningRoute::Page {
+                url: "https://sign.getvela.app/".to_owned()
+            },
+            "{kind:?}"
+        );
+        assert!(
+            matches!(signing_route(&custom, kind), SigningRoute::Page { ref url } if url.contains("localhost") || url.contains("example")),
+            "{kind:?}"
+        );
+    }
 
-    // Through the JSON door the web uses.
-    let record = fixture("custom-origin-account.json").to_string();
-    let plan: SigningPlan = vela_core::app::signing_plan_on_web_json(&record)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_else(|| unreachable!("the web's plan"));
-    assert_eq!(plan.blocked, Some(VenueBlock::NotOnWeb));
+    // Through the JSON door the web uses, by method.
+    let record = fixture("official-page-account.json").to_string();
+    for method in [
+        "",
+        "eth_sendTransaction",
+        "wallet_sendCalls",
+        "personal_sign",
+        "eth_signTypedData_v4",
+        "vela_multisigApprove",
+    ] {
+        let route: SigningRoute = vela_core::app::signing_route_json(&record, method)
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_else(|| unreachable!("{method}"));
+        assert!(matches!(route, SigningRoute::Page { .. }), "{method}");
+    }
+    assert_eq!(
+        vela_core::app::signing_route_json(&record, "eth_sign"),
+        None
+    );
+    assert_eq!(
+        vela_core::app::signing_route_json("{}", "personal_sign"),
+        None
+    );
 }
 
 // ---------------------------------------------------------------------------

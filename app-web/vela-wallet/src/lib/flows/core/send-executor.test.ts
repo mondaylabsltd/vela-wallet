@@ -69,7 +69,8 @@ vi.mock('$lib/signing/sign-challenge', () => ({
 		constructor(readonly block: unknown) {
 			super('venue blocked');
 		}
-	}
+	},
+	PageDeclinedError: class PageDeclinedError extends Error {}
 }));
 vi.mock('$lib/services/add-network.svelte', () => ({
 	addCustomNetworkByChainId: seams.addNetwork

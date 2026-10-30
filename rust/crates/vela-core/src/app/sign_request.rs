@@ -793,6 +793,13 @@ pub enum SignSubmitOutcome {
     VenueBlocked {
         block: crate::signing_venue::VenueBlock,
     },
+    /// The person declined on the account's trusted signing page — the page
+    /// answered `user_rejected`, or was closed with the request unsigned
+    /// (spec 102, owner 2026-10-30: the page is the venue, so its "no" is the
+    /// person's answer, as the sheet's ✕ is). Nothing was signed or sent: the
+    /// page that asked is answered 4001, the request settles rejected, and the
+    /// sheet clears.
+    PageDeclined,
 }
 
 /// How long the confirm waits for the simulation's verdict
@@ -4025,6 +4032,7 @@ fn on_submit_outcome(
             SignSubmitOutcome::Failed { .. }
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
+            | SignSubmitOutcome::PageDeclined
             | SignSubmitOutcome::AskerGone,
         ) if is_tx => SignSubmitOutcome::NotConfirmed {
             user_op_hash: op_hash.clone(),
@@ -4035,6 +4043,7 @@ fn on_submit_outcome(
             SignSubmitOutcome::Failed { .. }
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
+            | SignSubmitOutcome::PageDeclined
             | SignSubmitOutcome::AskerGone,
         ) => SignSubmitOutcome::ReceiptPending {
             user_op_hash: op_hash.clone(),
@@ -4096,6 +4105,34 @@ fn on_submit_outcome(
                     },
                 ));
             }
+            render()
+        }
+        SignSubmitOutcome::PageDeclined if fl.op_hash.is_none() => {
+            // The page is the venue: the person's "no" there is their answer
+            // (4001), as the sheet's ✕ is — once, and never after a submission
+            // (nothing reaches the relay before the page has signed).
+            model.inflight = None;
+            if fl.page_gone {
+                if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+                    model.clear_sheet();
+                }
+                return render();
+            }
+            model.settle(&fl.id, SignSettledOutcome::Rejected);
+            let op = respond_op(
+                &fl.transport_id,
+                &fl.id,
+                err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
+            );
+            if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+                model.clear_sheet();
+            }
+            ops_and_render(model, vec![op])
+        }
+        SignSubmitOutcome::PageDeclined => {
+            // An op hash is known: the bytes may be on their way. The record
+            // and the tracker answer it, never a refusal.
+            model.inflight = None;
             render()
         }
         SignSubmitOutcome::AskerGone => {

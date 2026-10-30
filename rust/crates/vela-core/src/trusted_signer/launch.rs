@@ -606,11 +606,13 @@ impl CheckedPage {
         ))
     }
 
-    /// The page, opened by the web wallet's own window and handed the request
-    /// over `postMessage` (PROTOCOL.md §7.1, §12) — the checked address, in the
-    /// wallet's language as for [`Self::url_launch`]. The web wallet's one use:
-    /// a multisig member's approval ([`super::approval`]); the page answers it
-    /// to the web wallet's origin, as the browser reports it, and to nobody else.
+    /// The page, opened by the web wallet's or the Chrome extension's own
+    /// window and handed the request over `postMessage` (PROTOCOL.md §7.1,
+    /// §12) — the checked address, in the wallet's language as for
+    /// [`Self::url_launch`]. Every signature the account's venue sends there
+    /// ([`crate::signing_venue::signing_route`]); the page answers it to the
+    /// web wallet's or the extension's exact origin, as the browser reports
+    /// it, and to nobody else.
     ///
     /// # Errors
     ///

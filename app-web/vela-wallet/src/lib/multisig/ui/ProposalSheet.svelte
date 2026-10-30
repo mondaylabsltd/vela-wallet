@@ -100,6 +100,7 @@
 	import { multisigUi } from '../core/ui.svelte';
 	import { PasskeyCheckError } from '../core/owners';
 	import { PageApprovalError } from '../core/page-approval.svelte';
+	import { PageDeclinedError } from '$lib/signing/sign-challenge';
 	import { integrityLineModel } from '$lib/settings/venue';
 	import { ServiceUnavailableError } from '../core/service';
 	import { PasskeyError } from '$lib/onboarding/core/passkey';
@@ -579,6 +580,8 @@
 				? m.proposal.reason.passkeyFailed
 				: m.proposal.reason.passkeyClosed;
 		}
+		// An executor's own operation, declined on its trusted signing page.
+		if (error instanceof PageDeclinedError) return m.proposal.reason.passkeyClosed;
 		if (error instanceof PasskeyError) {
 			if (error.kind === 'cancelled') {
 				return error.timedOut ? m.proposal.reason.passkeyTimedOut : m.proposal.reason.passkeyClosed;

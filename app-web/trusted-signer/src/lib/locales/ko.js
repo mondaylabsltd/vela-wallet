@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('ko', {
   'warn.typedUnknown': '알 수 없는 EIP-712 구조입니다 — 결정하기 전에 아래 모든 필드를 읽어 보세요.',
   'warn.unverifiedDecimals': '이 페이지는 이 네트워크의 이 토큰을 알지 못해 금액을 최소 단위로 표시합니다 — 소수 자릿수는 여기서 확인할 수 없습니다.',
   'warn.claimedOrigin': '사이트 이름은 사이트가 스스로 밝힌 것이라 확인할 수 없습니다 — 아래 세부 내용을 기준으로 판단하세요.',
+  'warn.relayedOrigin': '어느 사이트가 요청했는지는 지갑이 알려 준 것이라 이 페이지는 확인할 수 없습니다 — 아래 세부 내용을 기준으로 판단하세요.',
 
   'ui.techDetails': '기술 세부 정보',
   'ui.function': '함수',

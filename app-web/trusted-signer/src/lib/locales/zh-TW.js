@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'warn.typedUnknown': '未知的 EIP-712 結構——請逐一看完下面每個欄位再決定。',
   'warn.unverifiedDecimals': '這一頁不認得這個網路上的這個代幣，所以金額以它的最小單位顯示——它的小數位數無法在這裡核實。',
   'warn.claimedOrigin': '網站名稱是網站自己提供的，無法核實——請以下方的內容為準。',
+  'warn.relayedOrigin': '是哪個網站提出的，是錢包的說法，本頁無法核實——請以下方的內容為準。',
 
   'ui.techDetails': '技術細節',
   'ui.function': '函式',

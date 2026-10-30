@@ -131,6 +131,7 @@ window.VelaCS.i18n.register('zh', {
   'warn.typedUnknown': '未知的 EIP-712 结构 — 逐字读完下面每个字段再决定。',
   'warn.unverifiedDecimals': '本页不认识这个网络上的这个代币，所以金额按它的最小单位显示 —— 小数位数在这里无法核实。',
   'warn.claimedOrigin': '网站名称是它自己提供的，无法核实，请以下方内容为准。',
+  'warn.relayedOrigin': '是哪个网站发起的，是钱包的说法，本页无法核实，请以下方内容为准。',
 
   // 界面
   'ui.techDetails': '技术细节',

@@ -19,10 +19,15 @@
 //!   verified, the credential is one of this wallet's, and the P-256 signature
 //!   verifies under that credential's key. It returns the DER signature the
 //!   existing Safe envelope takes, so nothing downstream changes.
+//! - [`accept_signature`] — the same acceptance for a shell that holds the
+//!   request as JSON (the web wallet, the Chrome extension): the bytes are
+//!   the core's own ([`digest_of`], from the request it built), and must be
+//!   the bytes the shell is about to sign with the answer.
 //! - [`approval`] — a multisig member's approval (2026-10-29): the SafeTx
 //!   handed to the page, which recomputes its hash and reads it itself; the
-//!   answer accepted only over the member's approval bytes; and where an
-//!   approval goes on the web wallet, the one hand-off the web makes.
+//!   answer accepted only over the member's approval bytes. Where any
+//!   signature goes — the apps, the web and the extension alike since
+//!   2026-10-30 — is [`crate::signing_venue::signing_route`].
 //! - The channels: [`launch::CheckedPage::url_launch`] with [`parse_callback`]
 //!   (URL fragment in, `velawallet://` out), and
 //!   [`launch::CheckedPage::ws_launch`] with [`ws`] (a WebSocket on the
@@ -707,6 +712,98 @@ pub fn verify(
     })
 }
 
+/// The bytes a page's answer to `request` must be over — computed by THE CORE
+/// from the request it built ([`request`]), never read from the page or the
+/// shell:
+///
+/// - a transaction, a batch, the wallet's own send, a multisig executor's
+///   operation: the SafeOp hash of the assembled operation the request carries
+///   (`context.operation.userOp`) on `context.chainId`
+///   ([`crate::user_op::calculate_safe_op_hash`]) — what the Safe4337Module
+///   verifies;
+/// - `personal_sign` and typed data: the request's own hash (EIP-191 /
+///   EIP-712, [`crate::sign_message::original_hash`]) wrapped in the account's
+///   `SafeMessage` under its own domain
+///   ([`crate::user_op::compute_safe_message_hash`]) — what EIP-1271 verifies.
+///
+/// # Errors
+///
+/// [`TrustedSignerError::Refused`] for a method no venue signs (`eth_sign`,
+/// a member's approval — that one is [`approval::accept`]'s, anything
+/// unknown), [`TrustedSignerError::Malformed`] for a request that does not
+/// carry what its kind needs.
+pub fn digest_of(request: &Value) -> Result<Vec<u8>, TrustedSignerError> {
+    use crate::signing_venue::SignatureKind;
+    let malformed = |what: &str| TrustedSignerError::Malformed(what.to_owned());
+    let intent = request
+        .get("intent")
+        .ok_or_else(|| malformed("no intent"))?;
+    let context = request
+        .get("context")
+        .ok_or_else(|| malformed("no context"))?;
+    let method = intent
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("no method"))?;
+    let chain_id = context
+        .get("chainId")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| malformed("no chainId"))?;
+    match SignatureKind::of_method(method) {
+        Some(SignatureKind::UserOperation | SignatureKind::Batch) => {
+            let op = context
+                .pointer("/operation/userOp")
+                .and_then(user_op_from_json)
+                .ok_or_else(|| malformed("no assembled operation"))?;
+            crate::user_op::calculate_safe_op_hash(&op, chain_id)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        Some(SignatureKind::PersonalSign | SignatureKind::TypedData) => {
+            let account = context
+                .get("account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| malformed("no account"))?;
+            let params = intent.get("params").cloned().unwrap_or(Value::Null);
+            let original = crate::sign_message::original_hash(method, &params.to_string())
+                .ok_or_else(|| malformed("nothing to sign"))?;
+            crate::user_op::compute_safe_message_hash(&original, chain_id, account)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        _ => Err(TrustedSignerError::Refused(format!("method {method}"))),
+    }
+}
+
+/// The page's answer to a signature request, accepted only as the chain's
+/// verifier will accept it, over exactly the bytes THE CORE computed.
+///
+/// `request` is the `{intent, context}` handed to the page ([`request`]),
+/// `shell_digest` the bytes the shell is about to put into the signature it
+/// submits (the SafeOp hash, the SafeMessage hash). Both must name the same
+/// bytes as [`digest_of`]: a request that describes one thing while the shell
+/// signs another is refused before the answer is read
+/// ([`TrustedSignerError::WrongChallenge`]). Then [`verify`]: a user-verified
+/// `webauthn.get` over those bytes, the Safe verifier's own client-data
+/// rules, by one of `keys` (the ACCOUNT's founding keys), with a P-256
+/// signature that verifies under that key. Nothing the page says about what
+/// it signed is read.
+///
+/// # Errors
+///
+/// [`TrustedSignerError`]: why the answer is not this account's signature of
+/// these bytes.
+pub fn accept_signature(
+    request: &Value,
+    result: &Value,
+    keys: &[WalletKey],
+    shell_digest: &[u8],
+) -> Result<Verified, TrustedSignerError> {
+    let digest = digest_of(request)?;
+    if digest != shell_digest {
+        return Err(TrustedSignerError::WrongChallenge);
+    }
+    verify(result, &digest, keys)
+}
+
 // ---------------------------------------------------------------------------
 // Channels
 // ---------------------------------------------------------------------------
@@ -838,17 +935,18 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, TrustedSignerEr
         .map_err(|_| TrustedSignerError::Malformed("result is not JSON".into()))
 }
 
-/// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
-/// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
-/// this.
 /// `<page>?ch=post` (PROTOCOL.md §7.1, §12): the page opened by the web
-/// wallet's own window, which hands the request over by `postMessage` once the
-/// page says it is ready, and receives the answer the same way. Nothing rides
-/// in the address: the browser tells the page which window opened it.
+/// wallet's or the Chrome extension's own window, which hands the request over
+/// by `postMessage` once the page says it is ready, and receives the answer the
+/// same way. Nothing rides in the address: the browser tells the page which
+/// window opened it.
 pub(crate) fn post_launch(page: &str, lang: &str) -> String {
     format!("{page}?ch=post{}", lang_param(lang))
 }
 
+/// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the
+/// wallet's loopback WebSocket (spec 071). Only [`launch::CheckedPage`] calls
+/// this.
 pub(crate) fn socket_launch(page: &str, port: u16, token: &str, lang: &str) -> String {
     format!(
         "{page}?ch=ws{}#p={port}&t={}",

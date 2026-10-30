@@ -249,14 +249,18 @@ pub fn signing_plan_json(account_json: &str) -> Option<String> {
     serde_json::to_string(&account.signing_plan()).ok()
 }
 
-/// [`signing_plan_json`] as the web wallet carries it out
-/// ([`crate::signing_venue::SigningPlan::on_web`]): the web opens no page, so
-/// a `getvela.app` account signs in Vela there and a custom-domain account is
-/// `blocked` with the web's reason.
+/// Where a request of `method` by the stored account goes (R7,
+/// [`crate::signing_venue::signing_route_for_method`]) — the JSON of a
+/// `SigningRoute`: `{type: 'in_vela'}`, `{type: 'page', url}` or
+/// `{type: 'blocked', block}`. The same answer on every surface (owner,
+/// 2026-10-30): the web wallet and the Chrome extension follow it as the apps
+/// do. `None` for a record this build cannot read, or a method no venue signs
+/// (`eth_sign`, anything unknown) — the shell refuses it.
 #[must_use]
-pub fn signing_plan_on_web_json(account_json: &str) -> Option<String> {
+pub fn signing_route_json(account_json: &str, method: &str) -> Option<String> {
     let account: Account = serde_json::from_str(account_json).ok()?;
-    serde_json::to_string(&account.signing_plan().on_web()).ok()
+    let route = crate::signing_venue::signing_route_for_method(&account.signing_plan(), method)?;
+    serde_json::to_string(&route).ok()
 }
 
 /// Which of the wallet's keys this device signs with, and where that key

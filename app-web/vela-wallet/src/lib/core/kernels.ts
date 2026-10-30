@@ -19,6 +19,7 @@ import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import type { SigningRoute } from '$lib/core/generated/SigningRoute';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
@@ -693,19 +694,82 @@ export function attestSafeMessageHash(
 // ---------------------------------------------------------------------------
 
 /**
- * Where a multisig member's approval goes on the web
- * (`trusted_signer::approval::approval_route`, 2026-10-29): the member's own
- * passkey prompt, the trusted signing page the member chose to review and
- * sign on, or nowhere and why. `account` is the member's record as STORED —
- * the plan an app would follow, not the web's (`SigningPlan::on_web` keeps
- * transactions and messages in Vela; an approval honours the venue).
+ * Where a multisig member's approval goes (`trusted_signer::approval::
+ * approval_route` — the one rule every signature follows, `signingRoute`, for
+ * `vela_multisigApprove`): the member's own passkey prompt, the trusted
+ * signing page the member chose to review and sign on, or nowhere and why.
+ * `account` is the member's record as STORED.
  */
-export type ApprovalRoute =
-	{ type: 'in_vela' } | { type: 'page'; url: string } | { type: 'blocked'; block: VenueBlock };
+export type ApprovalRoute = SigningRoute;
 
 export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
 	const route = wasm.multisigApprovalRoute(JSON.stringify(account));
 	return route === undefined ? null : (JSON.parse(route) as ApprovalRoute);
+}
+
+/**
+ * R7 (`signing_venue::signing_route`, owner 2026-10-30) — where a request of
+ * `method` by the stored `account` goes, on the web and in the Chrome
+ * extension exactly as in the apps: Vela's own sheet (`in_vela`), the
+ * account's trusted signing page (`page`, its base address), or nowhere and
+ * why (`blocked`). `method` is the JSON-RPC method — `''` for the wallet's own
+ * send, `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval. `null` for a record this
+ * build cannot read, or a method no venue signs (`eth_sign`, anything
+ * unknown).
+ */
+export function signingRoute(account: unknown, method: string): SigningRoute | null {
+	const route = wasm.signingRoute(JSON.stringify(account), method);
+	return route === undefined ? null : (JSON.parse(route) as SigningRoute);
+}
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ''`), a multisig executor's operation or a message
+ * (`trusted_signer::request`): the ASSEMBLED operation in the page's field
+ * names (`userOp`) with its calls before the fee leg, the account, its keys
+ * and route.
+ */
+export function trustedSignerSignatureRequest(args: {
+	method: string;
+	params: unknown;
+	origin: string;
+	chainId: number;
+	chainName?: string | null;
+	nativeSymbol?: string | null;
+	account: string;
+	accountName?: string | null;
+	credentialIdsHex: string[];
+	keyRoute?: unknown;
+	userOp?: Record<string, string> | null;
+	calls?: { to: string; value: string; data: string }[];
+}): { intent: unknown; context: unknown } {
+	return JSON.parse(wasm.trustedSignerSignatureRequest(JSON.stringify(args))) as {
+		intent: unknown;
+		context: unknown;
+	};
+}
+
+/**
+ * The page's answer to a signature request, as the passkey's `Assertion` — or
+ * a throw whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as the core accepts it (`trusted_signer::accept_signature`):
+ * over exactly the bytes the core computes from `request` — which must be
+ * `digestHex`, the bytes this shell signs with it — by one of the account's
+ * `keys`, user-verified, under the Safe verifier's client-data rules.
+ */
+export function trustedSignerSignatureAccept(args: {
+	request: unknown;
+	result: unknown;
+	keys: { credentialId: string; publicKeyHex: string }[];
+	digestHex: string;
+}): Assertion {
+	const accepted = JSON.parse(wasm.trustedSignerSignatureAccept(JSON.stringify(args))) as Omit<
+		Assertion,
+		'authenticatorAttachment'
+	>;
+	return { ...accepted, authenticatorAttachment: '' };
 }
 
 /** The page's `{intent, context}` for a member's approval (`trusted_signer::approval::request`). */
@@ -790,38 +854,26 @@ export function trustedSignerPageAdmit(
  * `account` is the record as STORED: the core's reader migrates a record
  * written before spec 102 (`signed_in_with`, a key's `signer_origin`) on the
  * way in, so this is the one place the web learns any of the three — never
- * the raw record's fields. `null` for a record this build cannot read.
- *
- * `surface: 'web'` is the plan as THIS shell must follow it
- * (`SigningPlan::on_web`): the web opens no signing page, so a `getvela.app`
- * account whose venue is a page signs in Vela, and a custom-domain account
- * comes back `blocked` (`not_on_web`) — sign nothing, and tell the sign/send
- * core `venue_blocked` so the sheet says why. Without it, the plan an app
- * would follow (which the web still asks when it only wants the key route).
+ * the raw record's fields. `null` for a record this build cannot read. The
+ * web's plan is the apps' (owner, 2026-10-30); where one signature goes is
+ * `signingRoute`.
  */
-export function signingPlan(account: unknown, surface?: 'web'): SigningPlan | null {
-	const plan = wasm.signingPlan(JSON.stringify(account), surface);
+export function signingPlan(account: unknown): SigningPlan | null {
+	const plan = wasm.signingPlan(JSON.stringify(account));
 	return plan === undefined ? null : (JSON.parse(plan) as SigningPlan);
 }
 
 /**
  * Spec 102 R1 + R2: every venue an account on `domain` could pick, each
- * reachable or not and why. `surface: 'web'` adds the web's own reason: every
- * page row R1 does not already block is blocked `not_on_web` — the rows are
- * shown, disabled, with "Signing pages open from the Vela apps" (D-16).
+ * reachable or not and why — the apps' rows, on the web and in the extension
+ * too (2026-10-30).
  */
 export function signingVenueChoices(
 	domain: string,
 	active: SigningVenue,
-	saved: SigningPage[],
-	surface?: 'web'
+	saved: SigningPage[]
 ): VenueChoice[] {
-	const choices = wasm.signingVenueChoices(
-		domain,
-		JSON.stringify(active),
-		JSON.stringify(saved),
-		surface
-	);
+	const choices = wasm.signingVenueChoices(domain, JSON.stringify(active), JSON.stringify(saved));
 	return choices === undefined ? [] : (JSON.parse(choices) as VenueChoice[]);
 }
 
