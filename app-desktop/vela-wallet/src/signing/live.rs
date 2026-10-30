@@ -2314,7 +2314,7 @@ fn blind_tx_blocks(
         // cs-13: nothing lives at the target on this chain — said on the
         // face, in the danger tone, where the unverified party would stand.
         if no_code {
-            out.push(Block::Sentence {
+            out.push(Block::Source {
                 text: s.certain_words("contractNoCode", &[("address", &short_address(to))]),
                 tone: Tone::Danger,
             });
@@ -2419,7 +2419,7 @@ pub(crate) fn certain_blocks(
     let reading = &result.reading;
     let owner = reading.descriptor_owner.as_deref();
     let mut out = Vec::new();
-    let source = |text: SharedString| Block::Sentence {
+    let source = |text: SharedString| Block::Source {
         text,
         tone: Tone::Neutral,
     };
@@ -2493,7 +2493,35 @@ pub(crate) fn certain_blocks(
             text: s.certain_words("dustMinimum", &[]),
         });
     }
+    // cs-4: each token whose name is only its own contract's word, once —
+    // the web's `certainLines` source line in the caution tone.
+    let mut seen = std::collections::BTreeSet::new();
+    for field in &result.fields {
+        let Some(token) = field.token_address.as_deref() else {
+            continue;
+        };
+        if !field.token_named_by_contract || !seen.insert(token.to_owned()) {
+            continue;
+        }
+        out.push(Block::Source {
+            tone: Tone::Caution,
+            text: s.certain_words(
+                "tokenByContract",
+                &[
+                    ("symbol", symbol_in(&field.value)),
+                    ("address", &short_address(token)),
+                ],
+            ),
+        });
+    }
     out
+}
+
+/// The symbol an amount or a Token row names: "250 USDC?" → "USDC?" (the
+/// web's `symbolIn`).
+fn symbol_in(value: &str) -> &str {
+    let head = value.split(" (").next().unwrap_or(value).trim();
+    head.rsplit(' ').next().unwrap_or(head)
 }
 
 /// "Amount −0.003 BNB" — the core's `native_value`, as a batch call's coin
@@ -3141,6 +3169,7 @@ mod tests {
                         .join(" | "),
                     Block::Party { label, name, .. } => format!("party {label} {name}"),
                     Block::Sentence { text, .. } => format!("sentence {text}"),
+                    Block::Source { text, .. } => format!("source {text}"),
                     Block::Warning { text, .. } => format!("warning {text}"),
                     Block::Positive(text) => format!("positive {text}"),
                     _ => "another block".to_owned(),
@@ -5037,7 +5066,7 @@ mod tests {
         let texts: Vec<String> = said
             .iter()
             .map(|block| match block {
-                Block::Sentence { text, tone } | Block::Warning { text, tone } => {
+                Block::Source { text, tone } | Block::Warning { text, tone } => {
                     format!("{tone:?} {text}")
                 }
                 _ => "another".to_owned(),

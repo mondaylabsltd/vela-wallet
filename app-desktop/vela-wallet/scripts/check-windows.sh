@@ -76,4 +76,60 @@ fi
 ( cd "$LIFTED" && cargo clippy --target "$TARGET" -- -D warnings )
 echo "windows: the app's timezone call type-checks too"
 
+# N-D3: the notification-area icon (`src/tray/windows.rs`, windows-sys only
+# by design) and the Windows half of `ui::motion`'s Reduce Motion read, lifted
+# the same way: the tray file whole (its `super::` stubbed with the three
+# names it uses), the motion function by its text.
+TRAY="$APP/src/tray/windows.rs"
+MOTION="$APP/src/ui/motion.rs"
+TRAY_LIFT=$(mktemp -d)
+trap 'rm -rf "$LIFTED" "$TRAY_LIFT"' EXIT
+mkdir -p "$TRAY_LIFT/src"
+cat > "$TRAY_LIFT/Cargo.toml" <<'TOML'
+[package]
+name = "vela-windows-tray-lift"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_System_LibraryLoader"] }
+TOML
+MOTION_FN=$(awk '
+  /^#\[cfg\(windows\)\]$/ { held = $0; next }
+  held != "" && /^fn system_reduces_motion/ { print held; on = 1 }
+  { held = "" }
+  on { print }
+  on && /^}$/ { exit }
+' "$MOTION")
+if ! grep -q "SPI_GETCLIENTAREAANIMATION" <<<"$MOTION_FN"; then
+  echo "windows: could not lift system_reduces_motion out of src/ui/motion.rs" >&2
+  exit 1
+fi
+cat > "$TRAY_LIFT/src/lib.rs" <<RUST
+#![cfg(windows)]
+#![allow(dead_code)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TrayModel {
+    pub figure: Option<String>,
+    pub updated: Option<String>,
+    pub send: String,
+    pub receive: String,
+    pub open: String,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayCommand {
+    Open,
+    Send,
+    Receive,
+}
+pub(crate) fn press(_: TrayCommand) {}
+#[path = "$TRAY"]
+mod windows;
+$MOTION_FN
+RUST
+( cd "$TRAY_LIFT" && cargo clippy --target "$TARGET" -- -D warnings )
+echo "windows: the tray icon and the Reduce Motion read type-check too"
+
 echo "windows: type-checked (not run — see the crate docs)"
