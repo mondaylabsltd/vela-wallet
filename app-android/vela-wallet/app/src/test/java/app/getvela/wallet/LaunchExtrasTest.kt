@@ -36,7 +36,9 @@ class LaunchExtrasTest {
             assertEquals(name, "x", LaunchExtras.honoured(name, "x", debug = true))
         }
         // The galleries, the route, the page door and the parallel space are all on the list.
-        for (name in listOf("vela.gallery", "vela.startDestination", "vela.openUrl", "vela.parallelSpace", "vela.settingsState", "vela.flowState", "vela.signingState", "vela.exploreState")) {
+        // …and the harness's launch inputs (native parity F0.5): a release
+        // build must never let an installed app re-point its endpoints or RPCs.
+        for (name in listOf("vela.gallery", "vela.startDestination", "vela.openUrl", "vela.parallelSpace", "vela.settingsState", "vela.flowState", "vela.signingState", "vela.exploreState", "vela.serviceEndpoints", "vela.rpcOverrides", "vela.peerconnectRelay")) {
             assert(name in LaunchExtras.DEBUG_ONLY) { name }
         }
     }

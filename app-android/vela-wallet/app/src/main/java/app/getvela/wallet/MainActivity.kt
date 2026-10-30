@@ -294,6 +294,10 @@ class MainActivity : ComponentActivity() {
         // The gallery skips the launch animation for deterministic walkthroughs.
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
+        // F0.5, debug builds only (the release binding is a no-op): the
+        // harness's endpoints / RPCs / relay from the launch line. When they
+        // changed the store, the process starts again to read them.
+        if (BuildConfig.DEBUG && savedInstanceState == null && app.getvela.wallet.dev.LaunchInputsBinding.apply(this)) return
         readDebugOverrides()
         // A gallery, a board or a developer route opens no camera, whatever
         // is drawn there (the scanner shows its fixture frame): said once,
