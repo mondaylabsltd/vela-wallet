@@ -369,8 +369,8 @@ struct TrustedSignerChooserTests {
         #expect(entry.lineKey.map { loc.t($0) } == "高级：Vela 官方页或自建页")
         let inVela = try #require(venueWords(row: "in_vela"))
         let onAPage = try #require(venueWords(row: "page"))
-        #expect(loc.t(inVela.titleKey) == "在 Vela 里预览并签名")
-        #expect(loc.t(onAPage.titleKey) == "在可信签名页预览并签名")
+        #expect(loc.t(inVela.titleKey) == "在 Vela 里签名")
+        #expect(loc.t(onAPage.titleKey) == "在可信签名页签名")
         // "My own signing page" is nowhere: only a self-hosted page is "own".
         for key in [entry.titleKey, inVela.titleKey, onAPage.titleKey] {
             #expect(!loc.t(key).contains("我自己的签名页"))
