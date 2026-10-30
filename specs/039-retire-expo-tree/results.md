@@ -187,7 +187,7 @@ analytics: default, unconfirmed; dev harnesses: Assumptions).
 | Owed | Status |
 | --- | --- |
 | Gas-account funding sheet | still owed (money path; first on the list before the hostname moves) |
-| Receive request mode + `/pay` page | still owed |
+| Receive request mode + `/pay` page | `/pay` page **done** (2026-10-31, branch `web-pay-route`: `/pay` → `/<locale>/pay`, core-validated, opens Send locked for review; getvela.app forwards to it); receive request mode (an amount control on the receive code) still owed |
 | In-app bug-report submit | still owed |
 | HTTPS SDK wallet half (`/web-request`) | still owed; package + CI step kept |
 | `[locale]/import` placeholder | still owed (trivial) |

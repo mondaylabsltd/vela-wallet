@@ -1324,8 +1324,17 @@ for (let i = 1; i < PATHS.length; i++) {
 //   sheet's line (`componentsUi.linkSheet.multisigOnWeb`) and the widget's
 //   gallery line (`componentsUi.widget.balanceDescription`). 2225 + 5
 //   leaves + 3 branches = 2233 paths, 2119 leaves, 114 branches.
-if (PATHS.length !== 2233) fail(`expected 2233 paths (2119 leaf + 114 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2119) fail(`expected 2119 leaf paths, got ${leafSet.size}`);
+// 2216 (the web wallet's `/pay`, spec 039 Part B, 2026-10-31): +
+//   `receive.pay.{invalidToken, invalidAmount}` (why the core refused a link
+//   whose token or amount is wrong — `invalidBody` already says recipient or
+//   network), `receive.pay.noWalletBody` (a link opened with no wallet on the
+//   device: kept while one is created or signed into) and `receive.pay.home`
+//   (the way home from a refused link). 2212 + 4 = 2216 paths, 2108 leaves,
+//   108 branches.
+// Merged (2026-10-31): core asks 1's 2233 and /pay's 4 leaves together:
+//   2233 + 4 = 2237 paths, 2123 leaves, 114 branches.
+if (PATHS.length !== 2237) fail(`expected 2237 paths (2123 leaf + 114 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2123) fail(`expected 2123 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 114) fail(`expected 114 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

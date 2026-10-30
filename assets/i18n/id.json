@@ -613,7 +613,11 @@
    "amount": "Jumlah",
    "anyAmount": "Berapa pun",
    "invalidTitle": "Tautan pembayaran tidak valid",
-   "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim."
+   "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim.",
+   "invalidToken": "Token di tautan ini bukan alamat kontrak. Minta yang baru kepada pengirim.",
+   "invalidAmount": "Jumlah di tautan ini tidak dapat dibaca dengan tepat. Minta yang baru kepada pengirim.",
+   "noWalletBody": "Belum ada dompet Vela di perangkat ini. Buat dompet atau masuk, dan pembayaran ini akan menunggu untuk Anda tinjau.",
+   "home": "Buka Vela Wallet"
   },
   "addressLabel": "Alamat penerimaan Anda",
   "searchNetworkPlaceholder": "Cari jaringan",

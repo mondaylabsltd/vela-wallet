@@ -613,7 +613,11 @@
    "amount": "금액",
    "anyAmount": "금액 자유",
    "invalidTitle": "잘못된 결제 링크",
-   "invalidBody": "이 링크에는 올바른 받는 사람 또는 네트워크 정보가 없습니다. 보내는 사람에게 새 링크를 요청하세요."
+   "invalidBody": "이 링크에는 올바른 받는 사람 또는 네트워크 정보가 없습니다. 보내는 사람에게 새 링크를 요청하세요.",
+   "invalidToken": "이 링크의 토큰은 컨트랙트 주소가 아닙니다. 보내는 사람에게 새 링크를 요청하세요.",
+   "invalidAmount": "이 링크의 금액을 정확히 읽을 수 없습니다. 보내는 사람에게 새 링크를 요청하세요.",
+   "noWalletBody": "이 기기에는 아직 Vela 지갑이 없습니다. 지갑을 만들거나 로그인하면 이 결제를 검토할 수 있도록 기다리고 있습니다.",
+   "home": "Vela Wallet으로 이동"
   },
   "addressLabel": "받기 주소",
   "searchNetworkPlaceholder": "네트워크 검색",

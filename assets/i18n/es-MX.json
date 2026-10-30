@@ -616,7 +616,11 @@
    "amount": "Monto",
    "anyAmount": "Cualquier monto",
    "invalidTitle": "Enlace de pago inválido",
-   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió."
+   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió.",
+   "invalidToken": "El token de este enlace no es una dirección de contrato. Pídele uno nuevo a quien te lo envió.",
+   "invalidAmount": "El monto de este enlace no se puede leer con exactitud. Pídele uno nuevo a quien te lo envió.",
+   "noWalletBody": "Todavía no hay una billetera Vela en este dispositivo. Crea una o inicia sesión y este pago te estará esperando para que lo revises.",
+   "home": "Ir a Vela Wallet"
   },
   "addressLabel": "Tu dirección para recibir",
   "searchNetworkPlaceholder": "Buscar redes",

@@ -63,6 +63,7 @@ import {
 	type VenueBlockKey
 } from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
+import { PAY_MESSAGE_KEYS, type PayMessages } from '$lib/pay/link';
 import type { PluralCopy } from './plural';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -194,6 +195,16 @@ export function resolveAppPromptMessages(locale: Locale): AppPromptMessages {
 		appStore: 'App Store',
 		googlePlay: 'Google Play'
 	};
+}
+
+/** The `/pay` page's words (spec 039 Part B): a refused link, and no wallet yet. */
+export function resolvePayMessages(locale: Locale): PayMessages {
+	activate(locale);
+	const out = {} as PayMessages;
+	for (const name of Object.keys(PAY_MESSAGE_KEYS) as (keyof PayMessages)[]) {
+		out[name] = t(locale, PAY_MESSAGE_KEYS[name]);
+	}
+	return out;
 }
 
 /** The serializable strings the wallet screens render (spec 015, research.md D3). */

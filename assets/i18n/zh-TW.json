@@ -613,7 +613,11 @@
    "amount": "金額",
    "anyAmount": "任意金額",
    "invalidTitle": "無效的收款連結",
-   "invalidBody": "此連結缺少有效的收款地址或網路，請向發送方索取新連結。"
+   "invalidBody": "此連結缺少有效的收款地址或網路，請向發送方索取新連結。",
+   "invalidToken": "此連結中的代幣不是合約地址，請向發送方索取新連結。",
+   "invalidAmount": "無法準確讀取此連結中的金額，請向發送方索取新連結。",
+   "noWalletBody": "這台裝置上還沒有 Vela 錢包。建立錢包或登入後，這筆付款會等你核對。",
+   "home": "前往 Vela Wallet"
   },
   "addressLabel": "你的收款地址",
   "searchNetworkPlaceholder": "搜尋網路",

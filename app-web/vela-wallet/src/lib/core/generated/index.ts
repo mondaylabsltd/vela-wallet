@@ -312,6 +312,7 @@ export * from './NumberPreset';
 export * from './OriginLock';
 export * from './OutboxRecord';
 export * from './PageFailure';
+export * from './PayRefusal';
 export * from './PayRequest';
 export * from './PaymentRequestEvent';
 export * from './PaymentRequestOperation';

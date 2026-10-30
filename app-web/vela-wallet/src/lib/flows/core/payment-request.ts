@@ -17,6 +17,7 @@
 import { loadCore, PaymentRequestCore } from '$lib/core/client';
 import type { EffectLoop } from '$lib/core/effect-loop';
 import { createJsonWasmShell } from '$lib/core/json-shell';
+import type { PayRefusal } from '$lib/core/generated/PayRefusal';
 import type { PayRequest } from '$lib/core/generated/PayRequest';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
 import type { PaymentRequestOperation } from '$lib/core/generated/PaymentRequestOperation';
@@ -95,11 +96,16 @@ export function createPaymentRequestSession(
 	});
 }
 
+/** The core's ruling on a `/pay` link: the request, or why it was refused. */
+export type PayVerdict =
+	{ valid: true; pay: PayRequest } | { valid: false; refusal: PayRefusal | null };
+
 /**
- * The `/pay` grammar, judged by the core. `null` = refused (the shell words
- * the refusal from the corpus). Loads the core if it is not aboard yet.
+ * The `/pay` grammar, judged by the core. A refusal carries the core's reason
+ * (`pay_refusal`); the shell words it from the corpus. Loads the core if it
+ * is not aboard yet.
  */
-export async function validatePayQuery(query: RawPayQuery): Promise<PayRequest | null> {
+export async function validatePayQuery(query: RawPayQuery): Promise<PayVerdict> {
 	await loadCore();
 	const core = new PaymentRequestCore();
 	try {
@@ -117,7 +123,10 @@ export async function validatePayQuery(query: RawPayQuery): Promise<PayRequest |
 				})
 			)
 		) as { view: PaymentRequestView };
-		return result.view.pay_valid ? (result.view.pay ?? null) : null;
+		const { view } = result;
+		return view.pay_valid === true && view.pay !== null
+			? { valid: true, pay: view.pay }
+			: { valid: false, refusal: view.pay_refusal };
 	} finally {
 		core.free();
 	}

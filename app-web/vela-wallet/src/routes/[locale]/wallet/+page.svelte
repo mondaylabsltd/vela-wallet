@@ -67,6 +67,9 @@
 	import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
 	import type { ContactsView } from '$lib/core/generated/ContactsView';
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
+	import { validatePayQuery } from '$lib/flows/core/payment-request';
+	import { payPrefill } from '$lib/pay/link';
+	import { takeKeptPay } from '$lib/pay/kept';
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
@@ -2189,6 +2192,28 @@
 		).then(() => {
 			if (handoff.kind !== 'group-send') return;
 			pendingGroup = handoff.groupId;
+		});
+	});
+
+	/**
+	 * A payment link (spec 039 Part B): `/pay` kept it and came here — at once
+	 * for a wallet already on this device, after Welcome for one created or
+	 * signed into since. Taken once, when the wallet knows whose it is, and
+	 * asked of the core again (the kept query is the link, never a ruling on
+	 * it). It opens Send locked to the link's network, token and amount, as a
+	 * scanned code does; Send rules on what this wallet can do with it, and
+	 * the person reviews and confirms before anything is signed.
+	 */
+	let payTaken = false;
+	$effect(() => {
+		if (payTaken || !identity) return;
+		payTaken = true;
+		const kept = takeKeptPay();
+		if (kept === null) return;
+		void validatePayQuery(kept).then((verdict) => {
+			if (!verdict.valid || sendSession || !identity) return;
+			nav.enter('send');
+			void openSend(payPrefill(verdict.pay));
 		});
 	});
 
