@@ -11992,6 +11992,14 @@ impl WalletPage {
         } else {
             (theme.bg_sunken, theme.divider)
         };
+        // Owner decision 2026-10-29: the Vela networks out of the person's
+        // list, by name, after the mainnet hint — "Add one from Add Network".
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let more = settings_live::more_networks(
+            &view,
+            &self.loc.t("settingsModals.network.moreNetworks"),
+        );
+        let hint = settings_live::space_hint(&self.loc.t(hint), more.as_deref(), testnet);
         Some(
             div()
                 .flex()
@@ -12021,7 +12029,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(theme.fg_subtle)
-                                .child(crate::ui::prose(self.loc.t(hint))),
+                                .child(crate::ui::prose(hint)),
                         ),
                 )
                 .child(
@@ -12274,6 +12282,7 @@ impl WalletPage {
                 ),
             )
         };
+        let only_mine = self.only_mine_row(theme, chain_id, cx);
         div()
             .flex()
             .flex_col()
@@ -12286,6 +12295,35 @@ impl WalletPage {
             .border_color(theme.divider)
             .child(rpc)
             .child(explorer)
+            .children(only_mine)
+    }
+
+    /// "Only use my node" (owner decision 2026-10-28): offered only where the
+    /// network's saved RPC is the person's own (`NetNetworkRow::own_rpc`) —
+    /// on, the pool never asks a public node about the account. The switch
+    /// says what is saved; the core decides what it binds.
+    fn only_mine_row(&mut self, theme: &Theme, chain_id: u32, cx: &mut Context<Self>) -> Option<Div> {
+        self.identity.as_ref()?;
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let row = view.networks.iter().find(|row| row.chain_id == chain_id)?;
+        if !row.own_rpc {
+            return None;
+        }
+        let on = row.only_mine;
+        Some(crate::settings::components::toggle_row(
+            ElementId::from(("settings-only-mine", chain_id as usize)),
+            theme,
+            self.loc.t("settingsModals.network.onlyMine"),
+            self.loc.t("settingsModals.network.onlyMineHint"),
+            on,
+            // The intent an agent sends too (`set_only_my_node`): the same
+            // event, as the web's switch dispatches it.
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |ledger, cx| {
+                    ledger.dispatch(NetEvent::OnlyMineChanged { chain_id, on: !on }, cx);
+                });
+            },
+        ))
     }
 
     /// DST6 — the four services the wallet leans on.
