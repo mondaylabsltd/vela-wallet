@@ -73,6 +73,7 @@ import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
 import app.getvela.wallet.feature.send.core.SendHoldReason
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
+import app.getvela.wallet.feature.send.core.SendReceiptView
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendToken
 import app.getvela.wallet.feature.send.core.SendTxStatus
@@ -1663,6 +1664,18 @@ object SendLive {
         null -> ReceiptStage.Submitting
     }
 
+    /**
+     * Who was paid, on the receipt, as the confirm said it (vis-24, the web's
+     * `liveSendReceipt`): the core's name with its tag and the short address
+     * beside it — "Landlord (0xaaaa…aaaa)" — or the address alone. A contact
+     * the confirm named must not turn back into hex once the money left.
+     */
+    internal fun receiptPayee(view: SendView, receipt: SendReceiptView, s: VelaStrings): String {
+        val payee = singlePayee(view)
+        val short = shortAddress(payee?.address ?: view.recipient)
+        return payeeName(payee, s)?.let { "$it ($short)" } ?: receipt.transfers.firstOrNull()?.to_name ?: short
+    }
+
     internal fun receipt(fallback: SendReceiptModel, view: SendView, ctx: Context): SendReceiptModel {
         val s = ctx.strings
         val token = view.selected_token
@@ -1729,7 +1742,7 @@ object SendLive {
                     ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${sentFigure(part.amount, view)} ${part.symbol}".trim() }
                 } else {
                     listOf(
-                        "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
+                        "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to receiptPayee(view, receipt, s)))} · $chain",
                     ) + coinLines
                 },
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },

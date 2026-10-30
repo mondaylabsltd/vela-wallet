@@ -582,6 +582,29 @@ class SendLiveTest {
     }
 
     /**
+     * vis-24 on the receipt (the web's `liveSendReceipt`): the payee the
+     * confirm named stays named once the money left — "Landlord (0x7687…D141)",
+     * found on the device (fork send, P2.2) where Android said hex alone.
+     */
+    @Test
+    fun `the receipt names the payee the confirm named, with the short address`() {
+        val model = (FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model
+        val confirmed = SendView(
+            stage = SendStage.Receipt,
+            selected_token = xdai,
+            recipient = recipient,
+            payees = listOf(app.getvela.wallet.feature.send.core.SendPayee(address = recipient, name = "Landlord", name_source = app.getvela.wallet.feature.send.core.SendNameSource.Own)),
+            tx_hash = "0x1234567890abcdef1234567890abcdef",
+            receipt = SendReceiptView(status = SendReceiptStatus.Confirmed, amount = "0.001", usd_value = 0.0),
+        )
+        val named = SendLive.receipt(model, confirmed, ctx())
+        assertTrue(named.captions.first(), named.captions.first().contains("Landlord (0x7687…D141)"))
+        // Nobody named them: the short address alone, as before.
+        val bare = SendLive.receipt(model, confirmed.copy(payees = listOf(app.getvela.wallet.feature.send.core.SendPayee(address = recipient))), ctx())
+        assertTrue(bare.captions.first(), bare.captions.first().contains("0x7687…D141") && !bare.captions.first().contains("("))
+    }
+
+    /**
      * 098 follow-up: the relay topping up its gas says so in place of the
      * wait, with no confirmation clock (nothing is on the network yet); a
      * fee hold keeps its own words; and a failure after a fee hold is not
