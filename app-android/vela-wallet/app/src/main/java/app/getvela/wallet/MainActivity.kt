@@ -542,6 +542,24 @@ class MainActivity : ComponentActivity() {
             container.agent.clientmcp.returned(data.toString())
             return
         }
+        // Phase 3: the verified App Links — read with the core's link codec.
+        when (val route = app.getvela.wallet.feature.wallet.core.AppLinks.classify(data.toString())) {
+            is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Pay -> {
+                container.pendingPayLink.value = data
+                return
+            }
+            is app.getvela.wallet.feature.wallet.core.AppLinks.Route.Web -> {
+                // Multisig is not in the phone app yet: the web wallet opens
+                // it as it always has, in a named browser — never the chooser,
+                // and never back into this app, which claims the link.
+                app.getvela.wallet.core.diagnostics.VelaLog.event("applink", "to the web", "kind" to route.kind.name)
+                val opened = container.trustedSignerTab?.open(route.url) == true
+                if (!opened) container.browser.askToOpen(route.url)
+                return
+            }
+            app.getvela.wallet.feature.wallet.core.AppLinks.Route.Home -> return
+            null -> Unit
+        }
         when (val link = PayLink.parse(data.toString())) {
             is PayLink.Open -> container.browser.askToOpen(link.url)
             is PayLink.Pay -> container.pendingPayLink.value = data

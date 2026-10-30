@@ -180,12 +180,39 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="app.getvela.wallet" />
             </intent-filter>
-            <intent-filter>
+            <!--
+                Native parity Phase 3 (owner decision 2, 2026-10-30): verified
+                App Links. The installed app claims what the web wallet shares,
+                by default — pay links on both hosts, and on the wallet's host a
+                multisig transaction (`/{locale}/wallet#ms=`), a multisig to add
+                (`#msa=`) and the outside signer's page (`/{locale}/connect#…`).
+                The fragment never reaches a filter: AppLinks.classify reads it
+                with the core's link codec, and a `/wallet` link that carries
+                nothing opens the app.
+
+                `autoVerify`: each host must serve /.well-known/assetlinks.json
+                naming this package and its signing key — getvela.app does;
+                wallet.getvela.app must (app-android/vela-wallet/app-links/).
+                One host per filter, so Android 12+ verifies each on its own and
+                the pay link on getvela.app does not wait on the wallet's host.
+            -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="wallet.getvela.app" android:pathPrefix="/pay" />
-                <data android:scheme="https" android:host="getvela.app" android:pathPrefix="/pay" />
+                <data android:scheme="https" />
+                <data android:host="getvela.app" />
+                <data android:path="/pay" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="wallet.getvela.app" />
+                <data android:path="/pay" />
+                <data android:pathPattern="/..*/wallet" />
+                <data android:pathPattern="/..*/connect" />
             </intent-filter>
         </activity>
         <!-- Spec 076: the Trusted Signer's answer. Transparent, out of recents,

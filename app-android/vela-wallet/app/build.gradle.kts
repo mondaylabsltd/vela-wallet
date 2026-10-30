@@ -220,6 +220,17 @@ android {
             test.inputs.file(velaRepoRoot.resolve("docs/design-tokens.json"))
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaDesignTokens")
+            // The web's tokens: the value button's fill (a web addition) is pinned to them.
+            test.inputs.file(velaRepoRoot.resolve("app-web/vela-wallet/src/lib/tokens/tokens.css"))
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaWebTokens")
+            // The App Links the owner hosts (AppLinksTest reads both).
+            test.inputs.file(projectDir.resolve("src/main/AndroidManifest.xml"))
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaManifest")
+            test.inputs.file(rootDir.resolve("app-links/assetlinks.json"))
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaAssetLinks")
             test.inputs.dir(velaRepoRoot.resolve("assets/i18n"))
                 .withPathSensitivity(PathSensitivity.RELATIVE)
                 .withPropertyName("velaI18nCatalogs")
