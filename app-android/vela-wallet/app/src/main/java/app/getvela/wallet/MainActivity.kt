@@ -465,9 +465,11 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
 
-            // Phase 3: the launcher's Send / Receive / Scan, in the app's language.
+            // Phase 3: the launcher's Send / Receive / Scan, in the app's language…
             LaunchedEffect(i18nState.language) {
                 app.getvela.wallet.core.platform.LauncherShortcuts.publish(this@MainActivity, container.i18nRuntime)
+                // …and the home-screen widget's words.
+                app.getvela.wallet.core.widget.VelaBalanceWidget.refresh(applicationContext)
             }
 
             // New provider identity per resolved language: every t() reader recomposes,
