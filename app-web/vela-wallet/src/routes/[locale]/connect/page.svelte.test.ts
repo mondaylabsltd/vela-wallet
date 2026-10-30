@@ -1,6 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- a stand-in bridge and wallet */
+/* eslint-disable @typescript-eslint/no-explicit-any -- a stand-in machine host and wallet */
 /**
- * The connect page in a browser.
+ * The connect page in a browser, drawing the core's page machine's view (a
+ * stand-in host, `fake-host.svelte.ts`: the machine itself is pinned by the
+ * Rust suite).
  *
  * ms-14: it says which account is connecting, and an account that is not one
  * of the members the link named is refused aloud — Connect is off, and the
@@ -28,6 +30,12 @@ import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
 import { cancelTx, safeTxHashes, type SafeTx } from '$lib/multisig/core/kernel';
+import type { OutsideActivityEntry } from '$lib/multisig/generated/OutsideActivityEntry';
+import type { OutsideActions } from '$lib/multisig/generated/OutsideActions';
+import type { OutsideGate } from '$lib/multisig/generated/OutsideGate';
+import type { OutsideSessionRow } from '$lib/multisig/generated/OutsideSessionRow';
+import type { OutsideTxView } from '$lib/multisig/generated/OutsideTxView';
+import type { FakeHost } from './fake-host.svelte';
 
 const MEMBER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 const STRANGER = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';
@@ -49,25 +57,21 @@ const TX: SafeTx = {
 const fake = vi.hoisted(() => ({
 	accounts: [] as string[],
 	joined: [] as unknown[][],
-	bridge: null as any,
-	approved: false,
-	/** The live session's connection state, and since when. */
-	state: 'connected',
-	stateSince: 0,
-	retried: 0,
+	host: null as any,
 	discover: null as null | Promise<void>,
-	outside: null as any,
-	/** Every transaction the page read, in order. */
-	made: [] as any[],
-	/** An execution's fee and the wallet's coin, as the page reads them (`null`: unknown). */
-	fee: null as null | { wei: bigint; count: number; partial: boolean },
+	/** Every link the page handed the machine, in order. */
+	links: [] as any[],
+	refreshed: 0,
+	/** An execution's fee and the wallet's coin, as the machine reads them (`null`: unknown). */
+	fee: null as null | { wei: string; count: number; partial: boolean },
 	balance: null as null | bigint,
-	/** Vela's request as the mailbox counts it (`readTransaction`); `null`: not in the mailbox. */
-	counted: null as any
+	/** §3.5: the machine asks about the risk before an action. */
+	risky: false,
+	/** Actions the machine carried out (after any risk question). */
+	acted: [] as string[]
 }));
 
 vi.mock('$lib/ui/history', () => ({ replaceUrl: () => {} }));
-vi.mock('$lib/multisig/external/injected', () => ({ currentChain: async () => 'eip155:100' }));
 vi.mock('$lib/multisig/external/eip6963', () => ({
 	discoverProviders: async () => {
 		if (fake.discover) await fake.discover;
@@ -79,83 +83,94 @@ vi.mock('$lib/multisig/external/eip6963', () => ({
 		];
 	}
 }));
-vi.mock('$lib/multisig/external/bridge', () => {
-	class DamagedInviteError extends Error {}
+vi.mock('$lib/multisig/shell/outside-page.svelte', async () => {
+	const actual = await vi.importActual<typeof import('$lib/multisig/shell/outside-page.svelte')>(
+		'$lib/multisig/shell/outside-page.svelte'
+	);
+	const { FakeHost } = await import('./fake-host.svelte');
 	return {
-		DamagedInviteError,
-		Bridge: class extends EventTarget {
-			signer: { accounts: string[]; chain: string };
-			activity: unknown[] = [];
-			prompt: unknown = undefined;
-			request: unknown = undefined;
-			relay: unknown = { kind: 'up' };
-			constructor(_provider: unknown, accounts: string[], chain: string) {
-				super();
-				this.signer = { accounts, chain };
-				fake.bridge = this;
-			}
-			get sessions() {
-				return fake.joined.length
-					? [
-							{
-								id: 's',
-								state: fake.state,
-								approved: fake.approved,
-								declined: false,
-								created: 1,
-								stateSince: fake.stateSince || Date.now()
+		...actual,
+		OutsidePageHost: class extends FakeHost {
+			constructor() {
+				super((host, event) => {
+					switch (event.type) {
+						case 'join':
+							// As PeerConnect reads an invite: one changed on the way does not open.
+							if (event.invite.includes('DAMAGED')) {
+								host.set({ joinFailed: 'invalid invite' });
+								return;
 							}
-						]
-					: [];
+							fake.joined.push([event.invite, event.members]);
+							host.set({
+								joinFailed: null,
+								sessions: [session()],
+								connectPrompt: { session: 's', dapp: { name: 'Vela' } }
+							});
+							return;
+						case 'link':
+							fake.links.push(event.link);
+							host.set({ link: event.link, load: { kind: 'loading' }, tx: null });
+							return;
+						case 'refresh':
+							fake.refreshed += 1;
+							return;
+						case 'estimate_fee':
+							host.set({ fee: { account: event.account, fee: fake.fee } });
+							return;
+						case 'balance':
+							host.set({
+								balance: {
+									account: event.account,
+									wei: fake.balance === null ? null : String(fake.balance)
+								}
+							});
+							return;
+						case 'approve':
+						case 'execute':
+						case 'reject':
+							if (!fake.risky) {
+								fake.acted.push(event.type);
+								return;
+							}
+							host.risk = {
+								chainId: 5042002,
+								findings: (host.view.tx?.gate as any)?.findings ?? [],
+								answer: (signs) => {
+									host.risk = null;
+									if (signs) fake.acted.push(event.type);
+								}
+							};
+					}
+				});
+				fake.host = this;
 			}
-			resumeAll() {}
-			retryRelay() {
-				fake.retried += 1;
-			}
-			join(...args: unknown[]) {
-				// As `Bridge.join` reads a PeerConnect invite: one cut short does not.
-				if (String(args[0]).includes('DAMAGED')) throw new DamagedInviteError('invalid invite');
-				fake.joined.push(args);
-				this.prompt = { session: 's', params: { name: 'Vela' }, answer: () => {} };
-				return 's';
-			}
-			end() {}
 		}
-	};
-});
-vi.mock('$lib/multisig/external/outside.svelte', async () => {
-	const { OutsideTransaction: Real } = await vi.importActual<
-		typeof import('$lib/multisig/external/outside.svelte')
-	>('$lib/multisig/external/outside.svelte');
-	return {
-		OutsideTransaction: class extends Real {
-			disposed = false;
-			refreshed = 0;
-			constructor(link: never) {
-				super(link);
-				fake.outside = this;
-				fake.made.push(this);
-			}
-			async refresh() {
-				this.refreshed += 1;
-			}
-			async fee() {
-				return fake.fee;
-			}
-			async balance() {
-				return fake.balance;
-			}
-			dispose() {
-				this.disposed = true;
-			}
-		},
-		// r5reg-23: the registry names the multisig.
-		verifiedGenesis: async () => ({ name: 'R5 Team' }),
-		readTransaction: async () => fake.counted
 	};
 });
 
 const { default: Page } = await import('./+page.svelte');
+
+const host = () => fake.host as FakeHost;
+
+/** The live session, as the machine lists it. */
+function session(over: Partial<OutsideSessionRow> = {}): OutsideSessionRow {
+	return {
+		id: 's',
+		state: 'connected',
+		dapp: { name: 'Vela' },
+		approved: false,
+		declined: false,
+		created: 1,
+		stateSince: Date.now(),
+		relay: { kind: 'up' },
+		...over
+	};
+}
+
+/** Paired with Vela: its connection approved, nothing asking to connect. */
+function pair(over: Partial<OutsideSessionRow> = {}) {
+	host().set({ connectPrompt: null, sessions: [session({ approved: true, ...over })] });
+}
 
 function words(): MultisigMessages {
 	const out: any = {};
@@ -190,7 +205,6 @@ const signing = new Proxy({}, { get: (_, key) => String(key) });
 async function open(accounts: string[], hash: string, { wait = true } = {}) {
 	fake.accounts = accounts;
 	fake.joined = [];
-	fake.approved = false;
 	history.replaceState(null, '', `${location.pathname}${hash}`);
 	const screen = render(Page, {
 		props: {
@@ -198,7 +212,7 @@ async function open(accounts: string[], hash: string, { wait = true } = {}) {
 		}
 	});
 	if (wait) {
-		await vi.waitFor(() => expect(fake.bridge?.signer).toBeDefined(), { timeout: 15_000 });
+		await vi.waitFor(() => expect(fake.host?.walletUsed).toBe(true), { timeout: 15_000 });
 		if (hash.includes('wss')) {
 			await vi.waitFor(() => expect(fake.joined).toHaveLength(1), { timeout: 15_000 });
 		}
@@ -211,22 +225,22 @@ const button = (label: string) =>
 	[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as
 		HTMLButtonElement | undefined;
 const testid = (id: string) => document.querySelector(`[data-testid="${id}"]`);
+const answers = () => host().events.filter((e) => e.type === 'answer_request') as any[];
 
 beforeAll(async () => {
 	await loadCore();
 });
 
 afterEach(() => {
-	fake.state = 'connected';
-	fake.stateSince = 0;
 	history.replaceState(null, '', location.pathname);
-	fake.bridge = null;
-	fake.outside = null;
+	fake.host = null;
 	fake.discover = null;
-	fake.made = [];
+	fake.links = [];
+	fake.refreshed = 0;
 	fake.fee = null;
 	fake.balance = null;
-	fake.counted = null;
+	fake.risky = false;
+	fake.acted = [];
 });
 
 describe('the connect page names who connects (ms-14)', () => {
@@ -252,15 +266,12 @@ describe('the connect page names who connects (ms-14)', () => {
 
 	it('connected as a stranger: the refusal, never "keep this page open"', async () => {
 		const screen = await open([STRANGER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.approved = true;
-		fake.bridge.prompt = undefined;
-		fake.bridge.dispatchEvent(new Event('change'));
+		pair();
 		await tick();
 		await vi.waitFor(() => expect(testid('connect-wrong-account')).not.toBeNull());
 		expect(testid('connect-connected')).toBeNull();
 		// The wallet switches to the member: the page carries on.
-		fake.bridge.signer.accounts.splice(0, 1, MEMBER);
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({ accounts: [MEMBER] });
 		await vi.waitFor(() => expect(testid('connect-connected')).not.toBeNull());
 		expect(testid('connect-wrong-account')).toBeNull();
 		await screen.unmount();
@@ -276,6 +287,27 @@ describe('the connect page names who connects (ms-14)', () => {
 	});
 });
 
+/** A request Vela sent through the pairing, as the machine logs it. */
+function asked(over: Partial<OutsideActivityEntry> = {}): OutsideActivityEntry {
+	return {
+		id: `r-${Math.random()}`,
+		at: Date.now(),
+		session: 's',
+		origin: null,
+		method: 'eth_signTypedData_v4',
+		account: MEMBER,
+		safeTx: { chainId: 5042002, safe: SAFE, tx: TX },
+		send: null,
+		stage: 'review',
+		walletAt: null,
+		outcome: null,
+		problem: null,
+		form: null,
+		result: null,
+		...over
+	};
+}
+
 describe('the connect page says where it stands (r4)', () => {
 	it('r4D-16: a spinner and "Connecting to Vela…" before anything is found', async () => {
 		let release!: () => void;
@@ -290,35 +322,22 @@ describe('the connect page says where it stands (r4)', () => {
 
 	it('r4C-1: the relay refusing this page is said, with Retry', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}`);
-		fake.bridge.relay = { kind: 'failed', why: 'refused', detail: 'HTTP 4403' };
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({ relay: { kind: 'failed', why: 'refused', detail: 'HTTP 4403' } });
 		await vi.waitFor(() =>
 			expect(testid('connect-relay')?.textContent).toContain(
 				"Can't connect to the signing relay (it refused this device's pass)."
 			)
 		);
 		button('external.retry')!.click();
-		expect(fake.retried).toBe(1);
+		expect(host().retried).toBe(1);
 		await screen.unmount();
 	});
 
 	it("r4C-7: Vela's request is reviewed before the wallet is asked — the multisig, network, what, number, hashes", async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		let answered: boolean | null = null;
-		const entry = {
-			id: 'r1',
-			at: Date.now(),
-			session: 's',
-			method: 'eth_signTypedData_v4',
-			account: MEMBER,
-			safeTx: { chainId: 5042002, safe: SAFE, tx: TX },
-			stage: 'review'
-		};
-		fake.bridge.activity = [entry];
-		fake.bridge.request = { entry, answer: (go: boolean) => (answered = go) };
-		fake.bridge.dispatchEvent(new Event('prompt'));
+		pair();
+		const entry = asked({ id: 'r1' });
+		host().set({ activity: [entry], request: entry });
 		await vi.waitFor(() => expect(testid('connect-review')).not.toBeNull());
 		const hashes = safeTxHashes(5042002, SAFE, TX);
 		expect(testid('review-safe')?.textContent).toBe(SAFE);
@@ -330,43 +349,40 @@ describe('the connect page says where it stands (r4)', () => {
 		expect(testid('hash-domain')?.textContent).toBe(hashes.domainHash);
 		expect(testid('hash-message')?.textContent).toBe(hashes.messageHash);
 		// The wallet is asked on the tap, not before.
-		expect(answered).toBeNull();
+		expect(answers()).toHaveLength(0);
 		button('Sign with MetaMask')!.click();
-		expect(answered).toBe(true);
+		expect(answers()).toEqual([{ type: 'answer_request', session: 's', id: 'r1', go: true }]);
 		await screen.unmount();
 	});
 
 	it('r4C-3 / r4C-12: the wait in the wallet is timed; then "Signed ✓" and each outcome', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		const waiting = {
+		pair();
+		const waiting = asked({
 			id: 'r1',
 			at: Date.now() - 25_000,
 			walletAt: Date.now() - 25_000,
-			session: 's',
-			method: 'eth_signTypedData_v4',
-			account: MEMBER,
+			safeTx: null,
 			stage: 'wallet'
-		};
-		fake.bridge.activity = [waiting];
-		fake.bridge.dispatchEvent(new Event('activity'));
+		});
+		host().set({ activity: [waiting] });
 		await vi.waitFor(() =>
 			expect(testid('connect-in-wallet')?.textContent).toMatch(/Confirm in MetaMask · 0:2\d/)
 		);
 		expect(testid('connect-still-waiting')).not.toBeNull();
-		fake.bridge.activity = [
-			{ ...waiting, stage: 'answered', outcome: 'done', form: 'typedData' },
-			{ ...waiting, id: 'r0', stage: 'answered', outcome: 'withdrawn' },
-			{
-				...waiting,
-				id: 'r-1',
-				stage: 'answered',
-				outcome: 'rejected',
-				problem: { kind: 'declined' }
-			}
-		];
-		fake.bridge.dispatchEvent(new Event('activity'));
+		host().set({
+			activity: [
+				{ ...waiting, stage: 'answered', outcome: 'done', form: 'typedData' },
+				{ ...waiting, id: 'r0', stage: 'answered', outcome: 'withdrawn' },
+				{
+					...waiting,
+					id: 'r-1',
+					stage: 'answered',
+					outcome: 'rejected',
+					problem: { kind: 'declined' }
+				}
+			]
+		});
 		await vi.waitFor(() => expect(testid('connect-signed')).not.toBeNull());
 		const list = testid('connect-activity')!.textContent ?? '';
 		expect(list).toContain('external.outcomeDone');
@@ -379,21 +395,10 @@ describe('the connect page says where it stands (r4)', () => {
 describe("Vela's side, said when it is not there (r4C-4, r4C-15)", () => {
 	it('r4C-15: Vela leaves while a request is in the wallet: "Vela went offline — reconnecting…"', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		fake.bridge.activity = [
-			{
-				id: 'r1',
-				at: Date.now(),
-				walletAt: Date.now(),
-				session: 's',
-				method: 'eth_signTypedData_v4',
-				account: MEMBER,
-				stage: 'wallet'
-			}
-		];
-		fake.state = 'waiting';
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({
+			activity: [asked({ id: 'r1', walletAt: Date.now(), safeTx: null, stage: 'wallet' })]
+		});
+		pair({ state: 'waiting' });
 		await vi.waitFor(() =>
 			expect(testid('connect-vela-gone')?.textContent).toContain('external.velaOffline')
 		);
@@ -402,10 +407,10 @@ describe("Vela's side, said when it is not there (r4C-4, r4C-15)", () => {
 
 	it('r4C-4: on the relay and Vela not there for a while: said, not an endless wait', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.state = 'waiting';
-		fake.stateSince = Date.now() - 15_000;
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({
+			connectPrompt: null,
+			sessions: [session({ state: 'waiting', stateSince: Date.now() - 15_000 })]
+		});
 		await vi.waitFor(
 			() => expect(testid('connect-vela-absent')?.textContent).toBe('external.velaNotConnected'),
 			{ timeout: 3_000 }
@@ -415,46 +420,89 @@ describe("Vela's side, said when it is not there (r4C-4, r4C-15)", () => {
 	});
 });
 
+const ALSO = '0x90f79bf6eb2c4f870365e785982e1f101e93b906';
+const approval = (owner: string) => ({ owner, counts: true, approval: { owner }, createdMs: 1 });
+
+/** The gate the core gives for these findings on the transaction's network. */
+function gateOf(findings: any[]): OutsideGate {
+	const refused = findings.filter((f) => f.from === 'genesis');
+	if (refused.length > 0) return { kind: 'refused', findings: refused };
+	const risks = findings.filter((f) => f.from === 'chain');
+	return risks.length > 0 ? { kind: 'risk', findings: risks } : { kind: 'open' };
+}
+
+/** What `account` may do, as the core says it for this view (`OutsideTxView::actions`). */
+function actionsFor(account: string | undefined, tx: OutsideTxView): OutsideActions | null {
+	if (!account) return null;
+	const owner = tx.members.owners.includes(account);
+	const has = tx.item.approvals.some((a) => a.counts && a.owner === account);
+	const open = tx.item.status !== 'done' && (tx.gate.kind === 'open' || tx.gate.kind === 'risk');
+	const enough = tx.item.approved >= tx.item.threshold;
+	const canApprove = open && owner && !has && !enough;
+	const own = owner && !has ? 1 : 0;
+	return {
+		account,
+		isOwner: owner,
+		hasApproved: has,
+		open,
+		enough,
+		canApprove,
+		canApproveOnChain: canApprove,
+		canExecute: open && tx.item.approved + own >= tx.item.threshold,
+		canReject: open && owner
+	};
+}
+
+/** The link's transaction, read: `approved` of 2, these approvals, on these owners. */
+function readyView(
+	approved: number,
+	approvals: any[] = [],
+	owners = [MEMBER, STRANGER, ALSO],
+	findings: unknown[] = []
+) {
+	const hashes = safeTxHashes(5042002, SAFE, TX);
+	const tx: OutsideTxView = {
+		chainId: 5042002,
+		safe: SAFE,
+		tx: TX,
+		hashes,
+		genesis: null,
+		findings,
+		gate: gateOf(findings),
+		review: null,
+		members: { deployed: true, owners, threshold: 2, nonce: '3' },
+		item: {
+			chainId: 5042002,
+			safeTxHash: hashes.safeTxHash,
+			status: approved >= 2 ? 'ready' : 'pending',
+			approved,
+			threshold: 2,
+			nonce: '3',
+			proposer: STRANGER,
+			renameUndeployed: false,
+			review: { action: { kind: 'transfer' }, refusal: null },
+			approvals
+		}
+	};
+	host().set({ load: { kind: 'ready' }, tx, actions: actionsFor(host().view.accounts[0], tx) });
+}
+
+/** As `readyView`, `approved` of 2 by the stranger, on these owners. */
+function ready(approved: number, owners = [MEMBER, STRANGER], findings: unknown[] = []) {
+	readyView(approved, approved > 0 ? [approval(STRANGER)] : [], owners, findings);
+}
+
 describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 	const link = `#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.0x${'ab'.repeat(32)}`;
 
-	function ready(approved: number, owners = [MEMBER, STRANGER], findings: unknown[] = []) {
-		const hashes = safeTxHashes(5042002, SAFE, TX);
-		fake.outside.load = {
-			kind: 'ready',
-			view: {
-				chainId: 5042002,
-				safe: SAFE,
-				tx: TX,
-				hashes,
-				genesis: null,
-				findings,
-				members: { deployed: true, owners, threshold: 2, nonce: 3n },
-				item: {
-					safeTxHash: hashes.safeTxHash,
-					status: approved >= 2 ? 'ready' : 'pending',
-					approved,
-					threshold: 2,
-					nonce: 3n,
-					renameUndeployed: false,
-					review: { action: { kind: 'transfer' }, refusal: null },
-					approvals:
-						approved > 0
-							? [{ owner: STRANGER, counts: true, approval: { owner: STRANGER }, createdMs: 1 }]
-							: []
-				}
-			}
-		};
-	}
-
 	it('reads it without Vela, and offers the wallet connect, then Sign', async () => {
 		const screen = await open([], link);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		ready(0);
 		await vi.waitFor(() => expect(testid('connect-outside')?.textContent).toContain('0 of 2'));
 		expect(button('external.connectWallet')).toBeDefined();
-		fake.bridge.signer.accounts.splice(0, 0, MEMBER);
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({ accounts: [MEMBER] });
+		ready(0);
 		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
 		expect(button('Execute with MetaMask')).toBeUndefined();
 		await screen.unmount();
@@ -462,8 +510,8 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 
 	it('with the threshold met counting the owner: Execute, its fee said as paid by the wallet', async () => {
 		const screen = await open([MEMBER], link);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
-		fake.outside.fee = async () => ({ wei: 21000n * 1_000_000_000n, count: 1, partial: false });
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
+		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
 		ready(1);
 		await vi.waitFor(() => expect(button('Execute with MetaMask')).toBeDefined());
 		await vi.waitFor(() => expect(testid('outside-fee')?.textContent).toContain('fee 0.000021'));
@@ -475,7 +523,7 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 
 	it('§3.5: a genesis refused on that network — said, and nothing is offered', async () => {
 		const screen = await open([MEMBER], link);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		ready(
 			1,
 			[MEMBER, STRANGER],
@@ -490,9 +538,8 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 
 	it('§3.5: a risk on that network — said, and each action asks first', async () => {
 		const screen = await open([MEMBER], link);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
-		let approved = 0;
-		fake.outside.approve = async () => void (approved += 1);
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
+		fake.risky = true;
 		ready(
 			0,
 			[MEMBER, STRANGER],
@@ -502,20 +549,20 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
 		button('Sign with MetaMask')!.click();
 		await vi.waitFor(() => expect(testid('outside-risk-confirm')).not.toBeNull());
-		expect(approved, 'nothing asked of the wallet before the tap').toBe(0);
+		expect(fake.acted, 'nothing asked of the wallet before the tap').toEqual([]);
 		button('authority.signRiskCancel')!.click();
 		await vi.waitFor(() => expect(testid('outside-risk-confirm')).toBeNull());
-		expect(approved).toBe(0);
+		expect(fake.acted).toEqual([]);
 		button('Sign with MetaMask')!.click();
 		await vi.waitFor(() => expect(button('authority.signRiskConfirm')).toBeDefined());
 		button('authority.signRiskConfirm')!.click();
-		await vi.waitFor(() => expect(approved).toBe(1));
+		await vi.waitFor(() => expect(fake.acted).toEqual(['approve']));
 		await screen.unmount();
 	});
 
 	it('a member it is not: said, nothing offered', async () => {
 		const screen = await open([MEMBER], link);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		ready(0, [STRANGER]);
 		await vi.waitFor(() => expect(testid('outside-not-owner')).not.toBeNull());
 		expect(button('Sign with MetaMask')).toBeUndefined();
@@ -524,47 +571,6 @@ describe("the link's own transaction, from here (r4C-2, r4C-9)", () => {
 });
 
 const txHash = () => safeTxHashes(5042002, SAFE, TX).safeTxHash;
-/** A request Vela sent through the pairing, as the bridge holds it. */
-function asked(over: Record<string, unknown> = {}) {
-	return {
-		id: `r-${Math.random()}`,
-		at: Date.now(),
-		session: 's',
-		method: 'eth_signTypedData_v4',
-		account: MEMBER,
-		safeTx: { chainId: 5042002, safe: SAFE, tx: TX },
-		stage: 'review',
-		...over
-	};
-}
-
-function readyView(approved: number, approvals: unknown[] = []) {
-	const hashes = safeTxHashes(5042002, SAFE, TX);
-	fake.outside.load = {
-		kind: 'ready',
-		view: {
-			chainId: 5042002,
-			safe: SAFE,
-			tx: TX,
-			hashes,
-			genesis: null,
-			findings: [],
-			members: { deployed: true, owners: [MEMBER, STRANGER, ALSO], threshold: 2, nonce: 3n },
-			item: {
-				safeTxHash: hashes.safeTxHash,
-				status: approved >= 2 ? 'ready' : 'pending',
-				approved,
-				threshold: 2,
-				nonce: 3n,
-				renameUndeployed: false,
-				review: { action: { kind: 'transfer' }, refusal: null },
-				approvals
-			}
-		}
-	};
-}
-const ALSO = '0x90f79bf6eb2c4f870365e785982e1f101e93b906';
-const approval = (owner: string) => ({ owner, counts: true, approval: { owner }, createdMs: 1 });
 
 describe('round 6: a new link in the same tab (r5reg-2)', () => {
 	it("reads the new link's transaction — never keeps showing the one before", async () => {
@@ -573,14 +579,12 @@ describe('round 6: a new link in the same tab (r5reg-2)', () => {
 			[MEMBER],
 			`#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
 		);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
-		const first = fake.outside;
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(0);
 		await vi.waitFor(() => expect(testid('connect-outside')?.textContent).toContain('0 of 2'));
 		location.hash = `#for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${other}`;
-		await vi.waitFor(() => expect(fake.outside).not.toBe(first));
-		expect(first.disposed).toBe(true);
-		expect(fake.outside.link.safeTxHash).toBe(other);
+		await vi.waitFor(() => expect(fake.links).toHaveLength(2));
+		expect(fake.links[1].safeTxHash).toBe(other);
 		await vi.waitFor(() =>
 			expect(testid('connect-outside')?.textContent).toContain('external.loadingTx')
 		);
@@ -613,7 +617,7 @@ describe("round 6: a damaged invite is the link's, never the wallet's", () => {
 			const screen = await open([MEMBER], `#${encodeURIComponent(invite)}&for=${MEMBER}`, {
 				wait: false
 			});
-			await vi.waitFor(() => expect(fake.bridge?.signer).toBeDefined(), { timeout: 15_000 });
+			await vi.waitFor(() => expect(fake.host?.walletUsed).toBe(true), { timeout: 15_000 });
 			await vi.waitFor(() => expect(damaged()).toBe('external.linkDamaged'));
 			expect(testid('connect-link-damaged')?.getAttribute('role')).toBe('alert');
 			expect(fake.joined).toHaveLength(0);
@@ -627,7 +631,7 @@ describe("round 6: a damaged invite is the link's, never the wallet's", () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(DAMAGED)}&for=${MEMBER}`, {
 			wait: false
 		});
-		await vi.waitFor(() => expect(fake.bridge?.signer).toBeDefined(), { timeout: 15_000 });
+		await vi.waitFor(() => expect(fake.host?.walletUsed).toBe(true), { timeout: 15_000 });
 		await vi.waitFor(() => expect(damaged()).toBe('external.linkDamaged'));
 		location.hash = `#${encodeURIComponent(INVITE)}&for=${MEMBER}`;
 		await vi.waitFor(() => expect(fake.joined).toHaveLength(1));
@@ -640,10 +644,8 @@ describe("round 6: a damaged invite is the link's, never the wallet's", () => {
 describe('round 6: one card, one message (r5reg-7)', () => {
 	it('signed on a paired page: "Signed ✓" with keep-open — never "you can close this page"', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		fake.bridge.activity = [asked({ stage: 'answered', outcome: 'done', form: 'typedData' })];
-		fake.bridge.dispatchEvent(new Event('activity'));
+		pair();
+		host().set({ activity: [asked({ stage: 'answered', outcome: 'done', form: 'typedData' })] });
 		await vi.waitFor(() =>
 			expect(testid('connect-signed')?.textContent).toContain('external.signedPaired')
 		);
@@ -657,27 +659,26 @@ describe('round 6: one card, one message (r5reg-7)', () => {
 			[MEMBER],
 			`#${encodeURIComponent(INVITE)}&for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
 		);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(1, [approval(STRANGER)]);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
+		pair();
 		// Vela asks for another transaction: its review is the one card.
 		const next = { ...TX, nonce: '0x4' };
-		fake.bridge.activity = [asked({ safeTx: { chainId: 5042002, safe: SAFE, tx: next } })];
-		fake.bridge.request = { entry: fake.bridge.activity[0], answer: () => {} };
-		fake.bridge.dispatchEvent(new Event('prompt'));
+		const other = asked({ safeTx: { chainId: 5042002, safe: SAFE, tx: next } });
+		host().set({ activity: [other], request: other });
 		await vi.waitFor(() => expect(testid('connect-request')).not.toBeNull());
 		expect(testid('connect-outside')).toBeNull();
 		expect(document.querySelectorAll('[data-testid="connect-review"]')).toHaveLength(1);
 		// The link's own transaction signed through the pairing: read again, and not shown twice.
-		const refreshed = fake.outside.refreshed;
-		fake.bridge.request = undefined;
-		fake.bridge.activity = [
-			asked({ stage: 'answered', outcome: 'done', form: 'typedData' }),
-			{ ...fake.bridge.activity[0], stage: 'answered', outcome: 'withdrawn' }
-		];
-		fake.bridge.dispatchEvent(new Event('activity'));
-		await vi.waitFor(() => expect(fake.outside.refreshed).toBeGreaterThan(refreshed));
+		const refreshed = fake.refreshed;
+		host().set({
+			request: null,
+			activity: [
+				asked({ stage: 'answered', outcome: 'done', form: 'typedData' }),
+				{ ...other, stage: 'answered', outcome: 'withdrawn' }
+			]
+		});
+		await vi.waitFor(() => expect(fake.refreshed).toBeGreaterThan(refreshed));
 		await vi.waitFor(() => expect(testid('connect-signed')).not.toBeNull());
 		expect(testid('connect-outside')).toBeNull();
 		await screen.unmount();
@@ -686,14 +687,10 @@ describe('round 6: one card, one message (r5reg-7)', () => {
 
 describe("round 6: Vela's request already has enough approvals (r4C-14)", () => {
 	it('nothing to sign: said, and only Decline is offered', async () => {
-		fake.counted = { enough: true, hasApproved: () => false };
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
+		pair();
 		const entry = asked();
-		fake.bridge.activity = [entry];
-		fake.bridge.request = { entry, answer: () => {} };
-		fake.bridge.dispatchEvent(new Event('prompt'));
+		host().set({ activity: [entry], request: entry, requestEnough: true });
 		await vi.waitFor(() =>
 			expect(testid('connect-request-enough')?.textContent).toBe('external.enoughApprovals')
 		);
@@ -703,14 +700,10 @@ describe("round 6: Vela's request already has enough approvals (r4C-14)", () => 
 	});
 
 	it('still needing approvals (or not in the mailbox yet): Sign is offered', async () => {
-		fake.counted = { enough: false, hasApproved: () => false };
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
+		pair();
 		const entry = asked();
-		fake.bridge.activity = [entry];
-		fake.bridge.request = { entry, answer: () => {} };
-		fake.bridge.dispatchEvent(new Event('prompt'));
+		host().set({ activity: [entry], request: entry, requestEnough: false });
 		await vi.waitFor(() => expect(button('Sign with MetaMask')).toBeDefined());
 		expect(testid('connect-request-enough')).toBeNull();
 		await screen.unmount();
@@ -722,7 +715,7 @@ describe('round 6: the link transaction from here', () => {
 
 	it('r4C-14: approvals already enough — nothing to sign; Execute is what is left', async () => {
 		const screen = await open([MEMBER], link());
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(2, [approval(STRANGER), approval(ALSO)]);
 		await vi.waitFor(() => expect(testid('outside-enough')).not.toBeNull());
 		expect(testid('outside-enough')?.textContent).toBe('external.enoughApprovals');
@@ -733,10 +726,10 @@ describe('round 6: the link transaction from here', () => {
 	});
 
 	it("r5reg-13: a wallet that can't pay the fee: told what it needs, Execute steps back", async () => {
-		fake.fee = { wei: 21000n * 1_000_000_000n, count: 1, partial: false };
+		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
 		fake.balance = 0n;
 		const screen = await open([MEMBER], link());
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(1, [approval(STRANGER)]);
 		await vi.waitFor(() =>
 			expect(testid('outside-cannot-pay')?.textContent).toContain('needs 0.000021')
@@ -751,10 +744,10 @@ describe('round 6: the link transaction from here', () => {
 	});
 
 	it('r5reg-13: a wallet that can pay: Execute is the main action, its fee said', async () => {
-		fake.fee = { wei: 21000n * 1_000_000_000n, count: 1, partial: false };
+		fake.fee = { wei: String(21000n * 1_000_000_000n), count: 1, partial: false };
 		fake.balance = 10n ** 18n;
 		const screen = await open([MEMBER], link());
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(1, [approval(STRANGER)]);
 		await vi.waitFor(() => expect(testid('outside-fee')?.textContent).toContain('fee 0.000021'));
 		expect(button('Execute with MetaMask')!.disabled).toBe(false);
@@ -765,16 +758,21 @@ describe('round 6: the link transaction from here', () => {
 
 	it("r5reg-12: a refusal in plain words, never the service's text; what was signed kept, Send again", async () => {
 		const screen = await open([MEMBER], link());
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
 		readyView(0);
-		fake.outside.step = {
-			kind: 'failed',
-			what: 'reject',
-			problem: null,
-			reason: 'refused: the proxy code of factory 0x4e1D on chain 5042002 could not be read',
-			refused: 'setupUnchecked',
-			unsent: true
-		};
+		host().set({
+			step: {
+				kind: 'failed',
+				what: 'reject',
+				problem: null,
+				reason: {
+					kind: 'refused',
+					detail: 'the proxy code of factory 0x4e1D on chain 5042002 could not be read'
+				},
+				refused: 'setupUnchecked',
+				unsent: true
+			}
+		});
 		await vi.waitFor(() =>
 			expect(testid('outside-failed')?.textContent).toBe('external.refusedSetupUnchecked')
 		);
@@ -789,20 +787,20 @@ describe('round 6: the link transaction from here', () => {
 			[MEMBER],
 			`#${encodeURIComponent(INVITE)}&for=${MEMBER}&ms=5042002.${SAFE.toLowerCase()}.${txHash()}`
 		);
-		await vi.waitFor(() => expect(fake.outside).not.toBeNull());
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		fake.bridge.activity = [
-			asked({
-				id: 'reject',
-				stage: 'answered',
-				outcome: 'rejected',
-				problem: { kind: 'declined' },
-				safeTx: { chainId: 5042002, safe: SAFE, tx: cancelTx(SAFE, '0x8') }
-			}),
-			asked({ id: 'approve', stage: 'answered', outcome: 'done', form: 'typedData' })
-		];
-		fake.bridge.dispatchEvent(new Event('activity'));
+		await vi.waitFor(() => expect(fake.links).toHaveLength(1));
+		pair();
+		host().set({
+			activity: [
+				asked({
+					id: 'reject',
+					stage: 'answered',
+					outcome: 'rejected',
+					problem: { kind: 'declined' },
+					safeTx: { chainId: 5042002, safe: SAFE, tx: cancelTx(SAFE, '0x8') }
+				}),
+				asked({ id: 'approve', stage: 'answered', outcome: 'done', form: 'typedData' })
+			]
+		});
 		await vi.waitFor(() =>
 			expect(testid('connect-activity')?.textContent).toMatch(
 				/Approve #3 · Send 0\.01 \S+ to 0x0000\S*dEaD/
@@ -815,7 +813,7 @@ describe('round 6: the link transaction from here', () => {
 		expect(list).not.toContain('external.signTx');
 		// What was done from here is a row too.
 		readyView(0);
-		fake.outside.step = { kind: 'executed', txHash: `0x${'77'.repeat(32)}` };
+		host().set({ step: { kind: 'executed', txHash: `0x${'77'.repeat(32)}` } });
 		await vi.waitFor(() => expect(testid('connect-activity')?.textContent).toContain('Execute #3'));
 		await screen.unmount();
 	});
@@ -824,13 +822,14 @@ describe('round 6: the link transaction from here', () => {
 describe('round 6: the relay and Vela, said plainly', () => {
 	it('r4C-1: no pass for the relay — plain words, no hosts, with Retry', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}`);
-		fake.bridge.relay = {
-			kind: 'retrying',
-			why: 'noToken',
-			detail: '127.0.0.1:5191: no token in the answer · peerconnect.dev: no token in the answer',
-			at: Date.now() + 20_000
-		};
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({
+			relay: {
+				kind: 'retrying',
+				why: 'noToken',
+				detail: '127.0.0.1:5191: no token in the answer · peerconnect.dev: no token in the answer',
+				at: Date.now() + 20_000
+			}
+		});
 		await vi.waitFor(() =>
 			expect(testid('connect-relay')?.textContent).toContain('external.relayNoToken')
 		);
@@ -842,26 +841,20 @@ describe('round 6: the relay and Vela, said plainly', () => {
 
 	it('r4C-15: "Vela went offline" clears as soon as Vela is back', async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
-		fake.bridge.activity = [asked({ stage: 'wallet', walletAt: Date.now() })];
-		fake.state = 'waiting';
-		fake.bridge.dispatchEvent(new Event('change'));
+		host().set({ activity: [asked({ stage: 'wallet', walletAt: Date.now() })] });
+		pair({ state: 'waiting' });
 		await vi.waitFor(() => expect(testid('connect-vela-gone')).not.toBeNull());
-		fake.state = 'connected';
-		fake.bridge.dispatchEvent(new Event('change'));
+		pair({ state: 'connected' });
 		await vi.waitFor(() => expect(testid('connect-vela-gone')).toBeNull(), { timeout: 2_000 });
 		await screen.unmount();
 	});
 
 	it("r5reg-23: Vela's request reviewed as the link's is — named, numbered #3", async () => {
 		const screen = await open([MEMBER], `#${encodeURIComponent(INVITE)}&for=${MEMBER}`);
-		fake.bridge.prompt = undefined;
-		fake.approved = true;
+		pair();
 		const entry = asked();
-		fake.bridge.activity = [entry];
-		fake.bridge.request = { entry, answer: () => {} };
-		fake.bridge.dispatchEvent(new Event('prompt'));
+		// The registry names the multisig (the core read it for the request).
+		host().set({ activity: [entry], request: entry, requestGenesis: { name: 'R5 Team' } });
 		await vi.waitFor(() => expect(testid('review-name')?.textContent).toBe('R5 Team'));
 		expect(testid('review-name-source')?.textContent).toBe('external.nameFromRecord');
 		expect(testid('review-nonce')?.textContent?.trim()).toBe('#3');

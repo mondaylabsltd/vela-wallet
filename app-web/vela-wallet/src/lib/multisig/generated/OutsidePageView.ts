@@ -9,6 +9,7 @@ import type { OutsideSessionRow } from "./OutsideSessionRow";
 import type { OutsideStep } from "./OutsideStep";
 import type { OutsideTxLink } from "./OutsideTxLink";
 import type { OutsideTxView } from "./OutsideTxView";
+import type { OutsideWalletProblem } from "./OutsideWalletProblem";
 import type { RelayStatus } from "./RelayStatus";
 
 export type OutsidePageView = { link: OutsideTxLink | null, load: OutsideLoad, tx: OutsideTxView | null, step: OutsideStep, 
@@ -35,4 +36,19 @@ joinFailed: string | null,
 /**
  * The page's own way onto the relay: the worst of its rooms'.
  */
-relay: RelayStatus, };
+relay: RelayStatus, 
+/**
+ * The wallet would not connect this page (`eth_requestAccounts`
+ * refused or failed): said with what to do.
+ */
+walletFailure: OutsideWalletProblem | null, 
+/**
+ * r5reg-23: the registry's genesis of the request's multisig, when
+ * the core derives its address from it (it names the multisig).
+ */
+requestGenesis: unknown, 
+/**
+ * r4C-14: the request's approvals already meet the threshold, and
+ * its account has not approved: nothing to sign.
+ */
+requestEnough: boolean, };

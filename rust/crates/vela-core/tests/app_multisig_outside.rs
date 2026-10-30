@@ -730,6 +730,52 @@ fn executing_with_the_owners_own_wallet_after_its_fee_is_said() {
     assert!(data.contains(&sign_hash(SEED_A, &hash)[2..]));
 }
 
+/// r7-3: approvals that already meet the threshold are what it carries —
+/// the executor only sends it, never approving as `msg.sender` in place of
+/// one given (which would then read as "not counted").
+#[test]
+fn approvals_already_enough_are_carried_and_the_executor_only_sends_it() {
+    let mut w = World::default();
+    let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &addr(SEED_B), &addr(SEED_STRANGER)], 2);
+    safe.nonce = 3;
+    w.deploy(CHAIN, SAFE, safe);
+    let t = tx("0x3");
+    let hash = hash_of(SAFE, &t);
+    w.mailbox = vec![stored(
+        SAFE,
+        &t,
+        vec![
+            approval_by(SEED_A, &hash),
+            approval_by(SEED_STRANGER, &hash),
+        ],
+    )];
+    w.wallet = Some(WalletSim::holding(&[SEED_B], CHAIN));
+    chain_answers(&mut w);
+    let mut sut = opened(&mut w, link_to(SAFE, &t));
+    assert_eq!(sut.view().tx.unwrap().item.approved, 2);
+    for _ in 0..2 {
+        run(
+            &mut sut,
+            &mut w,
+            page::Event::Execute {
+                account: addr(SEED_B),
+            },
+        );
+    }
+    assert!(matches!(sut.view().step, OutsideStep::Executed { .. }));
+    let sent = wallet(&mut w).sent.clone();
+    assert_eq!(sent.len(), 1);
+    let data = sent[0]["data"].as_str().unwrap().to_ascii_lowercase();
+    assert!(data.contains(&sign_hash(SEED_A, &hash)[2..].to_ascii_lowercase()));
+    assert!(data.contains(&sign_hash(SEED_STRANGER, &hash)[2..].to_ascii_lowercase()));
+    let as_sender = format!(
+        "{:0>64}{}01",
+        addr(SEED_B)[2..].to_ascii_lowercase(),
+        "0".repeat(64)
+    );
+    assert!(!data.contains(&as_sender), "no msg.sender approval");
+}
+
 #[test]
 fn rejecting_proposes_the_same_number_cancellation_approved_by_the_owner() {
     let mut w = deployed_world();
@@ -1509,6 +1555,82 @@ fn a_request_is_read_and_held_for_the_tap_the_wallet_asked_only_then() {
     assert_eq!(entry.form, Some(EcdsaForm::TypedData));
 }
 
+/// r4C-14: Vela's request, counted as the mailbox and the chain hold it
+/// now — its approvals already enough (and none of them its account's):
+/// nothing to sign, whatever Vela still thinks.
+#[test]
+fn a_request_whose_approvals_are_already_enough_is_said_so() {
+    let member = addr(MEMBER_SEED);
+    let t = tx("0x3");
+    let hash = hash_of(SAFE, &t);
+    for (approvals, enough) in [
+        (vec![approval_by(SEED_A, &hash)], false),
+        (
+            vec![
+                approval_by(SEED_A, &hash),
+                approval_by(SEED_STRANGER, &hash),
+            ],
+            true,
+        ),
+    ] {
+        let mut w = with_wallet(&[MEMBER_SEED]);
+        let mut safe = DeployedSafe::clean(&[&addr(SEED_A), &member, &addr(SEED_STRANGER)], 2);
+        safe.nonce = 3;
+        w.deploy(CHAIN, SAFE, safe);
+        w.mailbox = vec![stored(SAFE, &t, approvals)];
+        let (mut sut, room, _) = joined(&mut w, vec![member.clone()]);
+        w.peer.deliver(&room, typed_request("r1", &member, &t));
+        settle_ready(&mut sut, &mut w, 20_000);
+        assert!(sut.view().request.is_some());
+        assert_eq!(sut.view().request_enough, enough);
+    }
+}
+
+/// r5reg-23: Vela's request names its multisig as the link's review does —
+/// from the registry's genesis, only if the core derives the address from
+/// it — even before the mailbox holds the transaction.
+#[test]
+fn a_request_names_its_multisig_from_the_registry() {
+    let member = addr(MEMBER_SEED);
+    let mut w = with_wallet(&[MEMBER_SEED]);
+    let mut g = world::genesis(&[&addr(SEED_A), &member], 2, "0x05");
+    g.genesis.name = Some("R5 Team".into());
+    w.record(&g.address, &g.genesis, false);
+    let t = tx("0x0");
+    let (mut sut, room, _) = joined(&mut w, vec![member.clone()]);
+    let typed = multisig::safe_tx_typed_data(CHAIN, &g.address, &t).unwrap();
+    w.peer.deliver(
+        &room,
+        json!({ "id": "r1", "method": "eth_signTypedData_v4", "params": [member, typed.to_string()], "origin": ORIGIN }),
+    );
+    settle_ready(&mut sut, &mut w, 20_000);
+    assert!(sut.view().request.is_some());
+    let named = sut.view().request_genesis.unwrap();
+    assert_eq!(named.name.as_deref(), Some("R5 Team"));
+    assert!(
+        !sut.view().request_enough,
+        "not in the mailbox: Sign is offered"
+    );
+}
+
+/// The page came up, then its wallet was picked: started again with the
+/// wallet's name, the sessions joined meanwhile stand.
+#[test]
+fn started_again_with_the_wallets_name_its_sessions_stand() {
+    let mut w = with_wallet(&[SEED_A]);
+    let (mut sut, _, session) = joined(&mut w, Vec::new());
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Start {
+            service_url: SERVICE.to_owned(),
+            wallet_name: "Rabby".to_owned(),
+        },
+    );
+    assert_eq!(sut.view().sessions.len(), 1);
+    assert_eq!(sut.view().sessions[0].id, session);
+}
+
 #[test]
 fn declined_here_or_withdrawn_by_vela_while_shown_said_as_each() {
     let mut w = with_wallet(&[MEMBER_SEED]);
@@ -1757,6 +1879,70 @@ fn the_pages_own_way_onto_the_relay_is_the_worst_of_its_rooms() {
         worst(&[RelayStatus::Up, failed.clone(), RelayStatus::Connecting]),
         failed
     );
+}
+
+/// r4C-1: the transport's word on a room's way onto the relay (its token
+/// refused, none given) is the page's own, said until it is up again.
+#[test]
+fn the_transports_word_on_a_rooms_relay_is_the_pages() {
+    use relay::{RelayStatus, RelayTrouble};
+    let mut w = with_wallet(&[SEED_A]);
+    let (mut sut, room, _) = joined(&mut w, Vec::new());
+    let refused = RelayStatus::Failed {
+        why: RelayTrouble::Refused,
+        detail: "HTTP 4403".into(),
+    };
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Relay {
+            room: room.clone(),
+            status: refused.clone(),
+        },
+    );
+    assert_eq!(sut.view().relay, refused);
+    assert_eq!(sut.view().sessions[0].relay, refused);
+    // Another page's room, or none: nothing changes.
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::Relay {
+            room: "room-elsewhere".into(),
+            status: RelayStatus::Up,
+        },
+    );
+    assert_eq!(sut.view().relay, refused);
+    run(
+        &mut sut,
+        &mut w,
+        page::Event::PeerState {
+            room,
+            state: "connected".into(),
+        },
+    );
+    assert_eq!(sut.view().relay, RelayStatus::Up);
+}
+
+/// The wallet refusing to connect the page is said in its words, and gone
+/// once it connects.
+#[test]
+fn a_wallet_that_will_not_connect_the_page_is_said() {
+    let mut w = deployed_world();
+    wallet(&mut w).next.push_back((
+        "eth_requestAccounts".into(),
+        Res::WalletRefused {
+            code: Some(4001),
+            message: "User rejected".into(),
+        },
+    ));
+    let t = tx("0x3");
+    let mut sut = opened(&mut w, link_to(SAFE, &t));
+    run(&mut sut, &mut w, page::Event::ConnectWallet);
+    assert_eq!(sut.view().wallet_failure, Some(WalletProblem::Declined));
+    assert!(sut.view().accounts.is_empty());
+    run(&mut sut, &mut w, page::Event::ConnectWallet);
+    assert_eq!(sut.view().wallet_failure, None);
+    assert_eq!(sut.view().accounts, vec![addr(SEED_B).to_ascii_lowercase()]);
 }
 
 // ---------------------------------------------------------------------------
