@@ -1,0 +1,84 @@
+{
+  "description": "When the launch animation plays (vela_core::launch::launch_animation_due). One rule for every shell; the web's pre-paint copy in app-web/vela-wallet/src/app.html is held to these cases too. last_played_ms: the epoch ms stored under storage_key, null when nothing (or nothing readable) was stored.",
+  "storage_key": "vela.launch.played",
+  "replay_after_ms": 604800000,
+  "cases": [
+    {
+      "name": "never played",
+      "last_played_ms": null,
+      "now_ms": 1700000000000,
+      "disabled": false,
+      "due": true
+    },
+    {
+      "name": "never played, but turned off",
+      "last_played_ms": null,
+      "now_ms": 1700000000000,
+      "disabled": true,
+      "due": false
+    },
+    {
+      "name": "just played",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1700000000000,
+      "disabled": false,
+      "due": false
+    },
+    {
+      "name": "a second later",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1700000001000,
+      "disabled": false,
+      "due": false
+    },
+    {
+      "name": "a millisecond short of a week",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1700604799999,
+      "disabled": false,
+      "due": false
+    },
+    {
+      "name": "exactly a week",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1700604800000,
+      "disabled": false,
+      "due": true
+    },
+    {
+      "name": "a month on",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1702592000000,
+      "disabled": false,
+      "due": true
+    },
+    {
+      "name": "a month on, but turned off",
+      "last_played_ms": 1700000000000,
+      "now_ms": 1702592000000,
+      "disabled": true,
+      "due": false
+    },
+    {
+      "name": "stored zero (an empty string read as a number)",
+      "last_played_ms": 0,
+      "now_ms": 1700000000000,
+      "disabled": false,
+      "due": true
+    },
+    {
+      "name": "played in the future (a clock set back)",
+      "last_played_ms": 1700604800000,
+      "now_ms": 1700000000000,
+      "disabled": false,
+      "due": false
+    },
+    {
+      "name": "a week past a future time",
+      "last_played_ms": 1700604800000,
+      "now_ms": 1701209600000,
+      "disabled": false,
+      "due": true
+    }
+  ]
+}

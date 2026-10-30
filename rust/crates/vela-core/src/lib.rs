@@ -42,6 +42,8 @@ mod identicon_features;
 #[cfg(feature = "identicon-raster")]
 pub mod identicon_raster;
 pub mod l10n;
+/// When the launch animation plays: one replay rule for every shell (spec 012).
+pub mod launch;
 pub mod multisig;
 /// The multisig's links — the proposal link, the invite, the connect page's —
 /// and the Activity row ids, amounts and approvals line around them. Pure.
