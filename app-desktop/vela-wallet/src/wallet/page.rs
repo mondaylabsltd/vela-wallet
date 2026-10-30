@@ -22727,7 +22727,11 @@ impl Render for WalletPage {
                 .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                     this.take_dropped(paths.paths().to_vec(), window, cx);
                 }))
-                .child(drop_overlay(&theme, &mut self.icons, self.flow_strings.scan_title.clone()))
+                .child(drop_overlay(
+                    &theme,
+                    &mut self.icons,
+                    self.loc.t("componentsUi.dropOverlay.title"),
+                ))
         } else {
             root
         };
@@ -22804,8 +22808,10 @@ impl Render for WalletPage {
 
 /// N-D3: the drop target, drawn over the window while files are dragged over
 /// it (`group_drag_over` on the page's `wallet-drop` group) and invisible
-/// otherwise — no listener, so it never takes a click. The scanner's own
-/// words and glyph: what a drop does is what a scan of the picture does.
+/// otherwise — no listener, so it never takes a click. Its own words
+/// (`componentsUi.dropOverlay.title`: "Drop an address, payment link or QR
+/// image") under the scanner's glyph: what a drop does is what a scan of the
+/// picture does.
 fn drop_overlay(theme: &Theme, icons: &mut crate::icons::IconCache, title: SharedString) -> Div {
     let tint = theme.backdrop;
     div()

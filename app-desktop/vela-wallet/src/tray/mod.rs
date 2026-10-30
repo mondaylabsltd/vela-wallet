@@ -32,9 +32,10 @@ mod windows;
 /// The store key: `true` when the person turned the extra on.
 pub const PREF_KEY: &str = "vela.desktop.menuBar";
 
-/// The Settings switch's words (title, hint). NOT in the corpus yet — the
-/// I18N lane adds them (README "Menu bar and tray"); until then the switch
-/// is not drawn and the extra stays off.
+/// The Settings switch's words (title, hint), in the corpus in every
+/// language: Settings → Appearance draws the switch (off until the person
+/// turns it on). Should a key ever go missing the switch is not drawn —
+/// a switch labelled with its own key path is not shipped.
 pub const SWITCH_KEYS: (&str, &str) = if cfg!(windows) {
     (
         "settingsModals.appearance.trayIcon",
@@ -199,6 +200,24 @@ pub fn mark_png() -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The switch is drawn: its words are the corpus's in every language
+    /// (macOS's "menu bar", Windows' "system tray", one hint) — never a key.
+    #[test]
+    fn the_switchs_words_resolve_in_every_language() {
+        let keys = [
+            "settingsModals.appearance.menuBar",
+            "settingsModals.appearance.trayIcon",
+            "settingsModals.appearance.statusItemHint",
+        ];
+        assert!(keys.contains(&SWITCH_KEYS.0) && keys.contains(&SWITCH_KEYS.1));
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            for key in keys {
+                let word = loc.t(key);
+                assert!(!word.is_empty() && word.as_ref() != key, "{tag}: {key}");
+            }
+        }
+    }
 
     #[test]
     fn the_extra_is_off_until_the_person_turns_it_on() {

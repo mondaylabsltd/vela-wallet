@@ -148,6 +148,28 @@ pub struct Release {
     pub artifact: Artifact,
 }
 
+/// The update prompt's words (`componentsUi.appUpdate.*`): "Update
+/// available", Install, Later — in the person's language. The prompt that
+/// draws them waits for the install hand-off (README "Updates"), which is
+/// what Install would press; until then nothing offers an update.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PromptWords {
+    pub title: gpui::SharedString,
+    pub install: gpui::SharedString,
+    pub later: gpui::SharedString,
+}
+
+impl PromptWords {
+    #[must_use]
+    pub fn of(loc: &crate::loc::Loc) -> Self {
+        Self {
+            title: loc.t("componentsUi.appUpdate.title"),
+            install: loc.t("componentsUi.appUpdate.install"),
+            later: loc.t("componentsUi.appUpdate.later"),
+        }
+    }
+}
+
 /// Why a manifest or a download was not taken. None of these is shown as an
 /// update; each is logged.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -327,6 +349,25 @@ mod tests {
     /// A test-only key: a fixed scalar, never a release key.
     fn signer() -> SigningKey {
         SigningKey::from_slice(&[7u8; 32]).unwrap_or_else(|e| unreachable!("{e}"))
+    }
+
+    /// The prompt's words are the corpus's in every language — never a key.
+    #[test]
+    fn the_prompts_words_resolve_in_every_language() {
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let words = PromptWords::of(&loc);
+            for word in [&words.title, &words.install, &words.later] {
+                assert!(
+                    !word.is_empty() && !word.contains("componentsUi."),
+                    "{tag}: {word}"
+                );
+            }
+        }
+        let en = PromptWords::of(&crate::loc::Loc::for_tag("en"));
+        assert_eq!(
+            (en.title.as_ref(), en.install.as_ref(), en.later.as_ref()),
+            ("Update available", "Install", "Later")
+        );
     }
 
     fn key_hex() -> String {
