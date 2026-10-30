@@ -21,6 +21,11 @@ struct VelaButton: View {
         /// that moves value (design review 2026-07), and signing out or
         /// erasing a device moves none — it destroys.
         case danger
+        /// The web's `variant="primary"`: the neutral inverse ink — `fg.base`
+        /// fill, `fg.inverse` label — for a main action that moves no value
+        /// and signs nothing (design language rule 8; app-web CLAUDE.md
+        /// rule 4). The accent stays on the value tap.
+        case ink
     }
 
     let title: String
@@ -52,7 +57,7 @@ struct VelaButton: View {
                     ProgressView()
                         .progressViewStyle(.circular)
                         .controlSize(VelaButton.spinnerSize(textScale))
-                        .tint(kind == .secondary ? theme.fgBase : theme.onAccent)
+                        .tint(kind == .secondary ? theme.fgBase : (kind == .ink ? theme.fgInverse : theme.onAccent))
                     Text(busyTitle).typeRole(Typography.button)
                 }
             } else {
@@ -92,7 +97,11 @@ private struct VelaButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let labelColor = kind == .secondary ? theme.fgBase : theme.onAccent
+        let labelColor = switch kind {
+        case .secondary: theme.fgBase
+        case .ink: theme.fgInverse
+        case .primary, .danger: theme.onAccent
+        }
         // minHeight, not a fixed height: long-locale labels wrap centered and
         // grow the capsule instead of being clipped (spec 014 long-label fix).
         return configuration.label
@@ -119,6 +128,8 @@ private struct VelaButtonStyle: ButtonStyle {
                     Capsule().fill(theme.accentBase)
                 case .danger:
                     Capsule().fill(theme.errorBase)
+                case .ink:
+                    Capsule().fill(theme.fgBase)
                 case .secondary:
                     Capsule().strokeBorder(theme.borderStrong, lineWidth: Tokens.BorderWidth.hairline)
                 }

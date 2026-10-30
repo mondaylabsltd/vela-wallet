@@ -22,6 +22,13 @@ import SwiftUI
 /// What the sheet says, built from the core's reading — apart from the view,
 /// so a test can read every branch's words.
 struct MultisigLinkModel: Equatable {
+    /// A member as the invite names it: its label and kind, and its address
+    /// on a line of its own, in the mono face.
+    struct Member: Equatable, Hashable {
+        let label: String
+        var address: String?
+    }
+
     struct Row: Equatable {
         let label: String
         let value: String
@@ -37,7 +44,7 @@ struct MultisigLinkModel: Equatable {
     var rows: [Row] = []
     /// The members an invite names, by label — "That's you" never: this app
     /// has no multisig list to know who "you" is in one.
-    var members: [String] = []
+    var members: [Member] = []
     var membersLabel: String?
     let openLabel: String
     let copyLabel: String
@@ -76,7 +83,7 @@ struct MultisigLinkModel: Equatable {
             if !invite.chainIds.isEmpty {
                 model.body = loc.t(k.usedOn, vars: ["networks": invite.chainIds.map(network).joined(separator: ", ")])
             }
-            let named = (invite.members ?? []).compactMap { member -> String? in
+            let named = (invite.members ?? []).compactMap { member -> Member? in
                 let kind = member.kind.flatMap { kind -> String? in
                     switch kind {
                     case "passkey": loc.t(k.kindVela)
@@ -85,8 +92,9 @@ struct MultisigLinkModel: Equatable {
                     default: nil
                     }
                 }
-                let parts = [member.name, kind, member.address].compactMap { $0 }.filter { !$0.isEmpty }
-                return parts.isEmpty ? nil : parts.joined(separator: " · ")
+                let parts = [member.name, kind].compactMap { $0 }.filter { !$0.isEmpty }
+                guard !parts.isEmpty || member.address != nil else { return nil }
+                return Member(label: parts.joined(separator: " · "), address: member.address)
             }
             if !named.isEmpty {
                 model.members = named
@@ -175,16 +183,27 @@ struct MultisigLinkSheet: View {
                         .typeRole(Typography.label.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
                     ForEach(model.members, id: \.self) { member in
-                        Text(verbatim: member)
-                            .typeRole(Typography.rowSub.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                            if !member.label.isEmpty {
+                                Text(verbatim: member.label)
+                                    .typeRole(Typography.rowSub.scaled(textScale))
+                                    .foregroundStyle(theme.fgBase)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            if let address = member.address {
+                                Text(verbatim: address)
+                                    .typeRole(Typography.monoSmall.scaled(textScale))
+                                    .foregroundStyle(theme.fgMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                 }
                 .accessibilityElement(children: .combine)
             }
             VStack(spacing: Tokens.Space.s12) {
-                VelaButton(title: model.openLabel, kind: .primary, action: onOpen)
+                // Opening a page moves nothing: the neutral ink, not the accent.
+                VelaButton(title: model.openLabel, kind: .ink, action: onOpen)
                     .accessibilityIdentifier("applink.open")
                 VelaButton(title: model.copyLabel, kind: .secondary, action: onCopy)
                     .accessibilityIdentifier("applink.copy")
