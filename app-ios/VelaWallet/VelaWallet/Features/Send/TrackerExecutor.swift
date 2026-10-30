@@ -4,7 +4,7 @@
 //
 //  The only place the `tx_tracker` core touches the outside world.
 //
-//  Eight operations, ported from `app-android/.../feature/send/core/
+//  Ten operations, ported from `app-android/.../feature/send/core/
 //  TrackerExecutor.kt` (spec 043). Every cadence decision is the core's — how
 //  often to poll, how long to wait, when to give up — and this supplies the
 //  clock, the transport and the notification.
@@ -47,7 +47,7 @@ final class TrackerExecutor {
     static let operations = [
         "poll_receipt", "poll_status", "load_pending_txs",
         "update_tx_records", "notify_confirmed", "holdings_moved", "find_op_event", "now",
-        "tx_receipt",
+        "tx_receipt", "read_nonce",
     ]
 
     /// What the app owns: the notification, and the auto-add hand-off.
@@ -138,6 +138,21 @@ final class TrackerExecutor {
             return CoreJSON.string([
                 "type": "tx_receipt", "user_op_hash": hash, "now_ms": Self.nowMs,
                 "receipt_json": receipt.map { $0 as Any } ?? NSNull(),
+            ])
+
+        // Round 3 (send-5): after a relay error the chain is asked where the
+        // account's nonce stands — the head, then `getNonce` at it. Answered
+        // as it came; what a spent nonce means is the core's.
+        case "read_nonce":
+            let read = await relay.accountNonce(
+                chainId: chainId,
+                entryPoint: operation["entry_point"] as? String ?? "",
+                sender: operation["sender"] as? String ?? ""
+            )
+            return CoreJSON.string([
+                "type": "nonce_read", "user_op_hash": hash, "now_ms": Self.nowMs,
+                "nonce": read.nonce.map { $0 as Any } ?? NSNull(),
+                "head_block": read.head.map { $0 as Any } ?? NSNull(),
             ])
 
         case "holdings_moved":
@@ -274,6 +289,12 @@ final class TrackerExecutor {
             // No answer: asked again at the receipt cadence.
             return CoreJSON.string([
                 "type": "tx_receipt", "user_op_hash": hash, "now_ms": nowMs, "receipt_json": NSNull(),
+            ])
+        case "read_nonce":
+            // No answer: nothing is known, the core asks again.
+            return CoreJSON.string([
+                "type": "nonce_read", "user_op_hash": hash, "now_ms": nowMs,
+                "nonce": NSNull(), "head_block": NSNull(),
             ])
         default:
             return CoreJSON.string(["type": "clock", "now_ms": nowMs])
