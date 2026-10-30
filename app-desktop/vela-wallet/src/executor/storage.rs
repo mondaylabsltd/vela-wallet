@@ -200,22 +200,106 @@ pub fn remove_browser_profile() -> std::io::Result<()> {
     }
 }
 
-fn read_all() -> Result<Map<String, Value>> {
+/// The document as last parsed, and the file it was parsed from (Phase 4).
+///
+/// Every read here used to open and parse the whole wallet: ~170 of them in a
+/// launch's first seconds, 0.3 ms each on a wallet with a long history, most
+/// on the main thread before the first frame. The parse is kept while the
+/// file is provably the one it came from — the same path, size and
+/// modification time, and on Unix the same inode (a write renames a new file
+/// over it) — and no write from this process since ([`generation`]), which
+/// covers a filesystem whose clock ticks in whole seconds. Anything moves, and
+/// it is read again. Readers get the document shared; a writer copies it
+/// before changing it.
+struct Parsed {
+    path: PathBuf,
+    stamp: Stamp,
+    map: std::sync::Arc<Map<String, Value>>,
+}
+
+/// What says the file is still the one that was parsed.
+#[derive(PartialEq)]
+struct Stamp {
+    modified: std::time::SystemTime,
+    len: u64,
+    inode: u64,
+    generation: u64,
+}
+
+fn stamp_of(meta: &fs::Metadata) -> Option<Stamp> {
+    #[cfg(unix)]
+    let inode = std::os::unix::fs::MetadataExt::ino(meta);
+    #[cfg(not(unix))]
+    let inode = 0;
+    Some(Stamp {
+        modified: meta.modified().ok()?,
+        len: meta.len(),
+        inode,
+        generation: generation(),
+    })
+}
+
+static PARSED: Mutex<Option<Parsed>> = Mutex::new(None);
+
+/// The document, shared — what every reader takes.
+fn read_shared() -> Result<std::sync::Arc<Map<String, Value>>> {
     let _span = crate::perf::span("store", "read");
     let path = path()?;
-    let raw = match fs::read_to_string(&path) {
-        Ok(raw) => raw,
+    let stamp = match fs::metadata(&path) {
+        Ok(meta) => stamp_of(&meta),
         // A file that is not there yet is an empty wallet, not a failure.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(std::sync::Arc::new(Map::new()));
+        }
         Err(error) => return Err(StorageError(format!("{}: {error}", path.display()))),
     };
-    match serde_json::from_str::<Value>(&raw) {
-        Ok(Value::Object(map)) => Ok(map),
+    let mut parsed = PARSED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(hit) = parsed
+        .as_ref()
+        .filter(|parsed| parsed.path == path && stamp.as_ref() == Some(&parsed.stamp))
+    {
+        return Ok(hit.map.clone());
+    }
+    let _span = crate::perf::span("store", "parse");
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(std::sync::Arc::new(Map::new()));
+        }
+        Err(error) => return Err(StorageError(format!("{}: {error}", path.display()))),
+    };
+    let map = std::sync::Arc::new(match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(map)) => map,
         // Corrupt JSON reads as empty rather than throwing, exactly as the web
         // client does: a damaged file must not make the wallet permanently
         // unopenable, and every write below replaces the whole document.
-        _ => Ok(Map::new()),
+        _ => Map::new(),
+    });
+    // Kept only if the file did not move while it was read: a stamp taken
+    // before a concurrent write must not label what came after it.
+    // A platform with no modification time is never cached.
+    if let Some(stamp) = stamp
+        && fs::metadata(&path)
+            .ok()
+            .as_ref()
+            .and_then(stamp_of)
+            .as_ref()
+            == Some(&stamp)
+    {
+        *parsed = Some(Parsed {
+            path,
+            stamp,
+            map: map.clone(),
+        });
     }
+    Ok(map)
+}
+
+/// The document as a copy of its own, for a writer to change and write back.
+fn read_all() -> Result<Map<String, Value>> {
+    Ok(std::sync::Arc::unwrap_or_clone(read_shared()?))
 }
 
 /// Write a file only this user may read. The document holds credentials —
@@ -270,7 +354,7 @@ fn write_all(map: Map<String, Value>) -> Result<()> {
 }
 
 fn read_list(key: &str) -> Result<Vec<Value>> {
-    Ok(match read_all()?.get(key) {
+    Ok(match read_shared()?.get(key) {
         Some(Value::Array(items)) => items.clone(),
         _ => Vec::new(),
     })
@@ -281,7 +365,7 @@ fn read_list(key: &str) -> Result<Vec<Value>> {
 /// `None` means absent; a corrupt document reads as absent rather than failing,
 /// exactly as `read_all` decided for every other reader here.
 pub fn read_value(key: &str) -> Result<Option<Value>> {
-    Ok(read_all()?.get(key).cloned())
+    Ok(read_shared()?.get(key).cloned())
 }
 
 /// Every key under `prefix`, with its value.
@@ -291,9 +375,10 @@ pub fn read_value(key: &str) -> Result<Option<Value>> {
 /// spelling, and a reader that needed a list of origins first would need a
 /// second key to keep in step with the first.
 pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
-    Ok(read_all()?
-        .into_iter()
+    Ok(read_shared()?
+        .iter()
         .filter(|(key, _)| key.starts_with(prefix))
+        .map(|(key, value)| (key.clone(), value.clone()))
         .collect())
 }
 
@@ -306,14 +391,14 @@ pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
 /// instead, so this is the one place a value becomes the string those rules
 /// read. A corrupt document reads as empty, as everywhere else here.
 pub fn raw_entries() -> Result<Vec<(String, String)>> {
-    Ok(read_all()?
-        .into_iter()
+    Ok(read_shared()?
+        .iter()
         .map(|(key, value)| {
             let raw = match value {
-                Value::String(text) => text,
+                Value::String(text) => text.clone(),
                 other => other.to_string(),
             };
-            (key, raw)
+            (key.clone(), raw)
         })
         .collect())
 }
@@ -487,7 +572,7 @@ pub fn load_active_index() -> usize {
     // Missing, garbage and negative all read as 0. A negative index would make
     // the session render an empty address with a wallet present, which the core
     // forbids — so it fails closed here rather than at the wire.
-    read_all()
+    read_shared()
         .ok()
         .and_then(|map| map.get(KEY_ACTIVE_INDEX).cloned())
         .and_then(|value| match value {
@@ -569,7 +654,7 @@ pub fn remove_pending_upload(credential_id: &str) -> Result<()> {
 /// `passkeyIndexURL`. Until spec 030 the desktop wrote a name nothing else could
 /// read, so a self-hosted index configured here was invisible everywhere else.
 pub fn load_registry_endpoint() -> Option<String> {
-    let endpoints = read_all().ok()?;
+    let endpoints = read_shared().ok()?;
     let object = endpoints.get(KEY_SERVICE_ENDPOINTS)?;
     object
         .get("passkeyIndexURL")
@@ -690,6 +775,37 @@ pub(crate) mod tests {
             dirs::download_dir().is_some(),
             "macOS always has a Downloads folder"
         );
+    }
+
+    /// Phase 4: the document is parsed once per change, and never read stale
+    /// — not after this process writes it, and not after another one does.
+    #[test]
+    fn the_kept_parse_follows_every_write() {
+        with_temp_state("storage-parsed", || {
+            assert!(write_value("k", json!(1)).is_ok());
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(1)));
+            // Kept: the same document twice, one parse.
+            let first = read_shared().ok();
+            let again = read_shared().ok();
+            assert!(
+                first
+                    .zip(again)
+                    .is_some_and(|(a, b)| std::sync::Arc::ptr_eq(&a, &b))
+            );
+            assert!(write_value("k", json!(2)).is_ok());
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(2)));
+            // Another process's write: in place, the same length as ours.
+            let path = path().ok();
+            assert!(path.as_ref().is_some_and(|path| {
+                let now = fs::read_to_string(path).unwrap_or_default();
+                fs::write(path, now.replace('2', "3")).is_ok()
+            }));
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(3)));
+            // A writer's copy is its own: changing it changes nothing shared.
+            let mut copy = read_all().unwrap_or_default();
+            copy.insert("k".into(), json!(4));
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(3)));
+        });
     }
 
     /// The raw view the shared rules read: a string as itself, a record as its
