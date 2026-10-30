@@ -48,6 +48,101 @@ fn cached_usd(address: &str, now_ms: f64) -> Option<f64> {
     (now_ms - at <= CACHE_TTL_MS).then(|| record.get("usd").and_then(Value::as_f64))?
 }
 
+// ---------------------------------------------------------------------------
+// The rows the home last showed (`holdings-cache.ts`, home-1/home-3)
+// ---------------------------------------------------------------------------
+
+/// `vela.holdingsCache` — `{ "<address>#<space>": { at, tokens } }`, the
+/// web's bytes. Unlike the total, the testnet space keeps its rows too: they
+/// are coins, not a value.
+pub const HOLDINGS_KEY: &str = "vela.holdingsCache";
+
+fn holdings_key(address: &str, space: &str) -> String {
+    format!("{}#{space}", address.trim().to_lowercase())
+}
+
+/// Keep the rows a settled round left for `address` in `space` — told back
+/// once ([`Event::HoldingsRestored`]) the next time the account or space is
+/// in front, so the Assets list opens on what was last known instead of a
+/// skeleton that lasts as long as the slowest network. Best effort.
+pub fn save_holdings(address: &str, space: &str, tokens: &[BalanceToken], now_ms: f64) {
+    let mut map = match storage::read_value(HOLDINGS_KEY) {
+        Ok(Some(Value::Object(map))) => map,
+        _ => serde_json::Map::new(),
+    };
+    map.insert(
+        holdings_key(address, space),
+        json!({ "at": now_ms, "tokens": tokens }),
+    );
+    let _ = storage::write_value(HOLDINGS_KEY, Value::Object(map));
+}
+
+/// Every stored entry's rows, as the core reads them: a row only in its
+/// shape, an entry only with its time.
+fn stored_holdings() -> Vec<(String, f64, Vec<BalanceToken>)> {
+    let Ok(Some(Value::Object(map))) = storage::read_value(HOLDINGS_KEY) else {
+        return Vec::new();
+    };
+    map.into_iter()
+        .filter_map(|(key, entry)| {
+            let at = entry.get("at").and_then(Value::as_f64)?;
+            let tokens = entry
+                .get("tokens")
+                .and_then(Value::as_array)?
+                .iter()
+                .filter_map(|row| serde_json::from_value::<BalanceToken>(row.clone()).ok())
+                .collect();
+            Some((key, at, tokens))
+        })
+        .collect()
+}
+
+/// The rows last kept for `address` in `space`, or none when there are none
+/// or they are a day old.
+#[must_use]
+pub fn load_holdings(address: &str, space: &str, now_ms: f64) -> Vec<BalanceToken> {
+    let wanted = holdings_key(address, space);
+    stored_holdings()
+        .into_iter()
+        .find(|(key, _, _)| *key == wanted)
+        .filter(|(_, at, _)| now_ms - at <= CACHE_TTL_MS)
+        .map(|(_, _, tokens)| tokens)
+        .unwrap_or_default()
+}
+
+/// Networks where a last-known holding is more than zero — any account,
+/// either space, however old the reading; a spam token is not money. The
+/// balances' evidence for `shown_networks::settle`.
+#[must_use]
+pub fn held_chain_ids() -> Vec<u32> {
+    let mut ids: Vec<u32> = Vec::new();
+    for (_, _, tokens) in stored_holdings() {
+        for token in tokens {
+            if !token.spam
+                && token.balance.bytes().any(|b| (b'1'..=b'9').contains(&b))
+                && !ids.contains(&token.chain_id)
+            {
+                ids.push(token.chain_id);
+            }
+        }
+    }
+    ids
+}
+
+/// [`Event::HoldingsRestored`] for `address` in the space in front, when
+/// rows were kept for it.
+fn restored_holdings(address: &str) -> Option<Event> {
+    if address.trim().is_empty() {
+        return None;
+    }
+    let space = crate::network_space::current();
+    let tokens = load_holdings(address, space.as_str(), crate::executor::now_ms());
+    (!tokens.is_empty()).then(|| Event::HoldingsRestored {
+        address: address.to_owned(),
+        tokens,
+    })
+}
+
 fn write_cached_usd(address: &str, usd: f64, now_ms: f64) {
     let mut map = match storage::read_value(CACHE_KEY) {
         Ok(Some(Value::Object(map))) => map,
@@ -193,7 +288,21 @@ fn settled_result(
     // A chain that did not answer keeps what the last round knew it held;
     // it is still reported as failed below.
     let tokens = settle_with_carry_over(address, tokens, &failed);
-    let limited = if failed.iter().all(|chain| internal.contains(chain)) {
+    // The rows this round leaves on the home, kept for the next visit
+    // (home-1, home-3): what the space in front holds, more than nothing.
+    let shown: Vec<BalanceToken> = tokens
+        .iter()
+        .filter(|token| crate::network_space::in_space(token.chain_id))
+        .filter(|token| token.balance.bytes().any(|b| (b'1'..=b'9').contains(&b)))
+        .cloned()
+        .collect();
+    save_holdings(
+        address,
+        crate::network_space::current().as_str(),
+        &shown,
+        crate::executor::now_ms(),
+    );
+    let limited =if failed.iter().all(|chain| internal.contains(chain)) {
         // Nothing left the app: the pool has no verdict to give, and asking
         // it would be one more call into what just failed.
         Vec::new()
@@ -238,9 +347,26 @@ impl Machine for BalanceDashboard {
         // The core resets its state and paints the hero from cache on this
         // event, so it is the boot: an address, or the empty string, which is
         // what "no account yet" looks like on the way from Welcome.
-        Event::AccountChanged {
-            address: session::view(cx).address,
+        let address = session::view(cx).address;
+        // perf-10: opened on a screen that draws no balance of its own
+        // (Settings, the address book), the account is NOTED — its cached
+        // total read for the switcher and the privacy mask — and no network
+        // is read until the home is shown ([`shown`]).
+        let noted = NOTED_ONLY.load(Ordering::SeqCst) && !address.is_empty();
+        BOOTED_NOTED.store(noted, Ordering::SeqCst);
+        if noted {
+            return Event::AccountNoted { address };
         }
+        Event::AccountChanged { address }
+    }
+
+    /// The rows the home showed last time for this account in the space in
+    /// front (home-1, home-3) — the web's `#restoreRows` after
+    /// `account_changed`: the core lets them stand until each chain answers.
+    fn boot_followups(cx: &App) -> Vec<Event> {
+        restored_holdings(&session::view(cx).address)
+            .into_iter()
+            .collect()
     }
 
     fn perform(operation: &BalanceOperation) -> Answer<BalanceShellResult, Self::Event> {
@@ -512,6 +638,45 @@ pub fn dispatch(event: Event, cx: &mut App) {
     resident::resident::<BalanceDashboard>(cx).update(cx, |resident, cx| {
         resident.dispatch(event, cx);
     });
+}
+
+/// The window opened on a screen that draws no balance of its own: the next
+/// boot only notes the account ([`Event::AccountNoted`], perf-10).
+static NOTED_ONLY: AtomicBool = AtomicBool::new(false);
+/// The running machine was booted on [`Event::AccountNoted`] and has not
+/// been told the home is shown yet.
+static BOOTED_NOTED: AtomicBool = AtomicBool::new(false);
+
+/// The window is opening on Settings or the address book, not the home:
+/// the balances note the account and read no network until it is shown.
+pub fn note_only() {
+    NOTED_ONLY.store(true, Ordering::SeqCst);
+}
+
+/// The home is on screen. An account only noted so far is read now —
+/// [`Event::AccountChanged`] for the same account, as the web's wallet page
+/// says it — once; every later frame is nothing.
+pub fn shown(cx: &mut App) {
+    // Shown before anything booted the balances: they boot reading.
+    NOTED_ONLY.store(false, Ordering::SeqCst);
+    if !BOOTED_NOTED.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let address = session::view(cx).address;
+    if !address.is_empty() {
+        dispatch(Event::AccountChanged { address }, cx);
+    }
+}
+
+/// The space in front changed (spec 105): [`Event::SpaceChanged`] — the
+/// core resets for the same account, reads this space's cached total and
+/// forces a read — then the rows this space last showed for it.
+pub fn space_switched(cx: &mut App) {
+    dispatch(Event::SpaceChanged, cx);
+    let address = session::view(cx).address;
+    if let Some(event) = restored_holdings(&address) {
+        dispatch(event, cx);
+    }
 }
 
 /// A forced read, for the moments a screen KNOWS the answer changed — a token

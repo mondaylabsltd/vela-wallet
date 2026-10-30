@@ -1470,6 +1470,11 @@ impl WalletPage {
             _ => Section::Wallet,
         }
         .or_wallet();
+        // perf-10: a window opened on a screen that draws no balance of its
+        // own notes the account and reads no network until the home shows.
+        if section != Section::Wallet {
+            crate::executor::balance_dashboard::note_only();
+        }
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
         // Money in flight outlives every screen: the tracker runs from the
@@ -3386,6 +3391,11 @@ impl WalletPage {
     /// a switch from Settings stays on Settings.
     pub fn restore_place(&mut self, (section, settings_page): (Section, SettingsPage)) {
         self.section = section.or_wallet();
+        // perf-10: the other account, met on Settings or the address book,
+        // is noted — not read across every network — until the home shows.
+        if self.section != Section::Wallet {
+            crate::executor::balance_dashboard::note_only();
+        }
         self.settings_page = settings_page;
     }
 
@@ -19568,7 +19578,13 @@ impl WalletPage {
             self.backup_for = None;
         }
         columns = match self.section {
-            Section::Wallet => columns.child(self.content(theme, cx)),
+            Section::Wallet => {
+                // The home is on screen: an account only noted is read now.
+                if self.identity.is_some() {
+                    crate::executor::balance_dashboard::shown(cx);
+                }
+                columns.child(self.content(theme, cx))
+            }
             Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
             Section::Explore => columns.child(self.explore_content(theme, cx)),
             Section::Settings => columns
