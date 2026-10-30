@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -194,6 +195,7 @@ private fun WalletHomeContent(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .testTag("wallet-home")
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = VelaSizing.screenPaddingX),
                 ) {
@@ -227,6 +229,7 @@ private fun WalletHomeContent(
                         title = model.activitySection.title,
                         action = model.activitySection.action,
                         onAction = { onFlow(WalletFlowEntry.Activity, null) },
+                        actionTag = "home-activity-all",
                     )
                     when (model.activitySection.mode) {
                         SectionMode.Rows -> model.activityGroups.forEach { group ->

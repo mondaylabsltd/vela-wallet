@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,6 +98,82 @@ fun FlowScaffold(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = VelaSizing.screenPaddingX),
         ) {
+            FlowScaffoldHead(header = header, onBack = onBack, onAction = onAction, onPill = onPill)
+            content()
+            Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+            // Only when nothing is pinned below: with a footer the inset is
+            // the footer's, and taking it twice leaves a gap the mocks do not
+            // draw. Without one the last row runs under the navigation bar —
+            // R1's eighth network did exactly that on the first device run.
+            if (footer == null) {
+                Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+            }
+        }
+        footer?.let {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(
+                        horizontal = VelaSizing.screenPaddingX,
+                        vertical = VelaSpacing.lg,
+                    ),
+            ) { it() }
+        }
+    }
+}
+
+/**
+ * [FlowScaffold] for a body that is one long list (Phase 4): the same head and
+ * margins, but the rows are a [LazyColumn]'s — composed and laid out as they
+ * scroll into view, not all at once. A1's history is up to 200 records; as a
+ * plain column every one of them was composed when the page opened and
+ * measured again on every frame anything above them moved.
+ */
+@Composable
+fun FlowLazyScaffold(
+    header: FlowHeaderModel,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
+    onAction: () -> Unit = {},
+    onPill: () -> Unit = {},
+    listModifier: Modifier = Modifier,
+    content: LazyListScope.() -> Unit,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.bgBase)
+            .statusBarsPadding(),
+    ) {
+        LazyColumn(
+            modifier = listModifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = VelaSizing.screenPaddingX),
+        ) {
+            item(key = "flow-head", contentType = "flow-head") {
+                Column { FlowScaffoldHead(header = header, onBack = onBack, onAction = onAction, onPill = onPill) }
+            }
+            content()
+            item(key = "flow-tail", contentType = "flow-tail") {
+                Column {
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+                    Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+                }
+            }
+        }
+    }
+}
+
+/** The back chevron, the large title with its action or network pill, and the gap under them. */
+@Composable
+private fun ColumnScope.FlowScaffoldHead(
+    header: FlowHeaderModel,
+    onBack: () -> Unit,
+    onAction: () -> Unit,
+    onPill: () -> Unit,
+) {
+    val colors = VelaTheme.colors
             Spacer(modifier = Modifier.height(VelaSpacing.xl))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -195,28 +274,6 @@ fun FlowScaffold(
                 )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl))
-            content()
-            Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-            // Only when nothing is pinned below: with a footer the inset is
-            // the footer's, and taking it twice leaves a gap the mocks do not
-            // draw. Without one the last row runs under the navigation bar —
-            // R1's eighth network did exactly that on the first device run.
-            if (footer == null) {
-                Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-            }
-        }
-        footer?.let {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(
-                        horizontal = VelaSizing.screenPaddingX,
-                        vertical = VelaSpacing.lg,
-                    ),
-            ) { it() }
-        }
-    }
 }
 
 /**
