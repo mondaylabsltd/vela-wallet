@@ -1608,7 +1608,8 @@ pub struct Model {
     /// [`Event::InFlightOps`]: every operation in flight on this device.
     in_flight: Vec<super::tx_tracker::InFlightOp>,
     supported_chains: Vec<u32>,
-    /// `chainId` state; TS initialises to 1 — mirrored in `global_chain_id()`.
+    /// `chainId` state; TS initialises to 1 — mirrored in `global_chain_id()`
+    /// (the space's first network when it has no Ethereum).
     global_chain: Option<u32>,
     accounts: Vec<SignAccountRef>,
     active_index: u32,
@@ -1650,8 +1651,21 @@ pub struct Model {
 }
 
 impl Model {
+    /// The chain a request that names none is signed on: the one a site
+    /// switched to, or — before any did — Ethereum, the TS default, when the
+    /// wallet's space has it, and otherwise the space's first network. In the
+    /// testnet space a message with no chain was put on Ethereum, which the
+    /// space does not have: the sheet named a network the wallet could not
+    /// sign on, and the signature failed after the confirm (round 6 — an
+    /// account whose venue is the signing page never reached its hand-off).
+    /// The site's own start chain says the same (`network_space::
+    /// site_start_chain`, dapp-17).
     fn global_chain_id(&self) -> u32 {
-        self.global_chain.unwrap_or(1)
+        self.global_chain
+            .unwrap_or_else(|| match self.supported_chains.first() {
+                Some(&first) if !self.chain_supported(1) => first,
+                _ => 1,
+            })
     }
 
     fn chain_supported(&self, chain_id: u32) -> bool {

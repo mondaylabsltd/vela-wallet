@@ -921,6 +921,45 @@ fn f2_response_routes_to_the_owning_transport() {
     );
 }
 
+/// Round 6: a message that names no chain, in a space with no Ethereum (the
+/// testnet space). It was put on Ethereum — the sheet named a network the
+/// wallet could not sign on, the confirm failed after the tap, and an account
+/// whose venue is the signing page never reached its hand-off. Before any
+/// site switched chains, the request goes on the space's first network; a
+/// space with Ethereum keeps it.
+#[test]
+fn a_request_naming_no_chain_goes_on_a_network_the_space_has() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![11_155_111, 5_042_002],
+    });
+    sut.dispatch(Event::AccountsChanged {
+        accounts: accounts(),
+        active_index: 0,
+    });
+    sut.dispatch(Arrive::global("rid-t", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    let view = sut.view();
+    assert_eq!(view.global_chain_id, 11_155_111);
+    assert_eq!(view.request.expect("request").chain_id, 11_155_111);
+    let ops = sut.dispatch(approve(SignApproveOpts::default()));
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::SignAndSubmit {
+                chain_id: 11_155_111,
+                ..
+            }]
+        ),
+        "signed on the space's network: {ops:?}"
+    );
+
+    // The mainnet space has Ethereum: unchanged.
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("rid-m", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    assert_eq!(sut.view().global_chain_id, 1);
+    assert_eq!(sut.view().request.expect("request").chain_id, 1);
+}
+
 #[test]
 fn f3_f4_request_uses_its_own_chain_and_dapp_identity() {
     let mut sut = boot();
