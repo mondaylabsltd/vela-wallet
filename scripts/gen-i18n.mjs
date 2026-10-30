@@ -1304,8 +1304,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `componentsUi.browserStatus.reason.signingPage` (the dApp record's line
 //   for a page that did not sign, r7-2 / r7-7). 2210 + 2 = 2212 paths, 2104
 //   leaves, 108 branches.
-if (PATHS.length !== 2212) fail(`expected 2212 paths (2104 leaf + 108 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2104) fail(`expected 2104 leaf paths, got ${leafSet.size}`);
+// 2216 (the web wallet's `/pay`, spec 039 Part B, 2026-10-31): +
+//   `receive.pay.{invalidToken, invalidAmount}` (why the core refused a link
+//   whose token or amount is wrong — `invalidBody` already says recipient or
+//   network), `receive.pay.noWalletBody` (a link opened with no wallet on the
+//   device: kept while one is created or signed into) and `receive.pay.home`
+//   (the way home from a refused link). 2212 + 4 = 2216 paths, 2108 leaves,
+//   108 branches.
+if (PATHS.length !== 2216) fail(`expected 2216 paths (2108 leaf + 108 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2108) fail(`expected 2108 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.

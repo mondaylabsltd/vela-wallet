@@ -615,7 +615,11 @@
    "amount": "Valor",
    "anyAmount": "Qualquer valor",
    "invalidTitle": "Link de pagamento inválido",
-   "invalidBody": "Falta um destinatário ou uma rede válida neste link. Peça um novo ao remetente."
+   "invalidBody": "Falta um destinatário ou uma rede válida neste link. Peça um novo ao remetente.",
+   "invalidToken": "O token deste link não é um endereço de contrato. Peça um novo ao remetente.",
+   "invalidAmount": "O valor deste link não pode ser lido com exatidão. Peça um novo ao remetente.",
+   "noWalletBody": "Ainda não há uma carteira Vela neste dispositivo. Crie uma ou entre, e este pagamento estará esperando para você revisar.",
+   "home": "Ir para a Vela Wallet"
   },
   "addressLabel": "Seu endereço de recebimento",
   "searchNetworkPlaceholder": "Buscar redes",

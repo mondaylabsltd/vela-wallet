@@ -65,7 +65,11 @@
       "amount": "Betrag",
       "anyAmount": "Beliebiger Betrag",
       "invalidTitle": "Ungültiger Zahlungslink",
-      "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen."
+      "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen.",
+      "invalidToken": "Der Token in diesem Link ist keine Vertragsadresse. Bitten Sie den Absender um einen neuen.",
+      "invalidAmount": "Der Betrag in diesem Link lässt sich nicht exakt lesen. Bitten Sie den Absender um einen neuen.",
+      "noWalletBody": "Auf diesem Gerät gibt es noch kein Vela-Wallet. Erstellen Sie eines oder melden Sie sich an – diese Zahlung wartet dann zur Prüfung auf Sie.",
+      "home": "Zu Vela Wallet"
     },
     "addressLabel": "Ihre Empfangsadresse",
     "searchNetworkPlaceholder": "Netzwerke suchen",
