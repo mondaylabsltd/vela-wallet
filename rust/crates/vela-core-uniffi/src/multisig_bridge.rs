@@ -18,6 +18,12 @@
 
 /// The multisig links (`vela_core::multisig_link`): `method` plus its
 /// arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+///
+/// The same door answers the multisig's pure rules a screen asks one at a
+/// time (`vela_core::multisig_rules`), by `<area>.<method>`: `relay.*`
+/// (the PeerConnect token schedule), `names.*` (a member's label and kind),
+/// `networks.*` (the order networks are offered in), `calls.*` (which calls a
+/// review reads). docs/multisig-machines.md lists them.
 #[uniffi::export]
 pub fn multisig_link_call(method: String, args_json: String) -> Result<String, crate::CoreError> {
     Ok(vela_core::multisig_link::call_json(&method, &args_json)?)
@@ -140,5 +146,16 @@ mod tests {
         let view: serde_json::Value = serde_json::from_str(&core.view().unwrap()).unwrap();
         assert!(view["followed"].is_null());
         assert_eq!(view["pace_ms"], 12_000);
+        // W9: the machine's own words for the multisig it follows.
+        assert_eq!(view["members_anywhere"], serde_json::json!([]));
+    }
+
+    /// W9: the natives ask the multisig's pure rules through the link door,
+    /// as the web does (`multisigLinkCall`).
+    #[test]
+    fn the_rules_answer_through_the_link_door() {
+        let none = multisig_link_call("calls.readable".to_owned(), "{}".to_owned()).unwrap();
+        assert_eq!(none, "null");
+        assert!(multisig_link_call("nobody.knows".to_owned(), "{}".to_owned()).is_err());
     }
 }
