@@ -298,7 +298,7 @@ class SendRefusalsTest {
     @Test
     fun `the relay's refusal is the confirm page's notice, with a retry`() = runBlocking {
         seedAccount(); scriptRelay()
-        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA25 invalid account nonce") }
+        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA23 reverted: not allowed") }
         val c = controller()
         c.toConfirm()
         c.slideConfirm()
@@ -309,6 +309,33 @@ class SendRefusalsTest {
         val confirm = SendLive.confirm(drawn, failed, ctx())
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), confirm.noticeAction)
         assertFalse("the slider waits for the retry", confirm.ctaEnabled)
+        c.retryAfterError()
+        val cleared = withTimeout(10_000) { c.send.first { it.tx_error == null } }
+        assertTrue(cleared.can_confirm)
+    }
+
+    /**
+     * send-15 through the whole spine: the relay's bare AA25 is the core's
+     * `NonceUsed` — another transaction of this account went first. Nothing
+     * was sent, and the confirm says so calmly ("Not sent", "went first"),
+     * with Review again — never "couldn't be submitted".
+     */
+    @Test
+    fun `a nonce another transaction spent first is said calmly, with Review again`() = runBlocking {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA25 invalid account nonce") }
+        val c = controller()
+        c.toConfirm()
+        c.slideConfirm()
+        val failed = withTimeout(30_000) { c.send.first { it.tx_error != null } }
+        assertEquals(app.getvela.wallet.feature.send.core.SendTxErrorKey.NonceUsed, failed.tx_error)
+        assertEquals(SendStage.Confirm, failed.stage)
+        assertEquals(strings.t(I18nKeys.Flows.WENT_FIRST), SendLive.confirmNotice(failed, ctx()))
+        val drawn = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD3, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendConfirm).model
+        val confirm = SendLive.confirm(drawn, failed, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), confirm.noticeTitle)
+        assertTrue("calm", confirm.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), confirm.noticeAction)
         c.retryAfterError()
         val cleared = withTimeout(10_000) { c.send.first { it.tx_error == null } }
         assertTrue(cleared.can_confirm)

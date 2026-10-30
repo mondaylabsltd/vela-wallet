@@ -6,8 +6,10 @@ import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import org.json.JSONObject
+import uniffi.vela_core_uniffi.PasskeyCeremonyEnd
 import uniffi.vela_core_uniffi.RelayRejection
-import uniffi.vela_core_uniffi.userOpNonceUsedDetail
+import uniffi.vela_core_uniffi.passkeyCeremonyEnd
+import uniffi.vela_core_uniffi.passkeySignTimeoutMs
 import uniffi.vela_core_uniffi.WalletKeyRecord
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.UserOpDraft
@@ -80,6 +82,14 @@ class UserOpSpine(
     private val handoffShown: Boolean = false,
     /** The corpus, for the sentences a signature that cannot be made is told in. */
     private val words: (key: String, vars: Map<String, String>) -> String = { key, _ -> key },
+    /**
+     * send-11: the passkey prompt's deadline, ms — the core's
+     * (`passkey_sign_timeout_ms`), what the platform's prompt is asked for
+     * and what this spine stops waiting at. A seam for the tests only.
+     */
+    private val signDeadlineMs: Long = passkeySignTimeoutMs().toLong(),
+    /** A monotonic clock, ms: how long the prompt was up, for the core's `passkey_ceremony_end`. */
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     /**
      * Where one ceremony goes — the core's `signing_plan` (spec 102), read
@@ -218,7 +228,17 @@ class UserOpSpine(
             }
             channel.sign(requestJson, challenge, allowed, page, picked.keyLabel, askFirst = !handoffShown)
         } else {
-            signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
+            // send-11: the prompt runs to the core's deadline, and how it
+            // ended — closed by the person, or out of time — is the core's
+            // reading of the platform's answer and the clock.
+            val raised = clock()
+            try {
+                withTimeoutOrNull(signDeadlineMs) {
+                    signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
+                } ?: throw PasskeyFailure(FailureKind.Cancelled, "the passkey prompt ran out of time")
+            } catch (failure: PasskeyFailure) {
+                throw Refused(ceremonyFailure(failure, clock() - raised))
+            }
         }
     } catch (failure: PageSignFailure) {
         // The page is the venue: the person's "no" there is their answer
@@ -238,6 +258,13 @@ class UserOpSpine(
 
     sealed class Failure {
         data object PasskeyCancelled : Failure()
+
+        /**
+         * send-11: the passkey prompt ran out of time — the core's reading of
+         * a cancel at its deadline (`passkey_ceremony_end`). Handled as
+         * [PasskeyCancelled]; only the words differ ("timed out").
+         */
+        data object PasskeyTimedOut : Failure()
         data object RelayerUnavailable : Failure()
         data object BundlerUnderfunded : Failure()
         data class Other(val message: String?) : Failure()
@@ -298,6 +325,16 @@ class UserOpSpine(
          * `userOpPreviousPendingDetail()`.
          */
         data object PreviousPending : Failure()
+
+        /**
+         * send-15: the nonce this operation signed was spent already — another
+         * transaction of the account went first (`RelayRejection::NonceUsed`,
+         * the relay's bare AA25 as the core reads it). Nothing of this one was
+         * sent. Send says it calmly, "went first", with Review again
+         * (`SendSubmitFailure.NonceUsed`); a page is told the core's fixed
+         * detail (`userOpNonceUsedDetail()`) as a refusal.
+         */
+        data object NonceUsed : Failure()
 
         /**
          * Spec 082 RA1: the relay was never reached and nothing left the device
@@ -615,12 +652,35 @@ class UserOpSpine(
                     // went out.
                     is RelayRejection.NonceHeld -> Failure.PreviousPending
                     // send-15: the core's reading of a bare AA25 — another
-                    // transaction of the account spent the nonce first. Refused,
-                    // as the relay's sentence was before; the Android lane words
-                    // it as "went first" (`SendSubmitFailure.NonceUsed`).
-                    RelayRejection.NonceUsed -> Failure.Rejected(userOpNonceUsedDetail())
+                    // transaction of the account spent the nonce first.
+                    RelayRejection.NonceUsed -> Failure.NonceUsed
                 },
             )
         }
     }
 }
+
+/**
+ * send-11: how a passkey prompt that signed nothing ended — the core's rule
+ * (`passkey_ceremony_end`) over the platform's classification ([failure]'s
+ * kind) and how long the prompt was up ([elapsedMs]). Credential Manager says
+ * a prompt that ran out of time exactly as one the person closed
+ * (`GetCredentialCancellationException`); only the clock tells them apart.
+ * Closed and out of time are the same refusal to every rule — the confirm
+ * stays for another try — and only the words differ; every other end is the
+ * passkey's failure, by its kind.
+ */
+internal fun ceremonyFailure(failure: PasskeyFailure, elapsedMs: Long): UserOpSpine.Failure =
+    when (passkeyCeremonyEnd(failure.kind.wire, elapsedMs.toDouble())) {
+        PasskeyCeremonyEnd.TIMED_OUT -> UserOpSpine.Failure.PasskeyTimedOut
+        PasskeyCeremonyEnd.CANCELLED -> UserOpSpine.Failure.PasskeyCancelled
+        PasskeyCeremonyEnd.NOT_SUPPORTED, PasskeyCeremonyEnd.NOT_DISCOVERABLE, PasskeyCeremonyEnd.OTHER ->
+            // Spec 099 R8: how it failed travels on, as the app's passkey
+            // classifier read it, so the sheet and the page's record name
+            // the signer rather than "couldn't submit".
+            if (failure.kind == FailureKind.Cancelled) {
+                UserOpSpine.Failure.PasskeyCancelled
+            } else {
+                UserOpSpine.Failure.Signer(failure.kind, failure.message ?: "the passkey ceremony failed")
+            }
+    }

@@ -1413,9 +1413,16 @@ object SendLive {
             // transaction still holds the nonce is "Not sent yet" — its title
             // over its sentence, calm, with Try again (no error buzz either:
             // the core fires none for it).
-            noticeTitle = if (notSent(view)) s.t(I18nKeys.Flows.NOT_SENT_TITLE) else null,
+            noticeTitle = when {
+                notSent(view) -> s.t(I18nKeys.Flows.NOT_SENT_TITLE)
+                // send-15: another transaction of this account went first —
+                // "Not sent", calmly, over the core's sentence (the web's
+                // `nonce_used`).
+                wentFirst(view) -> s.t(I18nKeys.Flows.RECEIPT_NOT_SENT)
+                else -> null
+            },
             // send-11: a passkey that signed nothing is said calmly too.
-            noticeCalm = notSent(view) || passkeyNote(view, s) != null,
+            noticeCalm = notSent(view) || wentFirst(view) || passkeyNote(view, s) != null,
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
@@ -1432,6 +1439,10 @@ object SendLive {
                 // Spec 102: a venue that cannot be used here is not a failure
                 // trying again would fix — the notice says why, and no retry.
                 view.tx_error == SendTxErrorKey.VenueBlocked -> null
+                // A proposal this shell cannot make would meet the same answer.
+                view.tx_error == SendTxErrorKey.ProposalNotSupported -> null
+                // send-15: a fresh quote, nonce and signature — "Review again".
+                wentFirst(view) -> s.t(I18nKeys.Flows.TX_REVIEW_AGAIN)
                 view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)
                 // The stage stays Confirm while the passkey prompt is up; the
                 // one honest button under it is Cancel — the core's checkpoint.
@@ -1474,6 +1485,14 @@ object SendLive {
      */
     internal fun notSent(view: SendView): Boolean =
         view.tx_error == SendTxErrorKey.PreviousPending && view.relay_unreachable == null && view.treasury_bootstrap == null
+
+    /**
+     * send-15: the submit was turned back because another transaction of this
+     * account spent the nonce first — nothing was sent (the core's
+     * `SendTxErrorKey::NonceUsed`), and no relay stop is up over it.
+     */
+    internal fun wentFirst(view: SendView): Boolean =
+        view.tx_error == SendTxErrorKey.NonceUsed && view.relay_unreachable == null && view.treasury_bootstrap == null
 
     /** r7-6: the confirmed operation is out to be signed — its passkey, its page, its POST. */
     internal fun outToSign(view: SendView): Boolean =
@@ -1555,8 +1574,11 @@ object SendLive {
             // nothing was sent, calmly (the web's `nonce_used`).
             SendTxErrorKey.NonceUsed -> s.t(I18nKeys.Flows.WENT_FIRST)
             // A proposal's own words (web-only multisig); here the plain line.
-            SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline,
-            SendTxErrorKey.ProposalNotSupported -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            // A multisig's proposal this shell cannot make
+            // (`SendProposeFailure::NotSupported`): said as that — never the
+            // mailbox, and no retry that would meet the same answer.
+            SendTxErrorKey.ProposalNotSupported -> s.t(I18nKeys.Flows.TX_ERROR_PROPOSAL_NOT_SUPPORTED)
             // r5reg-3: the network's failure, by its name — never the passkey's.
             SendTxErrorKey.ChainBusy, SendTxErrorKey.ChainUnreachable -> s.t(
                 if (view.tx_error == SendTxErrorKey.ChainBusy) I18nKeys.Flows.TX_ERROR_CHAIN_BUSY else I18nKeys.Flows.TX_ERROR_CHAIN_UNREACHABLE,

@@ -311,9 +311,9 @@ sealed class SendSubmitFailure {
     data object PreviousPending : SendSubmitFailure()
 
     /**
-     * send-11: the passkey prompt timed out — nothing was signed. Declared so
-     * the shell can say it; this shell's ceremony does not yet tell a timeout
-     * from a cancel (Phase 2, send round 3-6).
+     * send-11: the passkey prompt timed out — nothing was signed. The prompt
+     * runs to the core's deadline (`passkey_sign_timeout_ms`), and a cancel at
+     * it is a timeout by the core's rule (`passkey_ceremony_end`).
      */
     @Serializable
     @SerialName("passkey_timed_out")
