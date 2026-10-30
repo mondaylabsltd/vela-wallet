@@ -330,7 +330,8 @@ final class PasskeyExecutor: NSObject {
         challenge: Data,
         credentialIdHex: String?,
         transports: String = "",
-        method: KeyMethod = .platform
+        method: KeyMethod = .platform,
+        deadlineMs: Double? = nil
     ) async throws -> Assertion {
         var securityKeyOnly = false
         switch Self.assertionPath(transports: transports, method: method) {
@@ -357,7 +358,7 @@ final class PasskeyExecutor: NSObject {
             challenge: challenge, credentialIdHex: credentialIdHex, transports: transports,
             securityKeyOnly: securityKeyOnly
         )
-        let authorization = try await perform(requests)
+        let authorization = try await perform(requests, deadlineMs: deadlineMs)
 
         guard let credential = authorization.credential
             as? ASAuthorizationPublicKeyCredentialAssertion
@@ -477,7 +478,15 @@ final class PasskeyExecutor: NSObject {
 
     // MARK: - The delegate bridge
 
-    private func perform(_ requests: [ASAuthorizationRequest]) async throws -> ASAuthorization {
+    /// - Parameter deadlineMs: the prompt's own deadline (send-11) — the
+    ///   signing prompt's is the core's (`passkey_sign_timeout_ms`). The
+    ///   system sheet takes no timeout on iOS, so the prompt is cancelled
+    ///   here when it runs out, and ends as a cancel AT the deadline: what
+    ///   `passkey_ceremony_end` reads as timed out. `nil`: no deadline (the
+    ///   sign-in and create ceremonies, as before).
+    private func perform(
+        _ requests: [ASAuthorizationRequest], deadlineMs: Double? = nil
+    ) async throws -> ASAuthorization {
         try await withCheckedThrowingContinuation { continuation in
             // A previous request is abandoned rather than left dangling: the
             // system refuses a second concurrent ceremony, which would surface
@@ -492,6 +501,19 @@ final class PasskeyExecutor: NSObject {
             controller.presentationContextProvider = self
             self.controller = controller
             controller.performRequests()
+            if let deadlineMs, deadlineMs.isFinite, deadlineMs > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + deadlineMs / 1000) { [weak self, weak controller] in
+                    MainActor.assumeIsolated {
+                        // Only the prompt this deadline was set for: one that
+                        // ended, or a newer one, is not touched.
+                        guard let self, let controller, self.controller === controller else { return }
+                        controller.cancel()
+                        self.finish(.failure(
+                            PasskeyFailure(kind: .cancelled, message: "The passkey prompt timed out")
+                        ))
+                    }
+                }
+            }
         }
     }
 

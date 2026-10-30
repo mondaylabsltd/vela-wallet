@@ -56,6 +56,8 @@ struct ExploreScreen: View {
     var onRefreshFee: (() -> Void)?
     /// Spec 096 F8: the failed receipt's Try again.
     var onSigningRetry: (() -> Void)?
+    /// dapp-15: the signing verdict's "Check again".
+    var onSimRecheck: () -> Void = {}
     /// Spec 079 US4: "暂时连不上 {chain}…" when the page's chain cannot be
     /// reached (`ExploreLive.chainNotice`), and its Retry — one read through
     /// the pool; an answer clears it.
@@ -618,7 +620,8 @@ struct ExploreScreen: View {
                     onClose: onSigningDismissed,
                     onExplorer: onSigningExplorer,
                     onRefreshFee: onRefreshFee,
-                    onRetry: onSigningRetry
+                    onRetry: onSigningRetry,
+                    onSimRecheck: onSimRecheck
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])

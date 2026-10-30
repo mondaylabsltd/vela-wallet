@@ -69,6 +69,8 @@ struct SigningSheet: View {
     var onRefreshFee: (() -> Void)?
     /// Spec 096 F8: the failed receipt's Try again.
     var onRetry: (() -> Void)?
+    /// dapp-15: the verdict's "Check again".
+    var onSimRecheck: () -> Void = {}
 
     @State private var techOverride: Bool?
     /// The confirm's note, the last time it was said. The note comes and goes
@@ -136,8 +138,8 @@ struct SigningSheet: View {
 
     /// The confirm's note as the gate says it now; `nil` while it is open.
     private var saidNote: String? {
-        guard let confirm = model.confirm, !confirm.enabled else { return nil }
-        return model.confirmBlockLine
+        guard let confirm = model.confirm else { return nil }
+        return confirm.enabled ? model.passkeyNote : model.confirmBlockLine
     }
 
     /// The send receipt's own body and its one button, so a dApp transaction
@@ -184,6 +186,9 @@ struct SigningSheet: View {
             ForEach(model.handoffBlocks) { block in
                 blockView(block)
             }
+            if let advice = model.advice {
+                AgentAdviceCard(model: advice)
+            }
         } else {
             // The wallet's own request: its intent is already the header's title.
             ForEach(model.formItems) { item in
@@ -198,6 +203,14 @@ struct SigningSheet: View {
                     let landed = landedVerdict
                     SigningVerdictRoom {
                         ForEach(inner) { block in blockView(block) }
+                        // dapp-15: no node answered — ask again, here, where
+                        // the line that says so stands.
+                        if let recheck = model.simRecheck {
+                            VelaButton(title: recheck.label, kind: .secondary,
+                                       loading: recheck.checking, busyTitle: recheck.label,
+                                       action: onSimRecheck)
+                                .accessibilityIdentifier("signing.simRecheck")
+                        }
                     }
                     .id(SigningFormItem.verdictId)
                     .onGeometryChange(for: VerdictSeen.self) { place in
@@ -206,6 +219,12 @@ struct SigningSheet: View {
                         reveal(seen, in: scroll)
                     }
                 }
+            }
+
+            // Spec 103: the agent's opinion, in its own card under Vela's
+            // own lines and over the fee — never one of the sheet's words.
+            if let advice = model.advice {
+                AgentAdviceCard(model: advice)
             }
 
             Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
@@ -242,7 +261,9 @@ struct SigningSheet: View {
         // never offered it. Spec 079: approved, the receipt has its own
         // button.
         if model.receipt == nil, let confirm = model.confirm {
-            let note = confirm.enabled ? nil : model.confirmBlockLine
+            // signer-11: an open confirm after a prompt that signed nothing
+            // says so in the same room — "closed" or "timed out".
+            let note = confirm.enabled ? model.passkeyNote : model.confirmBlockLine
             FlowFooter {
                 VStack(spacing: Tokens.Space.s8) {
                     // Issue #461: one tap, full width, shut while the core's
@@ -266,7 +287,7 @@ struct SigningSheet: View {
                     // that opens it.
                     if let note {
                         confirmNote(note)
-                            .accessibilityIdentifier("signing.confirmBlock")
+                            .accessibilityIdentifier(confirm.enabled ? "signing.passkeyNote" : "signing.confirmBlock")
                     } else {
                         confirmNote(heldNote ?? " ")
                             .hidden()

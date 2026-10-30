@@ -32,6 +32,9 @@ enum ExploreScan {
 
     static func route(_ payload: String) -> Route {
         let text = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A Vela payment link (`/pay?…`) is a payment, not a page: the core
+        // reads it (`payment_request`), as when it is opened as a link.
+        if case .pay? = PayLink.parse(text) { return .send(text) }
         if let url = url(from: text) { return .open(url) }
         if Eip681.parse(text) != nil || Eip681.isHexAddress(text) { return .send(text) }
         if text.lowercased().hasPrefix("wc:") { return .walletConnect }

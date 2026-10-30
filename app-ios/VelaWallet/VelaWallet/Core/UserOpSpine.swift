@@ -147,6 +147,17 @@ final class UserOpSpine {
         /// last transaction on this network" with Try again; a page is told
         /// `PREVIOUS_PENDING_DETAIL`.
         case previousPending
+        /// The relay refused it because the nonce it signed was already spent
+        /// — another transaction of this account went first (the core's
+        /// `RelayRejection::NonceUsed`, a bare AA25, send-15). Nothing was
+        /// sent. Send says "went first" with Review again (`nonce_used`); a
+        /// page is answered the core's fixed `NONCE_USED_DETAIL`.
+        case nonceUsed
+        /// The passkey prompt ran out of the core's time
+        /// (`passkey_sign_timeout_ms`, read by `passkey_ceremony_end`):
+        /// nothing was signed. The same refusal as `passkeyCancelled` to
+        /// every rule; only the words differ ("timed out", not "closed").
+        case passkeyTimedOut
     }
 
     /// What a submit came to when it did not fail (spec 082 RA1, RA4).
@@ -534,10 +545,10 @@ final class UserOpSpine {
             throw Refused(failure: .rejected(text.isEmpty ? nil : text))
         case .notSent(.nonceUsed?):
             // send-15: the core's reading of a bare AA25 — another transaction
-            // of the account spent the nonce first. Refused, as the relay's
-            // sentence was before; the iOS lane words it as "went first"
-            // (`nonce_used`).
-            throw Refused(failure: .rejected(userOpNonceUsedDetail()))
+            // of the account spent the nonce first. Nothing was sent: Send
+            // says "went first" and offers Review again (`nonce_used`); a page
+            // hears the core's fixed detail.
+            throw Refused(failure: .nonceUsed)
         case .notSent(.nonceHeld?):
             // 083: another operation of the account holds the nonce — its
             // hash is never this request's; nothing of this one went out.
@@ -694,6 +705,9 @@ final class UserOpSpine {
             let stored = await accounts.routing(of: account)
             routing = (pinned.credentialId, stored.transports, stored.method)
         }
+        // The prompt's clock (send-11): a cancel at the core's deadline is
+        // the deadline's, any other the person's — the core's rule.
+        let raised = Date()
         do {
             return try await signer().sign(
                 challenge: challenge,
@@ -702,7 +716,9 @@ final class UserOpSpine {
                 method: routing.method
             )
         } catch let failure as PasskeyFailure {
-            if failure.kind == .cancelled { throw Refused(failure: .passkeyCancelled) }
+            if failure.kind == .cancelled {
+                throw Refused(failure: Self.cancelEnd(elapsedMs: Date().timeIntervalSince(raised) * 1000))
+            }
             // Spec 099 R8: how it failed travels on, so the sheet and the
             // page's record name the passkey, not "couldn't submit".
             throw Refused(failure: .signer(
@@ -712,6 +728,14 @@ final class UserOpSpine {
         } catch is CancellationError {
             throw Refused(failure: .passkeyCancelled)
         }
+    }
+
+    /// How a cancelled prompt `elapsedMs` after it was raised ended, by the
+    /// core's rule (`passkey_ceremony_end`): timed out at its deadline,
+    /// otherwise closed by the person.
+    static func cancelEnd(elapsedMs: Double) -> Failure {
+        passkeyCeremonyEnd(kind: "cancelled", elapsedMs: elapsedMs) == .timedOut
+            ? .passkeyTimedOut : .passkeyCancelled
     }
 
     private static func webAuthn(_ assertion: Assertion) -> WebAuthnAssertion {

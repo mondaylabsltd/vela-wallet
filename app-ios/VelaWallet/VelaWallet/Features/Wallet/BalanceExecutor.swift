@@ -287,16 +287,19 @@ final class BalanceExecutor {
             // person's own node alone ("Can't reach your node for …"), and the
             // chains public nodes served because theirs is not answering — the
             // pool's lists, as the rate-limited ones are.
-            "own_node_chain_ids": Self.ownNodeChains(failed: failedChains, unreached: pool.ownNodeUnreachedChains),
+            "own_node_chain_ids": Self.ownNodeChains(failed: failedChains, poolViewJson: pool.viewJson),
             "fallback_chain_ids": pool.fallbackChains,
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
     }
 
-    /// The failed chains the pool read through the person's own node alone.
-    static func ownNodeChains(failed: [Int], unreached: [Int]) -> [Int] {
-        let own = Set(unreached)
-        return failed.filter(own.contains)
+    /// The failed chains the pool read through the person's own node alone
+    /// — by the core's one rule (`rpc_node_standing`: `own_node_unreached`),
+    /// the reading Settings' rows make of the same view.
+    static func ownNodeChains(failed: [Int], poolViewJson: String?) -> [Int] {
+        guard let poolViewJson else { return [] }
+        let nodes = SettingsLive.OwnNodes(viewJson: poolViewJson)
+        return failed.filter { nodes.standing($0) == "own_node_unreached" }
     }
 
     /// One chain's read over its registry document (spec 082 RE9): the

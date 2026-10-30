@@ -1018,28 +1018,48 @@ enum SettingsLive {
     }
 
     /// The RPC pool's word on the person's own nodes (owner decision
-    /// 2026-10-28, `RpcPoolView`): the chains public nodes serve because the
-    /// person's is not answering, and the chains read through their node
-    /// alone that cannot be reached.
+    /// 2026-10-28, `RpcPoolView`), read by the core's one rule
+    /// (`rpc_node_standing`): `own_node_unreached` ("Can't reach your node
+    /// for …"), `falling_back` (public nodes serve the reads for now),
+    /// `own_only` or `pooled` (nothing to say). The same reading the balance
+    /// and the web make of the same view — never this file's own.
     struct OwnNodes: Equatable {
-        var fallback: [Int] = []
-        var unreached: [Int] = []
+        /// The pool's view as the core wrote it.
+        var viewJson: String
+
+        init(viewJson: String) { self.viewJson = viewJson }
+
+        /// A view naming these lists alone (tests, a drawn board).
+        init(fallback: [Int] = [], unreached: [Int] = [], ownOnly: [Int] = []) {
+            viewJson = CoreJSON.string([
+                "failed_chains": [Int](), "rate_limited_chains": [Int](), "banned": [Any](),
+                "fallback_chains": fallback, "own_only_chains": ownOnly + unreached,
+                "own_node_unreached_chains": unreached,
+            ])
+        }
+
+        /// `chainId`'s standing — `""` for a view the core cannot read.
+        func standing(_ chainId: Int) -> String {
+            guard chainId >= 0, chainId <= Int(UInt32.max) else { return "" }
+            return rpcNodeStanding(viewJson: viewJson, chainId: UInt32(chainId))
+        }
     }
 
-    /// A network's own-node notice, or none — the pool's two lists, worded.
+    /// A network's own-node notice, or none — the core's standing, worded.
     /// Only a network whose RPC is the person's own has one.
     static func ownNodeNotice(_ network: NetNetworkRowWire, loc: Loc, nodes: OwnNodes?) -> CalloutModel? {
         guard let nodes, network.ownRpc else { return nil }
-        if nodes.unreached.contains(network.chainId) {
+        switch nodes.standing(network.chainId) {
+        case "own_node_unreached":
             return CalloutModel(
                 tone: .danger,
                 text: loc.t("assets.ownNodeUnreachable", vars: ["name": network.displayName])
             )
-        }
-        if nodes.fallback.contains(network.chainId) {
+        case "falling_back":
             return CalloutModel(tone: .warning, text: loc.t("settingsModals.network.fallback"))
+        default:
+            return nil
         }
-        return nil
     }
 
     /// "Also supported, not in your list: Stable, MegaETH…" — the Vela
