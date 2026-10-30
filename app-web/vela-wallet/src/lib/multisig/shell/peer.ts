@@ -18,7 +18,7 @@ import type { PeerTransport } from './handler';
 export type PeerEvent =
 	| { type: 'peer_state'; room: string; state: string }
 	| { type: 'paired'; room: string; pairing: string }
-	| { type: 'relay'; status: RelayStatus };
+	| { type: 'relay'; room: string; status: RelayStatus };
 
 interface Open {
 	connection: RelayConnection;
@@ -94,7 +94,7 @@ export function peerRooms(
 				}
 			});
 			connection.relay.addEventListener('change', () => {
-				tell({ type: 'relay', status: connection.relay.status });
+				tell({ type: 'relay', room: handle, status: connection.relay.status });
 			});
 			return {
 				room: handle,

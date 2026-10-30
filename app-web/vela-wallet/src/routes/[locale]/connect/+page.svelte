@@ -6,6 +6,12 @@
 	 * asks the owner. It keeps its sessions, so Vela can ask the same wallet
 	 * again: reopening this page resumes them.
 	 *
+	 * The core's page machine (`multisig_outside::page`, `OutsidePageHost`)
+	 * decides all of it — what a request is, whether it is one of the link's
+	 * members, how each ended, what the link's transaction is and who may act
+	 * on it, what was signed and kept — and this page draws its view and says
+	 * it in the corpus' words.
+	 *
 	 * ms-14: the link names the members Vela asks for (in its fragment, like
 	 * the invite). The page says which account is connecting, and refuses —
 	 * loudly, with what to do — an account that is not one of them.
@@ -19,8 +25,8 @@
 	 * said when they are not there — never an endless "Waiting for Vela…".
 	 *
 	 * r4C-2 / r4C-9: a link that names the transaction (`ms=`) lets the owner
-	 * approve, execute or reject it from here alone (`OutsideTransaction`):
-	 * read from the mailbox, checked by the core, signed in the wallet.
+	 * approve, execute or reject it from here alone: read from the mailbox,
+	 * checked by the core, signed in the wallet.
 	 *
 	 * Round 6: a new link opened in this tab is read at once (r5reg-2); one
 	 * transaction card at a time, and none for a transaction the pairing has
@@ -42,27 +48,21 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { chainName, nativeSymbol } from '$lib/services/networks';
 	import { discoverProviders, type ProviderDetail } from '$lib/multisig/external/eip6963';
+	import { problemText } from '$lib/multisig/external/errors';
 	import {
-		Bridge,
-		DamagedInviteError,
-		type ActivityEntry,
-		type SessionView
-	} from '$lib/multisig/external/bridge';
-	import { connectLink, isExpected, readConnectHash } from '$lib/multisig/external/connect-link';
-	import { currentChain } from '$lib/multisig/external/injected';
-	import { problemText, walletProblem } from '$lib/multisig/external/errors';
-	import {
-		OutsideTransaction,
-		readTransaction,
-		verifiedGenesis,
-		type ExecutionFee,
-		type OutsideStep,
-		type RefusalKind
-	} from '$lib/multisig/external/outside.svelte';
-	import type { RelayStatus } from '$lib/multisig/external/relay';
+		connectLink,
+		isExpected,
+		OutsidePageHost,
+		readConnectHash
+	} from '$lib/multisig/shell/outside-page.svelte';
+	import type { OutsideActivityEntry } from '$lib/multisig/generated/OutsideActivityEntry';
+	import type { OutsideStep } from '$lib/multisig/generated/OutsideStep';
+	import type { OutsideRefusalKind } from '$lib/multisig/generated/OutsideRefusalKind';
+	import type { RelayStatus } from '$lib/multisig/generated/RelayStatus';
 	import TxReview from '$lib/multisig/external/TxReview.svelte';
 	import AuthorityNotice from '$lib/multisig/ui/AuthorityNotice.svelte';
 	import { findingLines } from '$lib/multisig/ui/findings';
+	import type { Finding } from '$lib/multisig/core/refusal';
 	import {
 		actionRecipient,
 		actionTitle,
@@ -74,7 +74,8 @@
 		safeTxHashes,
 		verifyEcdsaApproval,
 		type Genesis,
-		type SafeTx
+		type SafeTx,
+		type SafeTxHashes
 	} from '$lib/multisig/core/kernel';
 	import { fillTemplate } from '$lib/i18n/fill';
 
@@ -89,36 +90,35 @@
 	/** r5reg-7: the link's transaction read again this often while it is shown, so its count is now's. */
 	const REREAD_MS = 30_000;
 
+	type ActivityEntry = OutsideActivityEntry;
+
 	let providers = $state<ProviderDetail[]>([]);
 	let discovered = $state(false);
 	let coreReady = $state(false);
 	let chosen = $state<ProviderDetail | null>(null);
-	let bridge = $state<Bridge | undefined>();
-	let sessions = $state<SessionView[]>([]);
-	let tick = $state(0);
+	/** The core's page machine, once the core is loaded. */
+	let host = $state<OutsidePageHost | null>(null);
+	/** The wallet picked and handed to the machine. */
+	let picked = $state(false);
 	let invite: string | null = null;
 	/** Whether this page came with an invite: "Connecting to Vela…" until it is in the room. */
-	let invited = $state(false);
+	let invitedLink = $state(false);
 	/** ms-14: the members Vela asked for (the link's), lowercase; empty for an older link. */
 	let members = $state<string[]>([]);
 	let link = $state('');
 	let copied = $state(false);
-	let failure = $state('');
 	/** Round 6: the link's invite does not read — said as the link's, never the wallet's. */
-	let damagedLink = $state(false);
-	/** r4C-2: the transaction the link names, read and acted on from here. */
-	let outside = $state<OutsideTransaction | null>(null);
+	let damagedHash = $state(false);
+	/** r4C-2: the link names a transaction, read and acted on from here. */
+	let linked = $state(false);
 	let now = $state(Date.now());
-
-	/** The core, loaded once: it reads every request before the wallet sees it. */
-	let core: Promise<unknown> = Promise.resolve();
 
 	onMount(() => {
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		// r5reg-7: the link's transaction, read again while it is shown and idle.
 		const reread = setInterval(() => {
-			if (outside && step.kind === 'idle' && document.visibilityState === 'visible') {
-				void outside.refresh();
+			if (host && linked && step.kind === 'idle' && document.visibilityState === 'visible') {
+				host.dispatch({ type: 'refresh' });
 			}
 		}, REREAD_MS);
 		// r5reg-2: a new link opened in this tab — same page, another fragment.
@@ -129,9 +129,11 @@
 			clearInterval(timer);
 			clearInterval(reread);
 			window.removeEventListener('hashchange', opened);
-			outside?.dispose();
+			host?.dispose();
 		};
 	});
+
+	const view = $derived(host?.view ?? null);
 
 	/**
 	 * What a link names, taken in: its members, the room's invite (out of the
@@ -140,50 +142,55 @@
 	 * transaction, read afresh — never the one an earlier link named.
 	 * Returns the invite, if it has one.
 	 */
-	function readLink(hash: string): string | null {
+	function readLink(machine: OutsidePageHost, hash: string): string | null {
 		const read = readConnectHash(hash);
 		if (read.damaged) {
-			damagedLink = true;
-			invited = false;
+			damagedHash = true;
+			invitedLink = false;
 		}
 		if (!read.invite && !read.tx) return null;
-		damagedLink = read.damaged;
+		damagedHash = read.damaged;
 		members = read.members;
 		if (read.invite) {
-			invited = true;
+			invitedLink = true;
 			link = location.href;
 			replaceUrl(connectLink(location.pathname, null, members, read.tx));
 		}
+		const current = machine.view.link;
 		const same =
-			!!outside &&
+			!!current &&
+			linked &&
 			!!read.tx &&
-			outside.link.chainId === read.tx.chainId &&
-			outside.link.multisig === read.tx.multisig &&
-			outside.link.safeTxHash === read.tx.safeTxHash;
+			current.chainId === read.tx.chainId &&
+			current.safe.toLowerCase() === read.tx.multisig &&
+			current.safeTxHash.toLowerCase() === read.tx.safeTxHash;
+		rejecting = false;
 		if (same) {
 			// The same transaction opened again: read now, as it stands.
-			if (step.kind === 'idle') void core.then(() => outside?.refresh());
+			if (step.kind === 'idle') machine.dispatch({ type: 'refresh' });
 			return read.invite;
 		}
-		outside?.dispose();
-		rejecting = false;
-		riskAsk = null;
-		fee = undefined;
-		coin = undefined;
-		outside = null;
+		linked = !!read.tx;
 		if (read.tx) {
-			const tx = new OutsideTransaction(read.tx);
-			outside = tx;
-			void core.then(() => tx.refresh());
+			machine.dispatch({
+				type: 'link',
+				link: {
+					chainId: read.tx.chainId,
+					safe: read.tx.multisig,
+					safeTxHash: read.tx.safeTxHash,
+					forMembers: members
+				}
+			});
 		}
 		return read.invite;
 	}
 
 	/** r5reg-2: another link in the same tab: its transaction and its room, now. */
 	function openLink(hash: string) {
-		const fresh = readLink(hash);
+		if (!host) return;
+		const fresh = readLink(host, hash);
 		if (!fresh) return;
-		if (bridge) joinRoom(bridge, fresh);
+		if (picked) joinRoom(host, fresh);
 		else invite = fresh;
 	}
 
@@ -191,57 +198,32 @@
 	 * Round 6: the link's room, joined. An invite that does not read is the
 	 * link's fault, said as such ("This link is damaged — ask for a new one"),
 	 * never "the wallet couldn't sign: invalid invite" — and nothing waits on
-	 * Vela for it.
+	 * Vela for it (`joinFailed`).
 	 */
-	function joinRoom(b: Bridge, fresh: string) {
-		try {
-			b.join(fresh, members);
-			// A good link after a damaged one: that one's line goes.
-			damagedLink = false;
-		} catch (error) {
-			if (!(error instanceof DamagedInviteError)) throw error;
-			invited = false;
-			damagedLink = true;
-		}
+	function joinRoom(machine: OutsidePageHost, fresh: string) {
+		damagedHash = false;
+		machine.dispatch({ type: 'join', invite: fresh, members });
 	}
 
 	async function boot() {
-		core = loadCore().then(() => (coreReady = true));
-		invite = readLink(location.hash);
-		providers = await discoverProviders();
+		const finding = discoverProviders();
+		await loadCore().catch(() => {});
+		const machine = new OutsidePageHost();
+		host = machine;
+		coreReady = true;
+		invite = readLink(machine, location.hash);
+		providers = await finding;
 		discovered = true;
-		await core.catch(() => {});
 		if (providers.length === 1) await start(providers[0]);
 	}
 
 	async function start(detail: ProviderDetail) {
-		failure = '';
-		try {
-			const accounts =
-				((await detail.provider.request({ method: 'eth_accounts' })) as string[]) ?? [];
-			const chain = await currentChain(detail.provider);
-			const b = new Bridge(
-				detail.provider,
-				accounts.map((a) => a.toLowerCase()),
-				chain,
-				detail.info.name
-			);
-			const refresh = () => {
-				sessions = b.sessions;
-				tick++;
-			};
-			b.addEventListener('change', refresh);
-			b.addEventListener('activity', refresh);
-			b.addEventListener('prompt', refresh);
-			b.resumeAll();
-			if (invite) joinRoom(b, invite);
-			invite = null;
-			chosen = detail;
-			bridge = b;
-			refresh();
-		} catch (error) {
-			failure = problemText(walletProblem(error), m, fillTemplate, walletName, '');
-		}
+		if (!host) return;
+		await host.useWallet(detail.provider, detail.info.name);
+		chosen = detail;
+		picked = true;
+		if (invite) joinRoom(host, invite);
+		invite = null;
 	}
 
 	// Keep the screen on while a session is open: a phone that sleeps drops the page.
@@ -258,8 +240,9 @@
 			// not offered: the page works while it stays in front
 		}
 	}
+	const sessionCount = $derived(view?.sessions.length ?? 0);
 	$effect(() => {
-		if (sessions.length > 0) void holdScreen();
+		if (sessionCount > 0) void holdScreen();
 		const again = () => {
 			wakeLock = undefined;
 			void holdScreen();
@@ -268,38 +251,20 @@
 		return () => document.removeEventListener('visibilitychange', again);
 	});
 
-	const prompt = $derived.by(() => {
-		void tick;
-		return bridge?.prompt;
-	});
-	const request = $derived.by(() => {
-		void tick;
-		const r = bridge?.request;
-		return r ? { entry: { ...r.entry }, answer: r.answer } : undefined;
-	});
-	const activity = $derived.by(() => {
-		void tick;
-		// Copies: the bridge changes its entries in place, and a list keyed by
-		// id redraws an entry only when it is another object.
-		return (bridge?.activity ?? []).map((a) => ({ ...a }));
-	});
-	const account = $derived.by(() => {
-		void tick;
-		return bridge?.signer.accounts[0] ?? null;
-	});
-	const network = $derived.by(() => {
-		void tick;
-		const chain = bridge?.signer.chain;
-		return chain ? chainName(Number(chain.split(':')[1])) : '';
-	});
-	const relay = $derived.by<RelayStatus>(() => {
-		void tick;
-		return bridge?.relay ?? { kind: 'up' };
-	});
+	const sessions = $derived(view?.sessions ?? []);
+	const prompt = $derived(view?.connectPrompt ?? null);
+	const request = $derived(view?.request ?? null);
+	const activity = $derived(view?.activity ?? []);
+	const account = $derived(view?.accounts[0] ?? null);
+	const network = $derived(view?.walletChainId ? chainName(view.walletChainId) : '');
+	const relay = $derived<RelayStatus>(view?.relay ?? { kind: 'up' });
+	/** Round 6: the invite did not open a room (PeerConnect refused it): the link's. */
+	const damagedLink = $derived(damagedHash || !!view?.joinFailed);
+	const invited = $derived(invitedLink && !view?.joinFailed);
 	const walletName = $derived(chosen?.info.name || m.ownerWallet);
 	const live = $derived(sessions.filter((s) => s.approved));
 	/** ms-14: the wallet's account is not one of the members the link named. */
-	const wrongAccount = $derived(!!account && !isExpected(members, account));
+	const wrongAccount = $derived(!!account && coreReady && !isExpected(members, account));
 	const memberList = $derived(members.map((a) => shortenAddress(eip55(a))).join(', '));
 	/** A request handed to the wallet and not answered. */
 	const inWallet = $derived(activity.find((a) => a.stage === 'wallet' && !a.outcome) ?? null);
@@ -386,7 +351,7 @@
 		const t = entry.safeTx;
 		if (!t || !coreReady) return null;
 		try {
-			return safeTxHashes(t.chainId, t.safe, t.tx);
+			return safeTxHashes(t.chainId, t.safe, t.tx as SafeTx);
 		} catch {
 			return null;
 		}
@@ -420,88 +385,97 @@
 
 	// -- r4C-2 / r4C-9: the transaction the link names, from here ------------------
 
-	const view = $derived(outside?.view ?? null);
-	const step = $derived<OutsideStep>(outside?.step ?? { kind: 'idle' });
+	const tx = $derived(linked ? (view?.tx ?? null) : null);
+	const load = $derived(view?.load ?? { kind: 'idle' as const });
+	const step = $derived<OutsideStep>(view?.step ?? { kind: 'idle' });
+	/** What the wallet's account may do with it, as the core says. */
+	const can = $derived(view?.actions ?? null);
+	const txHashes = $derived(tx ? (tx.hashes as SafeTxHashes) : null);
 	/** A live request for the same transaction is open: it is answered there, not twice. */
 	const liveSame = $derived(
-		!!view &&
+		!!tx &&
 			activity.some(
 				(a) =>
 					!a.outcome &&
 					a.safeTx &&
 					coreReady &&
-					hashesOf(a)?.safeTxHash.toLowerCase() === view.item.safeTxHash.toLowerCase()
+					hashesOf(a)?.safeTxHash.toLowerCase() === tx.item.safeTxHash.toLowerCase()
 			)
 	);
 	let connecting = $state(false);
-	async function connectWallet() {
-		if (!chosen || !bridge) return;
+	function connectWallet() {
+		if (!host || !chosen) return;
 		connecting = true;
-		failure = '';
-		try {
-			const accounts = (await chosen.provider.request({
-				method: 'eth_requestAccounts'
-			})) as string[];
-			bridge.signer.accounts.splice(
-				0,
-				bridge.signer.accounts.length,
-				...accounts.map((a) => a.toLowerCase())
-			);
-			tick++;
-		} catch (error) {
-			failure = problemText(walletProblem(error), m, fillTemplate, walletName, '');
-		} finally {
-			connecting = false;
-		}
+		host.dispatch({ type: 'connect_wallet' });
 	}
-
-	let fee = $state<ExecutionFee | null | undefined>(undefined);
-	/** r5reg-13: what the wallet holds of the network's coin, which pays an execution's fee. */
-	let coin = $state<bigint | null | undefined>(undefined);
+	// The wallet answered: connected, or its refusal said.
 	$effect(() => {
-		const tx = outside;
-		const who = account;
-		if (!tx || !who || !view || !tx.canExecute(who)) {
-			fee = undefined;
-			coin = undefined;
-			return;
-		}
-		let alive = true;
-		void Promise.all([tx.fee(who), tx.balance(who)]).then(([f, b]) => {
-			if (!alive) return;
-			fee = f;
-			coin = b;
-		});
-		return () => {
-			alive = false;
-		};
+		if (account || view?.walletFailure) connecting = false;
 	});
+	const failure = $derived(
+		view?.walletFailure ? problemText(view.walletFailure, m, fillTemplate, walletName, '') : ''
+	);
+
+	/** r5reg-13: the fee and the coin, read for the account that can execute it now. */
+	const feeKey = $derived(
+		tx && account && can?.canExecute
+			? `${account}|${tx.item.safeTxHash}|${tx.item.approved}|${tx.item.status}`
+			: ''
+	);
+	$effect(() => {
+		const key = feeKey;
+		const who = untrack(() => account);
+		if (!key || !who || !host) return;
+		const machine = host;
+		untrack(() => {
+			machine.dispatch({ type: 'estimate_fee', account: who });
+			machine.dispatch({ type: 'balance', account: who });
+		});
+	});
+	/** What executing costs (`null`: it cannot say; `undefined`: not read for this account). */
+	const fee = $derived(
+		feeKey && view?.fee && account && view.fee.account.toLowerCase() === account
+			? view.fee.fee
+			: undefined
+	);
+	/** r5reg-13: what the wallet holds of the network's coin, which pays an execution's fee. */
+	const coin = $derived(
+		feeKey && view?.balance && account && view.balance.account.toLowerCase() === account
+			? view.balance.wei === null
+				? null
+				: BigInt(view.balance.wei)
+			: undefined
+	);
 	/**
 	 * r5reg-13: the wallet cannot pay for executing it — less than the fee, or
 	 * nothing at all when the fee could not be worked out. Unknown is not "can't".
 	 */
 	const cannotPay = $derived(
-		coin !== undefined && coin !== null && fee !== undefined && (fee ? coin < fee.wei : coin === 0n)
+		coin !== undefined &&
+			coin !== null &&
+			fee !== undefined &&
+			(fee ? coin < BigInt(fee.wei) : coin === 0n)
 	);
-	const coinOf = (wei: bigint) =>
-		view ? `${formatUnits(wei.toString(), 18)} ${nativeSymbol(view.chainId)}` : '';
+	const coinOf = (wei: bigint | string) =>
+		tx ? `${formatUnits(wei.toString(), 18)} ${nativeSymbol(tx.chainId)}` : '';
 
 	/** Waiting on the wallet, the chain or the mailbox for the link's transaction. */
 	const outsideBusy = $derived(
-		step.kind === 'switching' ||
+		step.kind === 'checking' ||
+			step.kind === 'switching' ||
 			step.kind === 'wallet' ||
 			step.kind === 'mining' ||
 			step.kind === 'sending'
 	);
 	/** r5reg-7: the link's transaction was asked for, and answered, through the pairing. */
 	const handledPaired = $derived(
-		!!view &&
+		!!tx &&
 			coreReady &&
 			activity.some(
 				(a) =>
 					a.outcome &&
 					a.safeTx &&
-					hashesOf(a)?.safeTxHash.toLowerCase() === view.item.safeTxHash.toLowerCase()
+					hashesOf(a)?.safeTxHash.toLowerCase() === tx.item.safeTxHash.toLowerCase()
 			)
 	);
 	/**
@@ -511,62 +485,35 @@
 	 * a stale copy beside the current one.
 	 */
 	const showOutside = $derived(
-		!!outside &&
+		linked &&
 			!liveSame &&
 			(outsideBusy ||
 				(!request &&
 					!(inWallet && inWallet.method !== 'wallet_switchEthereumChain') &&
-					!(paired && step.kind === 'idle' && (handledPaired || view?.item.status === 'done'))))
+					!(paired && step.kind === 'idle' && (handledPaired || tx?.item.status === 'done'))))
 	);
 	// A request answered through the pairing moves the link's transaction on: read it again.
 	let answered = 0;
+	const doneCount = $derived(activity.filter((a) => a.outcome === 'done').length);
 	$effect(() => {
-		const done = activity.filter((a) => a.outcome === 'done').length;
-		if (done > answered && outside && step.kind === 'idle') void outside.refresh();
+		const done = doneCount;
+		if (done > answered && linked && untrack(() => step.kind) === 'idle') {
+			untrack(() => host?.dispatch({ type: 'refresh' }));
+		}
 		answered = done;
 	});
 
 	/**
-	 * r4C-14: Vela's request, counted as the mailbox and the chain hold it now.
-	 * Its approvals already enough: nothing to sign — the Sign button is not
-	 * offered (Decline is), whatever Vela still thinks.
+	 * r4C-14: Vela's request, counted as the mailbox and the chain hold it now
+	 * (the core's): its approvals already enough, nothing to sign — the Sign
+	 * button is not offered (Decline is), whatever Vela still thinks.
 	 */
-	let counted = $state<{ hash: string; tx: OutsideTransaction | null } | null>(null);
-	$effect(() => {
-		const entry = request?.entry;
-		const st = entry?.safeTx;
-		const hash = entry && coreReady ? hashesOf(entry)?.safeTxHash.toLowerCase() : undefined;
-		if (!st || !hash || untrack(() => counted?.hash) === hash) return;
-		counted = { hash, tx: null };
-		void readTransaction({ chainId: st.chainId, multisig: st.safe.toLowerCase(), safeTxHash: hash })
-			.then((tx) => {
-				if (untrack(() => counted?.hash) === hash) counted = { hash, tx };
-			})
-			.catch(() => {});
-	});
-	const requestEnough = $derived.by(() => {
-		const entry = request?.entry;
-		const tx = counted?.tx;
-		if (!entry || !tx || hashesOf(entry)?.safeTxHash.toLowerCase() !== counted?.hash) return false;
-		return tx.enough && !tx.hasApproved(entry.account);
-	});
-
+	const requestEnough = $derived(view?.requestEnough ?? false);
 	/**
 	 * r5reg-23: Vela's request names its multisig as the link's review does —
 	 * the registry's genesis, only if the core derives the address from it.
 	 */
-	let requestGenesis = $state<{ safe: string; genesis: Genesis | null } | null>(null);
-	$effect(() => {
-		const safe = request?.entry.safeTx?.safe.toLowerCase();
-		if (!safe || requestGenesis?.safe === safe) return;
-		let alive = true;
-		void verifiedGenesis(safe).then((genesis) => {
-			if (alive) requestGenesis = { safe, genesis };
-		});
-		return () => {
-			alive = false;
-		};
-	});
+	const requestGenesis = $derived((view?.requestGenesis ?? null) as Genesis | null);
 
 	/**
 	 * r4C-12: what each request was, by its number — "Approve #7 · Send 0.02
@@ -593,11 +540,11 @@
 	async function labelOf(a: ActivityEntry): Promise<string | null> {
 		try {
 			if (a.method === 'eth_signTypedData_v4' && a.safeTx) {
-				return await txLabel(a.safeTx.chainId, a.safeTx.safe, a.safeTx.tx);
+				return await txLabel(a.safeTx.chainId, a.safeTx.safe, a.safeTx.tx as SafeTx);
 			}
 			if (a.method === 'eth_sendTransaction' && a.send) {
-				const tx = executed(a.send);
-				if (tx) return fillTemplate(m.rowExecute, { number: numbered(BigInt(tx.nonce)) });
+				const sent = executed(a.send);
+				if (sent) return fillTemplate(m.rowExecute, { number: numbered(BigInt(sent.nonce)) });
 			}
 		} catch {
 			// the generic words stand
@@ -606,9 +553,9 @@
 	}
 
 	/** "Approve #7 · Send 0.02 USDC to 0x…", or "Reject #8" for a cancellation. */
-	async function txLabel(chainId: number, safe: string, tx: SafeTx): Promise<string> {
-		const action = reviewTx(chainId, safe, tx).action;
-		const nonce = BigInt(tx.nonce);
+	async function txLabel(chainId: number, safe: string, safeTx: SafeTx): Promise<string> {
+		const action = reviewTx(chainId, safe, safeTx).action;
+		const nonce = BigInt(safeTx.nonce);
 		if (action?.kind === 'cancel') return fillTemplate(m.rowReject, { number: numbered(nonce) });
 		const what = await actionTitle(all, chainId, action, nonce);
 		const to = actionRecipient(action);
@@ -631,21 +578,23 @@
 		if (!data.startsWith('0x6a761202')) return null;
 		const word = (i: number) => BigInt(`0x${data.slice(10 + i * 64, 10 + (i + 1) * 64) || '0'}`);
 		const known: { safe: string; tx: SafeTx }[] = [
-			...activity.flatMap((x) => (x.safeTx ? [{ safe: x.safeTx.safe, tx: x.safeTx.tx }] : [])),
-			...(view ? [{ safe: view.safe, tx: view.tx }] : [])
+			...activity.flatMap((x) =>
+				x.safeTx ? [{ safe: x.safeTx.safe, tx: x.safeTx.tx as SafeTx }] : []
+			),
+			...(tx ? [{ safe: tx.safe, tx: tx.tx as SafeTx }] : [])
 		];
 		return (
 			known.find(
-				({ safe, tx }) =>
+				({ safe, tx: t }) =>
 					safe.toLowerCase() === send.to.toLowerCase() &&
-					BigInt(tx.to) === word(0) &&
-					BigInt(tx.value) === word(1) &&
-					BigInt(tx.operation) === word(3) &&
-					BigInt(tx.safeTxGas) === word(4) &&
-					BigInt(tx.baseGas) === word(5) &&
-					BigInt(tx.gasPrice) === word(6) &&
-					BigInt(tx.gasToken) === word(7) &&
-					BigInt(tx.refundReceiver) === word(8)
+					BigInt(t.to) === word(0) &&
+					BigInt(t.value) === word(1) &&
+					BigInt(t.operation) === word(3) &&
+					BigInt(t.safeTxGas) === word(4) &&
+					BigInt(t.baseGas) === word(5) &&
+					BigInt(t.gasPrice) === word(6) &&
+					BigInt(t.gasToken) === word(7) &&
+					BigInt(t.refundReceiver) === word(8)
 			)?.tx ?? null
 		);
 	}
@@ -656,11 +605,14 @@
 	 */
 	let mine = $state<Row[]>([]);
 	let mineLabel = $state('');
+	const labelKey = $derived(
+		tx && coreReady ? `${tx.chainId}|${tx.safe}|${tx.item.safeTxHash}` : ''
+	);
 	$effect(() => {
-		const v = view;
-		if (!v || !coreReady) return;
+		const v = labelKey ? untrack(() => tx) : null;
+		if (!v) return;
 		let alive = true;
-		void txLabel(v.chainId, v.safe, v.tx)
+		void txLabel(v.chainId, v.safe, v.tx as SafeTx)
 			.then((label) => {
 				if (alive) mineLabel = label;
 			})
@@ -669,13 +621,15 @@
 			alive = false;
 		};
 	});
-	let logged: OutsideStep | null = null;
+	const stepKey = $derived(JSON.stringify(step));
+	let logged = JSON.stringify({ kind: 'idle' });
 	$effect(() => {
-		const s = step;
-		const v = view;
-		if (s === logged || !v) return;
-		logged = s;
-		const number = numbered(v.item.nonce);
+		const key = stepKey;
+		const s = untrack(() => step);
+		const v = untrack(() => tx);
+		if (key === logged || !v) return;
+		logged = key;
+		const number = numbered(BigInt(v.item.nonce));
 		const row = (label: string, outcome: string, bad = false) => {
 			const at = Date.now();
 			const before = untrack(() => mine);
@@ -716,22 +670,13 @@
 	let rejecting = $state(false);
 	/**
 	 * §3.5: on a network where something besides its members can act for the
-	 * multisig, each action from here asks first — named what was found — and
+	 * multisig, the core asks before each action — named what was found — and
 	 * nothing is remembered; "Don't sign" leaves it undone.
 	 */
-	let riskAsk = $state<(() => Promise<void>) | null>(null);
-	function act(run: () => Promise<void>) {
-		if (outside?.gate?.kind === 'risk') riskAsk = run;
-		else void run();
-	}
-	async function riskAnswer(yes: boolean) {
-		const run = riskAsk;
-		riskAsk = null;
-		if (yes && run) await run();
-	}
+	const riskAsk = $derived(host?.risk ?? null);
 
 	/** r5reg-12: the mailbox's refusal in plain words, never its raw text. */
-	function refusedText(kind: RefusalKind): string {
+	function refusedText(kind: OutsideRefusalKind): string {
 		switch (kind) {
 			case 'setupUnchecked':
 				return m.refusedSetupUnchecked;
@@ -749,28 +694,54 @@
 	}
 
 	function stepFailure(s: Extract<OutsideStep, { kind: 'failed' }>): string {
-		if (s.problem)
-			return problemText(
-				s.problem,
-				m,
-				fillTemplate,
-				walletName,
-				view ? chainName(view.chainId) : ''
-			);
-		if (s.reason === 'badSignature') return m.badSignature;
-		if (s.reason === 'notSent') return m.notSent;
-		if (s.reason === 'noEthSign') return m.mailboxNoEthSign;
-		// §3.5: no deploy from a genesis the core does not find Verified there.
-		if (s.reason === 'deployRefused' || s.reason === 'deployUnverified') {
-			const network = view ? chainName(view.chainId) : '';
-			return s.reason === 'deployRefused'
-				? fillTemplate(all.authority.deployRefused, { network })
-				: fillTemplate(all.authority.deployUnverified, { network });
-		}
-		if (s.reason.startsWith('reverted')) return m.reverted;
+		const network = tx ? chainName(tx.chainId) : '';
+		if (s.problem) return problemText(s.problem, m, fillTemplate, walletName, network);
+		const reason = s.reason;
 		if (s.refused) return refusedText(s.refused);
-		return fillTemplate(m.walletFailed, { wallet: walletName, reason: s.reason });
+		switch (reason?.kind) {
+			case 'badSignature':
+				return m.badSignature;
+			case 'notSent':
+				return m.notSent;
+			case 'noEthSign':
+				return m.mailboxNoEthSign;
+			// §3.5: no deploy from a genesis the core does not find Verified there.
+			case 'deployRefused':
+				return fillTemplate(all.authority.deployRefused, { network });
+			case 'deployUnverified':
+				return fillTemplate(all.authority.deployUnverified, { network });
+			case 'reverted':
+				return m.reverted;
+			// §3.5 / §3.6, read again right before the wallet was asked.
+			case 'unchecked':
+				return fillTemplate(all.authority.signUnchecked, { network });
+			case 'readOnly':
+				return fillTemplate(all.authority.refusedOn, { network });
+			case 'blocked':
+				return all.review.blocked;
+			case 'notMember':
+				return fillTemplate(m.notOwnerHere, {
+					account: account ? shortenAddress(eip55(account)) : '—',
+					network
+				});
+			case 'notLanded':
+				return fillTemplate(m.walletFailed, {
+					wallet: walletName,
+					reason: `not on chain after 180 s: ${reason.txHash}`
+				});
+			case 'noTransaction':
+				return fillTemplate(m.walletFailed, {
+					wallet: walletName,
+					reason: 'The wallet answered no transaction'
+				});
+			case 'refused':
+				return refusedText('other');
+			default:
+				return fillTemplate(m.walletFailed, { wallet: walletName, reason: '' });
+		}
 	}
+
+	const act = (event: Parameters<OutsidePageHost['dispatch']>[0]) => host?.dispatch(event);
 </script>
 
 <svelte:head><title>{m.pageTitle}</title></svelte:head>
@@ -793,7 +764,7 @@
 		<!-- r4C-1: this page's own way onto the relay, said with what to do. -->
 		<section class="card trouble" role="alert" data-testid="connect-relay">
 			<p class="error">{relayText(relay)}</p>
-			<Button variant="secondary" shape="rounded" onclick={() => bridge?.retryRelay()}
+			<Button variant="secondary" shape="rounded" onclick={() => host?.retryRelay()}
 				>{m.retry}</Button
 			>
 		</section>
@@ -803,8 +774,8 @@
 		<!-- r4D-16: from the first frame (prerendered), a spinner and what it waits for. -->
 		<p class="waiting" aria-busy="true" data-testid="connect-booting">
 			<span class="spinner" aria-hidden="true"></span>
-			{#if invited || outside}
-				{invited || !outside ? m.connectingVela : m.loadingTx}
+			{#if invited || linked}
+				{invited || !linked ? m.connectingVela : m.loadingTx}
 			{:else}
 				<!-- Round 5: before this page runs, `app.html` read the fragment — an
 				     approve-later link says "Reading the transaction…" from its first frame. -->
@@ -821,7 +792,7 @@
 				>
 			{/if}
 		</section>
-	{:else if !bridge}
+	{:else if !picked}
 		<section class="card">
 			<h2>{m.chooseWallet}</h2>
 			<ul class="wallets">
@@ -842,7 +813,10 @@
 				<p class="muted">{m.askNote}</p>
 				{@render who()}
 				<div class="row">
-					<Button variant="secondary" shape="rounded" onclick={() => prompt.answer(false)}
+					<Button
+						variant="secondary"
+						shape="rounded"
+						onclick={() => act({ type: 'answer_connect', session: prompt.session, approve: false })}
 						>{m.decline}</Button
 					>
 					<!-- ms-14: an account that is not a member is not connected. -->
@@ -850,14 +824,15 @@
 						variant="primary"
 						shape="rounded"
 						disabled={wrongAccount}
-						onclick={() => prompt.answer(true)}>{m.connect}</Button
+						onclick={() => act({ type: 'answer_connect', session: prompt.session, approve: true })}
+						>{m.connect}</Button
 					>
 				</div>
 			</section>
 		{/if}
 
 		{#if request}
-			{@const entry = request.entry}
+			{@const entry = request}
 			{@const hashes = hashesOf(entry)}
 			<!-- r4C-7: Vela's request, read before the wallet is asked. -->
 			<section class="card" aria-live="polite" data-testid="connect-request">
@@ -867,11 +842,9 @@
 						signing={data.signingMessages}
 						chainId={entry.safeTx.chainId}
 						safe={entry.safeTx.safe}
-						tx={entry.safeTx.tx}
+						tx={entry.safeTx.tx as SafeTx}
 						{hashes}
-						genesis={requestGenesis?.safe === entry.safeTx.safe.toLowerCase()
-							? requestGenesis.genesis
-							: null}
+						genesis={requestGenesis}
 					/>
 				{:else if entry.method === 'eth_signTypedData_v4'}
 					<p class="error" role="alert">{m.notSafeTx}</p>
@@ -890,7 +863,11 @@
 					</p>
 				{/if}
 				<div class="row">
-					<Button variant="secondary" shape="rounded" onclick={() => request.answer(false)}
+					<Button
+						variant="secondary"
+						shape="rounded"
+						onclick={() =>
+							act({ type: 'answer_request', session: entry.session, id: entry.id, go: false })}
 						>{m.decline}</Button
 					>
 					{#if !requestEnough && (entry.method !== 'eth_signTypedData_v4' || (entry.safeTx && hashes))}
@@ -898,7 +875,8 @@
 							variant="value"
 							shape="rounded"
 							disabled={wrongAccount}
-							onclick={() => request.answer(true)}
+							onclick={() =>
+								act({ type: 'answer_request', session: entry.session, id: entry.id, go: true })}
 							>{entry.stage === 'fallback'
 								? m.signHash
 								: fillTemplate(
@@ -976,18 +954,18 @@
 		{:else if sessions.some((s) => s.declined)}
 			<!-- ms-12: the person said no here; Vela says the same. -->
 			<p class="muted" data-testid="connect-declined">{m.declinedHere}</p>
-		{:else if velaAbsent && !outside}
+		{:else if velaAbsent && !linked}
 			<p class="muted" role="status" data-testid="connect-vela-absent">{m.velaNotConnected}</p>
 		{:else if connectingVela && relay.kind !== 'failed'}
 			<p class="waiting" aria-busy="true" data-testid="connect-waiting-vela">
 				<span class="spinner" aria-hidden="true"></span>{m.connectingVela}
 			</p>
-		{:else if sessions.length === 0 && !outside}
+		{:else if sessions.length === 0 && !linked}
 			<p class="muted">{m.noSession}</p>
 		{/if}
 
-		{#if outside && showOutside}
-			{@render fromHere(outside)}
+		{#if showOutside}
+			{@render fromHere()}
 		{/if}
 
 		{#if rows.length > 0}
@@ -1010,8 +988,10 @@
 		{#if live.length > 0}
 			<div class="end">
 				{#each live as s (s.id)}
-					<Button variant="secondary" shape="rounded" onclick={() => bridge?.end(s.id)}
-						>{m.disconnect}</Button
+					<Button
+						variant="secondary"
+						shape="rounded"
+						onclick={() => act({ type: 'end', session: s.id })}>{m.disconnect}</Button
 					>
 				{/each}
 			</div>
@@ -1043,78 +1023,88 @@
 {/snippet}
 
 <!-- r4C-2 / r4C-9: the link's transaction, approved, executed or rejected from here. -->
-{#snippet fromHere(tx: OutsideTransaction)}
+{#snippet fromHere()}
 	<section class="card" data-testid="connect-outside">
-		{#if tx.load.kind === 'loading'}
+		{#if load.kind === 'loading' || load.kind === 'idle'}
 			<p class="waiting" aria-busy="true">
 				<span class="spinner" aria-hidden="true"></span>{m.loadingTx}
 			</p>
-		{:else if tx.load.kind === 'missing'}
+		{:else if load.kind === 'missing'}
 			<p class="muted" data-testid="outside-missing">{m.missingTx}</p>
-			<Button variant="secondary" shape="rounded" onclick={() => tx.refresh()}>{m.retry}</Button>
-		{:else if tx.load.kind === 'mismatch'}
+			<Button variant="secondary" shape="rounded" onclick={() => act({ type: 'refresh' })}
+				>{m.retry}</Button
+			>
+		{:else if load.kind === 'mismatch'}
 			<p class="error" role="alert" data-testid="outside-mismatch">{m.mismatchTx}</p>
-		{:else if tx.load.kind === 'unavailable'}
+		{:else if load.kind === 'unavailable'}
 			<p class="error" role="alert" data-testid="outside-unavailable">
 				{fillTemplate(m.txUnavailable, {
-					what: tx.load.what === 'mailbox' ? m.whatMailbox : m.whatChain
+					what: load.what === 'mailbox' ? m.whatMailbox : m.whatChain
 				})}
 			</p>
-			<Button variant="secondary" shape="rounded" onclick={() => tx.refresh()}>{m.retry}</Button>
-		{:else if view}
+			<Button variant="secondary" shape="rounded" onclick={() => act({ type: 'refresh' })}
+				>{m.retry}</Button
+			>
+		{:else if tx && txHashes}
+			{@const gate = tx.gate}
 			<TxReview
 				m={all}
 				signing={data.signingMessages}
-				chainId={view.chainId}
-				safe={view.safe}
-				tx={view.tx}
-				hashes={view.hashes}
-				genesis={view.genesis}
-				chainNonce={view.members.nonce}
+				chainId={tx.chainId}
+				safe={tx.safe}
+				tx={tx.tx as SafeTx}
+				hashes={txHashes}
+				genesis={tx.genesis as Genesis | null}
+				chainNonce={BigInt(tx.members.nonce)}
 			/>
 			<!-- §3.5: who can act for it on this network, as Vela judges it. -->
-			{#if tx.gate?.kind === 'refused'}
+			{#if gate.kind === 'refused'}
 				<AuthorityNotice
 					m={all}
 					kind="refused"
-					findings={tx.gate.findings}
-					readOnlyOn={[view.chainId]}
+					findings={gate.findings as Finding[]}
+					readOnlyOn={[tx.chainId]}
 				/>
-			{:else if tx.gate?.kind === 'risk'}
-				<AuthorityNotice m={all} kind="risk" findings={tx.gate.findings} />
-			{:else if tx.gate?.kind === 'unchecked' && view.item.status !== 'done'}
+			{:else if gate.kind === 'risk'}
+				<AuthorityNotice m={all} kind="risk" findings={gate.findings as Finding[]} />
+			{:else if gate.kind === 'unchecked' && tx.item.status !== 'done'}
 				<p class="error" role="alert" data-testid="outside-unchecked">
-					{fillTemplate(all.authority.signUnchecked, { network: chainName(view.chainId) })}
+					{fillTemplate(all.authority.signUnchecked, { network: chainName(tx.chainId) })}
 				</p>
-				<Button variant="secondary" shape="rounded" onclick={() => tx.refresh()}>{m.retry}</Button>
+				<Button variant="secondary" shape="rounded" onclick={() => act({ type: 'refresh' })}
+					>{m.retry}</Button
+				>
+			{:else if gate.kind === 'blocked' && tx.item.status !== 'done'}
+				<!-- §3.6: the core does not sign what it reads as taking the multisig over. -->
+				<p class="error" role="alert" data-testid="outside-blocked">{all.review.blocked}</p>
 			{/if}
 			<!-- Counted while it is open; once its number is used, what happened is said instead. -->
-			{#if view.item.status !== 'done' && step.kind !== 'executed'}
+			{#if tx.item.status !== 'done' && step.kind !== 'executed'}
 				<p class="approvals" data-testid="outside-approvals">
 					{m.approvalsLabel} ·
 					{fillTemplate(all.status.progress, {
-						approved: view.item.approved,
-						threshold: view.item.threshold
+						approved: tx.item.approved,
+						threshold: tx.item.threshold
 					})}
 				</p>
 			{/if}
-			{#if view.item.status === 'done' && step.kind !== 'executed'}
+			{#if tx.item.status === 'done' && step.kind !== 'executed'}
 				<p class="muted" data-testid="outside-done">{m.doneTx}</p>
 			{/if}
 
-			{#if riskAsk && tx.gate?.kind === 'risk'}
+			{#if riskAsk}
 				<div class="risk-ask" role="alert" data-testid="outside-risk-confirm">
-					<p>{fillTemplate(all.authority.signRiskBody, { network: chainName(view.chainId) })}</p>
+					<p>{fillTemplate(all.authority.signRiskBody, { network: chainName(tx.chainId) })}</p>
 					<ul>
-						{#each findingLines(all, tx.gate.findings) as line (line)}
+						{#each findingLines(all, riskAsk.findings as Finding[]) as line (line)}
 							<li class="mono">{line}</li>
 						{/each}
 					</ul>
 					<div class="row">
-						<Button variant="secondary" shape="rounded" onclick={() => riskAnswer(false)}
+						<Button variant="secondary" shape="rounded" onclick={() => riskAsk.answer(false)}
 							>{all.authority.signRiskCancel}</Button
 						>
-						<Button variant="danger" shape="rounded" onclick={() => riskAnswer(true)}
+						<Button variant="danger" shape="rounded" onclick={() => riskAsk.answer(true)}
 							>{all.authority.signRiskConfirm}</Button
 						>
 					</div>
@@ -1139,11 +1129,11 @@
 			{:else if step.kind === 'executed'}
 				<p class="lead ok" data-testid="outside-executed">
 					<Icon icon={UTILITY_ICONS.check} size="md" />{all.proposal.executed}
-					{#if explorerTxUrl(view.chainId, step.txHash)}
+					{#if explorerTxUrl(tx.chainId, step.txHash)}
 						·
 						<!-- eslint-disable svelte/no-navigation-without-resolve -- an external block explorer -->
 						<a
-							href={explorerTxUrl(view.chainId, step.txHash)}
+							href={explorerTxUrl(tx.chainId, step.txHash)}
 							target="_blank"
 							rel="noopener noreferrer">{all.proposal.explorer}</a
 						>
@@ -1156,7 +1146,7 @@
 			{:else if step.kind === 'switching'}
 				<p class="waiting">
 					<span class="spinner" aria-hidden="true"></span>{fillTemplate(all.external.switching, {
-						chain: chainName(view.chainId)
+						chain: chainName(tx.chainId)
 					})}
 				</p>
 			{:else if step.kind === 'wallet' || step.kind === 'mining'}
@@ -1166,7 +1156,7 @@
 						<span class="spinner" aria-hidden="true"></span>
 						{step.kind === 'mining'
 							? fillTemplate(m.mining, {
-									network: chainName(view.chainId),
+									network: chainName(tx.chainId),
 									elapsed: elapsed(step.since)
 								})
 							: fillTemplate(m.inWallet, { wallet: walletName, elapsed: elapsed(step.since) })}
@@ -1180,7 +1170,7 @@
 						</p>
 					{/if}
 					{#if step.kind === 'wallet'}
-						<Button variant="secondary" shape="rounded" onclick={() => tx.cancel()}
+						<Button variant="secondary" shape="rounded" onclick={() => act({ type: 'cancel' })}
 							>{m.stopWaiting}</Button
 						>
 					{/if}
@@ -1203,59 +1193,56 @@
 					{/if}
 				{/if}
 				{#if step.kind === 'failed' && step.unsent}
-					<Button variant="value" shape="rounded" onclick={() => tx.sendAgain()}
+					<Button variant="value" shape="rounded" onclick={() => act({ type: 'send_again' })}
 						>{m.sendAgain}</Button
 					>
-				{:else if step.kind === 'failed' && step.reason === 'noEthSign' && account && view.members.deployed}
+				{:else if step.kind === 'failed' && step.reason?.kind === 'noEthSign' && account && tx.members.deployed}
 					<!-- r4C-16: the hash form is not taken there: approving on chain is. -->
 					<Button
 						variant="value"
 						shape="rounded"
-						onclick={() => act(() => tx.approveOnChain(chosen!.provider, account))}
-						>{m.approveOnChain}</Button
+						onclick={() => act({ type: 'approve_on_chain', account })}>{m.approveOnChain}</Button
 					>
 				{:else if !account}
 					<Button variant="primary" shape="rounded" loading={connecting} onclick={connectWallet}
 						>{fillTemplate(m.connectWallet, { wallet: walletName })}</Button
 					>
-				{:else if !tx.isOwner(account) && view.item.status !== 'done'}
+				{:else if !can?.isOwner && tx.item.status !== 'done'}
 					<p class="error" role="alert" data-testid="outside-not-owner">
 						{fillTemplate(m.notOwnerHere, {
 							account: shortenAddress(eip55(account)),
-							network: chainName(view.chainId)
+							network: chainName(tx.chainId)
 						})}
 					</p>
 				{:else if step.kind === 'unsupported'}
 					<!-- r4C-16: no typed data: the hash itself, or on chain. -->
 					<p class="muted" data-testid="outside-unsupported">
 						{fillTemplate(m.typedUnsupported, { wallet: walletName })}
-						{fillTemplate(m.ethSignOffer, { hash: view.hashes.safeTxHash })}
+						{fillTemplate(m.ethSignOffer, { hash: txHashes.safeTxHash })}
 					</p>
 					<Button
 						variant="value"
 						shape="rounded"
-						onclick={() => act(() => tx.approve(chosen!.provider, account, 'ethSign'))}
-						>{m.signHash}</Button
+						onclick={() => act({ type: 'approve', account, form: 'ethSign' })}>{m.signHash}</Button
 					>
-					{#if view.members.deployed}
+					{#if tx.members.deployed}
 						<p class="muted">{m.approveOnChainOffer}</p>
 						<Button
 							variant="secondary"
 							shape="rounded"
-							onclick={() => act(() => tx.approveOnChain(chosen!.provider, account))}
-							>{m.approveOnChain}</Button
+							onclick={() => act({ type: 'approve_on_chain', account })}>{m.approveOnChain}</Button
 						>
 					{/if}
 				{:else}
-					{#if tx.hasApproved(account)}
+					{#if can?.hasApproved}
 						<p class="muted" data-testid="outside-already">
 							{fillTemplate(m.alreadyApproved, { account: shortenAddress(eip55(account)) })}
 						</p>
-					{:else if tx.enough && tx.open}
+					{:else if can?.enough && can.open}
 						<!-- r4C-14: the approvals are enough: nothing to sign, only executing is left. -->
 						<p class="muted" data-testid="outside-enough">{m.enoughApprovals}</p>
 					{/if}
-					{#if tx.canExecute(account)}
+					{#if can?.canExecute}
 						<!-- r4C-9: the owner's own wallet executes it, and pays: said first. -->
 						{#if cannotPay}
 							<!-- r5reg-13: a wallet that can't pay is told what it needs; Execute steps back. -->
@@ -1265,7 +1252,7 @@
 											fee: coinOf(fee.wei),
 											balance: coinOf(coin ?? 0n)
 										})
-									: fillTemplate(m.executeNoGas, { symbol: nativeSymbol(view.chainId) })}
+									: fillTemplate(m.executeNoGas, { symbol: nativeSymbol(tx.chainId) })}
 							</p>
 						{:else}
 							<p class="muted" data-testid="outside-fee">
@@ -1276,7 +1263,7 @@
 										})
 									: m.executeFeeUnknown}
 								{#if fee && fee.count > 1}{fillTemplate(m.executeSteps, {
-										network: chainName(view.chainId)
+										network: chainName(tx.chainId)
 									})}{/if}
 							</p>
 						{/if}
@@ -1284,29 +1271,28 @@
 							variant={cannotPay ? 'secondary' : 'value'}
 							shape="rounded"
 							disabled={cannotPay}
-							onclick={() => act(() => tx.execute(chosen!.provider, account))}
+							onclick={() => act({ type: 'execute', account })}
 							>{fillTemplate(m.executeWith, { wallet: walletName })}</Button
 						>
 					{/if}
-					{#if tx.canApprove(account) && (!tx.canExecute(account) || cannotPay)}
+					{#if can?.canApprove && (!can.canExecute || cannotPay)}
 						<Button
 							variant="value"
 							shape="rounded"
-							onclick={() => act(() => tx.approve(chosen!.provider, account))}
+							onclick={() => act({ type: 'approve', account, form: null })}
 							>{fillTemplate(m.signInWallet, { wallet: walletName })}</Button
 						>
-					{:else if tx.canApprove(account)}
+					{:else if can?.canApprove}
 						<Button
 							variant="secondary"
 							shape="rounded"
-							onclick={() => act(() => tx.approve(chosen!.provider, account))}
-							>{m.approveOnly}</Button
+							onclick={() => act({ type: 'approve', account, form: null })}>{m.approveOnly}</Button
 						>
 					{/if}
-					{#if tx.canReject(account)}
+					{#if can?.canReject}
 						{#if rejecting}
 							<p class="muted">
-								{fillTemplate(all.proposal.rejectHint, { threshold: view.item.threshold })}
+								{fillTemplate(all.proposal.rejectHint, { threshold: tx.item.threshold })}
 							</p>
 							<div class="row">
 								<Button variant="secondary" shape="rounded" onclick={() => (rejecting = false)}
@@ -1315,8 +1301,7 @@
 								<Button
 									variant="danger"
 									shape="rounded"
-									onclick={() => act(() => tx.reject(chosen!.provider, account))}
-									>{all.proposal.reject}</Button
+									onclick={() => act({ type: 'reject', account })}>{all.proposal.reject}</Button
 								>
 							</div>
 						{:else}

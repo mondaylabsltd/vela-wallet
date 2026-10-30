@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- a stand-in session */
 /**
- * The "Sign with another wallet" sheet in a browser.
+ * The "Sign with another wallet" sheet in a browser, drawing the core's
+ * session machine's view (a stand-in host, `fake-session.svelte.ts`: the
+ * machine itself is pinned by the Rust suite).
  *
  * r4C-6: the pairing is shown — which account and wallet — with Use another
  * wallet (a fresh room, its own code) and Unpair (the pairing ended), and the
@@ -15,84 +17,71 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
-import { CallError } from '$lib/walletpair/client';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
+import type { OutsideSessionOutcome } from '../generated/OutsideSessionOutcome';
+import type { OutsideSessionView } from '../generated/OutsideSessionView';
 
 const OWNER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 
 const fake = vi.hoisted(() => ({
-	made: [] as any[],
-	sign: null as null | ((w: any) => Promise<{ owner: string; signature: string }>),
-	mailbox: [] as unknown[],
-	/** What the next session starts as (the stand-in is not reactive: set before it is read). */
-	next: {} as Record<string, unknown>
+	session: null as any,
+	/** What the session starts as (a pairing kept before, unless a test says). */
+	next: {} as Record<string, unknown>,
+	/** An approval the mailbox holds from the link alone. */
+	mailbox: null as null | { owner: string; signature: string }
 }));
 
-vi.mock('../external/session.svelte', async () => {
-	class FakeWallet {
-		phase = 'waiting';
-		since = Date.now();
-		relay: any = { kind: 'up' };
-		accounts: string[] = [];
-		wallet: string | null = null;
-		away = false;
-		link: string;
-		resumed: boolean;
-		ended = false;
-		left = false;
-		retried = 0;
-		constructor(resumed: boolean) {
-			this.resumed = resumed;
-			this.link = resumed ? 'https://w/en/connect#for=x' : 'https://w/en/connect#wss%3A&for=x';
-			if (resumed) {
-				this.accounts = [OWNER];
-				this.wallet = 'Rabby';
+vi.mock('../shell/outside-session.svelte', async () => {
+	const { FakeSession, sessionView } = await import('./fake-session.svelte');
+	const fresh = (): Partial<OutsideSessionView> => ({
+		resumed: false,
+		invite: 'wss://relay#invite',
+		accounts: [],
+		wallet: null,
+		pairedAccount: null,
+		phase: 'waiting',
+		failure: null
+	});
+	return {
+		MAILBOX_EVERY_MS: 8_000,
+		connectPage: () => 'https://w/en/connect',
+		OutsideSessionHost: class extends FakeSession {
+			constructor() {
+				super(
+					sessionView({
+						resumed: true,
+						invite: null,
+						accounts: [OWNER],
+						wallet: 'Rabby',
+						pairedAccount: OWNER,
+						...fake.next
+					}),
+					(session, event) => {
+						switch (event.type) {
+							case 'another_wallet':
+								session.set(fresh());
+								return;
+							case 'stop_waiting':
+								session.set({ failure: { kind: 'stoppedWaiting' } });
+								return;
+							case 'mailbox_tick':
+								if (fake.mailbox) {
+									session.set({ outcome: { kind: 'approved', approval: fake.mailbox } });
+								}
+								return;
+							case 'close':
+								session.set({ outcome: { kind: 'cancelled' } });
+						}
+					}
+				);
+				fake.session = this;
 			}
-			Object.assign(this, fake.next);
-			fake.made.push(this);
 		}
-		get pairedAccount() {
-			return this.accounts[0] ?? null;
-		}
-		static for() {
-			return new FakeWallet(true);
-		}
-		static fresh() {
-			return new FakeWallet(false);
-		}
-		to(p: string) {
-			this.phase = p;
-		}
-		retryRelay() {
-			this.retried += 1;
-		}
-		signTypedData() {
-			return fake.sign ? fake.sign(this) : new Promise(() => {});
-		}
-		leave() {
-			this.left = true;
-		}
-		end() {
-			this.ended = true;
-		}
-	}
-	class WalletDeclinedError extends Error {}
-	class WalletOtherChainError extends Error {}
-	return { ExternalWallet: FakeWallet, WalletDeclinedError, WalletOtherChainError };
+	};
 });
-vi.mock('../external/signing.svelte', () => ({
-	typedDataOf: () => ({}),
-	checked: (_hash: string, owners: string[], a: { owner: string; signature: string }) =>
-		owners.includes(a.owner) && a.signature === '0xgood' ? a : null
-}));
-vi.mock('../core/service', () => ({
-	fetchProposals: async () => ({ members: {}, proposals: fake.mailbox })
-}));
 vi.mock('../core/kernel', async (original) => ({
 	...(await original<typeof import('../core/kernel')>()),
-	reviewTx: () => ({ action: { kind: 'transfer' } }),
-	isEcdsaApproval: (a: object) => 'signature' in a,
-	sameAddress: (a: string, b: string) => a?.toLowerCase() === b?.toLowerCase()
+	reviewTx: () => ({ action: { kind: 'transfer' } })
 }));
 vi.mock('$lib/wallet/qr', () => ({ encodeQr: () => ({ modules: 21, path: 'M0 0h1v1H0z' }) }));
 
@@ -115,14 +104,14 @@ function words(): MultisigMessages {
 const SAFE_TX_HASH = `0x${'ab'.repeat(32)}`;
 
 function open() {
-	const resolved: unknown[] = [];
+	const settled: OutsideSessionOutcome[] = [];
 	const request = {
 		chainId: 5042002,
 		safe: '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83',
 		tx: {} as never,
 		safeTxHash: SAFE_TX_HASH,
 		owners: [OWNER],
-		resolve: (a: unknown) => resolved.push(a),
+		settle: (o: OutsideSessionOutcome) => settled.push(o),
 		reject: () => {}
 	};
 	const screen = render(Sheet, {
@@ -135,19 +124,19 @@ function open() {
 			closeLabel: 'Close'
 		}
 	});
-	return { screen, resolved };
+	return { screen, settled };
 }
 
 const testid = (id: string) => document.querySelector(`[data-testid="${id}"]`);
 const button = (label: string) =>
 	[...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as
 		HTMLButtonElement | undefined;
+const events = () => (fake.session?.events ?? []) as { type: string }[];
 
 afterEach(() => {
 	fake.next = {};
-	fake.made = [];
-	fake.sign = null;
-	fake.mailbox = [];
+	fake.session = null;
+	fake.mailbox = null;
 });
 
 describe('the outside-wallet sheet', () => {
@@ -160,9 +149,7 @@ describe('the outside-wallet sheet', () => {
 		expect(testid('external-qr')).not.toBeNull();
 		button('external.useAnother')!.click();
 		await tick();
-		expect(fake.made).toHaveLength(2);
-		expect(fake.made[0].left).toBe(true);
-		expect(fake.made[1].resumed).toBe(false);
+		expect(events()).toContainEqual({ type: 'another_wallet', unpair: false });
 		await vi.waitFor(() => expect(testid('external-paired')).toBeNull());
 		expect(testid('external-link')?.textContent).toContain('wss');
 		await screen.unmount();
@@ -173,8 +160,8 @@ describe('the outside-wallet sheet', () => {
 		await vi.waitFor(() => expect(testid('external-unpair')).not.toBeNull());
 		(testid('external-unpair') as HTMLButtonElement).click();
 		await tick();
-		expect(fake.made[0].ended).toBe(true);
-		expect(fake.made[1].resumed).toBe(false);
+		expect(events()).toContainEqual({ type: 'another_wallet', unpair: true });
+		await vi.waitFor(() => expect(testid('external-paired')).toBeNull());
 		await screen.unmount();
 	});
 
@@ -189,7 +176,7 @@ describe('the outside-wallet sheet', () => {
 			{ timeout: 3000 }
 		);
 		button('external.retry')!.click();
-		expect(fake.made[0].retried).toBe(1);
+		expect(fake.session.retried).toBe(1);
 		await screen.unmount();
 	});
 
@@ -210,20 +197,21 @@ describe('the outside-wallet sheet', () => {
 	});
 
 	it('r4C-11: a wallet failure in its own words, with Try again', async () => {
-		fake.sign = async () => {
-			throw new Error('Ledger: denied');
+		fake.next = {
+			phase: 'confirming',
+			failure: { kind: 'wallet', problem: { kind: 'unknown', reason: 'Ledger: denied' } }
 		};
 		const { screen } = open();
 		await vi.waitFor(() =>
 			expect(testid('external-failure')?.textContent).toBe('Rabby could not sign: Ledger: denied')
 		);
 		expect(button('external.retry')).toBeDefined();
+		button('external.retry')!.click();
+		expect(events()).toContainEqual({ type: 'ask_again' });
 		await screen.unmount();
 	});
 
 	it('r5reg-11: "Use another wallet", the request gone, then the wallet fails: nothing uncaught', async () => {
-		const pending: ((e: unknown) => void)[] = [];
-		fake.sign = () => new Promise((_, reject) => pending.push(reject));
 		const uncaught: unknown[] = [];
 		const onRejection = (event: PromiseRejectionEvent) => {
 			uncaught.push(event.reason);
@@ -234,12 +222,15 @@ describe('the outside-wallet sheet', () => {
 			const { screen } = open();
 			await vi.waitFor(() => expect(button('external.useAnother')).toBeDefined());
 			button('external.useAnother')!.click();
-			await vi.waitFor(() => expect(pending).toHaveLength(2));
+			await tick();
 			// The host's request is answered and gone (closed, or approved from the
 			// link) while the fresh room's wallet call is still out…
 			await screen.rerender({ request: null as never });
 			// …and fails late: the relay never answered.
-			pending[1](new CallError({ code: 4900, message: 'Disconnected' }));
+			fake.session.set({
+				phase: 'confirming',
+				failure: { kind: 'wallet', problem: { kind: 'disconnected' } }
+			});
 			await new Promise((r) => setTimeout(r, 50));
 			expect(uncaught.map(String)).toEqual([]);
 			await screen.unmount();
@@ -249,18 +240,28 @@ describe('the outside-wallet sheet', () => {
 	});
 
 	it('r4C-2: an approval that reaches the mailbox from the link alone ends the request', async () => {
-		fake.mailbox = [
-			{
-				safeTxHash: SAFE_TX_HASH,
-				approvals: [{ owner: OWNER, signature: '0xgood', createdMs: 1 }]
-			}
-		];
+		fake.mailbox = { owner: OWNER, signature: '0xgood' };
 		vi.useFakeTimers({ toFake: ['setInterval'] });
-		const { screen, resolved } = open();
+		const { screen, settled } = open();
 		await vi.advanceTimersByTimeAsync(9_000);
 		vi.useRealTimers();
-		await vi.waitFor(() => expect(resolved).toMatchObject([{ owner: OWNER, signature: '0xgood' }]));
-		expect(fake.made[0].left).toBe(true);
+		await vi.waitFor(() =>
+			expect(settled).toMatchObject([
+				{ kind: 'approved', approval: { owner: OWNER, signature: '0xgood' } }
+			])
+		);
+		expect(events()).toContainEqual({ type: 'mailbox_tick' });
+		await screen.unmount();
+	});
+
+	it('closing the sheet withdraws the ask: the caller is told it was cancelled, once', async () => {
+		const { screen, settled } = open();
+		await vi.waitFor(() => expect(fake.session).not.toBeNull());
+		(document.querySelector('button[aria-label="Close"]') as HTMLButtonElement).click();
+		await vi.waitFor(() => expect(settled).toEqual([{ kind: 'cancelled' }]));
+		expect(events()).toContainEqual({ type: 'close' });
+		await tick();
+		expect(settled).toHaveLength(1);
 		await screen.unmount();
 	});
 });

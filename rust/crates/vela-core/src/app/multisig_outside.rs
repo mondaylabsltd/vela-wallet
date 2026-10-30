@@ -1371,6 +1371,13 @@ pub mod page {
         PeerState { room: String, state: String },
         /// A room paired: its record to keep.
         Paired { room: String, pairing: String },
+        /// A room's way onto the relay, from the shell's transport (its
+        /// token refused, none given, retrying): said as the page's own.
+        Relay {
+            #[serde(default)]
+            room: String,
+            status: relay::RelayStatus,
+        },
         #[serde(skip)]
         Opened { session: String, room: String },
         #[serde(skip)]
@@ -1834,6 +1841,19 @@ pub mod page {
         pub join_failed: Option<String>,
         /// The page's own way onto the relay: the worst of its rooms'.
         pub relay: relay::RelayStatus,
+        /// The wallet would not connect this page (`eth_requestAccounts`
+        /// refused or failed): said with what to do.
+        #[serde(default)]
+        pub wallet_failure: Option<WalletProblem>,
+        /// r5reg-23: the registry's genesis of the request's multisig, when
+        /// the core derives its address from it (it names the multisig).
+        #[cfg_attr(feature = "bindings", ts(type = "unknown"))]
+        #[serde(default)]
+        pub request_genesis: Option<Genesis>,
+        /// r4C-14: the request's approvals already meet the threshold, and
+        /// its account has not approved: nothing to sign.
+        #[serde(default)]
+        pub request_enough: bool,
     }
 
     // -- state -------------------------------------------------------------------
@@ -1965,6 +1985,17 @@ pub mod page {
         connect_prompt: Option<ConnectPrompt>,
         join_failed: Option<String>,
         relays: BTreeMap<String, relay::RelayStatus>,
+        wallet_failure: Option<WalletProblem>,
+        /// Vela's requests read (by safeTxHash, lowercase).
+        request_reads: BTreeMap<String, RequestRead>,
+        started: bool,
+    }
+
+    /// Vela's request as this page read it ([`read_request`]).
+    #[derive(Clone, Debug, Default)]
+    struct RequestRead {
+        genesis: Option<Genesis>,
+        tx: Option<OutsideTxView>,
     }
 
     impl PageState {
@@ -2044,6 +2075,7 @@ pub mod page {
         Fallback { session: String, id: String },
         Switch { session: String, id: String },
         Accounts { session: String },
+        Read { request: SafeTxRequest },
     }
 
     impl crux_core::App for OutsidePage {
@@ -2064,6 +2096,10 @@ pub mod page {
                         let mut s = lock(&model.state);
                         s.service.set_url(&service_url);
                         s.wallet_name = wallet_name;
+                        // Up already (the wallet picked since): its sessions stand.
+                        if std::mem::replace(&mut s.started, true) {
+                            return render();
+                        }
                     }
                     flow(model, |io, st| async move {
                         let loaded = io.load(&[SESSIONS_KEY]).await;
@@ -2088,15 +2124,21 @@ pub mod page {
                     };
                     perform_outs(model, outs)
                 }
-                Event::ConnectWallet => flow(model, |io, st| async move {
-                    if let Ok(list) = wallet_ask(&io, "eth_requestAccounts", json!([])).await {
-                        let accounts = lowercase_list(&list);
-                        let chain = wallet_chain(&io).await.ok();
-                        let mut s = lock(&st);
-                        s.accounts = accounts;
-                        s.wallet_chain = chain;
-                    }
-                }),
+                Event::ConnectWallet => {
+                    lock(&model.state).wallet_failure = None;
+                    flow(model, |io, st| async move {
+                        match wallet_ask(&io, "eth_requestAccounts", json!([])).await {
+                            Ok(list) => {
+                                let accounts = lowercase_list(&list);
+                                let chain = wallet_chain(&io).await.ok();
+                                let mut s = lock(&st);
+                                s.accounts = accounts;
+                                s.wallet_chain = chain;
+                            }
+                            Err((c, m)) => lock(&st).wallet_failure = Some(wallet_problem(c, &m)),
+                        }
+                    })
+                }
                 Event::Link { link } => {
                     {
                         let mut s = lock(&model.state);
@@ -2243,6 +2285,13 @@ pub mod page {
                     drop(s);
                     perform_outs(model, vec![Out::Persist])
                 }
+                Event::Relay { room, status } => {
+                    let mut s = lock(&model.state);
+                    if let Some(id) = s.session_of_room(&room) {
+                        s.relays.insert(id, status);
+                    }
+                    render()
+                }
                 Event::AnswerConnect { session, approve } => {
                     let outs = {
                         let mut s = lock(&model.state);
@@ -2294,6 +2343,17 @@ pub mod page {
                     .find(|a| &a.session == session && &a.id == id)
                     .cloned()
             });
+            let request_read = request
+                .as_ref()
+                .and_then(|r| r.safe_tx.as_ref())
+                .and_then(|t| multisig::safe_tx_hash(t.chain_id, &t.safe, &t.tx).ok())
+                .and_then(|h| s.request_reads.get(&h.to_ascii_lowercase()));
+            let request_enough = request
+                .as_ref()
+                .zip(request_read.and_then(|r| r.tx.as_ref()))
+                .is_some_and(|(r, t)| {
+                    t.enough() && !t.has_approved(r.account.as_deref().unwrap_or(""))
+                });
             OutsidePageView {
                 link: s.link.clone(),
                 load: s.load.clone(),
@@ -2326,6 +2386,9 @@ pub mod page {
                 request,
                 connect_prompt: s.connect_prompt.clone(),
                 join_failed: s.join_failed.clone(),
+                wallet_failure: s.wallet_failure.clone(),
+                request_genesis: request_read.and_then(|r| r.genesis.clone()),
+                request_enough,
                 relay: relay::worst(
                     s.live
                         .keys()
@@ -2384,33 +2447,52 @@ pub mod page {
             (s.link.clone(), s.service.clone(), s.seen.clone())
         };
         let Some(link) = link else { return };
-        let still = |st: &Shared<PageState>| lock(st).link.as_ref() == Some(&link);
-        let set_load = |load: OutsideLoad| {
+        let read = read_link(io, &service, &seen, &link).await;
+        let used = {
             let mut s = lock(st);
-            if s.link.as_ref() == Some(&link) {
-                s.load = load;
-            }
-        };
-        let answer = match service
-            .fetch_proposals(io, link.chain_id, &link.safe, false)
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => {
-                set_load(OutsideLoad::Unavailable {
-                    what: "mailbox".to_owned(),
-                    detail: service_detail(&e),
-                });
+            if s.link.as_ref() != Some(&link) {
                 return;
             }
+            match read {
+                Err(load) => {
+                    s.load = load;
+                    return;
+                }
+                Ok(view) => {
+                    let used = view.item.status == ItemStatus::Done;
+                    s.loaded = Some(Loaded { view });
+                    s.load = OutsideLoad::Ready;
+                    used
+                }
+            }
         };
+        resume(io, st, &link, used).await;
+    }
+
+    /// A transaction a link names, read as this page reads it: the mailbox's
+    /// copy (believed only re-hashed to the link's hash), the chain's
+    /// members, what the chain approved, who can act for it (§3.5) and the
+    /// one review (§3.6) — or why it cannot be read now.
+    async fn read_link(
+        io: &Io<Event>,
+        service: &Service,
+        seen: &Shared<OnChainSeen>,
+        link: &TxLink,
+    ) -> Result<OutsideTxView, OutsideLoad> {
+        let answer = service
+            .fetch_proposals(io, link.chain_id, &link.safe, false)
+            .await
+            .map_err(|e| OutsideLoad::Unavailable {
+                what: "mailbox".to_owned(),
+                detail: service_detail(&e),
+            })?;
         let list = answer.map(|a| a.proposals).unwrap_or_default();
-        let p = match match_proposal(&link, &list) {
+        let p = match match_proposal(link, &list) {
             Matched::Found(p) => *p,
-            Matched::Missing => return set_load(OutsideLoad::Missing),
-            Matched::Mismatch => return set_load(OutsideLoad::Mismatch),
+            Matched::Missing => return Err(OutsideLoad::Missing),
+            Matched::Mismatch => return Err(OutsideLoad::Mismatch),
         };
-        let genesis = verified_genesis(io, &service, &link.safe).await;
+        let genesis = verified_genesis(io, service, &link.safe).await;
         let chain = shell::Chain::default();
         let members = match &genesis {
             Some(g) => chain.read_members(io, link.chain_id, &link.safe, g).await,
@@ -2430,7 +2512,7 @@ pub mod page {
                 }
                 Ok(false) => {
                     // Undeployed, and no genesis to say who its members are.
-                    return set_load(OutsideLoad::Unavailable {
+                    return Err(OutsideLoad::Unavailable {
                         what: "chain".to_owned(),
                         detail: "no genesis".to_owned(),
                     });
@@ -2438,15 +2520,10 @@ pub mod page {
                 Err(e) => Err(e),
             },
         };
-        let members = match members {
-            Ok(m) => m,
-            Err(e) => {
-                return set_load(OutsideLoad::Unavailable {
-                    what: "chain".to_owned(),
-                    detail: e.detail,
-                })
-            }
-        };
+        let members = members.map_err(|e| OutsideLoad::Unavailable {
+            what: "chain".to_owned(),
+            detail: e.detail,
+        })?;
         let on_chain = if members.deployed {
             let open: Vec<String> = members
                 .owners
@@ -2461,7 +2538,7 @@ pub mod page {
             let now = io.now().await;
             on_chain_approvals(
                 io,
-                &seen,
+                seen,
                 link.chain_id,
                 &link.safe,
                 &p.safe_tx_hash,
@@ -2472,9 +2549,7 @@ pub mod page {
         } else {
             Vec::new()
         };
-        let Some(item) = read_item(&link.safe, &members, &p, &on_chain) else {
-            return set_load(OutsideLoad::Mismatch);
-        };
+        let item = read_item(&link.safe, &members, &p, &on_chain).ok_or(OutsideLoad::Mismatch)?;
         let findings = shell::judge_on(
             io,
             link.chain_id,
@@ -2492,10 +2567,8 @@ pub mod page {
             genesis.as_ref(),
         )
         .await;
-        let hashes = match multisig::safe_tx_hashes(link.chain_id, &link.safe, &p.safe_tx) {
-            Ok(h) => h,
-            Err(_) => return set_load(OutsideLoad::Mismatch),
-        };
+        let hashes = multisig::safe_tx_hashes(link.chain_id, &link.safe, &p.safe_tx)
+            .map_err(|_| OutsideLoad::Mismatch)?;
         let gate = gate_of(
             link.chain_id,
             &link.safe,
@@ -2503,29 +2576,66 @@ pub mod page {
             findings.clone(),
             review.as_ref(),
         );
-        if !still(st) {
+        Ok(OutsideTxView {
+            chain_id: link.chain_id,
+            safe: link.safe.clone(),
+            tx: p.safe_tx.clone(),
+            item,
+            members,
+            hashes,
+            genesis,
+            findings,
+            gate,
+            review: review.and_then(|r| serde_json::to_value(r).ok()),
+        })
+    }
+
+    /// r4C-14 / r5reg-23: Vela's request, read as the link's own is — its
+    /// multisig named from the registry's genesis (only if the core derives
+    /// the address from it), and counted as the mailbox and the chain hold
+    /// it now: its approvals already enough, there is nothing to sign.
+    async fn read_request(io: &Io<Event>, st: &Shared<PageState>, request: SafeTxRequest) {
+        let Ok(hash) = multisig::safe_tx_hash(request.chain_id, &request.safe, &request.tx) else {
+            return;
+        };
+        let hash = hash.to_ascii_lowercase();
+        let (service, seen, known) = {
+            let s = lock(st);
+            (
+                s.service.clone(),
+                s.seen.clone(),
+                s.request_reads.contains_key(&hash),
+            )
+        };
+        if known {
             return;
         }
-        let used = item.status == ItemStatus::Done;
-        {
-            let mut s = lock(st);
-            s.loaded = Some(Loaded {
-                view: OutsideTxView {
-                    chain_id: link.chain_id,
-                    safe: link.safe.clone(),
-                    tx: p.safe_tx.clone(),
-                    item,
-                    members,
-                    hashes,
+        lock(st)
+            .request_reads
+            .insert(hash.clone(), RequestRead::default());
+        let genesis = verified_genesis(io, &service, &request.safe).await;
+        lock(st).request_reads.insert(
+            hash.clone(),
+            RequestRead {
+                genesis: genesis.clone(),
+                tx: None,
+            },
+        );
+        let link = TxLink {
+            chain_id: request.chain_id,
+            safe: request.safe.to_ascii_lowercase(),
+            safe_tx_hash: hash.clone(),
+            for_members: Vec::new(),
+        };
+        if let Ok(view) = read_link(io, &service, &seen, &link).await {
+            lock(st).request_reads.insert(
+                hash,
+                RequestRead {
                     genesis,
-                    findings,
-                    gate,
-                    review: review.and_then(|r| serde_json::to_value(r).ok()),
+                    tx: Some(view),
                 },
-            });
-            s.load = OutsideLoad::Ready;
+            );
         }
-        resume(io, st, &link, used).await;
     }
 
     fn service_detail(e: &ServiceFail) -> String {
@@ -3092,8 +3202,9 @@ pub mod page {
     }
 
     /// The transactions `account`'s wallet sends to execute it: whatever must
-    /// be deployed first, then `execTransaction` — the owner's own approval
-    /// as `msg.sender` when it is one. A deploy only from a genesis Verified
+    /// be deployed first, then `execTransaction` — the approvals the members
+    /// gave, the owner's own as `msg.sender` only where those fall short
+    /// (r7-3). A deploy only from a genesis Verified
     /// on code read right now (§3.5).
     async fn execution_calls(
         io: &Io<Event>,
@@ -3101,24 +3212,34 @@ pub mod page {
         account: &str,
     ) -> Result<Vec<multisig::Call>, Stop> {
         let owner = v.is_owner(account);
-        let approvals: Vec<Approval> = v
+        // A passkey member's check needs its account's code; a plain
+        // account's approval is ready as it is.
+        let mut others: Vec<(Approval, bool)> = Vec::new();
+        for a in v
             .item
             .approvals
             .iter()
             .filter(|a| a.counts && !(owner && same_address(&a.owner, account)))
-            .map(|a| a.approval.clone())
-            .collect();
-        let mut deploy_owners = Vec::new();
-        for a in &approvals {
-            if let Approval::Passkey(k) = a {
-                let code = shell::Chain::has_code(io, v.chain_id, &k.owner)
+        {
+            let ready = match &a.approval {
+                Approval::Passkey(k) => shell::Chain::has_code(io, v.chain_id, &k.owner)
                     .await
-                    .map_err(|_| Stop::reason(FailReason::Unchecked))?;
-                if !code {
-                    deploy_owners.push(k.owner_genesis.clone());
-                }
+                    .map_err(|_| Stop::reason(FailReason::Unchecked))?,
+                _ => true,
+            };
+            others.push((a.approval.clone(), ready));
+        }
+        // r7-3: the approvals the members gave come first; the owner
+        // approves as `msg.sender` only where those fall short.
+        let (chosen, executor_approves) =
+            crate::app::multisig_proposals::carried_approvals(v.members.threshold, owner, others);
+        let mut deploy_owners = Vec::new();
+        for (a, ready) in &chosen {
+            if let (Approval::Passkey(k), false) = (a, ready) {
+                deploy_owners.push(k.owner_genesis.clone());
             }
         }
+        let approvals: Vec<Approval> = chosen.into_iter().map(|(a, _)| a).collect();
         let deploy_multisig = if v.members.deployed {
             None
         } else {
@@ -3144,7 +3265,7 @@ pub mod page {
             deploy_owners,
             tx: v.tx.clone(),
             approvals,
-            executor: owner.then(|| account.to_owned()),
+            executor: executor_approves.then(|| account.to_owned()),
             deploy_facts,
         })
         .map_err(|_| Stop::reason(FailReason::DeployRefused))
@@ -3435,6 +3556,7 @@ pub mod page {
                     Out::Fallback { session, id } => fallback(&io, &st, &session, &id).await,
                     Out::Switch { session, id } => switch(&io, &st, &session, &id).await,
                     Out::Accounts { session } => connect_approved(&io, &st, &session).await,
+                    Out::Read { request } => read_request(&io, &st, request).await,
                 }
             }
         })
@@ -3492,6 +3614,9 @@ pub mod page {
 
     fn wallet_changed(s: &mut PageState, accounts: &[String], chain_id: Option<u64>) -> Vec<Out> {
         s.accounts = accounts.iter().map(|a| a.to_ascii_lowercase()).collect();
+        if !s.accounts.is_empty() {
+            s.wallet_failure = None;
+        }
         if let Some(c) = chain_id {
             s.wallet_chain = Some(c);
             for saved in &mut s.sessions {
@@ -3871,6 +3996,9 @@ pub mod page {
                     pair_error(&old, code::USER_REJECTED, "User rejected the request"),
                 ));
             }
+        }
+        if let Some(request) = s.entry_mut(&session, &id).and_then(|e| e.safe_tx.clone()) {
+            outs.push(Out::Read { request });
         }
         s.queue.push((session, id));
         outs

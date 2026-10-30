@@ -19,7 +19,6 @@ worker-configuration.d.ts
 
 # Vendored, kept identical to upstream (see their READMEs)
 /src/lib/vendor/
-/src/lib/walletpair/
 
 # Exploratory test specs (git-ignored, throwaway)
 /e2e/live/explore/

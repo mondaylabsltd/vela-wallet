@@ -35,12 +35,6 @@ export default defineConfig(
 		}
 	},
 	{
-		// WalletPair's messages, kept byte-identical to upstream: its NUL check
-		// and its reference Wallet's unused prompt hook are upstream's choices.
-		files: ['src/lib/walletpair/**'],
-		rules: { 'no-control-regex': 'off', 'no-unused-private-class-members': 'off' }
-	},
-	{
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}
