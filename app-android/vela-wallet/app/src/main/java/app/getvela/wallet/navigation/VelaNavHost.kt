@@ -1511,7 +1511,7 @@ fun VelaNavHost(
                             onConfirm = { confirmTransfer(agent, send, drawnReview) },
                             onFeeSelect = { index ->
                                 haptic(VelaHaptic.Select)
-                                feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
+                                feeView.options.getOrNull(index)?.let { send.pickFeeCoin(it.contract) }
                                 feeSheetOpen = false
                             },
                             // Issue #467: the row says WHO — its address. An index into

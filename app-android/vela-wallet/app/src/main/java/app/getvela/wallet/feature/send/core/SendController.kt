@@ -802,6 +802,17 @@ class SendController(
 
     fun chooseFeeToken(token: String?) = dispatch(SendEvent.ChooseFeeToken(token))
 
+    /**
+     * A coin picked in the fee-coin sheet, as the web's `pickFeeToken` does it:
+     * the fee session is told `select_fee_asset` (it re-prices in that coin —
+     * the only thing that does on the confirm step), then the send machine
+     * `choose_fee_token` (the coin rides its later estimates and its submit).
+     */
+    fun pickFeeCoin(token: String?) {
+        speedControl.selectFeeAsset(token)
+        chooseFeeToken(token)
+    }
+
     /** The confirm, naming the review it was drawn on (`review_digest`). */
     fun slideConfirm(review: String? = null) = dispatch(SendEvent.SlideConfirm(review))
 
