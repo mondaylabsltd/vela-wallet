@@ -46,3 +46,29 @@ serde = { workspace = true }
 # The i18n TOptions DTO uses `#[serde(flatten)]` into a JSON map so a TS caller can
 # write the i18next object literal verbatim; unknown keys become interpolation vars.
 serde_json = { workspace = true }
+
+# wasm-opt for the shipped module (rust/scripts/build-web.mjs runs
+# `wasm-pack build --release`). wasm-pack's default is `-O`, which binaryen
+# treats as `-Os`. Measured on this crate with wasm-pack's binaryen 117
+# (2026-10-30, 7.70 MB `-Os` build; brotli = q11, 2^24 window, as
+# app-web/vela-wallet/scripts/wasm-brotli.mjs ships it):
+#
+#   -O / -Os     7,700,713 raw   1,811,221 br
+#   -Oz          7,429,898 raw   1,815,573 br   (-271 KB raw, +4.4 KB br)
+#   -Oz -Os      7,426,095 raw   1,811,668 br   (-275 KB raw, +0.4 KB br)
+#
+# `-Oz`'s tighter inlining leaves code brotli packs slightly worse; the
+# following `-Os` pass recovers that, so the pair takes the raw saving at no
+# wire cost. No measurable speed change (keccak / ABI decode / Safe address /
+# P-256 recovery / i18n / a Crux dispatch, CPU time). Size optimisation only:
+# no pass that assumes traps never happen (`-tnh`) or that low memory is
+# unused, so the module behaves exactly as before. Features come from the
+# module's own `target_features` section.
+#
+# rustc's `opt-level` stays the workspace's "z". Against it (same source,
+# `-Os` here): "s" builds 9,781,884 raw / 2,094,292 br (+25% / +14%) and "3"
+# 14,179,296 raw (over the 8 MB gate), for hot calls ~30% faster in CPU time —
+# microseconds per call (a Crux dispatch 38 -> 25 µs, keccak 20 -> 14 µs,
+# P-256 recovery 6.3 -> 5.4 ms) — against 257 KB more on every cold load.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "-Os"]
