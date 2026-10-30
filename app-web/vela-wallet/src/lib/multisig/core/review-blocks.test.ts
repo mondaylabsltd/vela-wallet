@@ -29,6 +29,8 @@ import {
 import {
 	anywayLabel,
 	hashRows,
+	partyAddresses,
+	recipientBadges,
 	reviewBlocks,
 	reviewTech,
 	stateBlocks,
@@ -300,4 +302,37 @@ describe('parity: the same intent for a Vela account and a multisig (§3.6)', ()
 			expect(reviewTech(review, ctx).raw?.hex).toContain('SafeTx');
 		});
 	}
+});
+
+/**
+ * r5reg-15: a transfer's review named its recipient twice — the call's
+ * "Recipient 0xd9c7…" and the review's "To 0xd9c7…". Said once: the call's
+ * row, wearing what the review knows of it ("First time sending here").
+ */
+describe('who it reaches, said once (r5reg-15)', () => {
+	it('an ERC-20 transfer: the call names the recipient; the review adds its badge, not a second row', () => {
+		const reading = read(TRANSFER);
+		const call = callReviewBlocks(reading, signing, CURRENCY);
+		const drawn = partyAddresses(call);
+		expect(drawn).toContain(TO.toLowerCase());
+		const review = multisigReview({
+			chainId: CHAIN,
+			safe: MULTISIG,
+			tx: txOf(TRANSFER.to, '0x0', TRANSFER.data),
+			owners: ['0x1111111111111111111111111111111111111111'],
+			threshold: 1,
+			deployed: true,
+			simReply: '{"unreachable":true}',
+			blind: reading.clear.sign_anyway,
+			recipientFacts: [{ address: TO, isContract: false, firstTime: true }]
+		});
+		const named = (blocks: Block[]) =>
+			blocks.filter((b) => b.kind === 'party' && b.address?.toLowerCase() === TO.toLowerCase());
+		// Without the call's reading the review names it; with it, it does not.
+		expect(named(reviewBlocks(review, simOf(review), ctx))).toHaveLength(1);
+		expect(named(reviewBlocks(review, simOf(review), ctx, drawn))).toHaveLength(0);
+		// One row in all — and it still says it is the first time.
+		expect(named([...call, ...reviewBlocks(review, simOf(review), ctx, drawn)])).toHaveLength(1);
+		expect(recipientBadges(review, ctx)[TO.toLowerCase()]?.text).toBe(signing.tagFirstTime);
+	});
 });

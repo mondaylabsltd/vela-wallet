@@ -33,9 +33,22 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { CallReading, callTitle, readableCalls, reviewedCalls } from '../core/call-review.svelte';
+	import {
+		CallReading,
+		callReviewBlocks,
+		callTitle,
+		readableCalls,
+		reviewedCalls
+	} from '../core/call-review.svelte';
 	import { ProposalReview, REVIEW_FRESH_MS } from '../core/proposal-review.svelte';
-	import { anywayLabel, reviewBlocks, reviewTech } from '../core/review-blocks';
+	import {
+		anywayLabel,
+		partyAddresses,
+		recipientBadges,
+		reviewBlocks,
+		reviewTech
+	} from '../core/review-blocks';
+	import { currency } from '$lib/settings/core/currency.svelte';
 	import BlockList from '$lib/signing/ui/BlockList.svelte';
 	import { resolvedFormatKeys } from '$lib/services/locale-format';
 	import {
@@ -78,7 +91,7 @@
 		stoppedBeforeSigning,
 		type ExecutionPreview
 	} from '../core/execute';
-	import { feeWords, whyText } from '../core/execution-words';
+	import { feeCoin, feeWords, whyText } from '../core/execution-words';
 	import { preflight, PREVIEW_FRESH_MS } from '../core/preflight.svelte';
 	import { signers } from '../core/signers.svelte';
 	import {
@@ -107,6 +120,7 @@
 	import { memberDrift, readMemberChanges, sameAddress, transfersOf } from '../core/kernel';
 	import { proposalLink, shareOrigin } from '../core/link';
 	import { connectLink } from '../external/connect-link';
+	import { eip55 } from '../external/eip55';
 	import { localOwners, type LocalOwner } from '../core/owners';
 	import {
 		approve,
@@ -363,7 +377,18 @@
 		preset: resolvedFormatKeys().number,
 		nameOf: (address: string) => names.label(address) ?? localName(address)
 	});
-	const checks = $derived(reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext));
+	/**
+	 * r5reg-15: the addresses the call's reading names already (its
+	 * "Recipient"): the review says each once — the call's row, wearing what
+	 * the review knows of it ("First time sending here").
+	 */
+	const drawnParties = $derived(
+		reading ? partyAddresses(callReviewBlocks(reading, signing, currency.view)) : []
+	);
+	const partyBadges = $derived(recipientBadges(fullReview, reviewContext));
+	const checks = $derived(
+		reviewBlocks(fullReview, proposalReview?.sim ?? null, reviewContext, drawnParties)
+	);
 	const tech = $derived(fullReview ? reviewTech(fullReview, reviewContext) : null);
 	/** The review's rule: nothing signed (no override), "… anyway", or plain. */
 	const signRule = $derived(fullReview?.sign ?? null);
@@ -529,8 +554,8 @@
 			return fillTemplate(m.proposal.cannotPay, {
 				name: names.label(actor.address),
 				symbol,
-				fee: `${formatUnits(error.need, 18)} ${symbol}`,
-				balance: `${formatUnits(error.have, 18)} ${symbol}`
+				fee: feeCoin(error.need, symbol),
+				balance: feeCoin(error.have, symbol)
 			});
 		}
 		if (error instanceof ExecutionWouldFailError) {
@@ -1157,7 +1182,11 @@
 			<p class="site">{fillTemplate(m.proposal.siteAsks, { host: site })}</p>
 		{/if}
 		<header class="what">
-			<p class="title">{shownTitle || '…'}</p>
+			{#if !reading}
+				<!-- r5reg-15: a call read by the signing sheet's machines heads itself
+				     ("Send −0.05 USDC"): its verb is not said twice above it. -->
+				<p class="title">{shownTitle || '…'}</p>
+			{/if}
 			{#if recipient && !(reading && item.review.action?.kind === 'transfer')}
 				<!-- A transfer read by the signing sheet's machines names its own recipient (§3.6). -->
 				{@const named = reading?.clear.result?.contract_name ?? localName(recipient)}
@@ -1199,7 +1228,7 @@
 											size="compact"
 											address={address ?? ''}
 										/>
-										<code class="change-address">{address}</code>
+										<code class="change-address">{eip55(address ?? '')}</code>
 									</span>
 								{/each}
 							</li>
@@ -1214,7 +1243,7 @@
 				</section>
 			{/if}
 			{#if reading}
-				<CallReview {reading} m={signing} />
+				<CallReview {reading} m={signing} badges={partyBadges} />
 			{/if}
 			{#if lines.length > 0 && !reading}
 				<ul class="lines">
@@ -1564,12 +1593,15 @@
 			{#if phase.kind === 'failed'}
 				<p class="warn" role="alert" data-testid="proposal-failed">{phase.reason}</p>
 			{/if}
-			<div class="two">
+			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
+			<div class="two" class:actions={wide} data-testid="proposal-actions">
+				<!-- r4D-13: a site's request is declined; the person's own proposal is withdrawn. -->
 				<Button
 					variant="secondary"
 					shape="rounded"
 					disabled={busy}
-					onclick={() => (prebuilt ?? draft)?.decline()}>{m.external.decline}</Button
+					onclick={() => (prebuilt ?? draft)?.decline()}
+					>{prebuilt ? m.proposal.withdraw : m.external.decline}</Button
 				>
 				{#if item.review.action !== null && !readOnly && !signBlocked}
 					<Button
@@ -1666,7 +1698,8 @@
 				</p>
 			{/if}
 
-			<div class="primary">
+			<!-- r4D-19: in the desktop's capped dialog the actions stay in view. -->
+			<div class="primary" class:actions={wide} data-testid="proposal-actions">
 				{#if executors.length > 0 && actor}
 					{@const approveFirst = !actorApproved && item.approved < item.threshold}
 					{#if actorPreview?.kind === 'refused'}
@@ -1690,8 +1723,8 @@
 								: fillTemplate(m.proposal.cannotPay, {
 										name: names.label(actor.address),
 										symbol: nativeSymbol(chainId),
-										fee: `${formatUnits(actorPreview.fee.amount, 18)} ${nativeSymbol(chainId)}`,
-										balance: `${formatUnits(actorPreview.balance ?? 0n, 18)} ${nativeSymbol(chainId)}`
+										fee: feeCoin(actorPreview.fee.amount, nativeSymbol(chainId)),
+										balance: feeCoin(actorPreview.balance ?? 0n, nativeSymbol(chainId))
 									})}
 						</p>
 					{/if}
@@ -2269,6 +2302,19 @@
 
 	.primary {
 		margin-block-start: var(--space-xl);
+	}
+
+	/* r4D-19: the desktop's dialog is capped (80% high, 520 wide) and a
+	   review is long: its actions sat below the fold. They ride the
+	   dialog's bottom edge while the review scrolls under them, and settle
+	   in their place at its end. */
+	.actions {
+		position: sticky;
+		bottom: 0;
+		z-index: 1;
+		padding-block: var(--space-md) var(--space-sm);
+		border-top: var(--border-hairline) solid var(--color-border-base);
+		background: var(--color-bg-raised);
 	}
 
 	.actor-balance {

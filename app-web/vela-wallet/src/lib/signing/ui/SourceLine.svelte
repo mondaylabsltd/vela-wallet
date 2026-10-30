@@ -20,7 +20,9 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		/* r4D-11: information, not a mark — fg.muted holds AA on every sheet
+		   (fg.subtle read 3.38:1 under the multisig review's check). */
+		color: var(--color-fg-muted);
 		overflow-wrap: anywhere;
 	}
 

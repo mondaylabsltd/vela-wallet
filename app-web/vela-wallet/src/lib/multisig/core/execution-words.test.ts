@@ -8,7 +8,7 @@ import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 
 vi.mock('./execute', () => ({ previewExecution: async () => ({ kind: 'unpriced' }) }));
 
-const { feeWords, whyText } = await import('./execution-words');
+const { feeCoin, feeWords, whyText } = await import('./execution-words');
 const { blockOf, preflight, previewKey } = await import('./preflight.svelte');
 
 type Priced = Extract<import('./execute').ExecutionPreview, { kind: 'priced' }>;
@@ -102,6 +102,19 @@ describe('the fee line (r4-7)', () => {
 			'deploying this multisig',
 			'activating Bob’s account — the multisig checks their approval through it'
 		]);
+	});
+
+	it('r5reg-15: reads in the wallet’s fee precision — never six decimals, never "0"', () => {
+		const at = (wei: bigint) => ({ ...priced(), fee: { amount: wei, recipient: '0xfe' } });
+		// 0.035412… USDC read "0.035412 USDC": four decimals, as the wallet's fee rows.
+		expect(feeWords(words(), at(35_412_345_678_901_234n), opts).fee).toBe(
+			'Network fee ≈ 0.0354 USDC, paid by Alice'
+		);
+		// A tiny fee widens to its first digit, so it never reads as free.
+		expect(feeWords(words(), at(12_345_678_901_234n), opts).fee).toBe(
+			'Network fee ≈ 0.000012 USDC, paid by Alice'
+		);
+		expect(feeCoin(35_412_345_678_901_234n, 'USDC')).toBe('0.0354 USDC');
 	});
 
 	it('names the executor’s own first deployment, and no share it could not measure', () => {

@@ -560,6 +560,13 @@ class Proposals {
 	/** New activity was written: whoever shows it refreshes. */
 	onrecorded: (() => void) | null = null;
 	#address: string | null = null;
+	/**
+	 * r5reg-17: the multisig followed, as state: a view derived from whether
+	 * it is the one followed reads it again when it becomes so. A plain field
+	 * read once (the home's first-run card, before the host followed it) left
+	 * the card up for good — the networks it was deployed on never re-read.
+	 */
+	#shown = $state<string | null>(null);
 	#timer: ReturnType<typeof setInterval> | null = null;
 	#inflight: Promise<void> | null = null;
 	/** The poll's rounds since the last read the person or the page asked for. */
@@ -576,7 +583,7 @@ class Proposals {
 
 	/** The multisig followed (`null`: none). */
 	get followed(): string | null {
-		return this.#address;
+		return this.#shown;
 	}
 
 	get items(): ProposalItem[] {
@@ -610,6 +617,7 @@ class Proposals {
 			this.readAt = null;
 		}
 		this.#address = address;
+		this.#shown = address;
 		this.#account = account;
 		this.#chainIds = chainIds;
 		if (!account) return;

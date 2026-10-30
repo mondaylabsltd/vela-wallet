@@ -1673,8 +1673,9 @@ describe('who executes (r4-10, r4D-1)', () => {
 		m.proposal.cannotPay = '{{name}} cannot pay {{fee}}, has {{balance}}';
 		const screen = show({ m });
 		await settle();
+		// r5reg-15: in the wallet's fee precision, as the fee line reads it.
 		expect(document.querySelector('[data-testid="execute-cant-pay"]')?.textContent?.trim()).toBe(
-			`0x0000 cannot pay ${35n * 10n ** 15n} xDAI, has 0 xDAI`
+			'0x0000 cannot pay 0.035 xDAI, has 0 xDAI'
 		);
 		expect(buttons()).not.toContain('proposal.approveAndExecute');
 		expect(buttons()).toContain('proposal.approve');
@@ -1778,5 +1779,70 @@ describe('a dApp’s transaction on a device with no member (r4C-10)', () => {
 		expect(buttons()).toContain('send.proposeOnly');
 		expect(buttons()).not.toContain('send.propose');
 		await screen.unmount();
+	});
+});
+
+describe('round 6: the review’s words and where its actions stand', () => {
+	/** The person's own transfer, reviewed before its passkey (`prebuilt`). */
+	const own = (decline = () => {}) => ({
+		chainId: 100,
+		address: SAFE,
+		chain: { chainId: 100, members, items: [], mailbox: true },
+		item: item({
+			review: { action: { kind: 'transfer', token: null, to: TO, amount: '1' }, refusal: null }
+		}),
+		confirm: () => {},
+		decline
+	});
+
+	it('r4D-13: the person’s own proposal is withdrawn, not declined (a site’s request still is)', async () => {
+		const decline = vi.fn();
+		const screen = show({ prebuilt: own(decline), safeTxHash: '' });
+		await settle();
+		expect(buttons()).toContain('proposal.withdraw');
+		expect(buttons()).not.toContain('external.decline');
+		press('proposal.withdraw');
+		expect(decline).toHaveBeenCalledTimes(1);
+		await screen.unmount();
+	});
+
+	it('r5reg-15: a call the signing sheet reads heads itself — its verb is not said twice above it', async () => {
+		fake.chain.items = [item()];
+		const screen = show();
+		await settle();
+		expect(document.querySelector('[data-testid="multisig-call-review"]')).not.toBeNull();
+		expect(document.querySelector('header.what .title')).toBeNull();
+		await screen.unmount();
+		// A cancellation is the multisig's own reading: its line stays.
+		fake.chain.items = [
+			item({ review: { action: { kind: 'cancel', nonce: '0' }, refusal: null } })
+		];
+		const again = show();
+		await settle();
+		expect(document.querySelector('header.what .title')).not.toBeNull();
+		await again.unmount();
+	});
+
+	it('r4D-19: in the desktop dialog the actions ride its bottom edge; the phone sheet is unchanged', async () => {
+		const wide = show({ prebuilt: own(), safeTxHash: '', wide: true });
+		await settle();
+		const bar = document.querySelector<HTMLElement>('[data-testid="proposal-actions"]');
+		expect(bar).not.toBeNull();
+		expect(getComputedStyle(bar!).position).toBe('sticky');
+		expect(getComputedStyle(bar!).bottom).toBe('0px');
+		await wide.unmount();
+
+		fake.chain.items = [item({ canExecute: [local] })];
+		const pending = show({ wide: true });
+		await settle();
+		const primary = document.querySelector<HTMLElement>('[data-testid="proposal-actions"]');
+		expect(primary && getComputedStyle(primary).position).toBe('sticky');
+		await pending.unmount();
+
+		const phone = show({ prebuilt: own(), safeTxHash: '', wide: false });
+		await settle();
+		const plain = document.querySelector<HTMLElement>('[data-testid="proposal-actions"]');
+		expect(plain && getComputedStyle(plain).position).toBe('static');
+		await phone.unmount();
 	});
 });

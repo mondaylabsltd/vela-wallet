@@ -13,6 +13,7 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import {
+	counterpartyText,
 	dappTitle,
 	dappTitleParts,
 	dayLabel,
@@ -51,6 +52,14 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		...partial
 	});
 }
+
+describe('whom a transfer went to or came from (r4D-19)', () => {
+	it('reads in one case, its EIP-55 checksum, however the core handed it over', () => {
+		const checksummed = '0xd9c79Cc5C3DE9858E8767BB702DB5FfE51a20432';
+		expect(counterpartyText(checksummed.toLowerCase())).toBe('0xd9c79C…a20432');
+		expect(counterpartyText(checksummed)).toBe('0xd9c79C…a20432');
+	});
+});
 
 describe('dayLabel', () => {
 	it('today and yesterday from the corpus; older days in the date preset', () => {
@@ -413,8 +422,9 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
+		// r4D-19: the address in its EIP-55 case, as every other screen writes it.
 		expect(row.subtitle).toBe(
-			`${m.activity.pending} · To 0xcdcdcd…cdcdcd · app.uniswap.org · ${chainName(42161)}`
+			`${m.activity.pending} · To 0xCdCDCd…cDCDcD · app.uniswap.org · ${chainName(42161)}`
 		);
 		// The shell adds nothing the core did not send: no line, no subtitle.
 		expect(liveActivityRow(item({ id: 'n', subtitle: [] }), m, false).subtitle).toBe('');

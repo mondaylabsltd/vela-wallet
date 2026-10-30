@@ -23,9 +23,8 @@
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { shortenAddress } from '$lib/wallet/identity';
 	import type { MultisigMessages } from '../messages';
-	import { chainName } from '../core/display';
+	import { chainName, shortenAddress } from '../core/display';
 	import {
 		sameAddress,
 		type Action,

@@ -10,8 +10,9 @@ import { fillTemplate } from '$lib/i18n/fill';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import { chainMeta } from '$lib/services/chains';
 import { poolRpcCall } from '$lib/services/rpc-pool';
-import { shortenAddress } from '$lib/wallet/identity';
+import { shortenAddress as shorten } from '$lib/wallet/identity';
 import { sentAmountText } from '$lib/wallet/live';
+import { eip55 } from '../external/eip55';
 import type { MultisigMessages } from '../messages';
 import {
 	sameAddress,
@@ -24,7 +25,15 @@ import { formatUnits as cutUnits, plainUnits } from './units';
 
 export { parseUnits } from './units';
 
-export { shortenAddress };
+/**
+ * "0xd9c79C…a20432": an address short, always in its EIP-55 case (r4D-19) —
+ * the chain's logs and the mailbox hand addresses over lowercased, a member
+ * typed in another case, and one home read "To 0xd9c79C…" beside "From
+ * 0xd9c79c…" for one address. Every multisig screen shortens through here.
+ */
+export function shortenAddress(address: string): string {
+	return shorten(eip55(address));
+}
 
 /**
  * An amount in base units as every money surface reads it (r4a-21): the
@@ -225,6 +234,23 @@ export function memberChanges(m: MultisigMessages, action: Action | null): strin
 /** "2 of 3": a rule as the create sheet writes one. */
 export function ruleText(m: MultisigMessages, rule: { threshold: number; owners: number }): string {
 	return fillTemplate(m.create.thresholdValue, { m: rule.threshold, n: rule.owners });
+}
+
+/**
+ * The rule as a requirement (r4D-13): "Needs 2 of 3 members" — and, with one
+ * member, "Needs its only member's approval", never "Needs 1 of 1 members".
+ */
+export function ruleTitle(m: MultisigMessages, rule: { m: number; n: number }): string {
+	return rule.n === 1 ? m.panel.titleSolo : fillTemplate(m.panel.title, rule);
+}
+
+/**
+ * The header's rule chip (r4D-13, r5reg-10): what it needs, short — "Needs
+ * 2 of 3", "需 3 位中的 2 位" — never a bare "2 of 3" that reads as a count
+ * so far; "One member" for a multisig of one.
+ */
+export function ruleChipText(m: MultisigMessages, rule: { m: number; n: number }): string {
+	return rule.n === 1 ? m.panel.chipSolo : fillTemplate(m.panel.chip, rule);
 }
 
 /** One member change, in words: "Add Bob (0x12…34)", "Replace A with B". */

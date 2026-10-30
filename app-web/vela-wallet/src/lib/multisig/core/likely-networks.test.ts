@@ -17,7 +17,7 @@ vi.mock('$lib/services/networks', () => ({
 	networkRank: (id: number) => [1, 100, 11155111, 5042002, 8453].indexOf(id)
 }));
 
-const { firstNetworkDefault, heldChains, lastUsedChains, likelyNetworks } =
+const { firstNetworkDefault, heldChains, lastUsedChains, likelyNetworks, recentChains } =
 	await import('./likely-networks');
 
 const net = (chainId: number) => ({ chainId, displayName: String(chainId) });
@@ -51,5 +51,31 @@ describe('likely networks', () => {
 		expect(firstNetworkDefault(ALL, { used: [], held: [] })).toBeNull();
 		expect(firstNetworkDefault(ALL, { used: [5042002], held: [100] })).toBe(5042002);
 		expect(firstNetworkDefault(ALL, { used: [999], held: [100] })).toBe(100);
+	});
+
+	it('r5reg-19: the network the wallet is on, and where this device transacted, never under "More networks"', () => {
+		// Arc (5042002) is fourth in the wallet's order: past the four shown.
+		const order = (hints: Parameters<typeof likelyNetworks>[1]) =>
+			likelyNetworks(ALL, hints).map((n) => n.chainId);
+		expect(order({}).indexOf(5042002)).toBe(3);
+		expect(order({ here: [5042002] })[0]).toBe(5042002);
+		expect(order({ recent: [5042002], held: [100] }).slice(0, 2)).toEqual([5042002, 100]);
+		// Where the wallet is beats where its multisigs were; a link beats both.
+		expect(order({ named: [8453], here: [5042002], used: [100] })).toEqual([
+			8453, 5042002, 100, 1, 11155111
+		]);
+		expect(firstNetworkDefault(ALL, { here: [5042002], used: [100] })).toBe(5042002);
+		expect(firstNetworkDefault(ALL, { recent: [5042002], held: [100] })).toBe(5042002);
+	});
+
+	it('reads where this device transacted, the newest first, each network once', () => {
+		expect(
+			recentChains([
+				{ chainId: 100, timestamp: 1 },
+				{ chainId: 5042002, timestamp: 9 },
+				{ chainId: 100, timestamp: 5 },
+				{ chainId: 8453, timestamp: 3 }
+			])
+		).toEqual([5042002, 100, 8453]);
 	});
 });

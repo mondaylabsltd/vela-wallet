@@ -1274,8 +1274,15 @@ if (leafSet.size !== 2095) fail(`expected 2095 leaf paths, got ${leafSet.size}`)
 if (branchSet.size !== 108) fail(`expected 108 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
+// 568 (round 6, copy/visual, 2026-10-30): + `home.multisig.panel.{titleSolo,
+//   chip, chipSolo}` (the rule as a requirement — "Needs 2 of 3", never
+//   "Needs 1 of 1 members"), + `proposal.withdraw` (the person's own
+//   proposal is withdrawn, not declined), + `create.{createdBodySolo,
+//   sharedSolo}` (a multisig of one has no other members). The review's
+//   guard/handler words change value only (plain words, every locale).
+//   562 + 6 = 568.
 {
-  const pins = { multisig: 562 };
+  const pins = { multisig: 568 };
   for (const [name, docs] of Object.entries(onDemand)) {
     const leaves = new Set();
     for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());

@@ -1469,6 +1469,7 @@
 								multisig: {
 									label: data.multisigMessages.proposal.approvals,
 									rule: data.multisigMessages.panel.title,
+									ruleSolo: data.multisigMessages.panel.titleSolo,
 									feeNote: data.multisigMessages.proposal.feeNote,
 									// r4C-10: with no member here, nobody here approves it.
 									confirm:

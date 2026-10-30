@@ -76,6 +76,9 @@ vi.mock('$lib/services/networks', () => ({
 	networkRank: (id: number) => [11155111, 84532, 5042002].indexOf(id)
 }));
 vi.mock('$lib/core/kernels', () => ({ addressEntry: () => 'valid' }));
+vi.mock('../core/display', () => ({
+	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`
+}));
 vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: { tokens: [] } } }));
 vi.mock('$app/navigation', () => ({ goto: async () => {} }));
 vi.mock('../core/activity.svelte', () => ({

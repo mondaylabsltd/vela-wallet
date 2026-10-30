@@ -300,7 +300,14 @@ export function callReviewBlocks(
  */
 export function callTitle(clear: ClearSigningView, m: SigningMessages): string | null {
 	if (clear.resolving || !clear.resolved || clear.record_intent === null) return null;
-	return localizedTerms(clear, m).result?.intent ?? clear.record_intent;
+	const said = localizedTerms(clear, m);
+	if (said.result) return said.result.intent;
+	// A plain coin send has nothing decoded: its word is the confirm's term
+	// (`intentSend`), in the reader's words — the record's English "Send" was
+	// the zh review's heading (r5reg-10).
+	const term = clear.confirm.type === 'confirm_intent' ? clear.confirm.intent_term : null;
+	if (term && m.terms[term] && said.confirm.type === 'confirm_intent') return said.confirm.intent;
+	return clear.record_intent;
 }
 
 /**

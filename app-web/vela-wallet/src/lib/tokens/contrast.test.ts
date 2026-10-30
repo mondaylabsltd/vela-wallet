@@ -71,6 +71,10 @@ const PAIRS: Array<[string, string, number, string]> = [
 	// an Activity day heading, a sheet's section heading, a fact's label, the
 	// custom-service note — on every surface it is drawn on.
 	['color.fg.muted', 'color.bg.sunken', 4.5, 'addresses + labels on a sunken row (10–11px)'],
+	// r4D-11 (round 6): the review's source note, 11px on the phone's sheet
+	// (bg.base, #fafaf8 — it read 3.38:1 in fg.subtle) and the desktop dialog.
+	['color.fg.muted', 'color.bg.base', 4.5, 'a review’s source note on the sheet (11px)'],
+	['color.fg.muted', 'color.bg.raised', 4.5, 'a review’s source note in the dialog (11px)'],
 	['color.fg.subtle', 'color.bg.raised', 3, 'card index number (see header note)'],
 	['color.fg.subtle', 'color.bg.base', 3, 'inactive pager dots (non-text UI)'],
 	['color.fg.base', 'color.bg.base', 3, 'active pager dot, checks, selected marks, focus ring'],
@@ -186,7 +190,10 @@ describe('information never drawn in fg.subtle on the multisig screens (r4D-11)'
 		'lib/multisig/ui/MultisigHomeCard.svelte',
 		'lib/multisig/ui/NetworkChoice.svelte',
 		'lib/multisig/ui/RiskConfirmSheet.svelte',
-		'routes/[locale]/connect/+page.svelte'
+		'routes/[locale]/connect/+page.svelte',
+		// r4D-11 (round 6): the one review's source note ("Its code, … read
+		// before and after") is the signing sheet's line, 11px on the sheet.
+		'lib/signing/ui/SourceLine.svelte'
 	];
 	/** Rules that colour a glyph or a placeholder, not information. */
 	const GLYPH =

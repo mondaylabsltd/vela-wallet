@@ -3326,6 +3326,22 @@ describe('a multisig send', () => {
 		expect(fee.tap).toBe('none');
 	});
 
+	it('r4D-13: a multisig of one needs its one member — never "Needs 1 of 1 members"', () => {
+		const solo: SendLiveInputs = {
+			...inputs({ multisig: { threshold: 1, owners: 1 }, selected_token: ETH, fee: QUOTE }),
+			multisig: {
+				label: words.proposal.approvals,
+				rule: words.panel.title,
+				ruleSolo: words.panel.titleSolo,
+				feeNote: words.proposal.feeNote,
+				confirm: words.send.propose
+			}
+		};
+		const value = liveSendForm(formModel(), solo).fee.value;
+		expect(value).toBe("Needs its only member's approval");
+		expect(value).not.toContain('1 of 1');
+	});
+
 	it('the confirm swaps the fee fact for the approvals and proposes', () => {
 		const confirm = liveSendConfirm(
 			confirmModel(),

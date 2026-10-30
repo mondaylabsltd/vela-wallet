@@ -77,8 +77,10 @@ export interface SendLiveInputs {
 	multisig?: {
 		/** "Approvals" */
 		label: string;
-		/** "{{m}} of {{n}} members approve" */
+		/** "Needs {{m}} of {{n}} members" */
 		rule: string;
+		/** r4D-13: a multisig of one — "Needs its only member's approval", never "1 of 1 members". */
+		ruleSolo?: string;
 		/** "The network fee is paid by the executing member's account." */
 		feeNote: string;
 		/** "Propose and approve" */
@@ -400,10 +402,9 @@ function multisigRule(inputs: SendLiveInputs, send: SendView): string {
 	const chain = formChainOf(send);
 	const there = chain === null ? null : (inputs.multisig?.membersOn?.(chain) ?? null);
 	if (there === 'reading') return '…';
-	return fill(inputs.multisig!.rule, {
-		m: there?.threshold ?? own.threshold,
-		n: there?.owners ?? own.owners
-	});
+	const n = there?.owners ?? own.owners;
+	if (n === 1 && inputs.multisig!.ruleSolo) return inputs.multisig!.ruleSolo;
+	return fill(inputs.multisig!.rule, { m: there?.threshold ?? own.threshold, n });
 }
 
 /**

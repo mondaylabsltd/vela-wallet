@@ -45,6 +45,14 @@
 			proposals.chains.some((c) => c.members.deployed)
 	);
 	const firstRun = $derived(!!active?.firstRun && !setUp);
+	/** r5reg-18: a multisig of one has no members to invite. */
+	const solo = $derived(!!active && active.owners.length === 1);
+	// r5reg-17: once it is set up (deployed — funded and used), its first
+	// steps are behind it for good: not back on the next page before the
+	// chain is read again.
+	$effect(() => {
+		if (setUp && active?.firstRun) multisig.setFirstRun(active.address, false);
+	});
 </script>
 
 {#if active && words && waiting?.first}
@@ -64,16 +72,18 @@
 	<section class="first" aria-labelledby="multisig-first-run" data-testid="multisig-first-run">
 		<h2 id="multisig-first-run">{m.create.firstRunTitle}</h2>
 		<ol>
-			<li>
-				<button type="button" class="step" onclick={() => multisigUi.open({ kind: 'invite' })}>
-					<span class="icon"><Icon icon={UTILITY_ICONS['qr-code']} size="md" /></span>
-					<span class="text">
-						<span class="title">{m.create.firstRunInvite}</span>
-						<span class="note">{m.create.firstRunInviteNote}</span>
-					</span>
-					<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-				</button>
-			</li>
+			{#if !solo}
+				<li>
+					<button type="button" class="step" onclick={() => multisigUi.open({ kind: 'invite' })}>
+						<span class="icon"><Icon icon={UTILITY_ICONS['qr-code']} size="md" /></span>
+						<span class="text">
+							<span class="title">{m.create.firstRunInvite}</span>
+							<span class="note">{m.create.firstRunInviteNote}</span>
+						</span>
+						<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+					</button>
+				</li>
+			{/if}
 			<li>
 				<button type="button" class="step" onclick={() => onfund?.()} disabled={!onfund}>
 					<span class="icon"><Icon icon={UTILITY_ICONS['arrow-down-left']} size="md" /></span>

@@ -63,7 +63,8 @@ vi.mock('../core/proposals.svelte', async () => {
 	};
 });
 vi.mock('../core/display', () => ({
-	chainName: (id: number) => ({ [ARC]: 'Arc', [BASE]: 'Base', [GNOSIS]: 'Gnosis' })[id] ?? `${id}`
+	chainName: (id: number) => ({ [ARC]: 'Arc', [BASE]: 'Base', [GNOSIS]: 'Gnosis' })[id] ?? `${id}`,
+	shortenAddress: (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`
 }));
 vi.mock('../core/ui.svelte', () => ({
 	multisigUi: { open: (sheet: unknown) => seams.opened.push(sheet) }

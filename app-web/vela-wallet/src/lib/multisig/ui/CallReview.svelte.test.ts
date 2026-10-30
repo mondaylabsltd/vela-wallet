@@ -12,8 +12,9 @@ import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import type { SigningMessages } from '$lib/signing/messages';
+import type { PartyBadge } from '$lib/signing/model';
 import { CallReading } from '../core/call-review.svelte';
-import { APPROVE_MAX, BLIND, CHAIN, MULTISIG, read } from '../core/call-review.testing';
+import { APPROVE_MAX, BLIND, CHAIN, MULTISIG, SPENDER, read } from '../core/call-review.testing';
 import CallReview from './CallReview.svelte';
 
 /** Every message is its own name: `m.warnUnlimited` reads "warnUnlimited". */
@@ -22,12 +23,12 @@ const m = new Proxy({} as SigningMessages, {
 	get: (_, key) => (key === 'certain' ? new Proxy({}, names) : String(key))
 });
 
-function shown(call: typeof APPROVE_MAX) {
+function shown(call: typeof APPROVE_MAX, badges?: Record<string, PartyBadge>) {
 	const reading = new CallReading(CHAIN, MULTISIG, call);
 	const views = read(call);
 	reading.clear = views.clear;
 	reading.guard = views.guard;
-	return render(CallReview, { reading, m });
+	return render(CallReview, { reading, m, ...(badges ? { badges } : {}) });
 }
 
 describe('a member reads a multisig’s contract call (cs-12)', () => {
@@ -52,5 +53,16 @@ describe('a member reads a multisig’s contract call (cs-12)', () => {
 		expect(text).toContain('intentBlind');
 		expect(text).toContain('warnBlindDecode');
 		expect(text).toContain('1.5');
+	});
+
+	it('r5reg-15: its recipient row wears what the review knows of it — said once, here', async () => {
+		const send = { to: SPENDER, value: '50000000000000000', data: '0x' };
+		const plain = shown(send);
+		expect(plain.container.textContent).not.toContain('tagFirstTime');
+		await plain.unmount();
+		const screen = shown(send, {
+			[SPENDER.toLowerCase()]: { text: 'tagFirstTime', tone: 'caution' }
+		});
+		expect(screen.container.textContent).toContain('tagFirstTime');
 	});
 });

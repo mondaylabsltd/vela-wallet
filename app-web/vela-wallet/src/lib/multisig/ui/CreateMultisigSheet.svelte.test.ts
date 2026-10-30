@@ -9,8 +9,11 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { page } from 'vitest/browser';
+import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
+import { multisig, type MultisigAccount } from '../core/store.svelte';
 
 const ME = '0x00000000000000000000000000000000000000aa';
 const TWO = '0x00000000000000000000000000000000000000bb';
@@ -453,6 +456,96 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 		await settle();
 		expect(document.body.querySelectorAll('.owners li')).toHaveLength(2);
 		expect(document.body.querySelector('.owners')?.textContent).toContain('dan.eth');
+		await screen.unmount();
+	});
+});
+
+describe('round 6: the create sheet at a phone’s width, and a multisig of one', () => {
+	afterEach(async () => {
+		await page.viewport(414, 896);
+		multisig.accounts = [];
+		chainFilter.select(null);
+	});
+
+	it('r5reg-19: at 390 px the address field is the row’s full width', async () => {
+		await page.viewport(390, 844);
+		const screen = render(CreateMultisigSheet, {
+			props: {
+				m: words(),
+				locale: 'en',
+				current: ME,
+				wide: false,
+				closeLabel: 'Close',
+				onclose: () => {},
+				oncreated: () => {}
+			}
+		});
+		await settle();
+		const field = document.body.querySelector<HTMLInputElement>('.typed input.mono');
+		const row = field?.parentElement;
+		expect(field && row).toBeTruthy();
+		expect(field!.getBoundingClientRect().width).toBeGreaterThan(
+			row!.getBoundingClientRect().width - 1
+		);
+		// The Add button beside the name keeps its own width; the name field takes the rest.
+		const add = [...document.body.querySelectorAll<HTMLButtonElement>('.typed button')].find(
+			(b) => b.textContent?.trim() === 'create.addMember'
+		);
+		expect(getComputedStyle(add!).flexGrow).toBe('0');
+		const name = document.body.querySelector<HTMLInputElement>('.typed input.name-field');
+		expect(getComputedStyle(name!).flexGrow).toBe('1');
+		await screen.unmount();
+	});
+
+	it('r5reg-19: the network the wallet is on is in view, never under "More networks"', async () => {
+		seams.networks = [
+			{ chainId: 11155111, displayName: 'Sepolia' },
+			{ chainId: 84532, displayName: 'Base Sepolia' },
+			{ chainId: 421614, displayName: 'Arbitrum Sepolia' },
+			{ chainId: 11155420, displayName: 'OP Sepolia' },
+			{ chainId: 80002, displayName: 'Amoy' },
+			{ chainId: 5042002, displayName: 'Arc Testnet' }
+		];
+		chainFilter.select(5042002);
+		const screen = open();
+		await settle();
+		type('.name-field', 'Team');
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		const arc = document.body.querySelector('[role="radio"][data-chain="5042002"]');
+		expect(arc).not.toBeNull();
+		// And it is the one picked: where the person is says which.
+		expect(arc?.getAttribute('aria-checked')).toBe('true');
+		await screen.unmount();
+	});
+
+	it('r5reg-18: a multisig of one is not told to send "the other members" anything', async () => {
+		const screen = open();
+		await settle();
+		type('.name-field', 'Solo');
+		press('create.next');
+		await settle();
+		press('create.next');
+		await settle();
+		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
+		await settle();
+		// What the store holds once it is saved: a multisig of one.
+		multisig.accounts = [
+			{
+				address: SAFE,
+				owners: [ME],
+				threshold: 1,
+				chainIds: [100],
+				addedMs: 1
+			} as unknown as MultisigAccount
+		];
+		press('create.create');
+		await settle();
+		expect(document.body.querySelector('[data-testid="created-body"]')?.textContent?.trim()).toBe(
+			'create.createdBodySolo'
+		);
 		await screen.unmount();
 	});
 });

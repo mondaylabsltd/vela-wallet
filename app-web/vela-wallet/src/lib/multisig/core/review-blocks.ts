@@ -8,7 +8,7 @@
  */
 import { fillTemplate } from '$lib/i18n/fill';
 import type { SigningMessages } from '$lib/signing/messages';
-import type { Block, KeyValueRow, TechModel } from '$lib/signing/model';
+import type { Block, KeyValueRow, PartyBadge, TechModel } from '$lib/signing/model';
 import { rawWords } from '$lib/signing/raw-json';
 import { checkingCard, landedVerdict, verdictRooms, type SimEnded } from '$lib/signing/verdict';
 import type { MultisigMessages } from '../messages';
@@ -107,25 +107,65 @@ function roleLabel(r: ReviewRecipient, m: MultisigMessages['review']): string {
 	return r.call === null ? role : `${fillTemplate(m.callNumber, { n: String(r.call) })} · ${role}`;
 }
 
-/** Every address a leg sends to, calls or makes a member — with what is known of it. */
-export function recipientBlocks(review: MultisigReviewOut, ctx: ReviewContext): Block[] {
+/** What is known of a recipient, as its row's badge ("First time sending here"). */
+function recipientBadge(r: ReviewRecipient, ctx: ReviewContext): PartyBadge | undefined {
+	const tags = [
+		r.firstTime === true && r.role !== 'contract' ? ctx.signing.tagFirstTime : null,
+		r.isContract === true && r.role !== 'contract' ? ctx.signing.tagContract : null
+	].filter((t): t is string => t !== null);
+	return tags.length > 0
+		? { text: tags.join(' · '), tone: r.lookalike ? 'danger' : 'caution' }
+		: undefined;
+}
+
+/**
+ * r5reg-15: the addresses `blocks` (the call's own review) already name as a
+ * party — its "Recipient" — lowercased. The review says each of them once.
+ */
+export function partyAddresses(blocks: Block[]): string[] {
+	return blocks.flatMap((b) => (b.kind === 'party' && b.address ? [b.address.toLowerCase()] : []));
+}
+
+/**
+ * Each recipient's badge, by lowercased address: worn by the call's own row
+ * for that address when the review's row is left out (r5reg-15).
+ */
+export function recipientBadges(
+	review: MultisigReviewOut | null,
+	ctx: ReviewContext
+): Record<string, PartyBadge> {
+	const out: Record<string, PartyBadge> = {};
+	for (const r of review?.recipients ?? []) {
+		const badge = recipientBadge(r, ctx);
+		const key = r.address.toLowerCase();
+		if (badge && !out[key]) out[key] = badge;
+	}
+	return out;
+}
+
+/**
+ * Every address a leg sends to, calls or makes a member — with what is known
+ * of it. One the call's own review names already (`drawn`, lowercased) is
+ * not named twice (r5reg-15: "Recipient 0xd9c7…" then "To 0xd9c7…"); its
+ * warnings still stand.
+ */
+export function recipientBlocks(
+	review: MultisigReviewOut,
+	ctx: ReviewContext,
+	drawn: readonly string[] = []
+): Block[] {
 	const m = ctx.m.review;
 	const out: Block[] = [];
 	for (const r of review.recipients) {
-		const tags = [
-			r.firstTime === true && r.role !== 'contract' ? ctx.signing.tagFirstTime : null,
-			r.isContract === true && r.role !== 'contract' ? ctx.signing.tagContract : null
-		].filter((t): t is string => t !== null);
-		out.push({
-			kind: 'party',
-			label: roleLabel(r, m),
-			name: ctx.nameOf(r.address) ?? r.address,
-			address: r.address,
-			badge:
-				tags.length > 0
-					? { text: tags.join(' · '), tone: r.lookalike ? 'danger' : 'caution' }
-					: undefined
-		});
+		if (!drawn.includes(r.address.toLowerCase())) {
+			out.push({
+				kind: 'party',
+				label: roleLabel(r, m),
+				name: ctx.nameOf(r.address) ?? r.address,
+				address: r.address,
+				badge: recipientBadge(r, ctx)
+			});
+		}
 		if (r.lookalike) {
 			out.push({
 				kind: 'warning',
@@ -171,16 +211,20 @@ export function movesBlocks(
 	return out;
 }
 
-/** The review's own blocks, after the call's reading: the guard, who it reaches, what moves. */
+/**
+ * The review's own blocks, after the call's reading: the guard, who it
+ * reaches (but those the call's reading names, `drawn`), what moves.
+ */
 export function reviewBlocks(
 	review: MultisigReviewOut | null,
 	sim: SimEnded | null,
-	ctx: ReviewContext
+	ctx: ReviewContext,
+	drawn: readonly string[] = []
 ): Block[] {
 	if (!review) return movesBlocks(null, null, ctx);
 	return [
 		...stateBlocks(review, ctx),
-		...recipientBlocks(review, ctx),
+		...recipientBlocks(review, ctx, drawn),
 		...movesBlocks(review, sim, ctx)
 	];
 }
