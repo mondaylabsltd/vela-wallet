@@ -309,6 +309,25 @@ sealed class SendSubmitFailure {
     @Serializable
     @SerialName("previous_pending")
     data object PreviousPending : SendSubmitFailure()
+
+    /**
+     * send-11: the passkey prompt timed out — nothing was signed. Declared so
+     * the shell can say it; this shell's ceremony does not yet tell a timeout
+     * from a cancel (Phase 2, send round 3-6).
+     */
+    @Serializable
+    @SerialName("passkey_timed_out")
+    data object PasskeyTimedOut : SendSubmitFailure()
+
+    /** send-15: another transaction of this account spent the nonce first; nothing was sent. */
+    @Serializable
+    @SerialName("nonce_used")
+    data object NonceUsed : SendSubmitFailure()
+
+    /** r5reg-3: the reads before the passkey did not get through — [busy]: the nodes answered "busy". */
+    @Serializable
+    @SerialName("chain_unreachable")
+    data class ChainUnreachable(val busy: Boolean = false) : SendSubmitFailure()
 }
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
@@ -376,6 +395,20 @@ enum class SendTxErrorKey {
      * with Try again.
      */
     @SerialName("previous_pending") PreviousPending,
+
+    /** send-15: another transaction of this account spent the nonce first. Nothing was sent: Review again. */
+    @SerialName("nonce_used") NonceUsed,
+
+    /** A multisig's proposal: its own words replace these (web-only today). */
+    @SerialName("proposal_mailbox_down") ProposalMailboxDown,
+
+    @SerialName("proposal_offline") ProposalOffline,
+
+    /** r5reg-3: the reads before the passkey did not get through — the chain's nodes were busy. */
+    @SerialName("chain_busy") ChainBusy,
+
+    /** r5reg-3: …the chain could not be reached at all. */
+    @SerialName("chain_unreachable") ChainUnreachable,
 }
 
 @Serializable
@@ -418,8 +451,73 @@ data class SendPayee(
     val name_source: SendNameSource? = null,
 )
 
+/**
+ * The recipient's risk signals, as the shell observed them (the web's
+ * `recipient-risk.ts` + its `knownName` / `ownAddress` ports, r4a-18).
+ * Facts, not verdicts: what the confirm says of them is the core's.
+ */
 @Serializable
-data class SendRecipientRisk(val is_contract: Boolean? = null, val first_time: Boolean? = null)
+data class SendRecipientRisk(
+    /** Bytecode at the address: `true` contract, `false` an account (a 7702-delegated one too), `null` unknown. */
+    val is_contract: Boolean? = null,
+    /** Never sent here from this device. `null`: unknown — the history could not be read, or the address is the person's own. */
+    val first_time: Boolean? = null,
+    /** The history could not be read: `first_time` is `null` then, and the confirm says so, with a retry. */
+    val history_unread: Boolean = false,
+    /** The person's own name for it: one of their accounts here, else a contact they named. */
+    val known_name: String? = null,
+    /** One of the person's own accounts on this device: never told as a first transfer. */
+    val own: Boolean = false,
+)
+
+/** Why a multisig's proposal was not made, as the shell knows it (`SendProposeFailure`). */
+@Serializable
+enum class SendProposeFailure {
+    @SerialName("mailbox_down") MailboxDown,
+    @SerialName("offline") Offline,
+}
+
+/** One transfer the review showed (`ReviewedTransfer`): base units, `token` `null` for the native coin. */
+@Serializable
+data class ReviewedTransfer(val to: String, val token: String? = null, val amount: String)
+
+/** `SendSubmitSlow`: the submit has run [seconds] without an answer; [busy] — the relay said it is busy. */
+@Serializable
+data class SendSubmitSlow(val seconds: Int = 0, val busy: Boolean = false)
+
+/** `SendMaxMoved`: Max was tapped, and the figure moved from [from] to [to] as the fee settled. */
+@Serializable
+data class SendMaxMoved(val from: String = "", val to: String = "")
+
+/** `SendPasskeyNote`: the passkey sheet closed without a signature — how. */
+@Serializable
+enum class SendPasskeyNote {
+    @SerialName("cancelled") Cancelled,
+    @SerialName("timed_out") TimedOut,
+}
+
+/** `SendRecipientWarning`: the address is one money must not go to. */
+@Serializable
+enum class SendRecipientWarning {
+    @SerialName("zero_address") ZeroAddress,
+    @SerialName("own_address") OwnAddress,
+}
+
+/** `SendMultisigRef`: the multisig this send is from — its rule. Web-only today; decoded so a view carrying it reads. */
+@Serializable
+data class SendMultisigRef(val threshold: Int = 0, val owners: Int = 0)
+
+/** `SendProposed`: the proposal a multisig send became. */
+@Serializable
+data class SendProposed(val chain_id: Int, val safe_tx_hash: String)
+
+object SendPasskeyNoteFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendPasskeyNote>(SendPasskeyNote.serializer())
+object SendRecipientWarningFailSoft :
+    app.getvela.wallet.core.crux.FailSoftSerializer<SendRecipientWarning>(SendRecipientWarning.serializer())
+object SendSubmitSlowFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendSubmitSlow>(SendSubmitSlow.serializer())
+object SendMaxMovedFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendMaxMoved>(SendMaxMoved.serializer())
+object SendMultisigRefFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendMultisigRef>(SendMultisigRef.serializer())
+object SendProposedFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<SendProposed>(SendProposed.serializer())
 
 @Serializable
 enum class SendTimerTag {
@@ -429,6 +527,12 @@ enum class SendTimerTag {
 
     /** The open treasury sheet asks the relay again (spec 098 §4). */
     @SerialName("treasury_watch") TreasuryWatch,
+
+    /** The confirm's bounded wait for the recipient's check (send-18). */
+    @SerialName("risk_wait") RiskWait,
+
+    /** How long a may-have-been-sent receipt says "checking" before it says the outcome is still unknown (round 3). */
+    @SerialName("maybe_sent_cap") MaybeSentCap,
 }
 
 @Serializable
@@ -785,6 +889,32 @@ data class SendView(
     val can_confirm: Boolean = false,
     /** On the review: which review this is — what the confirm names back. */
     val review_digest: String? = null,
+    /** The address money must not go to (zero, or this account's own), the core's word. */
+    @Serializable(with = SendRecipientWarningFailSoft::class)
+    val recipient_warning: SendRecipientWarning? = null,
+    /** A multisig's send: its rule. Web-only today. */
+    @Serializable(with = SendMultisigRefFailSoft::class)
+    val multisig: SendMultisigRef? = null,
+    /** A multisig's send became this proposal. */
+    @Serializable(with = SendProposedFailSoft::class)
+    val proposed: SendProposed? = null,
+    /** The passkey sheet closed without a signature — how, for the line under the confirm. */
+    @Serializable(with = SendPasskeyNoteFailSoft::class)
+    val passkey_note: SendPasskeyNote? = null,
+    /** The recipient's check is still out on the confirm. */
+    val risk_checking: Boolean = false,
+    /** The confirm opened without the recipient's check (send-18): said neutrally, with "Check again" (`retry_risk_check`). */
+    val risk_unfinished: Boolean = false,
+    /** …because the account's history could not be read (round 3) — never a first-time tag built on it. */
+    val risk_history_unread: Boolean = false,
+    /** Another tab of this account holds the submit (web); always `false` here. */
+    val queued_behind_tab: Boolean = false,
+    /** The submit is taking long (`submit_slow`). */
+    @Serializable(with = SendSubmitSlowFailSoft::class)
+    val submit_slow: SendSubmitSlow? = null,
+    /** Max was tapped and the figure moved as the fee settled. */
+    @Serializable(with = SendMaxMovedFailSoft::class)
+    val max_moved: SendMaxMoved? = null,
     val sending: Boolean = false,
     val tx_status: SendTxStatus = SendTxStatus.Idle,
     val tx_error: SendTxErrorKey? = null,
@@ -971,6 +1101,19 @@ sealed class SendOperation {
     @Serializable
     @SerialName("close")
     data object Close : SendOperation()
+
+    /**
+     * A multisig's send becomes a proposal (web-only today: multisig
+     * orchestration is not in this shell yet). Answered `propose_failed` —
+     * never left unanswered, which is a confirm that spins for ever.
+     */
+    @Serializable
+    @SerialName("propose_safe_tx")
+    data class ProposeSafeTx(
+        val chain_id: Int,
+        val multisig: String,
+        val transfers: List<ReviewedTransfer> = emptyList(),
+    ) : SendOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -1028,6 +1171,15 @@ sealed class SendShellResult {
     @Serializable
     @SerialName("submit_failed")
     data class SubmitFailed(val failure: SendSubmitFailure) : SendShellResult()
+
+    @Serializable
+    @SerialName("proposed")
+    data class Proposed(val safe_tx_hash: String) : SendShellResult()
+
+    /** [reason] `null`: none the shell can name — never a guessed `mailbox_down` / `offline`. */
+    @Serializable
+    @SerialName("propose_failed")
+    data class ProposeFailed(val cancelled: Boolean, val reason: SendProposeFailure? = null) : SendShellResult()
 
     @Serializable
     @SerialName("passkey_cancel_acknowledged")
@@ -1297,6 +1449,11 @@ sealed class SendEvent {
     @Serializable
     @SerialName("retry_after_error")
     data object RetryAfterError : SendEvent()
+
+    /** The confirm opened without the recipient's check (`risk_unfinished`): ask it again ("Check again"). */
+    @Serializable
+    @SerialName("retry_risk_check")
+    data object RetryRiskCheck : SendEvent()
 
     /**
      * Every operation in flight on this device, as the tracker last said —

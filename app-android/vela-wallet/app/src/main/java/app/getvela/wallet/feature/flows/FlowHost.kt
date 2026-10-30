@@ -282,6 +282,7 @@ private fun FlowHostContent(
                     handoff = sendHandoff,
                     // The fee line over a failure: the form row's own tap (PR 2 polish).
                     onFee = { onNavigate(FlowStep.FeeToken) },
+                    onRecipientCheckRetry = { send?.onRecipientCheckRetry?.invoke() },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -523,6 +524,8 @@ class SendCallbacks(
     val onNoticeSecondary: () -> Unit = {},
     /** Issue #466: a relay stop's "Report this" (form or confirm). */
     val onRelayReport: () -> Unit = {},
+    /** send-18: the confirm's "Check again" on the recipient's unfinished check. */
+    val onRecipientCheckRetry: () -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

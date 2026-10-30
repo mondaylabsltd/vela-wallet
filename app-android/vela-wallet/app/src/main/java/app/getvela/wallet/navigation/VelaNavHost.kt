@@ -1541,6 +1541,7 @@ fun VelaNavHost(
                             onNoticeSecondary = {
                                 if (sendView.relay_unreachable != null) send.dismissRelayUnreachable() else send.dismissTreasurySheet()
                             },
+                            onRecipientCheckRetry = { send.retryRiskCheck() },
                             // Issue #466: snapshot the core's report NOW and open the report sheet with it.
                             onRelayReport = {
                                 sendView.relay_report?.let { report ->

@@ -887,6 +887,15 @@ data class SendConfirmModel(
      * so the form never had it to show.
      */
     val recipientTag: String? = null,
+    /**
+     * The recipient's check the confirm opened without (`SendView.
+     * risk_unfinished`, send-18) — it did not finish, or the account's history
+     * could not be read (`risk_history_unread`, round 3) — in neutral ink,
+     * with [recipientCheckRetry] ("Check again", `retry_risk_check`). Never a
+     * first-time tag built on a failed read.
+     */
+    val recipientCheck: String? = null,
+    val recipientCheckRetry: String? = null,
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,

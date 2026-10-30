@@ -392,6 +392,11 @@ sealed class SignSubmitOutcome {
     @SerialName("passkey_cancelled")
     data object PasskeyCancelled : SignSubmitOutcome()
 
+    /** send-11: the passkey prompt timed out — nothing was signed; said calmly, never as a failure. */
+    @Serializable
+    @SerialName("passkey_timed_out")
+    data object PasskeyTimedOut : SignSubmitOutcome()
+
     @Serializable
     @SerialName("underfunded")
     data class Underfunded(val message: String, val funding: SignFundingNeeded? = null) : SignSubmitOutcome()
@@ -429,6 +434,11 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("venue_blocked")
     data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SignSubmitOutcome()
+
+    /** Round 5/6: the trusted signing page declined it — nothing was signed or sent. */
+    @Serializable
+    @SerialName("page_declined")
+    data object PageDeclined : SignSubmitOutcome()
 }
 
 @Serializable

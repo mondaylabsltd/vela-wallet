@@ -548,6 +548,14 @@ class AppContainer(private val app: Application) {
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            // r4a-18 / vis-24 (the web's `knownName` / `ownAddress`): one of the
+            // person's accounts on this device, else a contact they named — a
+            // resolved name is a service's word, not theirs.
+            knownName = { address ->
+                session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+                    ?: contacts.view.value.contacts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+            },
+            ownAddress = { address -> session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } },
             // The importer is opened in the person's currency when that is known —
             // committed, or the stored choice on its way (F8); only before either
             // does it get the placeholder it needs to exist, which its sheet does

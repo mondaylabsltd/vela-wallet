@@ -775,7 +775,7 @@ object SendLive {
         // Spec 096 F12: a token's own contract, said before anything else.
         if (view.recipient_is_token_contract) return ctx.strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
         payeeName(singlePayee(view), ctx.strings)?.let { return it }
-        if (view.recipient_risk?.first_time == true) return ctx.strings.t(I18nKeys.Flows.FIRST_TIME_SEND)
+        if (view.recipient_risk?.first_time == true && view.recipient_risk.own != true) return ctx.strings.t(I18nKeys.Flows.FIRST_TIME_SEND)
         return null
     }
 
@@ -1289,9 +1289,19 @@ object SendLive {
             // recipient).
             recipientTag = when {
                 view.recipient_is_token_contract -> s.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
-                !split && view.recipient_risk?.first_time == true -> s.t(I18nKeys.Flows.FIRST_TIME_SEND)
+                // Never on one of the person's own accounts (r4a-18) — the core
+                // already withholds `first_time` there; this only reads it.
+                !split && view.recipient_risk?.first_time == true && view.recipient_risk.own != true -> s.t(I18nKeys.Flows.FIRST_TIME_SEND)
                 else -> null
             },
+            // send-18 / round 3: the check the confirm opened without, said as
+            // that — the history could not be read, or the check did not finish.
+            recipientCheck = if (view.risk_unfinished) {
+                s.t(if (view.risk_history_unread) I18nKeys.Flows.RISK_HISTORY_UNREAD else I18nKeys.Flows.RISK_UNFINISHED)
+            } else {
+                null
+            },
+            recipientCheckRetry = if (view.risk_unfinished) s.t(I18nKeys.Flows.RISK_RETRY) else null,
             facts = listOf(
                 FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress)),
                 // SD3b (spec 038 #D2): a split names its count here and every
@@ -1458,6 +1468,16 @@ object SendLive {
             // went wrong — the sentence under "Not sent yet" ([notSent]), the
             // signing sheet's own, with Try again.
             SendTxErrorKey.PreviousPending -> s.t(I18nKeys.Flows.NOT_SENT_BODY)
+            // send-15: another of this account's transactions went first —
+            // nothing was sent, calmly (the web's `nonce_used`).
+            SendTxErrorKey.NonceUsed -> s.t(I18nKeys.Flows.WENT_FIRST)
+            // A proposal's own words (web-only multisig); here the plain line.
+            SendTxErrorKey.ProposalMailboxDown, SendTxErrorKey.ProposalOffline -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            // r5reg-3: the network's failure, by its name — never the passkey's.
+            SendTxErrorKey.ChainBusy, SendTxErrorKey.ChainUnreachable -> s.t(
+                if (view.tx_error == SendTxErrorKey.ChainBusy) I18nKeys.Flows.TX_ERROR_CHAIN_BUSY else I18nKeys.Flows.TX_ERROR_CHAIN_UNREACHABLE,
+                mapOf("network" to (view.selected_token?.chain_id?.let { ctx.chainNames[it] } ?: "")),
+            )
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }
     }

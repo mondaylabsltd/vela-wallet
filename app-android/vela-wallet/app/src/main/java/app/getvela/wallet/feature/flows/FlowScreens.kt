@@ -1882,6 +1882,8 @@ fun SendConfirmBody(
     handoff: SendHandoff? = null,
     /** PR 2 polish: a tap on the fee line over a failure ([FactRowModel.tap]) — the form row's own tap. */
     onFee: () -> Unit = {},
+    /** send-18: "Check again" on the recipient's unfinished check (`retry_risk_check`). */
+    onRecipientCheckRetry: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1964,6 +1966,31 @@ fun SendConfirmBody(
                 fontSize = VelaTextSize.sm,
                 modifier = Modifier.padding(horizontal = VelaSpacing.lg),
             )
+        }
+        // send-18 / round 3: the check that did not finish, said neutrally —
+        // a quiet line and a plain text action, never the warning ink.
+        model.recipientCheck?.let { line ->
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = line,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg),
+            )
+            model.recipientCheckRetry?.let { retry ->
+                Text(
+                    text = retry,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.medium,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier
+                        .padding(horizontal = VelaSpacing.sm)
+                        .clickable(role = Role.Button, onClick = onRecipientCheckRetry)
+                        .padding(horizontal = VelaSpacing.sm, vertical = VelaSpacing.md),
+                )
+            }
         }
         if (model.breakdown.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))

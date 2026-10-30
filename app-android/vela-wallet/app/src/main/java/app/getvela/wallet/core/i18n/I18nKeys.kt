@@ -888,6 +888,15 @@ object I18nKeys {
         const val ALERT_ESTIMATE_CHAIN_DOWN_BODY = "send.alertEstimateChainDownBody"
         const val ALERT_LOAD_TOKENS = "send.alertLoadTokensError"
         const val TX_ERROR_GENERIC = "send.txErrorGeneric"
+        /** r5reg-3: the reads before the passkey did not get through — the network's failure, by its name. */
+        const val TX_ERROR_CHAIN_BUSY = "send.txErrorChainBusy"
+        const val TX_ERROR_CHAIN_UNREACHABLE = "send.txErrorChainUnreachable"
+        /** send-15: another transaction of this account spent the nonce first; nothing was sent. */
+        const val WENT_FIRST = "componentsUi.signing.wentFirst"
+        /** send-18 / round 3: the confirm opened without the recipient's check — said neutrally, with Check again. */
+        const val RISK_UNFINISHED = "send.riskUnfinished"
+        const val RISK_HISTORY_UNREAD = "send.riskHistoryUnread"
+        const val RISK_RETRY = "send.riskRetry"
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
         const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
         const val WARN_NEED_GAS = "send.warnNeedGas"
