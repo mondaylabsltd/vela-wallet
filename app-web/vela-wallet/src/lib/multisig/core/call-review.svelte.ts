@@ -50,6 +50,15 @@ function rule<T>(method: string, args: Record<string, unknown>): T {
 	return JSON.parse(wasm.multisigLinkCall(method, JSON.stringify(args))) as T;
 }
 
+/** A rule that could not read what it was handed reads nothing (`null`), never a crash. */
+function calls(method: string, args: Record<string, unknown>): InnerCall[] | null {
+	try {
+		return rule<InnerCall[] | null>(method, args);
+	} catch {
+		return null;
+	}
+}
+
 /**
  * The calls of `action` the signing sheet's machines read — the core's
  * (`calls.readable`): a call to another contract, or every call of a batch
@@ -57,7 +66,7 @@ function rule<T>(method: string, args: Record<string, unknown>): T {
  * `null`: nothing for them to read.
  */
 export function readableCalls(action: Action | null): InnerCall[] | null {
-	return rule<InnerCall[] | null>('calls.readable', { action });
+	return calls('calls.readable', { action });
 }
 
 /**
@@ -70,7 +79,7 @@ export function reviewedCalls(
 	action: Action | null,
 	tx: { to: string; value: string; data: string }
 ): InnerCall[] | null {
-	return rule<InnerCall[] | null>('calls.reviewed', { action, tx });
+	return calls('calls.reviewed', { action, tx });
 }
 
 /** A value as a site sends one: a hex quantity (the core reads one that is not hex as unreadable, RC4). */

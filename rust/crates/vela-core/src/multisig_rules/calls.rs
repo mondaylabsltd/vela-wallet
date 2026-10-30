@@ -3,12 +3,12 @@
 //! same intent. The shell asks here (`calls.readable`, `calls.reviewed`)
 //! and hands the calls to the clear-signing machines; it never picks them.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{arg, to_json};
 use crate::app::multisig_shell::quantity;
-use crate::multisig::{Action, SafeTx};
+use crate::multisig::Action;
 use crate::CoreError;
 
 /// One call as a site would have sent it from the multisig.
@@ -16,6 +16,16 @@ use crate::CoreError;
 pub struct InnerCall {
     pub to: String,
     /// Base units, as the action carries it.
+    pub value: String,
+    pub data: String,
+}
+
+/// The part of a SafeTx a lone transfer is read from (its own call): any
+/// field missing reads as empty — a shell hands what it has, never a crash.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct CallTx {
+    pub to: String,
     pub value: String,
     pub data: String,
 }
@@ -56,7 +66,7 @@ pub fn readable(action: Option<&Action>) -> Option<Vec<InnerCall>> {
 /// multisig — a lone transfer is the SafeTx's own call (`tx`). A member
 /// change, a rename or a cancellation is the multisig's own reading
 /// (`None`); so is a transfer whose value does not read.
-pub fn reviewed(action: Option<&Action>, tx: &SafeTx) -> Option<Vec<InnerCall>> {
+pub fn reviewed(action: Option<&Action>, tx: &CallTx) -> Option<Vec<InnerCall>> {
     match action? {
         Action::Call { to, value, data } => Some(vec![InnerCall {
             to: to.clone(),
@@ -73,7 +83,7 @@ pub fn reviewed(action: Option<&Action>, tx: &SafeTx) -> Option<Vec<InnerCall>> 
                 })
                 .collect(),
         ),
-        Action::Transfer { .. } => {
+        Action::Transfer { .. } if !tx.to.is_empty() => {
             let value = quantity(if tx.value.is_empty() { "0" } else { &tx.value })?;
             Some(vec![InnerCall {
                 to: tx.to.clone(),
@@ -95,7 +105,7 @@ pub fn call(method: &str, args: &Value) -> Result<String, CoreError> {
     match method {
         "readable" => to_json(&readable(action.as_ref())),
         "reviewed" => {
-            let tx: SafeTx = arg(args, "tx")?;
+            let tx: CallTx = arg::<Option<CallTx>>(args, "tx")?.unwrap_or_default();
             to_json(&reviewed(action.as_ref(), &tx))
         }
         other => Err(CoreError::Multisig(format!(
@@ -116,7 +126,7 @@ mod tests {
 
     const TO: &str = "0x00000000000000000000000000000000000000b0";
 
-    fn tx() -> SafeTx {
+    fn tx() -> CallTx {
         serde_json::from_value(json!({
             "to": TO, "value": "0x10", "data": "0x", "operation": 0,
             "safeTxGas": "0x0", "baseGas": "0x0", "gasPrice": "0x0",
@@ -154,6 +164,16 @@ mod tests {
                 value: "16".to_owned(),
                 data: "0x".to_owned()
             }]
+        );
+        // A shell that has no SafeTx at hand gets nothing, never a crash.
+        assert_eq!(reviewed(Some(&transfer), &CallTx::default()), None);
+        assert_eq!(
+            call(
+                "reviewed",
+                &json!({"action": {"kind": "transfer", "token": null, "to": TO, "amount": "1"}})
+            )
+            .unwrap(),
+            "null"
         );
         let rename = action(json!({"kind": "rename", "name": "Team"}));
         assert_eq!(reviewed(Some(&rename), &tx()), None);
