@@ -54,6 +54,13 @@ final class Loc {
     /// Whether an explicit tag was supplied at construction.
     private var pinned = false
 
+    /// Every plain key already resolved in the active language (native parity
+    /// Phase 4). The screens' models are rebuilt on every change they watch,
+    /// and each one asks for dozens of words — each a call into the engine.
+    /// A key with no variables always resolves to the same words until the
+    /// language changes, and `adopt` empties this when it does.
+    @ObservationIgnored private var resolved: [String: String] = [:]
+
     /// The device's own order, kept so `auto` can be re-resolved later without
     /// asking `Locale` again mid-session (it does not change while we run, and
     /// a test needs to be able to supply its own).
@@ -83,6 +90,7 @@ final class Loc {
     /// FR-005 forbids more strongly than it forbids the wrong language.
     private func adopt(_ candidate: String) {
         guard let engine else { return }
+        resolved.removeAll(keepingCapacity: true)
         if candidate != "en" {
             let state = try? engine.changeLanguage(lng: candidate)
             let active = state?.resolvedLanguage ?? "en"
@@ -111,6 +119,7 @@ final class Loc {
     func t(_ key: String, vars: [String: String] = [:]) -> String {
         _ = resolvedLanguage
         guard let engine else { return key }
+        if vars.isEmpty, let words = resolved[key] { return words }
         let opts = TOptions(
             count: nil,
             context: nil,
@@ -119,7 +128,9 @@ final class Loc {
             ordinal: false,
             vars: vars.map { TVar(name: $0.key, value: $0.value) }
         )
-        return (try? engine.t(key: key, opts: opts)) ?? key
+        let words = (try? engine.t(key: key, opts: opts)) ?? key
+        if vars.isEmpty { resolved[key] = words }
+        return words
     }
 
     /// Resolve a PLURAL key: `count` chooses the form — `_one`, `_few`,
