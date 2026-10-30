@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "Letakkan alamat, tautan pembayaran, atau gambar QR"
     },
+    "shortcuts": {
+      "send": "Kirim dengan {{app}}",
+      "receive": "Terima dengan {{app}}",
+      "scan": "Pindai dengan {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Untuk saat ini, tautan multisig dibuka di dompet web."
+    },
+    "widget": {
+      "balanceDescription": "Saldo Anda sekilas, sesuai terakhir kali Vela memperbaruinya."
+    },
     "browserStatus": {
       "title": "Status tab",
       "page": {

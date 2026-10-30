@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "Drop an address, payment link or QR image"
     },
+    "shortcuts": {
+      "send": "Send with {{app}}",
+      "receive": "Receive with {{app}}",
+      "scan": "Scan with {{app}}"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Multisig links open in the web wallet for now."
+    },
+    "widget": {
+      "balanceDescription": "Your balance at a glance, as of the last time Vela updated it."
+    },
     "browserStatus": {
       "title": "Tab status",
       "page": {

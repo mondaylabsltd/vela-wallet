@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "주소, 결제 링크 또는 QR 이미지를 놓으세요"
     },
+    "shortcuts": {
+      "send": "{{app}}에서 보내기",
+      "receive": "{{app}}에서 받기",
+      "scan": "{{app}}에서 스캔"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "멀티시그 링크는 당분간 웹 지갑에서 열립니다."
+    },
+    "widget": {
+      "balanceDescription": "잔액을 한눈에. Vela가 마지막으로 업데이트한 시점 기준입니다."
+    },
     "browserStatus": {
       "title": "탭 상태",
       "page": {

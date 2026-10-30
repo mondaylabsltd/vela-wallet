@@ -1318,9 +1318,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   title (`componentsUi.dropOverlay.title`). 2215 + 7 leaves + 3 branches
 //   (`settingsModals.appearance`, `componentsUi.appUpdate`,
 //   `componentsUi.dropOverlay`) = 2225 paths, 2114 leaves, 111 branches.
-if (PATHS.length !== 2225) fail(`expected 2225 paths (2114 leaf + 111 branch), got ${PATHS.length}`);
-if (leafSet.size !== 2114) fail(`expected 2114 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 111) fail(`expected 111 branch paths, got ${branchSet.size}`);
+// 2233 (core asks 1, iOS phase 3, 2026-10-31): + Siri / Shortcuts phrases
+//   (`componentsUi.shortcuts.{send,receive,scan}`, each with `{{app}}` — the
+//   `${applicationName}` Apple requires in every phrase), the multisig link
+//   sheet's line (`componentsUi.linkSheet.multisigOnWeb`) and the widget's
+//   gallery line (`componentsUi.widget.balanceDescription`). 2225 + 5
+//   leaves + 3 branches = 2233 paths, 2119 leaves, 114 branches.
+if (PATHS.length !== 2233) fail(`expected 2233 paths (2119 leaf + 114 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2119) fail(`expected 2119 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 114) fail(`expected 114 branch paths, got ${branchSet.size}`);
 // The on-demand catalogs, pinned the same way (leaves of every locale's union):
 // a key dropped from one namespace and not landed in the other fails here.
 // 579 (round 6, the outside owner's connect page, 2026-10-30): + 17

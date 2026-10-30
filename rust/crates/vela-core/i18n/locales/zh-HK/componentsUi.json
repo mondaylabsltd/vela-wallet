@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "拖放地址、付款連結或 QR 圖片"
     },
+    "shortcuts": {
+      "send": "用{{app}}發送",
+      "receive": "用{{app}}收款",
+      "scan": "用{{app}}掃描"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "多簽連結目前會在網頁版錢包中開啟。"
+    },
+    "widget": {
+      "balanceDescription": "一眼看到結餘，以 Vela 最近一次更新為準。"
+    },
     "browserStatus": {
       "title": "分頁狀態",
       "page": {

@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
     },
+    "shortcuts": {
+      "send": "{{app}} ile gönder",
+      "receive": "{{app}} ile al",
+      "scan": "{{app}} ile tara"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Multisig bağlantıları şimdilik web cüzdanında açılır."
+    },
+    "widget": {
+      "balanceDescription": "Bakiyeniz bir bakışta, Vela'nın son güncellediği haliyle."
+    },
     "browserStatus": {
       "title": "Sekme durumu",
       "page": {

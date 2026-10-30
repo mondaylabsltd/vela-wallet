@@ -570,6 +570,17 @@
     "dropOverlay": {
       "title": "Adresse, Zahlungslink oder QR-Bild hier ablegen"
     },
+    "shortcuts": {
+      "send": "Mit {{app}} senden",
+      "receive": "Mit {{app}} empfangen",
+      "scan": "Mit {{app}} scannen"
+    },
+    "linkSheet": {
+      "multisigOnWeb": "Multisig-Links öffnen sich vorerst in der Web-Wallet."
+    },
+    "widget": {
+      "balanceDescription": "Dein Guthaben auf einen Blick, so wie Vela es zuletzt aktualisiert hat."
+    },
     "browserStatus": {
       "title": "Tab-Status",
       "page": {
