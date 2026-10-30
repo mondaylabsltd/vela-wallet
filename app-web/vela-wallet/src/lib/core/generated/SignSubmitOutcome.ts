@@ -21,4 +21,4 @@ refused: boolean,
  * classifier read the platform's error — the one create and login
  * use (spec 099 R8). `Cancelled` is [`Self::PasskeyCancelled`].
  */
-signer: FailureKind | null, } | { "type": "asker_gone" } | { "type": "venue_blocked", block: VenueBlock, };
+signer: FailureKind | null, } | { "type": "asker_gone" } | { "type": "venue_blocked", block: VenueBlock, } | { "type": "page_declined" };

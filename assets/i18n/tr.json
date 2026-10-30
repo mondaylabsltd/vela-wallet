@@ -88,7 +88,8 @@
    "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
    "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
    "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın.",
-   "webApprovals": "Web’de çoklu imza onaylarınızı imza sayfası inceler ve imzalar. Diğer işlemler ve mesajlar Vela’da onaylanır."
+   "pageProtects": "İmza sayfası isteği kendisi okur ve size tam olarak gösterdiğini imzalar; bu yüzden kurcalanmış bir Vela ekranı sizi başka bir şeyi imzalamaya kandıramaz.",
+   "pageLimit": "Cüzdanın kendisi ele geçirildiyse sizi koruyamaz: geçiş anahtarlarınız {{domain}} için imza atar ve orada çalışan kod yine de doğrudan onlardan imza isteyebilir."
   },
   "advanced": {
    "networksTitle": "Ağlar",

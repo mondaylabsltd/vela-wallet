@@ -656,7 +656,10 @@ fn a_landing_closed_is_not_raised_again_and_the_next_one_is() {
     sut.resolve(submit_ok("0xtxone"));
     let view = sut.view();
     assert_eq!(view.surface, SignSurface::Hidden, "answered");
-    assert!(view.tracker_handoff.is_some(), "the hand-off stays in the view");
+    assert!(
+        view.tracker_handoff.is_some(),
+        "the hand-off stays in the view"
+    );
     assert!(!view.landing_closed, "its landing is still owed");
 
     // Done — by its hash in any spelling; nothing is sent, nothing else moves.
@@ -5302,6 +5305,45 @@ fn an_unavailable_passkey_is_named_and_not_retried() {
             .map(|(code, kind, _)| (code, kind)),
         Some((CODE_INTERNAL, SignErrorKind::SignerUnavailable))
     );
+}
+
+/// Spec 102 (owner, 2026-10-30): the person declined on the account's trusted
+/// signing page, or closed it unsigned. The page is the venue, so that is the
+/// person's answer: the site hears 4001 once, the request settles rejected
+/// (a replay says so), and the sheet clears.
+#[test]
+fn a_decline_on_the_page_is_the_persons_answer() {
+    for (method, params) in [
+        ("personal_sign", r#"["0xdead","0x0"]"#),
+        ("personal_sign", r#"["hello","0x0"]"#),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::extension("rid-page", method, params, 1).event());
+        sut.dispatch(approve(SignApproveOpts::default()));
+        let ops = sut.resolve(Res::Submit {
+            outcome: SignSubmitOutcome::PageDeclined,
+            now_ms: 11_000.0,
+        });
+        assert_eq!(response_count(&ops), 1, "{method}: answered once");
+        let (code, kind, _) = ops
+            .iter()
+            .find_map(response_error)
+            .expect("a refusal answered");
+        assert_eq!(
+            (code, kind),
+            (CODE_USER_REJECTED, SignErrorKind::UserRejected),
+            "{method}"
+        );
+        assert!(sut.view().request.is_none(), "{method}: the sheet cleared");
+        sut.dispatch(Arrive::extension("rid-page", method, params, 1).event());
+        assert_eq!(
+            sut.view().notice,
+            Some(SignNotice::AlreadySettled {
+                outcome: SignSettledOutcome::Rejected
+            }),
+            "{method}"
+        );
+    }
 }
 
 /// Spec 102: the account cannot sign here (its keys answer only on its page,

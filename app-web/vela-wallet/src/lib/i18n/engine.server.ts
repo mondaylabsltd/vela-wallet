@@ -448,7 +448,10 @@ function venueBlockWords(k: (key: string) => string): Record<VenueBlockKey, stri
 	>;
 }
 
-/** Spec 102 (D4): the hand-off card's words — for the gallery's boards only. */
+/**
+ * Spec 102 (D4): the hand-off card's words — every signing sheet's (the page,
+ * everywhere: 2026-10-30), the multisig's, and the gallery's boards.
+ */
 export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
@@ -644,7 +647,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			inVelaBody: k('settings.venue.inVelaBody'),
 			page: k('settings.venue.page'),
 			pageBody: k('settings.venue.pageBody'),
-			webApprovals: k('settings.venue.webApprovals'),
+			pageProtects: k('settings.venue.pageProtects'),
+			pageLimit: k('settings.venue.pageLimit'),
 			blocked: venueBlockWords(k)
 		},
 		integrity: {
@@ -1632,7 +1636,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		batchStep: k('componentsUi.signing.batchStep'),
 		labelTotal: k('send.splitTotalLabel'),
 		expiredValue: k('componentsUi.signing.expiredValue'),
-		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract')
+		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract'),
+		// The page, everywhere (2026-10-30): an account that reviews and signs
+		// on its trusted page is handed there from every signing sheet.
+		handoff: resolveHandoffMessages(locale)
 	};
 }
 

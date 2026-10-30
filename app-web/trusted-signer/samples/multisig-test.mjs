@@ -392,9 +392,20 @@ const warned = (v, key) => v.warnings.some((w) => w.key === key);
   delete globalThis.location;
   const url = view(intent, { channel: 'url', callback: 'velawallet://sign-result' });
   check('the apps\' url channel still answers to velawallet://', !url.refuse);
+  // 2026-10-30, the page everywhere: a message from the web wallet is answered
+  // too, and the published extension is one of Vela's wallets.
   const other = ns.resolve({ method: 'personal_sign', params: ['0x68656c6c6f', MEMBER], origin: '' },
     { chainId: CHAIN, account: MEMBER, ...WALLET_CTX });
-  check('any other signature over postMessage from the wallet: still refused', other.refuse && warned(other, 'refuse.answerElsewhere'));
+  check('a message over postMessage from the web wallet: answered (the page, everywhere)',
+    !other.refuse && !warned(other, 'refuse.answerElsewhere'));
+  const fromExtension = view(intent, { requester: 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl' });
+  check('an approval from the published extension: answered', !fromExtension.refuse);
+  const otherExtension = view(intent, { requester: 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+  check('…but not from another extension id', otherExtension.refuse && warned(otherExtension, 'refuse.answerElsewhere'));
+  globalThis.location = { hostname: 'localhost' };
+  const devExtension = view(intent, { requester: 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+  check('a loopback page answers an unpacked extension (development)', !devExtension.refuse);
+  delete globalThis.location;
 }
 
 {

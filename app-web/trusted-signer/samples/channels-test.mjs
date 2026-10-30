@@ -77,7 +77,7 @@ const tls = spawn('python3', [join(SB, 'tls-serve.py'), root, String(TLS_PORT), 
 const chrome = spawn(process.env.CHROME_BIN, [
   '--headless=new', `--remote-debugging-port=${CDP}`,
   `--user-data-dir=${profile}`,
-  `--host-resolver-rules=MAP getvela.app:443 127.0.0.1:${TLS_PORT}`,
+  `--host-resolver-rules=MAP getvela.app:443 127.0.0.1:${TLS_PORT}, MAP evil.example:443 127.0.0.1:${TLS_PORT}`,
   '--ignore-certificate-errors', '--no-proxy-server',
   '--enable-unsafe-extension-debugging',
   `--disable-extensions-except=${root}`, `--load-extension=${root}`,
@@ -227,10 +227,12 @@ try {
   // === 2. postMessage, same browser: refused for a signature ===============
   //
   // postMessage answers whoever opened the page, and any site can (spec 102
-  // R7). So a signature asked this way is refused even from a Vela origin;
-  // the opener hears "refused" at once, and no passkey prompt is raised.
+  // R7). So a signature asked this way by a site that is not one of Vela's
+  // wallets (since 2026-10-30 the web wallet and the published extension are
+  // answered, by their exact origins — answer-test.mjs G, H) is refused; the
+  // opener hears "refused" at once, and no passkey prompt is raised.
   {
-    const opener = await Page.open('https://getvela.app/samples/dapp-sim.html?lang=en');
+    const opener = await Page.open('https://evil.example/samples/dapp-sim.html?lang=en');
     await sleep(600);
     await opener.ev('window.__openSigner()', true);
     await sleep(1200);

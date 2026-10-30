@@ -991,18 +991,20 @@ export interface VenueModel {
 	domainLine: string;
 	rows: VenueRowModel[];
 	/**
-	 * The rows are a statement, not a choice: the web opens no signing page
-	 * (owner, 2026-09-23; D-16), so where it signs is marked, every page row
-	 * is disabled with its reason, and nothing is offered. Absent — a shell
-	 * that opens pages — every reachable row is a choice.
+	 * The rows are a statement, not a choice: where the account signs is
+	 * marked and nothing is offered (a board of a shell that opens no page).
+	 * Absent — every shell today, the web and the extension included since
+	 * 2026-10-30 — every reachable row is a choice.
 	 */
 	readOnly?: boolean;
 	/**
-	 * 2026-10-29, the web: what a page venue does there — the account's
-	 * multisig approvals are reviewed and signed on the page; its other
-	 * transactions and messages stay in Vela.
+	 * What a signing page protects against, and what it does not (owner,
+	 * 2026-10-30) — said under the choice, in two lines: a tampered app
+	 * interface cannot make the person sign something else there; a fully
+	 * compromised wallet on the same passkey domain can still ask the passkey
+	 * itself.
 	 */
-	webNote?: string;
+	pageNotes?: string[];
 }
 
 /** One row of Settings → Signing pages. */

@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('id', {
   'warn.typedUnknown': 'Struktur EIP-712 tidak dikenal — baca setiap kolom di bawah sebelum memutuskan.',
   'warn.unverifiedDecimals': 'Halaman ini tidak mengenal token ini di jaringan ini, jadi jumlahnya ditampilkan dalam satuan terkecil — desimalnya tidak bisa diperiksa di sini.',
   'warn.claimedOrigin': 'Nama situs berasal dari situs itu sendiri dan tidak bisa diperiksa — berpeganglah pada detail di bawah.',
+  'warn.relayedOrigin': 'Situs mana yang meminta adalah kata dompet — halaman ini tidak bisa memeriksanya. Berpeganglah pada detail di bawah.',
 
   'ui.techDetails': 'Detail teknis',
   'ui.function': 'Fungsi',

@@ -106,7 +106,7 @@
 		</ul>
 	{/if}
 
-	{#if venue.webNote !== undefined}<p class="web-note">{venue.webNote}</p>{/if}
+	{#each venue.pageNotes ?? [] as line (line)}<p class="page-note">{line}</p>{/each}
 	{#if showDomain}<p class="domain">{venue.domainLine}</p>{/if}
 </div>
 
@@ -228,7 +228,7 @@
 		color: var(--color-fg-subtle);
 	}
 
-	.web-note {
+	.page-note {
 		margin: 0;
 		padding-block: var(--space-xl) 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));

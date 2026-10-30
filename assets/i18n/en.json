@@ -88,7 +88,8 @@
    "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
    "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
    "blockedWeb": "Not available on the web. Open it from the Vela app.",
-   "webApprovals": "On the web, a signing page reviews and signs your multisig approvals. Other transactions and messages are confirmed in Vela."
+   "pageProtects": "A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
+   "pageLimit": "It can't protect you if this wallet itself is compromised: your passkeys sign for {{domain}}, and code running there could still ask them for a signature."
   },
   "advanced": {
    "networksTitle": "Networks",

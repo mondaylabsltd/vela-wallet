@@ -418,13 +418,19 @@ export async function previewExecution(
 function executorSigner(owner: LocalOwner, chainId: number, tx: SafeTx): SignFn {
 	const stored = findAccountByAddress(owner.address);
 	const keys = stored ? keySetOf(stored).keys : [];
-	return async (challenge) => {
-		const assertion = await signChallenge(challenge, {
-			account: owner.address,
-			keys,
-			credentials: keys.map((k) => ({ id: k.credentialId })),
-			request: { method: 'vela_multisigExecute', params: { tx }, origin: '', chainId }
-		});
+	return async (challenge, operation) => {
+		// The operation rides along: an executor that reviews and signs on its
+		// trusted page is handed it there, as its own calls (R7).
+		const assertion = await signChallenge(
+			challenge,
+			{
+				account: owner.address,
+				keys,
+				credentials: keys.map((k) => ({ id: k.credentialId })),
+				request: { method: 'vela_multisigExecute', params: { tx }, origin: '', chainId }
+			},
+			operation
+		);
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) throw new PasskeyCheckError(compat.reason ?? 'unverifiable');
 		return {

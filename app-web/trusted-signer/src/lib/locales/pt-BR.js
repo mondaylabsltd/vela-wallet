@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'warn.typedUnknown': 'Estrutura EIP-712 desconhecida — leia cada campo abaixo antes de decidir.',
   'warn.unverifiedDecimals': 'Esta página não conhece este token nesta rede, então o valor aparece nas suas menores unidades — as casas decimais não podem ser conferidas aqui.',
   'warn.claimedOrigin': 'O nome do site vem do próprio site e não pode ser verificado — guie-se pelos detalhes abaixo.',
+  'warn.relayedOrigin': 'Qual site pediu é a palavra da carteira — esta página não consegue verificar. Guie-se pelos detalhes abaixo.',
 
   'ui.techDetails': 'Detalhes técnicos',
   'ui.function': 'Função',

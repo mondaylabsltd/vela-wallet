@@ -88,7 +88,8 @@
       "blockedApp": "As chaves de acesso desta conta só assinam para {{domain}}, então a Vela não pode usá-las aqui.",
       "blockedPage": "Esta página está em {{pageDomain}}, mas as chaves de acesso desta conta só assinam para {{domain}}.",
       "blockedWeb": "Indisponível na web. Abra pelo app da Vela.",
-      "webApprovals": "Na web, uma página de assinatura revisa e assina suas aprovações multisig. As outras transações e mensagens são confirmadas na Vela."
+      "pageProtects": "Uma página de assinatura lê a solicitação por conta própria e assina exatamente o que mostra, então uma tela da Vela adulterada não consegue enganar você para assinar outra coisa.",
+      "pageLimit": "Ela não protege você se a própria carteira estiver comprometida: suas chaves de acesso assinam para {{domain}}, e um código rodando lá ainda poderia pedir uma assinatura a elas."
     },
     "advanced": {
       "networksTitle": "Redes",

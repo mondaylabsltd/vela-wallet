@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Y9OGYllD1jtJtMYCjMjrrrDgbPfGR+MhQXo1d1PGRs8='; style-src 'sha256-UEbMxBqoN5BMFcqEZ3oYgtitb8Zd2vXFVy1cYhg25h8='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pl6z1nTxeYou+lKolJR/aLnwch+Y4iuuAFHT1d/zFEE='; style-src 'sha256-UEbMxBqoN5BMFcqEZ3oYgtitb8Zd2vXFVy1cYhg25h8='; img-src data:; font-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela</title>
     <style>
@@ -1442,6 +1442,7 @@ window.VelaCS.i18n.register('en', {
   'warn.typedUnknown': 'Unknown EIP-712 structure — read every field below before deciding.',
   'warn.unverifiedDecimals': 'This page doesn’t know this token on this network, so the amount is shown in its smallest units — its decimals can’t be checked here.',
   'warn.claimedOrigin': "The site's name comes from the site itself and can't be checked — go by the details below.",
+  'warn.relayedOrigin': "Which site asked is the wallet's word — this page can't check it. Go by the details below.",
 
   'ui.techDetails': 'Technical details',
   'ui.function': 'Function',
@@ -1829,6 +1830,7 @@ window.VelaCS.i18n.register('zh', {
   'warn.typedUnknown': '未知的 EIP-712 结构 — 逐字读完下面每个字段再决定。',
   'warn.unverifiedDecimals': '本页不认识这个网络上的这个代币，所以金额按它的最小单位显示 —— 小数位数在这里无法核实。',
   'warn.claimedOrigin': '网站名称是它自己提供的，无法核实，请以下方内容为准。',
+  'warn.relayedOrigin': '是哪个网站发起的，是钱包的说法，本页无法核实，请以下方内容为准。',
 
   // 界面
   'ui.techDetails': '技术细节',
@@ -2201,6 +2203,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'warn.typedUnknown': '未知的 EIP-712 結構——請逐一看完下面每個欄位再決定。',
   'warn.unverifiedDecimals': '這一頁不認得這個網路上的這個代幣，所以金額以它的最小單位顯示——它的小數位數無法在這裡核實。',
   'warn.claimedOrigin': '網站名稱是網站自己提供的，無法核實——請以下方的內容為準。',
+  'warn.relayedOrigin': '是哪個網站提出的，是錢包的說法，本頁無法核實——請以下方的內容為準。',
 
   'ui.techDetails': '技術細節',
   'ui.function': '函式',
@@ -2558,6 +2561,7 @@ window.VelaCS.i18n.register('zh-HK', {
   'warn.typedUnknown': '未知的 EIP-712 結構——請逐一細閱下面每個欄位再作決定。',
   'warn.unverifiedDecimals': '這一頁不認識這個網絡上的這種代幣，所以金額以它的最小單位顯示——它的小數位無法在這裏核實。',
   'warn.claimedOrigin': '網站名稱由網站自己提供，無法核實——請以下方的內容為準。',
+  'warn.relayedOrigin': '是哪個網站提出的，是錢包所說的，本頁無法核實——請以下方的內容為準。',
 
   'ui.techDetails': '技術細節',
   'ui.function': '函數',
@@ -2915,6 +2919,7 @@ window.VelaCS.i18n.register('ja', {
   'warn.typedUnknown': '不明な EIP-712 構造です — 決める前に、以下のすべてのフィールドを読んでください。',
   'warn.unverifiedDecimals': 'このページはこのネットワーク上のこのトークンを知らないため、金額は最小単位で表示しています — 小数点以下の桁数はここでは確認できません。',
   'warn.claimedOrigin': 'サイト名はサイト自身が名乗っているもので、確認できません — 以下の詳細を基準に判断してください。',
+  'warn.relayedOrigin': 'どのサイトからの依頼かはウォレットの申告で、このページでは確認できません — 以下の詳細を基準に判断してください。',
 
   'ui.techDetails': '技術的な詳細',
   'ui.function': '関数',
@@ -3270,6 +3275,7 @@ window.VelaCS.i18n.register('ko', {
   'warn.typedUnknown': '알 수 없는 EIP-712 구조입니다 — 결정하기 전에 아래 모든 필드를 읽어 보세요.',
   'warn.unverifiedDecimals': '이 페이지는 이 네트워크의 이 토큰을 알지 못해 금액을 최소 단위로 표시합니다 — 소수 자릿수는 여기서 확인할 수 없습니다.',
   'warn.claimedOrigin': '사이트 이름은 사이트가 스스로 밝힌 것이라 확인할 수 없습니다 — 아래 세부 내용을 기준으로 판단하세요.',
+  'warn.relayedOrigin': '어느 사이트가 요청했는지는 지갑이 알려 준 것이라 이 페이지는 확인할 수 없습니다 — 아래 세부 내용을 기준으로 판단하세요.',
 
   'ui.techDetails': '기술 세부 정보',
   'ui.function': '함수',
@@ -3625,6 +3631,7 @@ window.VelaCS.i18n.register('vi', {
   'warn.typedUnknown': 'Cấu trúc EIP-712 không xác định — hãy đọc từng trường bên dưới trước khi quyết định.',
   'warn.unverifiedDecimals': 'Trang này không biết token này trên mạng này, nên số lượng được hiển thị theo đơn vị nhỏ nhất — không thể kiểm tra số chữ số thập phân ở đây.',
   'warn.claimedOrigin': 'Tên trang web do chính trang đó tự cung cấp và không thể kiểm chứng — hãy dựa vào các chi tiết bên dưới.',
+  'warn.relayedOrigin': 'Trang web nào yêu cầu là do ví cho biết — trang này không thể kiểm chứng. Hãy dựa vào các chi tiết bên dưới.',
 
   'ui.techDetails': 'Chi tiết kỹ thuật',
   'ui.function': 'Hàm',
@@ -3980,6 +3987,7 @@ window.VelaCS.i18n.register('id', {
   'warn.typedUnknown': 'Struktur EIP-712 tidak dikenal — baca setiap kolom di bawah sebelum memutuskan.',
   'warn.unverifiedDecimals': 'Halaman ini tidak mengenal token ini di jaringan ini, jadi jumlahnya ditampilkan dalam satuan terkecil — desimalnya tidak bisa diperiksa di sini.',
   'warn.claimedOrigin': 'Nama situs berasal dari situs itu sendiri dan tidak bisa diperiksa — berpeganglah pada detail di bawah.',
+  'warn.relayedOrigin': 'Situs mana yang meminta adalah kata dompet — halaman ini tidak bisa memeriksanya. Berpeganglah pada detail di bawah.',
 
   'ui.techDetails': 'Detail teknis',
   'ui.function': 'Fungsi',
@@ -4335,6 +4343,7 @@ window.VelaCS.i18n.register('tr', {
   'warn.typedUnknown': 'Bilinmeyen EIP-712 yapısı — karar vermeden önce aşağıdaki her alanı okuyun.',
   'warn.unverifiedDecimals': 'Bu sayfa bu ağdaki bu token\'ı tanımıyor; bu yüzden tutar en küçük biriminde gösteriliyor — ondalık sayısı burada kontrol edilemez.',
   'warn.claimedOrigin': 'Sitenin adı sitenin kendisinden geliyor ve doğrulanamaz — aşağıdaki ayrıntılara göre karar verin.',
+  'warn.relayedOrigin': 'Hangi sitenin istediğini cüzdan söylüyor — bu sayfa bunu doğrulayamaz. Aşağıdaki ayrıntılara göre karar verin.',
 
   'ui.techDetails': 'Teknik ayrıntılar',
   'ui.function': 'Fonksiyon',
@@ -4690,6 +4699,7 @@ window.VelaCS.i18n.register('es-MX', {
   'warn.typedUnknown': 'Estructura EIP-712 desconocida — lee cada campo de abajo antes de decidir.',
   'warn.unverifiedDecimals': 'Esta página no conoce este token en esta red, así que la cantidad se muestra en sus unidades más pequeñas — aquí no se pueden comprobar sus decimales.',
   'warn.claimedOrigin': 'El nombre del sitio lo da el propio sitio y no se puede comprobar — guíate por los detalles de abajo.',
+  'warn.relayedOrigin': 'Qué sitio lo pidió lo dice la billetera; esta página no puede comprobarlo. Guíate por los detalles de abajo.',
 
   'ui.techDetails': 'Detalles técnicos',
   'ui.function': 'Función',
@@ -5045,6 +5055,7 @@ window.VelaCS.i18n.register('pt-BR', {
   'warn.typedUnknown': 'Estrutura EIP-712 desconhecida — leia cada campo abaixo antes de decidir.',
   'warn.unverifiedDecimals': 'Esta página não conhece este token nesta rede, então o valor aparece nas suas menores unidades — as casas decimais não podem ser conferidas aqui.',
   'warn.claimedOrigin': 'O nome do site vem do próprio site e não pode ser verificado — guie-se pelos detalhes abaixo.',
+  'warn.relayedOrigin': 'Qual site pediu é a palavra da carteira — esta página não consegue verificar. Guie-se pelos detalhes abaixo.',
 
   'ui.techDetails': 'Detalhes técnicos',
   'ui.function': 'Função',
@@ -5400,6 +5411,7 @@ window.VelaCS.i18n.register('fr', {
   'warn.typedUnknown': 'Structure EIP-712 inconnue — lisez chaque champ ci-dessous avant de décider.',
   'warn.unverifiedDecimals': 'Cette page ne connaît pas ce token sur ce réseau : le montant est donc affiché dans sa plus petite unité — ses décimales ne peuvent pas être vérifiées ici.',
   'warn.claimedOrigin': 'Le nom du site vient du site lui-même et ne peut pas être vérifié — fiez-vous aux détails ci-dessous.',
+  'warn.relayedOrigin': "Le site qui le demande, c'est le portefeuille qui le dit — cette page ne peut pas le vérifier. Fiez-vous aux détails ci-dessous.",
 
   'ui.techDetails': 'Détails techniques',
   'ui.function': 'Fonction',
@@ -5757,6 +5769,7 @@ window.VelaCS.i18n.register('de', {
   'warn.typedUnknown': 'Unbekannte EIP-712-Struktur — lies jedes Feld unten, bevor du entscheidest.',
   'warn.unverifiedDecimals': 'Diese Seite kennt diesen Token in diesem Netzwerk nicht, daher wird der Betrag in seiner kleinsten Einheit angezeigt — seine Dezimalstellen lassen sich hier nicht prüfen.',
   'warn.claimedOrigin': 'Der Name der Seite stammt von der Seite selbst und lässt sich nicht prüfen — verlass dich auf die Angaben unten.',
+  'warn.relayedOrigin': 'Welche Seite gefragt hat, sagt die Wallet — diese Seite kann das nicht prüfen. Verlass dich auf die Angaben unten.',
 
   'ui.techDetails': 'Technische Details',
   'ui.function': 'Funktion',
@@ -6114,6 +6127,7 @@ window.VelaCS.i18n.register('ru', {
   'warn.typedUnknown': 'Неизвестная структура EIP-712 — прочитайте каждое поле ниже, прежде чем решать.',
   'warn.unverifiedDecimals': 'Эта страница не знает этот токен в этой сети, поэтому сумма показана в его минимальных единицах — число знаков после запятой здесь проверить нельзя.',
   'warn.claimedOrigin': 'Название сайта сообщает сам сайт, и проверить его нельзя — ориентируйтесь на подробности ниже.',
+  'warn.relayedOrigin': 'Какой сайт это запросил, сообщает кошелёк — эта страница не может это проверить. Ориентируйтесь на подробности ниже.',
 
   'ui.techDetails': 'Технические детали',
   'ui.function': 'Функция',
@@ -6471,6 +6485,7 @@ window.VelaCS.i18n.register('it', {
   'warn.typedUnknown': 'Struttura EIP-712 sconosciuta — leggi ogni campo qui sotto prima di decidere.',
   'warn.unverifiedDecimals': 'Questa pagina non conosce questo token su questa rete, quindi l’importo è mostrato nelle sue unità più piccole — qui non si possono verificare i suoi decimali.',
   'warn.claimedOrigin': 'Il nome del sito viene dal sito stesso e non si può verificare — basati sui dettagli qui sotto.',
+  'warn.relayedOrigin': 'Quale sito lo chiede lo dice il wallet: questa pagina non può verificarlo. Basati sui dettagli qui sotto.',
 
   'ui.techDetails': 'Dettagli tecnici',
   'ui.function': 'Funzione',
@@ -6712,26 +6727,26 @@ window.VelaCS.catalog = {
   chains: [
     [1,'Ethereum','ETH'],
     [56,'BNB Chain','BNB'],
+    [8453,'Base','ETH'],
     [137,'Polygon','POL'],
     [42161,'Arbitrum','ETH'],
-    [10,'Optimism','ETH'],
-    [8453,'Base','ETH'],
     [43114,'Avalanche','AVAX'],
-    [100,'Gnosis','xDAI'],
-    [130,'Unichain','ETH'],
-    [4217,'Tempo','USD'],
+    [10,'Optimism','ETH'],
     [143,'Monad','MON'],
-    [480,'World Chain','ETH'],
+    [4663,'Robinhood Chain','ETH'],
     [5042,'Arc','USDC'],
     [196,'X Layer','OKB'],
-    [988,'Stable','USDT0'],
-    [1868,'Soneium','ETH'],
-    [4326,'MegaETH','ETH'],
-    [4663,'Robinhood Chain','ETH'],
     [5000,'Mantle','MNT'],
-    [8217,'Kaia','KAIA'],
+    [100,'Gnosis','xDAI'],
+    [4217,'Tempo','USD'],
+    [480,'World Chain','ETH'],
     [42220,'Celo','CELO'],
+    [130,'Unichain','ETH'],
     [57073,'Ink','ETH'],
+    [1868,'Soneium','ETH'],
+    [8217,'Kaia','KAIA'],
+    [988,'Stable','USDT0'],
+    [4326,'MegaETH','ETH'],
     [98866,'Plume','PLUME'],
     [1440000,'XRPL EVM','XRP'],
     [11155111,'Sepolia','ETH'],
@@ -8441,8 +8456,9 @@ window.VelaCS = window.VelaCS || {};
         icon: (known && known.icon) || null,
         // Only a channel the browser itself vouches for (postMessage
         // messaging) proves who is asking. Everything else is the requester's
-        // own word, and has to be shown as such.
-        originVerified: ctx.originVerified === true,
+        // own word, and has to be shown as such — a site a wallet relays
+        // included (`relayedSite`).
+        originVerified: ctx.originVerified === true && ctx.siteRelayed !== true,
         // No site at all: the wallet's own send. The card then names no
         // requester (the apps' `first_party`), rather than a generic
         // "Wallet" line that says nothing a person can check.
@@ -9591,14 +9607,18 @@ window.VelaCS = window.VelaCS || {};
    *
    * The URL channel can say yes when its answer address is exactly the
    * wallet's. postMessage answers whoever opened this page — any site can —
-   * so it says yes for ONE request only: a multisig member's approval
-   * (`vela_multisigApprove`), and only when the browser reports the opener as
-   * Vela's web wallet (`isWebWallet`). The web wallet is where multisigs live
-   * and it cannot receive `velawallet://`; the browser's own `event.origin`
-   * names the window the answer goes to, which is a stronger fact than any
-   * callback address. Every other signature over postMessage stays refused,
-   * whoever opened the page. The loopback socket is retired (the published
-   * page's `default-src 'none'` cannot open it).
+   * so it says yes only when the browser reports the opener as one of Vela's
+   * own wallets, by its EXACT origin: the web wallet (`isWebWallet`) or the
+   * published Chrome extension (`isExtension`). Neither can receive
+   * `velawallet://`; the browser's own `event.origin` names the window the
+   * answer goes to, which is a stronger fact than any callback address. And
+   * only for what a wallet signs (`SIGNED_THERE`): a transaction, a batch, a
+   * message, a multisig member's approval (owner, 2026-10-30: the page is
+   * usable everywhere — until then, only the approval, and only for the web
+   * wallet). Every signature over postMessage from any other opener stays
+   * refused, a `getvela.app` subdomain included; `eth_sign` is refused
+   * whoever asks. The loopback socket is retired (the published page's
+   * `default-src 'none'` cannot open it).
    *
    * ONE rule, used everywhere the answer's destination matters: a signature
    * is refused without it (`resolve`), so is every key ceremony on the URL
@@ -9613,8 +9633,13 @@ window.VelaCS = window.VelaCS || {};
   function answersToWallet(ctx) {
     if (!ctx) return false;
     if (ctx.channel === 'url') return ctx.callback === WALLET_CALLBACK;
-    return ctx.channel === 'post' && ctx.method === MULTISIG_APPROVE && ctx.originVerified === true &&
-      isWebWallet(ctx.requester);
+    return ctx.channel === 'post' && ctx.originVerified === true &&
+      SIGNED_THERE.indexOf(ctx.method) >= 0 && walletOpener(ctx.requester);
+  }
+
+  /** The opener the browser reports is one of Vela's own wallets. */
+  function walletOpener(origin) {
+    return isWebWallet(origin) || isExtension(origin);
   }
 
   /**
@@ -9628,6 +9653,57 @@ window.VelaCS = window.VelaCS || {};
    */
   var WEB_WALLETS = ['https://wallet.getvela.app', 'https://getvela.app'];
   var MULTISIG_APPROVE = 'vela_multisigApprove';
+
+  /**
+   * The published Chrome extension, by its exact origin. The id is the one
+   * the extension's manifest `key` derives (`extension/manifest.json`; the
+   * development and the GitHub-release packages carry that key). The Chrome
+   * Web Store assigns its own id to the store package, which carries no key:
+   * it joins this list once the store has assigned it — until then a store
+   * install reviews and signs in Vela (`docs/store-submission`).
+   */
+  var EXTENSIONS = ['chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl'];
+
+  /** What a wallet hands this page to sign over postMessage. */
+  var SIGNED_THERE = [
+    'eth_sendTransaction',
+    'wallet_sendCalls',
+    'personal_sign',
+    'eth_signTypedData_v4',
+    'eth_signTypedData_v3',
+    'eth_signTypedData',
+    MULTISIG_APPROVE,
+  ];
+
+  /**
+   * The extension, by the origin the BROWSER reports for the window that
+   * opened this page: its published id, exactly. A page served from this
+   * machine's loopback — a developer's — also answers any unpacked
+   * extension (whose id is derived from its folder): such a page can only
+   * use the loopback's own passkeys, never `getvela.app`'s.
+   */
+  function isExtension(origin) {
+    if (typeof origin !== 'string') return false;
+    if (EXTENSIONS.indexOf(origin) >= 0) return true;
+    var here = typeof location === 'object' && location ? String(location.hostname || '') : '';
+    return LOOPBACK_HOST.test(here) && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
+  }
+
+  /**
+   * The site in a request a wallet relays (the opener is Vela's web wallet or
+   * extension, and the site is not the opener itself) is the wallet's word:
+   * the browser vouched for who opened this page, not for the site the
+   * wallet says asked it. A tampered wallet is what this page is for, so its
+   * word is drawn as a claim (`warn.claimedOrigin`).
+   */
+  function relayedSite(requested, ctx) {
+    if (ctx.channel !== 'post' || ctx.originVerified !== true || !walletOpener(ctx.requester)) return false;
+    var origin = requested && typeof requested.origin === 'string' ? requested.origin : '';
+    if (!origin) return false;
+    var parsed = null;
+    try { parsed = new URL(origin); } catch (e) { return true; }
+    return parsed.origin !== ctx.requester;
+  }
 
   function isWebWallet(origin) {
     if (typeof origin !== 'string') return false;
@@ -10318,6 +10394,7 @@ window.VelaCS = window.VelaCS || {};
     // requester's word for it, the intent's own method.
     ctx.method = requested && typeof requested.method === 'string' ? requested.method : '';
     if (ns.multisig && ctx.method === ns.multisig.METHOD) return resolveMultisig(requested, ctx);
+    ctx.siteRelayed = relayedSite(requested, ctx);
     ctx.selfAccount = selfAccountOf(requested, ctx);
     ctx.coin = coinOf(ctx);
     var view = baseView(requested, ctx);
@@ -10384,7 +10461,8 @@ window.VelaCS = window.VelaCS || {};
 
     if (!view.dapp.originVerified && view.dapp.origin) {
       // About the requester line, so drawn under it (`near`), not as a banner.
-      view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin', near: 'requester' });
+      // A site a wallet relays is the WALLET's word, not the site's own.
+      view.warnings.push({ tone: 'caution', key: ctx.siteRelayed ? 'warn.relayedOrigin' : 'warn.claimedOrigin', near: 'requester' });
     }
 
     return finishSigning(view, ctx);
@@ -10395,6 +10473,7 @@ window.VelaCS = window.VelaCS || {};
   ns.resolve.walletRequester = walletRequester;
   ns.resolve.keyRoute = keyRoute;
   ns.resolve.answersToWallet = answersToWallet;
+  ns.resolve.EXTENSIONS = EXTENSIONS.slice();
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };
@@ -12906,8 +12985,9 @@ window.VelaCS = window.VelaCS || {};
       }, function (kind, body) {
         // The same rule as the card's, where the bytes leave (spec 102 R7):
         // an answer goes to the opener only when the answer rule says the
-        // opener is the wallet — today, a multisig approval answered to Vela's
-        // web wallet. Anything else gets the refusal code and nothing more.
+        // opener is the wallet — Vela's web wallet or its published extension,
+        // by the exact origin the browser reports, for what a wallet signs
+        // (2026-10-30). Anything else gets the refusal code and nothing more.
         // A key ceremony keeps its own rule (resolve.js `walletRequester`).
         var method = data.intent && typeof data.intent.method === 'string' ? data.intent.method : '';
         var ceremony = !!(ns.ceremony && ns.ceremony.kindOf(method));

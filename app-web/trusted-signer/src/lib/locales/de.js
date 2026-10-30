@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('de', {
   'warn.typedUnknown': 'Unbekannte EIP-712-Struktur — lies jedes Feld unten, bevor du entscheidest.',
   'warn.unverifiedDecimals': 'Diese Seite kennt diesen Token in diesem Netzwerk nicht, daher wird der Betrag in seiner kleinsten Einheit angezeigt — seine Dezimalstellen lassen sich hier nicht prüfen.',
   'warn.claimedOrigin': 'Der Name der Seite stammt von der Seite selbst und lässt sich nicht prüfen — verlass dich auf die Angaben unten.',
+  'warn.relayedOrigin': 'Welche Seite gefragt hat, sagt die Wallet — diese Seite kann das nicht prüfen. Verlass dich auf die Angaben unten.',
 
   'ui.techDetails': 'Technische Details',
   'ui.function': 'Funktion',

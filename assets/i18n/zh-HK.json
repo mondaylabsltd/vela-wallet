@@ -88,7 +88,8 @@
    "blockedApp": "此帳戶的通行密鑰只會為 {{domain}} 簽署，因此 Vela 無法在此使用。",
    "blockedPage": "此頁面位於 {{pageDomain}}，但此帳戶的通行密鑰只會為 {{domain}} 簽署。",
    "blockedWeb": "網頁版無法使用，請在 Vela App 中開啟。",
-   "webApprovals": "喺網頁版，簽名頁負責審閱同簽署你嘅多簽批准；其他交易同訊息喺 Vela 度確認。"
+   "pageProtects": "簽名頁自己讀取請求，顯示甚麼便簽署甚麼——就算 Vela 嘅介面被篡改，都呃唔到你簽其他嘢。",
+   "pageLimit": "如果錢包本身被完全攻破，佢就保護唔到你：你嘅通行密鑰為 {{domain}} 簽署，喺嗰度運行嘅程式碼仍然可以直接要求佢哋簽名。"
   },
   "advanced": {
    "networksTitle": "網絡",

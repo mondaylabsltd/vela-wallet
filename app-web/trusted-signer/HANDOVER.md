@@ -40,6 +40,22 @@
 > 字节，选语言的规则和 App 相同（`samples/locales-test.mjs`）。见 PROTOCOL.md 第 0 节后
 > 「钥匙路线、确认按钮、页面自己那一行」。
 
+> **签名页处处可用（2026-10-30，创始人）。** 推翻 2026-09-23「网页版不支持可信签名器」和 2026-10-29「只为多签批准」：
+> 账户的签名方式选了签名页，**网页钱包与 Chrome 扩展**的每一笔交易、批量、钱包自己的发送、`personal_sign`、
+> `eth_signTypedData_v4`、多签批准都交到本页。走哪里是 vela-core 的一条规则（`signing_venue::signing_route`，
+> wasm `signingRoute`），钱包一侧只有一个交接（`app-web/vela-wallet/src/lib/signing/page-handoff.svelte.ts`）：
+> 核对页面（R6）→ 交接卡 → `window.open(…/b/<hash>/sign?ch=post)` → 核心造的请求 → 只按核心的方式接受答复
+> （`trusted_signer::accept_signature`）。本页一侧：`resolve.answersToWallet` 对 postMessage 只答
+> `https://wallet.getvela.app`、`https://getvela.app`、`chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl`（逐字），
+> 钱包转来的站点写成钱包的说法（`warn.relayedOrigin`，十五种语言）。新版本 **031dd666**（`BUILD_ALLOWED` 第一位，
+> LAUNCH 不变）；目录 `catalog.js` 重新生成（第三轮改了网络顺序，`gen-catalog --check` 之前是红的）。
+> 部署顺序：`dist/` 先上线（含 `/b/031dd666…/sign`），`curl -I` 200 + immutable + `access-control-allow-origin: *`；
+> 网页钱包与扩展按 `index.json` 选 `BUILD_ALLOWED` 里第一个被列出的版本，所以部署之后才会打开 031dd666，
+> 部署之前打开的是 48030d02（它只答多签批准，别的签名会被它拒 —— 钱包那边说「签名页没有签」）。
+> **还缺**：Chrome 应用商店分配给商店包的扩展 id（商店包不带 key）—— 分配后加进 `resolve.js` 的 `EXTENSIONS`
+> 并重新构建本页。测试：`answer-test.mjs` H 段（真的扩展 origin）；钱包一侧 `sign-challenge.test.ts`、
+> `e2e/extension-signing-page.e2e.ts`。见 PROTOCOL.md 第 13 节。
+
 > **多签成员在签名页上批准（2026-10-29）。** 创始人的 Bybit 教训：签名人必须能在独立于钱包 App
 > 代码的界面上审阅并签名。多签住在网页钱包里，所以**网页钱包第一次打开签名页** —— 只为这一件事：
 > 成员账户的「签名方式」选了签名页时，发起并批准、批准、执行前执行者自己的批准、拒绝，都把原始
@@ -80,7 +96,7 @@ cd app-web/trusted-signer
 export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
-bun samples/answer-test.mjs        # 37/37 答复只交给钱包（102 R7；G 段：多签批准只答网页钱包，2026-10-29），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
+bun samples/answer-test.mjs        # 55/55 答复只交给钱包（102 R7；G 段：网页钱包的多签批准与消息，2026-10-29/30；H 段：Chrome 扩展的已发布 id，2026-10-30），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
 bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
 bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
@@ -94,7 +110,7 @@ node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plu
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
-node samples/multisig-test.mjs     # 199/199 多签批准：哈希、批准字节、读法与发布的 wasm 逐例对拍；敌意输入；十五种语言（2026-10-29）
+node samples/multisig-test.mjs     # 248/248 多签批准：哈希、批准字节、读法与发布的 wasm 逐例对拍；敌意输入；十五种语言（2026-10-29）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
 node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）

@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('it', {
   'warn.typedUnknown': 'Struttura EIP-712 sconosciuta — leggi ogni campo qui sotto prima di decidere.',
   'warn.unverifiedDecimals': 'Questa pagina non conosce questo token su questa rete, quindi l’importo è mostrato nelle sue unità più piccole — qui non si possono verificare i suoi decimali.',
   'warn.claimedOrigin': 'Il nome del sito viene dal sito stesso e non si può verificare — basati sui dettagli qui sotto.',
+  'warn.relayedOrigin': 'Quale sito lo chiede lo dice il wallet: questa pagina non può verificarlo. Basati sui dettagli qui sotto.',
 
   'ui.techDetails': 'Dettagli tecnici',
   'ui.function': 'Funzione',

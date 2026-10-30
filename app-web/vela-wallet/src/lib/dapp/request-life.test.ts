@@ -198,6 +198,31 @@ describe('the claim verdict (RB5)', () => {
 		expect(claimVerdict(nearly, { ...base, phase: 'approve' })).toEqual({ live: true });
 	});
 
+	it('a sign claim renews a sign claim while the trusted page has the request (2026-10-30)', () => {
+		// Arrived nine minutes ago, last claimed for its passkey (the page) one minute ago.
+		const onPage = record({
+			at: NOW - 9 * 60_000,
+			state: 'claimed',
+			phase: 'sign',
+			claimedAt: NOW - 60_000
+		});
+		expect(claimVerdict(onPage, { ...base, phase: 'sign' })).toEqual({ live: true });
+		// …and the renewed claim moves its clock: five minutes from now.
+		const renewed = withClaim(onPage, { phase: 'sign', now: NOW });
+		expect(deadlineOf(renewed)).toBe(NOW + REQUEST_TTL_MS);
+		// Never a revival: a claim after that clock ran out is refused.
+		const lapsed = { ...onPage, claimedAt: NOW - REQUEST_TTL_MS };
+		expect(claimVerdict(lapsed, { ...base, phase: 'sign' })).toEqual({
+			live: false,
+			cause: 'expired'
+		});
+		// Only a sign claim renews: approve still runs from arrival.
+		expect(claimVerdict(onPage, { ...base, phase: 'approve' })).toEqual({
+			live: false,
+			cause: 'expired'
+		});
+	});
+
 	it('needs an earlier claim for submit, and ignores the age there', () => {
 		expect(claimVerdict(record(), { ...base, phase: 'submit' })).toEqual({
 			live: false,

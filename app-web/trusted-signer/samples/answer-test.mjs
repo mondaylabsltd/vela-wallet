@@ -26,7 +26,16 @@
 //   E. a frame: the host's headers stop it, and with no headers the page
 //      itself refuses to run in one;
 //   F. the real thing still works: answered to `velawallet://sign-result`,
-//      the page signs, and the signature verifies under the account's key.
+//      the page signs, and the signature verifies under the account's key;
+//   G. postMessage from Vela's web wallet (2026-10-29, widened 2026-10-30): a
+//      multisig member's approval and a message are answered to
+//      `wallet.getvela.app`; evil.example and a getvela.app subdomain are
+//      refused;
+//   H. postMessage from the Chrome extension (2026-10-30): a real unpacked
+//      extension carrying the published manifest key (so the published id)
+//      opens the page and is answered — a message, typed data, a transaction
+//      — while one with another key (another id) is refused before any
+//      passkey.
 //
 // Whenever a slide IS offered, this suite slides — what a person who trusted
 // the card would do — so an old page shows what it would have given away.
@@ -38,8 +47,8 @@
 import { spawn } from 'node:child_process';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { webcrypto } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createHash, generateKeyPairSync, webcrypto } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { Page, b64url, loadPageLibs, makeChecks, root, sleep } from './test-kit.mjs';
@@ -208,7 +217,8 @@ const host = createHttpsServer(tls, (req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(framing(url.searchParams.get('src') || ''));
     return;
   }
-  if ((name === 'evil.example' || name === 'wallet.getvela.app') && url.pathname === '/open-request') {
+  if ((name === 'evil.example' || name === 'wallet.getvela.app' || name === 'staging.getvela.app') &&
+    url.pathname === '/open-request') {
     const request = JSON.parse(Buffer.from(url.searchParams.get('req') || '', 'base64url').toString('utf8'));
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       .end(genericOpener(url.searchParams.get('signer'), request, name));
@@ -242,10 +252,41 @@ await new Promise((r) => loopback.listen(LOOPBACK_PORT, '127.0.0.1', r));
 // --- the browser ----------------------------------------------------------------
 
 const profile = mkdtempSync(join(tmpdir(), 'answer-'));
-const rules = ['sign.getvela.app', 'getvela.app', 'evil.example', 'wallet.getvela.app'].map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
+const rules = ['sign.getvela.app', 'getvela.app', 'evil.example', 'wallet.getvela.app', 'staging.getvela.app']
+  .map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
+
+// H: two unpacked extensions with one page that opens the signer and hands
+// it a request — one carrying the wallet extension's published manifest key
+// (so Chrome gives it the published id), one with a key of its own.
+const idOf = (keyB64) => [...createHash('sha256').update(Buffer.from(keyB64, 'base64')).digest('hex').slice(0, 32)]
+  .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+const PUBLISHED_KEY = JSON.parse(readFileSync(join(root, '..', 'vela-wallet', 'extension', 'manifest.json'), 'utf8')).key;
+const OTHER_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey
+  .export({ type: 'spki', format: 'der' }).toString('base64');
+const EXTENSIONS = { published: { key: PUBLISHED_KEY }, other: { key: OTHER_KEY } };
+const OPENER_JS = `window.__answers = [];
+window.__go = function (signer, request) {
+  var child = window.open(signer, 'vela-signer', 'width=460,height=760');
+  window.addEventListener('message', function (event) {
+    var data = event.data || {};
+    if (event.source !== child) return;
+    if (data.vela === 'ready') child.postMessage(Object.assign({ vela: 'intent', id: 'ext-1' }, request), event.origin);
+    else if (data.vela === 'result' || data.vela === 'error') window.__answers.push(data);
+  });
+  return true;
+};`;
+for (const [name, ext] of Object.entries(EXTENSIONS)) {
+  ext.dir = join(profile, `ext-${name}`);
+  mkdirSync(ext.dir, { recursive: true });
+  writeFileSync(join(ext.dir, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: `opener-${name}`, version: '1', key: ext.key }));
+  writeFileSync(join(ext.dir, 'opener.html'), '<!doctype html><meta charset="utf-8"><p>extension</p><script src="opener.js"></script>');
+  writeFileSync(join(ext.dir, 'opener.js'), OPENER_JS);
+  ext.id = idOf(ext.key);
+}
 const chrome = spawn(process.env.CHROME_BIN, [
   '--headless=new', `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`,
   `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--no-proxy-server',
+  `--load-extension=${EXTENSIONS.published.dir},${EXTENSIONS.other.dir}`,
   '--no-first-run', '--no-default-browser-check', 'about:blank',
 ], { stdio: 'ignore' });
 for (let i = 0; i < 80; i++) {
@@ -343,9 +384,35 @@ async function describeStolen(entries) {
     const got = r7(ctx);
     check(`R. ${what}: refused`, got.refused && got.key === 'refuse.answerNotToWallet', JSON.stringify(got));
   }
-  const post = r7({ channel: 'post', originVerified: true, requester: 'https://wallet.getvela.app' });
-  check('R. postMessage, even from a Vela origin: refused, naming the opener',
-    post.refused && post.key === 'refuse.answerElsewhere' && post.to === 'wallet.getvela.app', JSON.stringify(post));
+  // postMessage (2026-10-30): answered only to Vela's own wallets, by the
+  // exact origin the browser reports — the web wallet and the published
+  // extension — and nothing broader.
+  for (const opener of ['https://wallet.getvela.app', 'https://getvela.app', 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl']) {
+    const got = r7({ channel: 'post', originVerified: true, requester: opener });
+    check(`R. postMessage from ${opener}: the answer reaches the wallet`, !got.refused && !got.key, JSON.stringify(got));
+  }
+  for (const [opener, to] of [
+    ['https://staging.getvela.app', 'staging.getvela.app'],
+    ['https://evil.example', 'evil.example'],
+    ['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+    ['chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl.evil', 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl.evil'],
+    ['http://localhost:5173', 'localhost:5173'],
+  ]) {
+    const got = r7({ channel: 'post', originVerified: true, requester: opener });
+    check(`R. postMessage from ${opener}: refused, naming the opener`,
+      got.refused && got.key === 'refuse.answerElsewhere' && got.to === to, JSON.stringify(got));
+  }
+  const unverified = r7({ channel: 'post', originVerified: false, requester: 'https://wallet.getvela.app' });
+  check('R. postMessage the browser did not vouch for: refused', unverified.refused);
+  const ethSign = lib.resolve({ method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: 'https://app.example' },
+    { account: SAFE, chainId: 1, channel: 'post', originVerified: true, requester: 'https://wallet.getvela.app' });
+  check('R. eth_sign, even from the web wallet: refused', ethSign.refuse === true);
+  // The site a wallet relays is the wallet's word: drawn as a claim.
+  const relayed = lib.resolve(signature, { account: SAFE, chainId: 1, channel: 'post', originVerified: true,
+    requester: 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl' });
+  check('R. the site an extension relays is drawn as the wallet\'s word, never as verified',
+    relayed.dapp.originVerified === false && relayed.warnings.some((w) => w.key === 'warn.relayedOrigin'),
+    JSON.stringify(relayed.dapp));
 
   const signIn = (ctx) => lib.resolve({ method: 'vela_signIn', params: [{}], origin: '' }, { rpId: 'getvela.app', ...ctx });
   const home = signIn({ channel: 'url', callback: WALLET_CALLBACK });
@@ -580,12 +647,84 @@ try {
       !lied.slid && lied.used === 0 && lied.text.includes(forged) && lied.text.includes(hashes.safeTxHash) &&
         lied.answers.length === 1 && lied.answers[0].code === 'refused', lied.text.slice(0, 200));
 
-    const message = await askOver('wallet.getvela.app', {
+    // 2026-10-30: the page, everywhere — a message the web wallet asks is
+    // answered to it, over the SafeMessage this page derived.
+    const messageRequest = {
       intent: { method: 'personal_sign', params: ['0x68656c6c6f', SAFE], origin: '' },
       context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] },
+    };
+    const message = await askOver('wallet.getvela.app', messageRequest);
+    const signed = message.answers.find((a) => a.vela === 'result');
+    const messageSig = signed ? await usable(Buffer.from(JSON.stringify(signed.result)).toString('base64url')) : { valid: false };
+    check('G. a message the web wallet asks over postMessage: answered to it, by the account\'s key, over the digest the page derived',
+      message.slid && message.used === 1 && messageSig.valid && messageSig.overDigest,
+      JSON.stringify(message.answers).slice(0, 160));
+    const sub = await askOver('staging.getvela.app', messageRequest);
+    check('G. the same asked by a getvela.app subdomain: refused, no passkey',
+      !sub.slid && sub.used === 0 && sub.answers.length === 1 && sub.answers[0].code === 'refused',
+      JSON.stringify(sub.answers).slice(0, 160));
+  }
+
+  // === H. the Chrome extension over postMessage (2026-10-30) ====================
+  //
+  // The extension's request window or side panel opens the page with
+  // `window.open` and hands it the dApp's request. The browser reports the
+  // opener as `chrome-extension://<id>`: the published id is answered, any
+  // other is not.
+  {
+    async function askFromExtension(which, request) {
+      const ext = EXTENSIONS[which];
+      const opener = await Page.open(CDP, `chrome-extension://${ext.id}/opener.html`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev(`window.__go(${JSON.stringify(`${PAGE}?ch=post&lang=en`)}, ${JSON.stringify(request)})`, true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && ['card', 'refused'].includes(window.__velaState.phase)");
+      const text = await popup.ev('document.body.innerText');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', slid ? 10000 : 4000).catch(() => {});
+      const answers = await opener.ev('window.__answers');
+      const used = await uses();
+      await popup.close();
+      await opener.close();
+      const result = answers.find((a) => a.vela === 'result');
+      const sig = result ? await usable(Buffer.from(JSON.stringify(result.result)).toString('base64url')) : { valid: false };
+      return { slid, answers, used, text, sig };
+    }
+    check('H. the published extension id is the one its manifest key derives',
+      EXTENSIONS.published.id === 'bjbdmnmpgcfkocfcfdocopkioacojkhl', EXTENSIONS.published.id);
+
+    const site = 'https://app.example';
+    const typed = JSON.stringify({
+      types: {
+        EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'chainId', type: 'uint256' }],
+        Mail: [{ name: 'contents', type: 'string' }],
+      },
+      primaryType: 'Mail', domain: { name: 'Ether Mail', chainId: 1 }, message: { contents: 'Hello from a dApp' },
     });
-    check('G. any other signature the web wallet asks over postMessage: still refused (R7)',
-      !message.slid && message.used === 0 && message.answers.length === 1 && message.answers[0].code === 'refused');
+    const cases = [
+      ['personal_sign', { intent: { method: 'personal_sign', params: ['0x68656c6c6f', SAFE], origin: site },
+        context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] } }],
+      ['eth_signTypedData_v4', { intent: { method: 'eth_signTypedData_v4', params: [SAFE, typed], origin: site },
+        context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] } }],
+      ['eth_sendTransaction', { intent, context }],
+    ];
+    for (const [method, request] of cases) {
+      const got = await askFromExtension('published', request);
+      check(`H. ${method} from the published extension: signed and answered to it, by the account's key over the page's digest`,
+        got.slid && got.used === 1 && got.sig.valid && got.sig.overDigest,
+        `${got.sig.kind || '-'} ${JSON.stringify(got.answers).slice(0, 120)}`);
+      if (method === 'personal_sign') {
+        check('H. the site the extension relays is drawn as its word ("claimed"), not as verified',
+          /app\.example/.test(got.text) && got.text.includes("the wallet's word"), got.text.slice(0, 200));
+      }
+    }
+    const other = await askFromExtension('other', cases[0][1]);
+    check('H. the same from an extension with another id: refused before any passkey, nothing signed',
+      !other.slid && other.used === 0 && other.answers.length === 1 && other.answers[0].code === 'refused',
+      JSON.stringify(other.answers).slice(0, 160));
+    check('H. and the card names the extension the answer would have gone to',
+      other.text.includes(`chrome-extension://${EXTENSIONS.other.id}`), other.text.slice(0, 200));
   }
 } catch (error) {
   console.log('FAILED: ' + (error.stack || error.message));

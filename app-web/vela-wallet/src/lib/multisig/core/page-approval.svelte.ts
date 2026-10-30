@@ -30,145 +30,29 @@
  * (`event.source`, `event.origin` — the browser's facts), and go only there.
  */
 import type { Account } from '$lib/core/generated/Account';
-import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { KeyLabel } from '$lib/core/generated/KeyLabel';
-import {
-	trustedSignerApprovalAccept,
-	trustedSignerApprovalRequest,
-	trustedSignerPageAdmit,
-	trustedSignerPageTarget
-} from '$lib/core/kernels';
+import { trustedSignerApprovalAccept, trustedSignerApprovalRequest } from '$lib/core/kernels';
 import { chainName, nativeSymbol } from '$lib/services/networks';
+import {
+	browserDeps,
+	handOff,
+	PageHandoffError,
+	type PageHandoffDeps,
+	type PageHandoffFailure
+} from '$lib/signing/page-handoff.svelte';
 import type { PasskeyApproval, SafeTx } from './kernel';
 
-/** What a browser sends when it navigates to a page (`launch::CHECK_HEADERS`). */
-const CHECK_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
-
-/** How long the page has to say it is ready once opened. */
-const READY_MS = 30_000;
-
-/** Why an approval on the page did not come back. */
-export type PageApprovalFailure =
-	/** The page's check did not pass: it was not opened (`line` says why). */
-	| 'not_opened'
-	/** The person closed the page, or the hand-off, without approving. */
-	| 'closed'
-	/** The page refused to sign (it said why, on its own card). */
-	| 'declined'
-	/** The page answered, and the answer is not the member's approval. */
-	| 'unverified';
-
-export class PageApprovalError extends Error {
-	constructor(
-		readonly failure: PageApprovalFailure,
-		readonly line: IntegrityLine | null = null,
-		detail = ''
-	) {
-		super(`the signing page did not approve: ${failure}${detail ? ` (${detail})` : ''}`);
-		this.name = 'PageApprovalError';
-	}
-}
-
-/** The hand-off card, as the multisig host draws it. */
-export interface PageHandoff {
-	/** `checking` while the page is checked; `ready` to open; `waiting` once open; `refused` when it may not open. */
-	phase: 'checking' | 'ready' | 'waiting' | 'refused';
-	/** The page's host, and whether it is Vela's official page. */
-	host: string;
-	official: boolean;
-	/** The member approving (its name on this device). */
-	member: string;
-	/** The key row: which key confirms it (`SigningPlan.key_label`). */
-	keyLabel: KeyLabel | null;
-	/** The core's integrity line, once the check ran. */
-	line: IntegrityLine | null;
-	/** Open the checked page (a tap); again, to bring it back. */
-	open: () => void;
-	/** Give up: nothing is approved. */
-	cancel: () => void;
-}
-
-class Handoffs {
-	current = $state<PageHandoff | null>(null);
-}
-
-/** The hand-off on screen, if any. */
-export const pageHandoff = new Handoffs();
-
-/** What the browser and the clock give, so a test can stand in for both. */
-export interface PageApprovalDeps {
-	fetch: typeof fetch;
-	open: (url: string) => Window | null;
-	now: () => number;
-	lang: () => string;
-	listen: (handler: (event: MessageEvent) => void) => () => void;
-	sha256: (bytes: ArrayBuffer) => Promise<string>;
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-	return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-export const browserDeps: PageApprovalDeps = {
-	fetch: (input, init) => fetch(input, init),
-	// The page must know which window opened it (`window.opener`): no `noopener`.
-	open: (url) => window.open(url, 'vela-signing-page'),
-	now: () => Date.now(),
-	lang: () => (typeof document === 'undefined' ? '' : document.documentElement.lang),
-	listen: (handler) => {
-		window.addEventListener('message', handler);
-		return () => window.removeEventListener('message', handler);
-	},
-	sha256: sha256Hex
-};
-
-function originOf(url: string): string {
-	try {
-		return new URL(url).origin;
-	} catch {
-		return '';
-	}
-}
-
-function hostOf(url: string): string {
-	try {
-		return new URL(url).host;
-	} catch {
-		return url;
-	}
-}
-
-/**
- * R6, the web's way: the deployment's index, the version the core picks, the
- * bytes that version serves — fetched as a browser navigates — and the core's
- * ruling on them. The page must answer the wallet's origin's request
- * (`Access-Control-Allow-Origin`); one that does not is a check that could
- * not complete, and nothing opens.
- */
-export async function checkPage(
-	base: string,
-	deps: PageApprovalDeps = browserDeps
-): Promise<{ line: IntegrityLine; launch: string | null }> {
-	const root = base.endsWith('/') ? base : `${base}/`;
-	const index = await deps
-		.fetch(`${root}index.json`, { cache: 'no-store', credentials: 'omit' })
-		.then((r) => (r.ok ? r.text() : null))
-		.catch(() => null);
-	let observed: string | null = null;
-	try {
-		const target = trustedSignerPageTarget(root, index);
-		const response = await deps.fetch(target.url, {
-			headers: { Accept: CHECK_ACCEPT },
-			cache: 'no-store',
-			credentials: 'omit'
-		});
-		if (response.ok) observed = await deps.sha256(await response.arrayBuffer());
-	} catch {
-		observed = null;
-	}
-	return trustedSignerPageAdmit(root, index, observed, deps.now(), deps.lang());
-}
+// The hand-off machinery is every signature's (`$lib/signing/page-handoff`,
+// 2026-10-30); an approval is one kind of it. The names it had here stay.
+export {
+	browserDeps,
+	checkPage,
+	pageHandoff,
+	type PageHandoff
+} from '$lib/signing/page-handoff.svelte';
+export { PageHandoffError as PageApprovalError };
+export type PageApprovalFailure = PageHandoffFailure;
+export type PageApprovalDeps = PageHandoffDeps;
 
 export interface PageApprovalInput {
 	/** The member's record as stored. */
@@ -214,7 +98,7 @@ export async function approveOnPage(
 ): Promise<PasskeyApproval> {
 	const kept = answered.get(answerKey(input));
 	if (kept) return kept;
-	const approval = await handOff(input, deps);
+	const approval = await handOffApproval(input, deps);
 	answered.set(answerKey(input), approval);
 	return approval;
 }
@@ -224,60 +108,10 @@ export function forgetPageAnswers(): void {
 	answered.clear();
 }
 
-async function handOff(input: PageApprovalInput, deps: PageApprovalDeps): Promise<PasskeyApproval> {
-	const official = /(^|\.)getvela\.app$/.test(hostOf(input.page).split(':')[0] ?? '');
-	const base: Omit<PageHandoff, 'phase' | 'line' | 'open' | 'cancel'> = {
-		host: hostOf(input.page),
-		official,
-		member: input.member.name,
-		keyLabel: input.keyLabel ?? null
-	};
-	let settle: { resolve: (a: PasskeyApproval) => void; reject: (e: unknown) => void } | null = null;
-	const done = new Promise<PasskeyApproval>((resolve, reject) => {
-		settle = { resolve, reject };
-	});
-	let win: Window | null = null;
-	let stopListening: (() => void) | null = null;
-	let watch: ReturnType<typeof setInterval> | null = null;
-	let readyTimer: ReturnType<typeof setTimeout> | null = null;
-	let finished = false;
-
-	const finish = (error: unknown, approval?: PasskeyApproval) => {
-		if (finished) return;
-		finished = true;
-		stopListening?.();
-		if (watch) clearInterval(watch);
-		if (readyTimer) clearTimeout(readyTimer);
-		pageHandoff.current = null;
-		if (approval) settle?.resolve(approval);
-		else settle?.reject(error);
-	};
-	const cancel = () => {
-		try {
-			win?.close();
-		} catch {
-			/* gone already */
-		}
-		finish(new PageApprovalError('closed'));
-	};
-	input.signal?.addEventListener('abort', cancel, { once: true });
-
-	pageHandoff.current = { ...base, phase: 'checking', line: null, open: () => {}, cancel };
-	const checked = await checkPage(input.page, deps);
-	if (finished) return done;
-	if (checked.launch === null) {
-		const line = checked.line;
-		pageHandoff.current = {
-			...base,
-			phase: 'refused',
-			line,
-			open: () => {},
-			cancel: () => finish(new PageApprovalError('not_opened', line))
-		};
-		return done;
-	}
-	const launch = checked.launch;
-	const pageOrigin = originOf(launch);
+function handOffApproval(
+	input: PageApprovalInput,
+	deps: PageApprovalDeps
+): Promise<PasskeyApproval> {
 	const request = trustedSignerApprovalRequest({
 		chainId: input.chainId,
 		chainName: chainName(input.chainId) || null,
@@ -290,80 +124,23 @@ async function handOff(input: PageApprovalInput, deps: PageApprovalDeps): Promis
 		credentialIdsHex: input.keys.map((k) => k.credentialId),
 		keyRoute: input.keyRoute
 	});
-	const id = `ms-${deps.now().toString(36)}`;
-
-	const onMessage = (event: MessageEvent) => {
-		if (!win || event.source !== win || event.origin !== pageOrigin) return;
-		const data = event.data as {
-			vela?: string;
-			id?: string;
-			result?: unknown;
-			code?: string;
-		} | null;
-		if (!data || typeof data !== 'object') return;
-		if (data.vela === 'ready') {
-			if (readyTimer) clearTimeout(readyTimer);
-			win.postMessage({ vela: 'intent', v: 1, id, ...request }, pageOrigin);
-			return;
-		}
-		if (data.id !== id) {
-			if (data.vela === 'bye') finish(new PageApprovalError('closed'));
-			return;
-		}
-		if (data.vela === 'error') {
-			finish(new PageApprovalError('declined', null, data.code ?? ''));
-			return;
-		}
-		if (data.vela === 'result') {
-			try {
-				const approval = trustedSignerApprovalAccept<PasskeyApproval>({
-					result: data.result,
+	return handOff<PasskeyApproval>(
+		{
+			kind: 'approval',
+			page: input.page,
+			signer: input.member.name,
+			keyLabel: input.keyLabel ?? null,
+			request,
+			accept: (result) =>
+				trustedSignerApprovalAccept<PasskeyApproval>({
+					result,
 					chainId: input.chainId,
 					member: input.member.address,
 					safeTxHash: input.safeTxHash,
 					keys: input.keys
-				});
-				win.postMessage({ vela: 'bye', v: 1, reason: 'done' }, pageOrigin);
-				finish(null, approval);
-			} catch (error) {
-				finish(
-					new PageApprovalError(
-						'unverified',
-						null,
-						error instanceof Error ? error.message : String(error)
-					)
-				);
-			}
-		}
-	};
-
-	const open = () => {
-		if (finished) return;
-		if (win && !win.closed) {
-			win.focus();
-			return;
-		}
-		// Inside the tap: a browser opens a window only for one.
-		win = deps.open(launch);
-		if (!win) return;
-		stopListening?.();
-		stopListening = deps.listen(onMessage);
-		readyTimer = setTimeout(
-			() => finish(new PageApprovalError('closed', null, 'silent')),
-			READY_MS
-		);
-		if (watch) clearInterval(watch);
-		watch = setInterval(() => {
-			let closed: boolean;
-			try {
-				closed = !win || win.closed;
-			} catch {
-				closed = true;
-			}
-			if (closed) finish(new PageApprovalError('closed'));
-		}, 500);
-		pageHandoff.current = { ...base, phase: 'waiting', line: checked.line, open, cancel };
-	};
-	pageHandoff.current = { ...base, phase: 'ready', line: checked.line, open, cancel };
-	return done;
+				}),
+			signal: input.signal
+		},
+		deps
+	);
 }

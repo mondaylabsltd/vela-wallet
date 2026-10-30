@@ -88,7 +88,8 @@
       "blockedApp": "Le passkey di questo account firmano solo per {{domain}}, quindi Vela non può usarle qui.",
       "blockedPage": "Questa pagina è su {{pageDomain}}, ma le passkey di questo account firmano solo per {{domain}}.",
       "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela.",
-      "webApprovals": "Sul web, una pagina di firma esamina e firma le tue approvazioni multisig. Le altre transazioni e i messaggi si confermano in Vela."
+      "pageProtects": "Una pagina di firma legge da sé la richiesta e firma esattamente ciò che ti mostra, quindi una schermata di Vela manomessa non può indurti a firmare altro.",
+      "pageLimit": "Non ti protegge se è compromesso il wallet stesso: le tue passkey firmano per {{domain}}, e il codice in esecuzione lì potrebbe comunque chiedere loro una firma."
     },
     "advanced": {
       "networksTitle": "Reti",

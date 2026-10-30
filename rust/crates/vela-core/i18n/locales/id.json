@@ -88,7 +88,8 @@
       "blockedApp": "Passkey akun ini hanya menandatangani untuk {{domain}}, jadi Vela tidak bisa memakainya di sini.",
       "blockedPage": "Halaman ini ada di {{pageDomain}}, tetapi passkey akun ini hanya menandatangani untuk {{domain}}.",
       "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela.",
-      "webApprovals": "Di web, halaman penandatanganan meninjau dan menandatangani persetujuan multisig Anda. Transaksi dan pesan lain dikonfirmasi di Vela."
+      "pageProtects": "Halaman penandatanganan membaca permintaan itu sendiri dan menandatangani persis apa yang ditampilkannya, jadi layar Vela yang dimanipulasi tidak bisa menipu Anda agar menandatangani hal lain.",
+      "pageLimit": "Halaman ini tidak bisa melindungi Anda jika dompet ini sendiri telah dibobol: passkey Anda menandatangani untuk {{domain}}, dan kode yang berjalan di sana tetap bisa meminta tanda tangannya."
     },
     "advanced": {
       "networksTitle": "Jaringan",

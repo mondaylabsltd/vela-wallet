@@ -61,6 +61,24 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 48030d02's page, usable everywhere (owner, 2026-10-30): over
+    // postMessage it answers every signature a wallet hands it — a
+    // transaction, a batch, the wallet's own send, `personal_sign`, typed data
+    // and a member's approval — to Vela's own wallets only, by the EXACT
+    // origin the browser reports for the opener: `https://wallet.getvela.app`,
+    // `https://getvela.app` and the published Chrome extension
+    // `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` (a page on the
+    // loopback also answers a loopback wallet and an unpacked extension); a
+    // `getvela.app` subdomain, any other extension and every other site stay
+    // refused, `eth_sign` from anyone. The site a wallet relays is drawn as
+    // the wallet's word ("Which site asked is the wallet's word"), never as
+    // verified. Its network table is the core's order again (the catalogue
+    // regenerated after round 3's reorder). Not LAUNCH: the apps open LAUNCH
+    // over `velawallet://`, unchanged; the web and the extension open the
+    // first entry here the deployed `index.json` lists — so this one only once
+    // `dist/` is deployed and `/b/031dd666…/sign` answers 200 + immutable +
+    // `access-control-allow-origin: *` with exactly these bytes.
+    "031dd666453f6175f3d1aef79505e87ce488d0123b1b96ee131f525aec537e55",
     // 593d37fe's page approving a multisig member (2026-10-29, the owner's
     // Bybit lesson): `vela_multisigApprove` — the page recomputes the
     // safeTxHash (and the domain and message hashes) from the raw SafeTx, the

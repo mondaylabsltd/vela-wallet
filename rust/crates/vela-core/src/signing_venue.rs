@@ -33,18 +33,19 @@
 //! - **R5** [`KeyRoute`] — the page is told which key to use and where it
 //!   lives, so the browser goes straight to it instead of asking again; and
 //!   the person is told which key they will confirm with ([`KeyLabel`]).
-//! - **The web** ([`venue_choices_on_web`], [`SigningPlan::on_web`]) opens no
-//!   page for a transaction or a message (owner, 2026-09-23): a `getvela.app`
-//!   account signs those in Vela, and a custom-domain account cannot sign them
-//!   there and says why. Its one hand-off is a multisig member's approval,
-//!   which goes to the page the account chose
-//!   ([`crate::trusted_signer::approval::approval_route`]) — the owner
-//!   APPROVED it on 2026-10-30 for multisig approvals only, and only when the
-//!   member chose the page venue (spec 102 plan, P2-11 amended).
+//! - **R7** [`signing_route`] — the ONE rule every shell follows to send a
+//!   signature somewhere: per account plan and [`SignatureKind`], Vela's own
+//!   sheet, the account's page, or nowhere and why. The same answer on every
+//!   surface — the apps, the web wallet and the Chrome extension (owner,
+//!   2026-10-30: the page is usable everywhere, superseding the 2026-09-23
+//!   "the web opens no signing page" and its 2026-10-29 multisig-only
+//!   exception, spec 102 plan P2-11 / D-16). A shell that cannot carry a
+//!   kind to the page refuses; it never falls back to its own sheet.
 //!
 //! What this does NOT claim: the domain is shared (D2), so a page as venue
-//! assures *what you see is what you sign*; it does not stop a fully
-//! compromised app from asking a native passkey for a signature.
+//! assures *what you see is what you sign* against a tampered app interface;
+//! it does not stop a fully compromised wallet on the same passkey domain
+//! (`getvela.app`) from asking the passkey for a signature itself.
 //!
 //! Pure: no I/O, no clock.
 
@@ -166,11 +167,12 @@ pub enum VenueBlock {
     /// The page lives on `page_domain` and the account's keys on `domain`: a
     /// browser lets a page use only the passkeys of its own site.
     PageOnOtherDomain { page_domain: String, domain: String },
-    /// The web wallet opens no signing page for a transaction or a message
-    /// (owner, 2026-09-23): pages open from the Vela apps. The one exception
-    /// (owner, approved 2026-10-30) is a multisig member's approval on the
-    /// page the member chose ([`crate::trusted_signer::approval::approval_route`]). Never an R1 answer — only the web's choices and
-    /// plan ([`venue_choices_on_web`], [`SigningPlan::on_web`]) give it.
+    /// RETIRED 2026-10-30: the web wallet once opened no signing page for a
+    /// transaction or a message (owner, 2026-09-23), and a custom-domain
+    /// account was refused there with this. The owner then made the page
+    /// usable everywhere ([`signing_route`]), so no rule in this build gives
+    /// it. Kept on the wire because shells built before still decode and
+    /// word it (`settings.venue.blockedWeb`).
     NotOnWeb,
 }
 
@@ -346,26 +348,6 @@ pub fn venue_choices(
         .collect()
 }
 
-/// [`venue_choices`] as the web draws them: the web wallet opens no page, so
-/// every page row an R1 reason does not already block is blocked with
-/// [`VenueBlock::NotOnWeb`] — drawn disabled, with "Signing pages open from
-/// the Vela apps". R1's reason wins where both hold: it is true everywhere,
-/// and an app would refuse that row too.
-#[must_use]
-pub fn venue_choices_on_web(
-    domain: &str,
-    active: &SigningVenue,
-    saved: &[SigningPage],
-) -> Vec<VenueChoice> {
-    let mut rows = venue_choices(domain, active, saved);
-    for row in &mut rows {
-        if matches!(row.venue, SigningVenue::Page { .. }) && row.blocked.is_none() {
-            row.blocked = Some(VenueBlock::NotOnWeb);
-        }
-    }
-    rows
-}
-
 /// The venue an account falls back to when none was chosen, or when the one
 /// stored cannot reach its keys: Vela's sheet for a `getvela.app` account; for
 /// a custom-domain one, the first of `pages` on that domain — `None` when no
@@ -400,35 +382,124 @@ pub fn ceremony_page(page: Option<&str>) -> Option<String> {
     (!domain.is_empty() && !is_app_domain(&domain)).then_some(url)
 }
 
-/// What is being signed, as far as the venue rule cares (R4).
+/// What is being signed, as far as the venue rule cares (R4, R7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignatureKind {
-    /// A user operation: the wallet's own send, or a site's transaction.
+    /// One call as a user operation: a site's `eth_sendTransaction`.
     UserOperation,
+    /// Several calls in one user operation: a site's `wallet_sendCalls`
+    /// (EIP-5792), the wallet's own send (no site asked: its calls are handed
+    /// over as a batch, [`trusted_signer::own_send_params`]), and a multisig
+    /// executor's own operation ([`MULTISIG_EXECUTE_METHOD`]).
+    Batch,
     /// `personal_sign`.
     PersonalSign,
-    /// `eth_signTypedData_v4`.
+    /// `eth_signTypedData_v4` (and its v3 / v1 spellings).
     TypedData,
+    /// A multisig member's approval of a SafeTx (`vela_multisigApprove`,
+    /// [`trusted_signer::approval`]).
+    MultisigApproval,
     /// Create, add a key, sign in, a member or recovery proof — a challenge
     /// that is random or derived, with nothing to preview.
     KeyCeremony,
 }
 
+/// The method a multisig executor's own operation is asked under: the
+/// executor's account calls `execTransaction` on the multisig.
+pub const MULTISIG_EXECUTE_METHOD: &str = "vela_multisigExecute";
+
+/// The method a member's owner proof is asked under when a multisig is
+/// created: the genesis service's sponsor challenge for the multisig's
+/// address — derived, moving nothing, with nothing to preview. A ceremony
+/// (R3): in Vela for a `getvela.app` account.
+pub const MULTISIG_CREATE_METHOD: &str = "vela_multisigCreate";
+
+impl SignatureKind {
+    /// The kind of a request by its JSON-RPC method — `""` is the wallet's own
+    /// send. `None` for a method no venue signs: `eth_sign` (a bare digest,
+    /// blind by construction, refused everywhere) and anything unknown.
+    #[must_use]
+    pub fn of_method(method: &str) -> Option<Self> {
+        match method {
+            "eth_sendTransaction" => Some(Self::UserOperation),
+            "" | "wallet_sendCalls" | MULTISIG_EXECUTE_METHOD => Some(Self::Batch),
+            "personal_sign" => Some(Self::PersonalSign),
+            "eth_signTypedData_v4" | "eth_signTypedData_v3" | "eth_signTypedData" => {
+                Some(Self::TypedData)
+            }
+            trusted_signer::approval::METHOD => Some(Self::MultisigApproval),
+            MULTISIG_CREATE_METHOD => Some(Self::KeyCeremony),
+            _ => None,
+        }
+    }
+}
+
 /// R4: where a signature of `kind` goes for an account on `domain` whose venue
-/// is `venue`. Transactions and messages follow the venue; a key ceremony runs
-/// in the app for a `getvela.app` account and on the account's page otherwise
-/// (R3).
+/// is `venue`. Transactions, batches, messages and multisig approvals follow
+/// the venue; a key ceremony runs in the app for a `getvela.app` account and
+/// on the account's page otherwise (R3).
 #[must_use]
 pub fn venue_for(kind: SignatureKind, domain: &str, venue: &SigningVenue) -> SigningVenue {
     match kind {
-        SignatureKind::UserOperation | SignatureKind::PersonalSign | SignatureKind::TypedData => {
-            venue.clone()
-        }
+        SignatureKind::UserOperation
+        | SignatureKind::Batch
+        | SignatureKind::PersonalSign
+        | SignatureKind::TypedData
+        | SignatureKind::MultisigApproval => venue.clone(),
         SignatureKind::KeyCeremony if is_app_domain(domain) => SigningVenue::InVela,
         SignatureKind::KeyCeremony => venue.clone(),
     }
+}
+
+/// Where one signature goes (R7). Its JSON is `{type: 'in_vela' | 'page' |
+/// 'blocked', url?, block?}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SigningRoute {
+    /// Vela's own sheet and the account's own passkey prompt.
+    InVela,
+    /// The account's trusted signing page, at its base address: the shell
+    /// checks it (R6), opens it, hands it the request, and accepts only an
+    /// answer the core verifies ([`trusted_signer::accept_signature`],
+    /// [`trusted_signer::approval::accept`]).
+    Page { url: String },
+    /// Nothing on this device can sign for the account, and why.
+    Blocked { block: VenueBlock },
+}
+
+/// R7 — where a signature of `kind` by an account with `plan` goes, on every
+/// surface alike: the apps, the web wallet and the Chrome extension (owner,
+/// 2026-10-30).
+///
+/// - a blocked plan (a custom-domain account whose page is unknown here) →
+///   blocked, with the plan's reason, whatever the kind;
+/// - otherwise the venue [`venue_for`] gives. For a transaction, a batch, a
+///   message or a multisig approval that is the venue the person chose
+///   (already checked against R1 by the account's reader), so a person who
+///   chose the page reviews every one of them there, independently of the
+///   wallet's code (the owner's Bybit lesson); a key ceremony follows R3.
+#[must_use]
+pub fn signing_route(plan: &SigningPlan, kind: SignatureKind) -> SigningRoute {
+    if let Some(block) = &plan.blocked {
+        return SigningRoute::Blocked {
+            block: block.clone(),
+        };
+    }
+    match venue_for(kind, &plan.domain, &plan.venue) {
+        SigningVenue::InVela => SigningRoute::InVela,
+        SigningVenue::Page { url } => SigningRoute::Page { url },
+    }
+}
+
+/// [`signing_route`] for a request's JSON-RPC `method` (`""`: the wallet's
+/// own send) — `None` for a method no venue signs
+/// ([`SignatureKind::of_method`]), which the shell refuses.
+#[must_use]
+pub fn signing_route_for_method(plan: &SigningPlan, method: &str) -> Option<SigningRoute> {
+    SignatureKind::of_method(method).map(|kind| signing_route(plan, kind))
 }
 
 // ---------------------------------------------------------------------------
@@ -615,29 +686,6 @@ pub struct SigningPlan {
     /// its first key.
     #[serde(default)]
     pub key_label: KeyLabel,
-}
-
-impl SigningPlan {
-    /// This plan as the web wallet carries it out — for a transaction or a
-    /// message. The web opens no page for those (owner, 2026-09-23; a
-    /// multisig member's approval is the approved exception, 2026-10-30,
-    /// [`crate::trusted_signer::approval::approval_route`]): a `getvela.app` account whose venue is a page
-    /// signs in Vela there (its keys are the web's own), and a custom-domain
-    /// account cannot sign there at all — [`Self::blocked`] says why
-    /// ([`VenueBlock::NotOnWeb`]: its keys answer only on its page, and pages
-    /// open from the apps), and its venue is left as it is.
-    #[must_use]
-    pub fn on_web(mut self) -> Self {
-        if self.blocked.is_some() {
-            return self;
-        }
-        if is_app_domain(&self.domain) {
-            self.venue = SigningVenue::InVela;
-        } else {
-            self.blocked = Some(VenueBlock::NotOnWeb);
-        }
-        self
-    }
 }
 
 #[cfg(test)]
@@ -831,8 +879,10 @@ mod tests {
         let official = SigningVenue::official();
         for kind in [
             SignatureKind::UserOperation,
+            SignatureKind::Batch,
             SignatureKind::PersonalSign,
             SignatureKind::TypedData,
+            SignatureKind::MultisigApproval,
         ] {
             assert_eq!(venue_for(kind, APP_DOMAIN, &official), official);
             assert_eq!(
@@ -847,6 +897,136 @@ mod tests {
         assert_eq!(
             venue_for(SignatureKind::KeyCeremony, "sign.example.com", &page(OWN)),
             page(OWN)
+        );
+    }
+
+    /// R7: one rule, per plan and kind, on every surface (owner, 2026-10-30).
+    #[test]
+    fn every_kind_follows_the_chosen_venue_and_never_a_blocked_one() {
+        let plan = |domain: &str, venue: SigningVenue, blocked: Option<VenueBlock>| SigningPlan {
+            domain: domain.to_owned(),
+            venue,
+            blocked,
+            key: None,
+            key_label: KeyLabel::default(),
+        };
+        let signing = [
+            SignatureKind::UserOperation,
+            SignatureKind::Batch,
+            SignatureKind::PersonalSign,
+            SignatureKind::TypedData,
+            SignatureKind::MultisigApproval,
+        ];
+        let official_url = trusted_signer::DEFAULT_SIGNER_URL.to_owned();
+        for kind in signing {
+            // A getvela.app account that chose the official page: the page.
+            assert_eq!(
+                signing_route(&plan(APP_DOMAIN, SigningVenue::official(), None), kind),
+                SigningRoute::Page {
+                    url: official_url.clone()
+                },
+                "{kind:?}"
+            );
+            // In Vela: Vela's sheet.
+            assert_eq!(
+                signing_route(&plan(APP_DOMAIN, SigningVenue::InVela, None), kind),
+                SigningRoute::InVela,
+                "{kind:?}"
+            );
+            // A custom-domain account: its own page, the only place its keys
+            // answer — on the web and in the extension too, now.
+            assert_eq!(
+                signing_route(&plan("sign.example.com", page(OWN), None), kind),
+                SigningRoute::Page {
+                    url: OWN.to_owned()
+                },
+                "{kind:?}"
+            );
+            // A plan nothing here can carry out: blocked, with its reason.
+            let block = VenueBlock::AppCannotReach {
+                domain: "sign.example.com".to_owned(),
+            };
+            assert_eq!(
+                signing_route(
+                    &plan(
+                        "sign.example.com",
+                        SigningVenue::InVela,
+                        Some(block.clone())
+                    ),
+                    kind
+                ),
+                SigningRoute::Blocked { block },
+                "{kind:?}"
+            );
+        }
+        // A ceremony still follows R3: in the app for getvela.app.
+        assert_eq!(
+            signing_route(
+                &plan(APP_DOMAIN, SigningVenue::official(), None),
+                SignatureKind::KeyCeremony
+            ),
+            SigningRoute::InVela
+        );
+        assert_eq!(
+            signing_route(
+                &plan("sign.example.com", page(OWN), None),
+                SignatureKind::KeyCeremony
+            ),
+            SigningRoute::Page {
+                url: OWN.to_owned()
+            }
+        );
+    }
+
+    /// Every request a shell signs has a kind; `eth_sign` and the unknown none.
+    #[test]
+    fn a_method_names_its_kind() {
+        let cases = [
+            ("eth_sendTransaction", Some(SignatureKind::UserOperation)),
+            ("wallet_sendCalls", Some(SignatureKind::Batch)),
+            ("", Some(SignatureKind::Batch)),
+            (MULTISIG_EXECUTE_METHOD, Some(SignatureKind::Batch)),
+            ("personal_sign", Some(SignatureKind::PersonalSign)),
+            ("eth_signTypedData_v4", Some(SignatureKind::TypedData)),
+            ("eth_signTypedData_v3", Some(SignatureKind::TypedData)),
+            ("eth_signTypedData", Some(SignatureKind::TypedData)),
+            (
+                "vela_multisigApprove",
+                Some(SignatureKind::MultisigApproval),
+            ),
+            (MULTISIG_CREATE_METHOD, Some(SignatureKind::KeyCeremony)),
+            ("eth_sign", None),
+            ("eth_signTransaction", None),
+            ("vela_somethingElse", None),
+        ];
+        for (method, kind) in cases {
+            assert_eq!(SignatureKind::of_method(method), kind, "{method}");
+        }
+        let official = SigningPlan {
+            domain: APP_DOMAIN.to_owned(),
+            venue: SigningVenue::official(),
+            blocked: None,
+            key: None,
+            key_label: KeyLabel::default(),
+        };
+        assert_eq!(signing_route_for_method(&official, "eth_sign"), None);
+        // A multisig's owner proof is a ceremony: in Vela for a getvela.app
+        // account, whatever its venue (found on Arc, round 6: creating a
+        // multisig with the page as venue was refused).
+        assert_eq!(
+            signing_route_for_method(&official, MULTISIG_CREATE_METHOD),
+            Some(SigningRoute::InVela)
+        );
+        assert!(matches!(
+            signing_route_for_method(&official, "personal_sign"),
+            Some(SigningRoute::Page { .. })
+        ));
+        assert_eq!(
+            serde_json::to_value(SigningRoute::Page {
+                url: OWN.to_owned()
+            })
+            .unwrap_or_default(),
+            serde_json::json!({"type": "page", "url": OWN})
         );
     }
 

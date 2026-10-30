@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('tr', {
   'warn.typedUnknown': 'Bilinmeyen EIP-712 yapısı — karar vermeden önce aşağıdaki her alanı okuyun.',
   'warn.unverifiedDecimals': 'Bu sayfa bu ağdaki bu token\'ı tanımıyor; bu yüzden tutar en küçük biriminde gösteriliyor — ondalık sayısı burada kontrol edilemez.',
   'warn.claimedOrigin': 'Sitenin adı sitenin kendisinden geliyor ve doğrulanamaz — aşağıdaki ayrıntılara göre karar verin.',
+  'warn.relayedOrigin': 'Hangi sitenin istediğini cüzdan söylüyor — bu sayfa bunu doğrulayamaz. Aşağıdaki ayrıntılara göre karar verin.',
 
   'ui.techDetails': 'Teknik ayrıntılar',
   'ui.function': 'Fonksiyon',

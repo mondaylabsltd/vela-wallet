@@ -125,6 +125,7 @@ window.VelaCS.i18n.register('vi', {
   'warn.typedUnknown': 'Cấu trúc EIP-712 không xác định — hãy đọc từng trường bên dưới trước khi quyết định.',
   'warn.unverifiedDecimals': 'Trang này không biết token này trên mạng này, nên số lượng được hiển thị theo đơn vị nhỏ nhất — không thể kiểm tra số chữ số thập phân ở đây.',
   'warn.claimedOrigin': 'Tên trang web do chính trang đó tự cung cấp và không thể kiểm chứng — hãy dựa vào các chi tiết bên dưới.',
+  'warn.relayedOrigin': 'Trang web nào yêu cầu là do ví cho biết — trang này không thể kiểm chứng. Hãy dựa vào các chi tiết bên dưới.',
 
   'ui.techDetails': 'Chi tiết kỹ thuật',
   'ui.function': 'Hàm',

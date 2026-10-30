@@ -27,9 +27,9 @@ use vela_core::app::network_admin::{
     NetProbeHealth, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
     NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
     NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
-    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_GENESIS_SERVICE_URL, DEFAULT_PASSKEY_INDEX_URL,
-    MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS, REQUIRED_CONTRACTS,
-    SEARCH_DEBOUNCE_MS,
+    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_GENESIS_SERVICE_URL,
+    DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS,
+    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
 
@@ -3427,7 +3427,10 @@ fn the_multisig_service_is_an_endpoint_only_where_multisigs_are() {
     let ops = sut.dispatch(Event::EndpointsOpened);
     assert!(!ops.iter().any(|op| matches!(
         op,
-        Op::FetchServiceHealth { field: NetEndpointField::GenesisService, .. }
+        Op::FetchServiceHealth {
+            field: NetEndpointField::GenesisService,
+            ..
+        }
     )));
 
     // Nor saves it, whoever asks (an agent's `set_service_endpoint`).

@@ -153,6 +153,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     vela_core::signing_venue::SigningPlan::export_all(&config)?;
     vela_core::signing_venue::KeyLabel::export_all(&config)?;
     vela_core::signing_venue::VenueChoice::export_all(&config)?;
+    // R7 (2026-10-30): where each signature goes (`signingRoute`).
+    vela_core::signing_venue::SigningRoute::export_all(&config)?;
+    vela_core::signing_venue::SignatureKind::export_all(&config)?;
     vela_core::trusted_signer::launch::IntegrityLine::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;

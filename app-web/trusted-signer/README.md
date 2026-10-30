@@ -4,9 +4,12 @@ One folder, one deployment: a static page. Pure HTML/CSS/JS — no build step, n
 dependencies, no bundler, nothing to install.
 
 It is reached by the **Android, iOS and desktop wallets**, which open it in this
-device's own browser. It was also a Chrome MV3 extension once, for the web
-wallet to reach over an extension port; spec 075 cut the Trusted Signer from the
-web wallet, so that had no caller left and went with it (owner, 2026-09-23).
+device's own browser — and, since the owner made it usable everywhere
+(2026-10-30), by the **web wallet and the Chrome extension**, which open it with
+`window.open` and hand it the request over `postMessage`. (The page itself was a
+Chrome MV3 extension once; that form went on 2026-09-23 and stays gone — today's
+extension is the wallet, `app-web/vela-wallet/extension`, and opens this page
+like the web wallet does.)
 
 ## Run as a web page
 
@@ -27,18 +30,24 @@ App 用的只有**一条**通道，一种意图格式，**没有服务器**。�
 | 请求方 | 通道 | 状态 |
 | --- | --- | --- |
 | 桌面 App（macOS / Windows / Linux）、iPhone、Android | 请求放在 URL 片段里（`sign.html?ch=url#i=…`），回答走 `velawallet://sign-result` 自定义 scheme 交回 App | ✅ Android、Windows 11 有端到端记录；macOS / iOS / Linux 接线相同、尚无完整跑通记录 |
-| 同浏览器网页 | `postMessage`（代码还在，没有 App 使用） | 仅测试用；签名一律拒签（规格 102 R7） |
+| 网页钱包、Chrome 扩展（同浏览器） | `postMessage`（`?ch=post`），答复只交给浏览器报告的打开者 origin **恰好是** `https://wallet.getvela.app`、`https://getvela.app`、`chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` | ✅ 2026-10-30 起：交易、批量、钱包自己的发送、`personal_sign`、typed data、多签批准（PROTOCOL.md 第 13 节）；其他打开者一律拒签（规格 102 R7） |
 | 同机 App | 回环 WebSocket（`?ch=ws`，代码还在，没有 App 使用） | 仅测试用：发布页的 CSP 连不出去 |
 
 已砍掉：跨设备的 BLE 与 WebSocket 隧道（075，「只留回环这个，这样更加安全」）；
 扩展端口（2026-09-23 随扩展形态一起砍掉）；App 不再用回环 WebSocket（076 改走自定义
 scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，页面里的 WebSocket 连不出去）。
-网页版钱包不用签名页（075）。
+~~网页版钱包不用签名页（075）~~ —— 2026-10-30 创始人推翻：签名页在网页钱包和扩展上处处可用（上表第二行）。
 
 **答复只交给 `velawallet://sign-result`**（规格 102 R7）：签名、以及 url 通道上的每一种
 仪式，答复地址不是这一串就拒签，不弹 passkey，也不往别的地址发任何东西；页面不在
 框架里运行（托管方另发 `frame-ancestors 'none'` / `X-Frame-Options: DENY`）。理由与
 测试例外见 [PROTOCOL.md](PROTOCOL.md) 第 0 节「答复只交给钱包」。
+
+**签名页处处可用（2026-10-30）**：账户的「签名方式」选了签名页，网页钱包与 Chrome 扩展里的每一种签名都交到这一页 ——
+走哪里由 vela-core 的一条规则决定（`signing_venue::signing_route`），答复只按核心的方式接受（`trusted_signer::accept_signature`：
+核心从它自己造的请求算出的字节、账户的钥匙）。本页只答 Vela 自己的钱包，按浏览器报告的打开者 origin 逐字比对；
+钱包转来的站点写成「钱包的说法」（`warn.relayedOrigin`），不当作已核实。Chrome 应用商店分配给商店包的 id 尚未加入
+（`resolve.js` 的 `EXTENSIONS`）。见 [PROTOCOL.md](PROTOCOL.md) 第 13 节。
 
 **多签成员的批准（2026-10-29，`vela_multisigApprove`）**：网页钱包的成员选了签名页时，批准交到这一页。
 本页从原始 SafeTx 字段自己算 safeTxHash（以及域哈希、消息哈希），App 给的哈希不一致就拒签；按 vela-core
@@ -48,9 +57,9 @@ delegatecall、改模块 / guard / handler / singleton 的自调用和 gas 退�
 （`https://wallet.getvela.app`、`https://getvela.app`），且只限这一种请求。见 [PROTOCOL.md](PROTOCOL.md) 第 12 节。
 
 ```sh
-node samples/multisig-test.mjs  # 245 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
+node samples/multisig-test.mjs  # 248 项：多签批准 —— 哈希、批准字节、读法与发布的 vela-core wasm 逐例对拍；钱包的唯一审阅（multisigReview）拒的本页一律拒，含状态差异守卫的 Bybit 向量；哈希不符、看不见的字符、超大载荷、非钱包打开者；十五种语言
 bun samples/serve-dist.mjs      # 本机按托管方的样子提供 dist/（含 _headers 的规则与 /b/<hash>/sign），部署前先试
-bun samples/answer-test.mjs     # 37 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：多签批准只答网页钱包
+bun samples/answer-test.mjs     # 55 项：答复只交给钱包 —— 钓鱼站的 cb、postMessage、框架、回环，在发布出去的字节上；G 段：网页钱包的多签批准与消息被答、子域被拒；H 段：真的未打包扩展 —— 已发布 id 的 personal_sign / typed data / 交易被答，别的 id 被拒
 node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
 node samples/channels-test.mjs  # 41 项：URL 片段 → velawallet:// + 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏链接、读不了的钥匙 id 都有一句话
 node samples/claims-test.mjs    # 62 项：谁的说法 —— 「本账户」、网络费的币种、本页不认识的链上 App 给的币名（标「币名由 App 提供」、显示链 ID）、法币与币种、看不见的字符、读不了的钥匙 id
