@@ -398,6 +398,10 @@ final class SignExecutor {
             switch refused.failure {
             case .passkeyCancelled:
                 return ["type": "passkey_cancelled"]
+            // send-11: the prompt ran out of the core's time — handled as a
+            // cancel, and the sheet says which (`passkey_note`).
+            case .passkeyTimedOut:
+                return ["type": "passkey_timed_out"]
             case .signer(let kind, let message):
                 return Self.signerFailed(kind, message)
             // Round 7: the page is the venue, so its ending is the answer —
@@ -437,6 +441,12 @@ final class SignExecutor {
             // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
             case .previousPending:
                 return Self.failed(userOpPreviousPendingDetail())
+            // send-15: another transaction of this account spent the nonce
+            // first — the relay's refusal (RJ3), and the page hears the
+            // core's fixed sentence for it, never the relay's.
+            case .nonceUsed:
+                VelaLog.failure(.sign, kind: "nonce_used", "chain=\(chainId)")
+                return Self.failed(userOpNonceUsedDetail(), refused: true)
             }
         } catch {
             return Self.failed("Signing failed")
@@ -510,6 +520,7 @@ final class SignExecutor {
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .passkeyTimedOut = refused.failure { return ["type": "passkey_timed_out"] }
             if case .signer(let kind, let message) = refused.failure { return Self.signerFailed(kind, message) }
             if case .askerGone = refused.failure { return ["type": "asker_gone"] }
             if case .trustedSigner(let notice) = refused.failure { return notice.signOutcome }

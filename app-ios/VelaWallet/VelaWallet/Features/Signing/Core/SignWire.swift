@@ -396,6 +396,11 @@ struct SignViewWire: Decodable, Equatable {
     /// stood — `componentsUi.signing.simUnavailableWarning` — and the confirm
     /// is open. `nil` again once the simulation's own verdict lands.
     var simWaitedOutKey: String? = nil
+    /// signer-11: the last passkey prompt for THIS request signed nothing —
+    /// `cancelled` (the person closed it) or `timed_out` (it ran out of the
+    /// core's time). The open confirm says so in one calm line; `nil` once
+    /// another attempt starts.
+    var passkeyNote: String? = nil
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,
