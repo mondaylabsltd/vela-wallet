@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::multisig_accounts::{
     AddOutcome, BackupState, CreateChoice, EnsAnswer, Event, ImportOutcome, InvitedMember,
-    MultisigAccounts, Phase,
+    MultisigAccounts, Phase, RenameBlocked,
 };
 use vela_core::app::multisig_shell::{keys, AccountUpdate, MemberInfo, Notice};
 use world::{fixture, genesis, settle, stored_row, DeployedSafe, World, HANDLER_141, SERVICE, T0};
@@ -512,6 +512,8 @@ fn found_keeps_nothing_until_the_tap_which_does_not_show_it() {
         Event::Find {
             address: g.address.clone(),
             network: Some(100),
+            chain_ids: None,
+            wait_ms: None,
         },
     );
     assert!(sut.view().add.found.is_some());
@@ -949,4 +951,617 @@ fn the_backup_is_checked_and_sent() {
 /// A voiding transaction at nonce 0: a proposal any mailbox could hold.
 fn cancel(safe: &str) -> Value {
     serde_json::to_value(vela_core::multisig::cancel_tx(safe, "0x0").unwrap()).unwrap()
+}
+
+// -- the web's facade (W8-M1) --------------------------------------------------------
+
+/// A change asked for before the store answered writes nothing: the list is
+/// never written over one not read yet (the web's facade queues until then).
+#[test]
+fn nothing_is_written_over_a_list_not_read_yet() {
+    let g = genesis(&[A], 1, "0x30");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start {
+        service_url: SERVICE.to_owned(),
+        accounts: Vec::new(),
+        networks: vec![100],
+    });
+    sut.dispatch(Event::SetLabel {
+        address: g.address.clone(),
+        label: Some("Early".to_owned()),
+    });
+    sut.dispatch(Event::Remove {
+        address: "0x00000000000000000000000000000000000000ee".to_owned(),
+    });
+    settle(&mut sut, &mut world, 5_000);
+    assert!(sut.view().loaded);
+    assert_eq!(world.stored_accounts().len(), 1, "the stored list stands");
+    assert_eq!(sut.view().accounts.len(), 1);
+}
+
+/// Another document changed the stored list: read again, nothing asked.
+#[test]
+fn another_documents_change_is_read_again() {
+    let g = genesis(&[A], 1, "0x31");
+    let h = genesis(&[B], 1, "0x32");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    assert_eq!(sut.view().accounts.len(), 1);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true), stored_row(&h, &[100], true)]).to_string(),
+    );
+    world
+        .store
+        .insert(keys::ACTIVE.to_owned(), h.address.clone());
+    let (http, rpc) = (world.http_log.len(), world.rpc_log.len());
+    run(&mut sut, &mut world, Event::Reload);
+    let view = sut.view();
+    assert_eq!(view.accounts.len(), 2);
+    assert_eq!(view.active.as_deref(), Some(h.address.as_str()));
+    assert_eq!(world.http_log.len(), http, "nothing asked of the service");
+    assert_eq!(world.rpc_log.len(), rpc, "nor of a chain");
+}
+
+/// An address is looked up on the space in front; the device's other
+/// networks are not read for it.
+#[test]
+fn an_address_is_looked_up_on_the_space_in_front() {
+    let mut world = World::default();
+    let mut sut = started(&mut world, vec![100, 11_155_111]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Space {
+            chain_ids: vec![100],
+        },
+    );
+    run(
+        &mut sut,
+        &mut world,
+        add("0x00000000000000000000000000000000000000dd", None, false),
+    );
+    assert_eq!(sut.view().add.outcome, Some(AddOutcome::NotFound));
+    assert!(world.reads_on(100) > 0);
+    assert_eq!(world.reads_on(11_155_111), 0, "the other space is not read");
+}
+
+/// A proposal link's lookup reads its own network only.
+#[test]
+fn a_find_reads_the_networks_it_names() {
+    let mut world = World::default();
+    let mut sut = started(&mut world, vec![100, 8453]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::Find {
+            address: "0x00000000000000000000000000000000000000dd".to_owned(),
+            network: Some(8453),
+            chain_ids: Some(vec![8453]),
+            wait_ms: Some(2500),
+        },
+    );
+    assert_eq!(sut.view().add.outcome, Some(AddOutcome::NotFound));
+    assert_eq!(world.reads_on(100), 0);
+    assert!(world.reads_on(8453) > 0);
+}
+
+/// r4a-12: why a record cannot be renamed here, each said as itself; one
+/// held on a network here names it, with whether it is deployed there.
+#[test]
+fn a_rename_says_why_it_cannot_run() {
+    let g = genesis(&[A], 1, "0x33");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], false)]).to_string(),
+    );
+    let plan = |sut: &Sut| sut.view().rename[&g.address.to_ascii_lowercase()].clone();
+    let rename = || Event::PlanRename {
+        address: g.address.clone(),
+    };
+    let mut sut = started(&mut world, vec![8453]);
+    run(&mut sut, &mut world, rename());
+    assert_eq!(plan(&sut).blocked, Some(RenameBlocked::Unrecorded));
+    assert_eq!(plan(&sut).chain_id, None);
+
+    world.record(&g.address, &g.genesis, true);
+    run(&mut sut, &mut world, rename());
+    assert_eq!(
+        plan(&sut).blocked,
+        Some(RenameBlocked::Unrecorded),
+        "a record on its way names no chain"
+    );
+
+    world.record(&g.address, &g.genesis, false);
+    run(&mut sut, &mut world, rename());
+    assert_eq!(plan(&sut).blocked, Some(RenameBlocked::Elsewhere));
+
+    world.service_down = true;
+    run(&mut sut, &mut world, rename());
+    assert_eq!(plan(&sut).blocked, Some(RenameBlocked::Unreachable));
+
+    world.service_down = false;
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, rename());
+    assert_eq!(plan(&sut).chain_id, Some(100));
+    assert_eq!(plan(&sut).deployed, Some(false));
+    assert_eq!(plan(&sut).blocked, None);
+}
+
+/// Sharing again: a passkey that failed says why; a service that does not
+/// hold it says nothing more than that it failed.
+#[test]
+fn sharing_again_says_why_a_passkey_failed() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let me = world.locals[0].address.clone();
+    let g = genesis(&[&me, B], 2, "0x34");
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[8453], false)]).to_string(),
+    );
+    world.passkey_fails = Some("{\"kind\":\"page_declined\"}".to_owned());
+    let mut sut = started(&mut world, vec![8453]);
+    let key = g.address.to_ascii_lowercase();
+    let share = || Event::ShareAgain {
+        address: g.address.clone(),
+        owner: me.clone(),
+    };
+    run(&mut sut, &mut world, share());
+    assert_eq!(sut.view().share_again[&key], Phase::Failed);
+    assert_eq!(
+        sut.view().share_again_failure.get(&key).map(String::as_str),
+        Some("{\"kind\":\"page_declined\"}")
+    );
+
+    world.passkey_fails = None;
+    world.service_down = true;
+    run(&mut sut, &mut world, share());
+    assert_eq!(sut.view().share_again[&key], Phase::Failed);
+    assert!(sut.view().share_again_failure.get(&key).is_none());
+}
+
+/// A new draft is a fresh sheet at once: what the sheet asked right after
+/// (its networks) is not wiped when the salt answers.
+#[test]
+fn a_new_draft_keeps_what_was_asked_after_it() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let me = world.locals[0].address.clone();
+    let mut sut = started(&mut world, vec![100]);
+    sut.dispatch(Event::NewDraft);
+    sut.dispatch(Event::CheckNetworks {
+        chain_ids: vec![100],
+    });
+    sut.dispatch(Event::Draft {
+        owners: vec![me],
+        threshold: 1,
+        name: "Quiet Harbor".to_owned(),
+    });
+    settle(&mut sut, &mut world, 5_000);
+    let view = sut.view();
+    assert!(view.create.networks.contains_key(&100));
+    assert!(view.create.draft_address.is_some());
+}
+
+/// r4D-5 (the web's `ens-name` suite): a name's address is read on Ethereum
+/// — the registry's resolver, then its `addr` — and given back
+/// checksummed; a resolver with no address for it points nowhere.
+#[test]
+fn an_ens_names_address_is_read_and_checksummed() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use vela_core::app::multisig_shell::MultisigShellResult as Res;
+    let resolver = format!(
+        "0x{}{}",
+        "0".repeat(24),
+        "4976fb03c32e5b8cfe2b6ccb31c09ba78ebaba41"
+    );
+    let addr = Rc::new(RefCell::new(format!(
+        "0x{}{}",
+        "0".repeat(24),
+        "d8da6bf26964af9d7eed9e03e53415d37aa96045"
+    )));
+    let calls = Rc::new(RefCell::new(Vec::<(u64, String)>::new()));
+    let mut world = World::default();
+    let mut sut = started(&mut world, vec![1]);
+    {
+        let (addr, calls) = (addr.clone(), calls.clone());
+        world.rpc_hooks.push(Box::new(move |chain, method, params| {
+            if method != "eth_call" {
+                return None;
+            }
+            let to = params[0]["to"].as_str().unwrap_or("").to_owned();
+            let data = params[0]["data"].as_str().unwrap_or("").to_owned();
+            calls.borrow_mut().push((chain, to));
+            Some(Res::RpcResult {
+                result: json!(if data.starts_with("0x0178b8bf") {
+                    resolver.clone()
+                } else {
+                    addr.borrow().clone()
+                }),
+            })
+        }));
+    }
+    run(
+        &mut sut,
+        &mut world,
+        Event::ResolveEns {
+            name: "Vitalik.eth".to_owned(),
+        },
+    );
+    assert_eq!(
+        sut.view().add.ens,
+        Some(EnsAnswer::Found {
+            name: "vitalik.eth".to_owned(),
+            address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045".to_owned(),
+        })
+    );
+    let asked = calls.borrow().clone();
+    assert_eq!(
+        asked.iter().map(|(c, _)| *c).collect::<Vec<_>>(),
+        vec![1, 1]
+    );
+    assert_eq!(asked[0].1, "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e");
+
+    *addr.borrow_mut() = format!("0x{}", "0".repeat(64));
+    run(
+        &mut sut,
+        &mut world,
+        Event::ResolveEns {
+            name: "nobody.eth".to_owned(),
+        },
+    );
+    assert_eq!(
+        sut.view().add.ens,
+        Some(EnsAnswer::None {
+            name: "nobody.eth".to_owned()
+        })
+    );
+}
+
+/// r4D-5 (the web's `invite` suite): one added since is kept once a network
+/// the invite names says it is a member — a network that cannot be read
+/// keeps only the founding members' — and a link from before r6 names them
+/// by the genesis's order, only when the counts match.
+#[test]
+fn an_invites_labels_for_members_added_since_and_by_order() {
+    const C: &str = "0x00000000000000000000000000000000000000cc";
+    const STRANGER: &str = "0x00000000000000000000000000000000000000dd";
+    let g = genesis(&[A, B], 2, "0x35");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    world.deploy(100, &g.address, DeployedSafe::clean(&[A, B, C], 2));
+    let mut sut = started(&mut world, vec![100]);
+    let m = |a: &str, n: &str| InvitedMember {
+        address: Some(a.to_owned()),
+        name: Some(n.to_owned()),
+        kind: Some("passkey".to_owned()),
+    };
+    let invite = |members: Vec<InvitedMember>| Event::KeepInvited {
+        address: g.address.clone(),
+        chain_ids: vec![100],
+        members,
+    };
+    world.silent.insert(100);
+    run(&mut sut, &mut world, invite(vec![m(A, "Ana"), m(C, "Cy")]));
+    let members = world.stored_accounts()[0]["members"].clone();
+    assert_eq!(members[A]["name"], "Ana");
+    assert!(members.get(C).is_none(), "the network did not say");
+
+    world.silent.clear();
+    run(
+        &mut sut,
+        &mut world,
+        invite(vec![m(C, "Cy"), m(STRANGER, "Ana")]),
+    );
+    let members = world.stored_accounts()[0]["members"].clone();
+    assert_eq!(members[C]["name"], "Cy");
+    assert!(members.get(STRANGER).is_none(), "not a member anywhere");
+
+    // Before r6: by the genesis's order, only when the counts match.
+    let h = genesis(&[A, B], 2, "0x36");
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&h, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    let unaddressed = |name: Option<&str>, kind: Option<&str>| InvitedMember {
+        address: None,
+        name: name.map(str::to_owned),
+        kind: kind.map(str::to_owned),
+    };
+    let keep = |members| Event::KeepInvited {
+        address: h.address.clone(),
+        chain_ids: vec![100],
+        members,
+    };
+    run(
+        &mut sut,
+        &mut world,
+        keep(vec![unaddressed(Some("Ana"), None)]),
+    );
+    assert!(world.stored_accounts()[0].get("members").is_none());
+    run(
+        &mut sut,
+        &mut world,
+        keep(vec![
+            unaddressed(Some("Ana"), None),
+            unaddressed(Some("Bo"), Some("wallet")),
+        ]),
+    );
+    let members = world.stored_accounts()[0]["members"].clone();
+    assert_eq!(members[A]["name"], "Ana");
+    assert_eq!(members[B]["name"], "Bo");
+    assert_eq!(members[B]["kind"], "wallet");
+}
+
+// -- ported from the web's suites (W8-M1) ---------------------------------------------------
+
+/// accounts-records: a record's name is the chain's own record where this
+/// device has the registry's network — a rename shows here, the service's
+/// word only where the chain cannot be read.
+#[test]
+fn a_records_name_is_read_from_the_chain_where_it_can_be() {
+    use vela_core::app::multisig_shell::MultisigShellResult as Res;
+    let owners = [
+        "0x1111111111111111111111111111111111111111".to_owned(),
+        "0x2222222222222222222222222222222222222222".to_owned(),
+    ];
+    let ms = vela_core::multisig::multisig_genesis(&owners, 2, "Team fund", "0x7").unwrap();
+    let ret = include_str!("vectors/multisig-genesis-of.hex")
+        .trim()
+        .to_owned();
+    let mut stored = ms.genesis.clone();
+    stored.name = Some("Old name".to_owned());
+    let mut service = ms.genesis.clone();
+    service.name = Some("Service word".to_owned());
+    let mut world = World::default();
+    world.record(&ms.address, &service, false);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([{
+            "address": ms.address, "genesis": stored, "owners": ms.owners,
+            "threshold": ms.threshold, "recorded": true, "chainIds": [100], "addedMs": 1,
+        }])
+        .to_string(),
+    );
+    let registry = vela_core::multisig::GENESIS_REGISTRY.to_ascii_lowercase();
+    world.rpc_hooks.push(Box::new(move |chain, method, params| {
+        let to = params[0]["to"].as_str().unwrap_or("").to_ascii_lowercase();
+        (chain == 100 && method == "eth_call" && to == registry).then(|| Res::RpcResult {
+            result: json!(ret.clone()),
+        })
+    }));
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::CheckRecords);
+    assert_eq!(world.stored_accounts()[0]["genesis"]["name"], "Team fund");
+}
+
+/// accounts-records: a name that comes with a genesis that is not this
+/// address is no record of it; a record queued moments ago is given the
+/// time to land (not called unshared), and looked at again.
+#[test]
+fn a_record_for_another_address_or_still_landing_changes_nothing() {
+    let g = genesis(&[A], 1, "0x37");
+    let other = genesis(&[B], 1, "0x38");
+    let mut world = World::default();
+    let mut wrong = other.genesis.clone();
+    wrong.name = Some("Treasury".to_owned());
+    world.record(&g.address, &wrong, false);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![8453]);
+    run(&mut sut, &mut world, Event::CheckRecords);
+    assert_eq!(
+        world.stored_accounts()[0]["genesis"]["name"],
+        "Quiet Harbor"
+    );
+
+    // Added a moment ago, the service has none yet: still shared, asked again.
+    let h = genesis(&[A], 1, "0x39");
+    let mut row = stored_row(&h, &[100], true);
+    row["addedMs"] = json!(world.now - 1_000.0);
+    world
+        .store
+        .insert(keys::ACCOUNTS.to_owned(), json!([row]).to_string());
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::CheckRecords);
+    assert_eq!(world.stored_accounts()[0]["recorded"], true);
+    let asked = world.http_log.len();
+    run(&mut sut, &mut world, Event::CheckRecords);
+    assert!(world.http_log.len() > asked, "looked at again");
+}
+
+/// accounts-find: a record goes to the default service's home (Gnosis)
+/// only when the service in use names none.
+#[test]
+fn a_record_goes_to_gnosis_when_the_service_names_no_home() {
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world.home_chain = None;
+    let mut sut = started(&mut world, vec![8453]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    assert_eq!(world.imports[0]["chainId"], 100);
+
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    world.home_chain = Some(5_042_002);
+    let mut sut = started(&mut world, vec![8453]);
+    run(&mut sut, &mut world, Event::NewDraft);
+    let c = choice(&world);
+    run(&mut sut, &mut world, Event::Create { choice: c });
+    assert_eq!(
+        world.imports[0]["chainId"], 5_042_002,
+        "the service's own home"
+    );
+}
+
+/// accounts-import: a refused genesis is not imported and says why; one
+/// deployed with a module only on the person's tap, keeping what was found.
+#[test]
+fn an_import_is_vetted_as_an_address_added_is() {
+    let g = genesis(&[A], 1, "0x3a");
+    let mut world = World::default();
+    world.record(&g.address, &g.genesis, false);
+    world
+        .canonical_missing
+        .insert((100, HANDLER_LOWER.to_owned()));
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ParseExport {
+            json: export_of(&g.address, 100, true, None),
+        },
+    );
+    let import = |accept_risks| Event::Import {
+        address: g.address.clone(),
+        accept_risks,
+    };
+    run(&mut sut, &mut world, import(false));
+    let key = g.address.to_ascii_lowercase();
+    let ImportOutcome::Refused { findings } = sut.view().import.outcomes[&key].clone() else {
+        panic!("{:?}", sut.view().import.outcomes[&key]);
+    };
+    assert_eq!(findings[0]["from"], "genesis");
+    assert!(world.stored_accounts().is_empty());
+
+    let h = genesis(&[A], 1, "0x3b");
+    let mut world = World::default();
+    world.record(&h.address, &h.genesis, false);
+    let mut safe = DeployedSafe::clean(&[A], 1);
+    safe.modules = vec!["0x00000000000000000000000000000000000000ee".to_owned()];
+    world.deploy(100, &h.address, safe);
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ParseExport {
+            json: export_of(&h.address, 100, true, None),
+        },
+    );
+    let import = |accept_risks| Event::Import {
+        address: h.address.clone(),
+        accept_risks,
+    };
+    run(&mut sut, &mut world, import(false));
+    let key = h.address.to_ascii_lowercase();
+    assert!(matches!(
+        sut.view().import.outcomes[&key],
+        ImportOutcome::HighRisk { .. }
+    ));
+    assert!(world.stored_accounts().is_empty(), "not without the tap");
+    run(&mut sut, &mut world, import(true));
+    assert_eq!(sut.view().import.outcomes[&key], ImportOutcome::Imported);
+    assert_eq!(
+        world.stored_accounts()[0]["findings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+/// accounts-records: one with no proof kept here is asked about once a
+/// session, not every minute; an owner's proof the service keeps, though
+/// its sponsor will not pay now, is shared.
+#[test]
+fn sharing_without_a_proof_is_asked_once_a_session() {
+    let g = genesis(&[A], 1, "0x3c");
+    let mut world = World::default();
+    world.import_status = (
+        200,
+        json!({"status": "resolved", "reason": "notDeployed", "recordCall": {}}),
+    );
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], false)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    run(&mut sut, &mut world, Event::Tick);
+    assert_eq!(world.imports.len(), 1);
+    assert!(world.imports[0].get("ownerProof").is_none());
+    assert_eq!(world.imports[0]["genesis"]["name"], "Quiet Harbor", "named");
+    run(&mut sut, &mut world, Event::Tick);
+    assert_eq!(world.imports.len(), 1, "once a session");
+
+    // The owner's passkey: not paid for now, yet the service hands it out.
+    let mut world = World::default();
+    world.locals.push(fixture(0));
+    let me = world.locals[0].address.clone();
+    let h = genesis(&[&me], 1, "0x3d");
+    world.import_status = (
+        200,
+        json!({"status": "resolved", "reason": "budget", "recordCall": {}}),
+    );
+    world.record(&h.address, &h.genesis, true);
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&h, &[100], false)]).to_string(),
+    );
+    let mut sut = started(&mut world, vec![100]);
+    run(
+        &mut sut,
+        &mut world,
+        Event::ShareAgain {
+            address: h.address.clone(),
+            owner: me,
+        },
+    );
+    assert_eq!(
+        sut.view().share_again[&h.address.to_ascii_lowercase()],
+        Phase::Done
+    );
+    assert_eq!(world.stored_accounts()[0]["shared"], true);
+}
+
+/// recheck: once a session — and a network it comes to be used on is
+/// checked then (its verdict per network, never the multisig's at once).
+#[test]
+fn a_network_it_comes_to_be_used_on_is_checked_then() {
+    let g = genesis(&[A], 1, "0x3e");
+    let mut world = World::default();
+    world.store.insert(
+        keys::ACCOUNTS.to_owned(),
+        json!([stored_row(&g, &[100], true)]).to_string(),
+    );
+    world.deploy(100, &g.address, DeployedSafe::clean(&[A], 1));
+    let mut sut = started(&mut world, vec![100, 8453]);
+    run(&mut sut, &mut world, Event::Recheck);
+    let on_100 = world.reads_on(100);
+    assert!(on_100 > 0);
+    assert_eq!(world.reads_on(8453), 0, "not one of its networks yet");
+    run(&mut sut, &mut world, Event::Recheck);
+    assert_eq!(world.reads_on(100), on_100, "once a session");
+    run(
+        &mut sut,
+        &mut world,
+        Event::Apply {
+            address: g.address.clone(),
+            update: AccountUpdate::UseChain { chain_id: 8453 },
+        },
+    );
+    run(&mut sut, &mut world, Event::Recheck);
+    assert!(world.reads_on(8453) > 0, "checked once it is used there");
+    assert_eq!(world.reads_on(100), on_100);
+    assert!(sut.view().accounts[0].high_risk_on.is_empty());
+    assert!(sut.view().accounts[0].refused_on.is_empty());
 }

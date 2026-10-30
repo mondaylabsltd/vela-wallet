@@ -367,6 +367,8 @@ pub struct World {
     // The outside owner's side.
     pub peer: PeerSim,
     pub wallet: Option<WalletSim>,
+    /// The passkey fails with this detail (neither signed nor cancelled).
+    pub passkey_fails: Option<String>,
 }
 
 impl Default for World {
@@ -413,6 +415,7 @@ impl Default for World {
             sim_reply: None,
             peer: PeerSim::default(),
             wallet: None,
+            passkey_fails: None,
         }
     }
 }
@@ -782,6 +785,11 @@ impl World {
         self.passkeys.push((owner.to_owned(), challenge.to_owned()));
         if self.cancel_passkey {
             return Res::PasskeyCancelled;
+        }
+        if let Some(detail) = &self.passkey_fails {
+            return Res::PasskeyFailed {
+                detail: detail.clone(),
+            };
         }
         let local = self
             .locals

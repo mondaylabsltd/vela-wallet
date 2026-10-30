@@ -106,6 +106,17 @@ pub enum Event {
         #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
         networks: Vec<u64>,
     },
+    /// The networks of the space in front (mainnets or testnets): where an
+    /// address is looked up (`addMultisig` reads the space's networks; the
+    /// device's other networks still count as ones it has). Never sent: the
+    /// lookup reads every network the device has.
+    Space {
+        #[cfg_attr(feature = "bindings", ts(type = "number[]"))]
+        chain_ids: Vec<u64>,
+    },
+    /// The stored list changed in another document (a tab, the side panel):
+    /// read again — the stored keys only, nothing asked of anyone.
+    Reload,
     /// Another service is in use (Settings → Service Endpoints).
     Service {
         url: String,
@@ -165,6 +176,15 @@ pub enum Event {
         address: String,
         #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         network: Option<u64>,
+        /// The networks to look on (a proposal link: its own one); absent,
+        /// the space's.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number[] | null"))]
+        chain_ids: Option<Vec<u64>>,
+        /// How long before a record not there yet is asked for once more.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        wait_ms: Option<u64>,
     },
     /// Keep the one [`Event::Find`] read (a tap; not shown).
     KeepFound {
@@ -399,6 +419,22 @@ pub struct RenamePlan {
     #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
     pub chain_id: Option<u64>,
     pub deployed: Option<bool>,
+    /// r4a-12: why there is no chain — each said as itself.
+    #[serde(default)]
+    pub blocked: Option<RenameBlocked>,
+}
+
+/// Why a record cannot be renamed from here (`renameBlocked`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "MultisigRenameBlocked"))]
+pub enum RenameBlocked {
+    /// Its record is not saved yet: nothing to rename.
+    Unrecorded,
+    /// The service could not be asked.
+    Unreachable,
+    /// Held only on chains this device lacks.
+    Elsewhere,
 }
 
 /// One stored multisig, as the switcher and Settings draw it.
@@ -433,6 +469,10 @@ pub struct MultisigAccountsView {
     pub import: ImportView,
     pub backup: BTreeMap<String, BackupState>,
     pub share_again: BTreeMap<String, Phase>,
+    /// Why sharing again failed when the passkey did (its `detail`); absent
+    /// for one the service does not hold yet.
+    #[serde(default)]
+    pub share_again_failure: BTreeMap<String, String>,
     pub rename: BTreeMap<String, RenamePlan>,
     /// The service is away (the outage), as far as this machine has seen.
     pub service_down: bool,
@@ -451,6 +491,7 @@ pub struct State {
     discovered_kept: BTreeMap<String, f64>,
     local: Vec<LocalAccount>,
     networks: Vec<u64>,
+    space: Option<Vec<u64>>,
     service: Service,
     chain: Chain,
     // This session's.
@@ -470,10 +511,16 @@ pub struct State {
     import: ImportView,
     backup: BTreeMap<String, BackupState>,
     share_again: BTreeMap<String, Phase>,
+    share_again_failure: BTreeMap<String, String>,
     rename: BTreeMap<String, RenamePlan>,
 }
 
 impl State {
+    /// Where an address is looked up: the space in front, else every network here.
+    fn lookup_chains(&self) -> Vec<u64> {
+        self.space.clone().unwrap_or_else(|| self.networks.clone())
+    }
+
     fn find(&self, address: &str) -> Option<&MultisigAccount> {
         self.accounts
             .iter()
@@ -758,6 +805,11 @@ impl App for MultisigAccounts {
                     |io, st| async move { recheck_stored(&io, &st).await },
                 )
             }
+            Event::Space { chain_ids } => {
+                lock(&model.state).space = Some(chain_ids);
+                render()
+            }
+            Event::Reload => flow(model, |io, st| async move { start(&io, &st).await }),
             Event::Service { url } => {
                 lock(&model.state).service.set_url(&url);
                 render()
@@ -780,13 +832,22 @@ impl App for MultisigAccounts {
             Event::Discover { address, chain_ids } => flow(model, move |io, st| async move {
                 discover_chains(&io, &st, &address, &chain_ids).await;
             }),
-            Event::NewDraft => flow(model, |io, st| async move {
-                let salt = io.random_hex(32).await.map(|h| hex_prefixed(&h));
-                let mut s = lock(&st);
-                s.salt = salt;
-                s.create = CreateView::default();
-                redraft(&mut s);
-            }),
+            Event::NewDraft => {
+                // A fresh sheet at once: what it asks next (its networks, its
+                // draft) is never wiped by the salt answering after it.
+                {
+                    let mut s = lock(&model.state);
+                    s.salt = None;
+                    s.draft = None;
+                    s.create = CreateView::default();
+                }
+                flow(model, |io, st| async move {
+                    let salt = io.random_hex(32).await.map(|h| hex_prefixed(&h));
+                    let mut s = lock(&st);
+                    s.salt = salt;
+                    redraft(&mut s);
+                })
+            }
             Event::Draft {
                 owners,
                 threshold,
@@ -820,10 +881,14 @@ impl App for MultisigAccounts {
                     create(&io, &st, choice).await
                 })
             }
-            Event::ResolveEns { name } => flow(model, move |io, st| async move {
-                let answer = resolve_ens(&io, &name).await;
-                lock(&st).add.ens = Some(answer);
-            }),
+            Event::ResolveEns { name } => {
+                // The last name's answer goes at once: a retry is never answered by it.
+                lock(&model.state).add.ens = None;
+                flow(model, move |io, st| async move {
+                    let answer = resolve_ens(&io, &name).await;
+                    lock(&st).add.ens = Some(answer);
+                })
+            }
             Event::Add {
                 address,
                 network,
@@ -842,7 +907,12 @@ impl App for MultisigAccounts {
                     s.add.outcome = Some(outcome);
                 })
             }
-            Event::Find { address, network } => {
+            Event::Find {
+                address,
+                network,
+                chain_ids,
+                wait_ms,
+            } => {
                 {
                     let mut s = lock(&model.state);
                     s.add.phase = Phase::Working;
@@ -852,9 +922,10 @@ impl App for MultisigAccounts {
                     s.found = None;
                 }
                 flow(model, move |io, st| async move {
-                    let chain_ids = lock(&st).networks.clone();
+                    let chain_ids = chain_ids.unwrap_or_else(|| lock(&st).lookup_chains());
+                    let wait_ms = wait_ms.unwrap_or(2000);
                     let found =
-                        find_multisig(&io, &st, &address, &chain_ids, network, 1, 2000).await;
+                        find_multisig(&io, &st, &address, &chain_ids, network, 1, wait_ms).await;
                     let mut s = lock(&st);
                     s.add.phase = Phase::Done;
                     match found {
@@ -938,14 +1009,20 @@ impl App for MultisigAccounts {
                 })
             }
             Event::ShareAgain { address, owner } => {
-                lock(&model.state)
-                    .share_again
-                    .insert(address.to_ascii_lowercase(), Phase::Working);
+                {
+                    let mut s = lock(&model.state);
+                    let key = address.to_ascii_lowercase();
+                    s.share_again.insert(key.clone(), Phase::Working);
+                    s.share_again_failure.remove(&key);
+                }
                 flow(model, move |io, st| async move {
-                    let phase = share_again(&io, &st, &address, &owner).await;
-                    lock(&st)
-                        .share_again
-                        .insert(address.to_ascii_lowercase(), phase);
+                    let (phase, failure) = share_again(&io, &st, &address, &owner).await;
+                    let mut s = lock(&st);
+                    let key = address.to_ascii_lowercase();
+                    s.share_again.insert(key.clone(), phase);
+                    if let Some(failure) = failure {
+                        s.share_again_failure.insert(key, failure);
+                    }
                 })
             }
             Event::CheckBackup { address } => {
@@ -1076,6 +1153,7 @@ impl App for MultisigAccounts {
             import: s.import.clone(),
             backup: s.backup.clone(),
             share_again: s.share_again.clone(),
+            share_again_failure: s.share_again_failure.clone(),
             rename: s.rename.clone(),
             service_down,
         }
@@ -1133,7 +1211,15 @@ async fn start(io: &Io<Event>, st: &Shared<State>) {
 }
 
 async fn save(io: &Io<Event>, st: &Shared<State>) {
-    let json = lock(st).accounts_json();
+    // Never the list over one not read yet: a change before the store
+    // answered would write an empty list over every stored multisig.
+    let json = {
+        let s = lock(st);
+        if !s.loaded {
+            return;
+        }
+        s.accounts_json()
+    };
     io.store(keys::ACCOUNTS, Some(json)).await;
     io.emit(Event::Changed);
 }
@@ -1439,7 +1525,12 @@ pub async fn retry_unrecorded(io: &Io<Event>, st: &Shared<State>) {
     save(io, st).await;
 }
 
-async fn share_again(io: &Io<Event>, st: &Shared<State>, address: &str, owner: &str) -> Phase {
+async fn share_again(
+    io: &Io<Event>,
+    st: &Shared<State>,
+    address: &str,
+    owner: &str,
+) -> (Phase, Option<String>) {
     let (account, owner, service) = {
         let s = lock(st);
         (
@@ -1452,7 +1543,7 @@ async fn share_again(io: &Io<Event>, st: &Shared<State>, address: &str, owner: &
         )
     };
     let (Some(account), Some(owner)) = (account, owner) else {
-        return Phase::Failed;
+        return (Phase::Failed, None);
     };
     let chain = account
         .chain_ids
@@ -1461,8 +1552,8 @@ async fn share_again(io: &Io<Event>, st: &Shared<State>, address: &str, owner: &
         .unwrap_or(REGISTRY_HOME_CHAIN_ID);
     let proof = match sign_owner_proof(io, &owner, &account.address, chain).await {
         Ok(Some(p)) => p,
-        Ok(None) => return Phase::Cancelled,
-        Err(_) => return Phase::Failed,
+        Ok(None) => return (Phase::Cancelled, None),
+        Err(detail) => return (Phase::Failed, Some(detail)),
     };
     let recorded = record(
         io,
@@ -1487,9 +1578,9 @@ async fn share_again(io: &Io<Event>, st: &Shared<State>, address: &str, owner: &
     if shared {
         lock(st).mark_shared(&account.address);
         save(io, st).await;
-        Phase::Done
+        (Phase::Done, None)
     } else {
-        Phase::Failed
+        (Phase::Failed, None)
     }
 }
 
@@ -1956,7 +2047,7 @@ async fn add_multisig(
         activate(io, st, Some(existing.clone())).await;
         return AddOutcome::Added { address: existing };
     }
-    let chain_ids = lock(st).networks.clone();
+    let chain_ids = lock(st).lookup_chains();
     let kept = match find_multisig(io, st, address, &chain_ids, network, 1, 2000).await {
         Found::Account(account, findings) if findings.is_empty() => {
             keep_multisig(io, st, &account, Vec::new()).await
@@ -2550,29 +2641,50 @@ async fn start_backup(io: &Io<Event>, genesis: &Genesis, from: &str) -> BackupSt
 /// The rename runs on the registry chain that holds the record and that
 /// this device has (the service's home chain first); offered only where
 /// the multisig is deployed (§3.3, owner 2026-10-29: a rename never deploys).
+/// A record still on its way, or none, names no chain (`unrecorded`); one
+/// held only on chains this device lacks is `elsewhere`; a service that
+/// could not be asked is `unreachable` (r4a-12) — each said as itself.
 async fn plan_rename(io: &Io<Event>, st: &Shared<State>, address: &str) -> RenamePlan {
     let service = lock(st).service.clone();
-    let known = service.fetch_genesis(io, address, false).await.ok();
+    let blocked = |why| RenamePlan {
+        chain_id: None,
+        deployed: None,
+        blocked: Some(why),
+    };
+    let Ok(known) = service.fetch_genesis(io, address, false).await else {
+        return blocked(RenameBlocked::Unreachable);
+    };
     let home = record_home_chain(io, &service).await;
-    let mut on: Vec<u64> = known
-        .as_ref()
-        .and_then(|k| k.recorded_on.clone())
-        .unwrap_or_else(|| vec![home]);
-    on.sort_by_key(|id| u8::from(*id != home));
-    let chain_id = {
+    let recorded_on: Vec<u64> = if known.found && known.pending != Some(true) {
+        known.recorded_on.clone().unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let held: Vec<u64> = {
         let s = lock(st);
-        on.into_iter().find(|id| s.has_network(*id))
+        recorded_on
+            .iter()
+            .filter(|id| s.has_network(**id))
+            .copied()
+            .collect()
+    };
+    let chain_id = if held.contains(&home) {
+        Some(home)
+    } else {
+        held.first().copied()
     };
     let Some(chain_id) = chain_id else {
-        return RenamePlan {
-            chain_id: None,
-            deployed: None,
-        };
+        return blocked(if recorded_on.is_empty() {
+            RenameBlocked::Unrecorded
+        } else {
+            RenameBlocked::Elsewhere
+        });
     };
     let deployed = Chain::has_code(io, chain_id, address).await.ok();
     RenamePlan {
         chain_id: Some(chain_id),
         deployed,
+        blocked: None,
     }
 }
 

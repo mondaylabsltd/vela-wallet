@@ -51,6 +51,7 @@ export * from './MultisigProposalStatus';
 export * from './MultisigProposalsEvent';
 export * from './MultisigProposalsView';
 export * from './MultisigRecovery';
+export * from './MultisigRenameBlocked';
 export * from './MultisigRenamePlan';
 export * from './MultisigReplacePreview';
 export * from './MultisigRuleChip';
