@@ -298,85 +298,85 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "收款 ${applicationName}"
+            "value": "用${applicationName}收款"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "收款 ${applicationName}"
+            "value": "用${applicationName}收款"
           }
         },
         "zh-HK": {
           "stringUnit": {
             "state": "translated",
-            "value": "收款 ${applicationName}"
+            "value": "用${applicationName}收款"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "受け取る ${applicationName}"
+            "value": "${applicationName}で受け取る"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "받기 ${applicationName}"
+            "value": "${applicationName}에서 받기"
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nhận ${applicationName}"
+            "value": "Nhận bằng ${applicationName}"
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Terima ${applicationName}"
+            "value": "Terima dengan ${applicationName}"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Al ${applicationName}"
+            "value": "${applicationName} ile al"
           }
         },
         "es-MX": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recibir ${applicationName}"
+            "value": "Recibir con ${applicationName}"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Receber ${applicationName}"
+            "value": "Receber com o ${applicationName}"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recevoir ${applicationName}"
+            "value": "Recevoir avec ${applicationName}"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empfangen ${applicationName}"
+            "value": "Mit ${applicationName} empfangen"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Получить ${applicationName}"
+            "value": "Получить в ${applicationName}"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ricevi ${applicationName}"
+            "value": "Ricevi con ${applicationName}"
           }
         }
       }
@@ -393,85 +393,85 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "扫码 ${applicationName}"
+            "value": "用${applicationName}扫码"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "掃描 ${applicationName}"
+            "value": "用${applicationName}掃描"
           }
         },
         "zh-HK": {
           "stringUnit": {
             "state": "translated",
-            "value": "掃描 ${applicationName}"
+            "value": "用${applicationName}掃描"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "スキャン ${applicationName}"
+            "value": "${applicationName}でスキャン"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "스캔 ${applicationName}"
+            "value": "${applicationName}에서 스캔"
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quét ${applicationName}"
+            "value": "Quét bằng ${applicationName}"
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pindai ${applicationName}"
+            "value": "Pindai dengan ${applicationName}"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tara ${applicationName}"
+            "value": "${applicationName} ile tara"
           }
         },
         "es-MX": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escanear ${applicationName}"
+            "value": "Escanear con ${applicationName}"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escanear ${applicationName}"
+            "value": "Escanear com o ${applicationName}"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scanner ${applicationName}"
+            "value": "Scanner avec ${applicationName}"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scannen ${applicationName}"
+            "value": "Mit ${applicationName} scannen"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сканировать ${applicationName}"
+            "value": "Сканировать в ${applicationName}"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scansiona ${applicationName}"
+            "value": "Scansiona con ${applicationName}"
           }
         }
       }
@@ -488,85 +488,85 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "转账 ${applicationName}"
+            "value": "用${applicationName}转账"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "發送 ${applicationName}"
+            "value": "用${applicationName}發送"
           }
         },
         "zh-HK": {
           "stringUnit": {
             "state": "translated",
-            "value": "發送 ${applicationName}"
+            "value": "用${applicationName}發送"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "送る ${applicationName}"
+            "value": "${applicationName}で送る"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "보내기 ${applicationName}"
+            "value": "${applicationName}에서 보내기"
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gửi ${applicationName}"
+            "value": "Gửi bằng ${applicationName}"
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kirim ${applicationName}"
+            "value": "Kirim dengan ${applicationName}"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gönder ${applicationName}"
+            "value": "${applicationName} ile gönder"
           }
         },
         "es-MX": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enviar ${applicationName}"
+            "value": "Enviar con ${applicationName}"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enviar ${applicationName}"
+            "value": "Enviar com o ${applicationName}"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envoyer ${applicationName}"
+            "value": "Envoyer avec ${applicationName}"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Senden ${applicationName}"
+            "value": "Mit ${applicationName} senden"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Отправить ${applicationName}"
+            "value": "Отправить в ${applicationName}"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Invia ${applicationName}"
+            "value": "Invia con ${applicationName}"
           }
         }
       }

@@ -387,91 +387,91 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Send · Receive · Scan"
+            "value": "Your balance at a glance, as of the last time Vela updated it."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "转账 · 收款 · 扫码"
+            "value": "一眼看到余额，以 Vela 最近一次更新为准。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "發送 · 收款 · 掃描"
+            "value": "一眼看到餘額，以 Vela 最近一次更新為準。"
           }
         },
         "zh-HK": {
           "stringUnit": {
             "state": "translated",
-            "value": "發送 · 收款 · 掃描"
+            "value": "一眼看到結餘，以 Vela 最近一次更新為準。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "送る · 受け取る · スキャン"
+            "value": "残高をひと目で。Vela が最後に更新した時点の金額です。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "보내기 · 받기 · 스캔"
+            "value": "잔액을 한눈에. Vela가 마지막으로 업데이트한 시점 기준입니다."
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gửi · Nhận · Quét"
+            "value": "Số dư trong nháy mắt, theo lần cập nhật gần nhất của Vela."
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kirim · Terima · Pindai"
+            "value": "Saldo Anda sekilas, sesuai terakhir kali Vela memperbaruinya."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gönder · Al · Tara"
+            "value": "Bakiyeniz bir bakışta, Vela'nın son güncellediği haliyle."
           }
         },
         "es-MX": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enviar · Recibir · Escanear"
+            "value": "Tu saldo de un vistazo, según la última vez que Vela lo actualizó."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enviar · Receber · Escanear"
+            "value": "Seu saldo num relance, conforme a última atualização do Vela."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Envoyer · Recevoir · Scanner"
+            "value": "Votre solde en un coup d’œil, tel que Vela l’a mis à jour la dernière fois."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Senden · Empfangen · Scannen"
+            "value": "Dein Guthaben auf einen Blick, so wie Vela es zuletzt aktualisiert hat."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Отправить · Получить · Сканировать"
+            "value": "Баланс одним взглядом — на момент последнего обновления в Vela."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Invia · Ricevi · Scansiona"
+            "value": "Il tuo saldo a colpo d'occhio, all'ultimo aggiornamento di Vela."
           }
         }
       }

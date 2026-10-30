@@ -13,9 +13,9 @@
 //   VelaWallet/VelaWidgets/Localizable.xcstrings   widget + control names
 //
 // No new words are invented: every value is a corpus string, or two of them
-// joined. The phrases are the dock's verb beside the app's name — the corpus
-// has no sentence for "Send with Vela"; when it gains one (needed key, listed
-// in the round's report), this is where it goes.
+// joined. Each door has two phrases: the corpus's own sentence for it
+// (`componentsUi.shortcuts.*`, "Send with {{app}}" — `{{app}}` is written as
+// Siri's `${applicationName}`), and the app's name beside the dock's verb.
 //
 //   node app-ios/scripts/gen-intent-strings.mjs           write
 //   node app-ios/scripts/gen-intent-strings.mjs --check   exit 1 when stale
@@ -83,15 +83,33 @@ function catalog(entries) {
   return `${JSON.stringify({ sourceLanguage: "en", strings, version: "1.0" }, null, 2)}\n`;
 }
 
-// Siri phrases. English keeps the provider's own sentence; every other
-// language says the app's name and the corpus's verb (the word order a
-// spoken command takes in the language does not matter to Siri's matcher,
-// which hears both orders).
+// The corpus's sentence for a door, with its `{{app}}` as Siri's
+// `${applicationName}` — every phrase must name the app, so one that lost it
+// is refused here rather than shipped.
+function phrase(tag, key) {
+  const text = t(tag, key);
+  if (!text.includes("{{app}}")) throw new Error(`${key} (${tag}) does not name the app`);
+  return text.replaceAll("{{app}}", APP);
+}
+
+// Siri phrases. The "with" phrase is the corpus's own sentence in every
+// language (English's is the provider's source key, and the same words); the
+// other says the app's name and the corpus's verb (the word order a spoken
+// command takes in the language does not matter to Siri's matcher, which
+// hears both orders).
 const shortcuts = {};
 for (const door of DOORS) {
   const [named, withApp] = door.phrases;
   shortcuts[named] = (tag) => (tag === "en" ? named : `${APP} ${t(tag, door.title)}`);
-  shortcuts[withApp] = (tag) => (tag === "en" ? withApp : `${t(tag, door.title)} ${APP}`);
+  shortcuts[withApp] = (tag) => phrase(tag, `componentsUi.shortcuts.${door.id}`);
+}
+// The provider's source keys are the English sentences: a corpus that says
+// otherwise would leave Swift declaring a phrase no catalog carries.
+for (const door of DOORS) {
+  const english = phrase("en", `componentsUi.shortcuts.${door.id}`);
+  if (english !== door.phrases[1]) {
+    throw new Error(`componentsUi.shortcuts.${door.id} is "${english}", but VelaShortcuts declares "${door.phrases[1]}"`);
+  }
 }
 
 const appStrings = {};
@@ -99,8 +117,7 @@ for (const door of DOORS) appStrings[`intent.${door.id}.title`] = (tag) => t(tag
 
 const widgetStrings = {
   "widget.balance.name": (tag) => t(tag, "home.totalBalance"),
-  "widget.balance.description": (tag) =>
-    [t(tag, "componentsUi.dock.send"), t(tag, "componentsUi.dock.receive"), t(tag, "componentsUi.dock.scan")].join(" · "),
+  "widget.balance.description": (tag) => t(tag, "componentsUi.widget.balanceDescription"),
   "widget.scan.name": (tag) => t(tag, "componentsUi.scanner.title"),
   "widget.scan.description": (tag) => t(tag, "componentsUi.scanner.hint"),
   "control.scan.title": (tag) => t(tag, "componentsUi.dock.scan"),
