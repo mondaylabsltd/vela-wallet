@@ -136,7 +136,25 @@ const DISPATCHED: Record<string, Place> = {
 	'signRequest.sim_started': { machine: 'the simulation' },
 	'signRequest.sim_settled': { machine: 'the simulation' },
 	'signRequest.transport_dropped': { machine: 'the dApp’s connection' },
-	'login.sign_in': { later: 'signing in or creating a wallet: the passkey’s own ceremony' }
+	'login.sign_in': { later: 'signing in or creating a wallet: the passkey’s own ceremony' },
+	// W8: an outside owner's wallet, asked through Vela's live session (the
+	// core's multisig session machine, ExternalSignSheet).
+	'host.mailbox_tick': { machine: 'the mailbox read while an outside wallet is asked' },
+	'session.ask_again': { later: "asking a multisig's outside owner through their own wallet" },
+	'session.stop_waiting': { later: "asking a multisig's outside owner through their own wallet" },
+	'session.another_wallet': {
+		later: "asking a multisig's outside owner through their own wallet"
+	},
+	'session.close': { later: "asking a multisig's outside owner through their own wallet" },
+	// W8: the /connect page acts for an outside owner and their own wallet,
+	// never for this wallet's person (the core's multisig page machine).
+	'host.refresh': { machine: 'the connect page’s refresh' },
+	'machine.refresh': { machine: 'the connect page’s refresh' },
+	'machine.link': { machine: 'the link the connect page was opened with' },
+	'machine.join': { none: "the connect page joins an outside owner's own session" },
+	'host.connect_wallet': { none: "the outside owner's own wallet, on the connect page" },
+	'machine.estimate_fee': { view: "what executing costs the outside owner's wallet" },
+	'machine.balance': { view: "what the outside owner's wallet holds" }
 };
 
 /** Resident methods the screens call. */
