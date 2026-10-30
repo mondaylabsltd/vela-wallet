@@ -1,50 +1,33 @@
 /**
- * §3.5: a multisig already on this device — one added before the
- * counterfactual rule, or one that has gained a module since — is checked
- * again, once a session and on each network it comes to be used on, as
- * adding one is: deployed there, the chain's state; not deployed there, the
- * core's counterfactual rule. What is found is kept on it (never silent);
- * a network that does not answer is asked again, and changes nothing.
- * The chain's readings are stood in for (`authority.test.ts` reads them).
+ * §3.5: a multisig on this device checked again, on the network a sheet is
+ * about (`checkOn`, the proposal sheet's and the signing gate's read): the
+ * chain's state where it is deployed, the core's counterfactual rule where
+ * it is not. A verdict is kept for the session and handed to the accounts
+ * machine (its `findings_on`); "cannot check yet" is no verdict.
+ *
+ * Every stored multisig's own re-check — once a session, on each network it
+ * comes to be used on, a network that does not answer asked again — is the
+ * core accounts machine's `recheck` (Rust: `app_multisig_accounts.rs`,
+ * `rechecked_once_a_session_and_again_where_unanswered`,
+ * `a_module_added_since_is_found_and_one_gone_is_not_said`,
+ * `a_network_it_comes_to_be_used_on_is_checked_then`).
  */
-import { readFileSync } from 'node:fs';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initSync } from '../../../../../../rust/pkg-web/vela_core.js';
-import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
-
-// The gate's rule is the core's (`signingGate`): it reads the findings kept here.
-beforeAll(() => {
-	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
-});
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const MODULE = '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1';
 const GNOSIS = 100;
 const BASE = 8453;
-/** A network this device does not have. */
-const ELSEWHERE = 99999;
 
 const seams = vi.hoisted(() => ({
-	/** Where it has code; a chain in `down` does not answer. */
 	deployed: [] as number[],
 	down: [] as number[],
-	/** A deployed Safe's check, per chain (default: only its members act). */
 	risks: {} as Record<number, unknown[]>,
-	/** The core's counterfactual verdict, per chain (default: verified). */
 	verdict: {} as Record<number, unknown>,
-	reads: [] as string[]
+	reads: [] as string[],
+	written: [] as [string, number, unknown[]][]
 }));
 
-const storage = new Map<string, string>();
-vi.stubGlobal('localStorage', {
-	getItem: (k: string) => storage.get(k) ?? null,
-	setItem: (k: string, v: string) => void storage.set(k, v),
-	removeItem: (k: string) => void storage.delete(k)
-});
-
-vi.mock('$lib/services/networks', () => ({
-	networkForChainId: (id: number) => (id === ELSEWHERE ? null : { chainId: id })
-}));
 vi.mock('./chain', () => ({
 	hasCode: async (chainId: number) => {
 		seams.reads.push(`code:${chainId}`);
@@ -62,118 +45,64 @@ vi.mock('./authority', () => ({
 		return seams.verdict[chainId] ?? { kind: 'verified', owners: [], threshold: 1 };
 	}
 }));
+vi.mock('./store.svelte', () => ({
+	multisig: {
+		accounts: [],
+		find: (address: string) => (address === SAFE ? account : undefined),
+		setFindingsOn: (address: string, chainId: number, found: unknown[]) =>
+			void seams.written.push([address, chainId, found])
+	}
+}));
 
-const { multisig } = await import('./store.svelte');
-const { checkOn, forgetChecks, recheckStored } = await import('./recheck');
-const { signingGate } = await import('./gate.svelte');
+const account = {
+	address: SAFE,
+	genesis: { factory: '', singleton: '', saltNonce: '0x1', initializer: '0x' },
+	owners: [],
+	threshold: 1,
+	recorded: true,
+	chainIds: [GNOSIS, BASE],
+	addedMs: 0
+};
 
-/** A row as a build before the rule kept it: no findings. */
-function stored(chainIds: number[]) {
-	multisig.accounts = [
-		{
-			address: SAFE,
-			genesis: { factory: '', singleton: '', saltNonce: '0x1', initializer: '0x' },
-			owners: [],
-			threshold: 1,
-			recorded: true,
-			chainIds,
-			addedMs: 0
-		}
-	];
-}
-
-const kept = () => multisig.find(SAFE)?.findings;
+const { checkOn, checkedOn, forgetChecks } = await import('./recheck');
 
 beforeEach(() => {
 	forgetChecks();
-	storage.clear();
 	seams.deployed = [];
 	seams.down = [];
 	seams.risks = {};
 	seams.verdict = {};
 	seams.reads = [];
+	seams.written = [];
 });
 
-describe('a multisig on this device, checked again (§3.5)', () => {
-	it('deployed with a module since: marked high risk, kept on it and written', async () => {
-		stored([GNOSIS]);
+describe('a multisig checked again on one network (§3.5)', () => {
+	it('deployed with a module: the risk, once a session, handed to the accounts machine', async () => {
 		seams.deployed = [GNOSIS];
 		seams.risks[GNOSIS] = [{ kind: 'module', address: MODULE }];
-		await recheckStored();
 		const risk = { from: 'chain', chainId: GNOSIS, risk: { kind: 'module', address: MODULE } };
-		expect(kept()).toEqual([risk]);
-		expect(JSON.parse(storage.get('vela.multisigAccounts')!)[0].findings).toEqual([risk]);
-		expect(signingGate(multisig.find(SAFE)!, GNOSIS)).toMatchObject({ kind: 'risk' });
-	});
-
-	it('not deployed, its genesis refused by the core: read-only there, the other network as it was', async () => {
-		stored([GNOSIS, BASE]);
-		seams.deployed = [GNOSIS];
-		seams.verdict[BASE] = { kind: 'refused', reasons: [{ kind: 'module', address: MODULE }] };
-		await recheckStored();
-		expect(seams.reads).toEqual(
-			expect.arrayContaining([`deployed:${GNOSIS}`, `counterfactual:${BASE}`])
-		);
-		expect(kept()).toEqual([
-			{ from: 'genesis', chainId: BASE, reason: { kind: 'module', address: MODULE } }
-		]);
-		expect(signingGate(multisig.find(SAFE)!, BASE)).toMatchObject({ kind: 'refused' });
-		expect(signingGate(multisig.find(SAFE)!, GNOSIS)).toEqual({ kind: 'open' });
-	});
-
-	it('once a session — and a network it comes to be used on is checked then', async () => {
-		stored([GNOSIS]);
-		seams.deployed = [GNOSIS];
-		await recheckStored();
-		await recheckStored();
+		expect(await checkOn(account, GNOSIS)).toEqual([risk]);
+		expect(await checkOn(account, GNOSIS)).toEqual([risk]);
 		expect(seams.reads).toEqual([`code:${GNOSIS}`, `deployed:${GNOSIS}`]);
-		multisig.accounts = [{ ...multisig.accounts[0], chainIds: [GNOSIS, BASE] }];
-		await recheckStored();
-		expect(seams.reads).toEqual([
-			`code:${GNOSIS}`,
-			`deployed:${GNOSIS}`,
-			`code:${BASE}`,
-			`counterfactual:${BASE}`
-		]);
-		expect(kept() ?? []).toEqual([]);
+		expect(seams.written).toEqual([[SAFE, GNOSIS, [risk]]]);
+		expect(checkedOn(SAFE, GNOSIS)).toBe(true);
 	});
 
 	it('a network that does not answer changes nothing, and is asked again', async () => {
-		stored([GNOSIS]);
-		seams.deployed = [GNOSIS];
 		seams.down = [GNOSIS];
-		await recheckStored();
-		expect(kept()).toBeUndefined();
-		expect(await checkOn(multisig.find(SAFE)!, GNOSIS)).toBeNull();
+		expect(await checkOn(account, GNOSIS)).toBeNull();
+		expect(seams.written).toEqual([]);
 		seams.down = [];
-		seams.risks[GNOSIS] = [{ kind: 'guard', address: MODULE }];
-		await recheckStored();
-		expect(kept()).toEqual([
-			{ from: 'chain', chainId: GNOSIS, risk: { kind: 'guard', address: MODULE } }
-		]);
+		seams.deployed = [GNOSIS];
+		expect(await checkOn(account, GNOSIS)).toEqual([]);
+		expect(seams.written).toEqual([[SAFE, GNOSIS, []]]);
 	});
 
 	it("the core's 'cannot check yet' is not a verdict: nothing kept, asked again", async () => {
-		stored([BASE]);
 		seams.verdict[BASE] = { kind: 'unknown', unread: ['0x1'] };
-		expect(await checkOn(multisig.find(SAFE)!, BASE)).toBeNull();
-		expect(await checkOn(multisig.find(SAFE)!, BASE)).toBeNull();
+		expect(await checkOn(account, BASE)).toBeNull();
+		expect(await checkOn(account, BASE)).toBeNull();
 		expect(seams.reads.filter((r) => r === `counterfactual:${BASE}`)).toHaveLength(2);
-	});
-
-	it('a network this device does not have is not read', async () => {
-		stored([ELSEWHERE]);
-		await recheckStored();
-		expect(seams.reads).toEqual([]);
-	});
-
-	it('the chain is the authority: a risk gone from it is no longer said', async () => {
-		stored([GNOSIS]);
-		multisig.setFindings(SAFE, [
-			{ from: 'chain', chainId: GNOSIS, risk: { kind: 'module', address: MODULE } }
-		]);
-		seams.deployed = [GNOSIS];
-		await recheckStored();
-		expect(kept()).toEqual([]);
+		expect(seams.written).toEqual([]);
 	});
 });

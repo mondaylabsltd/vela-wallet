@@ -296,7 +296,6 @@ vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6), isVela: (a: string) => fake.vela.includes(a) }
 }));
 // A rename executed here reads the record's new name: not this sheet's test.
-vi.mock('../core/accounts', () => ({ recheckRecord: async () => {} }));
 vi.mock('../core/records', () => ({
 	findExecution: async (_safe: string, _chain: number, hash: string) =>
 		hash in fake.executedBy ? fake.executedBy[hash] : fake.executed

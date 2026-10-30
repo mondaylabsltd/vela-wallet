@@ -20,51 +20,53 @@ const calls = vi.hoisted(() => [] as (number | undefined)[]);
 const accepted = vi.hoisted(() => [] as boolean[]);
 const SAFE = '0x013124f0f8b38d42a2e192bcc26337ee9d7ffbf1';
 const used = vi.hoisted(() => [] as number[]);
-vi.mock('../core/accounts', () => ({
-	addMultisig: async (
-		address: string,
-		_ids: number[],
-		network?: number,
-		options: { acceptRisks?: boolean } = {}
-	) => {
-		if (address === '0x2f53cc750594bb97c21bf3c18a4837bb5ad911f6') {
-			return {
-				ok: false,
-				reason: 'refused',
-				findings: [
-					{
-						from: 'genesis',
-						chainId: 100,
-						reason: { kind: 'module', address: '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1' }
-					}
-				]
-			};
+/**
+ * The core's accounts machine, as the sheet asks it (`multisig.request`):
+ * what it answers each event with, in its own words.
+ */
+const machine = vi.hoisted(() => ({
+	answer(event: { type: string; [k: string]: unknown }): unknown {
+		if (event.type === 'add') {
+			const address = event.address as string;
+			const network = event.network as number | null;
+			if (address === '0x2f53cc750594bb97c21bf3c18a4837bb5ad911f6') {
+				return {
+					kind: 'refused',
+					findings: [
+						{
+							from: 'genesis',
+							chainId: 100,
+							reason: { kind: 'module', address: '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1' }
+						}
+					]
+				};
+			}
+			if (address === '0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83') {
+				accepted.push(!!event.accept_risks);
+				return event.accept_risks
+					? { kind: 'added', address }
+					: {
+							kind: 'highRisk',
+							findings: [
+								{
+									from: 'chain',
+									chainId: 100,
+									risk: { kind: 'module', address: '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1' }
+								}
+							]
+						};
+			}
+			calls.push(network ?? undefined);
+			return network === null ? { kind: 'chooseNetwork' } : { kind: 'added', address };
 		}
-		if (address === '0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83') {
-			accepted.push(!!options.acceptRisks);
-			return options.acceptRisks
-				? { ok: true, account: { address } }
-				: {
-						ok: false,
-						reason: 'highRisk',
-						findings: [
-							{
-								from: 'chain',
-								chainId: 100,
-								risk: { kind: 'module', address: '0x9813461E88aDD60D0eC0943B74A83368CA2E36D1' }
-							}
-						],
-						account: { address }
-					};
+		if (event.type === 'parse_export') {
+			return { safes: io.exported, error: null, busy: null, outcomes: {} };
 		}
-		calls.push(network);
-		return network === undefined
-			? { ok: false, reason: 'chooseNetwork' }
-			: { ok: true, account: { address } };
-	},
-	importExported: async (safe: { address: string }) => {
-		io.imported.push(safe.address);
-		return { ok: true, account: { address: safe.address } };
+		if (event.type === 'import') {
+			io.imported.push(event.address as string);
+			return { kind: 'imported' };
+		}
+		throw new Error(`not asked here: ${event.type}`);
 	}
 }));
 vi.mock('$lib/services/networks', () => ({
@@ -104,12 +106,9 @@ vi.mock('../core/store.svelte', () => ({
 		find: () => undefined,
 		useChain: (_a: string, id: number) => void used.push(id),
 		nameMembers: (a: string, known: Record<string, unknown>, options: unknown) =>
-			void io.named.push([a, known, options])
+			void io.named.push([a, known, options]),
+		request: async (event: { type: string }) => machine.answer(event)
 	}
-}));
-vi.mock('../core/kernel', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../core/kernel')>()),
-	parseSafeExport: () => io.exported
 }));
 vi.mock('../core/signers.svelte', () => ({
 	signers: { evidence: (_ids: number[], a: string) => io.evidence[a] ?? null }

@@ -10,6 +10,10 @@
 	 * The name a member types here stays a proposal until the members approve
 	 * and execute it: the device's label (`label`) is never touched, and what
 	 * the header shows is the record's name as the chain holds it.
+	 *
+	 * Where it can be renamed, sharing it again and its Ethereum backup are
+	 * the core's accounts machine's (`plan_rename`, `share_again`,
+	 * `check_backup`, `save_to_ethereum`): this draws its views.
 	 */
 	import { onMount } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -19,9 +23,6 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { recordHomeChain, recordWaiting, shareAgain } from '../core/accounts';
-	import { hasCode } from '../core/chain';
-	import { checkBackup, startBackup, type BackupState } from '../core/backup';
 	import { chainName, ruleTitle, shortenAddress } from '../core/display';
 	import { memberDrift, sameAddress, validName } from '../core/kernel';
 	import { names } from '../core/names.svelte';
@@ -32,14 +33,14 @@
 		proposals,
 		proposeRename
 	} from '../core/proposals.svelte';
-	import { fetchGenesis } from '../core/service';
 	import {
 		SigningBlockedError,
 		SigningRefusedError,
 		SigningUncheckedError
 	} from '../core/gate.svelte';
-	import { networkForChainId } from '$lib/services/networks';
 	import { isShared, multisig, type MultisigAccount } from '../core/store.svelte';
+	import { failureText } from '../shell/failure';
+	import { localAccounts } from '../shell/local-accounts';
 	import { multisigUi } from '../core/ui.svelte';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
@@ -87,60 +88,60 @@
 	/** Who proves an owner asks to share it: an original member (the service checks the genesis). */
 	const founders = $derived(localOwners(original.owners));
 
-	let backup = $state<BackupState>('checking');
 	let removing = $state(false);
+	const key = $derived(account.address.toLowerCase());
+	/** The machine's row: whether it is shared, whether its record is on its way (r4a-12). */
+	const row = $derived(multisig.row(account.address));
+	const shared = $derived(row?.shared ?? isShared(account));
+	const recordWaiting = $derived(row?.record_waiting ?? false);
 
-	async function check() {
-		backup = 'checking';
-		backup = await checkBackup(account);
+	/**
+	 * Where its record stands on Ethereum (`check_backup`): a record sent from
+	 * here reads as backed up; one whose send failed or was closed, as not.
+	 */
+	const backup = $derived.by(() => {
+		const state = multisig.view?.backup[key];
+		if (state === undefined) return 'checking';
+		if (state === 'sent') return 'backedUp';
+		if (state === 'failed') return 'notBackedUp';
+		return state;
+	});
+
+	function check() {
+		multisig.send({ type: 'check_backup', address: account.address });
 	}
 
 	/**
-	 * Where its record can be renamed: a registry chain holding it that this
-	 * wallet has a network for — the service's home chain (the index, Gnosis)
-	 * first, where it writes records. `rename` is called BY the Safe on the
-	 * chain whose registry holds the record it changes, so the transaction runs
-	 * there whatever networks the multisig is used on. `null`: none (or not
-	 * recorded); `undefined`: not known yet.
+	 * Where its record can be renamed (`plan_rename`): a registry chain
+	 * holding it that this wallet has a network for — the service's home
+	 * chain (the index, Gnosis) first, where it writes records. `rename` is
+	 * called BY the Safe on the chain whose registry holds the record it
+	 * changes, so the transaction runs there whatever networks the multisig is
+	 * used on. `null`: none (or not recorded); `undefined`: not known yet.
 	 */
-	let renameChain = $state<number | null | undefined>(undefined);
+	const plan = $derived(multisig.view?.rename[key]);
+	const renameChain = $derived(plan === undefined ? undefined : plan.chain_id);
 	/**
 	 * Whether it is deployed on `renameChain` (this wallet's RPC). A rename
 	 * never deploys it (owner, 2026-10-29): deployed there, renaming is
 	 * offered; not, Settings says only the multisig itself can rename it
 	 * there, and offers nothing. `undefined`: not known yet.
 	 */
-	let renameDeployed = $state<boolean | undefined>(undefined);
-
+	const renameDeployed = $derived(plan?.deployed ?? undefined);
 	/**
 	 * r4a-12: why there is no `renameChain` — its record is not saved yet
 	 * (nothing to rename), the service could not be asked, or it is held only
-	 * on chains this wallet lacks. Each said as itself; "isn't on a network
-	 * this wallet has" was said of all three.
+	 * on chains this wallet lacks. Each said as itself.
 	 */
-	let renameBlocked = $state<'unrecorded' | 'unreachable' | 'elsewhere' | null>(null);
+	const renameBlocked = $derived(plan?.blocked ?? null);
 
-	async function findRenameChain() {
-		try {
-			const answer = await fetchGenesis(account.address);
-			const home = await recordHomeChain();
-			const recordedOn = answer.found && !answer.pending ? (answer.recordedOn ?? []) : [];
-			const held = recordedOn.filter((id) => networkForChainId(id) !== null);
-			renameChain = held.includes(home) ? home : (held[0] ?? null);
-			renameBlocked =
-				renameChain !== null ? null : recordedOn.length > 0 ? 'elsewhere' : 'unrecorded';
-		} catch {
-			renameChain = null;
-			renameBlocked = 'unreachable';
-		}
-		if (renameChain == null) return;
-		const chainId = renameChain;
-		renameDeployed = await hasCode(chainId, account.address).catch(() => undefined);
+	function findRenameChain() {
+		multisig.send({ type: 'plan_rename', address: account.address });
 	}
 
 	onMount(() => {
-		void check();
-		void findRenameChain();
+		check();
+		findRenameChain();
 	});
 
 	let renaming = $state(false);
@@ -196,26 +197,26 @@
 		if (!owner || sharing) return;
 		sharing = true;
 		shareFailure = null;
-		try {
-			if (await shareAgain(multisig.find(account.address) ?? account, owner)) {
-				void findRenameChain();
-			} else {
-				shareFailure = m.add.unavailable;
-			}
-		} catch (error) {
-			shareFailure = fillTemplate(m.proposal.failed, {
-				reason: error instanceof Error ? error.message : String(error)
-			});
-		} finally {
-			sharing = false;
-		}
+		// The owner's passkey is this device's: the machine is told who is here.
+		multisig.send({ type: 'local_accounts', accounts: localAccounts() });
+		const phase = await multisig.request(
+			{ type: 'share_again', address: account.address, owner: owner.address },
+			(view) => (view.share_again[key] !== 'working' ? view.share_again[key] : undefined)
+		);
+		sharing = false;
+		if (phase === 'done') return findRenameChain();
+		if (phase !== 'failed') return;
+		const passkey = multisig.view?.share_again_failure[key];
+		shareFailure =
+			passkey === undefined
+				? m.add.unavailable
+				: fillTemplate(m.proposal.failed, { reason: failureText(passkey) });
 	}
 
-	async function save() {
-		if (backup === 'couldNotCheck') return void check();
+	function save() {
+		if (backup === 'couldNotCheck') return check();
 		if (backup !== 'notBackedUp' || !payer) return;
-		const settled = await startBackup(account, payer);
-		if (settled.kind === 'submitted') backup = 'backedUp';
+		multisig.send({ type: 'save_to_ethereum', address: account.address, from: payer });
 	}
 
 	const backupLine = $derived(
@@ -322,16 +323,16 @@
 	{/if}
 	<!-- Add, replace, remove, the approvals needed: one proposal per deployed network. -->
 	<MemberChanges {m} {account} {cancelLabel} />
-	{#if !isShared(multisig.find(account.address) ?? account)}
+	{#if !shared}
 		<!-- Its record has not landed: another member cannot add it yet. -->
 		<p class="note" role="status">
-			{recordWaiting(account.address) ? m.create.savedLater : m.panel.notShared}
+			{recordWaiting ? m.create.savedLater : m.panel.notShared}
 		</p>
 		{#if founders.length > 0}
 			<!-- An owner here shares it (again), one passkey. r4a-12: the "older
 			     registry" guess is said only when no record of it is on its way
 			     from this device — never of a creation still sharing. -->
-			{#if !recordWaiting(account.address)}<p class="note">{m.settings.shareAgainNote}</p>{/if}
+			{#if !recordWaiting}<p class="note">{m.settings.shareAgainNote}</p>{/if}
 			<div class="row-actions">
 				<Button variant="secondary" shape="rounded" disabled={sharing} onclick={() => void share()}
 					>{m.settings.shareAgain}</Button

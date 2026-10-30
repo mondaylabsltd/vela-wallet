@@ -1,6 +1,8 @@
 /**
  * The multisig accounts this browser has added, and which one (if any) is the
- * account the wallet is showing.
+ * account the wallet is showing — a facade over the core's accounts machine
+ * (`vela_core::app::multisig_accounts`, the same one the apps drive), kept
+ * synchronous for the app's callers.
  *
  * Kept under keys of their own, never in `vela.accounts`: an older build reads
  * that list with a parser that requires a passkey, and its migration re-derives
@@ -10,17 +12,24 @@
  * the wallet shows its address, and the session's own active account is
  * untouched underneath.
  *
- * What is stored is what does not change — the address and the genesis that
- * makes it. Owners and threshold are each chain's and are read from it; the
- * genesis's are kept as the multisig's founding members, for display before
- * a chain answers.
+ * The machine is the only writer of `vela.multisigAccounts` and
+ * `vela.activeMultisig`. Until its view says `loaded` (the wasm is fetched
+ * after the first paint), what is shown is a display-only snapshot of the
+ * stored JSON, so the first paint does not change; a change asked for then
+ * waits for the machine, and is never written here.
  */
+import { untrack } from 'svelte';
 import type { Finding } from './refusal';
-import { genesisAddress, genesisMembers, sameAddress, type Genesis } from './kernel';
+import { sameAddress, type Genesis } from './kernel';
+import type { MultisigAccountsView } from '../generated/MultisigAccountsView';
+import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
+import type { MultisigAccountRow } from '../generated/MultisigAccountRow';
+import type { MultisigAddOutcome } from '../generated/MultisigAddOutcome';
 
 export const MULTISIG_ACCOUNTS_KEY = 'vela.multisigAccounts';
 export const ACTIVE_MULTISIG_KEY = 'vela.activeMultisig';
 
+/** One stored multisig, in the JSON the machine keeps (`MultisigAccount`). */
 export interface MultisigAccount {
 	address: string;
 	genesis: Genesis;
@@ -57,10 +66,9 @@ export interface MultisigAccount {
 	/**
 	 * What else can act for it, as the chain showed when the person added it
 	 * anyway (§3.5: a module, a guard, a handler or singleton that is not
-	 * Safe's) — kept to be shown wherever it is, never hidden. The re-check
-	 * (`recheck.ts`) keeps each network's current: a risk found there since,
-	 * or its genesis refused on a network it is not deployed on (read-only
-	 * there).
+	 * Safe's) — kept to be shown wherever it is, never hidden. The machine's
+	 * re-check keeps each network's current: a risk found there since, or its
+	 * genesis refused on a network it is not deployed on (read-only there).
 	 */
 	findings?: Finding[];
 }
@@ -83,260 +91,292 @@ export interface MemberInfo {
 /**
  * Whether another device can find it by its address: the service hands its
  * genesis out (`shared`), or the registry holds it (a row written before
- * `shared` existed says only `recorded`).
+ * `shared` existed says only `recorded`). The machine's rows say it
+ * (`row.shared`); this reads a record handed around on its own.
  */
 export function isShared(account: Pick<MultisigAccount, 'shared' | 'recorded'>): boolean {
 	return account.shared === true || account.recorded;
 }
 
-function read(): MultisigAccount[] {
+/**
+ * The accounts machine as the facade drives it: its view, its events, and a
+ * word each time the view moves (`shell/machine.svelte.ts`; a test's stand-in).
+ */
+export interface AccountsMachine {
+	readonly view: MultisigAccountsView;
+	dispatch(event: MultisigAccountsEvent): void;
+	listen(onview: (view: MultisigAccountsView) => void): () => void;
+}
+
+/**
+ * What a lookup by address came to (the machine's `MultisigAddOutcome`), in
+ * the words the sheets say it in: the multisig read, or why it is not.
+ */
+export type FoundOutcome =
+	| { ok: true; account: MultisigAccount }
+	| {
+			ok: false;
+			reason:
+				'notFound' | 'unavailable' | 'unsupported' | 'notMultisig' | 'chooseNetwork' | 'unchecked';
+	  }
+	| { ok: false; reason: 'refused'; findings: Finding[] }
+	| { ok: false; reason: 'unverified'; chainId: number }
+	| { ok: false; reason: 'highRisk'; findings: Finding[]; account: MultisigAccount | null };
+
+export function foundOutcome(
+	outcome: MultisigAddOutcome | null,
+	account: MultisigAccount | null
+): FoundOutcome {
+	if (!outcome) return { ok: false, reason: 'unavailable' };
+	switch (outcome.kind) {
+		case 'added':
+			return account ? { ok: true, account } : { ok: false, reason: 'notFound' };
+		case 'refused':
+			return { ok: false, reason: 'refused', findings: outcome.findings as Finding[] };
+		case 'highRisk':
+			return { ok: false, reason: 'highRisk', findings: outcome.findings as Finding[], account };
+		case 'unverified':
+			return { ok: false, reason: 'unverified', chainId: outcome.chain_id };
+		default:
+			return { ok: false, reason: outcome.kind };
+	}
+}
+
+/** How long a kept multisig is waited for before nothing was kept. */
+const KEEP_MS = 5_000;
+
+/** The stored list, read for the first paint only (the machine reads it again). */
+function snapshot(): { accounts: MultisigAccount[]; active: string | null } {
 	try {
 		const raw = localStorage.getItem(MULTISIG_ACCOUNTS_KEY);
-		if (!raw) return [];
-		const rows = JSON.parse(raw) as unknown;
-		if (!Array.isArray(rows)) return [];
-		return rows
-			.filter(
-				(r): r is MultisigAccount =>
-					!!r &&
-					typeof r === 'object' &&
-					typeof (r as MultisigAccount).address === 'string' &&
-					!!(r as MultisigAccount).genesis
-			)
-			.map((r) => ({ ...r, chainIds: Array.isArray(r.chainIds) ? r.chainIds : [] }));
+		const rows = raw ? (JSON.parse(raw) as unknown) : [];
+		const accounts = Array.isArray(rows)
+			? rows
+					.filter(
+						(r): r is MultisigAccount =>
+							!!r &&
+							typeof r === 'object' &&
+							typeof (r as MultisigAccount).address === 'string' &&
+							!!(r as MultisigAccount).genesis
+					)
+					.map((r) => ({ ...r, chainIds: Array.isArray(r.chainIds) ? r.chainIds : [] }))
+			: [];
+		return { accounts, active: localStorage.getItem(ACTIVE_MULTISIG_KEY) || null };
 	} catch {
-		return [];
-	}
-}
-
-function write(rows: MultisigAccount[]): void {
-	try {
-		localStorage.setItem(MULTISIG_ACCOUNTS_KEY, JSON.stringify(rows));
-	} catch {
-		// best effort: the in-memory list stands
-	}
-}
-
-function readActive(): string | null {
-	try {
-		return localStorage.getItem(ACTIVE_MULTISIG_KEY) || null;
-	} catch {
-		return null;
-	}
-}
-
-function writeActive(address: string | null): void {
-	try {
-		if (address) localStorage.setItem(ACTIVE_MULTISIG_KEY, address);
-		else localStorage.removeItem(ACTIVE_MULTISIG_KEY);
-	} catch {
-		// best effort
+		return { accounts: [], active: null };
 	}
 }
 
 class MultisigStore {
-	accounts = $state<MultisigAccount[]>([]);
-	#active = $state<string | null>(null);
+	#machine = $state.raw<AccountsMachine | null>(null);
+	#snapshot = $state.raw<{ accounts: MultisigAccount[]; active: string | null }>({
+		accounts: [],
+		active: null
+	});
+	/** Changes asked for before the machine was loaded: sent once it is. */
+	#queue: MultisigAccountsEvent[] = [];
 	#booted = false;
+
+	/** The machine's view, once it has read the store; `null` before. */
+	get view(): MultisigAccountsView | null {
+		return this.#machine?.view ?? null;
+	}
+
+	/** The last view's accounts, so one view reads as one list (not reactive itself). */
+	#read: { view: MultisigAccountsView; accounts: MultisigAccount[] } | null = null;
+
+	/** Every multisig on this device, in the order they were added. */
+	get accounts(): MultisigAccount[] {
+		const view = this.view;
+		if (!view) return this.#snapshot.accounts;
+		if (this.#read?.view !== view) {
+			// A multisig the view did not change stays the same object: every view
+			// is a fresh parse, and a sheet holding one must not see it replaced
+			// (and redraw) each time the machine says anything.
+			const was = new Map((this.#read?.accounts ?? []).map((a) => [JSON.stringify(a), a] as const));
+			this.#read = {
+				view,
+				accounts: view.accounts.map((row) => {
+					const account = row.account as MultisigAccount;
+					return was.get(JSON.stringify(account)) ?? account;
+				})
+			};
+		}
+		return this.#read.accounts;
+	}
+
+	/** The machine's row for `address` (its name, sharing, flags), once it is loaded. */
+	row(address: string): MultisigAccountRow | null {
+		return (
+			this.view?.accounts.find((r) =>
+				sameAddress((r.account as MultisigAccount).address, address)
+			) ?? null
+		);
+	}
 
 	/** The active multisig, or `null` when the wallet shows a Vela account. */
 	get active(): MultisigAccount | null {
-		const address = this.#active;
-		return address ? (this.accounts.find((a) => sameAddress(a.address, address)) ?? null) : null;
+		const view = this.view;
+		const address = view ? view.active : this.#snapshot.active;
+		return address ? (this.find(address) ?? null) : null;
 	}
 
+	/**
+	 * The stored list for the first paint, and the machines' host (fetched on
+	 * its own: it carries the app's pipelines) — which attaches the machine
+	 * here once it has read the store.
+	 */
 	boot(): void {
 		if (this.#booted || typeof window === 'undefined') return;
 		this.#booted = true;
-		this.accounts = read();
-		this.#active = readActive();
-		// Another tab added, removed or switched: follow it.
-		window.addEventListener('storage', (event) => {
-			if (event.key === MULTISIG_ACCOUNTS_KEY) this.accounts = read();
-			if (event.key === ACTIVE_MULTISIG_KEY) this.#active = readActive();
+		this.#snapshot = snapshot();
+		void import('../shell/machines.svelte')
+			.then((host) => host.machines.boot())
+			.catch((error: unknown) =>
+				console.error('[multisig] the accounts machine did not start:', error)
+			);
+	}
+
+	/** The host hands over the machine once its view is `loaded`: what waited goes now. */
+	attach(machine: AccountsMachine | null): void {
+		this.#machine = machine;
+		if (!machine) return;
+		const waiting = this.#queue;
+		this.#queue = [];
+		for (const event of waiting) machine.dispatch(event);
+	}
+
+	/** One event to the machine (held until it is loaded). */
+	send(event: MultisigAccountsEvent): void {
+		// Sent from an effect, it is no dependency of it: what the machine
+		// answers never runs the effect that asked again.
+		untrack(() => {
+			const machine = this.#machine;
+			if (machine) machine.dispatch(event);
+			else this.#queue.push(event);
 		});
+	}
+
+	/**
+	 * The first view (from now on) `read` answers something for — what a
+	 * sheet waits on after its event (an outcome, a kept account).
+	 */
+	until<T>(read: (view: MultisigAccountsView) => T | undefined | null): Promise<T> {
+		return new Promise((resolve) => {
+			let stop: (() => void) | null = null;
+			const check = (view: MultisigAccountsView | null) => {
+				if (!view) return false;
+				const got = read(view);
+				if (got === undefined || got === null) return false;
+				stop?.();
+				resolve(got);
+				return true;
+			};
+			const attachAndWatch = () => {
+				const machine = this.#machine;
+				if (!machine) return void setTimeout(attachAndWatch, 50);
+				if (check(machine.view)) return;
+				stop = machine.listen((view) => void check(view));
+			};
+			attachAndWatch();
+		});
+	}
+
+	/** `event`, then the first view `read` answers something for. */
+	request<T>(
+		event: MultisigAccountsEvent,
+		read: (view: MultisigAccountsView) => T | undefined | null
+	): Promise<T> {
+		this.send(event);
+		return this.until(read);
+	}
+
+	/**
+	 * The multisig at `address`, read and checked as adding one is — and kept
+	 * nowhere (ms-21, the machine's `find`): what it is, or why not.
+	 */
+	async lookUp(
+		address: string,
+		{
+			network = null,
+			chainIds = null,
+			waitMs = null
+		}: { network?: number | null; chainIds?: number[] | null; waitMs?: number | null } = {}
+	): Promise<FoundOutcome> {
+		const add = await this.request(
+			{ type: 'find', address, network, chain_ids: chainIds, wait_ms: waitMs },
+			(view) =>
+				view.add.phase === 'done' && sameAddress(view.add.address, address) ? view.add : undefined
+		);
+		return foundOutcome(add.outcome, add.found as MultisigAccount | null);
+	}
+
+	/**
+	 * Keep what the last {@link lookUp} read (the person's tap): in the list,
+	 * not shown. Resolves with it as kept — `undefined` if nothing was kept.
+	 */
+	keepFound(address: string, acceptRisks = false): Promise<MultisigAccount | undefined> {
+		const kept = this.request({ type: 'keep_found', accept_risks: acceptRisks }, (view) =>
+			view.accounts.some((r) => sameAddress((r.account as MultisigAccount).address, address))
+				? this.find(address)
+				: undefined
+		);
+		const late = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), KEEP_MS));
+		return Promise.race([kept, late]);
 	}
 
 	find(address: string): MultisigAccount | undefined {
 		return this.accounts.find((a) => sameAddress(a.address, address));
 	}
 
-	/**
-	 * Add a multisig by its genesis. The genesis must derive the address —
-	 * the core re-derives it — so a wrong one never becomes an account.
-	 */
-	add(
-		address: string,
-		genesis: Genesis,
-		recorded: boolean,
-		chainIds: number[] = []
-	): MultisigAccount {
-		if (!sameAddress(genesisAddress(genesis), address)) {
-			throw new Error('the genesis does not make this address');
-		}
-		const existing = this.find(address);
-		if (existing) {
-			if (recorded && !existing.recorded) this.markRecorded(address);
-			for (const chainId of chainIds) this.useChain(address, chainId);
-			return this.find(address) ?? existing;
-		}
-		const { owners, threshold } = genesisMembers(genesis);
-		const row: MultisigAccount = {
-			address,
-			genesis,
-			owners,
-			threshold,
-			recorded,
-			chainIds: [...new Set(chainIds)],
-			addedMs: Date.now()
-		};
-		this.accounts = [...this.accounts, row];
-		write(this.accounts);
-		return row;
-	}
-
 	/** This device's own name for it (shown when its genesis has none). */
 	setLabel(address: string, label: string | null): void {
-		const clean = label?.trim() || undefined;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, label: clean } : a
-		);
-		write(this.accounts);
+		this.send({ type: 'set_label', address, label });
 	}
 
 	/**
-	 * Keep what is known of its members (r4D-5). What this device already
-	 * holds stays: a field is only filled where it is empty — the person's own
-	 * names over a link's. `known` is keyed by address, any case. `typed`: the
-	 * person typed these just now (Settings → Add member, r5reg-16) — their
-	 * word replaces what was kept.
+	 * Keep what is known of its members (r4D-5): what this device already
+	 * holds stays, unless `typed` — the person typed these just now (Settings
+	 * → Add member, r5reg-16), and their word replaces what was kept. The
+	 * machine's rule (`name_members`).
 	 */
 	nameMembers(
 		address: string,
 		known: Record<string, MemberInfo>,
 		{ typed = false }: { typed?: boolean } = {}
 	): void {
-		const row = this.find(address);
-		if (!row) return;
-		const members = { ...(row.members ?? {}) };
-		let changed = false;
-		for (const [member, info] of Object.entries(known)) {
-			const key = member.toLowerCase();
-			const was = members[key] ?? {};
-			const given = info.name?.trim() || undefined;
-			const name = typed ? (given ?? was.name) : (was.name ?? given);
-			const kind = typed ? (info.kind ?? was.kind) : (was.kind ?? info.kind);
-			const mine = (typed && !!given) || was.typed === true;
-			if (name === was.name && kind === was.kind && mine === (was.typed === true)) continue;
-			members[key] = {
-				...(name ? { name } : {}),
-				...(kind ? { kind } : {}),
-				...(mine && name ? { typed: true as const } : {})
-			};
-			changed = true;
-		}
-		if (!changed) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, members } : a
-		);
-		write(this.accounts);
+		this.send({ type: 'name_members', address, members: known, typed });
 	}
 
 	/** r4D-8: show (or, `false`, stop showing) its first steps on the home. */
 	setFirstRun(address: string, on: boolean): void {
-		const row = this.find(address);
-		if (!row || !!row.firstRun === on) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, firstRun: on || undefined } : a
-		);
-		write(this.accounts);
+		this.send({ type: 'set_first_run', address, on });
 	}
 
 	/** Note that the multisig is used on `chainId` (its proposals are looked for there). */
 	useChain(address: string, chainId: number): void {
-		const row = this.find(address);
-		if (!row || row.chainIds.includes(chainId)) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, chainIds: [...a.chainIds, chainId] } : a
-		);
-		write(this.accounts);
-	}
-
-	markRecorded(address: string): void {
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, recorded: true, shared: true } : a
-		);
-		write(this.accounts);
-	}
-
-	/**
-	 * The service answered it holds no record of it (one in an earlier
-	 * registry, which v4's service no longer reads): not shared, said on
-	 * screen, and asked again — never left looking shared.
-	 */
-	markUnshared(address: string): void {
-		const row = this.find(address);
-		if (!row || (!row.recorded && !row.shared)) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, recorded: false, shared: false } : a
-		);
-		write(this.accounts);
-	}
-
-	/**
-	 * The name its record holds now (the multisig renamed itself): the
-	 * genesis keeps every field that makes the address, only its label moves.
-	 */
-	setRecordedName(address: string, name: string): void {
-		const row = this.find(address);
-		if (!row || row.genesis.name === name) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, genesis: { ...a.genesis, name } } : a
-		);
-		write(this.accounts);
-	}
-
-	/** What else can act for it, accepted by the person when it was added (shown, never hidden). */
-	setFindings(address: string, findings: Finding[]): void {
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, findings } : a
-		);
-		write(this.accounts);
+		this.send({ type: 'apply', address, update: { kind: 'use_chain', chain_id: chainId } });
 	}
 
 	/**
 	 * What the chain says now about `chainId` (the re-check, §3.5): that
 	 * network's findings are replaced by `found`, every other network's kept.
-	 * Written only when something changed.
 	 */
 	setFindingsOn(address: string, chainId: number, found: Finding[]): void {
-		const row = this.find(address);
-		if (!row) return;
-		const kept = (row.findings ?? []).filter((f) => f.chainId !== chainId);
-		const next = [...kept, ...found];
-		if (JSON.stringify(next) === JSON.stringify(row.findings ?? [])) return;
-		this.setFindings(address, next);
-	}
-
-	markShared(address: string): void {
-		const row = this.find(address);
-		if (!row || row.shared) return;
-		this.accounts = this.accounts.map((a) =>
-			sameAddress(a.address, address) ? { ...a, shared: true } : a
-		);
-		write(this.accounts);
+		this.send({
+			type: 'apply',
+			address,
+			update: { kind: 'findings_on', chain_id: chainId, findings: found }
+		});
 	}
 
 	remove(address: string): void {
-		this.accounts = this.accounts.filter((a) => !sameAddress(a.address, address));
-		write(this.accounts);
-		if (sameAddress(this.#active, address)) this.activate(null);
+		this.send({ type: 'remove', address });
 	}
 
 	/** Show this multisig (or, `null`, the session's own Vela account). */
 	activate(address: string | null): void {
-		this.#active = address;
-		writeActive(address);
+		this.send({ type: 'activate', address });
 	}
 }
 

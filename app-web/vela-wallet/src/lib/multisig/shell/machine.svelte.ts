@@ -12,6 +12,8 @@ export class MultisigMachine<View, Event> {
 	/** The machine's view, as last committed. */
 	view = $state.raw<View>() as View;
 	readonly #loop: EffectLoop<Event>;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- who is told, never drawn
+	readonly #listeners = new Set<(view: View) => void>();
 
 	constructor(core: JsonWasmCore, deps: MultisigShellDeps, name: string) {
 		const shell = multisigShell(deps);
@@ -19,6 +21,7 @@ export class MultisigMachine<View, Event> {
 		this.#loop = createJsonWasmShell<View, Event, MultisigEffect, MultisigShellResult>(core, {
 			onView: (view) => {
 				this.view = view;
+				for (const listener of [...this.#listeners]) listener(view);
 			},
 			execute: shell.execute,
 			toFailure: shell.toFailure,
@@ -30,7 +33,14 @@ export class MultisigMachine<View, Event> {
 		this.#loop.dispatch(event);
 	}
 
+	/** Told every view the machine commits, until the returned stop. */
+	listen(onview: (view: View) => void): () => void {
+		this.#listeners.add(onview);
+		return () => void this.#listeners.delete(onview);
+	}
+
 	dispose(): void {
+		this.#listeners.clear();
 		this.#loop.dispose();
 	}
 }

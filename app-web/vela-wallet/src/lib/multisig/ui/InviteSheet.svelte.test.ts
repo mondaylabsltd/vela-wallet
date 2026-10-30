@@ -13,7 +13,7 @@ const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 
 vi.mock('../core/store.svelte', () => ({
 	isShared: () => true,
-	multisig: { find: () => null, accounts: [] }
+	multisig: { find: () => null, row: () => null, accounts: [] }
 }));
 vi.mock('$lib/services/public-key-index', () => ({
 	queryWalletName: async () => null,

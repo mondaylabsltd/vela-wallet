@@ -9,7 +9,12 @@ import type { MultisigLinkStand } from "./MultisigLinkStand";
 import type { MultisigPhase } from "./MultisigPhase";
 import type { MultisigRenamePlan } from "./MultisigRenamePlan";
 
-export type MultisigAccountsView = { loaded: boolean, accounts: Array<MultisigAccountRow>, active: string | null, create: MultisigCreateView, add: MultisigAddView, import: MultisigImportView, backup: { [key in string]: MultisigBackupState }, share_again: { [key in string]: MultisigPhase }, rename: { [key in string]: MultisigRenamePlan }, 
+export type MultisigAccountsView = { loaded: boolean, accounts: Array<MultisigAccountRow>, active: string | null, create: MultisigCreateView, add: MultisigAddView, import: MultisigImportView, backup: { [key in string]: MultisigBackupState }, share_again: { [key in string]: MultisigPhase }, 
+/**
+ * Why sharing again failed when the passkey did (its `detail`); absent
+ * for one the service does not hold yet.
+ */
+share_again_failure: { [key in string]: string }, rename: { [key in string]: MultisigRenamePlan }, 
 /**
  * The service is away (the outage), as far as this machine has seen.
  */

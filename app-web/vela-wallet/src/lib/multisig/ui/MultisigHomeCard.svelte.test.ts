@@ -10,12 +10,18 @@
  * - r5reg-18: a multisig of one has no members to invite.
  */
 import { tick } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import { proposals, type ChainState } from '../core/proposals.svelte';
 import { multisig, type MultisigAccount } from '../core/store.svelte';
+import { loadCore } from '$lib/core/client';
+import {
+	startAccounts,
+	stopAccounts,
+	type AccountsMachineForTests
+} from '../shell/accounts.testing';
 
 vi.mock('../core/presence.svelte', () => ({
 	presence: { follow: () => () => {}, of: () => null },
@@ -52,12 +58,25 @@ const settle = async () => {
 const account = (owners: string[]): MultisigAccount =>
 	({
 		address: SAFE,
+		genesis: { factory: '0x01', singleton: '0x02', saltNonce: '0x1', initializer: '0x' },
 		owners,
 		threshold: 1,
+		recorded: true,
 		chainIds: [100],
 		firstRun: true,
 		addedMs: 1
 	}) as unknown as MultisigAccount;
+
+/** The accounts machine (the real wasm) holding `row`, shown. */
+let machine: AccountsMachineForTests | null = null;
+async function shown(row: MultisigAccount) {
+	stopAccounts(machine);
+	({ machine } = await startAccounts({
+		seed: { 'vela.multisigAccounts': JSON.stringify([row]), 'vela.activeMultisig': SAFE }
+	}));
+}
+
+beforeAll(() => loadCore());
 
 const deployedOn = (chainId: number, owners: string[]): ChainState => ({
 	chainId,
@@ -79,15 +98,14 @@ beforeEach(() => {
 afterEach(() => {
 	proposals.follow(null, []);
 	proposals.chains = [];
-	multisig.activate(null);
-	multisig.accounts = [];
+	stopAccounts(machine);
+	machine = null;
 	globalThis.fetch = realFetch;
 });
 
 describe('the first-run card (r5reg-17, r5reg-18)', () => {
 	it('goes once the multisig is read deployed — though the home drew it before it was followed', async () => {
-		multisig.accounts = [account([A, B])];
-		multisig.activate(SAFE);
+		await shown(account([A, B]));
 		const screen = render(MultisigHomeCard, { props: { m: words(), onfund: () => {} } });
 		await settle();
 		expect(card()).not.toBeNull();
@@ -106,8 +124,7 @@ describe('the first-run card (r5reg-17, r5reg-18)', () => {
 	});
 
 	it('can still be dismissed before then', async () => {
-		multisig.accounts = [account([A, B])];
-		multisig.activate(SAFE);
+		await shown(account([A, B]));
 		const screen = render(MultisigHomeCard, { props: { m: words(), onfund: () => {} } });
 		await settle();
 		[...document.body.querySelectorAll('button')]
@@ -119,8 +136,7 @@ describe('the first-run card (r5reg-17, r5reg-18)', () => {
 	});
 
 	it('a multisig of one: no members to invite', async () => {
-		multisig.accounts = [account([A])];
-		multisig.activate(SAFE);
+		await shown(account([A]));
 		const screen = render(MultisigHomeCard, { props: { m: words(), onfund: () => {} } });
 		await settle();
 		expect(card()).not.toBeNull();
@@ -128,7 +144,7 @@ describe('the first-run card (r5reg-17, r5reg-18)', () => {
 		expect(card()?.textContent).toContain('create.firstRunFund');
 		await screen.unmount();
 
-		multisig.accounts = [account([A, B])];
+		await shown(account([A, B]));
 		const two = render(MultisigHomeCard, { props: { m: words(), onfund: () => {} } });
 		await settle();
 		expect(card()?.textContent).toContain('create.firstRunInvite');
