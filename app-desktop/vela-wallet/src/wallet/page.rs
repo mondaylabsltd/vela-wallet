@@ -1035,6 +1035,9 @@ pub struct WalletPage {
     /// Phase 4: a scripted scroll over the panel's column, while one runs
     /// (`VELA_PERF_SCROLL=1`, developer builds).
     perf_scroll: Option<crate::perf::ScrollRun>,
+    /// History's rows, measured, for drawing it a window at a time
+    /// (`ui::windowed`, Phase 4).
+    history_window: crate::ui::Windowed,
     panel_scroll_subject: String,
     /// The landed simulation verdict the signing column last drew: whose it
     /// was (the request's id, or the drawn scenario) and what it said. One
@@ -1947,6 +1950,7 @@ impl WalletPage {
             content_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll: crate::ui::SmoothScroll::new(),
             perf_scroll: None,
+            history_window: crate::ui::Windowed::new(),
             panel_scroll_subject: String::new(),
             verdict_seen: None,
             verdict_reveal: std::rc::Rc::default(),
@@ -7979,6 +7983,7 @@ impl WalletPage {
             open_qr_rows: Vec::new(),
             open_tx: bind(FlowStep::TxDetail, cx),
             open_tx_rows: Vec::new(),
+            windowed: None,
             open_send_form: bind(FlowStep::SendForm, cx),
             open_fee_token: bind(FlowStep::FeeToken, cx),
             refresh_fee: None,
@@ -20382,6 +20387,12 @@ impl WalletPage {
                         cx,
                     );
                     actions.search = Some(self.flow_search_field(panel, cx));
+                    // Phase 4: a live History is drawn a window at a time
+                    // inside the panel's own scrolling body.
+                    if panel == FlowPanel::Da1 && self.identity.is_some() {
+                        actions.windowed =
+                            Some((self.history_window.clone(), (*self.panel_scroll).clone()));
+                    }
                     if panel == FlowPanel::Dt3 && self.identity.is_some() {
                         self.bind_add_token_tabs(&mut actions, cx);
                     }
