@@ -19,6 +19,7 @@ use crate::theme::{
     self, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
+use crate::ui::Accessible as _;
 use crate::wallet::components::{
     balanced_wrap_width, empty_state_wrapped, icon_img, openable_identicon,
 };
@@ -50,6 +51,10 @@ pub fn contact_row(
     // at the sides on a button's line, radius 12 — 51 tall where this was 66.
     let row = div()
         .id(id)
+        .a11y_item(crate::ui::a11y::sentence([
+            contact.name.as_ref(),
+            contact.address_full.as_ref(),
+        ]))
         .flex()
         .items_center()
         .gap(px(12.))
@@ -156,6 +161,7 @@ pub fn rail_row(
     };
     let mut row = div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(8.))
@@ -455,6 +461,7 @@ pub fn detail_action(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_1()
         .h(px(44.))
         .flex()
@@ -486,6 +493,7 @@ pub fn ghost_add_row(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(12.))
@@ -534,6 +542,7 @@ pub fn accent_button(
 ) -> Stateful<Div> {
     let mut button = div()
         .id(id)
+        .a11y_button(label.clone())
         .h(px(CONTACTS_BUTTON_H))
         .px(px(20.))
         .rounded(px(CONTACTS_BUTTON_H / 2.))
@@ -565,6 +574,7 @@ pub fn header_pill(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_none()
         .h(px(36.))
         .px(px(16.))
@@ -589,6 +599,7 @@ pub fn header_pill(
 pub fn header_cta(id: impl Into<ElementId>, theme: &Theme, label: SharedString) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_none()
         .h(px(36.))
         .px(px(16.))
@@ -646,6 +657,7 @@ pub fn outline_button(
 ) -> Stateful<Div> {
     let mut button = div()
         .id(id)
+        .a11y_button(label.clone())
         .h(px(CONTACTS_BUTTON_H))
         .px(px(18.))
         .rounded(px(CONTACTS_BUTTON_H / 2.))
@@ -720,6 +732,7 @@ pub fn destructive_text_button(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .cursor_pointer()
@@ -738,6 +751,7 @@ pub fn text_action(
 ) -> Stateful<Div> {
     let mut action = div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(6.))

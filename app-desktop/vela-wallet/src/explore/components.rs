@@ -13,6 +13,7 @@ use vela_core::app::dapp_permissions::OriginLock;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
+use crate::ui::Accessible as _;
 use crate::wallet::components::{icon_img, identicon_avatar};
 
 use super::fixtures::{DemoPage, SiteModel, TabModel, demo_palette};
@@ -84,6 +85,7 @@ pub const TILE_W: f32 = 85.;
 pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(site.name.clone())
         .w(px(TILE_W))
         .flex()
         .flex_col()
@@ -115,6 +117,7 @@ pub fn add_tile(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .w(px(TILE_W))
         .flex()
         .flex_col()
@@ -151,6 +154,10 @@ pub fn site_row(
     // Padded 12 on a button's line, as the web's `SiteRow` (078 E-05).
     let mut row = div()
         .id(id)
+        .a11y_button(crate::ui::a11y::sentence([
+            site.name.as_ref(),
+            site.host.as_ref(),
+        ]))
         .flex()
         .items_center()
         .gap(px(12.))

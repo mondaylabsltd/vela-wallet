@@ -13,6 +13,7 @@ use gpui::{
 };
 
 use crate::theme::{self, Theme};
+use crate::ui::a11y::Accessible as _;
 
 /// `--layout-settingsDialogW`: the centred dialog.
 pub const DIALOG_W: f32 = theme::SETTINGS_DIALOG_W;
@@ -87,6 +88,8 @@ pub fn dialog(
     scroll: &crate::ui::SmoothScroll,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    // N-D1: the dialog is read by its title.
+    let name = title.clone();
     let has_subtitle = subtitle.is_some();
     let close = std::rc::Rc::new(close);
     let close_x = std::rc::Rc::clone(&close);
@@ -119,6 +122,7 @@ pub fn dialog(
         .child(
             div()
                 .id((id, 1u64))
+                .a11y_button(crate::ui::a11y::close_label())
                 .size(px(CLOSE))
                 .flex_none()
                 .rounded_full()
@@ -157,6 +161,7 @@ pub fn dialog(
         .on_click(move |event, window, cx| close(event, window, cx))
         .child(
             card((id, 0u64), theme, DIALOG_W)
+                .a11y_dialog(name)
                 .child(header)
                 .child(content),
         )

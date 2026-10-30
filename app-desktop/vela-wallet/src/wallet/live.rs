@@ -691,9 +691,9 @@ pub fn sync_line(
     s: &WalletStrings,
     failed_rounds: usize,
 ) -> Option<SyncLine> {
-    let owed = unsynced
-        .iter()
-        .find(|wallet| !wallet.address.is_empty() && wallet.address.eq_ignore_ascii_case(address))?;
+    let owed = unsynced.iter().find(|wallet| {
+        !wallet.address.is_empty() && wallet.address.eq_ignore_ascii_case(address)
+    })?;
     Some(if !owed.retrying {
         SyncLine {
             text: s.sync_stalled.clone(),

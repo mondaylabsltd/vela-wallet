@@ -40,11 +40,13 @@ use crate::loc::Loc;
 use crate::resident;
 use crate::session;
 use crate::settings::SettingsStrings;
+use crate::ui::Accessible as _;
 
 /// The Feedback page — the report, its screenshots and its two outcomes
 /// (078 S-03 and round 3) — kept beside this file rather than in it.
 mod agent;
 mod feedback;
+mod palette;
 use feedback::FeedbackDraft;
 
 /// A menu that drops over the in-app page (spec 099): in a window of its own
@@ -826,6 +828,9 @@ pub struct WalletPage {
     /// dapp-13: the add-network sheet's "Add without verifying" was opened,
     /// and its warning and confirm are up.
     add_unverified_open: bool,
+    /// N-D2: the command palette (⌘K / Ctrl+K), while it is open.
+    palette: Option<palette::Palette>,
+    palette_focus: gpui::FocusHandle,
     /// Spec 092: the list of networks the wallet cannot reach, which the
     /// hero's status line opens while any is.
     unreachable_open: bool,
@@ -1790,6 +1795,8 @@ impl WalletPage {
             contacts_query: String::new(),
             balance_detail_open: false,
             add_unverified_open: false,
+            palette: None,
+            palette_focus: cx.focus_handle(),
             unreachable_open: false,
             refresh_hold: None,
             hero_clock: None,
@@ -3855,6 +3862,8 @@ impl WalletPage {
     fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
         if let Some(pending) = self.agent_pending(cx) {
             crate::agent::answer(pending.id, false, cx);
+        } else if self.palette.is_some() {
+            self.palette = None;
         } else if self.identicon_viewer.is_some() {
             self.identicon_viewer = None;
         } else if self.account_switcher {
@@ -5005,6 +5014,8 @@ impl WalletPage {
             || self.explore_groups
             || self.balance_detail_open
             || self.unreachable_open
+            // N-D2: the command palette, over the browser too.
+            || self.palette.is_some()
             || self.feedback.viewer_open()
             || session::view(cx).sign_out.is_some()
             || self.signing_host.as_ref().is_some_and(|host| {
@@ -6332,7 +6343,7 @@ impl WalletPage {
                 .text_size(theme::text_panel_title())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
-                .child(title),
+                .child(crate::ui::a11y::heading("panel-title", title)),
         );
         // The column, its header and its ✕ say where they are to a
         // measurement pass (`crate::dev_probe`): none of them may move for
@@ -6364,6 +6375,7 @@ impl WalletPage {
                 bar.child(heading).child(
                     div()
                         .id("panel-close")
+                        .a11y_button(crate::ui::a11y::close_label())
                         .relative()
                         .children(crate::dev_probe::mark("panel-close"))
                         .flex_none()
@@ -19341,7 +19353,7 @@ impl WalletPage {
         let controls: Vec<AllowanceControl> = Vec::new();
         let mut controls = controls.into_iter();
 
-        for item in &model.blocks {
+        for (block_index, item) in model.blocks.iter().enumerate() {
             let control = matches!(item, signing_fixtures::Block::Allowance { .. })
                 .then(|| controls.next())
                 .flatten()
@@ -19429,13 +19441,17 @@ impl WalletPage {
                         )
                     })
                     .collect();
-                column = column.child(signing_components::block_with_actions(
-                    theme,
-                    &mut self.icons,
+                column = column.child(read_as(
+                    block_index,
                     item,
-                    actions,
-                    field,
-                    window,
+                    signing_components::block_with_actions(
+                        theme,
+                        &mut self.icons,
+                        item,
+                        actions,
+                        field,
+                        window,
+                    ),
                 ));
             } else if let signing_fixtures::Block::Verdict { inner, landed } = item {
                 // A verdict that has just landed, or grown (it is not the
@@ -19463,11 +19479,10 @@ impl WalletPage {
                 // The verdict's place: the least room from the first frame,
                 // and as tall as the verdict when it is taller — whole,
                 // with no scroll or fold of its own.
-                column = column.child(signing_components::verdict_room(
-                    theme,
-                    &mut self.icons,
-                    inner,
-                    Some(laid_out),
+                column = column.child(read_as(
+                    block_index,
+                    item,
+                    signing_components::verdict_room(theme, &mut self.icons, inner, Some(laid_out)),
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
@@ -19475,9 +19490,17 @@ impl WalletPage {
                 // The wallet's own request has no figure to lead with — its
                 // intent IS the outcome, so it is the headline rather than the
                 // eyebrow over a hero (issue #314).
-                column = column.child(signing_components::headline(theme, text.clone(), *tone));
+                column = column.child(read_as(
+                    block_index,
+                    item,
+                    signing_components::headline(theme, text.clone(), *tone),
+                ));
             } else {
-                column = column.child(signing_components::block(theme, &mut self.icons, item));
+                column = column.child(read_as(
+                    block_index,
+                    item,
+                    signing_components::block(theme, &mut self.icons, item),
+                ));
             }
         }
 
@@ -19755,6 +19778,7 @@ impl WalletPage {
             column = column.child(
                 div()
                     .id("signing-refused-close")
+                    .a11y_button(self.signing.close.clone())
                     .cursor_pointer()
                     .child(crate::flows::components::ghost_button(
                         theme,
@@ -22024,6 +22048,8 @@ impl Render for WalletPage {
             scroll.step(window);
         }
         self.watch_field_blurs(window, cx);
+        // N-D1: `VELA_A11Y_DUMP` (developer builds) — the last frame's tree.
+        crate::ui::a11y::dump_tree(window);
         self.watch_money(cx);
         self.watch_send_display(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
@@ -22174,6 +22200,7 @@ impl Render for WalletPage {
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
+        let palette = self.palette_dialog(&theme, window, cx);
         let unreachable = self.unreachable_dialog(&theme, window, cx);
         let agent_bar = self.agent_bar(&theme, cx);
         let agent_approval = self.agent_approval_dialog(&theme, window, cx);
@@ -22273,6 +22300,10 @@ impl Render for WalletPage {
         // The report's screenshot viewer, over the page it was opened from.
         if let Some(feedback_viewer) = feedback_viewer {
             root = root.child(feedback_viewer);
+        }
+        // N-D2: the command palette, over the page it was opened from.
+        if let Some(palette) = palette {
+            root = root.child(palette);
         }
         // Over every other question: the agent waits on the person's answer.
         if let Some(approval) = agent_approval {
@@ -22804,9 +22835,11 @@ mod tests {
         let source = include_str!("page.rs");
         // The agent's own dialog is drawn from its module (spec 103).
         let agent = include_str!("page/agent.rs");
+        // And the command palette from its own (N-D2).
+        let palette = include_str!("page/palette.rs");
         let body_of = |name: &str| -> &str {
             let signature = ["fn ", name, "("].concat();
-            let (file, start) = [source, agent]
+            let (file, start) = [source, agent, palette]
                 .into_iter()
                 .find_map(|file| file.find(&signature).map(|start| (file, start)))
                 .unwrap_or_else(|| unreachable!("fn {name}"));
@@ -22834,6 +22867,7 @@ mod tests {
             ("sign_out_dialog", ".sign_out"),
             ("trusted_signer_prompt", "trusted_signer()"),
             ("agent_approval_dialog", "self.agent_pending(cx)"),
+            ("palette_dialog", "self.palette"),
         ];
         for (dialog, state) in raised_by {
             assert!(
@@ -23430,6 +23464,18 @@ struct PickDialog {
     subject: PickSubject,
     checked: Vec<String>,
     query: String,
+}
+
+/// One block of the signing sheet, as the accessibility tree reads it (N-D1):
+/// a Group node named by the block's words (`signing::components::
+/// block_words`), its id the block's place on the sheet — so a verdict that
+/// lands in its kept room is the same node changing, not a new one.
+fn read_as(index: usize, item: &signing_fixtures::Block, block: Div) -> gpui::Stateful<Div> {
+    div()
+        .id(("signing-block", index as u64))
+        .role(gpui::Role::Group)
+        .aria_label(signing_components::block_words(item))
+        .child(block)
 }
 
 /// The longest note a contact may carry — the core's

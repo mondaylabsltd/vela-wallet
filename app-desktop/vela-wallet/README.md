@@ -807,6 +807,50 @@ cargo test -p vela-core --features i18n-all    # conformance corpus stays green
 
 ---
 
+## Keyboard shortcuts
+
+N-D2. One table (`app_menu::COMMANDS`) drives the bindings, the macOS menu
+bar and the command palette; `app_menu::tests` keeps it free of duplicates
+and of the standard menu chords. Every command is the press of the control
+it names — Send opens the form, nothing moves until the person confirms.
+
+| Command | macOS | Windows / Linux | Menu (macOS) |
+|---|---|---|---|
+| Wallet | ⌘1 | Ctrl+1 | View |
+| Contacts | ⌘2 | Ctrl+2 | View |
+| Explore | ⌘3 | Ctrl+3 | View |
+| Settings | ⌘4, ⌘, | Ctrl+4, Ctrl+, | View; Vela Wallet → Settings |
+| Send | ⌘N | Ctrl+N | Wallet |
+| Receive | ⇧⌘R | Ctrl+Shift+R | Wallet |
+| Refresh balances | ⌘R | Ctrl+R, F5 | Wallet |
+| Find (the section's search; the palette where it has none) | ⌘F | Ctrl+F | — (palette) |
+| Command palette ("Search or run") | ⌘K | Ctrl+K | Wallet |
+| Close window / Minimize / Full screen | ⌘W / ⌘M / ⌃⌘F | — | Window / View |
+
+gpui draws no menu bar on Windows and Linux, so the command palette is the
+menu there: Ctrl+K lists every command above with its shortcut, typed to
+narrow, ↑/↓ to move, Enter to run, Esc to close. Scan is a palette row
+without a shortcut.
+
+## Accessibility
+
+N-D1 (`docs/ACCESSKIT-SPIKE.md`). gpui at this pin ships AccessKit and the app
+runs with it on; a node is reported only when an element has an id and a
+role, so the shared controls name themselves (`src/ui/a11y.rs`): buttons and
+CTAs, sidebar and Settings tabs (selected), switches (on/off), text fields
+(label, placeholder, value — never a masked PIN), list rows (an asset, a
+network, a contact read as one sentence), dialogs by their title, the column
+title as a heading, the home hero as one sentence, and each block of the
+signing sheet as a group named by what it says.
+
+- macOS leak: zed PR #64143 is backported into `vendor/gpui_macos`
+  (`MacWindow::drop` drops the AccessKit adapter first).
+- Snapshot: `VELA_A11Y_DUMP=/tmp/tree.json cargo run` writes the last frame's
+  tree (`Window::debug_a11y_tree_json`) whenever it changes. gpui builds the
+  tree only while an assistive client is attached (VoiceOver, Accessibility
+  Inspector, Narrator, Orca); its test platform never attaches one, so there
+  is no unit-level tree test at this pin.
+
 ## Known gpui quirks
 
 Three upstream behaviours found while debugging second-display fullscreen and

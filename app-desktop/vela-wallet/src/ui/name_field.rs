@@ -15,6 +15,7 @@ use std::rc::Rc;
 
 use super::editor::{self, EditorStyle, OnChange, Wrap};
 use crate::theme::{self, FLOW_GAP_MD, FLOW_GAP_SM, INPUT_H, RADIUS_FIELD, Theme};
+use crate::ui::a11y::Accessible as _;
 use gpui::{
     App, Div, ElementId, FocusHandle, FontWeight, InteractiveElement, Keystroke, MouseButton,
     ParentElement, SharedString, Styled, Window, div, px,
@@ -157,6 +158,11 @@ pub fn text_field(
     let well = wire(
         div()
             .id(id)
+            .a11y_input(
+                strings.label.clone(),
+                strings.placeholder.clone(),
+                (!mask).then_some(value),
+            )
             .track_focus(focus)
             .h(px(INPUT_H))
             .w_full()
@@ -243,7 +249,7 @@ pub fn hero_amount_field(
     let on_change: OnChange = Rc::new(on_change);
     let figure = editor::editor(
         focus,
-        placeholder,
+        placeholder.clone(),
         EditorStyle {
             weight: FontWeight::BOLD,
             ..style(theme, size, theme::line_amount_hero())
@@ -258,6 +264,7 @@ pub fn hero_amount_field(
     wire(
         div()
             .id(id)
+            .a11y_input(unit.clone(), placeholder, Some(value))
             .track_focus(focus)
             .cursor_text()
             .w_full()
@@ -305,7 +312,7 @@ pub fn bare_text_field(
     let size = theme::text_row_sub();
     let text = editor::editor(
         focus,
-        placeholder,
+        placeholder.clone(),
         EditorStyle {
             family: theme::font_mono().into(),
             ..style(theme, size, size * 1.45)
@@ -316,6 +323,7 @@ pub fn bare_text_field(
     wire(
         div()
             .id(id)
+            .a11y_input(placeholder.clone(), placeholder, Some(value))
             .track_focus(focus)
             .cursor_text()
             .flex_1()
@@ -351,7 +359,7 @@ pub fn search_input(
     let size = theme::text_row_sub();
     let text = editor::editor(
         focus,
-        placeholder,
+        placeholder.clone(),
         style(theme, size, size * 1.45),
         Wrap::None,
         Rc::clone(&on_change),
@@ -359,6 +367,7 @@ pub fn search_input(
     wire(
         div()
             .id(id)
+            .a11y_input(placeholder.clone(), placeholder, Some(value))
             .track_focus(focus)
             .cursor_text()
             .flex_1()
@@ -403,13 +412,14 @@ pub fn text_area(
     let on_change: OnChange = Rc::new(on_change);
     let text = editor::editor(
         focus,
-        placeholder,
+        placeholder.clone(),
         style(theme, size, line),
         wrap,
         Rc::clone(&on_change),
     );
     let well = div()
         .id(id)
+        .a11y_input(placeholder.clone(), placeholder, Some(value))
         .w_full()
         .min_h(line * f32::from(rows) + px(24.))
         .p(px(12.))

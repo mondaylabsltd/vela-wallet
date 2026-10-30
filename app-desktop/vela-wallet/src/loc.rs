@@ -27,15 +27,27 @@ pub struct Loc {
 const MULTISIG_CATALOGS: [(&str, &str); 15] = [
     ("en", include_str!("../../../assets/i18n/multisig/en.json")),
     ("zh", include_str!("../../../assets/i18n/multisig/zh.json")),
-    ("zh-TW", include_str!("../../../assets/i18n/multisig/zh-TW.json")),
-    ("zh-HK", include_str!("../../../assets/i18n/multisig/zh-HK.json")),
+    (
+        "zh-TW",
+        include_str!("../../../assets/i18n/multisig/zh-TW.json"),
+    ),
+    (
+        "zh-HK",
+        include_str!("../../../assets/i18n/multisig/zh-HK.json"),
+    ),
     ("ja", include_str!("../../../assets/i18n/multisig/ja.json")),
     ("ko", include_str!("../../../assets/i18n/multisig/ko.json")),
     ("vi", include_str!("../../../assets/i18n/multisig/vi.json")),
     ("id", include_str!("../../../assets/i18n/multisig/id.json")),
     ("tr", include_str!("../../../assets/i18n/multisig/tr.json")),
-    ("es-MX", include_str!("../../../assets/i18n/multisig/es-MX.json")),
-    ("pt-BR", include_str!("../../../assets/i18n/multisig/pt-BR.json")),
+    (
+        "es-MX",
+        include_str!("../../../assets/i18n/multisig/es-MX.json"),
+    ),
+    (
+        "pt-BR",
+        include_str!("../../../assets/i18n/multisig/pt-BR.json"),
+    ),
     ("fr", include_str!("../../../assets/i18n/multisig/fr.json")),
     ("de", include_str!("../../../assets/i18n/multisig/de.json")),
     ("ru", include_str!("../../../assets/i18n/multisig/ru.json")),

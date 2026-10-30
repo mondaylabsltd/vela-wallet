@@ -39,7 +39,7 @@ use vela_core::app::send::{
     SendToken, SendTokenMeta, SendTxRecord,
 };
 use vela_core::app::{Account, KeyMethod};
-use vela_core::signing_venue::{KeyLabel, KeyRoute, SigningVenue, VenueBlock};
+use vela_core::signing_venue::{KeyLabel, KeyRoute, VenueBlock};
 use vela_core::user_op::WalletKey;
 
 use crate::diag::vlog;
@@ -1093,6 +1093,7 @@ fn stored_asset_sim(outcome: &vela_core::app::sim_outcome::SimOutcome) -> Option
 mod tests {
     use super::*;
     use vela_core::app::{AccountKey, SignInKey};
+    use vela_core::signing_venue::SigningVenue;
 
     fn account(transports: &str, keys: usize) -> Account {
         Account {

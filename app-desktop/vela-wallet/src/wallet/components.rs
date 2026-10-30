@@ -15,6 +15,7 @@ use crate::theme::{
     self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_BADGE_LOGO, WALLET_BADGE_RING,
     WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
+use crate::ui::Accessible as _;
 
 use super::fixtures::{
     ActivityKind, ActivityRowModel, AssetRowModel, BalanceModel, BalanceState, ChainRowModel, Fiat,
@@ -319,6 +320,7 @@ pub fn nav_row(
     // chosen at once.
     let row = div()
         .id(id)
+        .a11y_tab(label.clone(), selected)
         .group("nav-row")
         .flex()
         .items_center()
@@ -385,6 +387,7 @@ pub fn chain_row(
     };
     let mut el = div()
         .id(id)
+        .a11y_tab(row.name.clone(), row.selected)
         .flex()
         .items_center()
         .gap(px(12.))
@@ -460,6 +463,25 @@ pub fn balance_display(
     // The hero's boxes say where they are to a measurement pass
     // (`crate::dev_probe`): the hero, its figure, its status line and the
     // refresh control on it.
+    // N-D1: the hero is read as one sentence — its label, the figure as the
+    // eye sees it (the mask when hidden, nothing while it loads), and the
+    // status line under it — on the label line, which is where VoiceOver
+    // lands first on the home.
+    let figure_words: String = match model.state {
+        BalanceState::Loading => String::new(),
+        _ => format!(
+            "{}{}",
+            model.integer,
+            model.decimals.as_ref().map_or("", |d| d.as_ref())
+        ),
+    };
+    let hero_words = crate::ui::a11y::sentence([
+        model.label.as_ref(),
+        model.currency.as_ref(),
+        figure_words.as_str(),
+        model.status.as_ref().map_or("", |(_, text)| text.as_ref()),
+        model.checking.as_ref().map_or("", |text| text.as_ref()),
+    ]);
     let mut root = div()
         .relative()
         .flex()
@@ -468,6 +490,9 @@ pub fn balance_display(
         .children(crate::dev_probe::mark("hero"))
         .child(
             div()
+                .id("hero-label")
+                .role(gpui::Role::Label)
+                .aria_label(hero_words)
                 .text_size(theme::text_label())
                 .line_height(gpui::relative(LINE_BODY))
                 .font_weight(gpui::FontWeight::MEDIUM)
@@ -983,6 +1008,7 @@ pub fn action_pill(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_1()
         .h(px(52.))
         .flex()
@@ -1417,6 +1443,23 @@ fn title_part_cell() -> Div {
 const TITLE_SPACE_EM: f32 = 0.13;
 
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
+/// What an asset row is read as (N-D1): the coin, its network, how much,
+/// and what it is worth — the worth withheld exactly where the row withholds
+/// it (masked, pending, no price), never read out when the eye cannot see it.
+fn asset_row_words(row: &AssetRowModel) -> SharedString {
+    let worth = match &row.fiat {
+        Fiat::Value(text) | Fiat::NoPrice(text) => text.as_ref(),
+        Fiat::Masked => super::fixtures::MASK,
+        Fiat::Pending | Fiat::None => "",
+    };
+    crate::ui::a11y::sentence([
+        row.ticker.as_ref(),
+        row.chain.as_ref(),
+        row.balance.as_ref(),
+        worth,
+    ])
+}
+
 pub fn asset_row(
     id: impl Into<ElementId>,
     theme: &Theme,
@@ -1464,6 +1507,7 @@ pub fn asset_row(
     // font's own line, 64 tall.
     div()
         .id(id)
+        .a11y_item(asset_row_words(row))
         .flex()
         .items_center()
         .gap(px(12.))

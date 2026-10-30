@@ -417,6 +417,10 @@ const EVENTS: &[(&str, Place)] = &[
         "browser_history::Event::VisitRecorded",
         Machine("a page visited"),
     ),
+    (
+        "contacts::Event::HistoryChanged",
+        Machine("the send history read again"),
+    ),
     ("create_wallet::Event::SigningPageChosen", Later(ONBOARD)),
     ("create_wallet::Event::Start", Later(ONBOARD)),
     (
@@ -661,6 +665,11 @@ const CALLS: &[(&str, Place)] = &[
     ("session::reboot", Step("erase_device")),
     ("session::sign_out_confirmed", Step("sign_out")),
     ("session::sign_out_dismissed", Step("sign_out")),
+    (
+        "session::sync_pending",
+        Machine("the outbox retried now (ob-2)"),
+    ),
+    ("session::sync_rounds", Machine("a read")),
     ("session::view", Machine("a read")),
     ("tracker::focused", Machine("the chain tracker")),
     ("tracker::in_flight_news", Machine("the chain tracker")),

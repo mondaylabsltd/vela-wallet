@@ -92,9 +92,8 @@ pub struct SettingsStrings {
     pub bug_open_github_form: SharedString,
     /// The screenshots (078 round 3). `screenshotsHint` and
     /// `screenshotsLimit` carry `{{max}}`. (`removeScreenshot` is the
-    /// badge's accessibility label on the other shells. gpui at this pin does
-    /// carry an AccessKit tree — this app names no nodes in it yet; see
-    /// `docs/ACCESSKIT-SPIKE.md`, N-D1.)
+    /// badge's accessibility label on the other shells; here the shared controls
+    /// name themselves in gpui's AccessKit tree, `ui::a11y`, N-D1.)
     pub bug_screenshots_label: SharedString,
     pub bug_add_screenshots: SharedString,
     pub bug_screenshots_hint: String,

@@ -485,6 +485,9 @@ fn main() {
         if cfg!(target_os = "macos") {
             cx.bind_keys(app_menu::mac_key_bindings());
         }
+        // N-D2: the wallet's own shortcuts, on every desktop (⌘ on macOS,
+        // Ctrl on Windows and Linux) — README, "Keyboard shortcuts".
+        cx.bind_keys(app_menu::wallet_key_bindings(cfg!(target_os = "macos")));
         app_menu::install(cx);
         open_main_window(cx);
 
