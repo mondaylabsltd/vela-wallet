@@ -108,7 +108,6 @@
 	import { checkOn } from '../core/recheck';
 	import { refusalText } from './findings';
 	import AuthorityNotice from './AuthorityNotice.svelte';
-	import { recheckRecord } from '../core/accounts';
 	import { findExecution } from '../core/records';
 	import { ChainUnavailableError } from '../core/chain';
 	import { executions, watchExecution, type InFlight } from '../core/execution-watch.svelte';
@@ -147,7 +146,7 @@
 		type ChainState,
 		type ProposalItem
 	} from '../core/proposals.svelte';
-	import type { MultisigAccount } from '../core/store.svelte';
+	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { typedName } from '../core/typed-name';
 	import type { DappProposal } from '../core/ui.svelte';
 	import type { ReviewFirstRequest } from '../core/review-first.svelte';
@@ -863,7 +862,8 @@
 				if (sent) rememberExecution(chainId, account.address, flight.safeTxHash, sent);
 				phase = { kind: 'sent', txHash: verdict.txHash, by: flight.by };
 				// A rename: the record's new name is read from the chain now.
-				if (executing.review.action?.kind === 'rename') void recheckRecord(account.address);
+				if (executing.review.action?.kind === 'rename')
+					multisig.send({ type: 'recheck_record', address: account.address });
 				onexecuted?.({ item: executing, txHash: verdict.txHash, userOpHash: flight.userOpHash });
 				// A dApp's transaction: its site gets the transaction, now.
 				draft?.executed(verdict.txHash);

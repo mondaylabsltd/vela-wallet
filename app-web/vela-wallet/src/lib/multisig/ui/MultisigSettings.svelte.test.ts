@@ -54,17 +54,6 @@ vi.mock('../core/member-entry', () => ({
 	resolveTypedName: async () => ({ state: 'unavailable' })
 }));
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('../core/accounts', () => ({
-	recordHomeChain: async () => 100,
-	recordWaiting: () => seams.waiting,
-	shareAgain: async () => {
-		seams.sharedAgain += 1;
-		return true;
-	}
-}));
-vi.mock('../core/service', () => ({
-	fetchGenesis: async () => ({ found: true, recordedOn: seams.recordedOn })
-}));
 vi.mock('$lib/services/networks', () => ({
 	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null),
 	chainName: (id: number) => `Chain ${id}`
@@ -77,7 +66,6 @@ vi.mock('../core/display', () => ({
 			? m.panel.titleSolo
 			: m.panel.title.replace('{{m}}', `${r.m}`).replace('{{n}}', `${r.n}`)
 }));
-vi.mock('../core/chain', () => ({ hasCode: async () => seams.deployed }));
 // A rename's signature passes the gate in `proposeRename` (stood in above).
 vi.mock('../core/gate.svelte', () => ({
 	SigningRefusedError: class extends Error {},
@@ -113,10 +101,6 @@ vi.mock('../core/kernel', () => {
 vi.mock('../core/ui.svelte', () => ({
 	multisigUi: { open: (sheet: unknown) => seams.opened.push(sheet) }
 }));
-vi.mock('../core/backup', () => ({
-	checkBackup: async () => 'unavailable',
-	startBackup: async () => ({ kind: 'cancelled' })
-}));
 vi.mock('../core/owners', () => ({
 	localOwners: (owners: string[]) =>
 		owners
@@ -129,10 +113,47 @@ vi.mock('../core/names.svelte', () => ({
 }));
 // r7: Add member pre-fills a member's kind from what the wallet can tell — nothing, here.
 vi.mock('../core/signers.svelte', () => ({ signers: { evidence: () => null } }));
+/**
+ * The core's accounts machine as Settings reads it: its rows, where its
+ * record can be renamed (the service's home chain, 100, first, among the
+ * networks this wallet has), its backup, and sharing again — answered as
+ * the machine would for the world the seams describe.
+ */
 vi.mock('../core/store.svelte', () => ({
 	isShared: () => seams.shared,
-	multisig: { find: () => null, remove: () => {} }
+	multisig: {
+		find: () => null,
+		remove: () => {},
+		row: () => ({ shared: seams.shared, record_waiting: seams.waiting }),
+		get view() {
+			const held = seams.recordedOn.filter((id) => seams.networks.includes(id));
+			const chain = held.includes(100) ? 100 : (held[0] ?? null);
+			const key = '0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83';
+			return {
+				backup: { [key]: 'unavailable' },
+				rename: {
+					[key]: {
+						chain_id: chain,
+						deployed: chain === null ? null : seams.deployed,
+						blocked:
+							chain !== null ? null : seams.recordedOn.length > 0 ? 'elsewhere' : 'unrecorded'
+					}
+				},
+				share_again: {},
+				share_again_failure: {}
+			};
+		},
+		send: () => {},
+		request: async (event: { type: string }) => {
+			if (event.type === 'share_again') {
+				seams.sharedAgain += 1;
+				return 'done';
+			}
+			throw new Error(`not asked here: ${event.type}`);
+		}
+	}
 }));
+vi.mock('../shell/local-accounts', () => ({ localAccounts: () => [] }));
 vi.mock('$lib/wallet/identicon', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));

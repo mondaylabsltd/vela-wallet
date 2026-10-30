@@ -26,10 +26,11 @@ vi.mock('./store.svelte', () => ({
 		find: () => fake.stored ?? undefined,
 		add: () => void fake.writes.push('add'),
 		activate: () => void fake.writes.push('activate'),
-		markShared: () => void fake.writes.push('markShared')
+		markShared: () => void fake.writes.push('markShared'),
+		// The accounts machine's lookup (`find`), which keeps nothing.
+		lookUp: async () => fake.found
 	}
 }));
-vi.mock('./accounts', () => ({ findMultisig: async () => fake.found }));
 vi.mock('./owners', () => ({
 	localOwners: (owners: string[]) =>
 		owners.filter((o) => fake.local.includes(o)).map((address) => ({ address }))

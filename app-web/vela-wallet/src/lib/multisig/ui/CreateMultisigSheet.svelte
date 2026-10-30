@@ -23,8 +23,12 @@
 	 * holds funds on — never one picked for them when nothing says.
 	 *
 	 * r4a-13: the moment the passkey answers, the multisig is kept on this
-	 * device (`createMultisig`); the created screen says, honestly, whether
-	 * it is shared yet.
+	 * device; the created screen says, honestly, whether it is shared yet.
+	 *
+	 * The core's accounts machine does it (`new_draft` — the salt, fixed per
+	 * draft; `draft` — the address the review shows; `check_networks`;
+	 * `create` — one passkey prompt, the account kept, then its record); this
+	 * sheet draws its `create` view.
 	 */
 	import { onMount, untrack } from 'svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -43,7 +47,6 @@
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { MultisigMessages } from '../messages';
-	import { createMultisig, draftGenesis, newSaltNonce } from '../core/accounts';
 	import { localName, ruleTitle, shortenAddress } from '../core/display';
 	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';
 	import { inviteLink } from '../core/invite';
@@ -60,9 +63,10 @@
 	import { kindChoice, type MemberKind } from '../core/member-kind';
 	import { memberProblem } from '../core/members';
 	import { keptMember, names } from '../core/names.svelte';
-	import { safeContractsOn } from '../core/chain';
 	import { signers } from '../core/signers.svelte';
-	import { isShared, multisig, type MemberInfo } from '../core/store.svelte';
+	import { multisig, type MemberInfo } from '../core/store.svelte';
+	import { failureText } from '../shell/failure';
+	import { localAccounts } from '../shell/local-accounts';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import MemberKindChoice from './MemberKindChoice.svelte';
 	import NetworkChoice from './NetworkChoice.svelte';
@@ -83,18 +87,20 @@
 
 	const accounts = loadAccounts();
 	const spaceNetworks = spaceNetworksSync();
-	const saltNonce = newSaltNonce();
+
+	// A new draft (its salt, fixed for this sheet), and which networks hold
+	// the Safe contracts a new multisig needs.
+	multisig.send({ type: 'new_draft' });
+	multisig.send({ type: 'check_networks', chain_ids: spaceNetworks.map((n) => n.chainId) });
+	/** The machine's create sheet. */
+	const sheet = $derived(multisig.view?.create ?? null);
 
 	/** The networks the core found without the Safe contracts a multisig needs. */
-	let without = $state<number[]>([]);
-	for (const n of spaceNetworks) {
-		void safeContractsOn(n.chainId).then(
-			(v) => {
-				if (v.kind === 'missing') without = [...without, n.chainId];
-			},
-			() => {}
-		);
-	}
+	const without = $derived(
+		Object.entries(sheet?.networks ?? {})
+			.filter(([, verdict]) => (verdict as { kind?: string } | null)?.kind === 'missing')
+			.map(([id]) => Number(id))
+	);
 	/** r5reg-19: the networks this device's own transactions were on, newest first. */
 	let recent = $state<number[]>([]);
 	void loadTransactions().then(
@@ -198,15 +204,14 @@
 					: m.create.nameInvalid
 	);
 	const membersOk = $derived(owners.length >= 1 && local.length >= 1 && nameOk);
-	const draft = $derived.by(() => {
-		try {
-			return owners.length > 0 && nameOk
-				? draftGenesis({ owners, threshold, name: cleanName }, saltNonce)
-				: null;
-		} catch {
-			return null;
-		}
+	// The draft's address, as the members, the rule and the name change.
+	$effect(() => {
+		if (owners.length === 0 || !nameOk) return;
+		multisig.send({ type: 'draft', owners: [...owners], threshold, name: cleanName });
 	});
+	const draft = $derived(
+		owners.length > 0 && nameOk && sheet?.draft_address ? { address: sheet.draft_address } : null
+	);
 
 	/**
 	 * r7: a member's kind — Vela's finding (the index or an account here: a
@@ -215,6 +220,7 @@
 	 * (here, or kept on this device), else asked — "Other wallet" hinted when
 	 * no Vela account is found, kept only if picked. The same address on
 	 * every network.
+	 * W8: moves onto the core's member-kind rule (create/import) once merged.
 	 */
 	function kindOf(address: string) {
 		return kindChoice(
@@ -326,40 +332,49 @@
 		if (!creator || !draft || !nameOk || chainId === null) return;
 		busy = true;
 		failure = null;
-		try {
-			const outcome = await createMultisig(
-				{ owners, threshold, chainId, creator, name: cleanName, members: membersInfo() },
-				saltNonce,
-				(account) => {
-					// Kept here: the created screen now, whatever the service does.
-					created = account.address;
-					sharing = true;
-					busy = false;
-					step = 'created';
+		// The creator's passkey is this device's: the machine is told who is here.
+		multisig.send({ type: 'local_accounts', accounts: localAccounts() });
+		const first = await multisig.request(
+			{
+				type: 'create',
+				choice: {
+					owners: [...owners],
+					threshold,
+					name: cleanName,
+					chain_id: chainId,
+					creator: creator.address,
+					members: membersInfo()
 				}
-			);
-			created = outcome.account.address;
-			refused = outcome.refused;
+			},
+			// Kept here (the created screen now, whatever the service does), or
+			// not created at all.
+			(view) => (view.create.address || view.create.phase !== 'working' ? view.create : undefined)
+		);
+		busy = false;
+		if (first.address) {
+			created = first.address;
 			step = 'created';
-		} catch (error) {
-			const name = error instanceof DOMException ? error.name : '';
-			if (name !== 'NotAllowedError' && name !== 'AbortError') {
-				failure = error instanceof Error ? error.message : String(error);
-			}
-		} finally {
-			busy = false;
+			sharing = first.phase === 'working';
+			const done = await multisig.until((view) =>
+				view.create.phase !== 'working' ? view.create : undefined
+			);
+			refused = done.refused;
 			sharing = false;
+			return;
 		}
+		// The person closed the passkey: nothing to say.
+		if (first.phase === 'failed') failure = failureText(first.error);
 	}
 
-	/** The created multisig as the store holds it now (its sharing moves on its own). */
+	/** The created multisig as the machine holds it now (its sharing moves on its own). */
 	const kept = $derived(created ? (multisig.find(created) ?? null) : null);
+	const keptRow = $derived(created ? multisig.row(created) : null);
 	/** r5reg-18: a multisig of one — no other members to send anything to. */
 	const solo = $derived(!!kept && kept.owners.length === 1);
 	const sharedState = $derived(
 		!kept
 			? null
-			: isShared(kept)
+			: keptRow?.shared
 				? solo
 					? m.create.sharedSolo
 					: m.create.shared
@@ -717,7 +732,7 @@
 				<!-- r4a-12, r4a-13: kept here first; shared when the service has it — said as it is. -->
 				<p
 					class="state"
-					class:pending={!kept || !isShared(kept)}
+					class:pending={!kept || !keptRow?.shared}
 					role="status"
 					data-testid="created-state"
 				>
