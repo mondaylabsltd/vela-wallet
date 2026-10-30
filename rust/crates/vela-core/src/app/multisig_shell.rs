@@ -181,7 +181,15 @@ pub enum MultisigOperation {
     /// room closes).
     PeerReceive { room: String },
     /// Close a room (`walletpair_cancel` is sent first when `cancel`).
-    PeerClose { room: String, cancel: bool },
+    /// `end`: the pairing ends for both sides (the room is closed and its
+    /// record forgotten); otherwise this side only leaves it, and the
+    /// pairing reopens it next time.
+    PeerClose {
+        room: String,
+        cancel: bool,
+        #[serde(default)]
+        end: bool,
+    },
     /// One EIP-1193 request to the wallet injected in this page (the
     /// connect page acting for an outside owner).
     WalletRequest {
