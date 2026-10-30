@@ -298,6 +298,15 @@ class AppContainer(private val app: Application) {
      * A name for an address (spec 043 T048): own accounts → cache → the
      * passkey index → the name services. Contacts and send ask the same one.
      */
+    /**
+     * [identity]'s waterfall on a background dispatcher. Its callers (the
+     * contacts and send machines' executors) run on the main thread; the
+     * lookup's namehash and verdict steps are core calls, and measured at
+     * launch they were a tenth of the main thread's time (Phase 4).
+     */
+    private suspend fun resolveIdentity(address: String): IdentityResolver.Identity? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { identity.resolve(address) }
+
     val identity: IdentityResolver by lazy {
         IdentityResolver(
             store = VelaStore(app),
@@ -561,7 +570,8 @@ class AppContainer(private val app: Application) {
             // Spec 082 RG3: a written row is one resolved — the feed re-reads
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
-            identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            // Phase 4: off the main thread — the reverse lookup hashes through the core.
+            identity = { address -> resolveIdentity(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
             // r4a-18 / vis-24 (the web's `knownName` / `ownAddress`): one of the
             // person's accounts on this device, else a contact they named — a
             // resolved name is a service's word, not theirs.
@@ -1034,7 +1044,9 @@ class AppContainer(private val app: Application) {
             // characters. The index this asks is the same one onboarding
             // publishes to, through the same client.
             registryName = { address -> registryNames.nameFor(address) },
-            identity = { address -> identity.resolve(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
+            // Phase 4: off the main thread (this controller runs on it) — a history
+            // of 200 counterparties is 200 reverse lookups as the wallet opens.
+            identity = { address -> resolveIdentity(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
             code = { chainId, address ->
                 (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") }
@@ -1185,8 +1197,12 @@ class VelaWalletApplication : Application() {
         // The parallel space's door, if this build type has one (spec 043,
         // research D2): a release build installs nothing here.
         ParallelSpaceBinding.install(this)
-        container = AppContainer(this)
-        container.start()
+        // Phase 4: the two halves of the launch's main-thread work, named in a
+        // Perfetto trace (the startup benchmark's); a no-op when nobody traces.
+        android.os.Trace.beginSection("vela.AppContainer.init")
+        try { container = AppContainer(this) } finally { android.os.Trace.endSection() }
+        android.os.Trace.beginSection("vela.AppContainer.start")
+        try { container.start() } finally { android.os.Trace.endSection() }
     }
 
     /**
