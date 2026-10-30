@@ -26,6 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,17 +47,19 @@ const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
  * once and cached immutably under its source-fingerprint name.
  */
 //
-// 8 MB since 2026-09-23 (owner). The previous 4.1 MB was a measured step taken
-// in spec 071 and the core had grown into it — today's build is 4,099,186
-// bytes, 814 under — so a cap that tight fails the next feature rather than a
-// regression, which is the opposite of what a guard is for.
+// The gate measures the wire (2026-10-31): what every web reader pays is the
+// brotli'd module, fetched once and cached immutably — the same q11 / 2^24
+// window `app-web/vela-wallet/scripts/wasm-brotli.mjs` ships. The raw size
+// only had to stand in for it, and pushed the build toward `-Oz`, which
+// shrinks the raw file but not the download (+0.4 KB br) nor the compile,
+// and costs cold first calls ~12 ms (the wasm-size lane's measurements, in
+// vela-core-wasm's Cargo.toml). The owner's rule: one core everywhere, a
+// bigger module is acceptable — so the guard watches the wire for a
+// regression, and the raw cap is a sanity bound only.
 //
-// What that costs, plainly: this artifact ships to every web reader, fetched
-// once and cached immutably under its fingerprint name. 4 MB raw is roughly
-// 1.3 MB brotli'd; the cap no longer argues about growth until the core has
-// nearly doubled. If the wire cost matters again, the number to watch is the
-// brotli'd size, which this gate has never measured.
-const MAX_WASM_BYTES = 8_000_000;
+// History: 4.1 MB raw (spec 071), 8 MB raw (owner, 2026-09-23).
+const MAX_WASM_BROTLI_BYTES = 2_500_000;
+const MAX_WASM_BYTES = 12_000_000;
 
 const CHECK_ONLY = process.argv.includes('--check');
 
@@ -235,10 +238,23 @@ function emit() {
   const wasm = readFileSync(join(STAGING_DIR, 'vela_core_bg.wasm'));
   if (wasm.byteLength > MAX_WASM_BYTES) {
     throw new Error(
-      `build-web: wasm is ${wasm.byteLength} bytes, over the ${MAX_WASM_BYTES} ceiling. ` +
-        'Switch to the async public/-dir loading route (research.md D7 fallback) instead of raising this limit.',
+      `build-web: wasm is ${wasm.byteLength} bytes raw, over the ${MAX_WASM_BYTES} sanity cap.`,
     );
   }
+  const wire = brotliCompressSync(wasm, {
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: 11,
+      [zlibConstants.BROTLI_PARAM_LGWIN]: 24,
+      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: wasm.byteLength,
+    },
+  }).byteLength;
+  if (wire > MAX_WASM_BROTLI_BYTES) {
+    throw new Error(
+      `build-web: wasm is ${wire} bytes brotli'd (${wasm.byteLength} raw), over the ` +
+        `${MAX_WASM_BROTLI_BYTES} wire budget every web reader pays. Find what grew (twiggy) before raising it.`,
+    );
+  }
+  console.log(`build-web: wasm ${wasm.byteLength} bytes raw, ${wire} brotli'd (budget ${MAX_WASM_BROTLI_BYTES}).`);
   const glue = patchGlue(readFileSync(join(STAGING_DIR, 'vela_core.js'), 'utf8'));
   const dts = readFileSync(join(STAGING_DIR, 'vela_core.d.ts'), 'utf8');
   const fingerprint = sourceFingerprint();

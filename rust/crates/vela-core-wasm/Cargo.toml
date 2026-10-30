@@ -69,9 +69,5 @@ serde_json = { workspace = true }
 # 14,179,296 raw (over the 8 MB gate), for hot calls ~30% faster in CPU time —
 # microseconds per call (a Crux dispatch 38 -> 25 µs, keccak 20 -> 14 µs,
 # P-256 recovery 6.3 -> 5.4 ms) — against 257 KB more on every cold load.
-# W8 (2026-10-31): with the multisig machines the `-Os` build is 8,046,647 bytes,
-# over build-web.mjs's 8,000,000 gate; `-Oz -Os` (measured above: -275 KB raw,
-# +0.4 KB br, ~12 ms slower cold first calls) fits. A decision for the wasm-size
-# lane — this commit is revertible on its own.
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "-Os"]
+wasm-opt = ["-Os"]
