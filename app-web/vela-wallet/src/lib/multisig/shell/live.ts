@@ -38,39 +38,11 @@ import { quoteExecutionFee } from '../core/execution-fee';
 import type { MultisigShellResult } from '../generated/MultisigShellResult';
 import type { MultisigOperation } from '../generated/MultisigOperation';
 import { passkeyRequest, type MultisigShellDeps, type PeerTransport } from './handler';
+import { shellFailure, type ShellFailure } from './failure';
+
+export { readShellFailure, failureText, shellFailure, type ShellFailure } from './failure';
 
 type Op<T extends MultisigOperation['type']> = Extract<MultisigOperation, { type: T }>;
-
-/**
- * Why a passkey or a send did not happen, as the shell saw it — JSON in the
- * result's `detail`, read back by {@link readShellFailure} where the core
- * hands the detail to a view.
- */
-export type ShellFailure =
-	| { kind: 'venue_blocked'; block: unknown }
-	| { kind: 'page_declined' }
-	| { kind: 'page_sign_failed'; page: string }
-	| { kind: 'page_approval'; failure: string; code: string | null; line: unknown }
-	| { kind: 'passkey'; failure: string; timedOut: boolean }
-	| { kind: 'passkey_check'; detail: string }
-	| { kind: 'not_sent' }
-	| { kind: 'cannot_pay'; need: string; have: string }
-	| { kind: 'unknown'; message: string };
-
-export function shellFailure(failure: ShellFailure): string {
-	return JSON.stringify(failure);
-}
-
-/** A `detail` the shell wrote, or `null` for one it did not (the core's own words). */
-export function readShellFailure(detail: string | null | undefined): ShellFailure | null {
-	if (!detail || !detail.startsWith('{')) return null;
-	try {
-		const parsed = JSON.parse(detail) as { kind?: unknown };
-		return typeof parsed.kind === 'string' ? (parsed as ShellFailure) : null;
-	} catch {
-		return null;
-	}
-}
 
 /** A dismissal the browser reports as its own (nothing said by the wallet). */
 function browserCancel(error: unknown): boolean {
@@ -90,6 +62,13 @@ function signingFailure(error: unknown): MultisigShellResult {
 }
 
 function failureOf(error: unknown): ShellFailure {
+	const failure = classified(error);
+	return error instanceof Error && failure.message === undefined
+		? { ...failure, message: error.message }
+		: failure;
+}
+
+function classified(error: unknown): ShellFailure {
 	if (error instanceof VenueBlockedError) return { kind: 'venue_blocked', block: error.block };
 	if (error instanceof PageDeclinedError) return { kind: 'page_declined' };
 	if (error instanceof PageSignFailedError) return { kind: 'page_sign_failed', page: error.page };

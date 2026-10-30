@@ -52,6 +52,7 @@
 
 {#each multisig.accounts as account (account.address)}
 	{@const selected = active?.address === account.address}
+	{@const row = multisig.row(account.address)}
 	<li class="account">
 		<!-- A multisig's mark, as the header draws it: a small disc on the
 		     artwork's lower edge. -->
@@ -77,14 +78,17 @@
 				<span class="address"
 					>{shortenAddress(
 						account.address
-					)}{#if account.findings?.some((f) => f.from === 'genesis')}<span
+					)}{#if row ? row.refused_on.length > 0 : account.findings?.some((f) => f.from === 'genesis')}<span
 							class="flag risk"
 							data-testid="flag-refused"
 						>
 							· {m.authority.refusedFlag}</span
-						>{:else if account.findings?.length}<span class="flag risk" data-testid="flag-risk">
+						>{:else if row ? row.high_risk_on.length > 0 : account.findings?.length}<span
+							class="flag risk"
+							data-testid="flag-risk"
+						>
 							· {m.authority.riskFlag}</span
-						>{:else if !isShared(account)}<span class="flag">
+						>{:else if !(row?.shared ?? isShared(account))}<span class="flag">
 							· {m.switcher.notShared}</span
 						>{:else if localOwners(membersAnywhere(account)).length === 0}<span class="flag">
 							· {m.switcher.readOnly}</span

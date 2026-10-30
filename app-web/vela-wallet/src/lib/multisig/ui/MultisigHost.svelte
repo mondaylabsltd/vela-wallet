@@ -10,10 +10,9 @@
 	 * only, and following it here is the person's tap.
 	 */
 	import { replaceUrl } from '$lib/ui/history';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { MultisigMessages } from '../messages';
-	import { checkRecords, discoverChains, followUnrecorded, keepMultisig } from '../core/accounts';
 	import { chainName, spaceNetworksSync } from '$lib/services/networks';
 	import { openProposalLink } from '../core/linked.svelte';
 	import {
@@ -28,8 +27,6 @@
 		type ProposalLink
 	} from '../core/link';
 	import { keepLink, takeKeptLink } from '../core/kept-link';
-	import { keepInvited as keepInvitedMembers } from '../core/invite';
-	import { readMembers } from '../core/chain';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Button from '$lib/ui/Button.svelte';
@@ -38,11 +35,11 @@
 	import { recordExecution, useRecordWords } from '../core/records';
 	import { multisig, type MultisigAccount } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
+	import { machines } from '../shell/machines.svelte';
 	import { externalSigning } from '../external/signing.svelte';
 	import { riskConfirmation, SigningBlockedError, SigningRefusedError } from '../core/gate.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import AuthorityNotice from './AuthorityNotice.svelte';
-	import { recheckStored } from '../core/recheck';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
 	import CreateMultisigSheet from './CreateMultisigSheet.svelte';
 	import InviteSheet from './InviteSheet.svelte';
@@ -128,11 +125,12 @@
 				void proposals.refresh(shown, shown.chainIds);
 			}
 		});
-		// A record that has not landed is asked about again while any page is up.
-		const stopRecords = followUnrecorded();
-		// What each shared multisig's record is now (registry v4: its name may
-		// have changed; the service may have no record of an older registry's).
-		void checkRecords();
+		// A record that has not landed is asked about again while any page is
+		// up; and, once a session, what each shared multisig's record is now
+		// (registry v4: its name may have changed; the service may have no
+		// record of an older registry's). The accounts machine's `tick` and
+		// `check_records`.
+		const stopRecords = machines.followRecords();
 		void resumeLink();
 		// r4b-9: a link opened before this device had an account opens now.
 		if (takeKept) {
@@ -167,7 +165,7 @@
 	);
 	$effect(() => {
 		if (!recheckKey) return;
-		void recheckStored();
+		multisig.send({ type: 'recheck' });
 	});
 
 	// Follow the active multisig's proposals on the networks it is used on.
@@ -176,16 +174,20 @@
 	);
 	$effect(() => {
 		void followKey;
-		const account = multisig.active;
-		proposals.follow(account, account?.chainIds ?? []);
-		// Once a session: networks another member made it used on (deployed
-		// there, or proposed there) become its networks here too.
-		if (account) {
-			void discoverChains(
-				account,
-				spaceNetworksSync().map((n) => n.chainId)
-			).catch(() => {});
-		}
+		// Only the key moves this: what the machine says back (its view) does not.
+		untrack(() => {
+			const account = multisig.active;
+			proposals.follow(account, account?.chainIds ?? []);
+			// Once a session: networks another member made it used on (deployed
+			// there, or proposed there) become its networks here too.
+			if (account) {
+				multisig.send({
+					type: 'discover',
+					address: account.address,
+					chain_ids: spaceNetworksSync().map((n) => n.chainId)
+				});
+			}
+		});
 	});
 
 	function clearHash() {
@@ -228,9 +230,17 @@
 	 * only.
 	 */
 	function keepInvited(address: string, link: AddLink | undefined) {
-		void keepInvitedMembers(address, link, (chainId, account) =>
-			readMembers(chainId, account.address, account.genesis).then((now) => now.owners)
-		).catch(() => {});
+		if (!link?.members?.length) return;
+		multisig.send({
+			type: 'keep_invited',
+			address,
+			chain_ids: link.chainIds,
+			members: link.members.map((m) => ({
+				address: m.address ?? null,
+				name: m.name ?? null,
+				kind: m.kind ?? null
+			}))
+		});
 	}
 
 	/** A proposal link's transaction (from the hash, or kept while its network was added). */
@@ -266,7 +276,9 @@
 		}
 		if (opening.kind === 'member') {
 			// A member is here: kept (if new) and shown, as a member's link always was.
-			const account = opening.added ? opening.account : keepMultisig(opening.account);
+			const account = opening.added
+				? opening.account
+				: ((await multisig.keepFound(opening.account.address)) ?? opening.account);
 			openLinked(account.address, proposal);
 			return;
 		}
@@ -330,7 +342,7 @@
 
 	/** ms-21: the person chose to follow the linked multisig here. It is not shown. */
 	function watch(account: MultisigAccount) {
-		keepMultisig(account);
+		void multisig.keepFound(account.address);
 		watched = true;
 	}
 

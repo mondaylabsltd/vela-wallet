@@ -25,6 +25,9 @@
 	 * (§3.5): a genesis it refuses is said with every reason and nothing adds
 	 * it; a deployed one something besides its members can act for is shown
 	 * with what that is, and added only on the person's explicit tap.
+	 *
+	 * The core's accounts machine does it (`add`, `parse_export`, `import`);
+	 * this sheet draws what it answers.
 	 */
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -38,17 +41,18 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
-	import { addMultisig, importExported, type AddOutcome } from '../core/accounts';
 	import type { Finding } from '../core/refusal';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { keepLink } from '../core/kept-link';
-	import { parseSafeExport, sameAddress, type ExportedSafe } from '../core/kernel';
+	import { sameAddress, type ExportedSafe } from '../core/kernel';
 	import { addLink, type AddLink, type InvitedMember } from '../core/link';
 	import { heldChains, lastUsedChains, likelyNetworks } from '../core/likely-networks';
 	import { kindChoice, type MemberKind } from '../core/member-kind';
 	import { keptMember, names } from '../core/names.svelte';
 	import { signers } from '../core/signers.svelte';
 	import { multisig, type MemberInfo } from '../core/store.svelte';
+	import type { MultisigAddOutcome } from '../generated/MultisigAddOutcome';
+	import type { MultisigImportOutcome } from '../generated/MultisigImportOutcome';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import AuthorityNotice from './AuthorityNotice.svelte';
@@ -156,28 +160,41 @@
 		refused = null;
 		if (!acceptRisks) risky = null;
 		const named = choosing && chosen !== null ? chosen : fromLink ? linkHas[0] : undefined;
-		const outcome = await addMultisig(
-			address.trim(),
-			networks.map((n) => n.chainId),
-			named,
-			{ acceptRisks }
+		const typed = address.trim();
+		const outcome = await multisig.request(
+			{ type: 'add', address: typed, network: named ?? null, accept_risks: acceptRisks },
+			(view) =>
+				view.add.phase === 'done' && sameAddress(view.add.address, typed)
+					? view.add.outcome
+					: undefined
 		);
 		busy = false;
 		said(outcome);
 	}
 
-	function said(outcome: AddOutcome) {
-		if (outcome.ok) {
-			// Every network the invite names is one it is used on (a link
-			// naming one is evidence, the core's rule).
-			if (fromLink) for (const id of linkHas) multisig.useChain(outcome.account.address, id);
-			onadded(outcome.account.address);
-		} else if (outcome.reason === 'chooseNetwork') choosing = true;
-		else if (outcome.reason === 'refused') refused = outcome.findings;
-		else if (outcome.reason === 'highRisk') risky = outcome.findings;
-		else if (outcome.reason === 'unverified') {
-			failure = fillTemplate(m.authority.unverified, { network: chainName(outcome.chainId) });
-		} else failure = m.add[outcome.reason];
+	function said(outcome: MultisigAddOutcome) {
+		switch (outcome.kind) {
+			case 'added':
+				// Every network the invite names is one it is used on (a link
+				// naming one is evidence, the core's rule).
+				if (fromLink) for (const id of linkHas) multisig.useChain(outcome.address, id);
+				onadded(outcome.address);
+				return;
+			case 'chooseNetwork':
+				choosing = true;
+				return;
+			case 'refused':
+				refused = outcome.findings as Finding[];
+				return;
+			case 'highRisk':
+				risky = outcome.findings as Finding[];
+				return;
+			case 'unverified':
+				failure = fillTemplate(m.authority.unverified, { network: chainName(outcome.chain_id) });
+				return;
+			default:
+				failure = m.add[outcome.kind];
+		}
 	}
 
 	/** Settings → Add network for the invite's network; the invite opens again once it is added. */
@@ -229,18 +246,30 @@
 		if (!file) return;
 		fileFailure = null;
 		results = {};
+		let text: string;
 		try {
-			const safes = parseSafeExport(await file.text());
-			if (safes.length === 0) {
-				fileFailure = m.import.empty;
-				return;
-			}
-			exported = safes;
-			// Everything new is picked to start with; one already here is shown as such.
-			picked = safes.filter((s) => !multisig.find(s.address)).map((s) => s.address);
+			text = await file.text();
 		} catch {
 			fileFailure = m.import.notExport;
+			return;
 		}
+		// Read by the core, on this device (`parse_export`).
+		const read = await multisig.request(
+			{ type: 'parse_export', json: text },
+			(view) => view.import
+		);
+		if (read.error !== null) {
+			fileFailure = m.import.notExport;
+			return;
+		}
+		const safes = read.safes as ExportedSafe[];
+		if (safes.length === 0) {
+			fileFailure = m.import.empty;
+			return;
+		}
+		exported = safes;
+		// Everything new is picked to start with; one already here is shown as such.
+		picked = safes.filter((s) => !multisig.find(s.address)).map((s) => s.address);
 	}
 
 	function toggle(address: string) {
@@ -302,6 +331,7 @@
 	 * r7: what each of `safe`'s members was declared as (or Vela found), kept
 	 * with it — a label that steers what each member is offered, never
 	 * authority. One left unsaid keeps nothing: it is offered both ways.
+	 * W8: moves onto the core's member-kind rule (create/import) once merged.
 	 */
 	function keepKinds(safe: ExportedSafe) {
 		const members: Record<string, MemberInfo> = {};
@@ -316,14 +346,18 @@
 
 	async function importOne(safe: ExportedSafe, acceptRisks = false) {
 		results = { ...results, [safe.address]: 'busy' };
-		const outcome = await importExported(safe, { acceptRisks });
-		if (outcome.ok) keepKinds(safe);
-		if (!outcome.ok && 'findings' in outcome)
-			found = { ...found, [safe.address]: outcome.findings };
-		if (!outcome.ok && outcome.reason === 'unverified') {
-			unchecked = { ...unchecked, [safe.address]: outcome.chainId };
+		const key = safe.address.toLowerCase();
+		const outcome: MultisigImportOutcome = await multisig.request(
+			{ type: 'import', address: safe.address, accept_risks: acceptRisks },
+			(view) => (view.import.busy === null ? view.import.outcomes[key] : undefined)
+		);
+		if (outcome.kind === 'imported') keepKinds(safe);
+		if (outcome.kind === 'refused' || outcome.kind === 'highRisk')
+			found = { ...found, [safe.address]: outcome.findings as Finding[] };
+		if (outcome.kind === 'unverified') {
+			unchecked = { ...unchecked, [safe.address]: outcome.chain_id };
 		}
-		results = { ...results, [safe.address]: outcome.ok ? 'ok' : outcome.reason };
+		results = { ...results, [safe.address]: outcome.kind === 'imported' ? 'ok' : outcome.kind };
 	}
 
 	function rule(safe: ExportedSafe): string {

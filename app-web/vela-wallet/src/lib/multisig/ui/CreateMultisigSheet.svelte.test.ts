@@ -13,7 +13,7 @@ import { page } from 'vitest/browser';
 import { chainFilter } from '$lib/wallet/chain-filter.svelte';
 import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
-import { multisig, type MultisigAccount } from '../core/store.svelte';
+import type { MultisigAccount } from '../core/store.svelte';
 
 const ME = '0x00000000000000000000000000000000000000aa';
 const TWO = '0x00000000000000000000000000000000000000bb';
@@ -49,27 +49,55 @@ vi.mock('$lib/services/networks', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/networks')>()),
 	spaceNetworksSync: () => seams.networks
 }));
-vi.mock('../core/chain', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../core/chain')>()),
-	safeContractsOn: async (chainId: number) => {
-		const kind = seams.contracts[chainId] ?? 'present';
-		return kind === 'missing' ? { kind, names: ['Safe L2'] } : { kind };
-	}
-}));
-vi.mock('../core/accounts', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../core/accounts')>()),
-	newSaltNonce: () => '1',
-	draftGenesis: () => ({ address: SAFE }),
-	createMultisig: async (
-		choice: { chainId: number },
-		_salt: string,
-		onsaved?: (a: { address: string }) => void
-	) => {
-		seams.created.push(choice);
-		onsaved?.({ address: SAFE });
-		return { account: { address: SAFE }, refused: null };
-	}
-}));
+/**
+ * The core's accounts machine as the sheet reads it: the draft's address,
+ * the Safe contracts per network (the core's verdict, `seams.contracts`),
+ * and a creation kept here at once — answered as the machine would.
+ */
+const facade = vi.hoisted(() => ({ accounts: [] as { address: string }[] }));
+vi.mock('../core/store.svelte', () => {
+	const find = (a: string) =>
+		facade.accounts.find((x) => x.address.toLowerCase() === a.toLowerCase());
+	return {
+		multisig: {
+			get accounts() {
+				return facade.accounts;
+			},
+			set accounts(rows: { address: string }[]) {
+				facade.accounts = rows;
+			},
+			find,
+			row: (a: string) => (find(a) ? { shared: true } : null),
+			get view() {
+				return {
+					create: {
+						phase: 'idle',
+						draft_address: SAFE,
+						draft_error: null,
+						address: null,
+						refused: null,
+						error: null,
+						networks: Object.fromEntries(
+							seams.networks.map((n) => {
+								const kind = seams.contracts[n.chainId] ?? 'present';
+								return [n.chainId, kind === 'missing' ? { kind, names: ['Safe L2'] } : { kind }];
+							})
+						)
+					},
+					add: { ens: null }
+				};
+			},
+			send: () => {},
+			request: async (event: { type: string; choice?: { chain_id: number } }) => {
+				if (event.type !== 'create' || !event.choice) throw new Error(`not asked: ${event.type}`);
+				seams.created.push({ ...event.choice, chainId: event.choice.chain_id });
+				return { phase: 'done', address: SAFE, refused: null, error: null };
+			},
+			until: async () => ({ phase: 'done', address: SAFE, refused: null, error: null })
+		}
+	};
+});
+vi.mock('../shell/local-accounts', () => ({ localAccounts: () => [] }));
 vi.mock('$lib/core/kernels', async (importOriginal) => {
 	const { eip55 } = await import('../external/eip55');
 	return {
@@ -569,7 +597,7 @@ describe('r4a-14: what a creation can be, and how its members come', () => {
 describe('round 6: the create sheet at a phone’s width, and a multisig of one', () => {
 	afterEach(async () => {
 		await page.viewport(414, 896);
-		multisig.accounts = [];
+		facade.accounts = [];
 		chainFilter.select(null);
 	});
 
@@ -638,7 +666,7 @@ describe('round 6: the create sheet at a phone’s width, and a multisig of one'
 		document.body.querySelector<HTMLButtonElement>('[role="radio"]')?.click();
 		await settle();
 		// What the store holds once it is saved: a multisig of one.
-		multisig.accounts = [
+		facade.accounts = [
 			{
 				address: SAFE,
 				owners: [ME],

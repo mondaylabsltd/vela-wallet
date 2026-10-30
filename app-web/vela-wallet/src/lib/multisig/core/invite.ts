@@ -6,15 +6,15 @@
  * it shows them by name, tells its own account apart (r5reg-24), and never
  * guesses a network. Labels only: the device that adds it re-derives the
  * address from the genesis, keeps a label only for an address that is a
- * member, keeps its own names over the link's, and who may act is each
- * chain's.
+ * member, keeps its own names over the link's (the core's accounts machine,
+ * `keep_invited`), and who may act is each chain's.
  */
 import { shortenAddress } from './display';
 import { sameAddress } from './kernel';
-import { addLink, type AddLink, type InvitedMember } from './link';
+import { addLink, type InvitedMember } from './link';
 import { names } from './names.svelte';
 import { membersAnywhere } from './proposals.svelte';
-import { multisig, type MemberInfo, type MultisigAccount } from './store.svelte';
+import type { MultisigAccount } from './store.svelte';
 
 /**
  * What this device knows of each member, by address: the founding members in
@@ -47,56 +47,4 @@ export function inviteLink(
 		chainIds: account.chainIds,
 		members: invitedMembers(account)
 	});
-}
-
-/**
- * Keep what an invite says of `address`'s members with it on this device
- * (r4D-5): a member named by address is kept only if it is one — a founding
- * member, or one of the members now on a network the invite names (`readOwners`)
- * — so a label never lands on an address that is not a member; one named by
- * the genesis's order (a link from before r6) only when the counts match.
- * This device's own names stay (`nameMembers`). Labels only.
- */
-export async function keepInvited(
-	address: string,
-	link: AddLink | undefined,
-	readOwners: (chainId: number, account: MultisigAccount) => Promise<string[]>
-): Promise<void> {
-	const account = multisig.find(address);
-	if (!account || !link?.members?.length) return;
-	const addressed = link.members.filter((m): m is InvitedMember & { address: string } =>
-		Boolean(m.address)
-	);
-	if (addressed.length === 0) {
-		if (link.members.length !== account.owners.length) return;
-		multisig.nameMembers(
-			account.address,
-			Object.fromEntries(account.owners.map((owner, i) => [owner, info(link.members?.[i])]))
-		);
-		return;
-	}
-	const founding = addressed.filter((m) => account.owners.some((o) => sameAddress(o, m.address)));
-	keep(account.address, founding);
-	const others = addressed.filter((m) => !founding.includes(m));
-	if (others.length === 0) return;
-	const chainIds = link.chainIds.filter((id) => account.chainIds.includes(id));
-	const now = (
-		await Promise.all(chainIds.map((id) => readOwners(id, account).catch(() => [] as string[])))
-	).flat();
-	keep(
-		account.address,
-		others.filter((m) => now.some((o) => sameAddress(o, m.address)))
-	);
-}
-
-function info(member: InvitedMember | undefined): MemberInfo {
-	return {
-		...(member?.name ? { name: member.name } : {}),
-		...(member?.kind ? { kind: member.kind } : {})
-	};
-}
-
-function keep(address: string, members: (InvitedMember & { address: string })[]): void {
-	if (members.length === 0) return;
-	multisig.nameMembers(address, Object.fromEntries(members.map((m) => [m.address, info(m)])));
 }

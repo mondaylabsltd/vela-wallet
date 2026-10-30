@@ -47,9 +47,9 @@
 	/**
 	 * Its record has not reached the genesis service yet: another member who
 	 * adds it by this address may not find it until it has. Read from the
-	 * store, so it changes the moment a retry lands.
+	 * accounts machine's row, so it changes the moment a retry lands.
 	 */
-	const unshared = $derived(!isShared(shown));
+	const unshared = $derived(!(multisig.row(account.address)?.shared ?? isShared(shown)));
 	let copied = $state<'address' | 'link' | null>(null);
 	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 

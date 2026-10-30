@@ -10,8 +10,12 @@
  * read-only there — and is shown wherever it is drawn. Never silent: a
  * network that does not answer is not counted as checked, and is asked
  * again.
+ *
+ * Every stored multisig's own re-check is the core accounts machine's
+ * (`recheck`); this is the read a sheet and the signing gate make on the
+ * network they are about, its verdict handed to the machine
+ * (`multisig.setFindingsOn`).
  */
-import { networkForChainId } from '$lib/services/networks';
 import { judgeOn } from './judge';
 import { hasCode } from './chain';
 import { sameAddress } from './kernel';
@@ -81,20 +85,6 @@ export async function checkNow(
 	verdicts.set(keyOf(account.address, chainId), found);
 	if (multisig.find(account.address)) multisig.setFindingsOn(account.address, chainId, found);
 	return found;
-}
-
-/**
- * Every multisig on this device, on each of its networks this device has,
- * that this session has not checked yet — one multisig at a time, so a
- * device with many does not spend the RPCs' budget at once.
- */
-export async function recheckStored(): Promise<void> {
-	for (const account of [...multisig.accounts]) {
-		const due = account.chainIds.filter(
-			(id) => networkForChainId(id) !== null && !verdicts.has(keyOf(account.address, id))
-		);
-		await Promise.all(due.map((id) => checkOn(account, id)));
-	}
 }
 
 /** Whether `address` has been checked on `chainId` this session. */

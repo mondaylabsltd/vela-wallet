@@ -9,7 +9,6 @@
  * following the multisig here, or signing with a member's own wallet, are
  * the person's choices, each on a tap.
  */
-import { findMultisig } from './accounts';
 import { localOwners } from './owners';
 import { readChain, type ChainState } from './proposals.svelte';
 import type { ProposalLink } from './link';
@@ -152,8 +151,11 @@ export async function openProposalLink(link: ProposalLink): Promise<LinkOpening>
 	if (!account) {
 		// The link names its transaction's network: that is where it is used.
 		// r4b-13: one lookup, answered in a few seconds — asked once more at most.
-		const found = await findMultisig(link.multisig, [link.chainId], link.chainId, {
-			waits: 1,
+		// The accounts machine's lookup, kept nowhere (its `find`).
+		// W8: moves onto the `#ms=` link flow once merged.
+		const found = await multisig.lookUp(link.multisig, {
+			network: link.chainId,
+			chainIds: [link.chainId],
 			waitMs: 2500
 		});
 		// (`chooseNetwork` cannot come back: the link names one.)
